@@ -17,6 +17,11 @@ from dataclasses import fields, is_dataclass
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -186,7 +191,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--clip", default="growing_pains")
     parser.add_argument("--family", action="append", choices=sorted(FAMILIES))
-    parser.add_argument("--out", type=Path)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg)
     args = parser.parse_args(argv)
     from PySide6.QtGui import QGuiApplication
     _app = QGuiApplication.instance() or QGuiApplication([])

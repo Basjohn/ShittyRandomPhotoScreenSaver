@@ -21,6 +21,11 @@ if str(ROOT) not in sys.path:
 import numpy as np
 
 from rendering.gl_programs import extruded_bubble_scene as scene
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 def _rec(*, x=1.3, y=0.4, z=-10., radius=.9, alpha=1.0, ident=1):
@@ -84,7 +89,7 @@ def audit() -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, help='write the read-only JSON diagnostic; no file written if omitted')
+    parser.add_argument('--output', type=artifact_paths.evidence_arg, help='write the read-only JSON diagnostic; no file written if omitted')
     args = parser.parse_args()
     result = audit()
     payload = json.dumps(result, indent=2) + '\n'

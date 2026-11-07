@@ -23,6 +23,11 @@ from core.system_stats.source import (  # noqa: E402
     PersistentWindowsGpuAdapterSource,
     WholeSystemCpuRamSource,
 )
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 def _burn_cpu(seconds: float) -> int:
@@ -90,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--interval-seconds", type=float, default=10.0)
     parser.add_argument("--contention-workers", type=int, default=0)
-    parser.add_argument("--out", type=Path)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg)
     args = parser.parse_args(argv)
     samples = max(2, int(args.samples))
     interval = max(0.0, float(args.interval_seconds))

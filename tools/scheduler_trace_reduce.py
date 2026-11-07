@@ -23,6 +23,11 @@ import re
 import statistics
 import struct
 from typing import Iterable, Iterator, Mapping, Sequence
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 TOOL_VERSION = 1
 ETL_BUFFER_BYTES = 1024 * 1024
@@ -938,8 +943,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="SRPSS log directory containing lifecycle telemetry and screensaver_frame_trace.bin",
     )
     parser.add_argument("--render-tid", type=int, default=None)
-    parser.add_argument("--output-json", type=Path, default=None)
-    parser.add_argument("--output-text", type=Path, default=None)
+    parser.add_argument("--output-json", type=artifact_paths.evidence_arg, default=None)
+    parser.add_argument("--output-text", type=artifact_paths.evidence_arg, default=None)
     parser.add_argument(
         "--delete-etl",
         action="store_true",

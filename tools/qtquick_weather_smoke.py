@@ -36,6 +36,12 @@ from rendering.quick.widgets.weather import (  # noqa: E402
     WeatherPresentationModel,
     WeatherPresentationStyle,
 )
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 class _SyntheticWeatherRuntime:
@@ -337,11 +343,19 @@ def run(output_dir: Path) -> dict[str, object]:
     return payload
 
 
+
+def _run_published(output_dir: Path) -> dict[str, object]:
+    """``run`` in an owner scratch folder; its PNGs are published to ``output_dir`` as WebP evidence."""
+    with evidence_media.evidence_workspace('qtquick_weather_smoke', output_dir) as work:
+        return run(work)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-dir", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("widgets", "weather_smoke"))
     args = parser.parse_args()
-    print(json.dumps(run(args.output_dir), indent=2))
+    print(json.dumps(_run_published(args.output_dir), indent=2))
     return 0
 
 

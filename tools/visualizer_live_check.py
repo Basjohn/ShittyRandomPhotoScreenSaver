@@ -586,7 +586,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--clip", default=str(DEFAULT_CLIP),
                         help="recorded-music JSONL replayed as the loopback, or 'none' for the machine's own audio")
     parser.add_argument("--clip-start", type=float, default=0.0, help="seconds into the recording")
-    parser.add_argument("--out", type=Path,
+    parser.add_argument("--out", type=artifact_paths.evidence_arg,
                         help="output folder (default .artifacts/evidence/visualizers/<mode>/live_check/"
                              "<YYYYMMDD>_<label>; inside the repository it must follow that layout)")
     parser.add_argument("--label", help="run label for the default output folder (default p<preset>_<time>)")

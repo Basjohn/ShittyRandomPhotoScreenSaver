@@ -73,6 +73,11 @@ import statistics
 import sys
 import time
 from pathlib import Path
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 # --- investigation thresholds (challengeable; not product SLAs) -------------
 MIN_SCORED_SECONDS = 60.0        # a scored window must cover at least this long
@@ -767,13 +772,13 @@ def main(argv: list[str] | None = None) -> int:
 
     p_score = sub.add_parser("score", help="score one run's named steady windows")
     p_score.add_argument("--log", required=True)
-    p_score.add_argument("--out", default=None)
+    p_score.add_argument("--out", type=artifact_paths.evidence_arg, default=None)
 
     p_class = sub.add_parser("classify", help="classify matched A/B/C scored reps")
     p_class.add_argument("--a", nargs="+", required=True)
     p_class.add_argument("--b", nargs="+", required=True)
     p_class.add_argument("--c", nargs="+", required=True)
-    p_class.add_argument("--out", default=None)
+    p_class.add_argument("--out", type=artifact_paths.evidence_arg, default=None)
 
     p_auto = sub.add_parser(
         "auto",
@@ -808,7 +813,7 @@ def main(argv: list[str] | None = None) -> int:
         "--deadline-seconds", type=float, default=1200.0,
         help="overall watchdog: hard timeout for the app subprocess",
     )
-    p_auto.add_argument("--out", default=None, help="full auto result JSON")
+    p_auto.add_argument("--out", type=artifact_paths.evidence_arg, default=None, help="full auto result JSON")
     p_auto.add_argument(
         "--rep-out", default=None,
         help="write just the scored rep JSON here (feeds `classify` directly)",

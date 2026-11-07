@@ -26,6 +26,12 @@ from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.quick.window import QuickDisplayWindow
 from rendering.quick.custom_layout_size import capture_quick_size_payload, scale_quick_size_payload
 from rendering.widget_descriptors import get_widget_runtime_descriptor
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 SIZES = (("1.00", 1., 1.), ("0.75", .75, .75), ("0.50", .5, .5),
          ("1.40", 1.4, 1.4), ("2.00", 2., 2.), ("narrow", .75, 1.),
@@ -272,12 +278,16 @@ def compare(before, after, output, *, max_channel_delta=0):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--output", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("widgets", "resize_capture"),
+                        help="captures for a later --compare stay lossless PNG under .artifacts/scratch/<owner>/")
     parser.add_argument("--families", nargs="+", choices=FAMILIES, default=list(FAMILIES))
     parser.add_argument("--compare", nargs=2, type=Path, metavar=("BEFORE", "AFTER"))
     parser.add_argument("--max-channel-delta", type=int, choices=range(256), default=0, metavar="0..255")
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "ordinary_widget_resize_capture")
     if args.compare:
         compare(*[path.resolve() for path in args.compare], args.output.resolve(), max_channel_delta=args.max_channel_delta)
     else:
         capture(args.output.resolve(), families=args.families)
+    evidence_media.finish(0)

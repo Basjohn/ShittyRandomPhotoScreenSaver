@@ -9,6 +9,7 @@ pixels and musical feel remain separate evidence.
 from __future__ import annotations
 import argparse,json,subprocess,sys
 from pathlib import Path
+from tools import artifact_paths  # noqa: E402
 ROOT=Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 
@@ -166,7 +167,7 @@ def audit(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--clip',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--clip',type=Path,required=True);parser.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
     parser.add_argument('--preset',type=int,choices=(1,2,3),default=3)
     parser.add_argument('--start',type=float,default=5.);parser.add_argument('--seconds',type=float,default=40.)
     parser.add_argument('--span',type=float,default=18.,help='Half-width of the measured scene x interval (world units)')

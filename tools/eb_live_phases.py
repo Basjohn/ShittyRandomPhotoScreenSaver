@@ -22,6 +22,11 @@ import sys
 import threading
 import time
 from pathlib import Path
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 _local = threading.local()
@@ -200,7 +205,7 @@ def waveform_worker_configuration(engine):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("mc_args", nargs=argparse.REMAINDER, help="arguments for main_mc.py after --")
     args = parser.parse_args()
     mc_args = args.mc_args[1:] if args.mc_args[:1] == ["--"] else args.mc_args

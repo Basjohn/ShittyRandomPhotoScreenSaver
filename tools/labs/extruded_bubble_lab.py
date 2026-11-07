@@ -1,7 +1,8 @@
 """Extruded Bubble composition lab (§4A): every shared primitive composed into one underwater scene per operator mock
 (Docs/Reference/Extruded_Bubble/Targets/Originals: bright, mid, dark water, teal), rendered offscreen at the mocks' resolution and laid side by
 side with them. A development harness for judging primitives against the target; not the Extruded Bubble renderer.
-usage: python tools/labs/extruded_bubble_lab.py out_sheet.png [--backdrop]"""
+usage: python tools/labs/extruded_bubble_lab.py out_sheet.png [--backdrop]
+out_sheet.png lies under the evidence layout (tools/artifact_paths.py); every PNG is published as WebP on success."""
 import ctypes
 from contextlib import ExitStack
 import math
@@ -12,6 +13,11 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+from tools import artifact_paths, evidence_media  # noqa: E402
+if __name__ == "__main__" and len(sys.argv) > 1 and not sys.argv[1].startswith("--"):
+    # The sheet path names the evidence destination; the run writes PNGs into owner scratch instead.
+    _destination = SimpleNamespace(output=artifact_paths.checked_output(sys.argv[1]))
+    sys.argv[1] = str(evidence_media.redirect_output(_destination, "output", "extruded_bubble_lab"))
 import numpy as np
 from rendering.gl_error_policy import disable_per_call_gl_error_checking
 if not disable_per_call_gl_error_checking():
@@ -980,3 +986,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    evidence_media.finish(0)

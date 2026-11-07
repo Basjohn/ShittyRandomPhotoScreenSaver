@@ -19,6 +19,8 @@ from bisect import bisect_left
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -114,7 +116,7 @@ def capture(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clip", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--preset", type=int, default=1)
     parser.add_argument("--start", type=float, default=20.0)
     parser.add_argument("--duration", type=float, default=4.0)
@@ -129,8 +131,10 @@ def main():
                         help="keep the canonical card geometry instead of filling the target")
     parser.add_argument("--set", action="append", default=[])
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "devcurve_capture")
     capture(args)
 
 
 if __name__ == "__main__":
     main()
+    evidence_media.finish(0)

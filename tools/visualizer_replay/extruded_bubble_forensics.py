@@ -26,6 +26,12 @@ from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBub
 from tools.visualizer_replay.extruded_bubble_world_probe import projected_sphere
 from widgets.spotify_visualizer.feature_frame import FeatureClip, FeatureFrame
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def distribution(values):
@@ -298,7 +304,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clip', required=True, type=Path)
-    parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=artifact_paths.evidence_arg)
     parser.add_argument('--preset', type=int, default=1)
     parser.add_argument('--start', type=float, default=0)
     parser.add_argument('--duration', type=float, default=60)
@@ -312,6 +318,7 @@ def main():
     parser.add_argument('--gif', action='store_true')
     parser.add_argument('--fps', type=float, default=6)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "extruded_bubble_forensics")
     from core.settings.visualizer_presets import get_custom_preset_index
     art_count = get_custom_preset_index('extruded_bubble')
     if args.duration <= 0 or args.start < 0 or args.fps <= 0 or not 1 <= args.preset <= art_count:
@@ -327,3 +334,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    evidence_media.finish(0)

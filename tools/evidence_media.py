@@ -3,18 +3,23 @@
 * A frame sequence becomes ONE animated WebP at 24 fps, under 10 MB, at a reduced size (the longest side starts
   at ``DEFAULT_MAX_SIDE`` and steps down until the file fits the cap).
 * A still (a frame, a contact sheet, a strip) becomes a still WebP.
-* PNG frames are temporary: ``frame_sequence`` hands out frame paths inside an owner scratch folder
-  (``tools/artifact_paths.scratch``), encodes them on success and deletes the folder on success and on
-  exceptions. ``still_from_png`` deletes its source PNG once encoded.
+* PNGs are temporary: a tool writes them into an owner scratch folder (``tools/artifact_paths.py``). When the
+  tool succeeds the folder is published (PNGs as WebP, data copied and relinked) and deleted. When it fails
+  the folder stays, its path is printed for debugging, and ``python tools/artifact_paths.py prune-scratch``
+  clears it later.
 
-Destinations come from ``tools/artifact_paths.py`` (``output_webp``/``webp_path``); this module only encodes.
-Product showcase WebPs are ``tools/release_media.py``'s own business and do not use this helper.
+Destinations come from ``tools/artifact_paths.py``. Product showcase WebPs are ``tools/release_media.py``'s
+own business and do not use this module.
 """
 from __future__ import annotations
 
 import contextlib
 import io
-from dataclasses import dataclass, field
+import os
+import re
+import shutil
+import sys
+import uuid
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
@@ -115,63 +120,182 @@ def still_from_png(png: str | Path, output: str | Path, **kwargs) -> dict:
         png.unlink(missing_ok=True)
 
 
-def save_qimage_webp(image: Any, output: str | Path, **kwargs) -> dict:
-    """A ``QImage`` (e.g. an offscreen ``grabWindow``) as a still WebP, through a scratch PNG."""
-    from tools.artifact_paths import scratch
-
-    with scratch("evidence_media") as folder:
-        png = folder / "still.png"
-        if not image.save(str(png)):
-            raise OSError(f"could not save the grabbed image to {png}")
-        return still_webp(png, output, **kwargs)
+_SEQUENCE = re.compile(r"^(?P<stem>.*?)(?P<index>\d{2,})$")
+_TEXT_SUFFIXES = {".json", ".jsonl", ".txt", ".md", ".csv", ".html", ".log"}
 
 
-@dataclass
-class FrameSequence:
-    """Frame paths inside a scratch folder; ``frame_sequence`` encodes them on exit."""
+def _webp_home(out_dir: Path) -> tuple[Path, str] | None:
+    """For an evidence folder ``evidence/<area>/<topic>/<YYYYMMDD>_<label>[/sub]``: the WebP folder
+    ``webp/<area>/<topic>`` and the name prefix ``<YYYYMMDD>_<label>[_sub]``; None outside the layout."""
+    from tools import artifact_paths
 
-    folder: Path
-    paths: list[Path] = field(default_factory=list)
-    receipt: dict | None = None
+    relative = artifact_paths._relative_to_root(out_dir.resolve(), artifact_paths.EVIDENCE_ROOT.resolve())
+    if relative is None or not artifact_paths._layout_shaped(relative):
+        return None
+    depth = 2 if relative[0] in artifact_paths._NAMED_AREAS else 1
+    return (artifact_paths.WEBP_ROOT.joinpath(*relative[: depth + 1]),
+            "_".join(relative[depth + 1:]))
 
-    def next_path(self, suffix: str = ".png") -> Path:
-        path = self.folder / f"frame_{len(self.paths):05d}{suffix}"
-        self.paths.append(path)
-        return path
 
-    def add(self, path: str | Path) -> None:
-        """Register a frame the caller wrote itself (it must lie inside ``folder``)."""
-        path = Path(path)
-        if self.folder not in path.resolve().parents:
-            raise ValueError(f"frames live in the scratch folder {self.folder}, not {path}")
-        self.paths.append(path)
+def _reference(path: Path) -> str:
+    """How a summary names a published WebP: repository-relative under the layout, else absolute."""
+    from tools import artifact_paths
+
+    relative = artifact_paths._relative_to_root(path.resolve(), artifact_paths.ARTIFACTS_ROOT.resolve())
+    if relative is None:
+        return str(path)
+    return "/".join((".artifacts", *relative))
+
+
+def publish(work: Path, out_dir: Path) -> dict:
+    """Publish a tool's scratch output folder as durable evidence.
+
+    * PNGs whose names differ only by a trailing frame number (``frame_0001.png``...) in one folder become one
+      animated 24 fps WebP named after their stem; every other PNG becomes a still WebP. When ``out_dir`` is
+      an evidence folder the WebPs go to the matching ``.artifacts/webp/<area>/<topic>/`` as
+      ``<YYYYMMDD>_<label>_<name>.webp``; elsewhere (tests) they sit beside the data.
+    * Every other file is copied to ``out_dir``; in text files (json, txt, md, csv, html) each PNG path or name
+      is rewritten to its WebP, so a summary links its WebPs by path.
+    Returns ``{"webp": [...], "files": [...], "renamed": {png name: reference}}``. The PNGs stay in ``work``.
+    """
+    work, out_dir = Path(work), Path(out_dir)
+    home = _webp_home(out_dir)
+    renamed: dict[str, str] = {}
+    absolute: dict[Path, Path] = {}
+    written: list[str] = []
+    copied: list[str] = []
+    if not work.exists():
+        return {"webp": written, "files": copied, "renamed": renamed}
+
+    def destination(parent: Path, name: str) -> Path:
+        sub = parent.relative_to(work).parts
+        if home is None:
+            return out_dir.joinpath(*sub, f"{name}.webp")
+        folder, prefix = home
+        return folder / ("_".join(part for part in (prefix, *sub, name) if part) + ".webp")
+
+    pngs = sorted(path for path in work.rglob("*") if path.is_file() and path.suffix.lower() == ".png")
+    groups: dict[tuple[Path, str], list[Path]] = {}
+    for png in pngs:
+        match = _SEQUENCE.match(png.stem)
+        key = (png.parent, match.group("stem").rstrip("_-.") if match else "\0" + png.stem)
+        groups.setdefault(key, []).append(png)
+    for (parent, stem), members in groups.items():
+        if len(members) >= 2 and not stem.startswith("\0"):
+            members.sort(key=lambda path: int(_SEQUENCE.match(path.stem).group("index")))
+            target = destination(parent, stem or "frames")
+            animated_webp(members, target)
+            outputs = [(member, target) for member in members]
+        else:
+            outputs = []
+            for member in members:
+                target = destination(parent, member.stem)
+                still_webp(member, target)
+                outputs.append((member, target))
+                written.append(str(target))
+        if len(members) >= 2 and not stem.startswith("\0"):
+            written.append(str(target))
+        for member, target in outputs:
+            absolute[member] = target
+            renamed[member.name] = target.name if home is None else _reference(target)
+
+    def forms(path: Path) -> tuple[str, ...]:
+        native = str(path)
+        return (native.replace("\\", "\\\\"), native, native.replace("\\", "/"))
+
+    for path in sorted(work.rglob("*")):
+        if not path.is_file() or path.suffix.lower() == ".png":
+            continue
+        target = out_dir / path.relative_to(work)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix.lower() in _TEXT_SUFFIXES:
+            text = path.read_text(encoding="utf-8", errors="surrogateescape")
+            for png, webp in absolute.items():                       # full paths first (JSON-escaped too)
+                for old, new in zip(forms(png), forms(webp)):
+                    text = text.replace(old, new)
+            for old in sorted(renamed, key=len, reverse=True):         # then bare names
+                text = text.replace(old, renamed[old])
+            for old, new in zip(forms(work), forms(out_dir)):
+                text = text.replace(old, new)
+            target.write_text(text, encoding="utf-8", errors="surrogateescape")
+        else:
+            shutil.copyfile(path, target)
+        copied.append(str(target))
+    return {"webp": written, "files": copied, "renamed": renamed}
 
 
 @contextlib.contextmanager
-def frame_sequence(owner: str, output: str | Path, **encode: Any) -> Iterator[FrameSequence]:
-    """Collect PNG frames in ``.artifacts/scratch/<owner>/``; on success encode ``output`` (animated WebP).
+def evidence_workspace(owner: str, out_dir: str | Path) -> Iterator[Path]:
+    """A scratch output folder for a tool that writes PNGs, published to ``out_dir`` when the block succeeds.
 
-    The scratch folder, and every PNG in it, is deleted on success and on exceptions.
+    Yields a not-yet-created path inside ``.artifacts/scratch/<owner>/``. On success it is published
+    (``publish``) and deleted; on failure it is kept and its path printed (``artifact_paths.scratch``).
     """
     from tools.artifact_paths import scratch
 
+    out_dir = Path(out_dir)
     with scratch(owner) as folder:
-        sequence = FrameSequence(folder)
-        yield sequence
-        written = [path for path in sequence.paths if path.exists()]
-        if len(written) >= 2:
-            sequence.receipt = animated_webp(written, output, **encode)
-        elif written:
-            sequence.receipt = still_webp(written[0], output)
+        work = folder / "out"
+        yield work
+        out_dir.mkdir(parents=True, exist_ok=True)
+        receipt = publish(work, out_dir)
+        print(f"evidence: {len(receipt['webp'])} WebP and {len(receipt['files'])} files in {out_dir}")
+
+
+_PENDING: list[tuple[Path, Path, Path]] = []
+
+
+def redirect_output(args: Any, attribute: str, owner: str) -> Path:
+    """CLI tools: write ``args.<attribute>`` into owner scratch; ``finish`` publishes it on success.
+
+    The destination (a folder, or a file such as ``out/sheet.png``) is remembered and ``args`` points into a
+    scratch folder instead; the tool runs unchanged. The tool's ``__main__`` line becomes
+    ``raise SystemExit(evidence_media.finish(main()))``. A destination already under ``.artifacts/scratch``
+    is left alone (lossless frames a later compare step reads may live there while they are examined).
+    """
+    from tools import artifact_paths
+
+    destination = Path(getattr(args, attribute))
+    if artifact_paths.in_scratch(destination):
+        return destination
+    folder = artifact_paths.scratch_root(owner) / f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+    work = folder / "out"
+    file_mode = bool(destination.suffix) and not destination.is_dir()
+    if file_mode:
+        work.mkdir(parents=True)
+    else:
+        folder.mkdir(parents=True)
+    _PENDING.append((folder, work, destination.parent if file_mode else destination))
+    redirected = work / destination.name if file_mode else work
+    setattr(args, attribute, redirected)
+    return redirected
+
+
+def finish(code: int | None = 0) -> int | None:
+    """End of a CLI run: on success (``0``/``None``) publish every redirected output and delete its scratch;
+    on failure keep the scratch and print where it is."""
+    while _PENDING:
+        folder, work, target = _PENDING.pop()
+        if code not in (0, None):
+            print(f"failed (exit {code}); scratch kept for debugging: {folder}", file=sys.stderr)
+            continue
+        target.mkdir(parents=True, exist_ok=True)
+        receipt = publish(work, target)
+        print(f"evidence: {len(receipt['webp'])} WebP and {len(receipt['files'])} files in {target}")
+        shutil.rmtree(folder)
+        with contextlib.suppress(OSError):
+            folder.parent.rmdir()
+    return code
 
 
 __all__ = [
     "EVIDENCE_FPS",
-    "FrameSequence",
     "MAX_BYTES",
     "animated_webp",
-    "frame_sequence",
-    "save_qimage_webp",
+    "evidence_workspace",
+    "finish",
+    "publish",
+    "redirect_output",
     "still_from_png",
     "still_webp",
 ]

@@ -90,7 +90,6 @@ import os
 import ctypes
 import json
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
@@ -242,7 +241,11 @@ def _start_external_winprobe(variant: int) -> tuple[subprocess.Popen[str] | None
         return (None, None)
 
     duration_s = max(4.0, float(AUTO_CLOSE_SECONDS) + 4.0)
-    out_path = Path(tempfile.gettempdir()) / f"srpss_flicker_winprobe_v{variant}_{int(time.time()*1000)}.json"
+    # Owner scratch (tools/artifact_paths.py), never %TEMP%; the report is read and deleted below.
+    from tools import artifact_paths
+    scratch = artifact_paths.scratch_root("flicker_test")
+    scratch.mkdir(parents=True, exist_ok=True)
+    out_path = scratch / f"{os.getpid()}_winprobe_v{variant}_{int(time.time()*1000)}.json"
     cmd = [
         sys.executable,
         str(observer_path),

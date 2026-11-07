@@ -181,7 +181,11 @@ def run_task(task_name: str) -> dict:
 
 
 def smoke_test(task_name: str) -> dict:
-    stamp_path = Path(tempfile.gettempdir()) / f"{task_name}_stamp.txt"
+    # Owner scratch (tools/artifact_paths.py), never %TEMP%: a late task write cannot leak there.
+    from tools import artifact_paths
+    stamp_dir = artifact_paths.run_scratch("reddit_helper_task_harness", "stamp")
+    stamp_dir.mkdir(parents=True, exist_ok=True)
+    stamp_path = stamp_dir / f"{task_name}_stamp.txt"
     try:
         stamp_path.unlink()
     except OSError:
@@ -215,6 +219,8 @@ def smoke_test(task_name: str) -> dict:
         stamp_path.unlink()
     except OSError:
         pass
+    if stamp_exists:
+        artifact_paths.discard_run_scratch("reddit_helper_task_harness")
 
     return {
         "success": (
