@@ -12,7 +12,8 @@ semantics, while family-specific Widget roles remain sparse and inherit through
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
 import re
 import sys
@@ -297,51 +298,113 @@ def widget_counterpart_for_settings_theme(
     )
 
 
+class MirrorRegenerationRefused(RuntimeError):
+    """Wholesale regeneration would erase authored content it was not told to erase."""
+
+
+@dataclass(frozen=True)
+class MirrorRegenerationPlan:
+    """What a wholesale regeneration would do to one Widget theme folder."""
+
+    writes: Mapping[Path, str]
+    # Existing files whose text the regeneration would change: hand-authored mirrors.
+    overwrites_authored: tuple[Path, ...]
+    # Existing ``.srwtheme`` files the regeneration would delete (unlinked themes, the
+    # ``widget:material:*`` themes among them, and orphans).
+    deletes: tuple[Path, ...]
+
+    def describe(self) -> str:
+        lines = [f"Would write {len(self.writes)} Widget theme mirrors."]
+        lines.append(f"Would overwrite {len(self.overwrites_authored)} hand-authored mirrors"
+                     + (":" if self.overwrites_authored else "."))
+        lines.extend(f"  {path.name}" for path in self.overwrites_authored)
+        lines.append(f"Would delete {len(self.deletes)} other Widget themes"
+                     + (":" if self.deletes else "."))
+        lines.extend(f"  {path.name}" for path in self.deletes)
+        return "\n".join(lines)
+
+
+def _normalised_text(path: Path) -> str | None:
+    return path.read_bytes().decode("utf-8").replace("\r\n", "\n") if path.is_file() else None
+
+
+def plan_widget_theme_mirror_regeneration(
+    themes_root: Path,
+    *,
+    output_directory: Path | None = None,
+) -> MirrorRegenerationPlan:
+    """Compute a wholesale regeneration without touching the disk."""
+
+    root = Path(themes_root)
+    output = Path(output_directory) if output_directory is not None else root / "widgets"
+    writes: dict[Path, str] = {}
+    # Compiled Default Dark is the canonical Widget mirror.
+    writes[output / CANONICAL_WIDGET_DEFAULT] = widget_theme_to_json(
+        widget_counterpart_for_settings_theme(
+            DEFAULT_DARK_SETTINGS_THEME,
+            settings_theme_id=BUILTIN_SETTINGS_THEME_ID,
+        )
+    )
+    for path in sorted(root.glob("*.srtheme"), key=lambda value: value.name.casefold()):
+        if path.name.casefold() == CANONICAL_SETTINGS_DEFAULT.casefold():
+            continue
+        widget_theme = widget_counterpart_for_settings_theme(
+            load_settings_theme_file(path),
+            settings_theme_id=f"file:{path.name}",
+        )
+        writes[output / f"{_widget_display_name(path.stem)}.srwtheme"] = widget_theme_to_json(widget_theme)
+
+    authored = tuple(
+        target for target, text in writes.items()
+        if (current := _normalised_text(target)) is not None and current != text
+    )
+    expected = {target.name for target in writes}
+    deletes = tuple(
+        sorted((stale for stale in output.glob("*.srwtheme") if stale.name not in expected),
+               key=lambda value: value.name.casefold())
+    ) if output.is_dir() else ()
+    return MirrorRegenerationPlan(writes=writes, overwrites_authored=authored, deletes=deletes)
+
+
 def generate_widget_theme_mirrors(
     themes_root: Path,
     *,
     output_directory: Path | None = None,
+    overwrite_authored: bool = False,
+    delete_unlinked: bool = False,
 ) -> tuple[Path, ...]:
-    """Regenerate the curated Widget mirror pack deterministically.
+    """Regenerate the curated Widget mirror pack wholesale, deterministically.
 
-    Wholesale: it rewrites every mirror from its Settings theme, which erases
-    hand-authored colour roles in shipped mirrors, and deletes every other
-    ``.srwtheme`` in the output folder (the unlinked ``widget:material:*`` themes
-    included). To add one projected field to the shipped pack use
-    :func:`fill_widget_theme_mirror_materials` instead.
+    Every mirror is rewritten from its Settings theme and every other ``.srwtheme``
+    in the folder is deleted. Both destroy authored content, so each needs its own
+    explicit permission: without ``overwrite_authored`` it refuses when any existing
+    mirror is not byte for byte what it would write (hand-authored colour roles);
+    without ``delete_unlinked`` it refuses when it would delete any file (the
+    unlinked ``widget:material:*`` themes). A refusal writes nothing. To add one
+    projected field to the shipped pack use :func:`fill_widget_theme_mirror_materials`.
     """
 
-    root = Path(themes_root)
-    output = Path(output_directory) if output_directory is not None else root / "widgets"
-    output.mkdir(parents=True, exist_ok=True)
+    plan = plan_widget_theme_mirror_regeneration(themes_root, output_directory=output_directory)
+    refused = []
+    if plan.overwrites_authored and not overwrite_authored:
+        refused.append(f"{len(plan.overwrites_authored)} hand-authored mirrors would be overwritten "
+                       "(pass overwrite_authored / --overwrite-authored)")
+    if plan.deletes and not delete_unlinked:
+        refused.append(f"{len(plan.deletes)} other Widget themes would be deleted "
+                       "(pass delete_unlinked / --delete-unlinked)")
+    if refused:
+        raise MirrorRegenerationRefused("Refusing to regenerate: " + "; ".join(refused) + "\n" + plan.describe())
 
-    # Compiled Default Dark is the canonical Widget mirror.
-    canonical_default = widget_counterpart_for_settings_theme(
-        DEFAULT_DARK_SETTINGS_THEME,
-        settings_theme_id=BUILTIN_SETTINGS_THEME_ID,
-    )
     written: list[Path] = []
-    default_path = output / CANONICAL_WIDGET_DEFAULT
-    default_path.write_text(widget_theme_to_json(canonical_default), encoding="utf-8")
-    written.append(default_path)
-
-    for path in sorted(root.glob("*.srtheme"), key=lambda value: value.name.casefold()):
-        if path.name.casefold() == CANONICAL_SETTINGS_DEFAULT.casefold():
-            continue
-        settings_theme = load_settings_theme_file(path)
-        settings_theme_id = f"file:{path.name}"
-        widget_theme = widget_counterpart_for_settings_theme(
-            settings_theme,
-            settings_theme_id=settings_theme_id,
-        )
-        target = output / f"{_widget_display_name(path.stem)}.srwtheme"
-        target.write_text(widget_theme_to_json(widget_theme), encoding="utf-8")
+    for target, text in plan.writes.items():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        raw = target.read_bytes() if target.is_file() else b""
+        newline = "\r\n" if b"\r\n" in raw else "\n"
+        with target.open("w", encoding="utf-8", newline=newline) as handle:
+            handle.write(text)
         written.append(target)
-
-    expected = {path.name for path in written}
-    for stale in output.glob("*.srwtheme"):
-        if stale.name not in expected:
-            stale.unlink()
+    for stale in plan.deletes:
+        stale.unlink()
     return tuple(written)
 
 
@@ -389,16 +452,47 @@ def fill_widget_theme_mirror_materials(themes_root: Path) -> tuple[Path, ...]:
     return tuple(changed)
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = sys.argv[1:] if argv is None else argv
-    project_root = Path(__file__).resolve().parent.parent
-    if args == ["--fill-materials"]:
-        changed = fill_widget_theme_mirror_materials(project_root / "themes")
-        print(f"Filled surface_material into {len(changed)} Widget theme mirrors in themes/widgets")
+_USAGE = """usage: generate_widget_theme_mirrors.py MODE
+  --fill-materials     fill each linked mirror's surface_material, changing nothing else
+  --regenerate-all     rewrite every mirror from its Settings theme; refuses to
+                       overwrite hand-authored mirrors or delete other Widget themes
+                       unless these name that intent too:
+      --overwrite-authored   allow overwriting mirrors the generator would change
+      --delete-unlinked      allow deleting every other .srwtheme (material themes)
+With no mode it changes nothing and prints what --regenerate-all would do."""
+
+
+def main(argv: list[str] | None = None, *, themes_root: Path | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    root = Path(themes_root) if themes_root is not None else (
+        Path(__file__).resolve().parent.parent / "themes"
+    )
+    flags = set(args)
+    known = {"--fill-materials", "--regenerate-all", "--overwrite-authored", "--delete-unlinked"}
+    if flags - known or len(flags) != len(args):
+        print(_USAGE, file=sys.stderr)
+        return 2
+    if flags == {"--fill-materials"}:
+        changed = fill_widget_theme_mirror_materials(root)
+        print(f"Filled surface_material into {len(changed)} Widget theme mirrors in {root / 'widgets'}")
         return 0
-    written = generate_widget_theme_mirrors(project_root / "themes")
-    print(f"Generated {len(written)} Widget theme mirrors in themes/widgets")
-    return 0
+    if "--regenerate-all" in flags and "--fill-materials" not in flags:
+        try:
+            written = generate_widget_theme_mirrors(
+                root,
+                overwrite_authored="--overwrite-authored" in flags,
+                delete_unlinked="--delete-unlinked" in flags,
+            )
+        except MirrorRegenerationRefused as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        print(f"Generated {len(written)} Widget theme mirrors in {root / 'widgets'}")
+        return 0
+    # No mode (or a meaningless combination): refuse, and show what regeneration would do.
+    print(_USAGE, file=sys.stderr)
+    print("\nNothing was changed. --regenerate-all would do this:", file=sys.stderr)
+    print(plan_widget_theme_mirror_regeneration(root).describe(), file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

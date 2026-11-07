@@ -252,8 +252,9 @@ widgets.<family>.surface_material       Inherit (default) | Normal | the five ma
   Overrides set to anything but Theme still win. The shipped mirrors got the key by a **one-key fill**
   (`python tools/generate_widget_theme_mirrors.py --fill-materials`, like the preset repair fill), never by
   regeneration: ten mirrors carry hand-authored colour roles (for example `media.volume.fill`) that the wholesale
-  generator would erase, and it also deletes every unlinked theme in the folder. The fill refuses a file the
-  canonical writer would not reproduce byte for byte. Two pairs name none: `Matte Graphite [Single]` (backdrop
+  generator would erase, and it would also delete every unlinked theme in the folder (so it now refuses both unless
+  a flag names each intent; with no arguments the script changes nothing). The fill refuses a file the canonical
+  writer would not reproduce byte for byte. Two pairs name none: `Matte Graphite [Single]` (backdrop
   `off`) and the built-in Default Dark, whose Widget half is the compiled `DEFAULT_DARK_WIDGET_THEME`: the
   unconditional fallback and the process's initial active theme, kept Normal so the error path and an un-themed
   start stay dormant (its Settings half draws an Acrylic window, but its name carries no tag). The Themes tab tags
