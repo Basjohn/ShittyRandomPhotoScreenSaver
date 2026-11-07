@@ -294,6 +294,79 @@ def test_response_editor_fills_its_own_dashboard_panel_beside_the_viewport(studi
     surface.pump(2)
     assert not dock.isVisible()
 
+
+def _reactivity_dock(controller, surface):
+    controller.bridge.setWorkspace("reactivity")
+    surface.pump(3)
+    return next(i for i in _walk(surface.host.root) if i.objectName() == "responseDock")
+
+
+def test_response_editor_paints_over_its_frame_never_under_it(studio):
+    """The operator saw the whole editor ghosted, an empty-looking panel (7 Nov): its frame, reparented into the same
+    panel area, landed after it and the frame's fill covered every row. The frame paints first, and the editor's rows
+    read clearly; forcing the frame over the editor (the defect) washes them out (negative control)."""
+    import numpy
+    from PySide6.QtCore import QPointF
+    controller, surface = studio
+    dock = _reactivity_dock(controller, surface)
+    siblings = dock.parentItem().childItems()
+    (frame,) = [i for i in siblings if i.objectName() == "panelFrame" and i.isVisible()]
+    order = {id(item): (item.z(), index) for index, item in enumerate(siblings)}
+    assert order[id(frame)] < order[id(dock)], "the dock's frame paints under the editor"
+
+    def contrast() -> float:
+        surface.pump(2)
+        image = surface.grab()[..., :3].astype(float) @ numpy.array([0.2126, 0.7152, 0.0722])
+        origin = dock.mapToScene(QPointF(0, 0))
+        x, y = int(origin.x()) + 8, int(origin.y()) + 8
+        region = image[y:y + int(dock.height()) - 16, x:x + int(dock.width()) - 16]
+        return float(numpy.percentile(region, 99.5) - numpy.median(region))   # its brightest rows over the fill
+
+    shown = contrast()
+    z = frame.z()
+    frame.setZ(dock.z() + 1)
+    covered = contrast()
+    frame.setZ(z)
+    assert shown > 2.0 * covered, (shown, covered)
+
+
+def _deepest_reachable(flick) -> float:
+    """The lowest edge of anything the editor shows, in its scroll content (a nested scroller counts as one box)."""
+    from PySide6.QtCore import QRectF
+    content = flick.property("contentItem")
+    bottom, stack = 0.0, list(content.childItems())
+    while stack:
+        item = stack.pop()
+        if not item.isVisible() or item.width() <= 0 or item.height() <= 0:
+            continue
+        bottom = max(bottom, item.mapRectToItem(content, QRectF(0, 0, item.width(), item.height())).bottom())
+        name = item.metaObject().className()
+        if "Flickable" not in name and "ScrollView" not in name:
+            stack.extend(item.childItems())
+    return bottom
+
+
+def test_response_editor_scrolls_to_every_row_when_its_panel_is_short(studio):
+    """At this window size the editor is taller than its panel: it scrolls down (its own scroll bar in the panel's
+    margin, beside the fields), so its last rows, the target's Range among them, stay in reach. Held to the panel's
+    height (before 7 Nov) they fall outside it (negative control)."""
+    from PySide6.QtCore import QPointF
+    controller, surface = studio
+    dock = _reactivity_dock(controller, surface)
+    flick = next(i for i in _walk(dock) if i.objectName() == "responseScroll")
+    deepest = _deepest_reachable(flick)
+    assert deepest > flick.height() + 1.0, "precondition: the editor is taller than its panel at this window size"
+    assert deepest <= float(flick.property("contentHeight")) + 1.0, "its last rows are out of reach"
+    assert flick.property("interactive")
+    (bar,) = [i for i in _walk(dock) if i.objectName() == "responseScrollVertical"]
+    assert bar.isVisible()
+    assert bar.mapToScene(QPointF(0, 0)).x() >= flick.mapToScene(QPointF(flick.width(), 0)).x()
+    assert bar.mapToScene(QPointF(bar.width(), 0)).x() <= dock.mapToScene(QPointF(dock.width(), 0)).x()
+    flick.setProperty("contentHeight", flick.height())
+    surface.pump(2)
+    assert _deepest_reachable(flick) > float(flick.property("contentHeight")) + 1.0
+
+
 def test_preset_tiles_render_once_per_starting_point_and_stay_idle(studio, monkeypatch):
     controller, surface = studio
     requests = []

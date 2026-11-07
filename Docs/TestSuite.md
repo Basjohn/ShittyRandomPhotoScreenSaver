@@ -811,7 +811,9 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
 - `tests/test_waveform_studio_framing.py` — the Studio opens on the live card's world (Fill), measured as production
   measures it;
 - `tests/test_waveform_studio_editors.py`, `tests/test_waveform_studio_theme.py` — direct editors, handles, tiles,
-  cards; theme-derived chrome contrast in every shipped theme, the instrument wells' inks readable on their well in
+  cards; the response editor paints over its frame (its rows read clearly; the frame forced over it washes them out)
+  and scrolls to every row when its panel is short (held to the panel's height they fall out of reach); theme-derived
+  chrome contrast in every shipped theme, the instrument wells' inks readable on their well in
   every theme with dark themes unchanged and the shell bound to the well roles (control: the former viewport-tone
   pairing is illegible on every light theme);
 - `tests/test_waveform_studio_replay_budget.py` — Waveform's exact replay on the shared `ExactReplay`: under the

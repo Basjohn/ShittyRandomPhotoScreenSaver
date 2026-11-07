@@ -73,7 +73,11 @@ reuses Settings' owners rather than restating them:
   half its offset, `SHADOW_SCALE`), the surface, and the border stroked once along one continuous path
   (`ui/widgets/continuous_border.py:rounded_border_path`), 1.5 px. Smaller cards (group headers, schematic and trace
   cards, starting-point tiles, toolbar backings) are Quick rectangles whose border is one ring, also 1.5 px. A painted
-  frame repaints only when its size or a colour changes: nothing per frame, no frame requests.
+  frame repaints only when its size or a colour changes: nothing per frame, no frame requests. A frame always paints
+  under its content by `z`: the response dock's frame sits beside the dock (the dock clips, the cast does not), both
+  reparented into the panel area, where sibling order is not declaration order. Without its `z` the frame landed over
+  the editor and its fill ghosted every row into an empty-looking panel (operator, 7 Nov;
+  `tests/test_waveform_studio_editors.py`, pixel contrast with a negative control).
 - **Instrument wells.** Signal-trace cards, the response-curve box and the transport bar (with its time readout) sit
   on the `well` role: the viewport tone while the theme's own text reads on it at 4.5:1 (every dark theme, unchanged),
   else the theme's input surface (a light theme). Their inks (`wellText`, `wellDim`, `wellTrace1..3`) are the panel's
@@ -363,8 +367,9 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
 `.artifacts/evidence/studio/followups/20261107_followups/drag_profile/`.
 
 A drag holds until release. Drag instruments that sit in a scrolling panel set `preventStealing: true`: the value
-slider, the colour picker's field and hue bar, gradient nodes, and the response curve in the sideways-scrolling
-dock. Without it, a vertical wobble past the drag threshold handed the press to the panel's scroll view, and the
+slider, the colour picker's field and hue bar, gradient nodes, and the response curve in the scrolling dock (it
+scrolls sideways when narrow and down when short, its vertical bar in the dock's right margin beside the fields; at
+the default window on a 1440p / 150% screen its Range row was otherwise cut off). Without it, a vertical wobble past the drag threshold handed the press to the panel's scroll view, and the
 slider let go mid-drag (operator, 6 Nov: "sliders snap out of being dragged in mid motion"; it reproduced on every
 mode at the first wobble). `tests/test_studio_drag_coalescing.py` drags every mode with a wobble, with a negative
 control.
