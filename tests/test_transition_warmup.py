@@ -527,6 +527,7 @@ def test_the_engine_prepares_the_first_transition_once_the_startup_reveal_comple
         _end_replacement_watchdog=lambda reason: calls.append("watchdog"),
         _runtime_lifecycle_event="cold_start",
         _prepare_next_transition=lambda: calls.append("next"),
+        _freeze_revealed_generation=lambda: None,   # the reveal's GC freeze (tests/test_gc_freeze_per_generation.py)
     )
     ScreensaverEngine._on_startup_reveal_completed(engine, 3, object(), 3)
     assert calls == ["watchdog", "next"]

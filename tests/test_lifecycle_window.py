@@ -72,6 +72,7 @@ def test_the_coordinated_reveal_closes_the_window(monkeypatch):
         _end_replacement_watchdog=lambda reason: None,
         _runtime_lifecycle_event="settings",
         _prepare_next_transition=lambda: None,
+        _freeze_revealed_generation=lambda: None,   # the reveal's GC freeze (tests/test_gc_freeze_per_generation.py)
     )
     lifecycle_window.open_window("settings")
     ScreensaverEngine._on_startup_reveal_completed(engine, 5, object(), 5)

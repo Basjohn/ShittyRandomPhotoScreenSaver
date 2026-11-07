@@ -86,6 +86,8 @@ EVENT_NAMES = {
     72: "retained_node_create_begin",
     73: "retained_node_create_ready",
     74: "quick_sync_latest_admitted",
+    75: "gc_begin",
+    76: "gc_end",
 }
 
 # Startup/teardown windows are not stall points (core/diagnostics/lifecycle_window.py):
@@ -231,6 +233,29 @@ CLIP_END_REFINED_STAGES = (
 )
 
 
+
+
+def _gc_report(edges, windows, first_ns, last_ns):
+    """Per generation: collections, pause per collection and per hour, steady (outside lifecycle windows) apart."""
+    if not edges:
+        print("gc=unrecorded (trace predates gc markers or none ran)")
+        return
+    hours = max(1e-9, ((last_ns or 0) - (first_ns or 0)) / 3.6e12)
+    pauses = defaultdict(list)       # (generation, steady) -> [(ms, collected)]
+    started: dict[int, int] = {}
+    for ts_ns, event, generation, collected in sorted(edges):
+        if event == 75:
+            started[generation] = ts_ns
+        elif generation in started:
+            begin = started.pop(generation)
+            steady = not any(b <= begin <= e for b, e in windows)
+            pauses[(generation, steady)].append(((ts_ns - begin) / 1e6, collected))
+    for (generation, steady), values in sorted(pauses.items()):
+        ms = [v for v, _c in values]
+        print(f"gc generation={generation} {'steady' if steady else 'lifecycle'} n={len(ms)} "
+              f"per_hour={len(ms) / hours:.1f} median_ms={statistics.median(ms):.2f} "
+              f"max_ms={max(ms):.2f} pause_ms_per_hour={sum(ms) / hours:.1f} "
+              f"collected={sum(c for _v, c in values)}")
 
 
 def _trace_segment_paths(path: Path) -> list[Path]:
@@ -875,6 +900,7 @@ def main() -> int:
     draw_timestamps_by_screen: dict[int, list[int]] = defaultdict(list)
     swap_timestamps_by_screen: dict[int, list[int]] = defaultdict(list)
     lifecycle_edges: list[tuple[int, int]] = []
+    gc_edges: list[tuple[int, int, int, int]] = []   # (ts_ns, event, generation, collected)
     first_ns, last_ns = None, None
     payload_bytes = len(raw) - HEADER.size
     records, trailing_bytes = divmod(payload_bytes, RECORD.size)
@@ -891,6 +917,8 @@ def main() -> int:
         last_ns = ts_ns if last_ns is None or ts_ns > last_ns else last_ns
         if event in (62, 63):
             lifecycle_edges.append((ts_ns, event))
+        if event in (75, 76):
+            gc_edges.append((ts_ns, event, int(aux), int(revision)))
         if event in (15, 16, 17, 18) and revision >= 0:
             worker_events[(int(aux), int(revision))][event].append(ts_ns)
         if event in (64, 65) and revision >= 0:
@@ -1017,6 +1045,8 @@ def main() -> int:
         )
     else:
         print("lifecycle_windows=unrecorded (trace predates lifecycle markers)")
+    _gc_report(gc_edges, _lifecycle_windows(lifecycle_edges, first_ns, last_ns) if lifecycle_edges else [],
+               first_ns, last_ns)
 
     audio_analysis_intervals = _paired_worker_intervals(worker_events, 15, 16)
     audio_smooth_intervals = _paired_worker_intervals(worker_events, 17, 18)

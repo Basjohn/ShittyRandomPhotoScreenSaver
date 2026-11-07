@@ -783,25 +783,10 @@ def run_screensaver(
         gc_policy = RuntimeGCPolicy()
         gc_policy.start()
         engine._gc_policy = gc_policy
-        # One-shot (not a poller): after startup warms, freeze the stable
-        # long-lived tracked set into the permanent generation so recurring
-        # Gen2 scans stop stalling the Visualizer cadence thread. In-situ
-        # evidence: the first Gen2 lands ~66 s in and RSS/tracked-set are stable
-        # by ~30 s, so a ~45 s warmup freezes after the set is built but before
-        # the first Gen2. Retirement thaws the frozen generation before a
-        # Settings/CUSTOM destruction barrier; normal RUN exit also restores.
-        from PySide6.QtCore import QTimer as _GCFreezeTimer
-
-        def _freeze_only_while_running() -> None:
-            # The existing single shot may land while Settings has paused the
-            # screensaver. Never freeze a dialog/replacement generation merely
-            # because the wall-clock startup delay elapsed.
-            if (getattr(engine, "_running", False)
-                    and getattr(engine._get_state(), "name", "") == "RUNNING"
-                    and getattr(engine, "display_manager", None) is not None):
-                gc_policy.freeze_stable_generation()
-
-        _GCFreezeTimer.singleShot(45_000, _freeze_only_while_running)
+        # Every display generation is frozen at its coordinated reveal (the engine's warm-up end,
+        # ScreensaverEngine._freeze_revealed_generation) and thawed before it retires
+        # (engine_lifecycle.teardown_display_runtime), so the long-lived heap of whichever generation is live never
+        # enters a gen2 scan. Normal RUN exit restores the interpreter's policy.
         _arm_cli_exit_after(engine, exit_after_seconds)
         try:
             return app.exec()
