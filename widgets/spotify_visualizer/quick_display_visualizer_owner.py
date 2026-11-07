@@ -728,6 +728,13 @@ class QuickDisplayVisualizerOwner:
     def expanded_display_transition_active(self) -> bool:
         return self._takeover is not None
 
+    @property
+    def expanded_display_fade_half_s(self) -> float:
+        """One half of the fade-through (seconds): the ordinary widgets on this display fade over the same span, out
+        while the card fades out at its ordinary rect, back in while the display-wide card fades out (plan 01 M3)."""
+
+        return self._transition_half_duration_s
+
     def set_expanded_display(
         self,
         expanded: bool,

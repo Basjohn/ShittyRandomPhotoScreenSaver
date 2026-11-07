@@ -166,7 +166,7 @@ the ordinary layout, and entering Edit collapses first.
 | --- | --- | --- | --- |
 | per-display wallpaper suppression wedges a global batch (§E) | medium | critical | pure state tests of the batch accounting first (E1.1); the fallback keeps the transaction contract and records one unresolved perf item |
 | 4K GPU cost of EB/Waveform exceeds budget | medium | high (decides the backend) | mixed resolution for soft layers; otherwise trigger 1 recorded, not hidden by a knob |
-| widget re-admission after fade creates duplicate owners or orphans shared backends | medium | high | symmetric, idempotent, exact-generation `admit_widget` on the binder (§F); consumer counts in the regression bar |
+| widget re-admission after fade creates duplicate owners or orphans shared backends | medium → closed at M3 | high | nothing is retired: the M3 cover is a visual policy only (no `admit_widget` built); the regression bar spies every lifecycle entry point over 20 cycles |
 | expansion persisted on a now-incapable mode flashes or loops at startup | low | medium | one evaluation at the readiness edge; deterministic incapable rule (§D3) |
 | HUD/OSD/control hit overlap | medium | low | one visibility lease with priority (§G); native QML hit tests |
 | plan drift from the source by the time it starts | high | medium | M0 re-audits every seam in §A and records amendments |
@@ -504,10 +504,62 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 
 **Milestone 3 | Display-local fading, HUD + safe widget suspension**
 
-- [ ] Add composed takeover opacity outside authored fade; no flashing at startup or immediate toggles.
-- [ ] Add exception/preservation for Media truth and OSD; implement consumer-accurate targeted retirement/re-admission (if safe), not global disable flags.
-- [ ] Add theme-aligned event-driven HUD with no tooltips/hit overlap; test track/play/pause/volume/hover and unavailable app-volume provider.
-- [ ] **Gate 3:** no service/backend orphaning, no duplicate worker/endpoint source, UI equal on untouched display, no opacity/binding warnings.
+- [x] Add composed takeover opacity outside authored fade; no flashing at startup or immediate toggles.
+- [x] Add exception/preservation for Media truth and OSD; implement consumer-accurate targeted retirement/re-admission (if safe), not global disable flags. (Retirement/re-admission decided against, below: the cover is visual only.)
+- [ ] HUD: **not M3 any more.** The operator respecified it (7 Nov night); it is its own slice after M3 merges, per the amended §G (lead).
+- [ ] **Gate 3:** no service/backend orphaning, no duplicate worker/endpoint source, UI equal on untouched display, no opacity/binding warnings. Widget part evidenced (below); lead signs; the operator's look on the real display is owed.
+
+**M3 as built (7 Nov night, implementing agent; widget fade and suspension only):**
+
+> Operator, on Waveform Ribbon expanded at 2560 x 1440: "Don't really hide/disable the widgets underneath as you can
+> see a double border on the topleft from another widget."
+
+- *Policy (§0.3, §F).* One display-local transient visual policy on the retained scene: `DisplayScene.qml`
+  `ordinaryWidgetsCovered` drives `ordinaryWidgetsCoverOpacity`, applied as the opacity of the two ordinary lanes,
+  the paint lane (`ordinaryWidgetHost`) and a new shadow lane (`ordinaryWidgetShadowLane`, inside the shadow host
+  after the Visualizer card's shadow, so paint order is unchanged and every ordinary card shadow fades with its
+  card). Fully covered, both lanes are invisible (no paint, hit or hover); input stops at the cover edge
+  (`enabled`), not at the end of the fade. It composes as an ancestor's opacity with every family `fadeOpacity` and
+  the startup gate and never writes them; a root created while covered joins covered. The Visualizer card, its
+  shadow and the OSD foreground lane are outside it. `QuickSceneController.set_ordinary_widgets_covered(covered,
+  fade_s)` is the one setter; QML owns only the fade (a `Behavior`, `Easing.InOutSine`, its `NumberAnimation`
+  instantiated on first use; nothing runs at rest).
+- *Driver.* The takeover coordinator, at its action edges only (no timer, no poll, no per-frame branch): `RunEnter`
+  covers (D1.6, before the owner's route), `BeginExit` uncovers (D2.2), as do `CancelEnter` and `RetireTakeover`.
+  The fade is the owner's own fade half (`expanded_display_fade_half_s`, 0.25 s): the widgets leave while the card
+  fades out at its ordinary rect and return while the display-wide card fades out. The readiness restore and Edit's
+  collapse snap (a restore happens before reveal, so nothing is ever seen fading; Edit edits the ordinary layout at
+  once). Only the owning display is covered; covering another first uncovers the previous one. The display manager
+  wires `_cover_ordinary_widgets` into the coordinator's services.
+- *Suspension (decided).* Covered widgets are suspended as presentation: invisible items draw nothing and take no
+  input. Family services are **not** retired and re-admitted: Media must keep feeding the Visualizer's playback
+  truth and its volume wheel; Gmail, Feeds, Steam, System Stats and Friend Pulse backends are generation-shared and
+  serve other displays; a per-collapse rebuild would re-run QML construction on the GUI thread and re-arm provider
+  refreshes (the Reddit/Steam burst risk §F names), and could not return each widget "exactly as it was" (rotation,
+  scroll and fade state). So the binder's targeted `admit_widget` is not built. Visibility-driven presentation work
+  already pauses on its own (Friend Pulse reports an empty visible range, so avatar hydration for this display
+  stops; Achievement Pulse's pulse stops). What still runs while covered: each family's provider cadence and model
+  updates, exactly as before expansion. Reopen only on measured evidence that a covered display's exclusive provider
+  work matters.
+- *§F open points, decided.* A widget enabled or disabled by Settings while covered: Settings replaces the
+  generation, and the readiness restore covers the new one before reveal. Edit collapses first (uncovered, snapped),
+  so its live enable/disable commits happen on the ordinary layout. Nothing is frozen, so collapse reconciles
+  nothing: the lanes reopen over whatever is live.
+- *Gate 3 evidence (widget part).* `tests/test_visualizer_expansion_widget_cover.py` on the production
+  `DisplayScene.qml` and `QuickSceneController` (hidden `QQuickRenderControl` scene, never shown): covered (snap and
+  fade) the frame equals the same display with no ordinary widgets, the expanded Visualizer card with its shadow and
+  a revealed OSD included; uncovering restores every pixel; mid-fade every card shadow fades with its card; family
+  fades, startup gate and roots untouched; input stops at the edge; a late root joins covered. Twenty user
+  expand/collapse cycles through the real coordinator and the display manager's cover service: 0 calls into any
+  family, binder, runtime-manager, presenter or host lifecycle entry point (spied), so no Media, OSD, Gmail, Feeds or
+  Steam consumer or lease can change; the same retained roots; QObject tree 206 before and after the 20 cycles (one
+  warm-up cycle first adds the deferred `NumberAnimation` and two Canvas contexts painting late); no Qt warning.
+  `tests/test_visualizer_expansion_coordinator.py` covers the edge order, snaps and retirements. Negative controls:
+  no cover on the paint lane, the cover on the whole shadow host (fades the Visualizer's shadow), an unfaded shadow
+  lane, ordinary shadows outside the lane, no uncover at `BeginExit`: each turns its bar red. No real Media / Gmail /
+  Feeds / Steam lease was counted in a test (that needs a live generation); the bar instead proves the cover cannot
+  reach their lifecycle. (§I proposed `test_visualizer_expansion_widget_leases.py` for a retire/re-admit design that
+  was not built.)
 
 **Milestone 4 | Wallpaper transition policy and GPU savings**
 

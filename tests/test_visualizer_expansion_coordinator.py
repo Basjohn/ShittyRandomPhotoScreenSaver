@@ -44,8 +44,13 @@ class _Engine:
         return self.activation
 
 
+HALF = 0.25   # the stand-in owner's fade half (the production owner reports its own)
+
+
 class _Owner:
     """Records route calls; an animated change completes when the test says so (the publication edge)."""
+
+    expanded_display_fade_half_s = HALF
 
     def __init__(self, mode: str) -> None:
         self.controller = SimpleNamespace(mode_id=mode, engine=_Engine())
@@ -96,6 +101,7 @@ class _Host:
         self.writes: list[bool] = []
         self.edit = False
         self.glyphs: list[tuple[str, bool, bool]] = []
+        self.covers: list[tuple[str, bool, float]] = []
         self.coordinator = ExpandedDisplayCoordinator(ExpandedDisplayServices(
             admitted_owner=lambda: self.owner,
             admitted_unit=lambda: self.unit,
@@ -105,6 +111,8 @@ class _Host:
             edit_active=lambda: self.edit,
             publish_glyph=lambda unit, available, expanded: self.glyphs.append(
                 (display_key(unit), bool(available), bool(expanded))),
+            cover_widgets=lambda unit, covered, fade_s: self.covers.append(
+                (display_key(unit), bool(covered), float(fade_s))),
         ))
 
     def _persist(self, value: bool) -> None:
@@ -307,6 +315,74 @@ def test_presses_are_fenced_to_the_owning_display_and_follow_a_transfer():
     assert host.press(True, unit=other) and host.owner.calls == [(True, True)]
 
 
+# ------------------------------------------------------------- M3: the expanded display's ordinary widgets
+
+
+def test_the_widgets_fade_out_with_the_enter_and_back_in_with_the_collapse():
+    """Operator, 7 Nov night: the widgets underneath must really be hidden (a double border showed at the top
+    left). They leave as the enter runs (D1.6) with the card's own fade half, and return as the collapse begins
+    (D2.2); nothing else covers or uncovers them."""
+    host = _Host()
+    host.coordinator.generation_ready()
+    key = display_key(host.unit)
+    assert host.covers == []
+    assert host.press(True)
+    assert host.covers == [(key, True, HALF)]
+    host.owner.finish()
+    assert host.covers == [(key, True, HALF)]
+    assert host.press(False)
+    assert host.covers == [(key, True, HALF), (key, False, HALF)]
+    host.owner.finish()
+    assert len(host.covers) == 2
+
+
+def test_a_restore_before_reveal_and_edits_collapse_snap_the_cover():
+    host = _Host(requested=True)
+    host.coordinator.generation_ready()
+    key = display_key(host.unit)
+    assert host.covers == [(key, True, 0.0)]                  # never shown before reveal: no fade, no flash
+    host.edit = True
+    host.coordinator.edit_entered()
+    assert host.covers[-1] == (key, False, 0.0)               # Edit edits the ordinary layout at once
+    host.edit = False
+    host.coordinator.edit_exited(saved=False)
+    assert host.covers[-1] == (key, True, HALF)               # the intent re-applies, with the fade
+
+
+def test_an_incapable_mode_collapse_a_failed_enter_and_a_retirement_bring_the_widgets_back():
+    host = _expanded_by_user()
+    key = display_key(host.unit)
+    host.request_mode(INCAPABLE)
+    assert host.covers[-1] == (key, False, HALF)
+
+    refused = _Host()
+    refused.coordinator.generation_ready()
+    refused.owner.set_expanded_display = lambda *args, **kwargs: False    # the owner cannot draw it
+    refused.press(True)
+    assert refused.covers == [(key, True, HALF), (key, False, HALF)]
+    assert refused.coordinator.phase is Phase.ORDINARY
+
+    retired = _expanded_by_user()
+    retired.owner = None                                      # the admission ended (reload, Visualizer off)
+    retired.coordinator.owner_retired("reload")
+    assert retired.covers[-1] == (key, False, HALF)           # with the fade the owner had
+    retired.coordinator.retire()
+    assert retired.covers[-1] == (key, False, HALF) and len(retired.covers) == 2
+
+
+def test_twenty_cycles_balance_the_cover_on_the_owning_display_only():
+    host = _Host()
+    host.coordinator.generation_ready()
+    key = display_key(host.unit)
+    for _ in range(20):
+        assert host.press(True)
+        host.owner.finish()
+        assert host.press(False)
+        host.owner.finish()
+    assert host.covers == [(key, True, HALF), (key, False, HALF)] * 20
+    assert host.writes == [True, False] * 20 and host.coordinator.phase is Phase.ORDINARY
+
+
 def test_after_retire_nothing_is_called():
     host = _expanded_by_user()
     host.coordinator.retire()
@@ -337,7 +413,8 @@ def _manager(mode: str, *, requested: bool):
     unit = _unit()
     published = []
     unit.runtime.scene_controller = SimpleNamespace(
-        set_visualizer_expand_glyph=lambda available, expanded: published.append((available, expanded)))
+        set_visualizer_expand_glyph=lambda available, expanded: published.append((available, expanded)),
+        set_ordinary_widgets_covered=lambda covered, *, fade_s: published.append(("covered", covered, fade_s)))
     section = {"mode": mode, "expanded_display_requested": requested}
     manager.__dict__.update(
         _retired=False, _expanded_display_coordinator=None, _quick_visualizer_owner=owner,
@@ -364,6 +441,9 @@ def test_a_capable_visualizer_gets_one_coordinator_at_admission(mode, requested,
     manager._expanded_display_ready()
     coordinator = manager._expanded_display_coordinator
     assert coordinator is not None and owner.calls == calls and published[-1] == glyph
+    # The manager's own cover service reaches the owning scene: a restored expansion hides its widgets at once.
+    assert [entry for entry in published if entry[0] == "covered"] == (
+        [("covered", True, 0.0)] if requested else [])
     manager._expanded_display_ready()                         # a re-admission reuses the one coordinator
     assert manager._expanded_display_coordinator is coordinator
     assert manager._expanded_display_blocks_layout() is (requested is True)

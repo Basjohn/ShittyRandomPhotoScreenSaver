@@ -546,12 +546,14 @@ class QuickSceneController(QObject):
         )
         if ordinary_widget_host_item is None:
             raise RuntimeError("DisplayScene.qml has no ordinary widget host")
+        # The ordinary card shadows go in their lane inside the shadow host (after the Visualizer card's shadow),
+        # which the Expanded Visualizer cover fades with the cards (``set_ordinary_widgets_covered``).
         ordinary_widget_shadow_host_item = root.findChild(
             QQuickItem,
-            "ordinaryWidgetShadowHost",
+            "ordinaryWidgetShadowLane",
         )
         if ordinary_widget_shadow_host_item is None:
-            raise RuntimeError("DisplayScene.qml has no ordinary widget shadow host")
+            raise RuntimeError("DisplayScene.qml has no ordinary widget shadow lane")
         osd_foreground_host_item = root.findChild(
             QQuickItem, "systemAudioOSDForegroundHost",
         )
@@ -2301,6 +2303,36 @@ class QuickSceneController(QObject):
     @property
     def visualizer_expand_glyph(self) -> tuple[bool, bool]:
         return self._visualizer_expand_glyph
+
+    def set_ordinary_widgets_covered(self, covered: bool, *, fade_s: float = 0.0) -> bool:
+        """Cover (fade out, then hide) or uncover this display's ordinary widget lanes (Expanded Visualizer, M3).
+
+        A display-local transient visual policy, never a lifetime signal: every retained root, model, provider,
+        lease and binding stays exactly as it is (no family is retired or rebuilt, ``widgets.<id>.enabled`` and
+        layout slots are untouched), so collapsing returns every widget exactly as it was. The OSD foreground lane,
+        the Visualizer card and its shadow are outside it. ``fade_s`` 0 snaps; otherwise QML fades over it. Called by
+        the takeover coordinator at its event edges only. Returns whether anything changed; a retired or closing
+        scene changes nothing.
+        """
+
+        root = self._scene_root
+        if root is None or not self._readiness.admission_open or not _qobject_is_alive(root):
+            return False
+        covered = bool(covered)
+        fade = float(fade_s)
+        fade_ms = int(round(fade * 1000.0)) if math.isfinite(fade) and fade > 0.0 else 0
+        if bool(root.property("ordinaryWidgetsCovered")) == covered:
+            return False
+        # The fade length first, so the Behavior that sees the new cover uses it (0 bypasses it and stops a fade
+        # already running).
+        root.setProperty("ordinaryWidgetsCoverFadeMs", fade_ms)
+        root.setProperty("ordinaryWidgetsCovered", covered)
+        return True
+
+    @property
+    def ordinary_widgets_covered(self) -> bool:
+        root = self._scene_root
+        return bool(root is not None and _qobject_is_alive(root) and root.property("ordinaryWidgetsCovered"))
 
     def set_visualizer_control_hints_available(self, available: bool) -> None:
         """Project framed-camera capability at mode admission, including lazy roots."""

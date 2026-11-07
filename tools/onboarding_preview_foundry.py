@@ -300,7 +300,7 @@ class _HiddenQuickScene:
 
         self.find = item
         self.host = OrdinaryWidgetPresentationHost(
-            host_item=item("ordinaryWidgetHost"), shadow_host_item=item("ordinaryWidgetShadowHost"),
+            host_item=item("ordinaryWidgetHost"), shadow_host_item=item("ordinaryWidgetShadowLane"),
             foreground_host_item=item("systemAudioOSDForegroundHost"),
             foreground_shadow_host_item=item("systemAudioOSDShadowHost"), context=self.qml_context,
             create_overlay_item=self.factory.create_overlay_widget,

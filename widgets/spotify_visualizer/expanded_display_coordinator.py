@@ -13,7 +13,13 @@ translates the facts in and performs the actions it returns through the existing
   nothing is written to the ordinary geometry, CUSTOM, presets or Settings);
 * the intent through one narrow Settings write (``widgets.spotify_visualizer.expanded_display_requested``);
 * a mode request through the canonical path, held until a collapse commits when the target is incapable;
-* the glyph's availability and direction through the owning scene.
+* the glyph's availability and direction through the owning scene;
+* the ordinary widgets on the owning display (M3, §F): one display-local transient visual policy on the retained
+  scene (``set_ordinary_widgets_covered``), covered as the enter runs (D1.6) and uncovered as a collapse, a failed
+  or cancelled enter, or a retirement begins (D2.2). It hides the cards and their shadows, never retires them:
+  every family, model, provider and display lease (Media, Gmail, Feeds, Steam...) stays exactly as it was, so the
+  Visualizer's Media truth and every shared backend keep their consumers, and collapsing returns each widget exactly
+  as it was. The OSD's foreground lane is outside the cover. Other displays are never touched.
 
 Fences (§0.5): the takeover generation is this coordinator's own admission serial, advanced at every owner
 admission (a Settings return or topology change replaces the display manager, and with it this object). The
@@ -91,6 +97,8 @@ class ExpandedDisplayServices:
     edit_active: Callable[[], bool]
     #: Project the glyph on one unit: (unit, available, expanded).
     publish_glyph: Callable[[Any, bool, bool], None]
+    #: Cover (True) or uncover the ordinary widget lanes on one unit: (unit, covered, fade seconds; 0 snaps).
+    cover_widgets: Callable[[Any, bool, float], None] = lambda _unit, _covered, _fade_s: None
 
 
 def display_key(unit: Any) -> str | None:
@@ -131,6 +139,9 @@ class ExpandedDisplayCoordinator:
         self._dispatching = False
         self._glyph_unit: Any = None
         self._glyph_activation: int | None = None
+        #: The unit whose ordinary widgets are covered (None: none), and the owner's fade half last seen.
+        self._cover_unit: Any = None
+        self._fade_half_s = 0.0
         self._transfer_done = False
         self._retired = False
 
@@ -281,6 +292,7 @@ class ExpandedDisplayCoordinator:
 
         if self._state.generation is None or self._state.phase is Phase.RETIRING:
             self._withdraw_glyph()
+            self._cover_widgets(False, animate=True)
             return
         self._feed(OwnerRetired(self._generation, str(reason)))
 
@@ -332,6 +344,8 @@ class ExpandedDisplayCoordinator:
                 else EnterFailed(generation, action.txn, "preflight")
             )
         elif isinstance(action, RunEnter):
+            # D1.6 before D1.7: the widgets fade out with the card's first half (a restore before reveal snaps).
+            self._cover_widgets(True, animate=bool(action.animate))
             started = owner is not None and owner.set_expanded_display(
                 True,
                 animate=bool(action.animate),
@@ -340,11 +354,15 @@ class ExpandedDisplayCoordinator:
             if not started:
                 self._events.append(EnterFailed(generation, action.txn, "owner"))
         elif isinstance(action, CancelEnter):
+            # Whatever had begun to fade comes back with a fade (fade, never vanish or pop).
+            self._cover_widgets(False, animate=True)
             if owner is not None and (owner.expanded_display or owner.expanded_display_transition_active):
                 owner.set_expanded_display(False, animate=False)
         elif isinstance(action, BeginExit):
             # Edit never shows an expanded state: its collapse is immediate, before the session draws.
             animate = bool(action.animate) and action.reason is not ExitReason.EDIT
+            # D2.2 before D2.4: the widgets fade back in while the display-wide card fades out.
+            self._cover_widgets(False, animate=animate)
             done = owner is not None and owner.set_expanded_display(
                 False,
                 animate=animate,
@@ -386,6 +404,9 @@ class ExpandedDisplayCoordinator:
             for request_id in tuple(self._forwards):
                 self._rejected.add(request_id)
             self._forwards.clear()
+            # A reload or the Visualizer turning off leaves the display's widgets: they fade back in (a scene that
+            # is retiring with the generation ignores it).
+            self._cover_widgets(False, animate=True)
             if owner is not None and not bool(getattr(owner, "is_retired", True)):
                 owner.set_expanded_display(False, animate=False)
         else:  # pragma: no cover - the reducer's action set is closed
@@ -406,6 +427,39 @@ class ExpandedDisplayCoordinator:
         except Exception:
             return False
         return float(width) > 0.0 and float(height) > 0.0
+
+    # ----------------------------------------------------------------------------------- widget cover (M3)
+
+    def _cover_widgets(self, covered: bool, *, animate: bool) -> None:
+        """Cover the owning display's ordinary widgets, or uncover whichever display is covered (idempotent).
+
+        The fade is the owner's fade half, so the widgets leave with the card's first half and return with the
+        display-wide card's fade-out; ``animate`` False snaps (a restore before reveal, Edit's collapse). Only one
+        display is ever covered: covering another first uncovers the previous one.
+        """
+
+        half = getattr(self._services.admitted_owner(), "expanded_display_fade_half_s", None)
+        if isinstance(half, (int, float)) and float(half) > 0.0:
+            # Remembered: a retirement uncovers after the owner has gone, with the same fade.
+            self._fade_half_s = float(half)
+        fade = self._fade_half_s if animate else 0.0
+        unit = self._services.admitted_unit() if covered else None
+        previous = self._cover_unit
+        if previous is not None and previous is not unit:
+            self._cover_unit = None
+            self._project_cover(previous, False, fade)
+        if covered and unit is not None and previous is not unit:
+            self._cover_unit = unit
+            self._project_cover(unit, True, fade)
+
+    def _project_cover(self, unit: Any, covered: bool, fade_s: float) -> None:
+        if unit is None or bool(getattr(unit, "is_retired", False)):
+            return
+        try:
+            self._services.cover_widgets(unit, bool(covered), float(fade_s))
+        except RuntimeError:
+            # A scene already retiring with its generation: nothing of it remains to cover.
+            pass
 
     # ---------------------------------------------------------------------------------------------- glyph
 

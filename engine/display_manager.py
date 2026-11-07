@@ -237,6 +237,13 @@ def _publish_expand_glyph(unit: Any, available: bool, expanded: bool) -> None:
         setter(available, expanded)
 
 
+def _cover_ordinary_widgets(unit: Any, covered: bool, fade_s: float) -> None:
+    """The expanded display's ordinary widgets fade out (and back in): a visual policy on its scene (plan 01 M3)."""
+    setter = getattr(unit.runtime.scene_controller, "set_ordinary_widgets_covered", None)
+    if callable(setter):
+        setter(covered, fade_s=fade_s)
+
+
 class DisplayManager(QObject):
     """
     Manage authoritative Quick display units across multiple monitors.
@@ -3246,6 +3253,7 @@ class DisplayManager(QObject):
             mode_capable=lambda mode_id: bool(_call("_expanded_display_mode_capable", mode_id, default=False)),
             edit_active=lambda: bool(_call("_quick_custom_layout_session_active", default=False)),
             publish_glyph=_publish_expand_glyph,
+            cover_widgets=_cover_ordinary_widgets,
         ))
         self._expanded_display_coordinator = coordinator
         return coordinator
