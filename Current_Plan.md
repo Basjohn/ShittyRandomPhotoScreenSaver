@@ -382,6 +382,10 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   the error. It is user-facing recovery data in a folder Windows Storage Sense may empty and nothing ever removes;
   a location beside the preset tree (or the data root) may be intended. Product behaviour unchanged pending the
   operator's call (the test redirects it to `tmp_path`).
+- **Gmail IMAP: an encoded sender name gets a doubled space.** `core/gmail/gmail_imap._decode_header_value` joins
+  `decode_header` fragments with a space, but the raw fragment after an encoded word already starts with one:
+  `=?utf-8?b?QmrDtnJu?= <bjorn@example.com>` shows as `Björn  <bjorn@example.com>`. Found by the real-TLS IMAP
+  session test (`tests/test_gmail_imap_interruptible.py`); `email.header.make_header` would join them correctly.
 - **A third evidence root lives in `Docs/`:** `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
   referenced by `Docs/Reference/Extruded_Bubble/Investigation.md`). Not part of the 7 Nov migration mapping; move it
   into the layout (`visualizers/extruded_bubble/...`) on the operator's word.

@@ -395,3 +395,141 @@ def test_a_certificate_for_another_host_still_fails_verification(tmp_path):
         session.release()
         listener.close()
         thread.join(10.0)
+
+
+# -- A whole successful session through the real TLS stream --------------------------------------------------
+
+_MESSAGES = {
+    1: ("Ada Lovelace <ada@example.com>", "=?utf-8?q?Caf=C3=A9_report?=", "Café report"),
+    # An encoded display name decodes with a doubled space (side defect, Current_Plan.md §3); plain here.
+    2: ("Bjorn <bjorn@example.com>", "Plain subject", "Plain subject"),
+    3: ("Grace <grace@example.com>", "=?utf-8?q?Launch_=E2=9C=93?=", "Launch ✓"),
+}
+_PADDING = 70 * 1024          # each FETCH literal spans several 16 KB TLS records
+
+
+def _make_cert(tmp_path, names: str):
+    openssl = _openssl()
+    if openssl is None:
+        pytest.skip("openssl is not available to make a throwaway loopback certificate")
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    made = subprocess.run([openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(key),
+                           "-out", str(cert), "-days", "2", "-subj", "/CN=localhost",
+                           "-addext", f"subjectAltName={names}"], capture_output=True, timeout=60)
+    if made.returncode != 0:
+        pytest.skip("openssl could not make a certificate here")
+    return cert, key
+
+
+class _TlsImapServer:
+    """Loopback TLS IMAP server: serves ``sessions`` connections one after another, then stops."""
+
+    def __init__(self, cert, key, sessions: int) -> None:
+        self._context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self._context.load_cert_chain(cert, key)
+        self._listener = socket.create_server(("127.0.0.1", 0))
+        self._listener.settimeout(20.0)
+        self.port = self._listener.getsockname()[1]
+        self.commands: list[str] = []
+        self.errors: list[BaseException] = []
+        self._thread = threading.Thread(target=self._serve, args=(sessions,), daemon=True)
+        self._thread.start()
+
+    def _serve(self, sessions: int) -> None:
+        try:
+            for _ in range(sessions):
+                conn, _addr = self._listener.accept()
+                conn.settimeout(20.0)
+                with self._context.wrap_socket(conn, server_side=True) as tls_conn:
+                    self._session(tls_conn)
+        except BaseException as exc:  # surfaced by the test
+            self.errors.append(exc)
+
+    def _session(self, conn) -> None:
+        reader = conn.makefile("rb")
+        conn.sendall(b"* OK [CAPABILITY IMAP4rev1] loopback ready\r\n")
+        while True:
+            line = reader.readline()
+            if not line:
+                return
+            tag, _, rest = line.rstrip(b"\r\n").partition(b" ")
+            words = rest.split(b" ")
+            command = words[0].upper()
+            if command == b"UID":
+                command = b"UID " + words[1].upper()
+            self.commands.append(command.decode())
+            if command == b"CAPABILITY":
+                conn.sendall(b"* CAPABILITY IMAP4rev1\r\n" + tag + b" OK done\r\n")
+            elif command == b"LOGIN":
+                conn.sendall(tag + b" OK LOGIN completed\r\n")
+            elif command in (b"SELECT", b"EXAMINE"):
+                mode = b"READ-ONLY" if command == b"EXAMINE" else b"READ-WRITE"
+                conn.sendall(b"* 3 EXISTS\r\n* FLAGS (\\Seen)\r\n" + tag + b" OK [" + mode + b"] done\r\n")
+            elif command == b"UID SEARCH":
+                conn.sendall(b"* SEARCH 1 2 3\r\n" + tag + b" OK SEARCH done\r\n")
+            elif command == b"UID FETCH":
+                uid = int(words[2])
+                sender, subject, _decoded = _MESSAGES[uid]
+                literal = (f"From: {sender}\r\nSubject: {subject}\r\nDate: Sat, 07 Nov 2026 10:0{uid}:00 +0000\r\n"
+                           f"Message-ID: <m{uid}@example.com>\r\n\r\n").encode() + b"x" * _PADDING
+                flags = b"(\\Seen)" if uid == 1 else b"()"
+                head = (b"* %d FETCH (UID %d FLAGS %s BODY[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)] {%d}\r\n"
+                        % (uid, uid, flags, len(literal)))
+                conn.sendall(head + literal + b")\r\n" + tag + b" OK FETCH done\r\n")
+            elif command == b"UID STORE":
+                conn.sendall(b"* 2 FETCH (UID 2 FLAGS (\\Seen))\r\n" + tag + b" OK STORE done\r\n")
+            elif command == b"LOGOUT":
+                conn.sendall(b"* BYE logging out\r\n" + tag + b" OK LOGOUT done\r\n")
+                try:
+                    conn.unwrap()                  # TLS close_notify
+                except (OSError, ssl.SSLError):
+                    pass
+                return
+            else:
+                conn.sendall(tag + b" BAD unexpected\r\n")
+
+    def close(self) -> None:
+        self._listener.close()
+        self._thread.join(30.0)
+
+
+def test_a_whole_session_runs_through_the_real_tls_stream(monkeypatch, tmp_path):
+    """Greeting, LOGIN, EXAMINE, SEARCH, multi-record FETCH literals, STORE and LOGOUT/close_notify over real
+    TLS with a verifying context that trusts only the test certificate."""
+    from core.network import interruptible_socket
+
+    cert, key = _make_cert(tmp_path, "IP:127.0.0.1,DNS:localhost")
+    server = _TlsImapServer(cert, key, sessions=2)
+    verifying = ssl.create_default_context(cafile=str(cert))
+    assert verifying.check_hostname and verifying.verify_mode == ssl.CERT_REQUIRED
+    monkeypatch.setattr(tls, "verified_client_context", lambda: verifying)
+    monkeypatch.setattr(gmail_imap, "IMAP_HOST", "127.0.0.1")
+    monkeypatch.setattr(gmail_imap, "IMAP_PORT", server.port)
+    sessions: list = []
+
+    class _Recorded(interruptible_socket.SocketInterrupt):
+        def __init__(self):
+            super().__init__()
+            sessions.append(self)
+
+    monkeypatch.setattr(gmail_imap, "SocketInterrupt", _Recorded)
+    before = interruptible_socket.live_session_count()
+    client = GmailImapClient("user@example.com", "app-password")
+    try:
+        emails = client.list_messages(max_results=3, should_cancel=lambda: False)
+        assert [(e.subject, e.sender) for e in emails] == [
+            (_MESSAGES[uid][2], sender) for uid, sender in
+            ((3, "Grace <grace@example.com>"), (2, "Bjorn <bjorn@example.com>"),
+             (1, "Ada Lovelace <ada@example.com>"))]
+        assert [e.is_unread for e in emails] == [True, True, False]
+        assert client.mark_as_read("2") is True
+    finally:
+        server.close()
+    assert server.errors == [], server.errors
+    assert "UID FETCH" in server.commands and "UID STORE" in server.commands
+    assert server.commands.count("LOGOUT") == 2
+    assert len(sessions) == 2
+    for session in sessions:
+        assert session._socket is not None and session._socket.fileno() == -1, "the session socket stayed open"
+        assert session._wake_r is None and session._wake_w is None, "the wake pair stayed open"
+    assert interruptible_socket.live_session_count() == before
