@@ -833,7 +833,7 @@ def shared_family_entries(mode_id: str) -> tuple[Control, ...]:
     return tuple(entries)
 
 
-# ---- Neon Lake Basin (`shockwave_grid`) ----------------------------------------------------------
+# ---- Neon Lake (`shockwave_grid`) ----------------------------------------------------------
 
 _BASIN_WIRE_CHOICES = tuple(BASIN_SURFACE_STYLES)
 _BASIN_GLASS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&4)

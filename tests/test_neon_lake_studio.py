@@ -1,4 +1,4 @@
-"""Neon Lake Basin's Studio adapter (mode id ``shockwave_grid``) on the shared Studio framework.
+"""Neon Lake's Studio adapter (mode id ``shockwave_grid``) on the shared Studio framework.
 
 Structural: no preset counts, preset values or UI wording are pinned (presets are authored, mutable content); inputs
 are the code-owned canonical defaults plus code-owned tier names. Truthfulness is proven against Neon Lake's

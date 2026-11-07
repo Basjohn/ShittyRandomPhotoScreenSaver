@@ -114,12 +114,12 @@ Reference figures (relative GPU in cf, thread CPU in ms, counts per frame):
 | Particle | 152.4 | 0.145 | 65 | 385 |
 | Spectrum | 2.40 | 0.183 | 17 | 754 |
 | Sphere | 6.86 | 0.394 | 78 | 1473 |
-| Shockwave Grid (flat scene before Neon Lake Basin) | 15.89 | 0.429 | 146 | 1883 |
+| Shockwave Grid (flat scene before Neon Lake) | 15.89 | 0.429 | 146 | 1883 |
 | Oscilloscope | 144.0 | 0.325 | 17 | 1768 |
 
 Every transition's own steady cost is recorded beside it in `Docs/Reference/Transitions.md`.
 
-Neon Lake Basin's foundation reference is `tools/baselines/overhead/2026-10-13_6a63dcda.json` at 960×540, compared
+Neon Lake's foundation reference is `tools/baselines/overhead/2026-10-13_6a63dcda.json` at 960×540, compared
 with `2026-10-13_000e222e.json`. All unchanged consumers retained their deterministic call counts. Neon alone added
 its new scene work (146→180 GL calls, 1883→2256 Python calls); its control-relative GPU equivalent rose from 0.190 to
 0.243 ms under different GPU clock conditions. These are foundation measurements; later optional point/celestial

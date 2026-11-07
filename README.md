@@ -48,7 +48,7 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
   - **Spline Curve**
   - **Voxel Sphere** (3D)
   - **Extruded Spectrum** (3D)
-  - **Neon Lake Basin** (3D)
+  - **Neon Lake** (3D)
   - **Extruded Bubble** (3D)
   - **Waveform Ribbon** (3D)
 - **Properly adjustable 3D views like it's 2002:** Orbit the applicable 3D visualizers, move or resize their stage and preserve your poorly chosen viewpoint. Alt-Left to rotate, Alt-Scroll to resize and Alt-Right to drag 3D Visualizers.

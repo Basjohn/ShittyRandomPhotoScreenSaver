@@ -1,6 +1,6 @@
 """Framed basin projection and terrain/water shaders over shared Scene3D owners.
 
-Neon Lake Basin (mode id ``shockwave_grid``; its keys, runtime and Settings are ``shockwave_grid_*``) is mapped
+Neon Lake (mode id ``shockwave_grid``; its keys, runtime and Settings are ``shockwave_grid_*``) is mapped
 in ``Docs/Reference/Naming.md``; ``SHOCKWAVE_*`` here are its onset waves, not the mode's old name.
 
 Authored base height alone classifies water. Its travelling waves join the visible

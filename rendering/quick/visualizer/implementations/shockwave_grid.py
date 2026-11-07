@@ -1,4 +1,4 @@
-"""Neon Lake Basin in the normal card, retaining the Shockwave mode identity.
+"""Neon Lake in the normal card, retaining the Shockwave mode identity.
 
 One static mesh and authored height texture, the existing onset stream and lazy
 SceneTarget draw reflected land then terrain/water. View pose never grows the
@@ -89,10 +89,10 @@ class QuickShockwaveGridRenderer:
     mode_id = "shockwave_grid"
 
     def __init__(self) -> None:
-        self._resources = MeshResources("Neon Lake Basin")
-        self._target = SceneTarget("Neon Lake Basin")
-        self._stream = StreamRing("Neon Lake Basin")
-        self._heightfield = HeightfieldTexture("Neon Lake Basin", components=2)
+        self._resources = MeshResources("Neon Lake")
+        self._target = SceneTarget("Neon Lake")
+        self._stream = StreamRing("Neon Lake")
+        self._heightfield = HeightfieldTexture("Neon Lake", components=2)
         self._terrain_data = None
         self._mesh_cells = None
         self._mesh_data = None
@@ -257,12 +257,12 @@ class QuickShockwaveGridRenderer:
         logical = snapshot.logical
         mode_state = logical.mode_state
         if not isinstance(mode_state, ShockwaveGridFrame):
-            raise TypeError("Neon Lake Basin renderer received another mode frame")
+            raise TypeError("Neon Lake renderer received another mode frame")
         presentation = snapshot.presentation
         if presentation.content_fade <= 0.0:
             return
         if frame.content_rotation_quarters:
-            raise ValueError("Neon Lake Basin does not offer content rotation")
+            raise ValueError("Neon Lake does not offer content rotation")
         if frame.logical_content_rect[2] <= 0.0 or frame.logical_content_rect[3] <= 0.0:
             return
         parameters = mode_state.parameters

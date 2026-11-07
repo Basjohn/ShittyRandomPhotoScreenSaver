@@ -1,4 +1,4 @@
-"""CPU and real-GL contracts for Neon Lake Basin's celestial helper."""
+"""CPU and real-GL contracts for Neon Lake's celestial helper."""
 from __future__ import annotations
 
 import math

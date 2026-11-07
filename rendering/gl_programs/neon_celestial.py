@@ -1,4 +1,4 @@
-"""Pure position math and GLSL for Neon Lake Basin's optional celestial scene.
+"""Pure position math and GLSL for Neon Lake's optional celestial scene.
 
 The caller owns its logical animation clock, scene pose, shader program and render
 resources.  ``basin_body_position`` is only an analytic mirror for the body orbit;

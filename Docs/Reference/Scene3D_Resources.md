@@ -85,7 +85,7 @@ per fragment. Density fades from water/lower slopes with world height; zero stre
 Thin ridges between taps may be missed, and this is not a shadow map or a fluid simulation. The consumer reuses its
 target/program/quad and owns admission; no volume texture or independent clock is created. Unrelated consumers
 do not import this shader fragment or acquire its work.
-Neon Lake Basin's source/authoring contract lives in `Docs/Reference/Neon_Lake_Basin.md`; its cost/fidelity gates remain
+Neon Lake's source/authoring contract lives in `Docs/Reference/Neon_Lake_Basin.md`; its cost/fidelity gates remain
 in `Current_Plan.md` until measured and accepted.
 
 ## Photo reflection resources

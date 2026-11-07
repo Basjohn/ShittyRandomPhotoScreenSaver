@@ -5,7 +5,7 @@
 - **Settings editing-path persistence:** [durable ownership contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md).
   [Current Plan](Current_Plan.md) owns remaining work; accepted Settings-window, connector and Visualizer checks live in source control.
 
-- **Names:** [Naming Reference](Docs/Reference/Naming.md) (generated, `tools/naming_reference.py --write`) maps every product name to its persisted id and every other spelling in code, with the grep hazards. Read it before searching for a mode, transition or widget by name: Neon Lake Basin is `shockwave_grid`, Spline Curve is `devcurve`.
+- **Names:** [Naming Reference](Docs/Reference/Naming.md) (generated, `tools/naming_reference.py --write`) maps every product name to its persisted id and every other spelling in code, with the grep hazards. Read it before searching for a mode, transition or widget by name: Neon Lake is `shockwave_grid`, Spline Curve is `devcurve`.
 
 - **Test suite:** [Test Suite Guide](Docs/TestSuite.md) owns commands and gates (`tests/run_chunked.py --isolated [--changed]` at milestones, focused files per slice). The [23 October archived-failure triage](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md) is historical; its stale-test reconciliation is closed.
 
@@ -21,7 +21,7 @@ exact current source
 
 ## Current product and regression references
 
-- `Current_Plan.md` contains the next actionable checklist; accepted Voxel Sphere (`sphere`) / Neon Lake Basin (`shockwave_grid`) DSP and R151 cache/Settings work are not implementation queues.
+- `Current_Plan.md` contains the next actionable checklist; accepted Voxel Sphere (`sphere`) / Neon Lake (`shockwave_grid`) DSP and R151 cache/Settings work are not implementation queues.
 - `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md` describe the current product contracts. `Future_Work.md` routes deferred feature ideas, not completed products.
 - `Docs/Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md` records durable Edit paint/role and test-oracle failures; use the live source and targeted tests for any new defect.
 
@@ -110,7 +110,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Visualizer Settings declarations, consumer/authoring boundaries, validation, availability and bespoke editors | `core/settings/visualizer_mode_settings.py`; `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Expanded Visualizer (full display) implementation plan: phase ladder, gates, 4K budgets, backend triggers | `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` (live; prerequisites in `Docs/Reference/Architecture_Checklist.md`) |
 | ShittyMusicPlayer implementation plan: `--smp` gate, prerequisite phases, SMP Settings tab with pills, audio quality bar, icon/artwork rules, full rearrangement | `Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md` (live); `Future_Work.md` §2.5 (only promoted work enters `Current_Plan.md`; the 5 Nov plans zip was never tracked and is superseded by these files) |
-| Neon Lake Basin (`shockwave_grid`) framing, terrain authoring, editable experiments, Custom selection migration and renderer | `Docs/Reference/Neon_Lake_Basin.md`; `Docs/Reference/Naming.md` (its `shockwave_grid_*`, `shockwave_*` and `neon_*` owners); concrete recurrences only enter `Current_Plan.md` §5 |
+| Neon Lake (`shockwave_grid`) framing, terrain authoring, editable experiments, Custom selection migration and renderer | `Docs/Reference/Neon_Lake_Basin.md`; `Docs/Reference/Naming.md` (its `shockwave_grid_*`, `shockwave_*` and `neon_*` owners); concrete recurrences only enter `Current_Plan.md` §5 |
 | Spline Curve (`devcurve`, code name DevCurve): solver, frame runtime, renderer, Studio and Settings | `Docs/Reference/Visualizer_Reference.md`; `widgets/spotify_visualizer/devcurve_runtime.py`, `widgets/spotify_visualizer/devcurve_frame_runtime.py`, `ui/studio/devcurve_adapter.py`; owner map in `Docs/Reference/Naming.md` |
 | Oscilloscope (`oscilloscope`; keys `osc_` and `oscilloscope_`): captured-PCM line, reaction, Studio and Settings | `Docs/Reference/Visualizer_Reference.md`; `widgets/spotify_visualizer/oscilloscope_frame_runtime.py`, `ui/studio/oscilloscope_adapter.py`; owner map in `Docs/Reference/Naming.md` |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`; `Docs/Guides/Transition_Change_Checklist.md` |
@@ -154,7 +154,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Steam source/auth/privacy contract | `Docs/Reference/Steam_Source_Contracts.md` |
 | Friend Pulse current contract | `Docs/Reference/Steam_Friend_Pulse.md` |
 | System Stats current contract | `Docs/Reference/System_Stats_Widget.md` |
-| Voxel Sphere (`sphere`) standard-mode contract, analysis-only DSP and accepted horizon shaped like Neon Lake Basin's (`shockwave_grid`) | `Docs/Reference/Sphere_Visualizer.md`; `Docs/Historical_Bugs/R-150_Sphere_Analysis_Only_Shockwave_Shaper_Audit.md` |
+| Voxel Sphere (`sphere`) standard-mode contract, analysis-only DSP and accepted horizon shaped like Neon Lake's (`shockwave_grid`) | `Docs/Reference/Sphere_Visualizer.md`; `Docs/Historical_Bugs/R-150_Sphere_Analysis_Only_Shockwave_Shaper_Audit.md` |
 | historical bug / rejected-method routing | `Docs/Historical_Bugs.md` (sole index) |
 | compatibility / schema-migration bridges | `Docs/Architecture/Persisted_Input_Compatibility.md` |
 | deferred features / long-horizon graphics and Visualizer ideas | `Future_Work.md` |

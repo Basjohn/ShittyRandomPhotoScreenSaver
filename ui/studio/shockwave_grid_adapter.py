@@ -1,4 +1,4 @@
-"""Neon Lake Basin's Studio adapter (mode id ``shockwave_grid``): schema, evaluator, fixtures, camera and renderer.
+"""Neon Lake's Studio adapter (mode id ``shockwave_grid``): schema, evaluator, fixtures, camera and renderer.
 
 Truthfulness: the Studio changes no Neon Lake simulation, timing, engine or render code and re-implements none of it.
 
