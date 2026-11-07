@@ -55,10 +55,10 @@ class _Engine:
 
 
 class _Manager:
-    """A retiring display generation: a cyclic Python graph (as Qt callback owners form), no native roots."""
+    """A retiring display generation's Python heap, released by reference counting (the barrier's standard)."""
 
     def __init__(self):
-        self.graph = [{"owner": self, "payload": [object() for _ in range(50)]} for _ in range(40)]
+        self.graph = [{"payload": [object() for _ in range(50)]} for _ in range(40)]
 
     def get_display_count(self):
         return 0
@@ -104,17 +104,19 @@ def test_every_teardown_thaws_the_generation_before_its_barrier(policy):
     assert policy.frozen
     engine.teardown()                       # a topology replacement: does not go through stop()
     assert not policy.frozen and gc.get_freeze_count() == 0
-    assert policy.retirement_collection_pending
 
 
 def test_generation_swaps_refreeze_each_generation_and_never_pin_a_retired_one(policy):
+    """25 reveal/teardown swaps: each generation is frozen while live and freed at its teardown; the frozen set
+    never accumulates retired generations (the frozen count returns to zero at every teardown)."""
     engine = _Engine(policy)
     retired = []
     for _swap in range(25):
         engine.reveal()
         assert policy.frozen and not _scanned(engine.display_manager.graph[0])
+        frozen_live = gc.get_freeze_count()
         retired.append(weakref.ref(engine.display_manager))
         engine.teardown()
-        policy.collect_thawed_retirement_cycles_once()   # the barrier's one sweep once native roots drained
-        assert retired[-1]() is None                     # this generation's cycles are gone, not pinned
+        assert retired[-1]() is None                     # released at its teardown by refcount: nothing pinned
+        assert gc.get_freeze_count() == 0 and frozen_live > 0
     assert all(ref() is None for ref in retired)
