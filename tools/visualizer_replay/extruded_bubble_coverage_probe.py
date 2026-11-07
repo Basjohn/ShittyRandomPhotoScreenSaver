@@ -18,10 +18,13 @@ from rendering.quick.render.gl_resources import compile_program
 from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, BUBBLE_FRAGMENT, CLUSTER_VERTEX, CLUSTER_FRAGMENT
 from rendering.gl_programs.extruded_bubble_scene import camera
 from rendering.quick.visualizer.implementations.extruded_bubble import _near_spread
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--output',type=Path,required=True)
+parser.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
 args=parser.parse_args()
+evidence_media.redirect_output(args, "output", "extruded_bubble_coverage_probe")
 OUT=args.output
 OUT.mkdir(parents=True,exist_ok=False)
 root=Path(__file__).resolve().parents[2]
@@ -110,3 +113,4 @@ finally:
     if 'vao' in locals():gl.glDeleteVertexArrays(1,[vao])
     if objects:gl.glDeleteTextures(objects)
     capture.close()
+evidence_media.finish(0)

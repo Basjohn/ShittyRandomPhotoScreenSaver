@@ -9,12 +9,17 @@ from PySide6.QtCore import QCoreApplication, QEvent
 from .driver import MODES, load_clips, replay_clip
 from tools.freeze_visualizer_settings import load_frozen
 from .floors import calibrate, check_floors
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", type=Path, help="write new calibration candidate; refuses overwrite")
-    parser.add_argument("--report", type=Path, help="write optional diagnostic HTML; refuses overwrite")
+    parser.add_argument("--report", type=artifact_paths.evidence_arg, help="write optional diagnostic HTML; refuses overwrite")
     args = parser.parse_args()
     for path in (args.candidate, args.report):
         if path is not None and path.exists():

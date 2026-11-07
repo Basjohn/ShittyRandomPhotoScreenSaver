@@ -8,12 +8,20 @@ Setup for end users:
 1. Enable 2-Step Verification on their Google account.
 2. Generate an App Password at https://myaccount.google.com/apppasswords
 3. Enter their email + app password in the SRPSS settings.
+
+Transport contract (Docs/Contracts.md -> Network transports): every blocking
+step (lookup, connect, TLS handshake, LOGIN, SELECT, SEARCH, FETCH, STORE,
+LOGOUT) is bounded by ``IMAP_TIMEOUT`` per step, and the whole session is
+interruptible through a ``core.network.interruptible_socket.SocketInterrupt``:
+a retiring Gmail runtime interrupts its sessions (a signal only); the waiting worker
+raises at once and closes its own socket instead of waiting for the server.
 """
 from __future__ import annotations
 
 import email as email_lib
 import imaplib
 import re
+import ssl
 import threading
 from datetime import datetime
 from email.header import decode_header as _decode_header
@@ -23,13 +31,47 @@ from typing import Callable, List, Optional
 from core.gmail.gmail_deeplinks import build_open_url, gmail_inbox_url
 from core.gmail.gmail_client import EmailMetadata, GmailFetchCancelled
 from core.logging.logger import get_logger
+from core.network.interruptible_socket import SocketInterrupt
 from core.windows.secure_url_launcher import open_url
 
 logger = get_logger(__name__)
 
 IMAP_HOST = "imap.gmail.com"
 IMAP_PORT = 993
+# Per blocking step (connect, handshake, each server response), never per session.
 IMAP_TIMEOUT = 30
+
+
+class InterruptibleIMAP4_SSL(imaplib.IMAP4):
+    """IMAP over TLS whose every wait can be interrupted by the session's ``SocketInterrupt``.
+
+    ``_create_socket`` returns ``SocketInterrupt.open_tls``: a non-blocking TCP connect and TLS through an
+    ``SSLObject`` over memory BIOs, so connect, handshake, each read and each write wait on the socket and
+    the session's wake socket together, bounded by ``timeout`` per step. The interrupting thread only signals;
+    this (the worker) thread raises ``SocketInterrupted`` and closes its own socket (``shutdown``).
+    Certificate and hostname checks are exactly ``ssl_context``'s.
+    """
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        *,
+        ssl_context: ssl.SSLContext,
+        timeout: float,
+        interrupt: SocketInterrupt,
+        should_continue: Optional[Callable[[], bool]] = None,
+    ) -> None:
+        self.ssl_context = ssl_context
+        self._srpss_interrupt = interrupt
+        self._srpss_should_continue = should_continue
+        super().__init__(host, port, timeout)
+
+    def _create_socket(self, timeout):
+        return self._srpss_interrupt.open_tls(
+            self.host, self.port, timeout if timeout else IMAP_TIMEOUT, self.ssl_context,
+            should_continue=self._srpss_should_continue,
+        )
 
 
 def _decode_header_value(raw: Optional[str]) -> str:
@@ -75,41 +117,72 @@ def _parse_date(raw: Optional[str]) -> datetime:
 class GmailImapClient:
     """IMAP-based Gmail client using App Password auth."""
 
+    # Owners pass a ``SocketInterrupt`` (``interrupt=``) to list_messages and
+    # the message actions and interrupt it when they retire.
+    supports_session_interrupt = True
+
     def __init__(self, email_address: str, app_password: str):
         self._email = email_address
         self._password = app_password
         self._lock = threading.Lock()
         self._supports_gmail_extensions = False
 
-    def _connect(self, should_cancel: Optional[Callable[[], bool]] = None) -> imaplib.IMAP4_SSL:
+    def _connect(
+        self,
+        should_cancel: Optional[Callable[[], bool]] = None,
+        interrupt: Optional[SocketInterrupt] = None,
+    ) -> imaplib.IMAP4_SSL:
         """Create and authenticate an IMAP connection.
 
-        ``imaplib`` resolves the host with an unbounded ``getaddrinfo``; resolve
-        it first through ``core/network`` (bounded, cancelled with the caller's
-        fence and at process exit) so the connection reuses the cached answer.
+        ``imaplib`` would resolve the host with an unbounded ``getaddrinfo``;
+        the connection resolves it through ``core/network`` instead (bounded,
+        cancelled with the caller's fence, the interrupt and at process exit).
+        Every socket the session opens is bound to ``interrupt``.
         """
-        from core.network.bounded_dns import DnsLookupError, resolve_bounded
+        from core.network.bounded_dns import DnsLookupError
+        from core.network.tls import verified_client_context
 
+        if interrupt is None:
+            interrupt = SocketInterrupt()
+        should_continue = (
+            (lambda: not should_cancel()) if should_cancel is not None else None
+        )
         try:
-            resolve_bounded(
-                IMAP_HOST, IMAP_PORT,
-                should_continue=(lambda: not should_cancel()) if should_cancel is not None else None,
+            # Without a context imaplib uses an unverified one (no certificate
+            # or hostname check) and the app password would go to any
+            # interceptor.
+            conn = InterruptibleIMAP4_SSL(
+                IMAP_HOST, IMAP_PORT, timeout=IMAP_TIMEOUT,
+                ssl_context=verified_client_context(),
+                interrupt=interrupt,
+                should_continue=should_continue,
             )
         except DnsLookupError:
             if should_cancel is not None and should_cancel():
                 raise GmailFetchCancelled("imap:connect")
             raise
-        from core.network.tls import verified_client_context
-
-        # Without a context imaplib uses an unverified one (no certificate or
-        # hostname check) and the app password would go to any interceptor.
-        conn = imaplib.IMAP4_SSL(
-            IMAP_HOST, IMAP_PORT, timeout=IMAP_TIMEOUT,
-            ssl_context=verified_client_context(),
-        )
-        conn.login(self._email, self._password)
-        self._supports_gmail_extensions = self._detect_gmail_extensions(conn)
+        try:
+            conn.login(self._email, self._password)
+            self._supports_gmail_extensions = self._detect_gmail_extensions(conn)
+        except BaseException:
+            try:
+                conn.shutdown()
+            except Exception:
+                pass
+            raise
         return conn
+
+    @staticmethod
+    def _session_interrupt(interrupt: Optional[SocketInterrupt]) -> SocketInterrupt:
+        return interrupt if interrupt is not None else SocketInterrupt()
+
+    @staticmethod
+    def _was_interrupted(
+        interrupt: SocketInterrupt, should_cancel: Optional[Callable[[], bool]] = None
+    ) -> bool:
+        if interrupt.interrupted:
+            return True
+        return bool(should_cancel is not None and should_cancel())
 
     def _detect_gmail_extensions(self, conn: imaplib.IMAP4_SSL) -> bool:
         """Return whether the server advertises Gmail IMAP extensions."""
@@ -135,14 +208,19 @@ class GmailImapClient:
         query: Optional[str] = None,
         max_results: int = 10,
         should_cancel: Optional[Callable[[], bool]] = None,
+        interrupt: Optional[SocketInterrupt] = None,
     ) -> List[EmailMetadata]:
         """Fetch recent message metadata (headers only) via IMAP.
 
         ``should_cancel`` matches the API client contract: a fetch whose owning
         runtime generation has retired stops traversing instead of holding an IO
-        worker past the runtime destruction barrier.
+        worker past the runtime destruction barrier. ``interrupt`` ends a
+        blocking step (connect, TLS, LOGIN, FETCH...) the moment its owner
+        retires; the fetch then raises ``GmailFetchCancelled``.
         """
-        if should_cancel is not None and should_cancel():
+        interrupt = self._session_interrupt(interrupt)
+        if self._was_interrupted(interrupt, should_cancel):
+            interrupt.release()
             raise GmailFetchCancelled("imap:list_messages")
         mailbox = "INBOX"
         if label_ids:
@@ -161,7 +239,7 @@ class GmailImapClient:
         with self._lock:
             conn = None
             try:
-                conn = self._connect(should_cancel)
+                conn = self._connect(should_cancel, interrupt)
                 status, _ = conn.select(f'"{mailbox}"', readonly=True)
                 if status != "OK":
                     logger.warning("[GMAIL_IMAP] Failed to select mailbox %s", mailbox)
@@ -179,7 +257,7 @@ class GmailImapClient:
                 results: List[EmailMetadata] = []
                 failed_ids: List[str] = []
                 for mid in recent_ids:
-                    if should_cancel is not None and should_cancel():
+                    if self._was_interrupted(interrupt, should_cancel):
                         raise GmailFetchCancelled("imap:list_messages")
                     try:
                         meta = self._fetch_message_metadata(conn, mid)
@@ -188,6 +266,8 @@ class GmailImapClient:
                     except GmailFetchCancelled:
                         raise
                     except Exception as exc:
+                        if interrupt.interrupted:
+                            raise GmailFetchCancelled("imap:list_messages") from exc
                         failed_ids.append(
                             mid.decode("ascii", errors="replace") if isinstance(mid, bytes) else str(mid)
                         )
@@ -201,18 +281,34 @@ class GmailImapClient:
                 return results
             except GmailFetchCancelled:
                 raise
-            except imaplib.IMAP4.error as exc:
-                logger.error("[GMAIL_IMAP] IMAP error: %s", exc)
-                raise
             except Exception as exc:
-                logger.error("[GMAIL_IMAP] Connection error: %s", exc)
+                if interrupt.interrupted:
+                    raise GmailFetchCancelled("imap:list_messages") from exc
+                if isinstance(exc, imaplib.IMAP4.error):
+                    logger.error("[GMAIL_IMAP] IMAP error: %s", exc)
+                else:
+                    logger.error("[GMAIL_IMAP] Connection error: %s", exc)
                 raise
             finally:
-                if conn:
+                self._end_session(conn, interrupt)
+
+    @staticmethod
+    def _end_session(conn: Optional[imaplib.IMAP4_SSL], interrupt: SocketInterrupt) -> None:
+        """LOGOUT unless interrupted (the socket is already closed), then release."""
+        try:
+            if conn is not None:
+                if interrupt.interrupted:
+                    try:
+                        conn.shutdown()
+                    except Exception:
+                        pass
+                else:
                     try:
                         conn.logout()
                     except Exception:
                         pass
+        finally:
+            interrupt.release()
 
     def _fetch_message_metadata(
         self, conn: imaplib.IMAP4_SSL, msg_id: bytes
@@ -305,12 +401,15 @@ class GmailImapClient:
             )
         return meta
 
-    def get_unread_count(self, label_id: str = "INBOX") -> int:
+    def get_unread_count(
+        self, label_id: str = "INBOX", *, interrupt: Optional[SocketInterrupt] = None
+    ) -> int:
         """Return the number of unseen messages."""
+        interrupt = self._session_interrupt(interrupt)
         with self._lock:
             conn = None
             try:
-                conn = self._connect()
+                conn = self._connect(interrupt=interrupt)
                 conn.select("INBOX", readonly=True)
                 status, data = conn.search(None, "UNSEEN")
                 if status == "OK" and data[0]:
@@ -320,11 +419,7 @@ class GmailImapClient:
                 logger.error("[GMAIL_IMAP] Unread count failed: %s", exc)
                 return 0
             finally:
-                if conn:
-                    try:
-                        conn.logout()
-                    except Exception:
-                        pass
+                self._end_session(conn, interrupt)
 
     def _coerce_imap_uid(self, message_id: str) -> str:
         uid = str(message_id or "").strip()
@@ -337,18 +432,21 @@ class GmailImapClient:
         message_id: str,
         action_name: str,
         action: Callable[[imaplib.IMAP4_SSL, str], bool],
+        interrupt: Optional[SocketInterrupt] = None,
     ) -> bool:
         """Run a UID-based IMAP action against INBOX."""
+        interrupt = self._session_interrupt(interrupt)
         try:
             uid = self._coerce_imap_uid(message_id)
         except ValueError as exc:
+            interrupt.release()
             logger.warning("[GMAIL_IMAP] %s skipped: %s", action_name, exc)
             return False
 
         with self._lock:
             conn = None
             try:
-                conn = self._connect()
+                conn = self._connect(interrupt=interrupt)
                 status, _ = conn.select('"INBOX"', readonly=False)
                 if status != "OK":
                     logger.warning("[GMAIL_IMAP] %s failed: could not select INBOX", action_name)
@@ -358,11 +456,7 @@ class GmailImapClient:
                 logger.warning("[GMAIL_IMAP] %s failed for UID %s: %s", action_name, uid, exc)
                 return False
             finally:
-                if conn:
-                    try:
-                        conn.logout()
-                    except Exception:
-                        pass
+                self._end_session(conn, interrupt)
 
     @staticmethod
     def _uid_store(conn: imaplib.IMAP4_SSL, uid: str, operation: str, flags: str) -> bool:
@@ -374,23 +468,25 @@ class GmailImapClient:
         status, _ = conn.uid("MOVE", uid, mailbox)
         return status == "OK"
 
-    def mark_as_read(self, message_id: str) -> bool:
+    def mark_as_read(self, message_id: str, *, interrupt: Optional[SocketInterrupt] = None) -> bool:
         """Mark a message as read using its IMAP UID."""
         return self._run_uid_action(
             message_id,
             "mark_as_read",
             lambda conn, uid: self._uid_store(conn, uid, "+FLAGS", r"(\Seen)"),
+            interrupt,
         )
 
-    def mark_as_unread(self, message_id: str) -> bool:
+    def mark_as_unread(self, message_id: str, *, interrupt: Optional[SocketInterrupt] = None) -> bool:
         """Mark a message as unread using its IMAP UID."""
         return self._run_uid_action(
             message_id,
             "mark_as_unread",
             lambda conn, uid: self._uid_store(conn, uid, "-FLAGS", r"(\Seen)"),
+            interrupt,
         )
 
-    def archive_message(self, message_id: str) -> bool:
+    def archive_message(self, message_id: str, *, interrupt: Optional[SocketInterrupt] = None) -> bool:
         """Archive a Gmail IMAP message by removing the Inbox label."""
         def _archive(conn: imaplib.IMAP4_SSL, uid: str) -> bool:
             # Gmail treats labels as IMAP folders. Archiving is the removal of
@@ -405,35 +501,37 @@ class GmailImapClient:
             message_id,
             "archive_message",
             _archive,
+            interrupt,
         )
 
-    def spam_message(self, message_id: str) -> bool:
+    def spam_message(self, message_id: str, *, interrupt: Optional[SocketInterrupt] = None) -> bool:
         """Move a Gmail IMAP message to Spam via Gmail labels."""
         def _spam(conn: imaplib.IMAP4_SSL, uid: str) -> bool:
             added = self._uid_store(conn, uid, "+X-GM-LABELS", r"(\Spam)")
             removed = self._uid_store(conn, uid, "-X-GM-LABELS", r"(\Inbox)")
             return added and removed
 
-        return self._run_uid_action(message_id, "spam_message", _spam)
+        return self._run_uid_action(message_id, "spam_message", _spam, interrupt)
 
-    def trash_message(self, message_id: str) -> bool:
+    def trash_message(self, message_id: str, *, interrupt: Optional[SocketInterrupt] = None) -> bool:
         """Move a Gmail IMAP message to Trash via Gmail labels."""
         def _trash(conn: imaplib.IMAP4_SSL, uid: str) -> bool:
             added = self._uid_store(conn, uid, "+X-GM-LABELS", r"(\Trash)")
             removed = self._uid_store(conn, uid, "-X-GM-LABELS", r"(\Inbox)")
             return added and removed
 
-        return self._run_uid_action(message_id, "trash_message", _trash)
+        return self._run_uid_action(message_id, "trash_message", _trash, interrupt)
 
     def open_message_in_browser(self, message_id: str) -> bool:
         """Open Gmail inbox as a fallback for IMAP messages."""
         return open_url(gmail_inbox_url(), source="gmail:inbox")
 
-    def test_connection(self) -> bool:
+    def test_connection(self, *, interrupt: Optional[SocketInterrupt] = None) -> bool:
         """Verify credentials by attempting login."""
+        interrupt = self._session_interrupt(interrupt)
         conn = None
         try:
-            conn = self._connect()
+            conn = self._connect(interrupt=interrupt)
             conn.select("INBOX", readonly=True)
             logger.info("[GMAIL_IMAP] Connection test successful for %s", self._email)
             return True
@@ -444,8 +542,4 @@ class GmailImapClient:
             logger.error("[GMAIL_IMAP] Connection test failed: %s", exc)
             return False
         finally:
-            if conn:
-                try:
-                    conn.logout()
-                except Exception:
-                    pass
+            self._end_session(conn, interrupt)

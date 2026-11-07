@@ -220,6 +220,8 @@ class DisplayManager(QObject):
     exit_requested = Signal()
     monitors_changed = Signal(int)  # new monitor count
     displays_ready = Signal(int)  # startup generation ready for image replay
+    # Startup generation in which every display's show failed (the last pending one included): nothing is on screen.
+    no_display_shown = Signal(int)
     authoritative_first_frames_ready = Signal(int)  # runtime generation
     startup_reveal_completed = Signal(int)  # runtime generation
     transition_completed = Signal(int)  # screen index
@@ -3971,11 +3973,20 @@ class DisplayManager(QObject):
                 if display in self.displays:
                     self.displays.remove(display)
             if startup_generation is not None and startup_generation == self._display_startup_generation:
-                self._display_startup_ready_expected.discard(id(display))
+                expected = self._display_startup_ready_expected
+                was_pending = id(display) in expected
+                expected.discard(id(display))
                 self._emit_display_startup_ready_if_complete(startup_generation)
                 # The removed display no longer holds its siblings' gates.
                 self._evaluate_authoritative_first_frames()
                 self._evaluate_startup_reveal()
+                # A shown display stays in the expected set, so an empty set after this failure means every
+                # display of this startup generation failed to show. Said once, last, by the failure that emptied it.
+                if was_pending and not expected and not self._retired:
+                    logger.error(
+                        "[DISPLAY] No display could be shown for startup generation %s", startup_generation
+                    )
+                    self.no_display_shown.emit(startup_generation)
             return False
 
     def _mark_display_startup_ready(self, display: QuickDisplayUnit, generation: int) -> None:

@@ -20,6 +20,8 @@ from pathlib import Path
 import random
 import sys
 from time import perf_counter
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -376,8 +378,13 @@ def main(argv=None):
     parser.add_argument("--quick-smoke", action="store_true")
     parser.add_argument("--windows", type=int, choices=(1, 2), default=2)
     parser.add_argument("--animate", action="store_true", help="also export a two-second, 60-frame WebP motion preview")
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-dir", type=artifact_paths.evidence_arg,
+                        help="default .artifacts/evidence/transitions/<effect>/contact_sheet/<YYYYMMDD>_<time>")
     args = parser.parse_args(argv)
+    if args.output_dir is None:
+        args.output_dir = artifact_paths.evidence_dir(f"transitions/{artifact_paths.slug(args.effect)}",
+                                                      "contact_sheet", artifact_paths.run_label("sheet"))
+    evidence_media.redirect_output(args, "output_dir", "transition_contact_sheet")
     if args.quick_smoke:
         return quick_smoke(args)
     capture = TransitionCapture(args.width, args.height,
@@ -425,4 +432,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

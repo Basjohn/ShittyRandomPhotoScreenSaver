@@ -44,6 +44,11 @@ from engine.image_pipeline import derive_prefetch_via_worker, load_image_via_wor
 from rendering.display_modes import DisplayMode
 from rendering.image_processor_async import AsyncImageProcessor
 from rendering.image_quality import RESAMPLE_FILTERS, decode_image, process_image
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 def _linear_slope(values: list[float]) -> float:
@@ -749,8 +754,7 @@ def run_harness(
 
 
 def _default_output_dir() -> Path:
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return Path("logs") / "evidence_chest" / f"image_worker_shm_{stamp}"
+    return artifact_paths.evidence_dir("performance", "image_worker_shm", artifact_paths.run_label("run"))
 
 
 def main() -> int:
@@ -760,7 +764,7 @@ def main() -> int:
     parser.add_argument("--height", type=int, default=2160)
     parser.add_argument("--warmup-cycles", type=int, default=10)
     parser.add_argument("--timeout-ms", type=int, default=15_000)
-    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--output-dir", type=artifact_paths.evidence_arg)
     parser.add_argument(
         "--source",
         type=Path,

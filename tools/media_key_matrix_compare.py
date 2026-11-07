@@ -12,6 +12,11 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -133,7 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--policies", default="strict,realistic")
     p.add_argument("--scenarios", default="focused_idle,focused_clicked")
     p.add_argument("--launch-timeout-s", type=float, default=40.0)
-    p.add_argument("--output-dir", default=str(ROOT / "logs" / "media_matrix_compare"))
+    p.add_argument("--output-dir", type=artifact_paths.evidence_arg, default=artifact_paths.default_evidence("media", "media_key_matrix_compare"))
     return p
 
 

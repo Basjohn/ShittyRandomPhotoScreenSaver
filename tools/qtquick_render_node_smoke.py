@@ -57,6 +57,11 @@ from rendering.quick.transitions import (  # noqa: E402
     TransitionRun,
 )
 from rendering.quick.window import QuickDisplayWindow  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 _TRANSITION_IDS = (
@@ -246,7 +251,7 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
         choices=("Linear", "Elastic", "Wobble", "Flex", "Perspective Push"),
         default="Linear",
     )
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=artifact_paths.evidence_arg)
     args = parser.parse_args(argv)
     if args.windows < 1:
         parser.error("--windows must be positive")

@@ -7,19 +7,26 @@ Example:
 from __future__ import annotations
 import argparse, io, subprocess
 from pathlib import Path
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def main():
     from PIL import Image, ImageDraw
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ffmpeg', type=Path, required=True)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=artifact_paths.evidence_arg, required=True)
     parser.add_argument('--start', type=float, default=0.)
     parser.add_argument('--step', type=float, default=.25)
     parser.add_argument('--count', type=int, default=8)
     parser.add_argument('--width', type=int, default=640)
     parser.add_argument('runs', type=Path, nargs='+')
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "capture_time_strip")
     if args.output.exists():
         parser.error('Refusing to overwrite an existing strip')
     rows = []
@@ -46,3 +53,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    evidence_media.finish(0)

@@ -42,3 +42,70 @@ def test_observation_reads_the_applied_worker_instead_of_requested_settings(qt_a
         assert actual['waveform_ribbon_manual_floor']==.12
         assert actual['waveform_ribbon_audio_block_size']==256
     finally:engine.force_stop()
+
+
+# -- The profile copy lives only while the run needs it (operator, 7 Nov 2026: 9.8 GB over 36 runs) ----------
+
+
+class _FakeRunner:
+    """Stands in for the saver child: no process, exits at once with ``returncode``."""
+
+    def __init__(self, returncode):
+        self.returncode = returncode
+        self.pid = 0
+
+    def poll(self):
+        return self.returncode
+
+
+def _fake_appdata(tmp_path):
+    appdata = tmp_path / "appdata"
+    (appdata / "SRPSS" / "cache" / "steam").mkdir(parents=True)
+    (appdata / "SRPSS" / "cache" / "steam" / "art.bin").write_bytes(b"\0" * 4096)
+    (appdata / "SRPSS" / "gmail_imap.enc").write_bytes(b"encrypted")
+    (appdata / "SRPSS" / "settings_v2.json").write_text('{"shared": true}')
+    (appdata / "SRPSS_MC").mkdir()
+    (appdata / "SRPSS_MC" / "settings_v2.json").write_text(json.dumps(
+        {"snapshot": {"widgets": {"spotify_visualizer": {"mode": "bubble", "preset_bubble": 0}}}}))
+    return appdata
+
+
+def _run_live_check(monkeypatch, tmp_path, returncode, report=None):
+    import tools.visualizer_live_check as live_check
+    from tools import artifact_paths
+
+    monkeypatch.setenv("APPDATA", str(_fake_appdata(tmp_path)))
+    monkeypatch.setattr(live_check.subprocess, "Popen", lambda *a, **k: _FakeRunner(returncode))
+    if report is not None:
+        monkeypatch.setattr(live_check, "_report", report)
+    with artifact_paths.use_root(tmp_path / ".artifacts"):
+        out = artifact_paths.evidence_dir("visualizers/bubble", "live_check", "unit")
+        try:
+            code = live_check.main(["--mode", "bubble", "--preset", "1", "--load", "none", "--visible",
+                                    "--clip", "none", "--out", str(out)])
+        except RuntimeError as exc:
+            return exc, out
+    return code, out
+
+
+def test_a_finished_run_keeps_its_settings_and_deletes_the_profile_copy(monkeypatch, tmp_path):
+    seen = {}
+
+    def report(args, out, *rest):
+        # The copy exists for the whole run, up to the report.
+        seen["profile_during_report"] = (out / "profile" / "SRPSS_MC" / "settings_v2.json").is_file()
+        return 0
+
+    code, out = _run_live_check(monkeypatch, tmp_path, 0, report)
+    assert code == 0 and seen["profile_during_report"]
+    assert not (out / "profile").exists(), "the profile copy outlived the run"
+    mc = json.loads((out / "run_settings_v2_mc.json").read_text())
+    assert mc["snapshot"]["widgets"]["spotify_visualizer"]["mode"] == "bubble"
+    assert json.loads((out / "run_settings_v2.json").read_text()) == {"shared": True}
+
+
+def test_a_failed_run_still_deletes_the_profile_copy(monkeypatch, tmp_path):
+    outcome, out = _run_live_check(monkeypatch, tmp_path, 1)
+    assert isinstance(outcome, RuntimeError) and "Live runner exited 1" in str(outcome)
+    assert not (out / "profile").exists(), "a failed run left the profile copy behind"
+    assert (out / "run_settings_v2_mc.json").is_file()

@@ -8,10 +8,12 @@ dependencies. A visible local OpenGL Quick window is required. No environment
 variables, network access, provider activation or real account data are needed.
 
 ```powershell
-python -m tools.ordinary_widget_resize_capture --output logs/widget_resize_normalization/before
+python -m tools.ordinary_widget_resize_capture --output .artifacts/scratch/<owner>/resize_before
 # Apply the reviewed presentation change, keeping the same desktop/DPI/font setup.
-python -m tools.ordinary_widget_resize_capture --output logs/widget_resize_normalization/after
-python -m tools.ordinary_widget_resize_capture --compare logs/widget_resize_normalization/before logs/widget_resize_normalization/after --output logs/widget_resize_normalization/comparison
+python -m tools.ordinary_widget_resize_capture --output .artifacts/scratch/<owner>/resize_after
+python -m tools.ordinary_widget_resize_capture --compare .artifacts/scratch/<owner>/resize_before .artifacts/scratch/<owner>/resize_after
+# The comparison goes to the default .artifacts/evidence/widgets/resize_capture/<YYYYMMDD>_<label>/ (PNGs as WebP);
+# the lossless before/after captures stay in owner scratch until you delete them.
 ```
 
 Every output directory must be new: existing evidence is never overwritten.

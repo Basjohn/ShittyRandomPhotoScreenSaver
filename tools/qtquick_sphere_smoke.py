@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from rendering.quick.bootstrap import configure_quick_environment, configure_quick_graphics
+from tools import artifact_paths, evidence_media  # noqa: E402
 
 configure_quick_environment()
 
@@ -275,7 +276,10 @@ class _Runner(QObject):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", default="logs/evidence_chest/fw_sphere/materials.png")
+    parser.add_argument("--output", type=artifact_paths.evidence_arg,
+                        default=str(artifact_paths.evidence_dir("visualizers/sphere", "materials",
+                                                                artifact_paths.run_label("run")) / "materials.png"),
+                        help="PNG capture path (published as WebP beside its JSON report)")
     parser.add_argument("--material", choices=("All", "Chrome", "Obsidian", "Magma", "Silver", "Water"), default="All")
     parser.add_argument("--width", type=int, default=1440)
     parser.add_argument("--height", type=int, default=800)
@@ -290,6 +294,7 @@ def main():
     parser.add_argument("--high", type=float, default=.35)
     parser.add_argument("--transient", type=float, default=0.0)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "qtquick_sphere_smoke")
     configure_quick_graphics()
     app = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
     app.setQuitOnLastWindowClosed(False)
@@ -299,4 +304,4 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

@@ -5,8 +5,8 @@ labelled synthetic head (no music), drawn with the production scope configuratio
 and a Perspective camera matching the WR-00 framing at the pivot. Writes reference-aspect cards beside the mock's low/high crops plus a
 wide card, and the material passes' warm GPU cost.
 
-    .venv\\Scripts\\python.exe tools/labs/ribbon_material_probe.py --output .artifacts/evidence/ribbon_material/<new-run>
-        [--cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection]
+    .venv\\Scripts\\python.exe tools/labs/ribbon_material_probe.py --output .artifacts/evidence/visualizers/waveform_ribbon/ribbon_material/<YYYYMMDD>_<label>
+        [--cards <lossless preflight cards: a waveform_ribbon_preflight run with --output under .artifacts/scratch/<owner>/>]
 """
 from __future__ import annotations
 
@@ -39,6 +39,8 @@ from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive
 from rendering.quick.scene3d.target import SceneTarget
 from tools.labs.render_target import OffscreenRenderTarget
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 # WR-00 proposed camera (Lab Plan section 1.3), unverified until the WR-03 blockout.
 HALF_HEIGHT, PITCH, PIVOT = 4.975, math.radians(15.), np.array((0., 2., 0.))
@@ -204,8 +206,10 @@ def run(output: Path, cards: Path | None, frames: int):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=artifact_paths.evidence_arg, required=True)
     parser.add_argument('--cards', type=Path)
     parser.add_argument('--frames', type=int, default=90)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "ribbon_material_probe")
     print(json.dumps(run(args.output, args.cards, args.frames)['gpu_ms_wide'], indent=2))
+    evidence_media.finish(0)

@@ -24,6 +24,11 @@ import json
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
 
 
 def load_series(path: Path):
@@ -111,7 +116,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("directory", type=Path)
     parser.add_argument("--min-seconds", type=float, default=2.0)
-    parser.add_argument("--report", type=Path, default=None)
+    parser.add_argument("--report", type=artifact_paths.evidence_arg, default=None)
     args = parser.parse_args()
     report = {}
     for mode in ("bubble", "extruded_bubble"):
