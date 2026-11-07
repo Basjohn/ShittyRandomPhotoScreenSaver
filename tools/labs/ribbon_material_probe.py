@@ -5,8 +5,8 @@ labelled synthetic head (no music), drawn with the production scope configuratio
 and a Perspective camera matching the WR-00 framing at the pivot. Writes reference-aspect cards beside the mock's low/high crops plus a
 wide card, and the material passes' warm GPU cost.
 
-    .venv\\Scripts\\python.exe tools/labs/ribbon_material_probe.py --output .artifacts/evidence/ribbon_material/<new-run>
-        [--cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection]
+    .venv\\Scripts\\python.exe tools/labs/ribbon_material_probe.py --output .artifacts/evidence/visualizers/waveform_ribbon/ribbon_material/<YYYYMMDD>_<label>
+        [--cards <lossless preflight cards: a waveform_ribbon_preflight run with --output under .artifacts/scratch/<owner>/>]
 """
 from __future__ import annotations
 

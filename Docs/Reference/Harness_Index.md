@@ -13,14 +13,59 @@ motion feel and real multi-monitor topology require corresponding Windows/Qt/Ope
 SRPSS does not use hosted repository CI as the normal local acceptance path unless the operator
 explicitly requests it.
 
+## 0. Where tool output goes (`tools/artifact_paths.py`)
+
+Every tool writes evidence and scratch through one owner, `tools/artifact_paths.py`:
+
+```
+.artifacts/
+  webp/<area>/<topic>/<YYYYMMDD>_<label>.webp   visual evidence only (animated 24 fps < 10 MB, or a still)
+  evidence/<area>/<topic>/<YYYYMMDD>_<label>/   data: summaries, json/csv, traces, logs, run settings
+  scratch/<owner>/                              temporary; the owner deletes it; safe to wipe when no agent runs
+```
+
+- `<area>` is the declared vocabulary in the owner (`visualizers/<mode id>`, `transitions/<name>`, `settings`,
+  `widgets`, `studio`, `display`, `performance`, `memory`, `lifecycle`, `media`, `input`, `network`, `build`,
+  `onboarding`, `themes`, `tests`, `architecture`); an unknown area raises. From a linked worktree the layout
+  resolves to the main checkout's `.artifacts`, so an agent's evidence outlives its worktree.
+- A tool's output argument defaults to the layout. An explicit one must lie inside it: anything else
+  (elsewhere in the repository, `logs/`, `%TEMP%`, a Claude session scratchpad, another drive) is refused
+  with a usage error. Programmatic APIs that tests call still take `tmp_path`.
+- PNGs are scratch. A tool that renders PNGs writes them into owner scratch; on success
+  `tools/evidence_media.py` publishes them (a numbered sequence as one animated 24 fps WebP under 10 MB at a
+  reduced size, every other PNG as a still WebP, into `webp/<area>/<topic>/`), copies the data files to the
+  evidence folder with their PNG references rewritten to the WebPs, and deletes the scratch. On failure the
+  scratch is kept and its path printed. A capture a later `--compare` reads stays lossless when its `--output`
+  is itself under `.artifacts/scratch/<owner>/`.
+- `python tools/artifact_paths.py prune-scratch [--apply] [--max-age-h 24]` lists every
+  `scratch/<owner>/<run>` with size and age and, with `--apply`, deletes runs older than the age whose
+  process has exited. It only reports (never deletes) PNG evidence, WebPs over 10 MB and `profile/` folders
+  under `evidence/` or `webp/`. The lead runs it at milestones; nothing schedules it. Nothing deletes `logs/`.
+- **Relocation.** `.artifacts/evidence`, `.artifacts/webp` and `.artifacts/scratch` may each be a Windows
+  directory junction to another drive (the archive on the HDD, e.g. `D:\Temp\Scratch\SRPSS\evidence`, scratch
+  on a fast NVMe). The owner resolves both the layout roots and every candidate path, so paths written through
+  a junction still count as inside the layout; moving data never needs a code change, a config value or an
+  environment variable. References in documents always stay repo-relative `.artifacts/...` paths.
+- Not evidence, so not routed: product assets (`tools/release_media.py` showcase WebPs in `assets/webp/`,
+  `convert_svg_to_png.py`, `convert_weather_svgs.py`, `regen_qrc.py`, `onboarding_preview_foundry.py`,
+  `onboarding_sheet_previews.py`, `download_weather_icons.py`, `build_studio_clips.py`, the foundries and preset
+  authoring tools), builds (`build_runner.py`, `linux_build.py`, `frozen_build_audit.py`), committed fixtures
+  and baselines (`freeze_visualizer_settings.py`, `visualizer_replay/sphere_golden.py --write-visual` into
+  `tests/goldens`, `overhead_baseline.py` into `tools/baselines/overhead`), GODZIP packaging of loose logs,
+  and the operator's recordings (`visualizer_replay/record.py` into `logs/visualizer_recordings`). The static
+  guard `tests/test_artifact_paths_contract.py` lists each with its reason.
+- `tools/artifact_migration.py` is the one-off move of the pre-layout flat folders (`plan` / `refs` dry runs,
+  `apply` copies, verifies size and count, then deletes; resumable).
+
 ## 1. Targeted tests first
 
-**Original Bubble settings parity:** `python -m tools.visualizer_replay.bubble_parity --output logs/bubble_before --gpu`
+**Original Bubble settings parity:** `python -m tools.visualizer_replay.bubble_parity --output .artifacts/scratch/<owner>/bubble_before --gpu`
 captures full native-clip logical/presentation/physics records, source/settings provenance and GPU stills
-using frozen test settings. Run again with a new `--output` and `--compare logs/bubble_before` after migration.
+using frozen test settings. Run again with a new `--output` and `--compare .artifacts/scratch/<owner>/bubble_before` after migration
+(a capture a later compare reads stays lossless in owner scratch; elsewhere its PNGs are published as WebP).
 It fails on full-frame, resolved-settings or GPU drift; it does not establish live cadence or audible timing.
 
-**Neon Lake GPU comparison:** `& ".\.venv\Scripts\python.exe" tools/neon_lake_capture.py --output logs/neon_review --suite`
+**Neon Lake GPU comparison:** `& ".\.venv\Scripts\python.exe" tools/neon_lake_capture.py --suite` (default output `.artifacts/evidence/visualizers/shockwave_grid/capture/`)
 captures current Preset 1 through the production render host, including admitted camera,
 size, embedded-card and DPR views. `--set KEY=JSON` overrides memory only; `--size`,
 `--dpr` and `--window` select logical card, physical mapping and whole-window viewport.
@@ -36,7 +81,7 @@ region measurements before GIF palette quantization; GIF colour bands are not ma
 For retained ordinary Edit changes, the shared native painter test (`tests/test_qtquick_child_mapped_geometry.py`) covers clipped/applied transforms and repeated family-owned normalization values. Combine it with the specific family scene tests (Clock, System Stats, Friend Pulse, Weather, Achievement Pulse or Abandonment Issues) and the import-free lifetime/paint source contracts. Stable role identity and real painted bounds must both pass; a green source scan cannot certify native gesture responsiveness.
 
 Ordinary widget pixels and resize geometry: `python -m tools.ordinary_widget_resize_capture
---output logs/widget_resize_normalization/before`. The retained long-term harness,
+--output .artifacts/scratch/<owner>/resize_before`. The retained long-term harness,
 comparison command and evidence boundaries are documented in
 [Ordinary_Widget_Resize_Capture.md](../Guides/Ordinary_Widget_Resize_Capture.md).
 
@@ -77,7 +122,7 @@ Bubble radius evidence uses production-object identity rather than nearest-posit
 envelope has an instant-release negative control:
 
 ```powershell
-python -m tools.visualizer_replay.bubble_judder --compare-release --px-per-unit 300 --min-px 0.5 --report logs/bubble_judder_acceptance/release_recordings.json
+python -m tools.visualizer_replay.bubble_judder --compare-release --px-per-unit 300 --min-px 0.5 --report .artifacts/evidence/visualizers/bubble/judder/<YYYYMMDD>_release/release_recordings.json
 python -m pytest tests/test_bubble_render_judder.py tests/test_bubble_fidelity_report.py -q
 ```
 
@@ -262,7 +307,7 @@ supervisor callback, returns two display derivatives from one child decode, chec
 parent handoff plus child scale durations. It creates no QGuiApplication or per-request thread.
 
 For a bounded selected-quality replay, use `--prefetch --resample-filter lanczos --sharpen --cycles 2
---warmup-cycles 1 --source "C:\path\photo.png" --output-dir "C:\path\diagnostic-output"`. Hamming and Smooth
+--warmup-cycles 1 --source "C:\path\photo.png" --output-dir .artifacts/evidence/performance/image_worker_shm/<YYYYMMDD>_<label>`. Hamming and Smooth
 use the same `--resample-filter` selector. Source files are read-only; omitting `--source` generates a temporary
 fixture. The report records filter/sharpen identity, byte parity and mapping retirement. The parent-baseline lane
 remains Smooth without sharpening, so its Qt timing label cannot silently describe another filter.
@@ -288,7 +333,7 @@ independent of product work queues without owning a raw ad-hoc thread or a secon
 The post-switch performance investigation is closed, but two explicitly admitted diagnostics remain useful if future normal use/logs expose a persistent or traceable Visualizer issue:
 
 ```powershell
-python tools\visualizer_switch_abc_harness.py auto --condition A --layout-slot 1 --workers 4 --log logs\screensaver_perf.log --out logs\abc_A.auto.json --rep-out logs\abc_A.json --run-cmd "python main_mc.py --usage --viz --perf --life"
+python tools\visualizer_switch_abc_harness.py auto --condition A --layout-slot 1 --workers 4 --log logs\screensaver_perf.log --out .artifacts\evidence\performance\visualizer_switch_abc\<YYYYMMDD>_a\abc_A.auto.json --rep-out .artifacts\evidence\performance\visualizer_switch_abc\<YYYYMMDD>_a\abc_A.json --run-cmd "python main_mc.py --usage --viz --perf --life"
 python tools\qtquick_visualizer_switch_smoke.py
 ```
 
@@ -396,15 +441,15 @@ these tools are reused only when a concrete regression is reopened. Prefer `anyt
 response comparator, then quiet→loud/heavy/soft recordings.
 
 ```powershell
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_eb --duration 12 --preset 1 --size 1672x941 --capture --fps 12 --gif
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_reference_capture --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_2d --duration 12 --preset 1 --size 1672x941 --fps 12
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_controls --duration 8 --probe-controls
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_log_inventory --directory F:/Programming/Apps --output Docs/Reference/Extruded_Bubble/Evidence/archive_inventory.json
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_ray_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_rays --preset 7 --at 3
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_held_bands --output Docs/Reference/Extruded_Bubble/Evidence/new_held_bands.json
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_coverage_probe --output Docs/Reference/Extruded_Bubble/Evidence/new_coverage
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_world_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_world --preset 7 --at 4 --size 1672x941
-.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_response_comparison --clip logs/visualizer_recordings/anything_mixed2.jsonl --output Docs/Reference/Extruded_Bubble/Evidence/new_paired_body --duration 12
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output .artifacts/evidence/visualizers/extruded_bubble/forensics/<YYYYMMDD>_eb --duration 12 --preset 1 --size 1672x941 --capture --fps 12 --gif
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_reference_capture --clip logs/visualizer_recordings/anything_mixed2.jsonl --output .artifacts/evidence/visualizers/bubble/reference/<YYYYMMDD>_2d --duration 12 --preset 1 --size 1672x941 --fps 12
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_forensics --clip logs/visualizer_recordings/anything_mixed2.jsonl --output .artifacts/evidence/visualizers/extruded_bubble/forensics/<YYYYMMDD>_controls --duration 8 --probe-controls
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_log_inventory --directory F:/Programming/Apps --output .artifacts/evidence/visualizers/extruded_bubble/log_inventory/<YYYYMMDD>_archive/archive_inventory.json
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_ray_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output .artifacts/evidence/visualizers/extruded_bubble/ray_probe/<YYYYMMDD>_p7 --preset 7 --at 3
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_held_bands --output .artifacts/evidence/visualizers/extruded_bubble/held_bands/<YYYYMMDD>_run/held_bands.json
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_coverage_probe --output .artifacts/evidence/visualizers/extruded_bubble/coverage/<YYYYMMDD>_run
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.extruded_bubble_world_probe --clip logs/visualizer_recordings/anything_mixed2.jsonl --output .artifacts/evidence/visualizers/extruded_bubble/world_probe/<YYYYMMDD>_p7 --preset 7 --at 4 --size 1672x941
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_response_comparison --clip logs/visualizer_recordings/anything_mixed2.jsonl --output .artifacts/evidence/visualizers/extruded_bubble/paired_body/<YYYYMMDD>_run --duration 12
 # Parity+ against 2D with Dynamic Floor ON, each mode's bands recomputed from PCM with its own floor:
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_response_comparison --clip logs/visualizer_recordings/anything_mixed2.jsonl --output <new dir> --duration 60 --window 0,60 --reanalyze-pcm --set bubble.bubble_dynamic_floor=true
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.bubble_breathing_continuity <dir> --report <dir>/continuity.json
@@ -500,7 +545,7 @@ shifted to hide latency. Pixels are evidence, not visual or listening acceptance
 # the drive reach (all ticks / loud ticks)
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.devcurve_continuous_kicks --preset 1 --output <new dir> --clip logs\visualizer_recordings\human_heavy1.jsonl --clip logs\visualizer_recordings\human_heavy1.jsonl
 # Side-by-side time strip from capture MP4s (motion review aid)
-.\.venv\Scripts\python.exe tools\visualizer_replay\capture_time_strip.py --ffmpeg <ffmpeg.exe> --output strip.png --start 5 --step .125 --count 8 <run dir> [<run dir> ...]
+.\.venv\Scripts\python.exe tools\visualizer_replay\capture_time_strip.py --ffmpeg <ffmpeg.exe> --output .artifacts/evidence/visualizers/<mode>/time_strip/<YYYYMMDD>_<label>/strip.png --start 5 --step .125 --count 8 <run dir> [<run dir> ...]
 # Hidden Studio capture (no window, in-memory store): one PNG per workspace plus timings; --mode picks any registered Studio,
 # --clip a shipped clip (analysed by the mode's own worker), --set KEY=JSON overrides one value (nothing is saved)
 .\.venv\Scripts\python.exe tools\waveform_studio_capture.py --output <new dir> [--mode extruded_bubble] [--preset 1] [--framing fill]
@@ -746,7 +791,7 @@ Do not copy a historical presentation mechanism back into Qt Quick merely becaus
 - `tools/eb_gpu_stage_cost.py`: Extruded Bubble GPU cost per render stage (probe and its prefilter/glint parts, shafts, near layer, material draws, drift compute, background capture) by skip variants: whole-frame `GL_TIME_ELAPSED` only, round-robin in one process, since timers inside a frame charge each stage for the previous stage's draining work. Skipped variants look wrong by design. `--wall` scores submit-to-GPU-completion time, and `--throughput` the sustained frame interval with two frames in flight (the measure that matters under contention).
 - `tools/gpu_load_generator.py`: game-like competing load in its own processes, shaped like the operator's reference game (Borderlands 4: GPU 60-68%, ~57% of 24 logical cores across 168 threads, 8.4 GB). `--profile game60` (the reference case) or `game85` (diagnosis only). Each GPU frame (`--passes` draws over two targets plus a 4 MB streamed upload, two frames in flight) is sized by timer query to `--gpu` percent of the frame period; frame-synced CPU workers (compute plus ~1 GB/s of memory streaming each) are steered to `--cpu` percent of all cores by their own measured CPU time. Measured alone: system CPU ~59%, GPU ~55-60%, 90 fps. `--compute-per-copy` sets worker memory intensity; `game60` uses 8000, calibrated so EB's single-thread tick slows exactly as under the operator's game at its menu (3.56 ms), and a live check then matches the game within ~2% on frame rate, publish to swap, render and tick (2026-10-31). Prints `ready` once calibrated; hard `--seconds` deadline; `--priority` for experiments. Check for stray instances before any idle measurement.
 - `tools/eb_live_phases.py`: the real MC saver (`-- <main_mc args>`) with tool-only timers on Extruded Bubble's render stages, state reads and logical publish; writes medians/p90/p99 per frame plus drift-solver restarts to `--out` at exit. Pass `--log-dir=<scratch folder>` among the main_mc arguments so the operator's logs stay untouched (a product CLI argument, never an environment variable). This is the only harness that sees Qt's scene, the swap chain, the real driver queue and the other displays under real load. It runs `main.py`'s startup preamble first (before 2026-10-31 it left PyOpenGL's per-call error checking on, inflating render timings).
-- `tools/visualizer_live_check.py`: **the live-shape check for any Visualizer mode** (`--mode`, `--preset`, `--set`, `--seconds`, `--load game60|none`, `--clip`). Runs the real MC saver from a copy of `SRPSS_MC` + `SRPSS` with its display windows given an empty window region (no pixel, no click, but presented as an ordinary window), never topmost (a guard kills the run if any window of the process could show; `--visible` opts out), plays a recorded real-music clip as the loopback, and reports the age chain (logical tick and its GIL share, consumed revision's age at sync, revisions waiting, publish to swap, render mode, pacing, first 2 s after startup, HUD age) with `FLAG` lines for known traps. Runs with `--usage`, as the operator always does, and reports the usage sampler's cost and tree (`usage`), steady hitches over 50 ms per minute (`hitches_per_min`) and a mid-run `process_tree` (name, threads, command). Writes `summary.json` under `logs/live_check/`. Required before accepting a new or reworked mode (`Docs/Guides/Visualizer_Change_Checklist.md` 1C). `--display-off AT:FOR[,AT:FOR]` sends the console display OFF/ON through the saver's own `WM_POWERBROADCAST` window procedure at those seconds (panels and power settings are never touched) and adds `display_power`: per pair, the saver tree's CPU (% of one core) and per-process GPU engine %, swaps/s and publishes/s for the windows before/while/after off (3 s settle each), plus the 2 s after ON (first swap/publish latency, swap and publish gaps). Its steady-state figures end at the first OFF edge. On code without the display-power authority the edges are recorded with `listener=false`, which is the before-measurement. `--settings-roundtrip AT[,AT]` drives the engine's real Settings path at those seconds (`tools/live_check_settings_roundtrip.py`): the stop with reason settings, the display barrier, the real `SettingsDialog` (its `exec` and `StyledPopup.exec` are patched in the runner so it closes after a 1.5 s dwell, never shown) with its own barrier, and the replacement up to its reveal. A time due before the current generation has revealed waits for that reveal. Per round trip it reports the stop and barrier times, generations, RSS and private bytes before the request and at the replacement's reveal, the thaw and re-freeze, and the `[GC_POLICY]` lines (`settings_roundtrip_summary.json`); a barrier timeout, a reveal without a re-freeze, an unfinished round trip, a shown dialog or popup, or a process exit before the `--exit-after` stop exits 3 (`tests/test_live_check_settings_roundtrip.py`). Its steady figures cover the time before the first round trip. `--roundtrip-memory census[,collect][,tracemalloc][,map]` (with `--settings-roundtrip`, runner only, off by default) classifies what each round trip leaves behind at every reveal, before its freeze (`settings_roundtrip_memory.json`): the tracked Python heap by type, QObject wrappers by class and validity, native QObject trees, GL accounting, threads/handles/GDI/USER, and which objects of retired display and dialog generations are still alive (weakrefs and `destroyed` edges); `collect` adds one classified `gc.collect()` and the RSS/private it returns, `tracemalloc` the top allocation-site diffs (started at the runner's start; ~25 s a snapshot), `map` the native memory map by category (`tools/win_memory_map.py`). A run with it classifies; it does not time (R-175). A run without `--settings-roundtrip` is the time-only control for a round-trip slope (the invisible Waveform check grows a few MB a minute on its own).
+- `tools/visualizer_live_check.py`: **the live-shape check for any Visualizer mode** (`--mode`, `--preset`, `--set`, `--seconds`, `--load game60|none`, `--clip`). Runs the real MC saver from a copy of `SRPSS_MC` + `SRPSS` with its display windows given an empty window region (no pixel, no click, but presented as an ordinary window), never topmost (a guard kills the run if any window of the process could show; `--visible` opts out), plays a recorded real-music clip as the loopback, and reports the age chain (logical tick and its GIL share, consumed revision's age at sync, revisions waiting, publish to swap, render mode, pacing, first 2 s after startup, HUD age) with `FLAG` lines for known traps. Runs with `--usage`, as the operator always does, and reports the usage sampler's cost and tree (`usage`), steady hitches over 50 ms per minute (`hitches_per_min`) and a mid-run `process_tree` (name, threads, command). Writes `summary.json` to `.artifacts/evidence/visualizers/<mode>/live_check/<YYYYMMDD>_<label>/` (`--label`, or `--out` inside the layout). The saver profile copy lives only while the run needs it: at the end of every run, failures included, its settings are kept beside the results as `run_settings_v2.json` (`SRPSS`) and `run_settings_v2_mc.json` (`SRPSS_MC`) and `profile/` (Steam image cache, backups, encrypted credentials: 9.8 GB over 36 runs before) is deleted; the run's `logs/`, summaries and traces are kept (`tests/test_visualizer_live_check.py`). Required before accepting a new or reworked mode (`Docs/Guides/Visualizer_Change_Checklist.md` 1C). `--display-off AT:FOR[,AT:FOR]` sends the console display OFF/ON through the saver's own `WM_POWERBROADCAST` window procedure at those seconds (panels and power settings are never touched) and adds `display_power`: per pair, the saver tree's CPU (% of one core) and per-process GPU engine %, swaps/s and publishes/s for the windows before/while/after off (3 s settle each), plus the 2 s after ON (first swap/publish latency, swap and publish gaps). Its steady-state figures end at the first OFF edge. On code without the display-power authority the edges are recorded with `listener=false`, which is the before-measurement. `--settings-roundtrip AT[,AT]` drives the engine's real Settings path at those seconds (`tools/live_check_settings_roundtrip.py`): the stop with reason settings, the display barrier, the real `SettingsDialog` (its `exec` and `StyledPopup.exec` are patched in the runner so it closes after a 1.5 s dwell, never shown) with its own barrier, and the replacement up to its reveal. A time due before the current generation has revealed waits for that reveal. Per round trip it reports the stop and barrier times, generations, RSS and private bytes before the request and at the replacement's reveal, the thaw and re-freeze, and the `[GC_POLICY]` lines (`settings_roundtrip_summary.json`); a barrier timeout, a reveal without a re-freeze, an unfinished round trip, a shown dialog or popup, or a process exit before the `--exit-after` stop exits 3 (`tests/test_live_check_settings_roundtrip.py`). Its steady figures cover the time before the first round trip. `--roundtrip-memory census[,collect][,tracemalloc][,map]` (with `--settings-roundtrip`, runner only, off by default) classifies what each round trip leaves behind at every reveal, before its freeze (`settings_roundtrip_memory.json`): the tracked Python heap by type, QObject wrappers by class and validity, native QObject trees, GL accounting, threads/handles/GDI/USER, and which objects of retired display and dialog generations are still alive (weakrefs and `destroyed` edges); `collect` adds one classified `gc.collect()` and the RSS/private it returns, `tracemalloc` the top allocation-site diffs (started at the runner's start; ~25 s a snapshot), `map` the native memory map by category (`tools/win_memory_map.py`). A run with it classifies; it does not time (R-175). A run without `--settings-roundtrip` is the time-only control for a round-trip slope (the invisible Waveform check grows a few MB a minute on its own).
 - `tools/visualizer_replay/live_audio.py`: `recorded_pcm` stitches a recording's native capture histories back into the exact PCM stream (verified: all 4,147 histories of 60 s reappear exactly, in order); `RecordedLoopback` plays it into the worker's capture callback in real time as identical stereo channels.
 - `tools/visualizer_preset_author.py`: writes a curated Visualizer preset from Settings values alone (`--mode`, `--values` scenes JSON, `--scene`, `--index`, `--title`, `--description`): each value must be admitted unchanged by its Settings control, the payload passes the Settings save's normalisers, the view pose becomes `starting_view`, and the file is read back through the activation path.
 - `tools/visualizer_replay/eb_chain_population_probe.py`: Extruded Bubble free-chain population per logical tick on a real recording (clip, preset, seconds, trace path): each chain's population opacity through the renderer's own fill helpers, the shortest whole fades and any chain that leaves and returns within 2 s (the 2026-10-31 blink). Offscreen, no GL.

@@ -11,7 +11,7 @@ Replays a recording through the production logical path at each committed extent
 
 Usage::
 
-    python -m tools.visualizer_replay.bubble_shape_strip --out-dir .artifacts/evidence/bubble/shape_invariance
+    python -m tools.visualizer_replay.bubble_shape_strip --out-dir .artifacts/evidence/visualizers/bubble/shape_invariance/<YYYYMMDD>_<label>
 """
 from __future__ import annotations
 

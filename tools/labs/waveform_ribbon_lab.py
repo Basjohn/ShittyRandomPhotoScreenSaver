@@ -15,8 +15,8 @@ The floor uses saved generated concrete colour, roughness and smooth wet-surface
 (S3D-5): ribbon light drawn through the mirrored camera, sampled at the floor's own screen position,
 streaked and blurred by wet roughness and perturbed by the micro-surface.
 
-    .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_lab.py --output .artifacts/evidence/waveform_ribbon/<new-run>
-        [--cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection] [--recipe complete|alternate|range]
+    .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_lab.py --output .artifacts/evidence/visualizers/waveform_ribbon/lab/<YYYYMMDD>_<label>
+        [--cards <lossless preflight cards in .artifacts/scratch/<owner>/>] [--recipe complete|alternate|range]
 
 Named looks (``RECIPES``) share every program and function; they differ in values only.
 """
