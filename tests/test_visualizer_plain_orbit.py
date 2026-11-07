@@ -166,7 +166,7 @@ def test_every_cancellation_unwinds_once(orbit_card, cancel):
     elif cancel == 'edit':
         card.window.set_custom_layout_input_blocked(True)
     elif cancel == 'mode':
-        card.controller.set_scene_transform_enabled(True, mode_id='neon_lake')
+        card.controller.set_scene_transform_enabled(True, mode_id='other_mode')  # any other mode; not a real id
     elif cancel == 'reset':
         card.controller.cancel_view_orbit_for_camera_reset()
     elif cancel == 'close':

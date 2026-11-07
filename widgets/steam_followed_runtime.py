@@ -1,5 +1,8 @@
 """Generation-shared Games You Follow source/lease. No QML, polling or per-display fetch.
 
+Games You Follow persists as widget id ``steam_progress``; its other spellings (``games_you_follow``,
+``steam_followed``, ``games_followed``) are mapped in ``Docs/Reference/Naming.md``.
+
 The existing runtime manager will own one lease per admitted display; this module
 owns one source and one refresh deadline per *active generation*, never one per
 card. The source/worker and private identity remain outside the Qt presentation.

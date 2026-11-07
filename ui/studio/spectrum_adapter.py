@@ -29,6 +29,7 @@ from typing import Any, Callable, Mapping
 
 from core.settings.visualizer_mode_settings import Choice, Colour, Custom, Slider, Toggle, require_mode_settings
 from ui.studio import engine_answers, framed, spectrum_shape
+from ui.studio.registry import studio_title
 from ui.studio.adapter import StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition
 from ui.studio.engine_answers import (  # noqa: F401  (re-exported: Spectrum's evaluator inputs)
     EngineAnswerEvaluator, EngineAnswerMode, RecordedInputs, RestInputs, ServedTick, source_of, synthetic_fixtures,
@@ -264,7 +265,7 @@ def build_schema() -> StudioSchema:
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _GROUP_PANEL.items() if key in titles}
     group_icons.update({TECHNICAL_GROUP: "bars", BAR_COLOUR_GROUP: "colour", RAINBOW_GROUP: "gradient"})
     add_node = spectrum_shape.add_node_action()
-    return StudioSchema(MODE, "Spectrum Studio", tuple(workspaces), tuple(props), admit,
+    return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), admit,
                         group_traces=((titles["audio"], ("Level", "Peak")), (titles["ghost"], ("Ghost",)),
                                       (titles["render"], ("Level",))),
                         group_icons=tuple(group_icons.items()), object_noun="Bar",
@@ -314,7 +315,7 @@ class SpectrumStudioRenderer(framed.ContractModeRenderer):
 # --------------------------------------------------------------------------------- adapter
 class SpectrumStudioAdapter(StudioModeAdapter):
     mode_id = MODE
-    title = "Spectrum Studio"
+    title = studio_title(MODE)
 
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None

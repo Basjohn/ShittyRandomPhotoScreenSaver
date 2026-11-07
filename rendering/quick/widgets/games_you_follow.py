@@ -1,5 +1,8 @@
 """Retained Games You Follow presentation using one shared Steam news lease.
 
+Games You Follow persists as widget id ``steam_progress``; its other spellings (``games_you_follow``,
+``steam_followed``, ``games_followed``) are mapped in ``Docs/Reference/Naming.md``.
+
 The model never owns credentials, provider work, a timer, or Settings writes.
 The ordinary family adapter injects one neutral runtime lease after QML
 construction and activates it only when a real display presenter is admitted.

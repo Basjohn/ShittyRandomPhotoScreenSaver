@@ -28,6 +28,7 @@ from typing import Any, Callable, Mapping
 
 from core.settings.visualizer_mode_settings import Choice, Colour, Custom, Slider, Toggle, require_mode_settings
 from ui.studio import engine_answers, framed, spectrum_shape
+from ui.studio.registry import studio_title
 from ui.studio.adapter import StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition
 from ui.studio.engine_answers import EngineAnswerEvaluator, EngineAnswerMode
 from ui.studio.schema import (
@@ -246,7 +247,7 @@ def build_schema() -> StudioSchema:
 
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _GROUP_PANEL.items() if key in titles}
     group_icons.update({TECHNICAL_GROUP: "bars", BAR_COLOUR_GROUP: "colour", VIEW_GROUP: "view"})
-    return StudioSchema(MODE, "Extruded Spectrum Studio", tuple(workspaces), tuple(props), admit,
+    return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), admit,
                         group_traces=((titles["response"], ("Level", "Peak")), (titles["effects"], ("Ghost",)),
                                       (titles["shape"], ("Level",))),
                         group_icons=tuple(group_icons.items()), object_noun="Bar",
@@ -295,7 +296,7 @@ class ExtrudedSpectrumStudioRenderer(framed.ContractModeRenderer):
 # --------------------------------------------------------------------------------- adapter
 class ExtrudedSpectrumStudioAdapter(StudioModeAdapter):
     mode_id = MODE
-    title = "Extruded Spectrum Studio"
+    title = studio_title(MODE)
 
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None

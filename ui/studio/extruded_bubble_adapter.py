@@ -25,6 +25,7 @@ from core.settings.visualizer_mode_settings import (
     Choice, Colour, Range, SceneCameraPosition, ScenePath, Slider, Toggle, Triangle, require_mode_settings,
 )
 from ui.studio import clip_loop, framed
+from ui.studio.registry import studio_title
 from ui.studio.adapter import (RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter,
                                control_condition)
 from ui.studio.schema import (
@@ -250,7 +251,7 @@ def build_schema() -> StudioSchema:
         modulation = PREFIX + "ray_modulation"
         roles = (("strength", rays),) + ((("modulation", modulation),) if modulation in controls else ())
         cards = (CardSpec(titles[controls[rays].bucket], "render", roles, "Ray strength", rendered=True),)
-    return StudioSchema(MODE, "Extruded Bubble Studio", tuple(workspaces), tuple(props), _admit(controls, technical),
+    return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), _admit(controls, technical),
                         group_traces=((titles.get("reaction", ""), ("Passage", "Level", "Sustain")),
                                       (titles.get("rays", ""), ("Rays",)),
                                       (titles.get("bubbles", ""), ("Bubbles", "Passage")),
@@ -693,7 +694,7 @@ def _hex(rgba) -> str:
 
 class ExtrudedBubbleStudioAdapter(StudioModeAdapter):
     mode_id = MODE
-    title = "Extruded Bubble Studio"
+    title = studio_title(MODE)
 
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None

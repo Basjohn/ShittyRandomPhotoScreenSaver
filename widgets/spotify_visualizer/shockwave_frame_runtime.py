@@ -1,4 +1,8 @@
-"""Activation-fenced authored state for the Shockwave Grid Visualizer mode.
+"""Activation-fenced authored state for the Neon Lake Basin Visualizer mode (mode id ``shockwave_grid``).
+
+Its owners span three vocabularies (``shockwave_grid_*``, this ``shockwave_*`` file, ``neon_*``), all mapped in
+``Docs/Reference/Naming.md``; here "shockwave" is also the mode's onset-wave concept, not only its old name.
+
 
 Spectrum's frame runtime (bars, peaks, temporal treatment, shape editor, energy distribution)
 plus a bounded ring of shockwave events: each musical onset the transient bus publishes

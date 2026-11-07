@@ -1,5 +1,8 @@
 """Neon Lake Basin's framed camera: a ``FramedCameraSpec`` of the shared standard (``framed_camera``).
 
+Neon Lake Basin is mode id ``shockwave_grid`` (keys ``shockwave_grid_*``); its sibling owners are mapped in
+``Docs/Reference/Naming.md``.
+
 The eye orbits the basin centre and may look almost level across the lake (tilt 0 is a flat horizon) while it
 never enters the land or water: its floor is the authored terrain under it, with room for detail, the music's
 Terrain Reaction and the lake's ripples. Settings, flight and rendering use the same fixed basin width;
