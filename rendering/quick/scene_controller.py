@@ -1967,8 +1967,8 @@ class QuickSceneController(QObject):
     def _plain_orbit_target_at(self, scene_position):
         """Discrete press ownership from live retained items, never saved rectangles."""
         root = self._visualizer_root
+        # A freeform (frameless) 3D stage orbits too: the stage rectangle, not a card shell, owns the press.
         if (self._custom_layout_session is not None or root is None or not root.isEnabled()
-                or not root.property('cardShellEnabled')
                 or not self.visualizer_contains_scene_position(scene_position)):
             return None
         host = self._ordinary_widget_host

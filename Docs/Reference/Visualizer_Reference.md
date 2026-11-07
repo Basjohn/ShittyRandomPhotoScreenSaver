@@ -212,7 +212,9 @@ lost eligibility retires their tooltip, and fading chrome cannot accept late cli
 
 For unframed 3D modes, Alt+right starts a native press-scoped origin in the current display's direct CUSTOM transaction. An Alt+wheel resize may keep that transaction open; a later Alt+right press must rebase the move origin to the **current** rectangle before applying the new pointer delta, otherwise stale unscaled positions teleport the stage. Freeform 3D whole-stage wheel scaling preserves the stage **centre** (subject to display-edge clamp), while planar/ordinary widgets retain their own established anchor rule. These whole-stage paths may not create a timer or borrow geometry from a sibling layout profile. Framed 3D modes route admitted Alt pan/scale inputs to the shared internal camera instead, with no CUSTOM geometry transaction; see [Neon Lake](Neon_Lake_Basin.md) and [Extruded Bubble](Extruded_Bubble/Target.md).
 
-Framed 3D modes also admit ordinary held-left orbit after Qt's drag threshold in interaction/Ctrl mode.
+Every orbiting 3D mode (framed, and freeform Sphere and Extruded Spectrum since 7 Nov: operator, "both it and
+sphere are supposed to") also admits ordinary held-left orbit after Qt's drag threshold in interaction/Ctrl mode;
+a freeform stage's rectangle owns the press as a framed card does (`tests/test_visualizer_freeform_held_left_orbit.py`).
 The actual retained card/stacking determines admission. Glyphs, visualizer descendants and higher controls
 retain first refusal; lower passive handlers cannot veto the visible card. Windows confinement uses the real
 client pixel rectangle, preserves foreign owners and retains failed cleanup at the existing runtime deletion
@@ -857,7 +859,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
 - **CUSTOM quarter-turn** is not offered (Turn orbits the field instead).
 - **Live view pose:** Sphere, Extruded Spectrum and Neon Lake declare turn/tilt through
   `view_orbit_settings`. W/A/S/D holds one immutable `ViewOrbitMotion`; the logical capture evaluates it at its own
-  timestamp, independent of OS key repeat. Alt+left-drag uses the same orbit owner. The GUI owner settles the reached
+  timestamp, independent of OS key repeat. Held-left and Alt+left drags use the same orbit owner. The GUI owner settles the reached
   view once through canonical Settings when the gesture finishes or the owner retires; ordinary frames write nothing.
   These are mode-specific live view settings, excluded from curated artwork and Custom art snapshots. Ordinary art
   hydration cannot reset the view or switch an orbit edit to Custom. The active CUSTOM `layout_profile` remains stage geometry,
