@@ -140,8 +140,8 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
 ):
     """The 3D Settings bodies are real pages: each builds through the lazy path, holds one mode-owned
     presentation value and one Technical value edited per mode, persists them, and a fresh Settings host
-    restores each mode independently."""
-    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+    restores each mode independently. Both values live in the body's value cache (no widget owns them)."""
+    from ui.tabs.media.technical_controls import _control_defs_for_mode
 
     modes = ("extruded_spectrum", "shockwave_grid", "sphere")
     presentation_controls = {
@@ -160,21 +160,18 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
             assert not mode_has_rainbow_controls(mode)
             assert tab._rainbow_controls_container.isHidden()
 
-            technical = get_per_mode_controls_for_mode(tab, mode)
-            assert technical is not None
-            assert technical["mode_key"] == mode
-            bar_count = technical.get("bar_count")
-            assert bar_count is not None
+            bar_count = next(d for d in _control_defs_for_mode(mode) if d.control_key == "bar_count")
+            current_bar_count = _cache(tab, mode)[f"{mode}_bar_count"]
 
             key = presentation_controls[mode]
             new_presentation = _other(mode, key, _cache(tab, mode)[key])
             new_bar_count = (
-                bar_count.minimum()
-                if bar_count.value() != bar_count.minimum()
-                else bar_count.maximum()
+                int(bar_count.minimum)
+                if current_bar_count != int(bar_count.minimum)
+                else int(bar_count.maximum)
             )
             _edit(tab, mode, key, new_presentation)
-            bar_count.setValue(new_bar_count)
+            _edit(tab, mode, f"{mode}_bar_count", new_bar_count)
             tab._save_settings_now()
             authored[mode] = (new_presentation, new_bar_count)
 
@@ -189,11 +186,9 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
     try:
         for mode in modes:
             reopened._select_mode_page(mode)
-            technical = get_per_mode_controls_for_mode(reopened, mode)
-            assert technical is not None
             expected_presentation, expected_bar_count = authored[mode]
             assert _cache(reopened, mode)[presentation_controls[mode]] == pytest.approx(expected_presentation)
-            assert technical["bar_count"].value() == expected_bar_count
+            assert _cache(reopened, mode)[f"{mode}_bar_count"] == expected_bar_count
     finally:
         reopened.deleteLater()
 
@@ -208,8 +203,6 @@ def test_current_3d_settings_curated_round_trip_restores_each_custom_without_cro
     that exact mode-owned snapshot without borrowing from or mutating either of
     the other 3D modes.
     """
-    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
-
     modes = ("extruded_spectrum", "shockwave_grid", "sphere")
     presentation_controls = {
         "extruded_spectrum": ("extruded_spectrum_depth", 123),
@@ -247,9 +240,7 @@ def test_current_3d_settings_curated_round_trip_restores_each_custom_without_cro
             assert slider.preset_index() == slider.custom_index()
             presentation_attr, expected_slider_value = presentation_controls[mode]
             assert _cache(tab, mode)[presentation_attr] == pytest.approx(expected_slider_value / 100.0)
-            technical = get_per_mode_controls_for_mode(tab, mode)
-            assert technical is not None
-            assert technical["bar_count"].value() == bar_counts[mode]
+            assert _cache(tab, mode)[f"{mode}_bar_count"] == bar_counts[mode]
 
         # Cycle each mode through a real curated-preset UI change and back to
         # Custom. The slider's own signal path invokes the canonical preset
@@ -281,9 +272,7 @@ def test_current_3d_settings_curated_round_trip_restores_each_custom_without_cro
 
             presentation_attr, expected_slider_value = presentation_controls[mode]
             assert _cache(tab, mode)[presentation_attr] == pytest.approx(expected_slider_value / 100.0)
-            technical = get_per_mode_controls_for_mode(tab, mode)
-            assert technical is not None
-            assert technical["bar_count"].value() == bar_counts[mode]
+            assert _cache(tab, mode)[f"{mode}_bar_count"] == bar_counts[mode]
 
             persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
             assert persisted[presentation_attr] == pytest.approx(expected_slider_value / 100.0)
@@ -331,11 +320,15 @@ def test_custom_accessories_live_inside_custom_and_evacuate_before_retirement(
         tab._select_mode_page("spectrum")
         body = tab._vis_body_host.body("spectrum")
         assert body is not None
-        assert tab._spectrum_normal.isAncestorOf(tab._base_appearance_group)
-        assert tab._spectrum_normal.isAncestorOf(tab._rainbow_controls_container)
+        # Every mode is edited in its Studio: the shared rows are value owners in the
+        # page's never-shown family holder and never enter a mode body (A-12).
+        holder = tab._studio_family_values
+        for accessory in (tab._base_appearance_group, tab._rainbow_controls_container):
+            assert holder.isAncestorOf(accessory)
+            assert not body.isAncestorOf(accessory)
 
-        # The stored fixture is curated. Custom-only buckets are physically in the
-        # mode's normal/Custom section but are not presented until Custom is chosen.
+        # The stored fixture is curated. The Custom-only gates still follow the preset,
+        # and no gate ever presents a row on the page.
         assert tab._spectrum_preset_slider.preset_index() != tab._spectrum_preset_slider.custom_index()
         assert tab._base_appearance_group.isHidden()
         assert tab._rainbow_controls_container.isHidden()
@@ -351,11 +344,12 @@ def test_custom_accessories_live_inside_custom_and_evacuate_before_retirement(
         tab._update_rainbow_visibility()
         assert not tab._base_appearance_group.isHidden()
         assert not tab._rainbow_controls_container.isHidden()
+        assert not tab._base_appearance_group.isVisibleTo(tab)
+        assert not tab._rainbow_controls_container.isVisibleTo(tab)
 
-        # Switching modes moves Rainbow into that mode's Custom section and parks
-        # the Spectrum-only appearance bucket outside the cached Spectrum body.
+        # Switching modes keeps both rows in the holder, outside the cached Spectrum body.
         tab._select_mode_page("bubble")
-        assert tab._bubble_normal.isAncestorOf(tab._rainbow_controls_container)
+        assert holder.isAncestorOf(tab._rainbow_controls_container)
         assert not body.isAncestorOf(tab._base_appearance_group)
         assert not body.isAncestorOf(tab._shared_vis_fill_row)
         assert not hasattr(tab, "_shared_vis_appearance_holder")
@@ -383,8 +377,9 @@ def test_rainbow_custom_toggle_persists_immediately_and_speed_is_custom_only(
             tab._loading = old_loading
         tab._update_rainbow_visibility()
 
-        assert tab._bubble_normal.isAncestorOf(tab._rainbow_controls_container)
+        assert tab._studio_family_values.isAncestorOf(tab._rainbow_controls_container)
         assert not tab._rainbow_controls_container.isHidden()
+        assert not tab._rainbow_controls_container.isVisibleTo(tab)
         assert tab._rainbow_speed_container.isHidden()
 
         tab.rainbow_enabled.setChecked(True)
@@ -534,57 +529,6 @@ def _bucket_titles(container) -> list[str]:
             if title:
                 titles.append(title)
     return titles
-
-
-def test_spectrum_technical_bucket_visibility_persists_per_mode(qt_app, settings_manager):
-    """Technical subsection visibility toggles persist per mode across recreation."""
-    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
-
-    tab = _make_tab(settings_manager, "spectrum")
-    try:
-        tab._select_mode_page("spectrum")
-        controls = get_per_mode_controls_for_mode(tab, "spectrum")
-        assert controls is not None
-        agc_toggle = controls.get("agc_visibility_toggle")
-        transient_toggle = controls.get("transient_visibility_toggle")
-        assert agc_toggle is not None
-        assert transient_toggle is not None
-
-
-        # Technical leaves share the same mode-page accordion as Custom leaves.
-        tab._rainbow_bucket_toggle.setChecked(True)
-        qt_app.processEvents()
-        agc_toggle.setChecked(True)
-        qt_app.processEvents()
-        assert tab._rainbow_bucket_toggle.isChecked() is False
-        assert tab.get_visualizer_bucket_state("spectrum", "rainbow") is False
-
-        tab._rainbow_bucket_toggle.setChecked(True)
-        qt_app.processEvents()
-        assert agc_toggle.isChecked() is False
-        assert tab.get_visualizer_tech_bucket_state("spectrum", "agc") is False
-
-        transient_toggle.setChecked(True)
-        qt_app.processEvents()
-
-        assert tab._rainbow_bucket_toggle.isChecked() is False
-        assert agc_toggle.isChecked() is False
-        assert transient_toggle.isChecked() is True
-        assert tab.get_visualizer_bucket_state("spectrum", "rainbow") is False
-        assert tab.get_visualizer_tech_bucket_state("spectrum", "agc") is False
-        assert tab.get_visualizer_tech_bucket_state("spectrum", "transient") is True
-    finally:
-        tab.deleteLater()
-
-    reloaded = VisualizersTab(settings_manager)
-    try:
-        reloaded._select_mode_page("spectrum")
-        reloaded_controls = get_per_mode_controls_for_mode(reloaded, "spectrum")
-        assert reloaded_controls is not None
-        assert reloaded_controls.get("agc_visibility_toggle").isChecked() is False
-        assert reloaded_controls.get("transient_visibility_toggle").isChecked() is True
-    finally:
-        reloaded.deleteLater()
 
 
 def test_bubble_stream_reactivity_load_clamps_to_slider_maximum(qt_app, settings_manager):

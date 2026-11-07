@@ -87,11 +87,6 @@ def _open_titles(scope):
     return sorted((t.text(), _depth(t)) for t in scope.findChildren(BucketToggle) if t.isChecked())
 
 
-def _visualizer_bucket(dialog, mode, key):
-    host = next(h for h in dialog.findChildren(QWidget) if h.objectName() == f"{mode}_bucket_{key}")
-    return host.findChild(BucketToggle)
-
-
 def test_sources_bucket_returns_only_while_its_tab_stays_current(manager):
     dialog = _dialog(manager)
     page = _page(dialog, "sources")
@@ -182,14 +177,3 @@ def test_transition_advanced_returns_on_its_pill_and_a_left_pill_presents_closed
     QCoreApplication.processEvents()
     assert not _advanced_of(tab, first).isChecked()
     _close(dialog)
-
-
-def _technical_root(dialog, mode):
-    container = getattr(dialog.visualizers_tab, f"_{mode}_settings_container")
-    return next(t for t in container.findChildren(BucketToggle) if t.text() == "Technical")
-
-
-def _eb_camera_saved(manager):
-    return bool((manager.get("ui.visualizer_bucket_states") or {}).get("extruded_bubble:camera"))
-
-
