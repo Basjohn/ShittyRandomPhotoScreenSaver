@@ -32,7 +32,7 @@ def spec():
 
 def admitted(values):
     out = dict(values)
-    for control in spec().controls:
+    for control in spec().body_controls:
         out[control.key] = control.admit(out[control.key], out[control.key])
     return out
 
@@ -62,10 +62,10 @@ def test_every_registry_control_is_editable_in_the_studio():
     by_key: dict[str, list] = {}
     for prop in schema.properties:
         by_key.setdefault(prop.path[0], []).append(prop)
-    missing = [c.key for c in spec().controls if c.key not in by_key]
+    missing = [c.key for c in spec().body_controls if c.key not in by_key]
     assert missing == [], f"Registry controls unreachable in the Extruded Bubble Studio: {missing}"
     values = canonical_section()
-    for control in spec().controls:
+    for control in spec().body_controls:
         props = by_key[control.key]
         assert all(not p.instrument_only for p in props)
         if isinstance(control, (ScenePath, SceneCameraPosition, Triangle)):
@@ -81,7 +81,7 @@ def test_every_registry_control_is_editable_in_the_studio():
 def test_instruments_and_bounds_come_from_the_registry_not_copies():
     schema = build_schema()
     by_id = {p.id: p for p in schema.properties}
-    for control in spec().controls:
+    for control in spec().body_controls:
         label = (control.label.rstrip(":").strip() or (control.text if isinstance(control, Toggle) else "")).strip()
         if isinstance(control, Range):
             prop = by_id[control.key]
@@ -126,7 +126,7 @@ def test_headline_controls_lead_and_paths_belong_to_their_scene_objects():
     assert first_row(titles["bubbles"]) == PREFIX + "large_bubbles"
     values = canonical_section()
     objects = adapter.scene_objects(values)
-    paths = [c for c in spec().controls if isinstance(c, ScenePath)]
+    paths = [c for c in spec().body_controls if isinstance(c, ScenePath)]
     assert [o.id for o in objects] == [c.key[len(PREFIX):] for c in paths]
     for obj, control in zip(objects, paths):
         rows = [p for p in schema.properties if p.object_scope == obj.id]

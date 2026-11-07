@@ -306,11 +306,6 @@ into them.
     key (never regenerate them: ten mirrors carry hand-edited colours).
   - **Waits on the operator's choice:** the default pair would then draw Glass cards on fresh profiles. The
     alternative is linking the 15 material themes and labelling "[Glass]" as window-only.
-- [ ] **AC-18 (SS-02) Fold the audio-analysis Technical controls into each mode's spec.** P1, effort M-L.
-  - Today they are declared in five places with disagreeing ranges (manual floor: 0.05 vs 0.0).
-  - The settings model does not clamp them (a bar count of 500 stays 500).
-  - The preset completeness check and repair fill cannot see them.
-  - The registry keeps membership; the spec gains range and presentation, and a single mode filter folds in.
 - [ ] **AC-20 (SS-04) The Particle, Blinds and Burn pages go through the transition spec.** P2, effort M.
   - Particle's default radius of 7 always runs as 8. Its gloss offers 10–200 where 16–128 is admitted.
   - The Particle save overwrites four fields it doesn't show with literals.
@@ -319,7 +314,7 @@ into them.
   - This finishes A-12: the page builds no hidden value-owner widget.
   - One range per value: the rainbow speed range is restated in four places today.
   - The preset completeness check covers them.
-  - Uses AC-18's shared-entries pattern.
+  - Uses AC-18's shared-entries pattern (landed: `audio_analysis_entries`, the `technical` bucket).
 - [ ] **AC-23 (SS-07) AC-01 residue.** P3, effort S. Folds into AC-14 and follows AC-18.
   - Delete about 600 dead lines of Technical widget code and the dead Advanced plumbing
     (`_auto_switch_preset_to_custom` never fires).

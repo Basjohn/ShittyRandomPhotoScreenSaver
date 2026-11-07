@@ -40,7 +40,7 @@ def spec():
 def canonical_section():
     """Test-owned inputs: the code-owned canonical defaults, never an authored preset."""
     out = dict(require_canonical_default("widgets.spotify_visualizer"))
-    for control in spec().controls:
+    for control in spec().body_controls:
         out[control.key] = control.admit(out[control.key], out[control.key])
     return out
 
@@ -65,8 +65,8 @@ def decorated_section():
 
 
 def technical_keys():
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    return {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)}
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    return {control.key for control in require_mode_settings(MODE).technical_controls()}
 
 
 def family_keys():
@@ -158,7 +158,7 @@ def _vector_elements() -> set[tuple]:
     from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
     shared = get_owned_mode_setting_keys(MODE, "shared_bar")
     canonical = require_canonical_default("widgets.spotify_visualizer")
-    out = {(c.key, 3) for c in spec().controls if isinstance(c, Colour) and c.alpha}
+    out = {(c.key, 3) for c in spec().body_controls if isinstance(c, Colour) and c.alpha}
     out |= {(shared["bar_fill_color"], 3), (shared["bar_border_color"], 3)}
     out |= {(SHAPE_NODES, i, axis) for i in range(_MAX_NODES) for axis in (0, 1)}
     for mirrored in (True, False):
@@ -173,7 +173,7 @@ def _uncovered(properties) -> set:
     paths = {tuple(p.path) for p in properties}
     roots = {p.path[0] for p in properties}
     custom_keys = {key for e in spec().entries if isinstance(e, Custom) for key in e.keys}
-    keys = {c.key for c in spec().controls} | custom_keys | technical_keys() | family_keys()
+    keys = {c.key for c in spec().body_controls} | custom_keys | technical_keys() | family_keys()
     return (keys - roots) | {element for element in _vector_elements() if element not in paths}
 
 
@@ -195,7 +195,7 @@ def test_coverage_check_detects_a_missing_control_negative_control():
 def test_instruments_bounds_choices_and_conditions_come_from_the_registry():
     from ui.studio.adapter import control_condition
     schema = build_schema()
-    for control in spec().controls:
+    for control in spec().body_controls:
         prop = schema.find(control.key)
         if isinstance(control, Slider):
             assert (prop.minimum, prop.maximum) == (control.low, control.high), control.key

@@ -94,7 +94,8 @@ class VisualizerModeDescriptor:
     # Owned technical controls the mode's published frame provably never reads (measured by
     # ``tools/visualizer_replay/analysis_controls_audit.py``, which re-analyses recorded PCM through the production
     # DSP): Settings and the Studio do not offer them. Visibility only: the keys stay owned, stored, serialized and
-    # preset-authorable, and a mode that starts reading one drops it from here.
+    # preset-authorable, and a mode that starts reading one drops it from here. This is the one offered/hidden
+    # mechanism (the Kick Lane Gain / Transient Pulse mode filters folded in here).
     technical_hidden_suffixes: tuple[str, ...] = ()
     # Whether this mode participates in the shared per-mode Rainbow settings
     # contract. Experimental modes may deliberately omit that product surface;
@@ -205,6 +206,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_module="ui.tabs.media.spectrum_builder",
         settings_builder_factory="build_spectrum_ui",
         draws_bars=True,
+        # Transient Pulse feeds only Bubble's pulse amplitude.
+        technical_hidden_suffixes=("transient_pulse_gain",),
         # The original Spectrum owns its peak-ghost settings as well as the
         # Extruded family member. Without this capability, source-config
         # projection forces ghosting off before logical capture, even when
@@ -246,8 +249,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_factory="build_bubble_ui",
         logical_tick_hook_module="widgets.spotify_visualizer.tick_pipeline",
         logical_tick_hook_factory="dispatch_bubble_simulation",
-        # No authored Spectrum shaping runs for Bubble, so the AGC and Output Lift stage after it is never reached.
-        technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled"),
+        # No authored Spectrum shaping runs for Bubble, so the AGC and Output Lift stage after it is never reached; the
+        # Spectrum-family kick lane is not its transient path.
+        technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled", "kick_lane_gain"),
     ),
     VisualizerModeDescriptor(
         "devcurve",
@@ -262,8 +266,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_factory="build_devcurve_ui",
         logical_tick_hook_module="widgets.spotify_visualizer.tick_pipeline",
         logical_tick_hook_factory="dispatch_devcurve_field",
-        # Same stage as Bubble: it reads the pre-AGC control lanes, never shaped bars.
-        technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled"),
+        # Same stage as Bubble: it reads the pre-AGC control lanes, never shaped bars, and neither the kick lane nor
+        # Bubble's pulse.
+        technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled", "kick_lane_gain", "transient_pulse_gain"),
     ),
     VisualizerModeDescriptor(
         "sphere",
@@ -323,6 +328,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_factory="build_extruded_spectrum_ui",
         draws_bars=True,
         technical_controls=True,
+        technical_hidden_suffixes=("transient_pulse_gain",),
         rainbow_controls=False,
         shared_bar_appearance=True,
         spectrum_shape_controls=True,
@@ -355,6 +361,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_module="ui.tabs.media.shockwave_grid_builder",
         settings_builder_factory="build_shockwave_grid_ui",
         technical_controls=True,
+        # Its kick-lane onset waves read Kick Lane Gain (offered); Transient Pulse feeds only Bubble.
+        technical_hidden_suffixes=("transient_pulse_gain",),
         rainbow_controls=False,
         shared_bar_appearance=False,
         spectrum_shape_controls=True,
