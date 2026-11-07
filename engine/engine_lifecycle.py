@@ -304,45 +304,44 @@ def retire_application_services(engine: ScreensaverEngine, *, reason: str) -> No
         logger.warning("Application service retirement failed: %s", e, exc_info=True)
 
 
-def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
-    """Stop-sequence finalization (worker/process shutdown, housekeeping, quit).
+def retire_terminal_resources(engine: ScreensaverEngine, *, reason: str) -> bool:
+    """Terminal only, exactly once per engine: the process-scoped resources a terminal exit retires.
 
-    For a non-terminal stop this runs synchronously. For terminal exit it is the
-    barrier continuation, executed only after the terminal-purpose destruction
-    barrier proves the asynchronous Quick retirement drained — so the event loop
-    is never ended while Quick roots are still live. Semantics are unchanged from
-    the previous inline tail; only the timing of the terminal case moved.
+    The beat engine's audio worker, the usage sampler, the display-power source, the ProcessSupervisor and its
+    workers, the network admission fence, the application-service tier and the ThreadManager, in that order.
+    Reached from the terminal stop's finalization (after its barrier) and, as the backstop, from
+    ``finalize_after_event_loop`` when the loop ended through a bare ``QCoreApplication.exit`` that skipped it.
+    Returns whether this call retired them (False: already retired).
     """
-    from engine.screensaver_engine import EngineState
-
+    if getattr(engine, "_terminal_resources_retired", False):
+        return False
+    engine._terminal_resources_retired = True
+    logger.info("[LIFECYCLE] Retiring terminal resources reason=%s", reason)
     # Force-stop shared beat engine audio worker to release audio threads
-    if exit_app:
-        try:
-            from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry
-            BeatEngineRegistry.get_instance().clear()     # the one authority: force-stops its engine
-            logger.info("Shared beat engine audio worker force-stopped")
-        except Exception as e:
-            logger.debug("Beat engine force-stop failed: %s", e)
+    try:
+        from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry
+        BeatEngineRegistry.get_instance().clear()     # the one authority: force-stops its engine
+        logger.info("Shared beat engine audio worker force-stopped")
+    except Exception as e:
+        logger.debug("Beat engine force-stop failed: %s", e)
 
     # The opt-in sampler shares the app ThreadManager and must quiesce
     # before that pool. Keep it alive across settings pauses so a profiling
     # run remains continuous through the stop/restart cycle.
-    if exit_app:
-        usage_telemetry = getattr(engine, "_usage_telemetry", None)
-        if usage_telemetry is not None:
-            try:
-                usage_telemetry.stop()
-            except Exception as e:
-                logger.debug("[USAGE] Failed to stop usage telemetry: %s", e)
-            engine._usage_telemetry = None
+    usage_telemetry = getattr(engine, "_usage_telemetry", None)
+    if usage_telemetry is not None:
+        try:
+            usage_telemetry.stop()
+        except Exception as e:
+            logger.debug("[USAGE] Failed to stop usage telemetry: %s", e)
+        engine._usage_telemetry = None
 
     # Unregister the process-scoped display-power source before the
     # ThreadManager (its Linux listener lane) shuts down.
-    if exit_app:
-        retire_display_power(engine)
+    retire_display_power(engine)
 
     # Shutdown ProcessSupervisor and all workers
-    if exit_app and engine._process_supervisor:
+    if engine._process_supervisor:
         logger.info("Shutting down ProcessSupervisor...")
         try:
             engine._process_supervisor.shutdown()
@@ -351,7 +350,7 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
             logger.warning("ProcessSupervisor shutdown failed: %s", e, exc_info=True)
 
     # Shutdown ThreadManager to stop all IO/compute threads
-    if exit_app and engine.thread_manager:
+    if engine.thread_manager:
         logger.info("Shutting down ThreadManager...")
         # Process exit fence: network lookups still in progress return at once
         # and new ones are refused, so no IO worker is left waiting on a
@@ -361,7 +360,7 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
         close_network_admission()
         # Application services retire after the network fence (their in-flight
         # lookups return at once) and before the pool their work runs on.
-        retire_application_services(engine, reason="application_exit")
+        retire_application_services(engine, reason=reason)
         try:
             # wait=True so pool threads are joined here, within the timeout.
             # A worker still running afterwards is NOT killed by the OS at
@@ -381,8 +380,25 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
             logger.info("ThreadManager shutdown complete")
         except Exception as e:
             logger.warning("ThreadManager shutdown failed: %s", e, exc_info=True)
-    elif exit_app:
-        retire_application_services(engine, reason="application_exit")
+    else:
+        retire_application_services(engine, reason=reason)
+    return True
+
+
+def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
+    """Stop-sequence finalization (worker/process shutdown, housekeeping, quit).
+
+    For a non-terminal stop this runs synchronously. For terminal exit it is the
+    barrier continuation, executed only after the terminal-purpose destruction
+    barrier proves the asynchronous Quick retirement drained — so the event loop
+    is never ended while Quick roots are still live. Semantics are unchanged from
+    the previous inline tail; only the timing of the terminal case moved.
+    """
+    from engine.screensaver_engine import EngineState
+
+    # Terminal resources retire once, here or in the post-loop backstop (finalize_after_event_loop).
+    if exit_app:
+        retire_terminal_resources(engine, reason="application_exit")
 
     # Emit a concise image cache summary for profiling.
     # Dual-tagged for the PERF and cache sidecars so cache investigations
@@ -467,6 +483,32 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
         from engine.runtime_destruction import request_application_quit
 
         request_application_quit("engine_stop")
+
+
+def finalize_after_event_loop(engine: ScreensaverEngine | None) -> bool:
+    """The RUN loop has returned: retire what terminal finalization has not, exactly once (UI thread).
+
+    The terminal stop retires the process-scoped resources in its finalization, after its barrier. A bare
+    ``QCoreApplication.exit(1)`` ends the loop without it: the replacement barrier's timeout
+    (``RuntimeDestructionBarrier._on_timeout``), the Settings single-shot cancellation failure, a terminal barrier
+    whose continuation never ran. ``main.run_screensaver`` calls this once ``app.exec()`` returns, so application
+    services, the ProcessSupervisor and the ThreadManager are retired on every exit; after a normal terminal stop it
+    does nothing. A still-pending barrier is disarmed first so its continuation can never run afterwards.
+    Returns whether the backstop had to retire anything.
+    """
+    if engine is None or getattr(engine, "_terminal_resources_retired", False):
+        return False
+    engine._terminal_shutdown_requested = True
+    cancel_barrier = getattr(
+        getattr(engine, "_pending_runtime_destruction_barrier", None), "cancel_for_terminal_shutdown", None
+    )
+    if callable(cancel_barrier):
+        try:
+            cancel_barrier()
+        except Exception:
+            logger.debug("Pending barrier disarm failed after the event loop", exc_info=True)
+    logger.warning("[LIFECYCLE] Event loop ended without terminal finalization; retiring terminal resources")
+    return retire_terminal_resources(engine, reason="event_loop_exit_backstop")
 
 
 def stop(
