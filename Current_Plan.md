@@ -102,8 +102,21 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 **Active or paused (resume each with a message to the same agent, which keeps its context and worktree):**
 - **AC-01 Settings tab registry** (Opus high, started 7 Nov): checklist AC-01 with A-12 and A-14, proven on the real
   SettingsDialog; side defects and conflicts reported.
+  **Next in this slot (operator 7 Nov): a Settings system and SSOT audit, once AC-01 is merged.** Read-only audit of
+  the post-registry code. Scope:
+  - schema, defaults and persistence: one owner per key; defaults that leak into widgets, QML or presets;
+  - typed settings versus raw key strings;
+  - presets and Studio-owned values; profile gating (MC/SMP);
+  - import, export, reset and cache; change signals and the control-to-key binding;
+  - dead or orphan keys, and compatibility bridges;
+  - values duplicated between 2D and 3D or between runtime and Settings.
+  It produces a ranked, actionable checklist (priority, reward, the fix) that the lead challenges and promotes into
+  `Docs/Reference/Architecture_Checklist.md`. Defects it finds go to this plan.
 - **Spectrum presets 2 onward** (Opus medium, started 7 Nov): queue item 5 below, in progress (flags, 2000s-app
-  themes, novel 2.5D/gloss/ghost presets on Preset 1's reactivity; judged on rendered music clips).
+  themes, novel 2.5D/gloss/ghost presets on Preset 1's reactivity; judged on rendered music clips). **Merge gate
+  (operator 7 Nov): the lead judges fidelity on the rendered clips first.** Each preset must be vibrant and distinct,
+  each flag recognisable, and the reactivity on Preset 1's baseline (no saturation, dead bars or washed-out colour).
+  Anything that fails goes back to the agent.
 - **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`):
   the logical tick cut (it had computed main's identity digests and was running its branch digests and tests; the
   gate is byte-identical output, Preset 4 required; then the lead schedules the game60 live check). After the cut: a
