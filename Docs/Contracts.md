@@ -512,6 +512,13 @@ renderer/style/chrome values
 -> presentation state
 ```
 
+Exactly one production beat engine exists, and `BeatEngineRegistry` is its only process holder
+(`get_shared_spotify_beat_engine` reads it; no module global): `clear()` releases it once native capture ownership drains
+and terminal stop force-stops only the registry's engine. A controller gets its engine only from its own
+`engine_factory` (`VisualizerRuntimeController.ensure_engine`): the production `QuickDisplayVisualizerOwner` injects the
+shared engine, Studio/offline/replay controllers inject theirs, and a controller with neither raises. The logical tick
+never resolves a process service (`tests/test_beat_engine_single_authority.py`).
+
 Bar-count reconfiguration must leave controller authority, the shared engine generation and the controller-owned logical
 display-bar mirror/freshness state coherent. Legacy overlay-only mirrors get no Quick successor unless an exact retained
 consumer exists. Do not move every legacy widget field into the logical controller merely because the widget historically
