@@ -4,6 +4,9 @@
 without any sweep (option A); this stays as the record of why a sweep was not adopted. The per-retirement sweep (commit `c8a00d08`) was reverted in `635587c3`; nothing here is
 implemented. The former live task ("Settings-open lifecycle barrier timeout") is no longer in `Current_Plan.md`. First find the actual cycle
 (referrer snapshot now on in source runs, `ec2f0920`), then decide whether any sweep mechanism is wanted.
+**7 Nov 2026:** the inconsistency below is gone: every display generation is frozen at its coordinated reveal and
+thawed at every teardown, and the first-retirement-only thaw sweep is removed (option A for every retirement;
+`core/performance/gc_policy.py`, `tests/test_gc_freeze_per_generation.py`).
 
 ## The failure being solved
 
