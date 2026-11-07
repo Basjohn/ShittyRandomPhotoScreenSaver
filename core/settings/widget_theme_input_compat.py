@@ -1,6 +1,8 @@
 """Persisted-input compatibility for retired Widget Theme material state.
 
-Current Widget Theme state is colour-only schema v3.  Older profile/SST/QSettings
+Current Widget Theme state is schema v3: semantic colours plus the theme's optional
+``surface_material`` (Docs/Architecture/Card_Surface_Materials.md section 4), which
+is a different design from the retired keys below.  Older profile/SST/QSettings
 state could carry a root-level ``card_material_override`` and a schema-v1/v2
 ``custom`` payload with ``default_card_material_mode``.  Accept those names only at
 persisted/import boundaries, promote the custom payload to v3, and remove the

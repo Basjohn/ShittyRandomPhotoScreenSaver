@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Burgundy Mint [Two-Tone] [Glass].srtheme",
   "name": "Burgundy Mint [Two-Tone]",
   "linked_settings_theme_id": "file:Burgundy Mint [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       51,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Monsoon Teak [Complex] [Glass].srtheme",
   "name": "Monsoon Teak [Complex]",
   "linked_settings_theme_id": "file:Monsoon Teak [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       43,

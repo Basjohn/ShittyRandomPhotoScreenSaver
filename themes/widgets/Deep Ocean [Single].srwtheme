@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Deep Ocean [Single] [Acrylic].srtheme",
   "name": "Deep Ocean [Single]",
   "linked_settings_theme_id": "file:Deep Ocean [Single] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       16,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Ultraviolet Lime [Three-Tone] [Acrylic].srtheme",
   "name": "Ultraviolet Lime [Three-Tone]",
   "linked_settings_theme_id": "file:Ultraviolet Lime [Three-Tone] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       45,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Plum Jade [Two-Tone] [Glass].srtheme",
   "name": "Plum Jade [Two-Tone]",
   "linked_settings_theme_id": "file:Plum Jade [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       46,

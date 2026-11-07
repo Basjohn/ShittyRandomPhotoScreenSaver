@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Black Forest Raspberry [Complex] [Acrylic].srtheme",
   "name": "Black Forest Raspberry [Complex]",
   "linked_settings_theme_id": "file:Black Forest Raspberry [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       45,

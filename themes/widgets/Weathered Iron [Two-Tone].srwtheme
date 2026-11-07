@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Weathered Iron [Two-Tone] [Acrylic].srtheme",
   "name": "Weathered Iron [Two-Tone]",
   "linked_settings_theme_id": "file:Weathered Iron [Two-Tone] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       43,

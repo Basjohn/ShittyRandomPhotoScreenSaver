@@ -18,8 +18,11 @@ Boundaries (durable design owners: `Docs/Contracts.md`,
   material there or on a widget beats it. It does **not** own widget activation,
   provider/account state, geometry, cadence, compositor state, native Settings-window
   backdrop mode, or other business logic.
-* Settings Glass/Acrylic remain a separate QWidget/native-HWND theme concern and are
-  never projected into cards; card materials are the runtime scene's own.
+* A Settings theme's Glass/Acrylic backdrop drives its own native HWND. Its linked
+  Widget mirror carries the same material as ``surface_material`` (operator, 7 Nov
+  2026: cards follow the theme), projected once at pack-authoring time by
+  ``tools/generate_widget_theme_mirrors.widget_counterpart_for_settings_theme``; the
+  runtime reads only the Widget theme, never the Settings theme.
 
 Rgba/palette primitives are shared with the Settings theme spec so both systems use
 one colour type.

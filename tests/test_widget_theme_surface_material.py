@@ -126,9 +126,16 @@ def _over(top, bottom):
 def test_material_themes_keep_their_own_text_roles_legible_on_their_own_surfaces() -> None:
     """A theme made for a material: its text roles reach 4.5:1 on its own opaque card surface
     and the header label on its header fill. (The wallpaper side is the material's legibility
-    rows; measured per run by tools/surface_material_capture.py --legibility-themes.)"""
-    themes = [path for path in sorted((ROOT / "themes" / "widgets").glob("*.srwtheme"))
-              if "surface_material" in json.loads(path.read_text(encoding="utf-8"))]
+    rows; measured per run by tools/surface_material_capture.py --legibility-themes.)
+
+    The subjects are the unlinked themes authored for a material. A linked mirror's colours
+    are its Settings theme's projection and its material is that pair's backdrop (AC-17), so
+    mirrors are not held to this authoring bar."""
+    payloads = [(path, json.loads(path.read_text(encoding="utf-8")))
+                for path in sorted((ROOT / "themes" / "widgets").glob("*.srwtheme"))]
+    themes = [path for path, raw in payloads
+              if "surface_material" in raw and raw.get("linked_settings_theme_id") is None]
+    assert themes
     for path in themes:
         colors = json.loads(path.read_text(encoding="utf-8"))["colors"]
         panel = colors["widget.panel"][:3]

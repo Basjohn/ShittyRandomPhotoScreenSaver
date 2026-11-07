@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Graphite Frost [Single] [Glass].srtheme",
   "name": "Graphite Frost [Single]",
   "linked_settings_theme_id": "file:Graphite Frost [Single] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       36,

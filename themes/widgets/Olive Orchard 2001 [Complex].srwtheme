@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Olive Orchard 2001 [Complex] [Acrylic].srtheme",
   "name": "Olive Orchard 2001 [Complex]",
   "linked_settings_theme_id": "file:Olive Orchard 2001 [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       226,
