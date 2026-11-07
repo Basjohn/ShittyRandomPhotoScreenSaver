@@ -798,6 +798,25 @@ class ExtrudedBubbleFrame:
         return tuple(array("f", self.wakes))
 
 
+_WAVEFORM_FRAME_CONTRACT: tuple = ()
+
+
+def _waveform_frame_contract() -> tuple:
+    """The types and sizes a ``WaveformRibbonFrame`` validates against, imported once on first use (lazily, so this
+    contract stays importable without the ribbon owners; the import statements used to run on every logical tick)."""
+    global _WAVEFORM_FRAME_CONTRACT
+    if not _WAVEFORM_FRAME_CONTRACT:
+        from types import MappingProxyType
+        from core.ribbon_bursts import CAPACITY, STRIDE
+        from core.ribbon_packet import RibbonPacket, RIBBON_BYTES
+        from core.ribbon_strand_cohorts import COHORT_BYTES
+        from core.waveform_ribbon_dynamics import PULSE_GRID
+        from core.waveform_ribbon_scene import Recipe
+        _WAVEFORM_FRAME_CONTRACT = (RibbonPacket, RIBBON_BYTES, Recipe, MappingProxyType, CAPACITY*STRIDE*4,
+                                    COHORT_BYTES, PULSE_GRID.size*4)
+    return _WAVEFORM_FRAME_CONTRACT
+
+
 @dataclass(frozen=True, slots=True)
 class WaveformRibbonFrame:
     """Detached selected-hybrid geometry and resolved scene; rendering owns no musical evolution."""
@@ -821,9 +840,7 @@ class WaveformRibbonFrame:
     pulse: bytes = b''  # the logical owner's pulse appearance field on PULSE_GRID (float32, history x), or empty
 
     def __post_init__(self):
-        from core.ribbon_packet import RibbonPacket, RIBBON_BYTES
-        from core.waveform_ribbon_scene import Recipe
-        from types import MappingProxyType
+        RibbonPacket,RIBBON_BYTES,Recipe,MappingProxyType,PARTICLE_BYTES,COHORT_BYTES,PULSE_BYTES=_waveform_frame_contract()
         if not isinstance(self.packet,RibbonPacket) or not isinstance(self.packet.payload,bytes):
             raise TypeError('Waveform geometry must be an immutable ribbon packet')
         if len(self.packet.payload)!=self.packet.instances*RIBBON_BYTES:
@@ -832,23 +849,20 @@ class WaveformRibbonFrame:
             raise TypeError('Waveform scene must be detached immutable configuration')
         for key in ('time','travel','rotation_angle','rotation_speed'):
             object.__setattr__(self,key,_finite(getattr(self,key),name='waveform '+key))
-        from core.ribbon_bursts import CAPACITY, STRIDE
-        if not isinstance(self.particles,bytes) or len(self.particles) not in (0,CAPACITY*STRIDE*4):
+        if not isinstance(self.particles,bytes) or len(self.particles) not in (0,PARTICLE_BYTES):
             raise ValueError('Waveform particle records must be immutable and bounded')
         object.__setattr__(self,'particle_origin',_finite(self.particle_origin,name='waveform particle origin'))
         passage=_finite(self.passage,name='waveform passage')
         if not 0.<=passage<=1.:raise ValueError('Waveform passage must be in 0..1')
         object.__setattr__(self,'passage',passage)
         object.__setattr__(self,'parameters',_coerce_frozen_fields(self.parameters,name='waveform parameters'))
-        from core.ribbon_strand_cohorts import COHORT_BYTES
         if not isinstance(self.strands,bytes) or len(self.strands) not in (0,self.packet.instances*COHORT_BYTES):
             raise ValueError('Waveform strand cohorts must be immutable and match physical knot slots')
         object.__setattr__(self,'strand_origin',_finite(self.strand_origin,name='strand birth origin'))
         zoom=_finite(self.zoom,name='waveform dynamic zoom')
         if not .5<=zoom<=2.:raise ValueError('Waveform dynamic zoom must be in 0.5..2')
         object.__setattr__(self,'zoom',zoom)
-        from core.waveform_ribbon_dynamics import PULSE_GRID
-        if not isinstance(self.pulse,bytes) or len(self.pulse) not in (0,PULSE_GRID.size*4):
+        if not isinstance(self.pulse,bytes) or len(self.pulse) not in (0,PULSE_BYTES):
             raise ValueError('Waveform pulse field must be immutable and match the pulse grid')
 
     @property

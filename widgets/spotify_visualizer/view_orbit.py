@@ -176,12 +176,39 @@ def _camera_values(host, spec, values=None):
     return result
 
 
-def _bounded_camera_values(host, mode_id, values):
+class CameraAdmissionMemo:
+    """``admit_camera_parameters`` for one capture owner that admits much the same camera on every logical tick.
+
+    A complete camera input strictly equal (``strictly_equal_render_value``, items in the same order) to last time's,
+    for the same spec, returns last time's admitted offset; anything else is admitted afresh. The admission is a pure
+    function of the spec and those values, so the result always equals admitting afresh: only the repeated solve
+    disappears. A refused admission stores nothing. Single-threaded: one memo per capture owner (its logical runtime).
+    """
+
+    __slots__ = ("_spec", "_items", "_result")
+
+    def __init__(self) -> None:
+        self._spec = self._items = self._result = None
+
+    def admit(self, spec, values: Mapping[str, object]):
+        from core.settings.framed_camera import admit_camera_parameters
+        from widgets.spotify_visualizer.render_state import strictly_equal_render_value
+        items = tuple(values.items())
+        if self._spec is spec and self._items is not None and strictly_equal_render_value(items, self._items):
+            return self._result
+        result = admit_camera_parameters(spec, values)
+        self._spec, self._items, self._result = spec, items, result
+        return result
+
+
+def _bounded_camera_values(host, mode_id, values, admission=None):
     from core.settings.framed_camera import admit_camera_parameters
     spec = _spec(mode_id)
     if spec is None:
         return dict(values)
-    return {**values, spec.key('camera_position'): admit_camera_parameters(spec, _camera_values(host, spec, values))}
+    camera = _camera_values(host, spec, values)
+    offset = admit_camera_parameters(spec, camera) if admission is None else admission.admit(spec, camera)
+    return {**values, spec.key('camera_position'): offset}
 
 
 def _ceiling(motion, spec):
@@ -490,8 +517,10 @@ def transform_visualizer_scene(host: Any, mode_id: str, values: Mapping[str, flo
     return view_pose_values(host, mode_id)
 
 
-def apply_view_orbit_motion(host: Any, mode_id: str, values: Mapping[str, object], now: float) -> Dict[str, object]:
-    """A capture's ``values`` with the held-key or auto-rotating view at ``now`` (logical thread; read only)."""
+def apply_view_orbit_motion(host: Any, mode_id: str, values: Mapping[str, object], now: float,
+                            admission: CameraAdmissionMemo | None = None) -> Dict[str, object]:
+    """A capture's ``values`` with the held-key or auto-rotating view at ``now`` (logical thread; read only).
+    ``admission``: the capture owner's ``CameraAdmissionMemo`` when it keeps one (the same result)."""
     motion = _motion(host, mode_id)
     flight = getattr(host, _FLIGHT, None)
     if isinstance(flight, FramedFlightMotion) and flight.mode_id == mode_id:
@@ -502,7 +531,7 @@ def apply_view_orbit_motion(host: Any, mode_id: str, values: Mapping[str, object
     if motion is None and isinstance(auto, AutoRotate) and auto.mode_id == mode_id:
         turn_key = view_orbit_settings(mode_id)[0]
         values = {**values, turn_key: auto_rotate_turn(auto, turn_key, now)}
-    return _bounded_camera_values(host, mode_id, values)
+    return _bounded_camera_values(host, mode_id, values, admission)
 
 
 def _take_auto_rotation(host: Any, mode_id: str, now: float | None) -> None:
