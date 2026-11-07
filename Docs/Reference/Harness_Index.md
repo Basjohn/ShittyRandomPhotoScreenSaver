@@ -784,7 +784,7 @@ docstring before running one. Anything that opens a window is operator-only (pro
 **Foundries and generators**
 - `tools/theme_foundry.py` / `tools/theme_foundry_model.py`: the schema-v6 semantic Settings Theme editor and its pure model.
 - `tools/widget_theme_foundry.py` / `tools/widget_theme_foundry_model.py`: the schema-v3 `.srwtheme` editor and its Qt-free model.
-- `tools/generate_widget_theme_mirrors.py`: generates mirrored `.srwtheme` files from the curated Settings theme pack.
+- `tools/generate_widget_theme_mirrors.py`: generates mirrored `.srwtheme` files from the curated Settings theme pack (wholesale: erases authored mirror roles and deletes unlinked themes in the folder); `--fill-materials` instead fills only each linked mirror's `surface_material` (AC-17).
 - `tools/defaults_foundry_core.py`: safety/transaction helpers for the Defaults Foundry.
 - `tools/foundry_chrome.py`, `tools/godzip_foundry_theme.py`: shared frameless chrome / appearance picker and the Settings-theme bridge for the standalone Foundry tools.
 - `tools/godzip_script_runner.py`: repo-local, opt-in script-run helpers for the GODZIP Foundry CMD tab.
