@@ -110,7 +110,7 @@ def auto_rotate_turn(record: AutoRotate, turn_key: str, now: float) -> float:
 
 @dataclass(frozen=True, slots=True)
 class ViewOrbitMotion:
-    """The view of ``mode_id`` at ``since`` (logical-clock seconds, ``time.time()``) and how fast
+    """The view of ``mode_id`` at ``since`` (authored-clock seconds, ``logical_runtime.authored_now``) and how fast
     it is turning (setting units per second)."""
 
     mode_id: str
@@ -479,8 +479,8 @@ def transform_visualizer_scene(host: Any, mode_id: str, values: Mapping[str, flo
     if not keys or not set(values) <= keys:
         return {}
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
-    import time as _time
-    now = _time.time()
+    from core.authored_clock import authored_now
+    now = authored_now()
     if _spec(mode_id) is not None:
         rebase_framed_flight_on_drag(host, now)
     _take_auto_rotation(host, mode_id, now)

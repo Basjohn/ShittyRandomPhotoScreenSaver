@@ -5,7 +5,6 @@ Owns one authoritative Quick display unit for each selected screen.
 """
 import math
 import random
-import time
 import weakref
 from copy import deepcopy
 from dataclasses import asdict, replace
@@ -72,6 +71,7 @@ from rendering.quick.transitions.run_geometry import (
     has_run_geometry,
     prepare_run_geometry,
 )
+from core.authored_clock import authored_now
 
 logger = get_logger(__name__)
 REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
@@ -809,7 +809,7 @@ class DisplayManager(QObject):
         if admitted and owner is not None:
             # A completed startup or mode/preset swap starts Auto Rotate at once (when the mode has it on).
             from widgets.spotify_visualizer.view_orbit import arm_view_auto_rotate
-            arm_view_auto_rotate(owner.controller.presentation_state, str(owner.controller.mode_id), time.time(),
+            arm_view_auto_rotate(owner.controller.presentation_state, str(owner.controller.mode_id), authored_now(),
                                  immediate=True)
         for display in tuple(self.displays):
             if not isinstance(display, QuickDisplayUnit) or display.is_retired:
@@ -849,7 +849,7 @@ class DisplayManager(QObject):
 
         mode_id = str(owner.controller.mode_id)
         values = set_view_orbit_rates(
-            owner.controller.presentation_state, mode_id, turn_steps, tilt_steps, time.time()
+            owner.controller.presentation_state, mode_id, turn_steps, tilt_steps, authored_now()
         )
         if values:
             self._quick_view_orbit_pending = (mode_id, values)
@@ -868,7 +868,7 @@ class DisplayManager(QObject):
             return
         from widgets.spotify_visualizer.view_orbit import set_framed_flight_rates
         values = set_framed_flight_rates(owner.controller.presentation_state,
-                                        mode_id, yaw, pitch, strafe, travel, time.time())
+                                        mode_id, yaw, pitch, strafe, travel, authored_now())
         if values:
             self._quick_view_orbit_pending = (mode_id, values)
             self._quick_view_pose_owner = owner
@@ -883,7 +883,7 @@ class DisplayManager(QObject):
         from widgets.spotify_visualizer.view_orbit import orbit_visualizer_view
 
         mode_id = str(owner.controller.mode_id)
-        now = time.time()
+        now = authored_now()
         values = orbit_visualizer_view(
             owner.controller.presentation_state, mode_id, turn_steps, tilt_steps, now
         )
@@ -1019,7 +1019,7 @@ class DisplayManager(QObject):
             # Edit refresh, including after a new audio packet lands.
             from widgets.spotify_visualizer.view_orbit import view_pose_values
             accepted_parameters.update(view_pose_values(
-                owner.controller.presentation_state, logical.mode_id, time.time()))
+                owner.controller.presentation_state, logical.mode_id, authored_now()))
         if track_orbit and accepted_parameters is not None:
             shadow_style = None
             alpha_style = None
@@ -1119,7 +1119,7 @@ class DisplayManager(QObject):
         if owner is not None and settle_motion:
             from widgets.spotify_visualizer.view_orbit import stop_view_orbit_motion, settle_framed_flight
 
-            now = time.time()
+            now = authored_now()
             pres = owner.controller.presentation_state
             settle_framed_flight(pres, now)
             settled = stop_view_orbit_motion(pres, now)
@@ -1148,7 +1148,7 @@ class DisplayManager(QObject):
                 or pose_owner is not None and pose_owner is not owner):
             return  # stale mode/generation gesture never writes another view
         from widgets.spotify_visualizer.view_orbit import view_pose_values
-        current_pose = view_pose_values(owner.controller.presentation_state, mode_id, time.time())
+        current_pose = view_pose_values(owner.controller.presentation_state, mode_id, authored_now())
         values = {**current_pose, **values} if settle_motion else current_pose
         section = settings.get("widgets.spotify_visualizer")
         custom_presets = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
@@ -3640,7 +3640,7 @@ class DisplayManager(QObject):
             str(getattr(model, "playbackState", "unknown")).lower()
             == "playing"
         )
-        observed_ts = time.time()
+        observed_ts = authored_now()
         if is_viz_diagnostics_enabled():
             previous = getattr(self, "_quick_visualizer_diag_last_playing", None)
             if previous is None or bool(previous) != playing:

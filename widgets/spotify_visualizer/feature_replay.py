@@ -379,7 +379,11 @@ class PcmReanalysis:
 
 @contextmanager
 def deterministic_clock():
-    """Pin ``time.time``/``time.monotonic`` to a settable clock and seed ``random`` (restored on exit)."""
+    """Pin the Visualizer's authored clock (``logical_runtime.authored_now``) and ``time.time``/``time.monotonic`` to
+    one settable clock and seed ``random`` (restored on exit). Recordings carry their own frame timestamps; the
+    replay sets this clock from them, so a recording made on either clock replays the same way."""
+    from core.authored_clock import pinned_authored_clock
+
     now = [0.0]
     saved_random = random.getstate()
     saved_time, saved_monotonic = time.time, time.monotonic
@@ -387,7 +391,8 @@ def deterministic_clock():
     time.time = lambda: now[0]
     time.monotonic = lambda: now[0]
     try:
-        yield now
+        with pinned_authored_clock(lambda: now[0]):
+            yield now
     finally:
         time.time, time.monotonic = saved_time, saved_monotonic
         random.setstate(saved_random)

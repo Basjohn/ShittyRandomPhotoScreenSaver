@@ -434,7 +434,7 @@ def test_controller_owned_logical_state_installs_tick_spike_diagnostics(
     assert float(state._dt_spike_log_cooldown) > 0.0
 
     warnings = []
-    monkeypatch.setattr(tick_helpers.time, "time", lambda: 100.0)
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", lambda: 100.0)
     monkeypatch.setattr(
         tick_helpers.logger,
         "warning",

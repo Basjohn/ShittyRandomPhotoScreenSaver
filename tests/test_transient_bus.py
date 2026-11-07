@@ -33,7 +33,7 @@ def test_the_frame_musical_level_is_what_an_onset_there_carries(monkeypatch):
         clock[0] += 0.01
         return clock[0]
 
-    monkeypatch.setattr(transient_bus.time, "time", tick)
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", tick)
     tb = TransientBus(threshold_k=1.0, transient_decay=0.3)
     assert tb.musical_level == (0.0, 0.0)
     for _ in range(20):
@@ -61,7 +61,7 @@ def test_a_pause_does_not_make_the_music_resuming_look_many_times_louder(monkeyp
         clock[0] += 0.01
         return clock[0]
 
-    monkeypatch.setattr(transient_bus.time, "time", tick)
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", tick)
     tb = TransientBus()
     for _ in range(600):                                   # 6 s of steady music
         tb.update(0.3, 0.3, 0.3, loudness=8.0)

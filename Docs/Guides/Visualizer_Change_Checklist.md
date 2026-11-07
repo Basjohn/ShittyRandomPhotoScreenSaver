@@ -117,6 +117,15 @@ these traps from the first slice, not after:
 `VisualizerLogicalRuntime` remains sole mode-general authored cadence. No QML/render-thread/per-mode replacement clock,
 paint acknowledgement, catch-up queue or display-rate divisor.
 
+- [ ] **Authored time is monotonic (AC-12, 7 Nov 2026).** Every timestamp on the visualizer path comes from
+      `core.authored_clock.authored_now()` (`perf_counter`; `logical_runtime` re-exports it). This covers the tick, the
+      beat engine, the onset bus, the audio capture stamp, the view motion stamps, and the renderer's logical-age reads.
+      - Never use `time.time()` there: a wall-clock step (time sync, manual change) would reach the published frames.
+      - Replays pin it through `deterministic_clock`.
+      - Wall time remains only for log epoch stamps that tools line up across files.
+      - Regression bar: `tests/test_visualizer_authored_clock.py` replays every mode with −5 s / +60 s wall jumps; the
+        frames must equal the steady replay.
+
 ## 3. One presentation surface
 
 Visualizer content stays inside the owning display's single retained `QQuickWindow`/scene. No separate native overlay,
