@@ -32,32 +32,11 @@ its bar. Tier 1 is complete.
 
 ## Tier 2: defects to fix soon (small, real)
 
-- [ ] **AC-07 Unchanged settings writes still publish** (A-13). Severity low, reward medium, effort S. **Confirmed
-  (code):** `core/settings/json_store.py:332-333` drops an unchanged write, but `SettingsManager.set`
-  (`core/settings/settings_manager.py:1099-1172`) always calls `sync()` and `_publish_store_change`, which fans out to
-  the Qt signal, every handler and the EventSystem bridge; `ScreensaverEngine._on_settings_changed` rebuilds
-  sources on any `sources*` key. **Needs measurement** for impact: count `settings_changed` publications per
-  Settings close and per preset re-application in a log before and after.
-  - **Fix (owner: `SettingsManager`):** `_set_structured_value_locked` and the store's `setValue` report "changed";
-    `set()` skips publication when nothing changed, except explicit migrations and `'*'` resets, which must publish.
-  - **Must stay true:** a first write of an explicit `None` is a change (the store's own comment at `:329-331`);
-    display-section writes stay one transaction published after coherence.
-  - **Regression bar:** `set(k, v)` twice emits `settings_changed` once; setting `sources.folders` to its current
-    value does not call `_on_sources_changed`; seeding a nullable default to `None` still publishes once.
-  - **Why it matters for SMP:** live Settings (SMP plan §9) and the SMP tab will re-save whole groups; publication
-    must mean change.
-
-- [ ] **AC-10 The Visualizer owner's mode-transition deadline joins the single-shot registry** (A-19). Severity low,
-  reward low, effort S. **Confirmed:** `widgets/spotify_visualizer/quick_display_visualizer_owner.py:1010-1013` uses
-  raw `QTimer.singleShot` (weakref and serial fenced, but `cancel_scheduled_single_shots` cannot cancel it). The
-  other raw sites are 0 ms deferrals (`ui/widgets/control_shadow.py:1152`, `ui/studio/waveform_recorded_inputs.py:252`)
-  and `main.py` CLI/auto-accept timers; no QML `Timer` exists; the OS-volume write debounce
-  (`widgets/media_volume_runtime.py:92,415`) is token-fenced. The timer inventory is otherwise clean.
-  - **Fix:** route the deadline through `ThreadManager.single_shot` with a bound slot tagged with the owner's
-    generation. Record the volume write debounce in `Spec.md` as an accepted coalescing exception (it coalesces OS
-    writes; it is not a cadence timer), or replace it with an edge.
-  - **Regression bar:** run a mode switch, then `cancel_scheduled_single_shots(generation)`: the deadline callback
-    never runs.
+AC-10 (the Visualizer owner's mode-transition deadline joins the single-shot registry, A-19) landed 7 Nov; its rule,
+with the Media volume write debounce recorded as an accepted coalescing exception, is in `Spec.md` ("Delayed runtime
+callbacks join the single-shot registry").
+AC-07 (unchanged settings writes no longer publish, A-13) landed 7 Nov; its rule is in `Docs/Contracts.md` ("A
+settings publication means a change"). Tier 2 is complete.
 
 ## Tier 3: product decision first (operator)
 

@@ -262,6 +262,9 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
      `tools/frame_trace_report.py` for gen1/gen2 pauses per hour and the heap census at the reveal. Plus one long
      run with a few Settings round trips: a re-freeze after each reveal, no barrier timeouts, flat memory, and the
      `[GC_POLICY]` lines. Commands in the agent's report; evidence `.artifacts/evidence/gc_gen2/`.
+     The round trips now run inside the live check itself: `tools/visualizer_live_check.py --settings-roundtrip
+     AT[,AT]` (real Settings path, dialog never shown) fails the run on a barrier timeout, a reveal without a
+     re-freeze or an early exit. Smoke (Bubble, 40 s, no load, 10,25): both re-froze, no timeout.
    - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
      they are collections.
 
@@ -305,17 +308,18 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   presets were always authored, so no value changes.
 
 **Found while landing AC-03 (7 Nov; record, not yet admitted):**
-- **Fatal exits other than a failed Settings teardown skip the service tier (no live service today; close before
-  SMP M3).** The replacement barrier's timeout (`engine/runtime_destruction.py::_on_timeout`), the Settings
-  single-shot cancellation failure (off the UI thread, so it must not retire services there) and any other bare
-  `QCoreApplication.exit(1)` end the loop without the terminal stop finalization, so application services, the
-  ProcessSupervisor and the ThreadManager are not retired (`main.run_screensaver` never calls `engine.cleanup()`).
-  Only the Settings-teardown failure retires the tier first (`engine_handlers._exit_after_lifecycle_failure`). Fix
-  candidate: one backstop `retire_application_services` on the UI thread after `app.exec()` returns in
-  `run_screensaver` (idempotent), with a barrier-timeout test.
 - **Production never calls `engine_lifecycle.cleanup`.** The terminal path is `stop(exit_app=True)` and its barrier
-  finalization; `cleanup()` is reached only by tests. AC-03 retires the tier on both paths (idempotent); a change to
-  one terminal path must check the other.
+  finalization (and the post-loop `finalize_after_event_loop` backstop); `cleanup()` is reached only by tests. AC-03
+  retires the tier on both paths (idempotent); a change to one terminal path must check the other.
+
+**Found while building the live check's Settings round trip (7 Nov; record, not yet admitted):**
+- **A Gmail IMAP login holds the Settings display barrier for seconds.** In the smoke run, Settings requested 0.25 s
+  after the startup reveal: the display barrier (reason `settings`, generation 0) completed only after 6183 ms, the
+  moment the Gmail runtime's in-flight `LOGIN` returned (`[UNAVAILABLE] Temporary System Error`); the later round
+  trip's barrier took 618 ms. The dialog cannot open until the generation's network work drains, so a slow or hung
+  IMAP server delays Settings by its whole login time. Fix candidate: a bounded/interruptible IMAP transport (as
+  `core/network/bounded_dns.py` bounds DNS) so retirement never waits on a login. Figures in the AC lifecycle
+  agent's report (`--settings-roundtrip 10,25`).
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
