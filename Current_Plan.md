@@ -45,8 +45,8 @@ registry"). The items promoted to run soon are in §3. Nothing else in it is adm
 **Next (admitted, waits for the above):**
 
 5. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted.
-6. **Architecture prerequisites, in this order: AC-02 → AC-03** (`Docs/Reference/Architecture_Checklist.md`
-   Tier 1; AC-01 landed 7 Nov). AC-02 lands before Expanded Visualizer M2; AC-03 before SMP M2.
+6. **Architecture prerequisites: AC-03** (`Docs/Reference/Architecture_Checklist.md` Tier 1; AC-01 and AC-02
+   landed 7 Nov). AC-03 lands before SMP M2.
 
 **Then (decided 5 Nov, `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
 
@@ -177,10 +177,12 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `tests/test_visualizer_authored_clock.py` fails on main; the lead re-ran it there for three modes. No external
   wall-clock timestamp reaches the clock path. The rule is in the visualizer change checklist §2.
   **Now on queue item 1 (the gen2 GC stalls),** which it found itself.
-- **AC-09, then AC-02 (Opus high, started 7 Nov):** the card border width resolver first, then the host-neutral
-  Visualizer binding with Media docking as a placement policy. AC-02 is the first SMP and Expanded Visualizer
-  prerequisite. It picks up the Reset Camera fix from main before moving the click admissions, and leaves
-  queue item 5 as AC-08 only.
+- **AC-09, then AC-02 (Opus high, started 7 Nov): both landed on the agent branch, awaiting the lead's audit.**
+  AC-09: one card border width resolver (`core/settings/default_contract.py`) for every card and the General page.
+  AC-02: `VisualizerHostBinding` owns construct/bind/transfer/retire, input admissions and authored placement;
+  Media docking is the descriptor's `docked_to` policy, resolved by one function for the saver and Arrange. Main
+  (Reset Camera, AC-04, AC-05) is merged into the branch; the in-card double-click rule lives in QuickDisplayWindow,
+  before any admission the binding installs. Queue item 5 is AC-08 only.
 - **Small-defects agent (Opus medium): its first four items were merged 7 Nov (c9b4e8ac):**
   - **AC-06:** the Studio's clip caches are bounded, and the clip parse runs off the GUI thread.
   - **Reset Camera:** in-card controls own their double-click, so it never cycles the mode.
@@ -212,7 +214,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
    - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
      they are collections.
 2. **Checklist AC-08** (one GL state-query helper on the per-frame fences, with the query order preserved, plus the
-   bench node-path case). Mechanical and pixel-identical. AC-09 moved to the AC-02 agent as its first step.
+   bench node-path case). Mechanical and pixel-identical. (AC-09, the card border width resolver, landed 7 Nov with AC-02.)
 3. **Checklist AC-11, decided (operator 7 Nov): "don't ruin the bordered 3D cameras so adjust the freeform Sphere
    but ideally in a way that does not ruin its look/capabilities".** The framed (bordered) 3D cameras of Extruded
    Bubble, Neon Lake and Waveform stay exactly as they are. Sphere (freeform) gains a Reset Camera to its preset home
@@ -246,6 +248,25 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
+
+**Found while landing AC-09 and AC-02 (7 Nov; fixed there or recorded):**
+- **Card border consumers disagreed on malformed values (fixed in AC-09).** Games You Follow drew 12 px for a stored
+  NaN/inf (0 for -inf) instead of the canonical width; the Studio's live `card_style` returned nothing for a malformed
+  `widgets.global`; the General page showed the canonical width for numeric text ("3.5") the cards drew. Fractional
+  stored widths are still drawn as stored and shown truncated in the integer spin; a Settings save then writes the
+  whole pixels (unchanged behaviour, now owned by the resolver).
+- **An oversized authored Visualizer reported an off-display origin (fixed in AC-02).** With no Media card and a
+  Visualizer as large as the display, the saver projected its origin and stacking obstacle at the margin (30 px off
+  the display) while the presentation drew it clamped at 0. The shared placement clamps, as Arrange always did.
+  Drawn pixels are unchanged; only that obstacle moves to where the card is.
+- **The owner and its click admissions held DisplayManager strongly (changed in AC-02).** The owner's layout-profile
+  resolver, transition-failure callback and the double/middle-click and wheel admissions were bound methods or
+  closures of the manager; they now reach it through the binding's weak services and ignore a late click once it is
+  gone.
+- **Still in `DisplayManager` after AC-02 (not the binding's scope):** the Visualizer request and gesture routing
+  that acts on the one owner (mode/preset requests, view orbit, camera reset, Edit move/scale gestures, transfer
+  glyphs) and the committed-CUSTOM profile resolver `_resolve_quick_visualizer_layout_profile`. Expanded Visualizer
+  M2's takeover coordinator sits beside the binding; move any of these only when a second host needs them.
 
 **Found during the Settings SSOT fold (7 Nov; fixed or recorded by that agent):**
 - **Neon Lake's Kick Lane Gain moves its frame but was never offered (fixed in AC-18).** The old Technical

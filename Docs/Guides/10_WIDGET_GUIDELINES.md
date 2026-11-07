@@ -493,7 +493,7 @@ intentional family/widget override
 -> preserved current fallback pixel
 ```
 
-`Widgets -> General -> Style Overrides` owns the shared **Card Surface**, **Card Border**, **Header Fill**, **Reset All Colours to Theme** and **Card Border Width** once for ordinary widget families. Surface/Border/Header Fill edits fork a named Widget Theme into persisted `Custom`; the reset is explicit profile cleanup back to theme authority; Border Width is global styling rather than Widget Theme schema. Do not add duplicate card/header palette controls to each family.
+`Widgets -> General -> Style Overrides` owns the shared **Card Surface**, **Card Border**, **Header Fill**, **Reset All Colours to Theme** and **Card Border Width** once for ordinary widget families. Surface/Border/Header Fill edits fork a named Widget Theme into persisted `Custom`; the reset is explicit profile cleanup back to theme authority; Border Width is global styling rather than Widget Theme schema; every card reads it through `resolve_card_border_width_px` (`core/settings/default_contract.py`), never a local clamp. Do not add duplicate card/header palette controls to each family.
 
 Existing/high-value **specialized** family swatches remain valid only when they represent a durable family contract (for example Media Seek/Volume), and then act as explicit family overrides. Canonical/default-valued persisted family fields are effectively Inherit where the current semantic adapter defines that behavior. Branded header colours are not a valid reason to add a family swatch: use shared `header.*` semantics instead. Editing a surviving family override must not create Widget Theme `Custom`; editing a Widget-Theme-owned shared value may.
 
