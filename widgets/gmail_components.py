@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 import re
@@ -312,7 +312,17 @@ def group_emails(emails: List[EmailMetadata]) -> List[DisplayRow]:
         groups.setdefault(str(key), []).append(email)
     rows: List[DisplayRow] = []
     for members in groups.values():
-        members.sort(key=lambda e: e.date, reverse=True)
+        members.sort(key=lambda e: _sort_date(e.date), reverse=True)
         rows.append(DisplayRow(email=members[0], count=len(members)))
-    rows.sort(key=lambda r: r.email.date, reverse=True)
+    rows.sort(key=lambda r: _sort_date(r.email.date), reverse=True)
     return rows
+
+
+_OLDEST = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _sort_date(date: Optional[datetime]) -> datetime:
+    """A comparable key: a missing date sorts last, a naive one is read as local time."""
+    if date is None:
+        return _OLDEST
+    return date if date.tzinfo is not None else date.astimezone()

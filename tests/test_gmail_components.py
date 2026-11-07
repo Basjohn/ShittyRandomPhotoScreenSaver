@@ -83,3 +83,39 @@ def test_format_email_date_modes() -> None:
     assert format_email_date(old_date, "numeric", now=now) == "23/06/2025"
     assert format_email_date(date, "words", now=now) == "April 16th"
     assert format_email_date(old_date, "words", now=now) == "June 23rd 2025"
+
+
+def test_mixed_naive_aware_and_missing_dates_group_without_raising() -> None:
+    """7 Nov 2026: a new mail with a naive date beside cached aware dates made group_emails raise TypeError inside the
+    widget's snapshot projection, so the widget stayed on its busy state after the new-mail sound."""
+    from datetime import datetime, timedelta, timezone
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_components import group_emails
+
+    aware = datetime(2026, 11, 7, 15, 0, tzinfo=timezone.utc)
+
+    def email(index, sender, date):
+        return EmailMetadata(id=str(index), thread_id=str(index), sender=sender, subject=f"s{index}", date=date,
+                             labels=(), is_unread=True)
+
+    emails = [
+        email(1, "a@example.com", aware),
+        email(2, "b@example.com", datetime(2026, 11, 7, 18, 0)),           # naive (e.g. an older cache)
+        email(3, "c@example.com", aware - timedelta(days=1)),
+    ]
+    missing = email(4, "d@example.com", aware)
+    object.__setattr__(missing, "date", None)                               # a cache row without a date
+    rows = group_emails([*emails, missing])
+    assert [row.email.id for row in rows][-1] == "4", "a missing date must sort last"
+    assert {row.email.id for row in rows} == {"1", "2", "3", "4"}
+    assert all(e.date.tzinfo is not None for e in emails), "EmailMetadata keeps a naive date"
+
+
+def test_imap_dates_are_aware_including_minus_zero_zone() -> None:
+    from core.gmail.gmail_imap import _parse_date
+
+    assert _parse_date("Sat, 07 Nov 2026 17:15:00 -0000").tzinfo is not None
+    assert _parse_date("Sat, 07 Nov 2026 17:15:00 +0200").utcoffset().total_seconds() == 7200
+    assert _parse_date("not a date").tzinfo is not None
+    assert _parse_date(None).tzinfo is not None
