@@ -663,6 +663,14 @@ inheriting a newer runtime override. Number-key slot **load** then performs the 
 visible state becomes runtime truth. Ordinary live Edit Save, including a successfully transferred cross-display Visualizer,
 is not a slot-load boundary and must not gain teardown/reinit from this rule.
 
+Media docking is a declared placement policy in the layout descriptor vocabulary:
+`WidgetRuntimeDescriptor.docked_to` is `media` (the Visualizer) or `none` (every other widget). While authored placement
+applies, a `media`-docked Visualizer sits beside Media's unstacked card and follows it when Media moves, with both
+reserved as stacking obstacles and Media held fixed; `none`, global CUSTOM and live Edit resolve undocked, on Media's
+plain authored slot, and moving Media leaves it in place. The saver's binding and Settings Arrange resolve it through
+one function (`rendering/visualizer_placement.py::resolve_visualizer_authored_placement`), so the canvas shows the
+Visualizer exactly where the saver puts it.
+
 CUSTOM is a **global layout mode**. If any effective widget route is `Custom`, ordinary authored stacking and the
 non-CUSTOM Media/Visualizer adjacency projection are disabled for the entire retained layout, not selectively per
 widget. The same subsystem switch is asserted before live Edit Layout captures geometry and before number-key layout
@@ -885,8 +893,16 @@ own persisted position, monitor and geometry are authoritative and may place it 
 Media. A live `QuickDisplayUnit` participates when it is not retired and has no display-binding loss; Media presence on
 that unit is not an admission condition. Numbered widget routes bind to physical display identity; Windows renumbering
 does not reassign them. An unavailable assignment suppresses its widgets until that display returns or the user explicitly
-changes the route. Saved CUSTOM geometry is retained on its original display. `DisplayManager` admits at most one
-Visualizer owner, with no delayed relocation; ALL continues to select its first participating display. Playback truth is
+changes the route. Saved CUSTOM geometry is retained on its original display. `DisplayManager` decides which unit
+hosts the Visualizer, with no delayed relocation; ALL continues to select its first participating display.
+Everything that binds the one owner to a host unit lives in one host-neutral binding,
+`widgets/spotify_visualizer/visualizer_host_binding.py`: construction (the only construction site, and the
+rejection of a second owner), bind/start, committed-CUSTOM hydration, authored placement and Media docking, the
+double-click / middle-click / wheel input admissions, the transactional cross-host transfer, route release (which
+clears the admissions) and Edit retirement. A host is any unit with the display-unit surface the binding names; the
+caller keeps only the admitted (owner, unit) record and reaches the binding through `VisualizerHostServices`, whose
+callables hold it weakly. `DisplayManager` never imports or builds the owner; a future host (Expanded Visualizer,
+SMP dock or Pop Out) binds through the same binding and never adds a second construction site. Playback truth is
 bound from the already-admitted effective Media presentation model across the active display set; a CUSTOM Visualizer on
 another display must not require or construct a duplicate Media presentation on its own unit.
 

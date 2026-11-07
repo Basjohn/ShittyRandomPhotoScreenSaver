@@ -22,38 +22,10 @@ appendix.
 These are the audit's readiness blockers (A-03, A-02, A-01). The SMP plan and the Expanded Visualizer plan
 list them as prerequisite phases with the milestone each must precede. Order here is by effort and by when each is
 first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-14) landed on 7 Nov; its contract is in
-`Docs/Architecture/Settings_Bucket_Persistence_Contract.md` ("Tabs and pills: one registry").
-
-- [ ] **AC-02 The Visualizer gets a host-neutral binding; Media docking becomes a declared placement policy** (A-02).
-  Severity high, reward high, effort L. **Confirmed.** Lands before Expanded Visualizer M2 (the takeover transaction
-  binds to this owner) and before SMP M7 (dock / Pop Out hosts).
-  - **Boundary:** `engine/display_manager.py` (5952 lines). The single owner is built in
-    `_construct_quick_visualizer_owner_on` (`:3245-3560`; the one construction site `:3389`; a second is rejected at
-    `:3258-3263`), which also wires double-click/middle-click admissions and the volume wheel (`:3529-3550`), and
-    resolves the card style itself (`:3355-3386`). Ordinary placement docks to Media through
-    `_resolve_quick_visualizer_base_authored_origin` / `_resolve_quick_visualizer_authored_layout` (`:3038-3110`),
-    the Media-geometry observer (`:3222-3242`) and `rendering/visualizer_media_adjacency.py`. Arrange resolves the
-    Visualizer on its own path too (`ui/onboarding/arrange_model.py::_visualizer_outer_size`). Ordinary widgets go
-    through `WidgetRuntimeManager` / `family_binder`; the Visualizer does not, although it is a catalog member
-    (`core/settings/widget_family_catalog.py:96`).
-  - **Fix:** extract `widgets/spotify_visualizer/visualizer_host_binding.py` (name illustrative) owning construct,
-    bind, transfer, retire, input admissions and authored layout for one host unit; `DisplayManager` keeps only the
-    "which unit" decision and calls the binding. Express Media docking as one placement policy in the canonical
-    layout descriptor vocabulary (`docked_to: media | none`), resolved by the binding and read by Arrange through the
-    same function, so both layout authorities become one. Keep the one-owner rejection at the binding boundary. The
-    card border width comes from `resolve_card_border_width_px` (AC-09, landed).
-  - **Must stay true:** exactly one Visualizer owner per process across construct → transfer → retire
-    (`Spec.md` → Visualizer display routing); CUSTOM authority (committed geometry wins outside Edit, override wins
-    while editing); the admissions cleared on route release (`display_manager.py:2215-2217, 3838-3840`); the
-    transactional cross-display transfer (`_transfer_quick_visualizer_unit`); the Edit/Arrange parity harness maps
-    (`tests/test_arrange_saver_geometry_parity.py`) identical; the operator-protected QSG/clip optimisations
-    untouched.
-  - **Regression bar:** one owner across construct → transfer → retire with today's unit and a stub second host;
-    moving Media leaves a Visualizer with `docked_to: none` in place and moves one with `docked_to: media`; the
-    parity harness maps are byte-identical before and after; `DisplayManager` no longer imports
-    `QuickDisplayVisualizerOwner`.
-  - **Depends on:** nothing open (AC-09 landed 7 Nov). **Unblocks:** Expanded Visualizer M2,
-    SMP docked Visualizer and Pop Out, the Expanded Media milestone.
+`Docs/Architecture/Settings_Bucket_Persistence_Contract.md` ("Tabs and pills: one registry"). AC-02 (the host-neutral
+Visualizer binding with Media docking as the declared `docked_to` placement policy, A-02) and AC-09 (one card border
+width resolver, A-09) landed on 7 Nov; their contracts are in `Spec.md` ("Visualizer display routing", "Geometry /
+CUSTOM", "Runtime Widget Themes") and the Visualizer change checklist §9A.
 
 - [ ] **AC-03 An application-service tier above display generations** (A-01). Severity high (for SMP), reward high,
   effort L. **Confirmed:** `engine/engine_handlers.py:355` `engine.stop(exit_app=False, reason="settings")` owns the
