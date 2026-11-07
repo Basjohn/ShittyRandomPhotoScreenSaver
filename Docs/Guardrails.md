@@ -26,7 +26,7 @@ This is the **short preflight**, not a second documentation authority. Use the f
   runs it, at most 10 minutes, after the operator's yes. Agents never start it.
 - **Reactivity is memoryless (operator, 7 Nov 2026: "Adaptivity is the enemy").** The same music at the same playback
   level draws the same response at any time in a song, after any break or louder/softer passage: no learned mean,
-  peak, floor or ratio against recent history in a response path. See `Docs/Guides/Visualizer_Reactivity_Authoring.md` §2A.
+  peak, floor or ratio against recent history in a response path. See `Docs/Guides/Visualizer_Reactivity_Authoring.md` §2B.
 - **Evidence and scratch hygiene (operator, 7 Nov 2026: "agents have littered").**
   - **PNGs are not barred.** Stills (screenshots, contact sheets, comparisons) stay PNG, and tools and compare
     steps produce and read PNG as they need. Only a sequence of single frames used to show motion is replaced, by
