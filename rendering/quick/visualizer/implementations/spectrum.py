@@ -21,7 +21,7 @@ from ..render_contract import (
     QuickVisualizerRenderFrame,
 )
 from ..implementation_values import parameter, rgba, safe_hue
-from rendering.gl_programs.spectrum_options import SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS
+from rendering.gl_programs.spectrum_options import SPECTRUM_FLAG_PATTERNS, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS
 
 
 _MAX_BARS = 64
@@ -345,6 +345,9 @@ class QuickSpectrumRenderer:
             )
             else 0,
         )
+        if uniforms["u_time"] >= 0 and parameter(parameters, "spectrum_pattern_shown") in SPECTRUM_FLAG_PATTERNS:
+            # Only a flag sheet's wave reads the clock (wrapped so a long session keeps float precision).
+            gl.glUniform1f(uniforms["u_time"], float(mode_state.animation_time) % 3600.0)
         gl.glUniform1f(uniforms["u_bars_left"], layout.bars_left)
         gl.glUniform1f(uniforms["u_bar_width_px"], layout.bar_width)
         gl.glUniform1f(uniforms["u_bar_gap_px"], layout.bar_gap)
@@ -444,7 +447,7 @@ class QuickSpectrumRenderer:
                 "u_bar_span_px",
                 *_DECOR_UNIFORMS,
             )
-            names = (*required, "u_playing")
+            names = (*required, "u_playing", "u_time")
             uniforms = {
                 name: int(gl.glGetUniformLocation(program, name))
                 for name in names

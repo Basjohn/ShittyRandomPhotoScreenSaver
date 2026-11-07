@@ -398,6 +398,86 @@ def test_a_half_faded_option_lies_between_off_and_on(render):
     assert 0.3 < share < 0.7
 
 
+# ------------------------------------------------------------------------------------- flags, gradient, rim (7 Nov)
+FULL = (1.0,) * COUNT
+NARROW = tuple(0.8 for _ in range(37))          # 37 bars across the card: each only a few pixels wide
+
+
+def _body_box(render, bars):
+    """Rows/columns spanned by the bar bodies (fill pixels) of ``bars`` with no decoration."""
+    import numpy as np
+    body = _is(render(bars=bars, peaks=bars, ghosting=False), FILL)
+    rows, cols = np.nonzero(body)
+    return body, rows.min(), rows.max(), cols.min(), cols.max()
+
+
+@pytest.mark.qt
+def test_a_flag_sheet_paints_its_flag_across_the_field_and_only_the_fills(render):
+    """Each flag draws its own picture over the whole field, only in fill pixels, and Strength 0 draws nothing
+    (negative control). Japan: the crimson disc sits at the field's centre on white."""
+    import numpy as np
+    from rendering.gl_programs.spectrum_options import SPECTRUM_FLAG_PATTERNS
+    body, r0, r1, c0, c1 = _body_box(render, FULL)
+    off = render(bars=FULL, peaks=FULL, ghosting=False)
+    images = {}
+    for flag in SPECTRUM_FLAG_PATTERNS:
+        on = render({"spectrum_pattern": flag, "spectrum_pattern_strength": 1.0}, bars=FULL, peaks=FULL,
+                    ghosting=False)
+        changed = _changed(off, on)
+        assert changed.sum() > 0.5 * body.sum() and not (changed & ~body).any(), flag
+        none = render({"spectrum_pattern": flag, "spectrum_pattern_strength": 0.0}, bars=FULL, peaks=FULL,
+                      ghosting=False)
+        assert np.array_equal(off, none), flag
+        images[flag] = on
+    for index, flag in enumerate(SPECTRUM_FLAG_PATTERNS):
+        for other in SPECTRUM_FLAG_PATTERNS[index + 1:]:
+            assert _changed(images[flag], images[other]).sum() > 0.2 * body.sum(), (flag, other)
+    japan = images["Japan Flag"]
+    rows, cols = np.nonzero(body)
+    cy, cx = (r0 + r1) / 2.0, (c0 + c1) / 2.0
+    radius = 0.3 * (r1 - r0)                     # three fifths of the height across
+    distance = np.hypot(rows - cy, cols - cx)
+    inside = japan[rows[distance < 0.7 * radius], cols[distance < 0.7 * radius]]
+    outside = japan[rows[distance > 1.3 * radius], cols[distance > 1.3 * radius]]
+    assert inside.size and outside.size
+    assert (inside[:, 0] > 150).mean() > 0.95 and (inside[:, 1] < 60).mean() > 0.95      # crimson
+    assert (outside[:, :3] > 170).all(axis=1).mean() > 0.95                                # white
+
+
+@pytest.mark.qt
+def test_the_fill_gradient_keeps_its_saturation_through_the_middle(render):
+    """Blue to green turns through bright cyan, not the dark teal an RGB mix gives (green to red likewise passes
+    yellow, not olive). Mid-field body pixels: both green and blue near full (an RGB mix holds them near half)."""
+    import numpy as np
+    body, r0, r1, _, _ = _body_box(render, FULL)
+    on = render(ON["fill_gradient"], bars=FULL, peaks=FULL, ghosting=False)
+    rows, cols = np.nonzero(body)
+    middle = np.abs(rows - (r0 + 0.47 * (r1 - r0))) < 3
+    pixels = on[rows[middle], cols[middle]]
+    assert pixels.size
+    assert (pixels[:, 1] > 200).mean() > 0.95 and (pixels[:, 2] > 200).mean() > 0.95
+    assert (pixels[:, 0] < 40).mean() > 0.95
+
+
+@pytest.mark.qt
+def test_rim_glow_stays_a_rim_on_narrow_bars(render):
+    """At the strongest intensity on 37 narrow bars the glow tints each bar's edges, never its middle (it used to
+    reach in (3 + 4 x intensity) x scale pixels from each side, recolouring every bar whole)."""
+    import numpy as np
+    body, r0, r1, _, _ = _body_box(render, NARROW)
+    off = render(bars=NARROW, peaks=NARROW, ghosting=False)
+    glow = {"spectrum_glow_enabled": True, "spectrum_glow_intensity": 1.5, "spectrum_glow_color": [0, 255, 0, 255]}
+    on = render(glow, bars=NARROW, peaks=NARROW, ghosting=False)
+    changed = _changed(off, on)
+    row = int(r0 + 0.4 * (r1 - r0))              # well below the bar tops
+    spans = np.split(np.nonzero(body[row])[0], np.nonzero(np.diff(np.nonzero(body[row])[0]) > 1)[0] + 1)
+    assert len(spans) >= 30
+    for span in spans:
+        middle = span[len(span) // 2]
+        assert not changed[row, middle], span    # the middle of every bar keeps its fill
+        assert changed[row, span[0]] or changed[row, span[-1]], span   # the edges glow
+
+
 # ------------------------------------------------------------------------------------------- cost at rest
 def test_the_renderer_fetches_every_decoration_input_it_resolves():
     """At rest the renderer compares the raw decoration inputs fetched in one call (``_DECOR_SOURCES``): every
