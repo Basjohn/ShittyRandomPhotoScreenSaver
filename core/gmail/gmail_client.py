@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable, List, Optional
 
@@ -71,6 +71,10 @@ class EmailMetadata:
     def __post_init__(self):
         # Security invariant: metadata-only by design
         object.__setattr__(self, "labels", tuple(self.labels))
+        # Every date is aware (a naive one, e.g. from an older cache, is local wall time): the widget sorts dates
+        # from every source together, and one naive date made that sort raise (7 Nov 2026).
+        if isinstance(self.date, datetime) and self.date.tzinfo is None:
+            object.__setattr__(self, "date", self.date.astimezone())
 
 
 class GmailClient:
@@ -210,7 +214,7 @@ class GmailClient:
         try:
             date = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %z")
         except ValueError:
-            date = datetime.now()
+            date = datetime.now(timezone.utc)
 
         labels = tuple(data.get("labelIds", []))
         return EmailMetadata(

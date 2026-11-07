@@ -23,7 +23,7 @@ import imaplib
 import re
 import ssl
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from email.header import decode_header as _decode_header
 from email.utils import parsedate_to_datetime
 from typing import Callable, List, Optional
@@ -105,13 +105,19 @@ def _decode_header_value(raw: Optional[str]) -> str:
 
 
 def _parse_date(raw: Optional[str]) -> datetime:
-    """Parse an email Date header into a datetime, fallback to now()."""
+    """Parse an email Date header into an AWARE datetime; fallback to now (UTC).
+
+    ``parsedate_to_datetime`` returns a naive datetime for a ``-0000`` zone (RFC 5322: UTC, local offset unknown);
+    it is UTC. Every date must be aware: the widget sorts cached (aware) and fresh dates together, and one naive
+    date made that sort raise, leaving the widget stuck on its busy state (7 Nov 2026).
+    """
     if not raw:
-        return datetime.now()
+        return datetime.now(timezone.utc)
     try:
-        return parsedate_to_datetime(raw)
+        parsed = parsedate_to_datetime(raw)
     except Exception:
-        return datetime.now()
+        return datetime.now(timezone.utc)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
 class GmailImapClient:

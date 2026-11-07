@@ -1046,3 +1046,26 @@ def test_gmail_stop_discards_deferred_refresh(_isolated_runtime):
         service.retire()
         gate.close()
         install_gate(None)
+
+
+def test_a_failed_snapshot_delivery_is_logged_as_an_error(caplog) -> None:
+    """A projection that raises leaves the widget on its previous state (stuck on busy, 7 Nov 2026): never quiet."""
+    import logging
+
+    from widgets.gmail_runtime import GmailRuntimeService
+
+    class _Consumer:
+        def is_gmail_consumer_alive(self):
+            return True
+
+        def on_gmail_runtime_snapshot(self, snapshot):
+            raise TypeError("can't compare offset-naive and offset-aware datetimes")
+
+    service = GmailRuntimeService.__new__(GmailRuntimeService)
+    consumer = _Consumer()
+    service._consumer_ref = lambda: consumer
+    service._running = True
+    with caplog.at_level(logging.DEBUG):
+        service._deliver_snapshot(object())
+    failures = [record for record in caplog.records if "Snapshot delivery failed" in record.getMessage()]
+    assert failures and failures[0].levelno >= logging.ERROR
