@@ -521,6 +521,23 @@ OverlayWidget {
             }
             HoverHandler { id: activityRowHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
+            // On a surface material: one rounded box filling the friend row over its
+            // fill (name and presence opt out of their own plates), concentric with
+            // its corners. Inactive on Normal.
+            LegibilityRow {
+                objectName: "friendPulseRowLegibilityRow_" + index
+                readonly property real inset: activityRow.border.width + 1.0
+                x: inset
+                y: inset
+                z: 0
+                width: Math.max(0.0, activityRow.width - 2.0 * inset)
+                height: Math.max(0.0, activityRow.height - 2.0 * inset)
+                radius: Math.max(0.0, activityRow.radius - inset)
+                underlayColor: activityRow.color
+                primaryColor: friendRoot.friendPulseModel.textColor
+                secondaryColor: friendRoot.friendPulseModel.mutedTextColor
+            }
+
             function triggerEventGlow() {
                 if (!visible)
                     return
@@ -659,6 +676,7 @@ OverlayWidget {
                 ShadowedText {
                     id: rowNameText
                     objectName: "friendPulseRowName_" + index
+                    surfacePlateEnabled: false   // the row's LegibilityRow
                     x: friendRoot.friendPulseModel.customUsernameXOffset
                         * friendRoot.baseAuthoredWidth
                     y: friendRoot.friendPulseModel.customUsernameYOffset
@@ -691,12 +709,13 @@ OverlayWidget {
                 }
                 ShadowedText {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 18.0
+                    surfacePlateEnabled: false   // the row's LegibilityRow
                     text: (secondaryText.length > 0
                         ? secondaryText + "  " + presenceText
                         : presenceText).toUpperCase()
                     color: rowGameHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.72; verticalAlignment: Text.AlignVCenter; fontSizeMode: Text.HorizontalFit; minimumPointSize: 6.0; elide: Text.ElideRight
-                    shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
+                    shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowSoft: friendRoot.friendPulseModel.textShadowSoft; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                     HoverHandler { id: rowGameHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.gameActionRequested(index) }
                 }
@@ -845,6 +864,23 @@ OverlayWidget {
                 }
                 HoverHandler { id: gridTileHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
+                // On a surface material: one rounded box filling the friend tile over its
+                // fill (name and presence opt out of their own plates), concentric with
+                // its corners. Inactive on Normal.
+                LegibilityRow {
+                    objectName: "friendPulseTileLegibilityRow_" + index
+                    readonly property real inset: gridTile.border.width + 1.0
+                    x: inset
+                    y: inset
+                    z: 0
+                    width: Math.max(0.0, gridTile.width - 2.0 * inset)
+                    height: Math.max(0.0, gridTile.height - 2.0 * inset)
+                    radius: Math.max(0.0, gridTile.radius - inset)
+                    underlayColor: gridTile.color
+                    primaryColor: friendRoot.friendPulseModel.textColor
+                    secondaryColor: friendRoot.friendPulseModel.mutedTextColor
+                }
+
                 function triggerEventGlow() {
                     if (!visible)
                         return
@@ -973,6 +1009,7 @@ OverlayWidget {
                 ShadowedText {
                     id: gridNameText
                     objectName: "friendPulseGridName_" + index
+                    surfacePlateEnabled: false   // the tile's LegibilityRow
                     readonly property real canonicalWidth: Math.max(20.0,
                         parent.width - 14.0
                     )
@@ -1001,10 +1038,11 @@ OverlayWidget {
                     // ALL-CAPS names are wide and the name box is one line tall, so a
                     // long tag shrinks on one line; 5.5 pt fits realistic 21-letter tags.
                     wrap: true; breakLongWords: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 5.5; elide: Text.ElideRight
-                    shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
+                    shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowSoft: friendRoot.friendPulseModel.textShadowSoft; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                 }
                 ShadowedText {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 7.0; anchors.rightMargin: 7.0
+                    surfacePlateEnabled: false   // the tile's LegibilityRow
                     y: friendRoot.friendPulseModel.showNames
                         ? gridNameText.y + gridNameText.height + 2.0
                         : 12.0 + Math.min(58.0, Math.max(38.0,
@@ -1019,7 +1057,7 @@ OverlayWidget {
                     // a two-line cap truncated what Fit could still fit on three.
                     // Elision is only the last resort below the minimum size.
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; wrap: true; breakLongWords: true; fontSizeMode: Text.Fit; minimumPointSize: 6.0; elide: Text.ElideRight
-                    shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
+                    shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowSoft: friendRoot.friendPulseModel.textShadowSoft; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                     HoverHandler { id: gridGameHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.gameActionRequested(index) }
                 }
@@ -1202,8 +1240,8 @@ OverlayWidget {
         visible: !activityRowsView.visible && !activityGridView.visible
         x: 36.0; y: 104.0; width: friendRoot.friendPulseModel.authoredWidth - 72.0; height: friendRoot.friendPulseModel.authoredHeight - y - 32.0
         Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 8.0; width: 54.0; height: 54.0; radius: 27.0; color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.16); border.color: friendRoot.friendPulseModel.rowBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); ThemedText { anchors.fill: parent; text: friendRoot.friendPulseModel.viewState === "private" ? "◌" : "●"; color: friendRoot.friendPulseModel.accentColor; sourceFont.pixelSize: 25.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
-        ShadowedText { anchors.left: parent.left; anchors.right: parent.right; y: 73.0; height: 34.0; text: friendRoot.friendPulseModel.primaryMetric; color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.18; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
-        ShadowedText { anchors.left: parent.left; anchors.right: parent.right; y: 108.0; height: 42.0; text: friendRoot.friendPulseModel.viewState === "connect_required" ? "Connect Steam in Settings to see the friend roster." : (friendRoot.friendPulseModel.viewState === "private" ? "Steam is not exposing this friend roster." : (friendRoot.friendPulseModel.viewState === "stale" ? "This friend roster uses the last accepted Steam observation." : (friendRoot.friendPulseModel.viewState === "loading" ? "Loading the account-private friend roster first…" : "The next accepted friend-roster observation will appear here."))); color: friendRoot.friendPulseModel.mutedTextColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.76; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; wrap: true; maximumLineCount: 2; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
+        ShadowedText { anchors.left: parent.left; anchors.right: parent.right; y: 73.0; height: 34.0; text: friendRoot.friendPulseModel.primaryMetric; color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.18; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowSoft: friendRoot.friendPulseModel.textShadowSoft; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
+        ShadowedText { anchors.left: parent.left; anchors.right: parent.right; y: 108.0; height: 42.0; text: friendRoot.friendPulseModel.viewState === "connect_required" ? "Connect Steam in Settings to see the friend roster." : (friendRoot.friendPulseModel.viewState === "private" ? "Steam is not exposing this friend roster." : (friendRoot.friendPulseModel.viewState === "stale" ? "This friend roster uses the last accepted Steam observation." : (friendRoot.friendPulseModel.viewState === "loading" ? "Loading the account-private friend roster first…" : "The next accepted friend-roster observation will appear here."))); color: friendRoot.friendPulseModel.mutedTextColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.76; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; wrap: true; maximumLineCount: 2; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowSoft: friendRoot.friendPulseModel.textShadowSoft; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
     }
 
 

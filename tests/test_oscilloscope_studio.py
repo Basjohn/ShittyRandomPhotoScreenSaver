@@ -344,10 +344,10 @@ def test_parity_check_detects_a_perturbed_engine_answer_negative_control(qt_app)
     original = recorded(clip.description, values)
     data = {**original, "steps": json.loads(json.dumps(original["steps"]))}
     middle = len(data["steps"]) // 2
-    answers = data["steps"][middle]["answers"]
-    answers["get_musical_level"] = encode_answer((17.0, 2.0))          # a loud, present moment it never had
+    for step in data["steps"][middle:]:           # a loud, present stretch it never had (whichever tick the beam reads it on)
+        step["answers"]["get_musical_level"] = encode_answer((17.0, 2.0))
     evaluator = _clip_evaluator(clip, data=data)
-    step = data["steps"][middle]
+    step = data["steps"][-1]
     assert frame_digest(evaluator.evaluate(step["now_ts"] - data["origin"], values)) != step["frame_sha256"]
     evaluator.release()
 
@@ -896,7 +896,7 @@ def test_save_to_preset_writes_only_the_edited_key_into_a_curated_oscilloscope_p
     span = prop.maximum - prop.minimum
     target = round(prop.minimum + span * (0.25 if float(shown) > prop.minimum + span / 2 else 0.75), prop.decimals)
     bridge.commitValue(prop.id, 0, target)
-    assert slider.preset_index() == slider.custom_index()          # a Studio edit lands in Custom
+    assert slider.preset_index() == curated                        # held on the preset: no switch to Custom
     assert bridge.savePresetTarget == names[curated]
     before = path.read_bytes()
 
@@ -920,4 +920,4 @@ def test_save_to_preset_writes_only_the_edited_key_into_a_curated_oscilloscope_p
     assert {k: v for k, v in new_resolved.items() if k != prop.id} == {
         k: v for k, v in old_resolved.items() if k != prop.id}
     assert vp.get_preset_settings(MODE, curated)[prop.id] == pytest.approx(target)    # presets were reloaded
-    assert slider.preset_index() == slider.custom_index()
+    assert slider.preset_index() == curated                        # the preset stays selected, now holding it

@@ -16,9 +16,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Tuple
 
+from core.logging.logger import get_logger
 from core.settings import visualizer_presets as vp
 from core.settings.visualizer_settings_contract import LEGACY_GLOBAL_SHARED_VISUAL_KEYS
 from core.settings.visualizer_settings_snapshot import _TECHNICAL_GLOBAL_KEYS, normalize_visualizer_mode_payload
+
+logger = get_logger(__name__)
 
 MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = tuple(sorted(_TECHNICAL_GLOBAL_KEYS))
 DEPRECATED_AUTHORED_GLOBAL_KEYS: Tuple[str, ...] = (
@@ -250,6 +253,64 @@ def preset_file_writable(path: Path) -> bool:
     return os.access(path, os.W_OK) and os.access(path.parent, os.W_OK)
 
 
+# ------------------------------------------------------------------- every preset-file write: one mode, checked
+class PresetModeMismatch(ValueError):
+    """A preset-file write whose target belongs to another mode than its values (refused; nothing written)."""
+
+
+def _payload_modes(payload: Mapping[str, Any]) -> set[str]:
+    return {str(payload[key]) for key in ("mode", "visualizer_preset_mode") if payload.get(key) not in (None, "")}
+
+
+def check_preset_write_target(mode: str, path: Path, payload: Mapping[str, Any]) -> None:
+    """Fail closed unless ``payload`` (the values to write) is ``mode``'s, ``path`` lies in ``mode``'s own curated
+    preset folder, and any file already at ``path`` is a ``mode`` preset.
+
+    The 6 Nov loss (R-174): Save Preset As on Bubble's Custom wrote a Bubble payload over Neon Lake's
+    ``shockwave_grid/preset_1_synthwave.json`` (the file dialog put no bound on the folder), replacing ~13,000 lines."""
+    mode = str(mode)
+    path = Path(path)
+    problems = []
+    named = _payload_modes(payload)
+    if named - {mode}:
+        problems.append(f"the values are {', '.join(sorted(named))} values")
+    folder = vp.get_visualizer_presets_dir(mode)
+    try:
+        inside = path.resolve().parent == folder.resolve()
+    except OSError:
+        inside = False
+    if not inside:
+        problems.append(f"{path.parent} is not {mode}'s preset folder {folder}")
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            existing = None
+        owners = _payload_modes(existing) if isinstance(existing, dict) else set()
+        if owners - {mode}:
+            problems.append(f"{path.name} is a {', '.join(sorted(owners))} preset")
+    if problems:
+        message = f"Refused to write a {mode} preset to {path}: " + "; ".join(problems)
+        logger.error("[VIS_PRESETS] %s", message)
+        raise PresetModeMismatch(message)
+
+
+def write_new_preset_file(mode: str, path: Path, payload: Mapping[str, Any]) -> Path:
+    """Write a whole preset file (Save Preset As) after :func:`check_preset_write_target`, atomically, with one info
+    line naming the mode, slot and path."""
+    from core.utils.atomic_files import atomic_write_bytes
+    path = Path(path)
+    check_preset_write_target(mode, path, payload)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        atomic_write_bytes(path, (json.dumps(dict(payload), indent=2) + "\n").encode("utf-8"))
+    except PermissionError as exc:
+        raise PresetFileReadOnly(path) from exc
+    logger.info("[VIS_PRESETS] wrote preset file mode=%s index=%s path=%s (new or replaced)",
+                mode, payload.get("preset_index"), path)
+    return path
+
+
 _MISSING = object()
 
 
@@ -296,6 +357,7 @@ def save_changes_to_preset(mode: str, index: int, changes: Mapping[str, Any], *,
     unresolved = [key for key, value in changes.items() if resolved.get(key, _MISSING) != value]
     if unresolved:
         raise ValueError(f"{path.name} would not load these values: {', '.join(unresolved)}")
+    check_preset_write_target(mode, path, patched)
     if not preset_file_writable(path):
         raise PresetFileReadOnly(path)
     if path.read_bytes() != original_bytes:
@@ -304,13 +366,16 @@ def save_changes_to_preset(mode: str, index: int, changes: Mapping[str, Any], *,
         atomic_write_bytes(path, format_like_source(patched, source_text).encode("utf-8"))
     except PermissionError as exc:
         raise PresetFileReadOnly(path) from exc
+    logger.info("[VIS_PRESETS] wrote preset file mode=%s index=%d path=%s (patched keys: %s)",
+                mode, index, path, ", ".join(written_keys))
     vp.reload_presets(mode)
     return PresetSaveResult(path, tuple(written_keys), True)
 
 
 __all__ = [
     "DEPRECATED_AUTHORED_GLOBAL_KEYS", "DEPRECATED_MODE_ALIAS_KEYS", "MANDATORY_TECH_SUFFIXES",
-    "PresetFileReadOnly", "PresetSaveResult", "apply_cleaned_payload_in_place", "apply_setting_changes_in_place",
+    "PresetFileReadOnly", "PresetModeMismatch", "PresetSaveResult", "apply_cleaned_payload_in_place",
+    "apply_setting_changes_in_place", "check_preset_write_target", "write_new_preset_file",
     "canonical_mode_defaults", "format_like_source", "is_visualizer_setting_key", "key_order",
     "load_visualizer_defaults", "merge_section", "preset_file_writable", "preset_setting_changes",
     "save_changes_to_preset",

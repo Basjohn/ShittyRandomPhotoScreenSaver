@@ -327,6 +327,9 @@ Rectangle {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            // The panel scrolls (a Flickable): without this, any vertical wobble past the drag threshold hands the
+            // press to the scroll view mid-drag and the slider lets go (operator, 6 Nov: "snap out of being dragged").
+            preventStealing: true
             onPressed: function(mouse) {
                 vs.forceActiveFocus()
                 vs.dragValue = vs.valueAt(mouse.x)
@@ -532,6 +535,7 @@ Rectangle {
                 MouseArea {
                     id: svArea
                     anchors.fill: parent
+                    preventStealing: true                  // a drag holds until release, even in a scrolling panel
                     function pick(m) {
                         picker.hsv = [picker.hsv[0], Math.max(0, Math.min(1, m.x / width)), Math.max(0, Math.min(1, 1 - m.y / height))]
                         picker.changed(picker.current())
@@ -554,6 +558,7 @@ Rectangle {
                 MouseArea {
                     id: hueArea
                     anchors.fill: parent
+                    preventStealing: true
                     function pick(m) {
                         picker.hsv = [Math.max(0, Math.min(0.999, m.y / height)), picker.hsv[1], picker.hsv[2]]
                         picker.changed(picker.current())
@@ -652,6 +657,7 @@ Rectangle {
                         anchors.fill: parent
                         anchors.margins: -4
                         cursorShape: Qt.SizeHorCursor
+                        preventStealing: true
                         property real startX: 0
                         property bool moved: false
                         onPressed: function(m) { gr.selected = index; startX = node.x; moved = false
@@ -2742,6 +2748,7 @@ Rectangle {
                             MouseArea {
                                 id: curveDrag
                                 anchors.fill: parent
+                                preventStealing: true          // the dock scrolls sideways when narrow
                                 cursorShape: Qt.SizeVerCursor
                                 enabled: curveBox.cell !== null && curveBox.gain > 0
                                 function powerAt(y) {

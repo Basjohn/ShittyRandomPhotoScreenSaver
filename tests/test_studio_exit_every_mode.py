@@ -250,6 +250,156 @@ def test_the_python_hide_probe_detects_a_synchronous_hide_negative_control(qt_ap
     controller.evaluator.release()
 
 
+# ------------------------------------------------- a surface that was never retired is still destroyed legally
+def _unretired_toy_surface(qt_app, monkeypatch):
+    """A toy Studio closed with the surface's retirement forced to fail: its render tree is left alive, as after
+    ``test_a_failing_teardown_still_reveals_settings`` (or a failing evidence capture)."""
+    from PySide6.QtWidgets import QDialog
+    from ui.studio.controller import StudioController
+    from ui.studio.presence import WindowPresence
+    from ui.studio.surface import OffscreenStudioSurface
+    from tests.test_waveform_studio_second_mode import ToyAdapter, ToyStore
+    surfaces = []
+    dialog = QDialog()                                         # never shown
+
+    def factory(controller):
+        surfaces.append(OffscreenStudioSurface(controller, size=(900, 600), present_on_show=False))
+        return surfaces[-1]
+    controller = StudioController(ToyAdapter(), ToyStore(), WindowPresence(dialog), factory)
+    assert controller.open()
+    surface = surfaces[0]
+    surface.pump(2)                                            # the render control's RHI exists and imported the context
+
+    def boom():
+        raise RuntimeError("forced retire failure")
+    monkeypatch.setattr(surface, "retire", boom)
+    controller.close()
+    assert controller.state == "closed" and "surface" in controller.close_failures
+    dialog.deleteLater()
+    return surface
+
+
+def _exit_sweep(surface) -> list:
+    """What PySide's interpreter-exit sweep destroys of this surface: every live *Python-owned* native QObject, one by
+    one, in an order it does not control (hash order). Arranged adversarially here: the GL context first."""
+    import shiboken6
+    natives = (surface.context, surface.surface, surface.control, surface.window, surface.host.engine,
+               surface.host._component)
+    owned = [o for o in natives if shiboken6.isValid(o) and shiboken6.ownedByPython(o)]
+    return sorted(owned, key=lambda o: o is not surface.context)
+
+
+def _context_freed_before_control(plan, surface) -> bool:
+    return surface.context in plan and plan.index(surface.context) < plan.index(surface.control)
+
+
+def test_an_unretired_surface_destroys_its_gl_context_only_after_its_render_control(qt_app, monkeypatch):
+    """The render control's RHI uses the imported context until its own destructor; the context and its surface are
+    the control's children, so no sweep order (exit, GC) can free the context first. The fault this pins was an
+    intermittent access violation after the whole file had passed."""
+    import shiboken6
+    surface = _unretired_toy_surface(qt_app, monkeypatch)
+    plan = _exit_sweep(surface)
+    assert surface.control in plan and not _context_freed_before_control(plan, surface)
+    events = []
+    surface.control.destroyed.connect(lambda *_a: events.append("control"))
+    surface.context.aboutToBeDestroyed.connect(lambda: events.append("context"))
+    surface.surface.destroyed.connect(lambda *_a: events.append("offscreen surface"))
+    for obj in plan:
+        if shiboken6.isValid(obj):
+            shiboken6.delete(obj)
+    assert events == ["control", "context", "offscreen surface"]
+    assert not shiboken6.isValid(surface.context) and not shiboken6.isValid(surface.surface)
+
+
+def test_a_context_with_its_own_python_owner_is_flagged_by_the_sweep_negative_control(qt_app, monkeypatch):
+    """The former structure (context and render control as two independent Python owners) puts the context ahead
+    of the control in the sweep. Only the plan is checked; the illegal deletion itself is never run."""
+    import shiboken6
+    surface = _unretired_toy_surface(qt_app, monkeypatch)
+    surface.context.setParent(None)                            # back to its own Python owner, as before the fix
+    try:
+        assert shiboken6.ownedByPython(surface.context)
+        assert _context_freed_before_control(_exit_sweep(surface), surface)
+    finally:
+        surface.context.setParent(surface.control)
+    assert not _context_freed_before_control(_exit_sweep(surface), surface)
+    surface.control.deleteLater()
+    QCoreApplication.sendPostedEvents(surface.control, QEvent.Type.DeferredDelete)
+
+
+# ----------------------------------------------------------------- a closed Studio is released, not kept for the process
+_SESSION_TYPES = ("StudioController", "StudioBridge", "StudioEditSession", "OffscreenStudioSurface", "StudioShellHost",
+                  "StudioViewportItem", "QQuickWindow", "QQmlEngine", "QQuickRenderControl", "QOpenGLContext")
+
+
+def _live_counts() -> dict:
+    import gc
+    import shiboken6
+    from PySide6.QtCore import QObject
+    gc.collect()
+    counts = dict.fromkeys(_SESSION_TYPES, 0)
+    for obj in gc.get_objects():
+        name = type(obj).__name__
+        if name in counts and (not isinstance(obj, QObject) or shiboken6.isValid(obj)):
+            counts[name] += 1
+    return counts
+
+
+def _sessions(tab, mode, times: int) -> list:
+    """``times`` real open -> commit -> Close-button sessions through Settings' own open path; weak references to what
+    each session made."""
+    import weakref
+    made = []
+    for _ in range(times):
+        controller, surface = _open(tab, mode)
+        _commit_one_value(controller)
+        _click_close(surface)
+        assert controller.state == "closed" and not controller.presence.concealed
+        made += [weakref.ref(controller), weakref.ref(controller.bridge), weakref.ref(controller.session),
+                 weakref.ref(surface), weakref.ref(surface.host)]
+        del controller, surface
+    return made
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_closed_studio_sessions_are_released_and_live_counts_stay_flat(qt_app, mode_dialog, no_gl_checks, mode):
+    """Three sessions of every mode: the controller, its bridge, session, surface and shell are all collectable once
+    closed, and the live Studio objects (window, engine, render control, GL context included) return to the count
+    before the first session. Settings is revealed every time (``_sessions``)."""
+    import gc
+    dialog, tab = mode_dialog(mode)
+    _sessions(tab, mode, 1)                                  # first use: lazily built caches and registrations
+    before = _live_counts()
+    made = _sessions(tab, mode, 3)
+    gc.collect()
+    alive = [ref() for ref in made if ref() is not None]
+    assert alive == [], f"{mode}: closed sessions still alive: {sorted({type(o).__name__ for o in alive})}"
+    assert _live_counts() == before
+    assert getattr(tab, "_studio_controller", None) is None
+
+
+def test_a_closure_that_holds_the_controller_through_its_own_signal_keeps_it_alive_negative_control(
+        qt_app, mode_dialog, no_gl_checks):
+    """The former leak's shape: a slot Qt holds on the controller's own ``closed`` signal that closes over the
+    controller. The garbage collector cannot see the Qt-side reference, so the closed session never goes."""
+    import gc
+    import weakref
+    dialog, tab = mode_dialog("spectrum")
+    controller, surface = _open(tab, "spectrum")
+    controller.closed.connect(lambda *_a, held=controller: None)
+    _click_close(surface)
+    ref = weakref.ref(controller)
+    del controller, surface
+    gc.collect()
+    assert ref() is not None
+    leaked = ref()
+    leaked.closed.disconnect()                               # release it so later tests start clean
+    del leaked
+    gc.collect()
+    assert ref() is None
+
+
 # ------------------------------------------------------------------------------------------- the --studio sidecar
 @pytest.fixture
 def logging_into(tmp_path, monkeypatch):

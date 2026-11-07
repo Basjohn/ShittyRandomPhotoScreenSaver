@@ -376,11 +376,22 @@ def _shared_types() -> tuple:
     import weakref
     import numpy as np
     from PySide6.QtCore import QObject
+    from core.performance.frame_trace import FrameTraceSink
+    from core.performance.gui_stall_sampler import GuiStallSampler
+    # The process-wide diagnostic sinks (--frame-trace's ring buffer, --gui-stall-stacks' sampler) are cached by
+    # production objects at construction; a snapshot shares them, never copies them (7 Nov: copying the frame-trace
+    # sink failed every engine-answer Studio for an operator running with --frame-trace, first on its WindowsPath,
+    # then its bytearray).
     return (type(threading.RLock()), type(threading.Lock()), QObject, types.FunctionType, types.MethodType,
-            types.BuiltinFunctionType, types.ModuleType, type, enum.Enum, np.generic, weakref.ref)
+            types.BuiltinFunctionType, types.ModuleType, type, enum.Enum, np.generic, weakref.ref, FrameTraceSink,
+            GuiStallSampler)
 
 
-_ATOMS = (int, float, str, bool, bytes, type(None), complex, range, slice)
+import pathlib as _pathlib
+
+# Immutable values a snapshot shares instead of copying. Paths included (7 Nov: field-only controller state held a
+# WindowsPath and every engine-answer Studio failed to start: "Step state holds an uncopyable WindowsPath").
+_ATOMS = (int, float, str, bool, bytes, type(None), complex, range, slice, _pathlib.PurePath)
 
 
 def _clone(value: Any, memo: dict, shared: tuple) -> Any:
@@ -461,8 +472,16 @@ class StepState:
 
     def _copy(self, states):
         memo = {id(obj): obj for obj in self._owners + self._keep}
-        return {owner: {name: _clone(value, memo, self._shared) for name, value in state.items()}
-                for owner, state in states.items()}
+        out = {}
+        for owner, state in states.items():
+            copied = out[owner] = {}
+            for name, value in state.items():
+                try:
+                    copied[name] = _clone(value, memo, self._shared)
+                except TypeError as exc:
+                    # Name the attribute that holds it, so a field-only failure identifies its owner.
+                    raise TypeError(f"{exc} (in {type(owner).__qualname__}.{name})") from exc
+        return out
 
     def restore(self) -> None:
         """Put the captured state back (a fresh copy each time, so the capture stays reusable)."""

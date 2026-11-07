@@ -1,5 +1,12 @@
 # Neon Lake Basin
 
+**Accepted 7 Nov 2026 (operator):** "In general the neon lake fidelity is much improved and I would say accepted, it
+also gives us a much nicer starting line for water deformation later." The seventh pass (Water Reaction, the skyline
+sheet fix; evidence `.artifacts/evidence/neon_lake/fidelity_20261106/pass7/`) is the accepted look. The remaining
+gaps it recorded against the goal mocks (whole-scene high-react look, net hue, dot field, far-shore line) are future
+enhancements, not acceptance failures. Water deformation (Current_Plan §6, S3D-4 dynamic surface field) starts from
+this baseline. The camera step on real music stays open in `Current_Plan.md` §5.
+
 **23 October addendum (not yet visually accepted):** the [operator reconciliation](2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md) requires camera/control-hint parity with Extruded Bubble (while preventing entry into terrain and allowing almost flat horizon views), a square editor preserving existing heightmap/brush results with desirable angled pseudo-3D preview, layered water/water glow, and improved relevant shared 3D controls. Only presets 1–4 are currently useful artistic study cases; all presets remain mutable. Existing baseline acceptance is not a claim these additions have been implemented or visually accepted. [Current Plan](../../Current_Plan.md) owns status.
 
 Neon Lake Basin replaces the flat Shockwave Grid picture. The stable mode ID and settings prefix remain
@@ -645,6 +652,45 @@ cooler sky/horizon, smaller halo (1.1) and rays (0.45), stronger and softer wisp
 unchanged: P1 293.6 -> 293.5 cf at 1300x750, 192.2 -> 191.7 at 2560x1440; P3 323.1 -> 322.5, 219.8 -> 220.3).
 Per-frame calls unchanged (353 GL). Motion (4 s from 30 s, 60 fps): Preset 1 1.30 -> 1.095 /255, Preset 3 0.28 ->
 0.232. Evidence `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/`.
+
+**Seventh pass (2026-11-06; the high-react look on real music, the skyline sheet).** Music vs response
+(`tools/visualizer_replay/neon_lake_music_response.py`: the shared `music` step, then the lake's mean light, its
+line-mesh contrast, the island and the shore per rendered frame over the song's own envelope):
+- *Why loud music did not reach it.* Every continuous lake term (the ripple network, shore line and glow, contour
+  energy, the ridges' breath) reads the display bars, post-AGC and Height Scale shaped: the midband sat at >= 0.95
+  for 72-75% of every song (p50 0.98) and only moved in breaks, so loud and usual passages drew the same lake
+  (Preset 1, 1985_loud1: lake light p5-p95 62.6-69.8 /255; loud vs quiet quartile line contrast 4.99 vs 4.82). The
+  only fixed-scale drive, the waves, lit just the lines a crest crossed. And 1985_loud1 is the quietest capture on
+  the fixed scale (PCM RMS p50 -22 dBFS against -16..-19 for the others, bus loudness p50 6.4 against 8.0-10.3), so
+  its waves are the weakest (strength p50 0.31 against 0.72-0.96): the fixed scale rightly reacts less to it, but it
+  must still visibly react.
+- **Water Reaction** (Waves, 0..1, default 0, no work at 0): the music drive is read from the admitted waves
+  themselves (`shockwave_music_drive`), whose strengths already carry the fixed scale (passage share, musical weight
+  and emphasis): their summed strength over the last ~3 s on a compressive fixed scale (each wave eases in over
+  0.25 s and out before the ring can drop it), swung 40% by the newest waves' light (rise 0.08 s, settle 0.35 s).
+  On six recordings its p50 runs 0.29 (1985_loud1) to 0.71, p95 <= 0.84, never above 0.9, at most 0.045 a 60 Hz
+  frame. It drives a glowing net of two crossing, warped ripple families over the water (the ripple colour leaning a
+  third to the crest colour, the crest colour, whitening where they cross; convex in the drive, so quiet passages
+  stay faint), a slight lift of the water body, the shoreline, shore glow, shore rings and the Sun/Moon path, and
+  the ridges breathe with it instead of the pinned midband (exactly the midband at 0). Result on Preset 1: lake light
+  p5-p95 71.9-99.0 on 1985_loud1 (range x4), 82.7-118.4 on anything_mixed2, 54.4-120.6 on nightsolong; at rest
+  (one weak wave) the lake's p35 is [24,34,68] against the mock's [17,28,69] (was [27,35,71]: the near ridge
+  bloomed at its loud strength in every passage). Contracts: `tests/test_neon_water_reaction.py`.
+- *Skyline sheet* (Depth Scale 1, thickness 3, grazing over dunes): the lifted copy is pushed behind the depth its
+  own face reaches over the lift wherever the face climbs on past the lift (three quarters of a cell ahead, away
+  from the eye); crests within the lift keep their copy in front of the land beyond. The test's ridge band falls from
+  95 px to 26; `tests/test_neon_ridge_shape.py` now covers that corner. It also trims near ridges seen grazing in
+  Presets 1, 3 and 4 (239 px changed in Preset 4).
+- *Far-shore sawtooth*: not the skyline (per-fragment bank classification there changed nothing) but the shoreline
+  line itself (crest alpha 0 removes it, Shore Glow 0 does not); a grazing-derivative fade did not remove it either.
+  Still open, see `Current_Plan.md`.
+Presets: Water Reaction 1.0 on Presets 1 and 2, 0.25 on Preset 3 (its mock's high-react lake is lit swells, not a
+net) with Water Detail 0.06 -> 0.03, so its motion stays at pass 6's (0.231 against 0.232 /255 on heavy1); Presets 4
+and 5 at 0 (pixel-identical apart from the skyline fix). GPU (RTX 4090, PairedBench, pass 6 and pass 7 alternated in one session, control-relative): P1 291.5 -> 294.2 cf
+at 1300x750, 188.6 -> 191.2 at 2560x1440; P3 318.5 -> 325.8, 220.1 -> 220.5; CPU thread unchanged (1.49 / 1.46 ms).
+Overhead baseline against 90f65ee9 (visualizers): only Neon Lake moves (+1 GL call, the uniform; +51 Python calls,
+the drive); Extruded Bubble's +51 Python calls come from main's EB work, every other mode unchanged. Evidence
+`.artifacts/evidence/neon_lake/fidelity_20261106/pass7/`.
 
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 

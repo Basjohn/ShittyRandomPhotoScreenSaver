@@ -174,6 +174,13 @@ class LatestStateMailbox:
         self._frame_trace = current_frame_trace()
         self._trace_screen_index = -1
 
+    def detach_frame_trace(self) -> None:
+        """Record nothing into the process-wide ``--frame-trace`` sink. For an offline controller (a Studio
+        preview's replay): its publications are not presentation events, and replaying thousands of steps would
+        flood the live trace with records that never reached a display."""
+
+        self._frame_trace = None
+
     def publish(
         self,
         state: Any,

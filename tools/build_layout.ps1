@@ -853,7 +853,10 @@ function Get-SRPSSQuickPayloadRelativePaths {
         'VisualizerPresentation.qml',
         'WidgetInteractionGlow.qml',
         'WidgetHoverEditGlyphs.qml',
-        'shaders\widget_glow.frag.qsb'
+        'MaterialSurface.qml',
+        'shaders\widget_glow.frag.qsb',
+        'shaders\surface_material.vert.qsb',
+        'shaders\surface_material.frag.qsb'
     )
     foreach ($relativePath in $requiredRelativePaths) {
         if (-not (Test-Path -LiteralPath (Join-Path $qmlSource $relativePath) -PathType Leaf)) {
@@ -898,7 +901,10 @@ function Assert-SRPSSSourceProductAssets {
         'rendering\quick\qml\VisualizerPresentation.qml',
         'rendering\quick\qml\WidgetInteractionGlow.qml',
         'rendering\quick\qml\WidgetHoverEditGlyphs.qml',
-        'rendering\quick\qml\shaders\widget_glow.frag.qsb'
+        'rendering\quick\qml\MaterialSurface.qml',
+        'rendering\quick\qml\shaders\widget_glow.frag.qsb',
+        'rendering\quick\qml\shaders\surface_material.vert.qsb',
+        'rendering\quick\qml\shaders\surface_material.frag.qsb'
     )
     foreach ($relativePath in $requiredFiles) {
         $candidate = Join-Path $RepoRoot $relativePath

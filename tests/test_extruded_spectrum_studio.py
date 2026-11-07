@@ -154,6 +154,17 @@ def _clip_evaluator(clip, loader=None, values=None, data=None, *, mirror=False):
     return evaluator
 
 
+def _loudest_instant(data) -> float:
+    """The fixture time a quarter second after the clip's loudest recorded tick: the clip's content decides where a
+    falling peak (a ghost) is on screen, so a test of ghosts looks there, not at a fixed fraction of the clip."""
+    from ui.studio.replay_engine import decode_answer
+    levels = []
+    for step in data["steps"]:
+        bars = decode_answer(step["answers"].get("get_smoothed_bars", {"list": []})) or [0.0]
+        levels.append((sum(bars) / len(bars), step["now_ts"] - data["origin"]))
+    return min(float(data["duration"]), max(levels)[1] + 0.25)
+
+
 # ------------------------------------------------------------------------------------- schema
 def _vector_elements() -> set[tuple]:
     """Every element of a vector value Settings edits: the shared colours' alphas, every shape-node slot (both
@@ -865,7 +876,7 @@ def test_rainbow_ghost_colours_only_the_ghost_columns(qt_app, dialog_tab, no_gl_
             values[PREFIX + "ghosting_enabled"] = ghosting
             values[PREFIX + "rainbow_ghost"] = rainbow
             evaluator = _clip_evaluator(clip, values=values)
-            frames[(ghosting, rainbow)] = evaluator.evaluate(evaluator.fixture.duration * 0.8, values)
+            frames[(ghosting, rainbow)] = evaluator.evaluate(_loudest_instant(recorded(clip.description, values)), values)
             evaluator.release()
     images = _snapshots(surface, {repr(k): f for k, f in frames.items()}, controller.presented_extent())
     on, off = images[repr((True, True))], images[repr((True, False))]

@@ -260,6 +260,13 @@ class _HiddenQuickScene:
         self.surface.setFormat(self.context.format())
         self.surface.create()
         self.control = QQuickRenderControl()
+        # The render control's RHI keeps a raw pointer to this imported context and makes it
+        # current again in its destructor, so the context (and its offscreen surface) must
+        # outlive the control on every path: Qt children of the control, never independent
+        # Python owners (R-172; here R-173: freed first when the scene object was dropped,
+        # the control's later deletion corrupted the heap for the next test).
+        self.context.setParent(self.control)
+        self.surface.setParent(self.control)
         self.window = QQuickWindow(self.control)
         self.window.resize(width, height)
         self.window.setColor("transparent")
@@ -341,6 +348,20 @@ class _HiddenQuickScene:
         return _straight_alpha(numpy.flipud(pixels))
 
     def close(self) -> None:
+        """Tear the scene down completely before returning, in production's order: the
+        scene graph first (render nodes release their GL with the context current), then the
+        QML objects, the window, and the render control (which takes its GL context and
+        offscreen surface, its Qt children).
+
+        ``deleteLater`` alone is not enough here: outside a running event loop
+        ``processEvents`` does not deliver deferred deletions, so every object used to
+        outlive this call and die later in whatever order Python dropped them, the context
+        first (R-173).
+        """
+        from PySide6.QtCore import QCoreApplication, QEvent
+
+        self._make_current()
+        self.control.invalidate()      # sceneGraphInvalidated: nodes release GL here
         self.host.retire_all()
         self.root.setParentItem(None)
         self.root.deleteLater()
@@ -348,12 +369,12 @@ class _HiddenQuickScene:
         self.app.processEvents()
         self._make_current()
         self._gl.glDeleteTextures([self.texture])
-        self.control.invalidate()
         self.window.deleteLater()
         self.control.deleteLater()
         self.owner.deleteLater()
-        self.context.doneCurrent()
-        self.surface.destroy()
+        # Deferred deletions run in posting order: root, context, window, control (with the
+        # GL context and surface), owner.
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.app.processEvents()
 
 
