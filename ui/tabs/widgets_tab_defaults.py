@@ -26,6 +26,12 @@ from core.settings.shadow_direction import (
     resolve_shadow_direction,
 )
 from core.settings.widget_family_catalog import WIDGET_FAMILY_DESCRIPTORS
+from core.settings.default_contract import (
+    CARD_BORDER_WIDTH_MAX_PX,
+    CARD_BORDER_WIDTH_MIN_PX,
+    admit_card_border_width_setting_px,
+    resolve_card_border_width_setting_px,
+)
 
 from core.cache_maintenance import (
     CacheClearResult,
@@ -907,7 +913,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         wrap=False,
     )
     tab.card_border_width_spin = QSpinBox()
-    tab.card_border_width_spin.setRange(0, 12)
+    tab.card_border_width_spin.setRange(CARD_BORDER_WIDTH_MIN_PX, CARD_BORDER_WIDTH_MAX_PX)
     tab.card_border_width_spin.setToolTip(
         "Global card geometry override. This changes border width without editing or forking the selected Widget Theme."
     )
@@ -1087,8 +1093,7 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
         )
 
     global_cfg = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
-    border_width = tab._config_int("global", global_cfg, "card_border_width_px")
-    border_width = max(0, min(12, border_width))
+    border_width = resolve_card_border_width_setting_px(widgets_config)
     stacking_enabled = tab._config_bool("global", global_cfg, "stacking_enabled")
     child_collision_enabled = tab._config_bool(
         "global", global_cfg, "child_collision_enabled"
@@ -1156,7 +1161,7 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
 
     border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px"))
     global_config = {
-        "card_border_width_px": int(border_width),
+        "card_border_width_px": admit_card_border_width_setting_px(border_width),
         "child_collision_enabled": (
             tab.widget_child_collision_enabled.isChecked()
             if hasattr(tab, "widget_child_collision_enabled")

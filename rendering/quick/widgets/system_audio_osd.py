@@ -15,7 +15,10 @@ from PySide6.QtCore import QObject, Property, QTimer, Signal
 from PySide6.QtGui import QColor
 
 from core.media.system_audio_osd_policy import SystemAudioOSDPolicy
-from core.settings.default_contract import require_canonical_default
+from core.settings.default_contract import (
+    require_canonical_default,
+    resolve_card_border_width_px,
+)
 from ui.widget_theme_active import get_active_widget_theme
 from .theme_projection import (
     configured_rgba_override, resolve_card_surface_colors,
@@ -94,21 +97,7 @@ class SystemAudioOSDConfig:
                 current, _DEFAULTS, "track_color", color("track_color")
             ),
         )
-        global_values = widgets.get("global", {}) if isinstance(widgets, Mapping) else {}
-        if not isinstance(global_values, Mapping):
-            global_values = {}
-        canonical_border_width = float(
-            require_canonical_default("widgets.global.card_border_width_px")
-        )
-        try:
-            card_border_width = float(
-                global_values.get("card_border_width_px", canonical_border_width)
-            )
-        except (TypeError, ValueError):
-            card_border_width = canonical_border_width
-        if not isfinite(card_border_width):
-            card_border_width = canonical_border_width
-        card_border_width = max(0.0, min(12.0, card_border_width))
+        card_border_width = resolve_card_border_width_px(widgets)
         return cls(
             preferred_width=get_number("preferred_width", 180.0, 900.0),
             preferred_height=get_number("preferred_height", 48.0, 220.0),

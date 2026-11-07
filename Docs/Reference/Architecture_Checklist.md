@@ -22,38 +22,10 @@ appendix.
 These are the audit's readiness blockers (A-03, A-02, A-01). The SMP plan and the Expanded Visualizer plan
 list them as prerequisite phases with the milestone each must precede. Order here is by effort and by when each is
 first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-14) landed on 7 Nov; its contract is in
-`Docs/Architecture/Settings_Bucket_Persistence_Contract.md` ("Tabs and pills: one registry").
-
-- [ ] **AC-02 The Visualizer gets a host-neutral binding; Media docking becomes a declared placement policy** (A-02).
-  Severity high, reward high, effort L. **Confirmed.** Lands before Expanded Visualizer M2 (the takeover transaction
-  binds to this owner) and before SMP M7 (dock / Pop Out hosts).
-  - **Boundary:** `engine/display_manager.py` (5952 lines). The single owner is built in
-    `_construct_quick_visualizer_owner_on` (`:3245-3560`; the one construction site `:3389`; a second is rejected at
-    `:3258-3263`), which also wires double-click/middle-click admissions and the volume wheel (`:3529-3550`), and
-    resolves the card style itself (`:3355-3386`). Ordinary placement docks to Media through
-    `_resolve_quick_visualizer_base_authored_origin` / `_resolve_quick_visualizer_authored_layout` (`:3038-3110`),
-    the Media-geometry observer (`:3222-3242`) and `rendering/visualizer_media_adjacency.py`. Arrange resolves the
-    Visualizer on its own path too (`ui/onboarding/arrange_model.py::_visualizer_outer_size`). Ordinary widgets go
-    through `WidgetRuntimeManager` / `family_binder`; the Visualizer does not, although it is a catalog member
-    (`core/settings/widget_family_catalog.py:96`).
-  - **Fix:** extract `widgets/spotify_visualizer/visualizer_host_binding.py` (name illustrative) owning construct,
-    bind, transfer, retire, input admissions and authored layout for one host unit; `DisplayManager` keeps only the
-    "which unit" decision and calls the binding. Express Media docking as one placement policy in the canonical
-    layout descriptor vocabulary (`docked_to: media | none`), resolved by the binding and read by Arrange through the
-    same function, so both layout authorities become one. Keep the one-owner rejection at the binding boundary. The
-    card style comes from the family binder's resolver (AC-09).
-  - **Must stay true:** exactly one Visualizer owner per process across construct → transfer → retire
-    (`Spec.md` → Visualizer display routing); CUSTOM authority (committed geometry wins outside Edit, override wins
-    while editing); the admissions cleared on route release (`display_manager.py:2215-2217, 3838-3840`); the
-    transactional cross-display transfer (`_transfer_quick_visualizer_unit`); the Edit/Arrange parity harness maps
-    (`tests/test_arrange_saver_geometry_parity.py`) identical; the operator-protected QSG/clip optimisations
-    untouched.
-  - **Regression bar:** one owner across construct → transfer → retire with today's unit and a stub second host;
-    moving Media leaves a Visualizer with `docked_to: none` in place and moves one with `docked_to: media`; the
-    parity harness maps are byte-identical before and after; `DisplayManager` no longer imports
-    `QuickDisplayVisualizerOwner`.
-  - **Depends on:** AC-09 (border width resolver) is a convenient first step. **Unblocks:** Expanded Visualizer M2,
-    SMP docked Visualizer and Pop Out, the Expanded Media milestone.
+`Docs/Architecture/Settings_Bucket_Persistence_Contract.md` ("Tabs and pills: one registry"). AC-02 (the host-neutral
+Visualizer binding with Media docking as the declared `docked_to` placement policy, A-02) and AC-09 (one card border
+width resolver, A-09) landed on 7 Nov; their contracts are in `Spec.md` ("Visualizer display routing", "Geometry /
+CUSTOM", "Runtime Widget Themes") and the Visualizer change checklist §9A.
 
 - [ ] **AC-03 An application-service tier above display generations** (A-01). Severity high (for SMP), reward high,
   effort L. **Confirmed:** `engine/engine_handlers.py:355` `engine.stop(exit_app=False, reason="settings")` owns the
@@ -117,17 +89,6 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
     clip-smoke fixtures; production never re-tuned to satisfy a pixel oracle.
   - **Regression bar:** a test records the sequence of `glGet*` names in `capture()` before and after (identical);
     the bench's node-path GL and Python call counts appear in the baseline JSON and do not rise.
-
-- [ ] **AC-09 Card border width resolved once** (A-09). Severity low, reward low, effort S. **Confirmed:** the clamp
-  lives in `rendering/quick/widgets/family_binder.py:84-96` and is re-implemented in `engine/display_manager.py:3363-3370`,
-  `rendering/quick/widgets/games_you_follow.py:202-203`, `rendering/quick/widgets/system_audio_osd.py:98-111`, while
-  `rendering/widget_descriptors.py:3048` declares the key `"int"`.
-  - **Fix:** export `resolve_card_border_width_px(widgets_config) -> float` from the defaults-helper module the
-    family binder already imports, call it from all four consumers, and correct the descriptor type to the admitted
-    one (float if fractional widths are admitted, else clamp to int everywhere).
-  - **Regression bar:** a parametrised test feeds NaN, inf, -1, 12.5, "x" and a missing key to every consumer path
-    and gets the same value from each.
-  - **Depends on:** nothing; a convenient first step of AC-02.
 
 - [ ] **AC-10 The Visualizer owner's mode-transition deadline joins the single-shot registry** (A-19). Severity low,
   reward low, effort S. **Confirmed:** `widgets/spotify_visualizer/quick_display_visualizer_owner.py:1010-1013` uses
@@ -237,7 +198,6 @@ into them.
     alternative is linking the 15 material themes and labelling "[Glass]" as window-only.
 
 Addenda from the same audit:
-- **AC-09:** the Studio's `card_style` and the General page's integer spin also restate the border clamp.
 - **AC-07:** AC-19 (landed) reuses the dialog's reset/import reload edge, never a store subscription.
 
 ---

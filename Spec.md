@@ -201,7 +201,7 @@ Settings. Product and ownership details: `Docs/Reference/Guided_Setup.md`.
 
 ## Runtime Widget Themes / semantic visuals
 
-Runtime Widget Themes (`.srwtheme`) are separate from the Settings QWidget theme. They are **colour/semantic bundles only**. `Widgets -> General -> Style Overrides` contains Card Surface, Card Border, Header Fill and Card Border Width: the three colour edits fork a named Widget Theme into persisted `Custom`, while Border Width remains global geometry styling outside Widget Theme schema. Branded-header family colour swatches are retired; header Fill/Text/Border resolve through Widget Theme semantics instead of a Media/Gmail/Reddit/Steam Settings bucket. Existing non-header per-family colour swatches remain higher-precedence only when intentionally authored. `Reset All Colours to Theme` is an explicit operator normalization/cleanup action that normalizes ordinary Clock/Weather/Reddit/Gmail/Media/Steam family colour fields (and card alpha fields that make a colour explicit) back to canonical implicit-Inherit values; it never runs at startup and never changes the selected Widget Theme/Custom palette. Specialized optional visual roles are sparse and inherit through one resolver (`intentional family override -> exact role -> semantic parent -> local/current semantic value -> preserved fallback`); `local.*` roles are presentation context and never persistence. Visualizer-authored colours remain outside this generic reset/theme authority. The retained Context Menu has no family override and consumes the generation-scoped Widget Theme palette directly.
+Runtime Widget Themes (`.srwtheme`) are separate from the Settings QWidget theme. They are **colour/semantic bundles only**. `Widgets -> General -> Style Overrides` contains Card Surface, Card Border, Header Fill and Card Border Width: the three colour edits fork a named Widget Theme into persisted `Custom`, while Border Width remains global geometry styling outside Widget Theme schema. One resolver admits the stored width for every card (ordinary families, the Visualizer card, the Studio's live card chrome): `core/settings/default_contract.py::resolve_card_border_width_px` clamps a finite number to 0-12 px and draws a fraction as stored; anything else (missing, non-numeric, NaN, infinite) is the canonical default. The General page's integer spin shows and saves whole pixels through the same module (`resolve_card_border_width_setting_px`, the drawn width truncated); no consumer restates the clamp. Branded-header family colour swatches are retired; header Fill/Text/Border resolve through Widget Theme semantics instead of a Media/Gmail/Reddit/Steam Settings bucket. Existing non-header per-family colour swatches remain higher-precedence only when intentionally authored. `Reset All Colours to Theme` is an explicit operator normalization/cleanup action that normalizes ordinary Clock/Weather/Reddit/Gmail/Media/Steam family colour fields (and card alpha fields that make a colour explicit) back to canonical implicit-Inherit values; it never runs at startup and never changes the selected Widget Theme/Custom palette. Specialized optional visual roles are sparse and inherit through one resolver (`intentional family override -> exact role -> semantic parent -> local/current semantic value -> preserved fallback`); `local.*` roles are presentation context and never persistence. Visualizer-authored colours remain outside this generic reset/theme authority. The retained Context Menu has no family override and consumes the generation-scoped Widget Theme palette directly.
 
 Settings-theme <-> Widget-theme linking is one persisted **bidirectional** stable-ID relationship. The same compact lock/unlock control appears on both theme catalogue pages. While locked, selecting either catalogue activates and persists the explicit paired theme on the other side; selection must never implicitly unlock. A theme without an available counterpart (including Widget `Custom`) requires Independent mode first. Display names are never a pairing authority. Theme Foundry may explicitly save a linked Widget counterpart only through the same deterministic Settings->Widget projection authority used by the curated mirror generator; the Settings theme must have a real stable catalogue identity first. Clock is semantic through shared `card.text` when its family swatch remains canonical. Abandonment Issues' archive/BACKLOG accent is the specialized `abandonment_issues.accent -> widget.accent` role; the block consumes that accent while its label consumes ordinary themed text for contrast.
 
@@ -663,6 +663,14 @@ inheriting a newer runtime override. Number-key slot **load** then performs the 
 visible state becomes runtime truth. Ordinary live Edit Save, including a successfully transferred cross-display Visualizer,
 is not a slot-load boundary and must not gain teardown/reinit from this rule.
 
+Media docking is a declared placement policy in the layout descriptor vocabulary:
+`WidgetRuntimeDescriptor.docked_to` is `media` (the Visualizer) or `none` (every other widget). While authored placement
+applies, a `media`-docked Visualizer sits beside Media's unstacked card and follows it when Media moves, with both
+reserved as stacking obstacles and Media held fixed; `none`, global CUSTOM and live Edit resolve undocked, on Media's
+plain authored slot, and moving Media leaves it in place. The saver's binding and Settings Arrange resolve it through
+one function (`rendering/visualizer_placement.py::resolve_visualizer_authored_placement`), so the canvas shows the
+Visualizer exactly where the saver puts it.
+
 CUSTOM is a **global layout mode**. If any effective widget route is `Custom`, ordinary authored stacking and the
 non-CUSTOM Media/Visualizer adjacency projection are disabled for the entire retained layout, not selectively per
 widget. The same subsystem switch is asserted before live Edit Layout captures geometry and before number-key layout
@@ -885,8 +893,16 @@ own persisted position, monitor and geometry are authoritative and may place it 
 Media. A live `QuickDisplayUnit` participates when it is not retired and has no display-binding loss; Media presence on
 that unit is not an admission condition. Numbered widget routes bind to physical display identity; Windows renumbering
 does not reassign them. An unavailable assignment suppresses its widgets until that display returns or the user explicitly
-changes the route. Saved CUSTOM geometry is retained on its original display. `DisplayManager` admits at most one
-Visualizer owner, with no delayed relocation; ALL continues to select its first participating display. Playback truth is
+changes the route. Saved CUSTOM geometry is retained on its original display. `DisplayManager` decides which unit
+hosts the Visualizer, with no delayed relocation; ALL continues to select its first participating display.
+Everything that binds the one owner to a host unit lives in one host-neutral binding,
+`widgets/spotify_visualizer/visualizer_host_binding.py`: construction (the only construction site, and the
+rejection of a second owner), bind/start, committed-CUSTOM hydration, authored placement and Media docking, the
+double-click / middle-click / wheel input admissions, the transactional cross-host transfer, route release (which
+clears the admissions) and Edit retirement. A host is any unit with the display-unit surface the binding names; the
+caller keeps only the admitted (owner, unit) record and reaches the binding through `VisualizerHostServices`, whose
+callables hold it weakly. `DisplayManager` never imports or builds the owner; a future host (Expanded Visualizer,
+SMP dock or Pop Out) binds through the same binding and never adds a second construction site. Playback truth is
 bound from the already-admitted effective Media presentation model across the active display set; a CUSTOM Visualizer on
 another display must not require or construct a duplicate Media presentation on its own unit.
 

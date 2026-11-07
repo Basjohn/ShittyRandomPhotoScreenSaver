@@ -48,21 +48,24 @@ def test_global_disable_detaches_adjacency_observer_and_obstacles() -> None:
     source = _function_source("engine/display_manager.py", "_set_quick_authored_layout_enabled")
     assert "set_layout_observer(None)" in source
     assert "set_external_stack_obstacles(None, reflow=False)" in source
-    assert "_project_quick_visualizer_base_authored_origin()" in source
+    assert "_visualizer_host_binding(self).project_base_authored_origin()" in source
 
 
 def test_visualizer_adjacency_requires_global_authored_layout_admission() -> None:
-    source = _function_source("engine/display_manager.py", "_resolve_quick_visualizer_authored_layout")
-    assert "not chosen.presenter.authored_layout_enabled" in source
-    assert "is_global_custom_layout_mode_selected(widgets)" in source
+    binding = _function_source("widgets/spotify_visualizer/visualizer_host_binding.py", "resolve_placement")
+    assert "chosen.presenter.authored_layout_enabled" in binding
+    placement = _function_source("rendering/visualizer_placement.py", "resolve_visualizer_authored_placement")
+    assert "is_global_custom_layout_mode_selected(" in placement
+    assert "declared_visualizer_docked_to() if authored else DOCKED_TO_NONE" in placement
 
 
 def test_global_custom_visualizer_uses_plain_authored_anchor_not_zero_origin() -> None:
-    source = _function_source("engine/display_manager.py", "_construct_quick_visualizer_owner_on")
-    adjacency_at = source.index("_resolve_quick_visualizer_authored_layout")
-    base_at = source.index("_resolve_quick_visualizer_base_authored_origin")
-    assert adjacency_at < base_at
-    assert "owner.set_authored_outer_origin(base_origin[0], base_origin[1])" in source
+    source = _function_source("widgets/spotify_visualizer/visualizer_host_binding.py", "construct")
+    resolve_at = source.index("self.resolve_placement(chosen, owner)")
+    origin_at = source.index("owner.set_authored_outer_origin(placement.x, placement.y)")
+    assert resolve_at < origin_at < source.index("owner.start()")
+    placement = _function_source("rendering/visualizer_placement.py", "resolve_visualizer_authored_placement")
+    assert 'resolve_overlay_geometry_policy("media", widgets_config)' in placement
 
 
 # --- Behavioural: number-key slot save/load commit-once (current owner) ------ #

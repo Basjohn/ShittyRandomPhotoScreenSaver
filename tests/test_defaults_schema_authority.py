@@ -471,7 +471,7 @@ def test_visualizer_runtime_config_has_canonical_replacement_not_empty_holes() -
 def test_resolved_runtime_consumers_do_not_rebuild_product_defaults() -> None:
     """Active settings reach strict runtime consumers; local product baselines do not."""
 
-    display_manager = _text("engine/display_manager.py")
+    visualizer_binding = _text("widgets/spotify_visualizer/visualizer_host_binding.py")
     presentation = _text("widgets/spotify_visualizer/presentation_geometry.py")
     scene = _text("rendering/quick/scene_controller.py")
     devcurve_frame = _text("widgets/spotify_visualizer/devcurve_frame_runtime.py")
@@ -483,9 +483,9 @@ def test_resolved_runtime_consumers_do_not_rebuild_product_defaults() -> None:
     # Visualizer card Settings are repaired against canonical Widgets state at
     # admission, then supplied as one complete presentation payload. Resize/QML
     # consumers do not maintain another colour/shadow/border default table.
-    assert 'canonical_global = get_default_setting("widgets.global")' in display_manager
-    assert 'QuickShadowSnapshot.from_mapping(self._shadow_values_snapshot)' in display_manager
-    assert "technical_config=resolve_technical_config(technical_cache, mode)" in display_manager
+    assert '"border_width": resolve_card_border_width_px(widgets)' in visualizer_binding
+    assert 'QuickShadowSnapshot.from_mapping(shadow_values)' in visualizer_binding
+    assert "technical_config=resolve_technical_config(technical_cache, mode)" in visualizer_binding
     assert "_DEFAULT_BACKGROUND_COLOR" not in presentation
     assert "_DEFAULT_BORDER_COLOR" not in presentation
     assert "_DEFAULT_SHADOW_COLOR" not in presentation

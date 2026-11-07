@@ -403,19 +403,11 @@ class VisualizerSettingsStore:
     def card_style(self) -> dict | None:
         """The live card chrome production presents with (the display manager's card border rule)."""
         try:
-            import math
-            from core.settings.default_contract import require_canonical_default
+            from core.settings.default_contract import resolve_card_border_width_px
             from widgets.spotify_visualizer.presentation_geometry import VISUALIZER_CARD_CONTENT_INSET
-            canonical = float(require_canonical_default("widgets.global.card_border_width_px"))
             widgets = self._tab._settings.get("widgets")
-            stored = (widgets.get("global") or {}).get("card_border_width_px") if isinstance(widgets, dict) else None
-            try:
-                border = float(stored) if stored is not None else canonical
-            except (TypeError, ValueError):
-                border = canonical
-            if not math.isfinite(border):
-                border = canonical
-            return {"border_width": max(0.0, min(12.0, border)), "content_inset": VISUALIZER_CARD_CONTENT_INSET}
+            return {"border_width": resolve_card_border_width_px(widgets),
+                    "content_inset": VISUALIZER_CARD_CONTENT_INSET}
         except Exception:
             logger.debug("[STUDIO] No live card style", exc_info=True)
             return None

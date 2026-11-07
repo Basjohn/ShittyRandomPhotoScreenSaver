@@ -3,7 +3,6 @@ Display manager for multi-monitor support.
 
 Owns one authoritative Quick display unit for each selected screen.
 """
-import math
 import random
 import weakref
 from copy import deepcopy
@@ -104,6 +103,102 @@ class _IdleTransitionWarmReporter(QObject):
     """Qt-queued result ferry from a NoStage render job to its GUI owner."""
 
     finished = Signal(int, bool)
+
+
+
+def _visualizer_host_binding(manager: Any) -> "VisualizerHostBinding":
+    """The Visualizer host binding over this manager's "which unit" record.
+
+    Every service reaches the manager through a weak reference: the binding's
+    Media-docking observer lives on a display presenter and must never keep a
+    retired manager alive.
+    """
+
+    from widgets.spotify_visualizer.visualizer_host_binding import (
+        VisualizerHostBinding,
+        VisualizerHostServices,
+    )
+
+    manager_ref = weakref.ref(manager)
+
+    def _live() -> Any:
+        live = manager_ref()
+        if live is None:
+            raise RuntimeError("visualizer host binding outlived its display manager")
+        return live
+
+    def _record_admission(owner: Any, unit: Any) -> None:
+        live = _live()
+        live._quick_visualizer_owner = owner
+        live._quick_visualizer_unit = unit
+
+    def _record_unit(unit: Any) -> None:
+        _live()._quick_visualizer_unit = unit
+
+    def _caller_retired() -> bool:
+        live = manager_ref()
+        return live is None or bool(live._retired)
+
+    def _edit_layout_profile_activator(target: str) -> bool:
+        layout = _live()._quick_custom_layout_owner
+        return not layout.is_editing or layout.activate_edit_visualizer_profile(target)
+
+    def _release_view_state() -> None:
+        live = _live()
+        live._persist_quick_visualizer_view()
+        live._quick_scene_view_gesture = None
+        live._quick_view_pose_owner = None
+
+    # Input admissions live on a scene controller: a late click after the
+    # manager is gone is ignored, never raised into Qt's event handler.
+    def _cycle_mode() -> None:
+        live = manager_ref()
+        if live is not None:
+            live._cycle_quick_visualizer_mode()
+
+    def _cycle_preset() -> None:
+        live = manager_ref()
+        if live is not None:
+            live._cycle_quick_visualizer_preset()
+
+    def _volume_step(direction: int) -> bool:
+        live = manager_ref()
+        return False if live is None else bool(
+            live._request_quick_app_volume_step_from_visualizer(direction)
+        )
+
+    return VisualizerHostBinding(VisualizerHostServices(
+        admitted_owner=lambda: _live()._quick_visualizer_owner,
+        admitted_unit=lambda: _live()._quick_visualizer_unit,
+        record_admission=_record_admission,
+        record_unit=_record_unit,
+        live_units=lambda: _live().displays,
+        caller_retired=_caller_retired,
+        widgets_config=lambda: _live()._widgets_config_snapshot,
+        shadow_values=lambda: _live()._shadow_values_snapshot,
+        thread_manager=lambda: _live()._thread_manager,
+        process_supervisor=lambda: _live()._process_supervisor,
+        display_power_on=lambda: _live()._display_power_on,
+        set_construct_outcome=lambda *args: _live()._set_quick_visualizer_construct_outcome(*args),
+        committed_layout_profile_resolver=lambda target: (
+            _live()._resolve_quick_visualizer_layout_profile(target)
+        ),
+        edit_layout_profile_activator=_edit_layout_profile_activator,
+        transition_failure=lambda _reason: _live()._request_custom_layout_runtime_reload(
+            "visualizer_activation_failed"
+        ),
+        presentation_kwargs=lambda model, mode: _live()._visualizer_presentation_kwargs(model, mode),
+        media_model_for=lambda unit: _live()._resolve_quick_visualizer_media_model(unit),
+        bind_media=lambda model: _live()._bind_quick_visualizer_media(model),
+        disconnect_media=lambda: _live()._disconnect_quick_visualizer_media_route(),
+        publish_view_orbit_admission=lambda: _live()._publish_quick_view_orbit_admission(),
+        release_view_state=_release_view_state,
+        cycle_mode=_cycle_mode,
+        cycle_preset=_cycle_preset,
+        volume_step=_volume_step,
+        refresh_context_menus=lambda: _live()._refresh_all_quick_context_menus(),
+        refresh_transfer_glyphs=lambda: _live()._refresh_quick_visualizer_transfer_glyphs(),
+    ))
 
 
 class DisplayManager(QObject):
@@ -2201,30 +2296,11 @@ class DisplayManager(QObject):
             return False
         if bool(enabled):
             return self._quick_visualizer_owner is not None
-        host = self._quick_visualizer_unit
-        owner = self._quick_visualizer_owner
-        if owner is None or host is None:
+        retired = _visualizer_host_binding(self).retire()
+        if retired is None:
             return True
-        self._disconnect_quick_visualizer_media_route()
-        host.presenter.set_layout_observer(None)
-        host.presenter.set_external_stack_obstacles(None)
-        scene = host.runtime.scene_controller
-        scene.set_visualizer_double_click_admission(None)
-        scene.set_visualizer_middle_click_admission(None)
-        scene.set_visualizer_volume_wheel_handler(None)
-        try:
-            if not owner.is_retired:
-                owner.retire()
-        except Exception:
-            logger.warning("[SPOTIFY_VIS] Visualizer retirement failed", exc_info=True)
+        if not retired:
             return False
-        if not owner.is_retired:
-            logger.warning("[SPOTIFY_VIS] Visualizer retirement unconfirmed; retaining ownership")
-            return False
-        host.detach_visualizer_owner(owner)
-        self._release_quick_visualizer_routes(host)
-        scene.discard_unowned_visualizer_admission()
-        self._refresh_all_quick_context_menus()
         return self._quick_visualizer_owner is None
 
     def _request_custom_layout_runtime_reload(self, request_kind: str) -> None:
@@ -2275,14 +2351,14 @@ class DisplayManager(QObject):
             # Edit instead freezes the currently visible placement before the
             # session captures it; detaching adjacency must not move the card.
             if restore_base:
-                self._project_quick_visualizer_base_authored_origin()
+                _visualizer_host_binding(self).project_base_authored_origin()
             return
 
         owner = self._quick_visualizer_owner
         chosen = self._quick_visualizer_unit
         if owner is None or chosen is None or chosen.is_retired:
             return
-        if not self._install_quick_visualizer_authored_layout(
+        if not _visualizer_host_binding(self).install_authored_layout(
             chosen,
             owner,
             install_observer=True,
@@ -3032,539 +3108,17 @@ class DisplayManager(QObject):
             raise
         return _finish(admitted, chosen=chosen)
 
-    def _resolve_quick_visualizer_base_authored_origin(
-        self,
-        chosen: QuickDisplayUnit,
-        owner: Any,
-    ) -> tuple[float, float] | None:
-        """Resolve the Visualizer's plain authored anchor without adjacency.
-
-        This is the CUSTOM-safe baseline: the Visualizer still follows Media's
-        effective authored position/monitor route, but no stacking or
-        Media-relative displacement is applied. A committed Visualizer CUSTOM
-        rect remains authoritative inside the owner and rejects this projection.
-        """
-
-        bounds = chosen.display_bounds()
-        try:
-            vis_width, vis_height = owner.resolved_outer_size()
-        except Exception:
-            logger.warning(
-                "[SPOTIFY_VIS] Failed to resolve base authored visualizer size",
-                exc_info=True,
-            )
-            return None
-        vis_width = max(1.0, min(float(vis_width), float(bounds.width)))
-        vis_height = max(1.0, min(float(vis_height), float(bounds.height)))
-
-        from rendering.quick.widgets.geometry_resolver import (
-            resolve_overlay_geometry_policy,
-        )
-
-        base = resolve_overlay_geometry_policy(
-            "media",
-            self._widgets_config_snapshot,
-        ).resolve((vis_width, vis_height), bounds)
-        return (float(base.x - bounds.x), float(base.y - bounds.y))
-
-    def _project_quick_visualizer_base_authored_origin(self) -> bool:
-        """Project the plain authored Visualizer origin once, if admitted."""
-
-        owner = self._quick_visualizer_owner
-        chosen = self._quick_visualizer_unit
-        if owner is None or chosen is None or chosen.is_retired:
-            return False
-        origin = self._resolve_quick_visualizer_base_authored_origin(chosen, owner)
-        if origin is None:
-            return False
-        return bool(owner.set_authored_outer_origin(origin[0], origin[1]))
-
-    def _resolve_quick_visualizer_authored_layout(
-        self,
-        chosen: QuickDisplayUnit,
-        owner: Any,
-        *,
-        media_geometry: Any | None = None,
-    ) -> tuple[float, float, float, float, Any] | None:
-        """Resolve the ordinary Media-relative Visualizer rectangle once.
-
-        CUSTOM is a hard boundary and returns ``None``. Ordinary placement uses
-        the Media card's unstacked authored geometry, preferring the vertical
-        side with more usable space (top Media -> below, bottom Media -> above).
-        Horizontal adjacency is only a fallback when neither vertical side can
-        fit. No timer/poller/cadence owner is involved.
-        """
-
-        from rendering.widget_descriptors import is_global_custom_layout_mode_selected
-
-        widgets = self._widgets_config_snapshot
-        if (
-            not chosen.presenter.authored_layout_enabled
-            or is_global_custom_layout_mode_selected(widgets)
-        ):
-            return None
-        bounds = chosen.display_bounds()
-        try:
-            vis_width, vis_height = owner.resolved_outer_size()
-        except Exception:
-            logger.warning(
-                "[SPOTIFY_VIS] Failed to resolve ordinary visualizer size for adjacency",
-                exc_info=True,
-            )
-            return None
-        vis_width = max(1.0, min(float(vis_width), float(bounds.width)))
-        vis_height = max(1.0, min(float(vis_height), float(bounds.height)))
-
-        media_rect = media_geometry or chosen.presenter.authored_geometry_for("media")
-        if media_rect is None:
-            # Visualizer routing follows Media's authored route even when the
-            # Media *card* itself is disabled and therefore has no retained
-            # preferred-size rectangle. Resolve the Visualizer at that same
-            # authored anchor using its own current outer size. This is still
-            # ordinary/non-CUSTOM placement and owns no cadence.
-            from rendering.quick.widgets.geometry_resolver import (
-                resolve_overlay_geometry_policy,
-            )
-
-            fallback = resolve_overlay_geometry_policy("media", widgets).resolve(
-                (vis_width, vis_height), bounds
-            )
-            return (
-                float(fallback.x - bounds.x),
-                float(fallback.y - bounds.y),
-                vis_width,
-                vis_height,
-                None,
-            )
-
-        from rendering.visualizer_media_adjacency import resolve_visualizer_media_origin
-
-        x, y, overfull = resolve_visualizer_media_origin(
-            (
-                float(media_rect.x - bounds.x),
-                float(media_rect.y - bounds.y),
-                float(media_rect.width),
-                float(media_rect.height),
-            ),
-            (vis_width, vis_height),
-            (float(bounds.width), float(bounds.height)),
-        )
-        if overfull:
-            logger.warning(
-                "[SPOTIFY_VIS] Media+Visualizer ordinary pair exceeds available adjacent space"
-            )
-
-        return (x, y, vis_width, vis_height, media_rect)
-
-    def _install_quick_visualizer_authored_layout(
-        self,
-        chosen: QuickDisplayUnit,
-        owner: Any,
-        *,
-        install_observer: bool,
-        media_geometry: Any | None = None,
-        defer_presenter_reflow: bool = False,
-    ) -> bool:
-        """Project ordinary Visualizer adjacency and optional stacking reservation."""
-
-        resolved = self._resolve_quick_visualizer_authored_layout(
-            chosen, owner, media_geometry=media_geometry
-        )
-        if resolved is None:
-            return False
-        x, y, width, height, media_rect = resolved
-        owner.set_authored_outer_origin(x, y)
-
-        from rendering.widget_stacking import DisplayStackObstacle
-
-        visualizer_obstacle = DisplayStackObstacle(
-            key="spotify_visualizer",
-            x=int(round(x)),
-            y=int(round(y)),
-            width=max(1, int(round(width))),
-            height=max(1, int(round(height))),
-        )
-        if media_rect is None:
-            # Media may be disabled while the Visualizer remains ordinary. It
-            # still occupies real screen space, so authored stacking should
-            # route other ordinary cards around it when stacking is enabled.
-            chosen.presenter.set_external_stack_obstacles(
-                (visualizer_obstacle,),
-                reflow=not defer_presenter_reflow,
-            )
-            if install_observer:
-                chosen.presenter.set_layout_observer(None)
-            return True
-
-        bounds = chosen.display_bounds()
-        media_local_x = int(round(float(media_rect.x - bounds.x)))
-        media_local_y = int(round(float(media_rect.y - bounds.y)))
-        chosen.presenter.set_external_stack_obstacles(
-            (
-                DisplayStackObstacle(
-                    key="media",
-                    x=media_local_x,
-                    y=media_local_y,
-                    width=max(1, int(round(float(media_rect.width)))),
-                    height=max(1, int(round(float(media_rect.height)))),
-                ),
-                visualizer_obstacle,
-            ),
-            fixed_widget_ids=("media",),
-            reflow=not defer_presenter_reflow,
-        )
-
-        if install_observer:
-            manager_ref = weakref.ref(self)
-
-            def _on_authored_geometry(widget_id: str, geometry: Any) -> None:
-                if widget_id != "media":
-                    return
-                manager = manager_ref()
-                if (
-                    manager is None
-                    or manager._retired
-                    or manager._quick_visualizer_owner is not owner
-                    or manager._quick_visualizer_unit is not chosen
-                ):
-                    return
-                manager._install_quick_visualizer_authored_layout(
-                    chosen,
-                    owner,
-                    install_observer=False,
-                    media_geometry=geometry,
-                    defer_presenter_reflow=True,
-                )
-
-            chosen.presenter.set_layout_observer(_on_authored_geometry)
-        return True
-
     def _construct_quick_visualizer_owner_on(
         self,
         chosen: QuickDisplayUnit,
     ) -> bool:
         """Construct, bind and start the single visualizer owner on ``chosen``.
 
-        Final-create boundary for admission. Re-resolves the current model/config
-        and fails closed when the visualizers capability is no longer effective
-        or the instance is disabled. Returns True only when the single owner is
-        admitted.
+        The host binding owns construction, the one-owner rejection, authored
+        layout and admissions; this manager only chose ``chosen``.
         """
 
-        if self._quick_visualizer_owner is not None:
-            self._set_quick_visualizer_construct_outcome(
-                "rejected",
-                "owner_already_admitted",
-            )
-            return False
-        widgets = self._widgets_config_snapshot
-        section = widgets.get("spotify_visualizer", {})
-        if not isinstance(section, dict):
-            self._set_quick_visualizer_construct_outcome(
-                "rejected",
-                "invalid_visualizer_section",
-            )
-            return False
-        if not is_widget_family_effective(widgets, "visualizers"):
-            self._set_quick_visualizer_construct_outcome(
-                "rejected",
-                "visualizer_capability_not_effective",
-            )
-            return False
-
-        from core.settings.models import SpotifyVisualizerSettings
-        from core.settings.settings_manager import SettingsManager
-        from core.settings.visualizer_mode_registry import (
-            resolve_effective_visualizer_section,
-        )
-        from core.settings.visualizer_presets import (
-            resolve_visualizer_activation_payload,
-        )
-
-        # Resolve a disabled/stale persisted mode to an enabled one BEFORE the
-        # activation/model payload is resolved (pre-V5/V6 startup-substitution
-        # ordering gate): re-enter the canonical resolver for the substitute so
-        # mode-A activation/preset state is never field-patched onto mode B. With
-        # every mode enabled (today's default) this is a no-op.
-        section, mode_substituted, requested_mode, effective_mode = (
-            resolve_effective_visualizer_section(section)
-        )
-        if mode_substituted:
-            logger.info(
-                "[SPOTIFY_VIS] Persisted visualizer mode %r is not enabled; "
-                "starting enabled mode %r instead",
-                requested_mode,
-                effective_mode,
-            )
-
-        activation = resolve_visualizer_activation_payload(section)
-        model = SpotifyVisualizerSettings.from_mapping(
-            activation.resolved_config,
-            apply_preset_overlay=False,
-            resolve_preset_indices=False,
-        )
-        if not bool(model.enabled):
-            self._set_quick_visualizer_construct_outcome(
-                "rejected",
-                "visualizer_instance_disabled",
-            )
-            return False
-        if not bool(model.visualizers_enabled):
-            self._set_quick_visualizer_construct_outcome(
-                "rejected",
-                "visualizers_disabled",
-            )
-            return False
-
-        from widgets.spotify_visualizer.quick_display_visualizer_owner import (
-            QuickDisplayVisualizerOwner,
-        )
-        from widgets.spotify_visualizer.technical_config import (
-            build_technical_cache,
-        )
-
-        mode = str(model.mode)
-        technical_cache = build_technical_cache(None, model)
-
-        from core.settings.shadow_direction import (
-            resolve_directional_extensions,
-            resolve_signed_offset,
-        )
-        from rendering.quick.shadow_snapshot import QuickShadowSnapshot
-        from rendering.quick.widgets.host import ORDINARY_CARD_SHADOW_BASE
-        from widgets.spotify_visualizer.presentation_geometry import (
-            VISUALIZER_CARD_CONTENT_INSET,
-            VISUALIZER_CARD_CORNER_RADIUS,
-            VISUALIZER_CARD_SHADOW_SPREAD,
-        )
-
-        shadow = QuickShadowSnapshot.from_mapping(self._shadow_values_snapshot)
-        channels = list(shadow.color)
-        channels[3] = max(
-            0,
-            min(255, int(round(channels[3] * shadow.frame_opacity))),
-        )
-
-        from ui.widget_theme_active import get_active_widget_theme
-
-        widget_theme = get_active_widget_theme()
-        canonical_global = get_default_setting("widgets.global")
-        persisted_global = widgets.get("global")
-        global_widgets = dict(canonical_global)
-        if isinstance(persisted_global, Mapping):
-            global_widgets.update(
-                key_value
-                for key_value in persisted_global.items()
-                if key_value[1] is not None
-            )
-        canonical_border_width = float(canonical_global["card_border_width_px"])
-        try:
-            visualizer_border_width = float(global_widgets["card_border_width_px"])
-        except (TypeError, ValueError):
-            visualizer_border_width = canonical_border_width
-        if not math.isfinite(visualizer_border_width):
-            visualizer_border_width = canonical_border_width
-        visualizer_border_width = max(0.0, min(12.0, visualizer_border_width))
-        card_shadow_kwargs = {
-            "background_color": widget_theme.color("card.background").as_tuple(),
-            "border_color": widget_theme.color("card.border").as_tuple(),
-            "border_width": visualizer_border_width,
-            "corner_radius": VISUALIZER_CARD_CORNER_RADIUS,
-            "content_inset": VISUALIZER_CARD_CONTENT_INSET,
-            "shadow_enabled": shadow.enabled,
-            "shadow_color": tuple(channels),
-            "shadow_blur": min(80.0, shadow.blur_radius),
-            "shadow_offset": resolve_signed_offset(
-                shadow.direction, *ORDINARY_CARD_SHADOW_BASE
-            ),
-            "shadow_spread": VISUALIZER_CARD_SHADOW_SPREAD,
-            "shadow_extensions": resolve_directional_extensions(
-                shadow.direction, shadow.frame_extra_offset
-            ),
-        }
-
-        owner = QuickDisplayVisualizerOwner(
-            chosen.runtime,
-            bar_count=model.resolve_bar_count(mode),
-            initial_mode=mode,
-            committed_layout_profile_resolver=self._resolve_quick_visualizer_layout_profile,
-            edit_layout_profile_activator=(
-                lambda target: not self._quick_custom_layout_owner.is_editing
-                or self._quick_custom_layout_owner.activate_edit_visualizer_profile(target)
-            ),
-            transition_failure_callback=(
-                lambda reason: self._request_custom_layout_runtime_reload(
-                    "visualizer_activation_failed"
-                )
-            ),
-            card_shadow_kwargs=card_shadow_kwargs,
-        )
-        try:
-            owner.controller.settings_model = model
-            owner.controller.record_resolved_activation(activation)
-            owner.controller.technical_config_cache = technical_cache
-            from widgets.spotify_visualizer.technical_config import (
-                resolve_technical_config,
-            )
-            owner.configure(
-                logical_kwargs=asdict(model),
-                presentation_kwargs=self._visualizer_presentation_kwargs(model, mode),
-                technical_config=resolve_technical_config(technical_cache, mode),
-                thread_manager=self._thread_manager,
-                process_supervisor=self._process_supervisor,
-                playing=False,
-            )
-            custom_entry = resolve_visualizer_custom_entry(
-                widgets, chosen.runtime.window.screen(), mode
-            )
-            if custom_entry is not None:
-                from rendering.custom_layout_session import normalize_viewport_extent
-                from rendering.quick.custom_layout_hydration import (
-                    resolve_committed_visualizer_rect,
-                )
-
-                local_rect = resolve_committed_visualizer_rect(
-                    custom_entry,
-                    chosen.runtime.window.screen().geometry().size(),
-                )
-                from widgets.spotify_visualizer.presentation_orientation import (
-                    CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
-                    CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,
-                )
-                from core.settings.visualizer_mode_registry import (
-                    get_visualizer_layout_profile,
-                )
-                legacy_source_variant = (
-                    custom_entry.geometry_variant
-                    if custom_entry.geometry_variant in {"default", "freeform_3d"}
-                    else None
-                )
-
-                owner.configure_committed_layout(
-                    local_rect=(
-                        float(local_rect.x()),
-                        float(local_rect.y()),
-                        float(local_rect.width()),
-                        float(local_rect.height()),
-                    ),
-                    viewport_extent=normalize_viewport_extent(
-                        custom_entry.size_payload.get("viewport_extent")
-                    ),
-                    content_rotation_by_mode=custom_entry.size_payload.get(
-                        CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
-                        custom_entry.size_payload.get(
-                            CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, 0
-                        ),
-                    ),
-                    legacy_layout_profile=(
-                        get_visualizer_layout_profile(mode)
-                        if legacy_source_variant is not None else None
-                    ),
-                    legacy_source_variant=legacy_source_variant,
-                )
-            # Ordinary placement is resolved before start so the first retained
-            # Visualizer presentation never appears at the old (0, 0) default.
-            # CUSTOM rejects this path completely. Stacking reservation/observer
-            # are installed only after successful single-owner admission below.
-            ordinary_layout = self._resolve_quick_visualizer_authored_layout(
-                chosen, owner
-            )
-            if ordinary_layout is not None:
-                owner.set_authored_outer_origin(ordinary_layout[0], ordinary_layout[1])
-            else:
-                # Global CUSTOM disables adjacency, not authored anchoring. Keep
-                # an uncommitted Visualizer on Media's authored slot instead of
-                # leaking the owner's internal (0, 0) construction default.
-                base_origin = self._resolve_quick_visualizer_base_authored_origin(
-                    chosen, owner
-                )
-                if base_origin is not None:
-                    owner.set_authored_outer_origin(base_origin[0], base_origin[1])
-
-            engine = owner.controller.engine
-            generation = int(engine.get_generation_id())
-            activation_id = int(engine.get_activation_id())
-            owner.bind(
-                engine_generation=generation,
-                activation_id=activation_id,
-            )
-            media_model = self._resolve_quick_visualizer_media_model(chosen)
-            if media_model is not None:
-                owner.set_playing(
-                    str(getattr(media_model, "playbackState", "unknown")).lower()
-                    == "playing"
-                )
-            if not self._display_power_on:
-                # Built while the displays are off: start parked, holding no capture.
-                owner.set_display_power(False)
-            owner.start()
-            self._quick_visualizer_owner = owner
-            self._quick_visualizer_unit = chosen
-            self._publish_quick_view_orbit_admission()
-            if media_model is not None:
-                self._bind_quick_visualizer_media(media_model)
-            chosen.attach_visualizer_owner(owner)
-            self._install_quick_visualizer_authored_layout(
-                chosen, owner, install_observer=True
-            )
-            from rendering.quick.visualizer.double_click_admission import (
-                QuickVisualizerDoubleClickAdmission,
-            )
-            from rendering.quick.visualizer.middle_click_admission import (
-                QuickVisualizerMiddleClickAdmission,
-            )
-
-            def _visualizer_region_contains(
-                scene_position: Any,
-                admitted: Any = owner,
-            ) -> bool:
-                return bool(
-                    admitted.presentation_runtime.scene_controller
-                    .visualizer_contains_scene_position(scene_position)
-                )
-
-            chosen.runtime.scene_controller.set_visualizer_double_click_admission(
-                QuickVisualizerDoubleClickAdmission(
-                    region_contains=_visualizer_region_contains,
-                    is_active=lambda admitted=owner: (
-                        admitted.is_started and not admitted.is_retired
-                    ),
-                    cycle_mode=self._cycle_quick_visualizer_mode,
-                )
-            )
-            chosen.runtime.scene_controller.set_visualizer_middle_click_admission(
-                QuickVisualizerMiddleClickAdmission(
-                    region_contains=_visualizer_region_contains,
-                    is_active=lambda admitted=owner: (
-                        admitted.is_started and not admitted.is_retired
-                    ),
-                    cycle_preset=self._cycle_quick_visualizer_preset,
-                )
-            )
-            chosen.runtime.scene_controller.set_visualizer_volume_wheel_handler(
-                self._request_quick_app_volume_step_from_visualizer
-            )
-            self._refresh_all_quick_context_menus()
-        except Exception:
-            self._set_quick_visualizer_construct_outcome(
-                "exception",
-                "owner_configuration_failed",
-            )
-            if self._quick_visualizer_owner is owner:
-                self._release_quick_visualizer_routes()
-            if not owner.is_retired:
-                owner.retire()
-            raise
-
-        logger.info(
-            "[SPOTIFY_VIS] Admitted one Quick owner screen=%s mode=%s generation=%s activation=%s",
-            chosen.screen_index,
-            mode,
-            generation,
-            activation_id,
-        )
-        self._set_quick_visualizer_construct_outcome("admitted")
-        return True
+        return _visualizer_host_binding(self).construct(chosen)
 
     def _request_quick_app_volume_step_from_visualizer(self, direction: int) -> bool:
         """Route Visualizer wheel input through an already-admitted Media owner.
@@ -3738,86 +3292,9 @@ class DisplayManager(QObject):
         )
 
     def _transfer_quick_visualizer_unit(self, target: QuickDisplayUnit) -> bool:
-        """Move the single visualizer's display-retirement authority transactionally.
+        """Move the single visualizer to ``target`` through the host binding's transaction."""
 
-        The enclosing CUSTOM transaction moves the retained scene item first and
-        calls this manager seam before it can commit the session placement.
-        DisplayManager owns the matching Python
-        lifecycle edge: owner runtime/pacer routes, ``_quick_visualizer_unit`` and
-        the unit that will eventually retire the owner must all move together.
-        No controller, BeatEngine, logical runtime, activation, or cadence is
-        recreated.
-        """
-
-        if self._retired:
-            raise RuntimeError("cannot transfer visualizer on a retired display manager")
-        owner = self._quick_visualizer_owner
-        source = self._quick_visualizer_unit
-        if owner is None or source is None:
-            raise RuntimeError("visualizer display transfer has no admitted owner")
-        if target is source:
-            return False
-        if target not in self.displays or target.is_retired:
-            raise RuntimeError("visualizer display transfer target is not live")
-        if bool(getattr(owner, "is_retired", False)):
-            raise RuntimeError("visualizer display transfer owner is retired")
-        if owner.presentation_runtime is not source.runtime:
-            raise RuntimeError(
-                "visualizer presentation runtime disagrees with manager source unit"
-            )
-        if source.visualizer_owner is not owner:
-            raise RuntimeError("visualizer source unit lost retirement ownership")
-        target_owner = target.visualizer_owner
-        if target_owner is not None and target_owner is not owner:
-            raise RuntimeError("visualizer target unit owns another visualizer")
-        if target_owner is owner:
-            raise RuntimeError("visualizer target already owns retirement authority")
-
-        owner.set_presentation_runtime(target.runtime)
-        source_detached = False
-        target_attached = False
-        try:
-            source_detached = source.detach_visualizer_owner(owner)
-            if not source_detached:
-                raise RuntimeError("visualizer source unit could not detach owner")
-            target.attach_visualizer_owner(owner)
-            target_attached = True
-            self._quick_visualizer_unit = target
-            self._refresh_quick_visualizer_transfer_glyphs()
-        except Exception:
-            # The scene transfer has already happened, but the manager-side
-            # lifecycle move is still one bounded transaction.  Restore the old
-            # retirement/pacer edge rather than leave teardown split between two
-            # display units.
-            if target_attached and target.visualizer_owner is owner:
-                try:
-                    target.detach_visualizer_owner(owner)
-                except Exception:
-                    logger.exception(
-                        "[SPOTIFY_VIS] Failed rolling back target retirement owner"
-                    )
-            if source_detached and source.visualizer_owner is None:
-                try:
-                    source.attach_visualizer_owner(owner)
-                except Exception:
-                    logger.exception(
-                        "[SPOTIFY_VIS] Failed restoring source retirement owner"
-                    )
-            self._quick_visualizer_unit = source
-            try:
-                owner.set_presentation_runtime(source.runtime)
-            except Exception:
-                logger.exception(
-                    "[SPOTIFY_VIS] Failed restoring source display edge after transfer"
-                )
-            raise
-
-        logger.info(
-            "[SPOTIFY_VIS] Moved visualizer display ownership screen=%s -> %s",
-            source.screen_index,
-            target.screen_index,
-        )
-        return True
+        return _visualizer_host_binding(self).transfer(target)
 
     def _release_quick_visualizer_routes(
         self,
@@ -3825,24 +3302,7 @@ class DisplayManager(QObject):
     ) -> bool:
         """Drop manager routing references; the chosen unit owns retirement."""
 
-        if unit is not None and unit is not self._quick_visualizer_unit:
-            return False
-        self._disconnect_quick_visualizer_media_route()
-        chosen = self._quick_visualizer_unit
-        if chosen is not None:
-            chosen.presenter.set_layout_observer(None)
-            chosen.presenter.set_external_stack_obstacles(None)
-            chosen.runtime.scene_controller.set_visualizer_double_click_admission(None)
-            chosen.runtime.scene_controller.set_visualizer_middle_click_admission(None)
-            chosen.runtime.scene_controller.set_visualizer_volume_wheel_handler(None)
-        # An orbit still held when the Visualizer goes is saved now; its release never comes.
-        self._persist_quick_visualizer_view()
-        self._quick_scene_view_gesture = None
-        self._quick_view_pose_owner = None
-        self._quick_visualizer_owner = None
-        self._quick_visualizer_unit = None
-        self._publish_quick_view_orbit_admission()
-        return True
+        return _visualizer_host_binding(self).release_routes(unit)
 
     def _quick_ordinary_family_adapters(self):
         """Build one generation's family adapters with weak product-action routes.

@@ -15,7 +15,10 @@ from math import isfinite
 from PySide6.QtCore import QAbstractListModel, QModelIndex, QObject, Property, Qt, Signal, QUrl
 from PySide6.QtGui import QColor
 
-from core.settings.default_contract import require_canonical_default
+from core.settings.default_contract import (
+    require_canonical_default,
+    resolve_card_border_width_px,
+)
 from ui.resources.assets import resource_url
 from core.steam.games_followed_projection import FollowedNewsDisplay, project_followed_news
 from core.steam.games_followed_source import FollowedNewsSnapshot
@@ -196,11 +199,7 @@ def followed_visual_style(
         border_color=steam_rgba(values.get("border_color"), tuple(defaults["border_color"])),
         border_opacity=bounded_float(values.get("border_opacity"), defaults["border_opacity"], 0.0, 1.0),
     )
-    global_values = widgets.get("global", {}) if isinstance(widgets, Mapping) else {}
-    if not isinstance(global_values, Mapping):
-        global_values = {}
-    canonical_width = float(require_canonical_default("widgets.global.card_border_width_px"))
-    width = bounded_float(global_values.get("card_border_width_px"), canonical_width, 0.0, 12.0)
+    width = resolve_card_border_width_px(widgets)
     return project_steam_card_style(
         show_background=as_bool(values.get("show_background"), defaults["show_background"]),
         background_color=background, background_opacity=1.0,

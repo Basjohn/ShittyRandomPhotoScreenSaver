@@ -71,6 +71,8 @@ class _Manager:
         self._quick_visualizer_owner = owner
         self.disconnect_calls = 0
         self.release_calls = 0
+        self._quick_scene_view_gesture = object()
+        self._quick_view_pose_owner = object()
 
     def _refresh_all_quick_context_menus(self) -> None:
         pass
@@ -78,11 +80,13 @@ class _Manager:
     def _disconnect_quick_visualizer_media_route(self) -> None:
         self.disconnect_calls += 1
 
-    def _release_quick_visualizer_routes(self, display) -> None:
-        assert display is self._quick_visualizer_unit
+    def _persist_quick_visualizer_view(self) -> None:
+        # Route release saves a held orbit exactly once, while still admitted.
+        assert self._quick_visualizer_owner is not None
         self.release_calls += 1
-        self._quick_visualizer_unit = None
-        self._quick_visualizer_owner = None
+
+    def _publish_quick_view_orbit_admission(self) -> None:
+        pass
 
 
 def test_edit_disable_retires_and_detaches_both_owner_authorities():

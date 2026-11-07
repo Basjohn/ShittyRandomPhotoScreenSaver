@@ -1437,7 +1437,10 @@ def test_display_manager_visualizer_transfer_moves_unit_retirement_authority(fai
         refreshed.append(manager._quick_visualizer_unit)
         if fail_projection:
             raise RuntimeError("projection failed")
-    manager = SimpleNamespace(
+    class _Manager(SimpleNamespace):
+        """The manager's routing record; the host binding reaches it weakly."""
+
+    manager = _Manager(
         _retired=False,
         _quick_visualizer_owner=visualizer,
         _quick_visualizer_unit=source,
