@@ -209,7 +209,7 @@ def test_tool_output_arguments_go_through_the_owner():
     assert not found, "\n".join(found)
 
 
-def test_png_evidence_is_encoded_as_webp():
+def test_png_output_goes_through_the_evidence_publisher():
     found = [item for path in _tool_files() for item in png_evidence(path)]
     assert not found, "\n".join(found)
 
@@ -299,7 +299,11 @@ def test_prune_scratch_is_a_dry_run_unless_applied_and_never_leaves_scratch(tmp_
         evidence = root / "evidence" / "visualizers" / "bubble" / "live_check" / "20261101_old"
         (evidence / "profile").mkdir(parents=True)
         (evidence / "summary.json").write_text("{}")
-        (evidence / "frame.png").write_bytes(b"x")
+        (evidence / "frame.png").write_bytes(b"x")              # a still: never reported
+        frames = evidence / "spin"
+        frames.mkdir()
+        for index in range(12):                                   # a PNG frame sequence: reported
+            (frames / f"spin_{index:03d}.png").write_bytes(b"x")
         webp = root / "webp" / "settings" / "probe" / "20261101_big.webp"
         webp.parent.mkdir(parents=True)
         with open(webp, "wb") as handle:
@@ -314,6 +318,8 @@ def test_prune_scratch_is_a_dry_run_unless_applied_and_never_leaves_scratch(tmp_
         assert stale.exists(), "a dry run deleted something"
         reported = {item["why"].split(" ")[0] for item in dry["oversized"]}
         assert reported == {"profile", "PNG", "WebP"}
+        assert not any(item["path"].endswith("frame.png") for item in dry["oversized"]), "a PNG still was reported"
+        assert any(item["path"] == str(frames) for item in dry["oversized"]), "a PNG frame sequence went unreported"
 
         artifact_paths.prune_scratch(apply=True, now=now)
         assert not stale.exists()
@@ -375,3 +381,23 @@ def test_product_names_resolve_to_the_mode_id_folder(tmp_path):
         assert artifact_paths.checked_output(given) == expected.resolve() / "summary.json"
         with pytest.raises(artifact_paths.ArtifactPathError):
             artifact_paths.evidence_dir("visualizers/neon_pond", "capture", "a")
+
+
+def test_script_tools_set_their_import_path_before_importing_tools():
+    """A tool run as a script (``python tools/x.py``) has only its own folder on ``sys.path``: importing ``tools.*``
+    before its ``sys.path`` setup fails with ModuleNotFoundError (7 Nov: waveform_music_response and 14 others)."""
+    import re
+
+    offenders = []
+    for path in _tool_files():
+        text = path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        first_import = next((index for index, line in enumerate(lines)
+                             if re.match(r"(from|import)\s+(core|rendering|widgets|ui|engine|tools)\b", line)), None)
+        if first_import is None:
+            continue
+        setup = next((index for index, line in enumerate(lines)
+                      if "sys.path.insert" in line or "sys.path.append" in line), None)
+        if setup is not None and setup > first_import:
+            offenders.append(f"{path.relative_to(ROOT)}: line {first_import + 1} imports a repo module before line {setup + 1}")
+    assert not offenders, "\n".join(offenders)

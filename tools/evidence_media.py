@@ -1,12 +1,14 @@
-"""Durable visual evidence as small WebP (Docs/Guardrails.md "Evidence and scratch hygiene").
+"""Frame sequences as small animated WebP (Docs/Guardrails.md "Evidence and scratch hygiene").
 
-* A frame sequence becomes ONE animated WebP at 24 fps, under 10 MB, at a reduced size (the longest side starts
-  at ``DEFAULT_MAX_SIDE`` and steps down until the file fits the cap).
-* A still (a frame, a contact sheet, a strip) becomes a still WebP.
-* PNGs are temporary: a tool writes them into an owner scratch folder (``tools/artifact_paths.py``). When the
-  tool succeeds the folder is published (PNGs as WebP, data copied and relinked) and deleted. When it fails
-  the folder stays, its path is printed for debugging, and ``python tools/artifact_paths.py prune-scratch``
-  clears it later.
+Operator, 7 Nov 2026: PNGs are not barred. Only single frames used to show motion are replaced, by ONE animated
+WebP at 24 fps, under 10 MB, at a reduced size (the longest side starts at ``DEFAULT_MAX_SIDE`` and steps down
+until the file fits the cap). Stills (a screenshot, a contact sheet, a strip, a before/after) stay PNG, lossless.
+
+A tool writes into an owner scratch folder (``tools/artifact_paths.py``). When the tool succeeds the folder is
+published UNCHANGED (every file copied as the tool wrote it; tools and compare steps read PNG) and deleted. Turning a
+kept frame sequence into one animated WebP is a deliberate ``animated_webp`` call, never automatic.
+When it fails the folder stays, its path is printed for debugging, and ``python tools/artifact_paths.py
+prune-scratch`` clears it later.
 
 Destinations come from ``tools/artifact_paths.py``. Product showcase WebPs are ``tools/release_media.py``'s
 own business and do not use this module.
@@ -16,7 +18,6 @@ from __future__ import annotations
 import contextlib
 import io
 import os
-import re
 import shutil
 import sys
 import uuid
@@ -28,8 +29,6 @@ MAX_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_SIDE = 960
 MIN_SIDE = 160
 DEFAULT_QUALITY = 80
-STILL_MAX_SIDE = 1920
-STILL_QUALITY = 88
 
 
 def _frame_durations(count: int, fps: int) -> list[int]:
@@ -71,7 +70,7 @@ def animated_webp(
     ``MIN_SIDE`` does not. Returns the encoding receipt (size, frames, fps, bytes).
     """
     if len(frames) < 2:
-        raise ValueError("an animated WebP needs at least two frames; use still_webp for one")
+        raise ValueError("an animated WebP needs at least two frames")
     if not 1 <= fps <= 60 or max_bytes <= 0:
         raise ValueError("invalid fps or byte cap")
     output = Path(output)
@@ -98,130 +97,41 @@ def animated_webp(
         side = max(MIN_SIDE, round(side * 0.75))
 
 
-def still_webp(
-    source: Any, output: str | Path, *, max_side: int = STILL_MAX_SIDE, quality: int = STILL_QUALITY,
-) -> dict:
-    """One still (a PNG path or PIL image) as a WebP, reduced so its longest side is at most ``max_side``."""
-    output = Path(output)
-    if output.suffix.lower() != ".webp":
-        raise ValueError(f"evidence media is WebP: {output}")
-    image = _fit(_open_rgb(source), max_side)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    image.save(output, format="WEBP", quality=quality, method=4)
-    return {"path": str(output), "size": list(image.size), "bytes": output.stat().st_size}
-
-
-def still_from_png(png: str | Path, output: str | Path, **kwargs) -> dict:
-    """``still_webp`` from a temporary PNG, which is deleted once encoded (also on failure)."""
-    png = Path(png)
-    try:
-        return still_webp(png, output, **kwargs)
-    finally:
-        png.unlink(missing_ok=True)
-
-
-_SEQUENCE = re.compile(r"^(?P<stem>.*?)(?P<index>\d{2,})$")
 _TEXT_SUFFIXES = {".json", ".jsonl", ".txt", ".md", ".csv", ".html", ".log"}
 
 
-def _webp_home(out_dir: Path) -> tuple[Path, str] | None:
-    """For an evidence folder ``evidence/<area>/<topic>/<YYYYMMDD>_<label>[/sub]``: the WebP folder
-    ``webp/<area>/<topic>`` and the name prefix ``<YYYYMMDD>_<label>[_sub]``; None outside the layout."""
-    from tools import artifact_paths
-
-    relative = artifact_paths._relative_to_root(out_dir.resolve(), artifact_paths.EVIDENCE_ROOT.resolve())
-    if relative is None or not artifact_paths._layout_shaped(relative):
-        return None
-    depth = 2 if relative[0] in artifact_paths._NAMED_AREAS else 1
-    return (artifact_paths.WEBP_ROOT.joinpath(*relative[: depth + 1]),
-            "_".join(relative[depth + 1:]))
-
-
-def _reference(path: Path) -> str:
-    """How a summary names a published WebP: repository-relative under the layout, else absolute."""
-    from tools import artifact_paths
-
-    relative = artifact_paths._relative_to_root(path.resolve(), artifact_paths.ARTIFACTS_ROOT.resolve())
-    if relative is None:
-        return str(path)
-    return "/".join((".artifacts", *relative))
-
-
 def publish(work: Path, out_dir: Path) -> dict:
-    """Publish a tool's scratch output folder as durable evidence.
+    """Publish a tool's scratch output folder unchanged.
 
-    * PNGs whose names differ only by a trailing frame number (``frame_0001.png``...) in one folder become one
-      animated 24 fps WebP named after their stem; every other PNG becomes a still WebP. When ``out_dir`` is
-      an evidence folder the WebPs go to the matching ``.artifacts/webp/<area>/<topic>/`` as
-      ``<YYYYMMDD>_<label>_<name>.webp``; elsewhere (tests) they sit beside the data.
-    * Every other file is copied to ``out_dir``; in text files (json, txt, md, csv, html) each PNG path or name
-      is rewritten to its WebP, so a summary links its WebPs by path.
-    Returns ``{"webp": [...], "files": [...], "renamed": {png name: reference}}``. The PNGs stay in ``work``.
+    Every file (PNGs, stills and frames alike, data, logs) is copied to ``out_dir`` exactly as the tool wrote it:
+    tools and their compare steps read PNG, so publishing never converts anything. In text files (json, txt, md,
+    csv, html) the scratch folder's path is rewritten to ``out_dir``, so a summary's links stay valid. Replacing a
+    kept frame sequence by one animated WebP is a deliberate step (``animated_webp``), never automatic.
+    Returns ``{"files": [...]}``.
     """
     work, out_dir = Path(work), Path(out_dir)
-    home = _webp_home(out_dir)
-    renamed: dict[str, str] = {}
-    absolute: dict[Path, Path] = {}
-    written: list[str] = []
     copied: list[str] = []
     if not work.exists():
-        return {"webp": written, "files": copied, "renamed": renamed}
-
-    def destination(parent: Path, name: str) -> Path:
-        sub = parent.relative_to(work).parts
-        if home is None:
-            return out_dir.joinpath(*sub, f"{name}.webp")
-        folder, prefix = home
-        return folder / ("_".join(part for part in (prefix, *sub, name) if part) + ".webp")
-
-    pngs = sorted(path for path in work.rglob("*") if path.is_file() and path.suffix.lower() == ".png")
-    groups: dict[tuple[Path, str], list[Path]] = {}
-    for png in pngs:
-        match = _SEQUENCE.match(png.stem)
-        key = (png.parent, match.group("stem").rstrip("_-.") if match else "\0" + png.stem)
-        groups.setdefault(key, []).append(png)
-    for (parent, stem), members in groups.items():
-        if len(members) >= 2 and not stem.startswith("\0"):
-            members.sort(key=lambda path: int(_SEQUENCE.match(path.stem).group("index")))
-            target = destination(parent, stem or "frames")
-            animated_webp(members, target)
-            outputs = [(member, target) for member in members]
-        else:
-            outputs = []
-            for member in members:
-                target = destination(parent, member.stem)
-                still_webp(member, target)
-                outputs.append((member, target))
-                written.append(str(target))
-        if len(members) >= 2 and not stem.startswith("\0"):
-            written.append(str(target))
-        for member, target in outputs:
-            absolute[member] = target
-            renamed[member.name] = target.name if home is None else _reference(target)
+        return {"files": copied}
 
     def forms(path: Path) -> tuple[str, ...]:
         native = str(path)
         return (native.replace("\\", "\\\\"), native, native.replace("\\", "/"))
 
     for path in sorted(work.rglob("*")):
-        if not path.is_file() or path.suffix.lower() == ".png":
+        if not path.is_file():
             continue
         target = out_dir / path.relative_to(work)
         target.parent.mkdir(parents=True, exist_ok=True)
         if path.suffix.lower() in _TEXT_SUFFIXES:
             text = path.read_text(encoding="utf-8", errors="surrogateescape")
-            for png, webp in absolute.items():                       # full paths first (JSON-escaped too)
-                for old, new in zip(forms(png), forms(webp)):
-                    text = text.replace(old, new)
-            for old in sorted(renamed, key=len, reverse=True):         # then bare names
-                text = text.replace(old, renamed[old])
             for old, new in zip(forms(work), forms(out_dir)):
                 text = text.replace(old, new)
             target.write_text(text, encoding="utf-8", errors="surrogateescape")
         else:
             shutil.copyfile(path, target)
         copied.append(str(target))
-    return {"webp": written, "files": copied, "renamed": renamed}
+    return {"files": copied}
 
 
 @contextlib.contextmanager
@@ -239,7 +149,7 @@ def evidence_workspace(owner: str, out_dir: str | Path) -> Iterator[Path]:
         yield work
         out_dir.mkdir(parents=True, exist_ok=True)
         receipt = publish(work, out_dir)
-        print(f"evidence: {len(receipt['webp'])} WebP and {len(receipt['files'])} files in {out_dir}")
+        print(f"evidence: {len(receipt['files'])} files in {out_dir}")
 
 
 _PENDING: list[tuple[Path, Path, Path]] = []
@@ -281,7 +191,7 @@ def finish(code: int | None = 0) -> int | None:
             continue
         target.mkdir(parents=True, exist_ok=True)
         receipt = publish(work, target)
-        print(f"evidence: {len(receipt['webp'])} WebP and {len(receipt['files'])} files in {target}")
+        print(f"evidence: {len(receipt['files'])} files in {target}")
         shutil.rmtree(folder)
         with contextlib.suppress(OSError):
             folder.parent.rmdir()
@@ -296,6 +206,4 @@ __all__ = [
     "finish",
     "publish",
     "redirect_output",
-    "still_from_png",
-    "still_webp",
 ]

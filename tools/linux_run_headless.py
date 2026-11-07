@@ -12,7 +12,7 @@ Examples::
     python tools/linux_run_headless.py --mode /c --seconds 15 --shots 10
     python tools/linux_run_headless.py --keep-widgets -- --debug
 
-Arguments after ``--`` are passed to ``main.py`` unchanged. Logs and shots (as WebP) are published to
+Arguments after ``--`` are passed to ``main.py`` unchanged. Logs and shots (unchanged) are published to
 ``--out`` (``tools/artifact_paths.py``); images and the profile live in the run's owner scratch, deleted
 on success and kept on failure.
 """
@@ -64,7 +64,7 @@ def main() -> int:
                         help="images and profile, to reuse with --no-seed (default: this run's owner scratch, deleted on success)")
     parser.add_argument("--out", type=artifact_paths.evidence_arg,
                         default=artifact_paths.default_evidence("display", "linux_headless"),
-                        help="logs and shots (shots published as WebP)")
+                        help="logs and shots (published unchanged)")
     parser.add_argument("--display", default=":97")
     parser.add_argument("--geometry", default="1920x1080x24")
     parser.add_argument("--mode", default="/s", help="main.py mode argument: /s or /c")

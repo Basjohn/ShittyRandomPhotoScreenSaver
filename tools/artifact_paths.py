@@ -3,8 +3,8 @@
 Layout (Docs/Guardrails.md "Evidence and scratch hygiene"):
 
     .artifacts/
-      webp/<area>/<topic>/<YYYYMMDD>_<label>.webp   visual evidence only (animated 24 fps < 10 MB, or a still)
-      evidence/<area>/<topic>/<YYYYMMDD>_<label>/   data: summaries, json/csv, traces, logs, run settings
+      webp/<area>/<topic>/<YYYYMMDD>_<label>.webp   animated WebPs of kept frame sequences (24 fps, < 10 MB)
+      evidence/<area>/<topic>/<YYYYMMDD>_<label>/   data and stills: summaries, json/csv, traces, logs, PNGs
       scratch/<owner>/                              temporary; its owner deletes it; safe to wipe when no agent runs
 
 ``<area>`` comes from the declared vocabulary below (``AREAS``; ``visualizers/<mode>`` takes a registered or
@@ -424,6 +424,16 @@ def _tree_size_and_newest(folder: Path) -> tuple[int, float]:
     return size, newest
 
 
+def _png_frame_sequence(folder: Path, min_frames: int = 12) -> bool:
+    """True when ``folder`` holds at least ``min_frames`` numbered PNGs of one stem (motion, not stills)."""
+    stems: dict[str, int] = {}
+    for png in folder.glob("*.png"):
+        match = re.match(r"^(.*?)\d{2,}$", png.stem)
+        if match:
+            stems[match.group(1)] = stems.get(match.group(1), 0) + 1
+    return any(count >= min_frames for count in stems.values())
+
+
 def scan(*, max_age_h: float = DEFAULT_PRUNE_AGE_H, now: float | None = None) -> dict:
     """What ``prune-scratch`` would do: scratch runs to delete or keep, and oversized evidence to report.
 
@@ -450,8 +460,8 @@ def scan(*, max_age_h: float = DEFAULT_PRUNE_AGE_H, now: float | None = None) ->
             with contextlib.suppress(OSError):
                 if path.is_dir() and path.name == "profile":
                     oversized.append({"path": str(path), "why": "profile copy in evidence"})
-                elif path.suffix.lower() == ".png":
-                    oversized.append({"path": str(path), "why": "PNG evidence (use WebP)"})
+                elif path.is_dir() and _png_frame_sequence(path):
+                    oversized.append({"path": str(path), "why": "PNG frame sequence (use one animated WebP)"})
                 elif path.suffix.lower() == ".webp" and path.stat().st_size > OVERSIZED_WEBP_BYTES:
                     oversized.append({"path": str(path), "why": f"WebP over {OVERSIZED_WEBP_BYTES} bytes"})
     return {"scratch": runs, "oversized": oversized}

@@ -542,7 +542,7 @@ def main(argv=None) -> int:
     sub.add_parser("cost").add_argument("path", type=Path, nargs="?")
     args = parser.parse_args(argv)
     if args.command != "compare" and args.path is not None:
-        # Outputs go through the owner (tools/artifact_paths.py); PNGs are published as WebP on success. A
+        # Outputs go through the owner (tools/artifact_paths.py); outputs are published unchanged on success. A
         # baseline's pixels.npz (what compare reads) is data and is kept as is.
         try:
             args.path = artifact_paths.checked_output(args.path)

@@ -19,8 +19,8 @@ Every tool writes evidence and scratch through one owner, `tools/artifact_paths.
 
 ```
 .artifacts/
-  webp/<area>/<topic>/<YYYYMMDD>_<label>.webp   visual evidence only (animated 24 fps < 10 MB, or a still)
-  evidence/<area>/<topic>/<YYYYMMDD>_<label>/   data: summaries, json/csv, traces, logs, run settings
+  webp/<area>/<topic>/<YYYYMMDD>_<label>.webp   animated WebPs of kept frame sequences (24 fps, < 10 MB)
+  evidence/<area>/<topic>/<YYYYMMDD>_<label>/   data and stills: summaries, json/csv, traces, logs, PNGs
   scratch/<owner>/                              temporary; the owner deletes it; safe to wipe when no agent runs
 ```
 
@@ -36,15 +36,16 @@ Every tool writes evidence and scratch through one owner, `tools/artifact_paths.
 - A tool's output argument defaults to the layout. An explicit one must lie inside it: anything else
   (elsewhere in the repository, `logs/`, `%TEMP%`, a Claude session scratchpad, another drive) is refused
   with a usage error. Programmatic APIs that tests call still take `tmp_path`.
-- PNGs are scratch. A tool that renders PNGs writes them into owner scratch; on success
-  `tools/evidence_media.py` publishes them (a numbered sequence as one animated 24 fps WebP under 10 MB at a
-  reduced size, every other PNG as a still WebP, into `webp/<area>/<topic>/`), copies the data files to the
-  evidence folder with their PNG references rewritten to the WebPs, and deletes the scratch. On failure the
-  scratch is kept and its path printed. A capture a later `--compare` reads stays lossless when its `--output`
-  is itself under `.artifacts/scratch/<owner>/`.
+- **PNGs are not barred** (operator, 7 Nov: "only single frames when used to show full motion instead of a
+  webp"). A tool that renders writes into owner scratch; on success `tools/evidence_media.py` publishes every
+  file UNCHANGED to the evidence folder (stills, frames and data; compare steps read PNG) and deletes the
+  scratch. On failure the scratch is kept and its path printed. Keeping a frame sequence as evidence is a
+  deliberate step: encode it with `evidence_media.animated_webp` (24 fps, under 10 MB, reduced size) into
+  `webp/<area>/<topic>/` and delete the frames once it is verified.
 - `python tools/artifact_paths.py prune-scratch [--apply] [--max-age-h 24]` lists every
   `scratch/<owner>/<run>` with size and age and, with `--apply`, deletes runs older than the age whose
-  process has exited. It only reports (never deletes) PNG evidence, WebPs over 10 MB and `profile/` folders
+  process has exited. It only reports (never deletes) PNG frame sequences (12 or more numbered frames in one folder), WebPs over
+  10 MB and `profile/` folders
   under `evidence/` or `webp/`. The lead runs it at milestones; nothing schedules it. Nothing deletes `logs/`.
 - **Relocation.** `.artifacts/evidence`, `.artifacts/webp` and `.artifacts/scratch` may each be a Windows
   directory junction to another drive (the archive on the HDD, e.g. `D:\Temp\Scratch\SRPSS\evidence`, scratch
@@ -67,7 +68,7 @@ Every tool writes evidence and scratch through one owner, `tools/artifact_paths.
 **Original Bubble settings parity:** `python -m tools.visualizer_replay.bubble_parity --output .artifacts/scratch/<owner>/bubble_before --gpu`
 captures full native-clip logical/presentation/physics records, source/settings provenance and GPU stills
 using frozen test settings. Run again with a new `--output` and `--compare .artifacts/scratch/<owner>/bubble_before` after migration
-(a capture a later compare reads stays lossless in owner scratch; elsewhere its PNGs are published as WebP).
+(published unchanged; PNGs stay PNG).
 It fails on full-frame, resolved-settings or GPU drift; it does not establish live cadence or audible timing.
 
 **Neon Lake GPU comparison:** `& ".\.venv\Scripts\python.exe" tools/neon_lake_capture.py --suite` (default output `.artifacts/evidence/visualizers/shockwave_grid/capture/`)

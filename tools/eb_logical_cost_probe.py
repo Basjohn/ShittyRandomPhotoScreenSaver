@@ -33,10 +33,10 @@ import subprocess
 import sys
 import time
 from unittest.mock import patch
-from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from tools import artifact_paths  # noqa: E402
 
 MODE = "extruded_bubble"
 WARMUP_SECONDS = 2.0

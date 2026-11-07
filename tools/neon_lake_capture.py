@@ -252,7 +252,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", type=artifact_paths.evidence_arg,
                         default=artifact_paths.default_evidence("visualizers/shockwave_grid", "capture"),
-                        help="PNG stem, or directory with --suite (published as WebP)")
+                        help="PNG stem, or directory with --suite (published unchanged)")
     parser.add_argument("--size", default="1300x750", help="logical item dimensions")
     parser.add_argument("--dpr", type=float, default=1.0)
     parser.add_argument("--window", help="logical render-window size; centres the card inside it")

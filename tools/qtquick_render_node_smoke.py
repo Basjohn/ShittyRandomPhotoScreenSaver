@@ -13,6 +13,10 @@ import threading
 import time
 from typing import Any
 
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from rendering.quick.bootstrap import (
     configure_quick_environment,
     configure_quick_graphics,
@@ -57,10 +61,6 @@ from rendering.quick.transitions import (  # noqa: E402
     TransitionRun,
 )
 from rendering.quick.window import QuickDisplayWindow  # noqa: E402
-import sys as _sys  # noqa: E402
-from pathlib import Path as _Path  # noqa: E402
-if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from tools import artifact_paths  # noqa: E402
 
 

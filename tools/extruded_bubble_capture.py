@@ -231,7 +231,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", type=artifact_paths.evidence_arg,
                         default=artifact_paths.default_evidence("visualizers/extruded_bubble", "capture"),
-                        help="output directory (PNGs published as WebP)")
+                        help="output directory (published unchanged)")
     parser.add_argument("--clip", type=Path, required=True, help="recorded feature JSONL (real-music recording)")
     parser.add_argument("--size", default="1300x750", help="logical card size")
     parser.add_argument("--window", help="logical window size; centres the card inside it")
