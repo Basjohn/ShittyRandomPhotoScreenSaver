@@ -52,6 +52,7 @@ from core.settings.models._visualizer_helpers import (  # noqa: F401
 
 from core.settings.models._spotify_visualizer import (  # noqa: F401
     SpotifyVisualizerSettings,
+    normalize_expanded_display_requested,
 )
 
 from core.settings.models._widget_settings import (  # noqa: F401
