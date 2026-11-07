@@ -44,6 +44,13 @@ _PREPARED_REVEAL_DEADLINE_S = 1.5
 _ACTIVATION_TRANSACTION_DEADLINE_MS = 6000
 
 
+def _shared_beat_engine(bar_count: int) -> Any:
+    """The production engine factory: the registry's one shared beat engine (imported on first use, so building
+    an owner imports no capture code)."""
+    from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+    return get_shared_spotify_beat_engine(bar_count)
+
+
 def _mode_runtime_factory(mode_id: str) -> Callable[[], Any]:
     """Resolve a mode's frame-runtime class from the canonical descriptor wiring.
 
@@ -102,7 +109,8 @@ class QuickDisplayVisualizerOwner:
             runtime_generation=runtime.runtime_generation,
             bar_count=int(bar_count),
             initial_mode=str(initial_mode),
-            engine_factory=engine_factory,
+            # The production owner is where the process's one beat engine enters a controller.
+            engine_factory=engine_factory if engine_factory is not None else _shared_beat_engine,
         )
         self._controller.logical_mailbox.set_trace_screen_index(
             int(runtime.screen_index)

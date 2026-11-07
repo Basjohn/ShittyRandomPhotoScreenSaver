@@ -185,9 +185,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   Reset Camera's double-click cycling the mode, AC-04, AC-05). Each is its own commit and must fail on the old
   code first. The Waveform agent's work is complete and merged.
 **Queued, next free medium slot, in this order (small, bounded):**
-0. **Checklist AC-06** (left by the Studio agent): the four Studio adapters' unbounded class-level clip caches and
-   the GUI-thread clip parse. Repeated offscreen Extruded Bubble sessions still grow about 2-3 MB each after the
-   controller-leak fix; these caches are the first suspect.
 1. **GC freeze per generation: merged 7 Nov; the live check is owed (lead, quiet machine).** The minute-ly 86–161 ms
    gen2 stalls came from the replay driver: it kept every frame under the interpreter's thresholds.
    - **The live defect:** a one-shot 45 s timer froze the startup heap once, and the first Settings visit thawed it
@@ -203,29 +200,15 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
      `[GC_POLICY]` lines. Commands in the agent's report; evidence `.artifacts/evidence/gc_gen2/`.
    - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
      they are collections.
-2. **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode** (operator 6 Nov
-   ~22:00; `logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset
-   home" x2). The pair also reached the visualizer region's double-click admission
-   (`QuickVisualizerDoubleClickAdmission`, `cycle_mode=self._cycle_quick_visualizer_mode`,
-   `engine/display_manager.py` ~3529). That cycled to the next mode in `mode_activation` (after Extruded Bubble comes
-   Waveform) and wrote `widgets.spotify_visualizer.mode` (~1939). The one-Visualizer contract held: EB's last tick was
-   22:04:34 and Waveform's first was 22:04:36, never overlapping. Fix at the owner: the camera hint buttons (Reset
-   Camera and any other in-card control) consume their presses, including the second press of a double-click, so no
-   in-card control press reaches mode cycling. Regression bar: a double-click on Reset Camera resets once or twice but
-   never cycles; a double-click on the card's empty area still cycles.
-3. **Checklist AC-04:** a failing inactive-renderer release blacks out the active mode on every frame
-   (`rendering/quick/visualizer/render_host.py:182-183, 304-329`); render the active mode first, record the failure
-   once, retry at the next boundary.
-4. **Checklist AC-05:** one beat-engine authority (delete `_global_beat_engine`; the tick uses
-   `controller.ensure_engine()` or raises). Lands before any SMP PCM source.
-5. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame
+2. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame
    fences with the query order preserved, plus the bench node-path case). Mechanical, pixel-identical.
-6. **Checklist AC-11, decided (operator 7 Nov): "don't ruin the bordered 3D cameras so adjust the freeform Sphere
+3. **Checklist AC-11, decided (operator 7 Nov): "don't ruin the bordered 3D cameras so adjust the freeform Sphere
    but ideally in a way that does not ruin its look/capabilities".** The framed (bordered) 3D cameras of Extruded
    Bubble, Neon Lake and Waveform stay exactly as they are. Sphere (freeform) gains a Reset Camera to its preset home
    and declared inertia/wrap, without changing its look, framing or orbit freedom; Extruded Spectrum gets the same
    treatment where it applies. Prove it pixel-identical at the preset home and identical under orbit before and after.
-   The in-card Reset Camera button must consume its own presses (item 2).
+   The in-card Reset Camera button already consumes its own presses (landed 7 Nov:
+   `Docs/Guardrails/Visualizer_Presentation.md` §14A); a new Sphere / Extruded Spectrum control follows the same rule.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 - **Any ThreadManager shutdown cancels every pending single-shot in the process.** `ThreadManager.shutdown`
@@ -934,13 +917,16 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     is destroyed. The watch now stays armed until Settings' first Paint after the first input and logs `qt_exposed`.
     **Open until a field log** shows a paint right after the reveal and `first Paint after the first input` within a
     frame or two.
-- [ ] **Per-session memory growth in the Studio (side defect, 6 Nov).** Process memory grows about 2-3 MB per
-  offscreen Extruded Bubble session (private bytes and USS, 16 sessions). The growth is the same with and without the
-  controller-leak fix, which `test_closed_studio_sessions_are_released_and_live_counts_stay_flat` guards: closed
-  sessions are now collected and live Studio object counts stay flat. So something other than the controller grows.
-  Find it with tracemalloc plus a native heap comparison. Same owner: checklist AC-06
-  (`Docs/Reference/Architecture_Checklist.md`), the four adapters' unbounded class-level `_clip_cache` dicts and the
-  GUI-thread clip parse in `waveform_recorded_inputs.py:262-273`. These are the first suspects for the growth.
+- [ ] **Per-session memory growth in the Studio (side defect, 6 Nov; the clip caches ruled out 7 Nov).** Process
+  memory grows about 2-3 MB per offscreen Extruded Bubble session (private bytes and USS, 16 sessions), the same with
+  and without the controller-leak fix (`test_closed_studio_sessions_are_released_and_live_counts_stay_flat`). The
+  sessions measured load no recorded clip, so the clip caches cannot be the cause; they are bounded now anyway
+  (AC-06 landed: 60 Audio Analysis re-analyses grew 39.3 MB before, 15.5 MB after, flat at 120). Re-measured with
+  `_sessions` (24 sessions, private bytes after `gc.collect()` per session): the first 4 sessions add ~85 MB (warm-up),
+  then ~1 MB per session that flattens, but the series swings by ±70 MB run to run (main and branch alike), and
+  tracemalloc sees only ~55 kB of Python growth per session (QML chrome objects, settings normalisation copies). What
+  grows is native (Qt Quick / GL driver heaps), not Python. Next: a native heap comparison (UMDH or VMMap) across 30
+  sessions; bar: a trend, not run-to-run noise, before any fix.
 - [ ] **Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the operator's feel check.** The cause
   was the inspector's ScrollView: a vertical wobble past the drag threshold stole the press, on every mode at the
   first wobble. Every drag instrument in a scrolling panel now sets `preventStealing: true`

@@ -84,64 +84,6 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
 
 ## Tier 2: defects to fix soon (small, real)
 
-- [ ] **AC-04 A failing inactive-renderer release blacks out the active mode** (A-11). Severity medium, reward medium,
-  effort S. **Confirmed by reading** `rendering/quick/visualizer/render_host.py`: `:182-183` calls
-  `release_inactive_implementations` when `mode_changed or len(self._implementations) > 1`, **before** the active
-  implementation renders (`:258`); `:304-329` keeps a renderer whose `release_resources` raised and then raises
-  `RuntimeError`, so every following frame re-enters (the cache still holds two), raises again, and
-  `rendering/quick/visualizer/node.py:394-397` records it through `RenderFailureLog` without drawing. The docstring
-  promise "a later legal render can retry it" is false in effect: the card stays black until teardown. No release
-  failure has been seen in logs (trigger unobserved).
-  - **Fix (owning boundary: `render_host.py`):** render the active implementation first; attempt inactive release
-    after it, catch its error, record it once through the lifecycle note and the failure log, and retry only at the
-    next mode boundary or at `release_resources`, never per frame. Keep the current-context check and the "a failed
-    release stays accounted" rule.
-  - **Must stay true:** release happens on the render thread with a current context; a retired mode's resources are
-    never silently dropped from the ownership snapshot; mode-boundary telemetry still advances once per switch.
-  - **Regression bar:** a renderer whose `release_resources` raises, then a switch to mode B: B's `render` runs on
-    every frame, the failure is recorded once (not once per frame), and the next boundary retries the release.
-
-- [ ] **AC-05 One beat-engine authority: delete the module global and the in-tick fallback** (A-07 + A-08). Severity
-  medium, reward medium, effort S. **Confirmed:** `widgets/spotify_visualizer/beat_engine.py:1973-1988`
-  `get_shared_spotify_beat_engine` writes `_global_beat_engine`, which `BeatEngineRegistry.clear()` (`:1952-1969`)
-  never clears and `set_engine` (`:1944-1950`) never updates; `engine/engine_lifecycle.py:292-295` force-stops
-  through the global first. `widgets/spotify_visualizer/tick_pipeline.py:965-969` binds the process engine when
-  `widget._engine is None`, bypassing `runtime_controller.ensure_engine()` / `_engine_factory` and the owner lease
-  (`quick_display_visualizer_owner.py:1505-1530`). No production trigger of the fallback was found; a Studio or
-  offline controller built without its engine would silently take the live capture engine.
-  - **Fix:** `get_shared_spotify_beat_engine` returns `BeatEngineRegistry.get_instance().get_engine(bar_count)` and
-    the global is deleted; `engine_lifecycle` calls only the registry's `clear()`; the tick uses
-    `controller.ensure_engine()` and raises when the controller has neither an engine nor a factory. The tick must
-    never resolve a process service.
-  - **Must stay true:** exactly one production `_SpotifyBeatEngine` (`Docs/Contracts.md` → Transition / visualizer);
-    `clear()` retains the engine while native capture ownership drains; Studio/offline paths inject through
-    `engine_factory` only.
-  - **Regression bar:** after `clear()` a `weakref` to the engine dies once the test drops its own reference with gc
-    disabled; `set_engine(x)` then terminal stop force-stops `x`; a tick on a controller with `engine_factory=stub`
-    and `engine=None` uses the stub, a tick with neither raises, and neither touches `BeatEngineRegistry`.
-
-- [ ] **AC-06 Studio memory and GUI-thread work: bounded clip caches, off-thread clip parsing** (A-04 + A-10).
-  Severity medium, reward medium, effort S. **Confirmed:** class-level `_clip_cache: dict = {}` in
-  `ui/studio/waveform_adapter.py:1209`, `extruded_bubble_adapter.py:760`, `bubble_adapter.py:653`,
-  `sphere_adapter.py:591`, written on every analysed clip and never evicted (keys include analysis values, so each
-  Audio Analysis change is a new entry), while `ui/studio/engine_answers.py:586-597` caps its store at
-  `ANALYSED_LIMIT = 24`. `ui/studio/waveform_recorded_inputs.py:262-273` parses the worker's JSON and converts it on
-  the GUI thread inside `QProcess.finished`. Entry size and parse cost are **Needs measurement**: `tracemalloc`
-  around `to_inputs` for one Waveform entry, and `tools/studio_drag_profile.py`-style timing of a clip switch with
-  the preview rendering.
-  - **Fix (owner: `ui/studio`):** route the four adapters through `engine_answers.remember/analysed` (or one shared
-    `analysed_cache(mode_id)` with the same limit and the same eviction) and delete the class dicts. Do the parse and
-    `_convert` on a ThreadManager IO task and publish the finished `RecordedInputs` through the existing
-    `run_on_ui_thread`, fenced on the job's cancelled flag; or have the worker write the binary sidecar the
-    Oscilloscope capture history already uses (`Docs/Reference/Visualizer_Studio.md` §3).
-  - **Must stay true:** the Studio owns no settings, clock, engine or desktop-visualizer resources; the worker runs
-    in its kill-on-close Job Object; the newest analysis wins.
-  - **Regression bar:** `ANALYSED_LIMIT + 5` distinct keys through each adapter's `start_clip_load` with a stub loader
-    never exceed the limit and keep the newest entries; `_on_finished` returns without calling `json.loads` on the
-    GUI thread (stub worker output).
-  - **Depends on:** the Studio controller leak item in `Current_Plan.md` (same owner; the leak keeps these caches
-    reachable). Route both to the Studio agent.
-
 - [ ] **AC-07 Unchanged settings writes still publish** (A-13). Severity low, reward medium, effort S. **Confirmed
   (code):** `core/settings/json_store.py:332-333` drops an unchanged write, but `SettingsManager.set`
   (`core/settings/settings_manager.py:1099-1172`) always calls `sync()` and `_publish_store_change`, which fans out to
@@ -212,8 +154,8 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
     that does not need a physical camera (reset turn/tilt to the preset's authored values). Then inertia and wrap
     become declared per-mode choices with a reason in `Docs/Reference/Visualizer_Reference.md` → Live view pose.
   - **Must stay true:** the framed-camera standard is the one shared camera (memory: never per-mode cameras); a
-    landscape keeps wrap off on purpose; the queued Reset Camera double-click defect (`Current_Plan.md`) is fixed at
-    the in-card control, not here.
+    landscape keeps wrap off on purpose; an in-card control consumes its own double-click
+    (`Docs/Guardrails/Visualizer_Presentation.md` §14A).
   - **Regression bar:** a registry test lists every mode with `view_orbit_settings`: each declares a reset path
     (framed spec or explicit `camera_reset: none` with a reason) and its inertia/wrap matches the reference table.
   - **Must land before** a second mode opts into the Expanded Visualizer (where the card is large and orbiting
@@ -302,13 +244,12 @@ Addenda from the same audit:
 
 ## Where the rest of the audit went
 
-- **Healthy** (checked, no item): one Visualizer owner and one beat engine (apart from AC-05's handle); render
-  resources released at the mode boundary behind a context check (apart from AC-04); card materials dormant when
+- **Healthy** (checked, no item): one Visualizer owner and one beat engine (one registry holder, controllers by factory); render
+  resources released at the mode boundary behind a context check, after the active mode draws; card materials dormant when
   Normal; timers weak-ref + token fenced; Settings destruction barrier; supervisor per-role locks; Studio workers in
   Job Objects; GC policy-owned; steady publications early-return; no environment-variable flags; bounded image,
   exact-replay, engine-answer and DevCurve caches; every QML file and every `tools/*.py` referenced.
-- **Known elsewhere, not re-listed:** the Studio controller leak and 18 s post-Studio stall, Reset Camera reaching
-  the double-click mode cycle, the Waveform logical tick starving the render thread, the 15 s usage-sample hitch, the
+- **Known elsewhere, not re-listed:** the Studio controller leak and 18 s post-Studio stall, the Waveform logical tick starving the render thread, the 15 s usage-sample hitch, the
   Bubble `max_disp *= 0.72` side defect, the Studio exact-replay frame budget: all live in `Current_Plan.md`.
 
 ## Appendix: challenged and why
