@@ -106,6 +106,7 @@ class QuickDisplayVisualizerOwner:
     _expanded_display = False
     _takeover: "_TakeoverFade | None" = None
     _expanded_source: Any = None
+    _expanded_overlays_drawn = False
 
     def __init__(
         self,
