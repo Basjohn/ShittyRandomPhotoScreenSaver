@@ -475,6 +475,31 @@ class ScreensaverEngine(QObject):
             }
         )
 
+    def _freeze_revealed_generation(self) -> None:
+        """The generation's coordinated reveal is its warm-up end: freeze the long-lived heap it built.
+
+        Every display generation's Qt/QML wrappers, programs, settings and caches exist by its reveal; freezing them
+        here takes them out of every later gen2 scan (``RuntimeGCPolicy.freeze_stable_generation``). Each generation
+        is thawed again before it retires (``engine_lifecycle.teardown_display_runtime``), so a retired generation's
+        cycles are never pinned past its barrier. Only a RUNNING engine freezes: a Settings pause or a replacement
+        that has not revealed never does.
+        """
+        policy = getattr(self, "_gc_policy", None)
+        freeze = getattr(policy, "freeze_stable_generation", None)
+        if not (callable(freeze) and getattr(self._get_state(), "name", "") == "RUNNING"):
+            return
+        from core.performance.frame_trace import current_frame_trace
+
+        traced = current_frame_trace() is not None   # --frame-trace only: what the freeze takes out of gen2
+        if traced:
+            from core.performance.gc_policy import heap_census
+
+            tracked, frozen, top = heap_census()
+            logger.info("[GC_POLICY] heap at reveal (before freeze) tracked=%d frozen=%d top=%s", tracked, frozen, top)
+        if freeze() and traced:
+            tracked, frozen, top = heap_census()
+            logger.info("[GC_POLICY] heap after freeze tracked=%d frozen=%d top=%s", tracked, frozen, top)
+
     def _record_stale_runtime_callback(self, label: str, generation: int) -> None:
         self._lifecycle_rejected_callbacks += 1
         logger.info(
@@ -1344,6 +1369,7 @@ class ScreensaverEngine(QObject):
         from core.diagnostics import lifecycle_window
 
         lifecycle_window.close_window()
+        self._freeze_revealed_generation()
         self._prepare_next_transition()
         from core.logging.logger import (
             is_lifecycle_logging_enabled,
