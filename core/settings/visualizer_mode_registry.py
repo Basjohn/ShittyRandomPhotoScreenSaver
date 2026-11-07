@@ -191,6 +191,11 @@ class VisualizerModeDescriptor:
     # selected callable; it must never enumerate descriptor hooks per tick.
     logical_tick_hook_module: str = ""
     logical_tick_hook_factory: str = ""
+    # Expanded Visualizer (plan 01, M1): whether the mode may take over its display as a display-wide viewport.
+    # Capability metadata only, opted into per mode and never a Settings flag or preset field; the persisted user
+    # intent is ``widgets.spotify_visualizer.expanded_display_requested``. Read it through
+    # ``resolve_expanded_display_capable`` so a disabled, gated or unregistered mode can never force expansion.
+    supports_expanded_display: bool = False
 
     @property
     def preset_key(self) -> str:
@@ -432,6 +437,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         prepared_reveal=True,
         geometry_kind="planar",
         layout_profile="planar",
+        # The first (and so far only) mode admitted to the Expanded Visualizer (plan 01).
+        supports_expanded_display=True,
     ),
     VisualizerModeDescriptor(
         'waveform_ribbon','Waveform Ribbon','_waveform_ribbon_preset_slider',('waveform_ribbon_',),
@@ -1074,6 +1081,26 @@ def resolve_effective_mode(
     if default_mode in enabled:
         return default_mode, True
     return enabled[0], True
+
+
+def resolve_expanded_display_capable(mode_id: object, mode_activation: object) -> bool:
+    """Whether ``mode_id`` may be expanded to its display right now (Expanded Visualizer, plan 01 §B2).
+
+    Four of the plan's five predicates, each required: *registered* (a canonical descriptor), *active* (not behind a
+    closed gate), *enabled* (admitted by the canonical ``mode_activation``) and *capable* (its descriptor opts into
+    ``supports_expanded_display``). The fifth, expanded-effective, belongs to the takeover reducer
+    (``core.expanded_visualizer_takeover``). Unknown, retired, gated or disabled modes answer False and raise nothing,
+    so no stale or hand-written mode id can force expansion. Pure: no import, write or default is created here.
+    """
+
+    requested = str(mode_id or "").strip().lower()
+    if requested not in VISUALIZER_MODE_IDS:
+        return False
+    if not get_visualizer_mode_descriptor(requested).supports_expanded_display:
+        return False
+    if not is_mode_active(requested):
+        return False
+    return requested in resolve_admissible_enabled_modes(mode_activation)
 
 
 def resolve_effective_visualizer_section(
