@@ -177,6 +177,10 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `tests/test_visualizer_authored_clock.py` fails on main; the lead re-ran it there for three modes. No external
   wall-clock timestamp reaches the clock path. The rule is in the visualizer change checklist §2.
   **Now on queue item 1 (the gen2 GC stalls),** which it found itself.
+- **AC-09, then AC-02 (Opus high, started 7 Nov):** the card border width resolver first, then the host-neutral
+  Visualizer binding with Media docking as a placement policy. AC-02 is the first SMP and Expanded Visualizer
+  prerequisite. It picks up the Reset Camera fix from main before moving the click admissions, and leaves
+  queue item 5 as AC-08 only.
 - **Small-defects agent (Opus medium, started 7 Nov):** queue items 0, 2, 3 and 4 below, in that order (AC-06,
   Reset Camera's double-click cycling the mode, AC-04, AC-05). Each is its own commit and must fail on the old
   code first. The Waveform agent's work is complete and merged.
