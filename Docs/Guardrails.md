@@ -21,6 +21,14 @@ This is the **short preflight**, not a second documentation authority. Use the f
 - Settings remembers only the active tab/pill editing path and necessary ancestors. Inactive buckets close; Settings values and presets remain freely editable.
 - Use the present virtual environment and bounded focused tests. **No test-command environment-variable writes, no local frozen builds.** Prefer agent-executable verification; subjective appearance requires operator acceptance.
 - Treat source-only validation as source evidence. Do not close an unverified functional or visual failure.
+- **Evidence and scratch hygiene (operator, 7 Nov 2026: "agents have littered").**
+  - PNGs are temporary, kept only while you examine frames.
+  - **Durable visual evidence is small WebP:** a frame sequence becomes one animated WebP at 24 fps, under 10 MB and
+    reduced in size; a still becomes a still WebP. Keep summaries, tables and contact sheets. Never keep raw frame
+    folders, per-run profile copies or duplicated source trees in `.artifacts/evidence`.
+  - Delete your own scratch, temporary worktrees and `tmp/` items before reporting.
+  - Never touch the operator's recordings (`logs/visualizer_recordings`), `release/` or `.venv`.
+  - Listing of the 7 Nov conversion: `.artifacts/evidence/frame_webps_20261107.md`.
 
 ## Focused owners (read the relevant ones)
 
