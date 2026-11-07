@@ -62,16 +62,8 @@ Consequences, all learned the hard way:
   factor, presence against a 6 s running level, is itself a learned level: a quieter passage after a loud one reads
   less until the running level catches up, then more. Waveform Ribbon dropped it (7 Nov); the other modes still use it
   and are on the plan to follow.
-- **Memoryless means the same music draws the same response (operator, 7 Nov 2026: "Adaptivity is the enemy").** "A
-  soft start with vocals peaking should read the same as a chorus dropping to soft and vocals peaking there if they
-  match." Music cannot be analysed ahead of time, so any running mean, remembered peak, learned floor or ratio against
-  recent history in a response path makes the same moment look different depending on what came before. Smoothing the
-  CURRENT level (attack/release followers) is allowed and needed; comparing against a learned level is not. Good
-  reaction without memory comes from fixed references placed on real music (§13A), a release that actually lets go
-  (the visible release of cascaded stages is their sum), and the travelling or event channels for beats. Every
-  history-dependent stage agents added since (remembered-peak gains, phrase means with contrast widened about them,
-  learn-rate gates, presence gates on bodies) re-created the "hot-chorus flatlining" and "better later in the song"
-  failures this section was written against.
+- **Memoryless means the same music draws the same response (operator, 7 Nov 2026: "Adaptivity is the enemy").** The
+  rule, what counts as adaptive and what replaces it are in §2B; every response path obeys it.
 - **A clamp is not a normaliser.** The 2.5 clamp on the live lane is a safety bound; ordinary music saturates it, so
   no contrast survives there.
 - **Silence must not teach a running level.** A running reference that decays through a pause makes the music's
@@ -81,6 +73,93 @@ Consequences, all learned the hard way:
 Sphere's rejected spectral-flux implementation is the cleanest negative example: `get_smoothed_bars()` had already passed through Spectrum-oriented shaping, temporal bar smoothing and AGC/play-ramp behavior. That made a Sphere-local onset detector depend on another mode's display signal. The accepted path uses the already-computed, temporally unsmoothed, pre-shape/pre-AGC analysis spectrum instead.
 
 Conversely, raw/pre-AGC is **not** automatically better everywhere. Bubble/Blob proved that pushing hotter raw pressure through downstream math tuned for a cooler smoothed signal simply changes “dead” into “blown out.” Source choice and response math must be calibrated together.
+
+### 2B. No adaptivity: the same music draws the same response (binding)
+
+Operator, 7 Nov 2026: "Adaptivity is the enemy"; "A soft start with vocals peaking should read the same as a chorus
+dropping to soft and vocals peaking there if they match"; "Dynamics are fucking awful ... You cannot reliably do this
+for music you cannot analyse ahead of [time]."
+
+- **The rule.** Anything that sizes, gates or scales what the viewer sees is a function of the CURRENT music only.
+  Music cannot be analysed ahead of time, so any memory in a response path makes the same moment look different
+  depending on what came before: a loud passage starts big and shrinks, the same step draws a different rise, a song
+  reads "better later" or flatlines in a hot chorus. Smoothing the current level (attack/release followers, cascaded
+  stages) is allowed and needed; comparing it against a level learned from the track is not.
+- **What counts as adaptive (each was in production; never re-add one under another name):**
+  - **phrase-mean widening:** swings widened about a learned ~3 s mean of the drive itself (Waveform `PHRASE_DIP` /
+    `PHRASE_RISE`): the widened swell sank back over 3 s as the mean caught up, so a loud passage started big and
+    shrank;
+  - **a learn gate:** a learn rate that pauses a memory at dips (Waveform's fell to 0 at every presence dip and sat
+    below .5 on 39% of music ticks): the same soft->loud step drew x1.0 to x3.4 the memoryless rise depending on it
+    (Anything: none for 30 s; Growing Pains, 1985: x2.7-3.4);
+  - **a remembered or decaying peak** used as a divisor or gain (Waveform's retired Adaptive Response, Spline Curve's
+    body peak, a "slowly falling peak", a learned usual level, Dynamic Floor's learned average, §13A): a spliced 5 s
+    break sized the following 10 s 5-9% up, and a quieter passage was re-normalised back up to loud reach within a
+    verse;
+  - **a presence ratio** (loudness over its own running level: the bus `presence`, `musical_weight`'s second factor)
+    used as a gain or gate: it gated Waveform's body, so a quieter passage after a loud one read less until the
+    running level caught up, then more;
+  - **a per-block peak input normaliser** (each PCM block scaled to a target peak): it turns a louder, peakier
+    passage down against a softer one, and stepped near-silence by 2.8x at a .05 peak;
+  - **contrast about a running mean** (old Breathing widened each drive about the phrase mean; an "accent" sized by
+    its weight above the recent mean, §13C);
+  - **per-kind running-mean contrast on kicks:** an onset already measured against the bus's adaptive threshold,
+    judged again against a running mean of its own kind, zeroed 2/3 of kicks and faded a steady beat to <1% of its
+    first kick, so songs looked reactive at the start and muted in the middle (§13D).
+- **What replaces it:**
+  - **a fixed response on the real-music scale:** drive = gain x target^curve, eased above a knee toward a ceiling
+    below 1 (Waveform `fixed_response`: height/lift 1.2 x t^.75/.82, every other drive 1.12 x t^.86, knee .8,
+    ceiling .92), the same for every song, calibrated once on long recordings to what the replaced path VISIBLY did,
+    not hotter (§13D "no adaptive response gain");
+  - **absolute audibility gates:** a smoothstep on loudness on the fixed scale (`transient_bus.audible`), never a
+    ratio against recent loudness;
+  - **a fixed pre-FFT input gain** (Waveform `bar_computation.RAW_SIGNAL_INPUT_GAIN` 2.8: the gain the normaliser
+    always landed on in real playback, block peaks .14-.30 on eight recordings, so every calibrated anchor stayed
+    put);
+  - **release cascades within the authored Decay:** phrase-scale swings come from a release that actually lets go
+    (each stage of a two-stage cascade takes a share of Attack/Decay, Waveform `CASCADE_SHARE`, so the visible release
+    is about the authored Decay), and Breathing only shortens that release in a soft passage, a function of the current
+    passage;
+  - **travelling and event channels for beats**, and channels that do not fight the shape for kicks the geometry
+    cannot show (Waveform's Kick Accent, §13D).
+- **The one legitimate adaptive threshold is event ADMISSION.** "Did an onset happen?" may compare flux against a
+  short local threshold (about a second, §3). It decides admission only, never size: the same kick right after a dense
+  passage scores .22 against .61. Size every reward on the fixed scale (`musical_emphasis`, `passage_ramp`).
+- **Prove it in continuous play.** Replay songs back to back without a reset and splice a 2-5 s break into recorded
+  music (§13D "A break is a test of every running reference"); score the response against the song's own PCM
+  (`tools/visualizer_replay/waveform_music_response.py`, which flags re-scaling at equal loudness early vs late).
+  Anything that still differs once its followers settle is a running reference to remove.
+- **Known remaining violations** are on the plan (`Current_Plan.md` §3 "Learned levels still in other modes"):
+  `musical_weight`'s presence ratio in Spline Curve, Extruded Bubble, Neon Lake, Oscilloscope and Sphere, and Spline
+  Curve's remembered body peak; Waveform's onset reward is still sized by the bus's adaptive flux threshold
+  (`Current_Plan.md` §1 item 2). Remove them; never copy them into a new mode.
+
+### 2C. Vocals lead; bass must not drown them (Waveform Ribbon, 7 Nov 2026)
+
+Operator: "Vocals ARE more important than bass, secondary to vocals are changes (like kicks or vocals) during sustained
+bass"; "Bass is tricky it cannot be completely ignored but it easily drowns out everything else"; "Vocals are key to
+always keep an eye on though as well as of course the waveform reaction trace tool."
+
+- **Order of authority:** vocals first; then changes (kicks, vocal entries) inside sustained bass; bass kept, but
+  never the only or leading route of a main drive. Bass is loud and sustained in most mixes (the live bass lane is
+  pinned almost always, §2A), so a bass-led drive sits on the bass and cannot show the voice.
+- **Measured on Waveform:** every preset's Pulse Strength (the bend drive) was bass-only. Routed mid-led (Bass gain
+  1.0 -> .5, Mids gain 0 -> .8, both curve 1.3; commit d5623bdc), on eight recordings back to back: Pulse Strength vs
+  the PCM vocal band +.50 -> +.66 (Don't You See, a vocal song with little bass, -.58 -> +.18; Rag Doll, bass-led,
+  +.71 -> +.57), loudness tracking on Preset 1 +.45 -> +.48, Frozen Past born swell +.50 -> +.56. The cost: a kick
+  inside sustained bass raises the swell 21% less (median .058 -> .046), and those kicks now reach Kick Accent (roll,
+  twist, sparks, strands) instead.
+- **Rejected on measurement:** a dedicated 2048-sample 30-150 Hz bass lane (it drowned the vocals: Human +.55 ->
+  +.15); rebalancing the phrase-energy weights toward mids (+.03 only).
+- **Method for every candidate routing:** score a vocal band taken from the recording's own PCM (the lead audit used
+  300-3400 Hz energy over the newest 2048 samples of each feature frame's capture history, correlated in 1 s means
+  over music seconds) beside the song's own music trace (`tools/visualizer_replay/waveform_music_response.py`, the
+  waveform reaction trace tool: loudness tracking, saturation, dead and spurious shares), and kick-lock the swell rise
+  on kicks inside sustained bass (PCM bass in the song's top third). Judge whole songs in continuous play on several
+  recordings, including a vocal song with little bass and a bass-led one.
+- **Author routing in the canonical routing matrix** (the Studio's response tuner, then Save To Preset), never as a
+  hidden code lane: the change above is three routing values per curated preset, set through the Studio, nothing in
+  code. Routing is preset content the operator owns and retunes.
 
 ---
 
@@ -112,10 +191,10 @@ raw analysis spectrum
     -> flux / threshold contrast
 ```
 
-The adaptive threshold answers only "did an event happen?" (a short local context, about a second). Never size a
-reaction from that ratio alone: the same kick just after a dense passage scores far lower (lead audit 7 Nov, synthetic:
-reward .22 against .61 at 50 ms after the drop, equal after ~2 s). Size rewards on the fixed scale (`musical_emphasis`,
-`passage_ramp`).
+The adaptive threshold and the slower local baseline answer only "did an event happen?" (a short local context, about
+a second; §2B: the one legitimate adaptive threshold). Never size a reaction from that ratio or that jump alone: the
+same kick just after a dense passage scores far lower (lead audit 7 Nov, synthetic: reward .22 against .61 at 50 ms
+after the drop, equal after ~2 s). Size rewards on the fixed scale (`musical_emphasis`, `passage_ramp`).
 
 Typed events remain valid evidence over a loud bed. Do **not** reduce a kick/vocal because the surrounding passage is loud. Instead, separate the question “did the event happen?” from “how much presentation reward did this event earn?”
 
@@ -139,10 +218,13 @@ Prefer this shape:
 
 ```text
 raw/current source with useful headroom
--> local normalization against observed low/high or floor/peak
+-> normalization against a FIXED low/high placed on real music
 -> response shaping
 -> final bounded presentation value
 ```
+
+Place `low`/`high` once from pooled percentiles over several full songs (§13A), never from a floor or peak observed in
+the playing track (§2B).
 
 A simple normalized lane is often enough:
 
@@ -318,7 +400,10 @@ Treat these as warning signs:
 - a new timer/poller/FFT/audio worker created because the mode wants a different response signal;
 - normalising by `_raw_bass_avg` or any level that only adapts while Dynamic Floor is ON: with the floor OFF it
   is the manual-floor setting, so the lane pins at its ceiling (§13A);
-- relying on Dynamic Floor for good reactions: it learns a level from the track and degrades as the song continues (§13A).
+- relying on Dynamic Floor for good reactions: it learns a level from the track and degrades as the song continues (§13A);
+- any memory in a response path: a running mean, a remembered peak, a learn gate, a presence ratio used as a gain or
+  gate, a per-block peak normaliser, contrast about a running mean (§2B);
+- a main drive routed from bass alone, or a routing lane hidden in code instead of the canonical routing matrix (§2C).
 
 ---
 
@@ -341,7 +426,8 @@ Then:
 
 1. choose an existing audio/analysis authority for each semantic; do not create a second FFT or audio owner;
 2. keep presence, event admission, event magnitude and sustained support separate unless evidence proves they can share;
-3. preserve source headroom through the mode's local normalization;
+3. preserve source headroom through a fixed-scale normalization with no memory (§2B), and route main drives vocals
+   first (§2C);
 4. choose attack/release/refractory times from the visual meaning, not from one global smoothing constant;
 5. establish neutral, weak, medium, strong and maximum synthetic cases and assert monotonic ordering;
 6. explicitly test **silence**, a quiet song, ordinary material, a hot chorus/dense passage, and isolated strong kick/vocal events over a loud bed;
@@ -559,7 +645,9 @@ These held across EB's input, breathing, flow, collision and drift work. Each co
   passages but moved 2-4% with the beats. A separate surge (onsets that stand out from the recent ones, eased in
   over ~0.1 s, released over ~0.3 s) pushes toward the loud handle; leave headroom under the handle for it.
 - **Music sends ~10 onsets a second.** A response to every onset with a half-second release is a constant offset,
-  not pulses: respond to accents (weight above the recent mean).
+  not pulses: respond to accents (weight above the recent mean). **Superseded 7 Nov for sizing (§2B):** standing
+  out from the recent onsets may ADMIT an accent; its size is read on the fixed scale, never from its weight above
+  the recent mean (per-kind running-mean contrast muted mid-song kicks, §13D).
 - **Rank quiet/loud by the passage, not the instantaneous value** (it snaps to 0 between beats, so its "quietest
   fifth" is beat gaps inside loud music).
 - **Handles that cannot cross must hold one ordered quantity.** A rest depth and a crest on one Range forced the
@@ -652,8 +740,8 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` �
   reaches it, then it moves to match the current values low or high and freezes again when the pulse leaves.") A
   travelling field that sums every hit covers the whole view on dense music, so "where the pulse is" means everywhere:
   launch discrete bands on onsets (spaced at least two widths apart, later energy strengthening the newest), combine
-  them by maximum, cap how many are in view (Pulse Count) and gate a freeze on each band's window (a full core and a
-  Pulse Falloff at each side). A frozen region must hold every quantity that moves it, not just the body drives: the
+  them by maximum (never summed), cap how many are in view (Pulse Count 1-3; a Centre Out pair is one) and gate a
+  freeze on each band's window (a full core and a Pulse Falloff at each side). A frozen region must hold every quantity that moves it, not just the body drives: the
   swell, the final bounded gain (one shared bound rescales every held swell), vertical offsets (a whole-ribbon lift
   moves frozen cloth), the surge displacement (a scene-fixed drift field moves cloth flowing through it, and so does
   scaling it by a live strength), shape springs, roll and twist phase, idle motion and the clock. Hold it on cells
@@ -684,8 +772,8 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` �
   6 Nov) pinned Pulse Strength (3 s contrast -34..-39%), flattened passages and pushed crests out of the card; a drive
   parked in the easing knee loses contrast even when it never pins, so check each drive's own 3 s contrast, not only the
   visible size. Gate the result per preset against main: visible size p10/p50/p90, 3 s contrast, time near the top,
-  kicks per time bin, the card's top edge. Waveform's former remembered-peak path survives only as the opt-in
-  Adaptive Response control (off in every preset); add no new adaptive path.
+  kicks per time bin, the card's top edge. Waveform's remembered-peak path and its opt-in Adaptive Response control
+  were retired 7 Nov (`visualizer_retired_modes`); add no adaptive path (§2B).
 - **A break is a test of every running reference.** Splice 2-5 s of near-silence into recorded music (scale the PCM,
   re-analyse it through the production chain) and compare what follows against the unbroken clip per layer: engine
   adaptive sensitivity (Waveform's raw lanes and bus loudness are before it: no effect), the bus (its passage level
@@ -696,8 +784,9 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` �
   eased roll-speed impulse, spark births on the swell), on the fixed reward scale, never a clamped confidence. Bound
   any continuous channel per kick against its own base (Waveform: at most 15% of the roll's speed): unbounded, dense
   kicks overlapped into a sustained ~2x spin. Measure the mean and the acceleration tail in loud songs, not one kick.
-- **(Opt-in Adaptive Response only; superseded 7 Nov for every preset: there is no gain memory to hold.)** Hold the
-  gain's memory through a quieter PASSAGE, never through beat gaps. A 30 s relaxation re-normalises a
+- **Historical (the opt-in Adaptive Response this applied to was retired 7 Nov; there is no gain memory to hold, §2B).**
+  Kept as the record of why holding a memory does not rescue an adaptive gain. It held the gain's memory through a
+  quieter PASSAGE, never through beat gaps. A 30 s relaxation re-normalises a
   quieter passage back up to loud reach within one verse (a passage at 70% of the loud input reached Pulse Strength .88
   against the loud passage's .87 after 25 s): "it swelled up to full power when the song went quieter". Keying a
   longer memory to the drive being below its peak is wrong: a drive sits below its peak between almost every pair of
@@ -728,7 +817,7 @@ ticks (bass input p05 = p50 = p95 = 1.0 on two songs), beat modulation of the di
 windows differed by ≤ 1.4×, and the smoothness slope limiter held the bass curve on 72–98% of ticks. Fix, owner
 `widgets/spotify_visualizer/devcurve_runtime.py`: each layer's level = its share × the bus loudness (fixed real
 scale); the height is a slow **body** plus fast **accents**: only the body (two slow stages) is divided by the
-remembered peak (floor in loudness units, landing at 1.0 of the drive; **a learned level that breaks §2A**: on the
+remembered peak (floor in loudness units, landing at 1.0 of the drive; **a learned level that breaks §2B**: on the
 plan to remove, 7 Nov), while accents — the body layers' flux lane above its
 own recent mean, the transients layer's flux spike above its body, captured and held 0.06 s — are read on fixed
 scales into the reserved room above it, then eased by two stages of (0.025, 0.15) s (each second stage follows its
@@ -818,5 +907,6 @@ Read these for the cases behind this guide rather than copying their old impleme
 - R-76 / tall Spectrum evidence — physical-pixel flicker caused by delivery/temporal scaling must not be “fixed” by reducing response.
 - `Docs/Reference/Extruded_Bubble/Investigation.md` §65 — floor-independent fixed-scale body feed, sustained-lane knee/timing and per-identity breathing measured against 2D with Dynamic Floor ON (§13A).
 - `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` → Current reaction model and `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` — travelling pulse, flow rule, adaptive gain, floor lift and no-twitch evidence (§13D); negative-control tests `tests/test_waveform_no_twitch.py`, `tests/test_waveform_reaction_modes.py`, `tests/test_waveform_trough_clearance.py`.
+- `.artifacts/evidence/visualizers/waveform_ribbon/memoryless_reactivity/` (`20261107_lead/README.md`, `20261107_bands/`) and `Current_Plan.md` §1 item 2 — the adaptive stages removed and what replaced them (§2B), pulse bands and the cloth-fixed freeze (§13D), and the vocals-first routing (§2C, commit d5623bdc); tests `tests/test_waveform_memoryless_response.py`, `tests/test_waveform_fixed_response_and_kick_accent.py`, `tests/test_waveform_pulse_count_and_falloff.py`.
 
 Historical files are evidence and negative controls. Current source + `Spec.md` + current guardrails remain implementation authority.
