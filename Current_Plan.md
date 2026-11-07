@@ -150,9 +150,11 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
     against floor contact before. That is an authoring choice; no reaction was shrunk.
 
   Evidence: `.artifacts/evidence/waveform_followups/` (tables, clip sheets, music traces; raw captures not kept).
-  **AC-12 (the monotonic authored clock) built 7 Nov, awaiting the lead's review:** every mode's recorded-clip replay
-  byte-identical to main (88 cases, nine modes); result in `Docs/Reference/Architecture_Checklist.md` AC-12, evidence
-  `.artifacts/evidence/ac12/`. Its live tick spikes around preset switches are gen2 GC, now queue item 1 below.
+  **AC-12 merged 7 Nov.** The authored clock is monotonic: `core/authored_clock.py`, with every visualizer-path
+  `time.time()` converted. 88/88 replays across all nine modes are byte-identical to main.
+  `tests/test_visualizer_authored_clock.py` fails on main; the lead re-ran it there for three modes. No external
+  wall-clock timestamp reaches the clock path. The rule is in the visualizer change checklist §2.
+  **Now on queue item 1 (the gen2 GC stalls),** which it found itself.
 **Queued, next free medium slot, in this order (small, bounded):**
 0. **Checklist AC-06** (left by the Studio agent): the four Studio adapters' unbounded class-level clip caches and
    the GUI-thread clip parse. Repeated offscreen Extruded Bubble sessions still grow about 2-3 MB each after the
