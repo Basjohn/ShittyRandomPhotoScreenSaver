@@ -10,6 +10,9 @@ shift a remembered one.
 The profile is answered by the one product-identity predicate (``core/mc.py``); never add a second resolver here.
 A new tab adds one descriptor; it builds lazily, owns its own pill vocabulary through ``pill_of`` and must not keep
 hidden value-owner widgets (Studio-owned values live in a value cache, see ``ui/tabs/media/spec_mode_builder.py``).
+
+The existing tabs' modules are imported with this registry, as they were with the dialog before it. A profile that
+must not import saver modules (the SMP plan's import-scan bar) moves those imports into the builders.
 """
 from __future__ import annotations
 

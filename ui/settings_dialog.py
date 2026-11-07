@@ -33,7 +33,12 @@ from core.settings.visualizer_preset_transfer import (
     import_visualizer_presets_folder,
 )
 from core.animation import AnimationManager
-from ui.settings_tabs import SettingsProfile, settings_tab_descriptors, settings_tab_pill
+from ui.settings_tabs import (
+    SettingsProfile,
+    settings_tab_descriptor,
+    settings_tab_descriptors,
+    settings_tab_pill,
+)
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
 from ui.widgets.control_shadow import (
@@ -804,9 +809,13 @@ class SettingsDialog(QDialog):
     )
 
     def _persisted_tab_key(self) -> str:
-        """The remembered tab key, whether or not this profile shows that tab."""
+        """The remembered tab key, whether or not this profile shows that tab.
+
+        A key the registry does not know (a retired tab) falls back to the
+        legacy index, as before the registry.
+        """
         stored_key = self._settings.get('ui.last_tab_key', None)
-        if isinstance(stored_key, str) and stored_key:
+        if isinstance(stored_key, str) and settings_tab_descriptor(stored_key) is not None:
             return stored_key
         stored = self._settings.get('ui.last_tab_index', 0)
         try: legacy_index = int(stored)
