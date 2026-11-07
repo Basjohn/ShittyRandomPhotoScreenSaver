@@ -105,23 +105,14 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   9/9 focused files pass on the merge. The branch's impact gate passed 724/726; the two failures fail on main too.
   Its side defects are recorded below and in the checklist. The rest of A-12 (the page-level Bar Appearance and
   Rainbow hidden rows) is open.
-- **Settings system and SSOT audit (Opus high, started 7 Nov, operator-requested after AC-01).** A read-only audit
-  of the post-registry code. Scope:
-  - schema, defaults and persistence: one owner per key; defaults that leak into widgets, QML or presets;
-  - typed settings versus raw key strings;
-  - presets and Studio-owned values; profile gating (MC/SMP);
-  - import, export, reset and cache; change signals and the control-to-key binding;
-  - dead or orphan keys, and compatibility bridges;
-  - values duplicated between 2D and 3D or between runtime and Settings.
-  It produces a ranked, actionable checklist (priority, reward, the fix) that the lead challenges and promotes into
-  `Docs/Reference/Architecture_Checklist.md`. Defects it finds go to this plan.
-  **Binding (operator, 7 Nov):** the spec systems are the canonical owners and stay:
-  - each visualizer mode's Settings are declared once in `core/settings/visualizer_mode_settings.py`;
-  - each transition's Settings are declared once in `rendering/transition_settings.py`.
-
-  The audit finds what bypasses or duplicates them and proposes folding it into them; it never proposes replacing
-  them. One known straggler to judge: the audio-analysis Technical controls are still declared separately in
-  `ui/tabs/media/technical_controls.py`.
+- **Settings system and SSOT audit: done 7 Nov.** It is at `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md`. The
+  lead re-checked its key lines in source, and all 7 items survived; they are promoted to the checklist as Tier S,
+  AC-17 to AC-23. Theme-material root cause (AC-17): the generated Widget mirror of each "[Glass]"/"[Acrylic]"
+  Settings theme deliberately drops the material, so the runtime never sees one. The fix waits on the operator's
+  choice.
+- **Settings SSOT fold (Opus high, started 7 Nov):** AC-19, AC-22, AC-18, AC-21, AC-23 and AC-20, in that order,
+  each a separate commit. Each must fail on the old code first and keep the spec systems as the owners. AC-17 joins
+  once the operator chooses.
 - [~] **Spectrum presets 2-15: re-authored by the lead (7 Nov), awaiting the operator's eyes.** The first agent
   round failed the fidelity gate (operator: "awful"). Its looks were opaque clip-art blocks, its per-bar patterns
   turned to checkerboard and tartan, its ghost trails read as soot, and Union Jack read as tartan. That round is not
