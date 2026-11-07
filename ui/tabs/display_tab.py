@@ -107,6 +107,9 @@ class DisplayTab(QWidget):
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
         scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
+        # The themed slider look, as every other tab binds it (the Interaction glow sliders drew Qt's native
+        # slider without it, operator 7 Nov).
+        shared_styles.bind_shared_styles(scroll, "SLIDER_STYLE")
 
         content = QWidget()
         layout = QVBoxLayout(content)

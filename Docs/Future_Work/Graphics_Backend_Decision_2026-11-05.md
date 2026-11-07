@@ -93,6 +93,63 @@ measured, which no API change made from Python can fix.
 5. When a SPIR-V compiler is admitted to the dev tooling, a test compiles every program to SPIR-V; until then, reviews
    enforce 1-4.
 
+## Addendum, 7 Nov 2026: a universal visualizer performance architecture (operator direction)
+
+The operator: "The Native Core and the Vulkan support once we've finished this set of optimization and fixes? We
+should have it be universal so we have improvements to all visualizer modes which are more needed than ever when it
+could be going fullscreen."
+
+**Trigger status:**
+- **Trigger 2 (render-thread starvation)** is effectively met. Waveform Ribbon's logical tick holds the GIL 73-75%
+  under game60, so render-mode time is 16-21 ms and frames fall to 37-44 fps; offline its dynamics cost about 1.3 ms.
+  Extruded Bubble is the second case (GIL 0.53).
+- **Trigger 1 (GPU budget)** is close: at display size Extruded Bubble already renders 8.2 ms under game60 (M0
+  receipts), over §0.7's 8 ms. Full display now covers every mode except Sphere and Extruded Spectrum.
+- Trigger 2's wording asks for logical-tick optimisation first. That was the byte-identical tick cut (merged 7 Nov,
+  13-16% offline), and it confirmed the trigger:
+  - live with NO load, the Waveform Ribbon tick took 7.49 ms (median; p90 12.5; GIL share 0.67; 51.7 fps), against
+    about 1.5 ms of its own work in replay;
+  - about 6 ms of every live tick is therefore spent waiting for the GIL held by the render and GUI threads;
+  - code trimming cannot remove that wait. Piece A below removes it by construction.
+
+**The plan: three combinable pieces, each likely to pay off, each removing a different bottleneck.**
+
+| Piece | Removes | Fidelity | Why it is likely to pay |
+| --- | --- | --- | --- |
+| **A. Out-of-process visualizer engine** (universal) | GIL contention between the logical tick and the GUI/render threads | byte-identical | The same Python tick code runs in one worker process (only one Visualizer runs at a time). It publishes immutable frame packets through shared memory (the triple-buffer pattern of the audio capture, R-171), so the main process never runs the tick. Replay identity tests apply unchanged. Settings edits reach the worker as versioned snapshots; the worker lives and retires per generation like the image and audio workers. |
+| **B. Native render core** behind `QSGRenderNode` on Qt Quick's RHI (Vulkan; D3D12/GL selectable through the RHI) | Python and the GIL on the render thread, for every mode | pixel parity per mode | The core reads A's packets straight from shared memory and records frames natively, so no Python runs per frame on the render thread. Modes port one at a time behind a capability flag; the GL path stays until each mode's parity (BTF, pixel oracles, protected QSG/clip work) is proven. "Vulkan support" comes with it: the backend becomes Qt's choice. |
+| **C. Mixed-resolution soft layers** as a core service | GPU fill cost at full display and 4K | lines, dots, particles and rims stay native | Mist/fog, bloom, glass/reflection blur and wide glows render at reduced resolution with depth-aware upsampling (the rule above). It is universal, and it is the measured risk of full display. |
+
+A makes B cheaper (the packet layout is fixed and already off-thread). C slots into B's frame graph. Together they
+cover all three measured costs: the logical tick's GIL, the render thread's Python, and GPU fill.
+
+**Secondary options:**
+- **D. Per-mode GPU simulation** (a ribbon's per-vertex motion, strands, particle populations): only where a profile
+  after A shows the simulation itself dominates. Identity becomes tolerance-based, judged on renders.
+- **E. Compiled hot loops** (Cython/C, `nogil`): only if A is rejected or a hot spot remains inside the worker.
+- **F. Free-threaded CPython 3.14t:** a spike only. It depends on PySide6, PyOpenGL and numpy being production-ready
+  free-threaded; if they become so, it could someday replace A.
+
+**Rejected:**
+- A lower tick rate with interpolation: it moves transients and changes dynamics, so reaction is lost.
+- Whole-frame upscalers (above).
+
+**Order, after the current set of fixes and optimisations lands** (the tick cut, card surfaces, the Studio fixes):
+1. **P1, toolchain spike for B (go/no-go):**
+   - a minimal native `QSGRenderNode` built against PySide6's exact Qt version (QRhi headers), loaded from Python;
+   - drawing through the RHI on Vulkan inside the existing `QQuickWindow`;
+   - packaged by Nuitka in a frozen build, which the operator runs.
+2. **P2, A for every mode:**
+   - byte-identical packets on all recordings × all modes;
+   - GIL share and frame age before/after in one game60 run of at most 10 minutes, only after the operator's yes.
+3. **P3, B:**
+   - the core skeleton, then Spectrum as the parity proof (simplest);
+   - then the starved modes (Waveform Ribbon, Extruded Bubble), then the rest.
+4. **P4, C inside the core** for full display and 4K.
+
+Expanded Visualizer M2-M5 (behaviour) continue on the current path. M6, the 4K performance acceptance, waits for P2 and
+the first P3 ports. New 3D modes stay behind P3, as the Decision already says.
+
 ## Re-decision points
 
 Revisit this decision at Expanded Visualizer acceptance (with its full-display measurements) and whenever a trigger is

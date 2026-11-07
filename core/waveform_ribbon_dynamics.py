@@ -13,7 +13,7 @@ from collections.abc import Mapping
 import numpy as np
 from core.ribbon_packet import KNOT_ROWS, RibbonPacket
 from core.ribbon_ring import RibbonRing
-from core.waveform_ribbon_authoring import TARGETS, route, RIBBON_CAPACITY
+from core.waveform_ribbon_authoring import TARGETS, RIBBON_CAPACITY, clamp_sources, route_clamped
 from core.waveform_ribbon_scene import Recipe
 from core.ribbon_bursts import MAX_BURST, RibbonAccentControls, RibbonBursts
 from core.ribbon_strand_cohorts import RibbonStrandControls,RibbonStrandCohorts
@@ -406,6 +406,24 @@ def soft(value):
     return PULSE_SATURATION*np.tanh(value/PULSE_SATURATION)
 
 
+def unit_remainder(value):
+    """``value % 1.`` (``np.remainder``) of a float array, bit for bit, without its per-element divmod (the slowest
+    operation of the colour pass). NumPy's remainder is ``fmod(v, 1)``, plus 1 when that is negative, and +0.0 when it
+    is zero. ``fmod(v, 1)`` is ``v - trunc(v)``: the fractional part of a float is representable, so the subtraction
+    is exact, and it gives +0.0 exactly where fmod gives a zero of either sign. NaN and infinity give NaN, as there."""
+    part = value-np.trunc(value)
+    np.add(part,1.,out=part,where=part<0.)
+    return part
+
+
+def sector_remainder(value):
+    """``value % 6.`` (``np.remainder``) of a float array with every element in [0, 12) (or NaN), bit for bit: below 6
+    it is the value itself, and from 6 on ``fmod`` is ``value - 6``, exact there (Sterbenz) and +0.0 at 6, as NumPy's
+    remainder gives. The HSV sectors (offsets 1, 3, 5 plus 6 x a hue in [0, 1]) never leave that range."""
+    np.subtract(value,6.,out=value,where=value>=6.)
+    return value
+
+
 def hue_mix(a,b,share):
     left,right = colorsys.rgb_to_hsv(*a),colorsys.rgb_to_hsv(*b)
     delta = (right[0]-left[0]+.5)%1.-.5
@@ -465,6 +483,64 @@ class HybridSnapshot:
     pulse: bytes = b''              # published pulse appearance field (pulse_at) on PULSE_GRID, float32, history x
 
 
+def _frozen(array):
+    array.flags.writeable = False
+    return array
+
+
+_OWNER = _frozen(np.arange(RIBBON_CAPACITY)[:,None])   # each ribbon's index (a column)
+_SEPARATION = _frozen(.65*(_OWNER-1.))                # the bundle's rest separation in depth
+_HSV_OFFSETS = _frozen(np.array((5.,3.,1.)))           # HSV -> RGB sector offsets
+
+
+class _PacketTerms:
+    """The snapshot's terms that depend only on one history packet (a new packet arrives at the knot rate, ~6 Hz, the
+    snapshot runs every logical tick): computed once per packet by exactly the expressions the snapshot evaluated, so
+    every published value is unchanged. The arrays are read only; the snapshot always derives new arrays from them."""
+
+    __slots__ = ('u','carrier','depth_wave','depth_sway','idle_y','idle_z','idle_twist','twist','torsion_a','torsion_b',
+                 'windows','_crest')
+
+    def __init__(self, raw, base):
+        rows = base[:,4::KNOT_ROWS]
+        u = rows[:,:,0]+raw.world_origin[0]
+        self.u = u                                                            # cloth coordinate
+        self.carrier = rows[:,:,1]+raw.world_origin[1]-2.
+        self.depth_wave = rows[:,:,2]+raw.world_origin[2]-_SEPARATION
+        self.depth_sway = np.cos(.65*u+_OWNER)
+        self.idle_y,self.idle_z,self.idle_twist = .6*u,.4*u,.3*u             # the idle motion's spatial phases
+        origin_twist = (base[:,1,0,None]+math.pi)%(2*math.pi)-math.pi
+        self.twist = base[:,5::KNOT_ROWS,1]+origin_twist
+        self.torsion_a,self.torsion_b = np.sin(.45*u+_OWNER),np.sin(.7*u-_OWNER)
+        for name in ('u','carrier','depth_wave','depth_sway','idle_y','idle_z','idle_twist','twist','torsion_a','torsion_b'):
+            getattr(self,name).flags.writeable = False
+        self._crest = None
+        # The surge's history windows: ribbons sharing one (count, start, capacity) run, in first-member order, as
+        # (count, member ribbons, flat indices of their knots in a (ribbons, slots) field, oldest knot first).
+        windows = {}
+        for index,path in enumerate(base):
+            count,start,capacity = int(path[0,0]),int(path[1,1]),int(path[1,2])
+            if count>=4:
+                windows.setdefault((count,start,capacity),[]).append(index)
+        slots = rows.shape[1]
+        self.windows = tuple((count,_frozen(np.asarray(members)),
+                              _frozen(np.asarray(members)[:,None]*slots+(start+np.arange(count))%capacity))
+                             for (count,start,capacity),members in windows.items())
+
+    def crest(self, cards, n):
+        """(crest, .25+.75*crest) of the first ``n`` carriers against the cards' heights, per card set."""
+        cached = self._crest
+        if cached is None or cached[0] is not cards or cached[1] != n:
+            magnitude = np.abs(self.carrier[:n])
+            heights = np.asarray([max(1.5*card['height'],1e-5) for card in cards],
+                                 dtype=np.result_type(magnitude.dtype,np.float32))[:,None]
+            crest = np.clip(magnitude/heights,0.,1.)
+            weight = .25+.75*crest
+            crest.flags.writeable = weight.flags.writeable = False
+            cached = self._crest = (cards,n,crest,weight)
+        return cached[2],cached[3]
+
+
 class WaveformDynamics:
     def __init__(self, controls: HybridControls):
         self.controls = controls
@@ -520,6 +596,7 @@ class WaveformDynamics:
         self._next_knot = 1./controls.scene.flow.knot_hz
         self._snapshot = None
         self._base_packet = self._base_array = None
+        self._packet_terms = None   # _PacketTerms of _base_packet
         self._bursts = None
         self._strand_cohorts = None
         self._elastic_config = None
@@ -635,8 +712,9 @@ class WaveformDynamics:
         # Breathing's phrase mean re-learns the music fast after a break (PHRASE_SETTLE), so a phrase is not widened
         # against a mean the silence left stale; the remembered-peak path keeps BREATHING_BASE.
         mean_tau = BREATHING_BASE if c.adaptive_response else BREATHING_BASE*max(PHRASE_SETTLE_MIN,self._settled)
+        clamped = clamp_sources(sources)   # once for every target (route clamped them per target)
         for key in TARGETS:
-            target = route(c.routing[key],sources,passage=gate)
+            target = route_clamped(c.routing[key],clamped,passage=gate)
             if key in RESPONSE_TARGETS:
                 # Every song uses the whole authored Quiet->Peak ramp (operator, 5 Nov: "reactivity needs much more
                 # granularity and to actually hit that granularity"; no geometry drive ever passed .79 and a fixed
@@ -1059,20 +1137,17 @@ class WaveformDynamics:
         if not np.any(drift):
             return x,y,z
         x,y,z = x.copy(),y.copy(),z.copy()
-        windows = {}
-        for index,path in enumerate(data):
-            count,start,capacity = int(path[0,0]),int(path[1,1]),int(path[1,2])
-            if count>=4:
-                windows.setdefault((count,start,capacity),[]).append(index)
-        for (count,start,capacity),members in windows.items():
-            order = (start+np.arange(count))%capacity
-            rows = np.asarray(members)[:,None]
-            xs,ds = x[rows,order],drift[rows,order]
+        # ``data`` is this snapshot's copy of the current packet, so its windows are the packet's (headers unchanged).
+        windows = self._packet_terms.windows
+        # Every gather and scatter below goes through flat indices (``take``/``put``): the same elements as the former
+        # (rows, order) and (line, cell) fancy indexing, without its broadcast index machinery.
+        for count,rows,flat in windows:
+            xs,ds = x.take(flat),drift.take(flat)
             moving = ds.any(axis=1)
             if not moving.any():
                 continue
-            rows,xs,ds = rows[moving],xs[moving],ds[moving]
-            line = np.arange(len(rows))[:,None]   # row index for the per-row gathers below
+            rows,flat,xs,ds = rows[moving],flat[moving],xs[moving],ds[moving]
+            line = np.arange(len(rows))[:,None]*count   # each row's first flat index in the (rows, count) gathers
             # The ends never slide: a smooth taper of fixed length (a taper sized from the current drift changed length
             # every tick and jittered the knots near the head; 5 Nov per-tick acceleration probe).
             edge = np.clip(np.minimum(xs-xs[:,:1],xs[:,-1:]-xs)/SURGE_TAPER,0.,1.)
@@ -1082,7 +1157,7 @@ class WaveformDynamics:
             bound = np.where(limited,SURGE_MAX_COMPRESSION/np.where(limited,-squeeze,1.),1.)
             # The compression bound scales a whole ribbon's surge: it may tighten at once but relaxes at most
             # SURGE_BOUND_RISE per second, so a constraint letting go never jolts the whole ribbon sideways.
-            for row,member in enumerate(rows[:,0]):
+            for row,member in enumerate(rows):
                 previous,when = self._surge_bound.get(int(member),(1.,None))
                 if when is not None and self.time>=when:
                     bound[row,0] = min(bound[row,0],previous+SURGE_BOUND_RISE*(self.time-when))
@@ -1091,18 +1166,22 @@ class WaveformDynamics:
             target = xs+ds
             cell = np.stack([np.searchsorted(row,goal) for row,goal in zip(xs,target)])
             cell = np.clip(cell-1,0,count-2)
-            after = cell+1
-            left,right = xs[line,cell],xs[line,after]
+            at = line+cell        # flat (row, cell) and (row, cell + 1) indices
+            after = at+1
+            left,right = xs.take(at),xs.take(after)
             h = right-left
             t = (target-left)/h
             cube = t**3
             h00,h10,h01,h11 = 2*cube-3*t*t+1,cube-2*t*t+t,-2*cube+3*t*t,cube-t*t
             # y and z resampled together as one (2, rows, knots) stack: the same element-wise arithmetic in one pass.
-            vs = np.stack((y[rows,order],z[rows,order]))
+            vs = np.stack((y.take(flat),z.take(flat)))
             slope = apply_row_gradient(vs,row_gradient_coefficients(xs))
-            resampled = (h00*vs[:,line,cell]+h10*h*slope[:,line,cell]+h01*vs[:,line,after]+h11*h*slope[:,line,after])
-            y[rows,order],z[rows,order] = resampled[0],resampled[1]
-            x[rows,order] = target
+            values,slopes = vs.reshape(2,-1),slope.reshape(2,-1)
+            resampled = (h00*values.take(at,axis=1)+h10*h*slopes.take(at,axis=1)+h01*values.take(after,axis=1)
+                         +h11*h*slopes.take(after,axis=1))
+            np.put(y,flat,resampled[0])
+            np.put(z,flat,resampled[1])
+            np.put(x,flat,target)
         return x,y,z
 
     def _floor_room(self,height,hang,room,visible,static=None,soft=None,headroom=None):
@@ -1228,23 +1307,24 @@ class WaveformDynamics:
                 if count<4 or not (knots[:,1,2]>.5).all() or (knots[1:,1,3]>.5).any() or not (np.diff(knots[:,0,0])>0).all():
                     raise ValueError('Waveform cloth history must be one valid monotone axial run')
             self._base_packet,self._base_array=raw,base
+            self._packet_terms = _PacketTerms(raw,base)
+        terms = self._packet_terms
         data = self._base_array.copy()
         rows = data[:,4::KNOT_ROWS]
         # Cloth coordinate: fixed to the travelling history, so musical bends are sweeps carried by the ribbon
         # rather than a stationary lump field the cloth slides through.
-        u = rows[:,:,0]+raw.world_origin[0]
+        u = terms.u
         x = u+self.controls.scene.flow.head_x-self.travel
-        owner = np.arange(RIBBON_CAPACITY)[:,None]
         # Keep elastic excursions legible above ordinary sustained input; the old unit tanh compressed hits twice.
         b,m,h = (3.*np.tanh(np.asarray(self.spring)/3.)).T[:,:,None]
         values = {key:self._value(key) for key in TARGETS}
-        carrier = rows[:,:,1]+raw.world_origin[1]-2.
+        carrier = terms.carrier
         # No time-varying axial scaling: horizontal motion is only the steady flow (DevCurve's rule). The former
         # elastic stretch scaled x about the centre on every kick and read as sideways bursts (operator, 5 Nov).
         # The axial roll turns the carrier (its helix and the bundle's separation) like a skewer. Height scales
         # both transverse carrier components, so a turn changes the visible phase, never the visible amplitude.
-        separation = .65*(owner-1.)
-        depth_wave = rows[:,:,2]+raw.world_origin[2]-separation
+        separation = _SEPARATION
+        depth_wave = terms.depth_wave
         # The travelling pulse swells the carrier's own crests and troughs where it is: always WITH the shape.
         # Appearance follows the authored-width band (legible, travelling); geometry follows the broad bounded
         # envelope so whole waves swell together and the curvature keeps its own sign (flow rule).
@@ -1259,20 +1339,18 @@ class WaveformDynamics:
         y,z = cosine*cy-sine*cz,sine*cy+cosine*cz
         # Depth sway acts in world space after the roll and travels with the cloth. The former standing bend
         # (a fixed spatial sine the ribbon slid through) is replaced by the travelling pulse above.
-        z = z+.4*values['depth']*m*np.cos(.65*u+owner)
+        z = z+.4*values['depth']*m*terms.depth_sway
         idle=self.controls.idle_motion*(1.-self.passage)
-        y+=idle*.08*np.sin(.45*self.time+.6*u+owner)
-        z+=idle*.05*np.cos(.33*self.time+.4*u-owner)
+        y+=idle*.08*np.sin(.45*self.time+terms.idle_y+_OWNER)
+        z+=idle*.05*np.cos(.33*self.time+terms.idle_z-_OWNER)
         x,y,z = self._surge(data,x,y,z,PULSE_SURGE*values['bend'])
         rows[:,:,0] = x-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
         # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values. Peaks
         # are meant to rise high: the framing makes room for them, the body is never capped to fit a frame.
         rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*values['width']*(1.+.35*geometric)/3.5)
         rows[:,:,2] = 5.*np.tanh(z/5.)
-        origin_twist = (data[:,1,0,None]+math.pi)%(2*math.pi)-math.pi
-        twist = data[:,5::KNOT_ROWS,1]+origin_twist
-        twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.45*u+owner)+.12*h*np.sin(.7*u-owner))
-        data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*u+owner)
+        twist = terms.twist*values['twist']+values['torsion']*(1.6*m*terms.torsion_a+.12*h*terms.torsion_b)
+        data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+terms.idle_twist+_OWNER)
         data[:,1,0] = 0.
         # Admission phase of the history ring in [0, 1) (header extra.w): the renderer anchors the visible ends inside
         # the history and continues from there, so admitting/evicting a knot never steps the ends (core.ribbon_continuation).
@@ -1302,13 +1380,11 @@ class WaveformDynamics:
                 return np.asarray(values,dtype=np.result_type(like.dtype,np.float32))[:,None]
             locals_ = [max(self.power,*self.bands) if card['band']=='All' else
                        self.bands[('Bass','Mids','Highs').index(card['band'])] for card in cards]
-            magnitude = np.abs(carrier[:n])
-            crest = np.clip(magnitude/column([max(1.5*card['height'],1e-5) for card in cards],magnitude),0.,1.)
+            crest,weight = terms.crest(cards,n)
             # Existing visible rim slots respond immediately; this eased source creates no simulation in the draw.
             data[:n,6::KNOT_ROWS,3] = np.maximum(data[:n,6::KNOT_ROWS,3],
                 values['sparkle']*max(self._hit,.4*self.bands[2])*crest)
-            data[:n,7::KNOT_ROWS,3] *= (1.+HIT_GLOW*self._glow*(.25+.75*crest))*(1.+PULSE_GLOW*swell[:n])
-            weight = .25+.75*crest
+            data[:n,7::KNOT_ROWS,3] *= (1.+HIT_GLOW*self._glow*weight)*(1.+PULSE_GLOW*swell[:n])
             power = column(locals_,weight)*weight
             threshold = self.controls.colour_threshold
             share = np.clip((power-threshold)/max(1e-5,1.-threshold),0.,1.)
@@ -1325,10 +1401,16 @@ class WaveformDynamics:
                     peak = tuple((a+b)*.5 for a,b in zip(*card['peak']))
                     a,b = colorsys.rgb_to_hsv(*quiet),colorsys.rgb_to_hsv(*peak)
                     hsv.append((a[0],(b[0]-a[0]+.5)%1.-.5,a[1],b[1]-a[1],a[2],b[2]-a[2]))
-                self._card_hsv = cached = (cards,hsv)
-            hsv = cached[1]
-            hue_a,hue_d,sat_a,sat_d,val_a,val_d = (column(field,share) for field in zip(*hsv))
-            hue = (hue_a+hue_d*share)%1.
+                self._card_hsv = cached = (cards,hsv,{})
+            # The six HSV columns, per card set and share dtype (``column`` of the same values every tick). Keyed by the
+            # dtype's string: plain step state, as the Studio's checkpoints copy it.
+            columns = cached[2].get(share.dtype.str)
+            if columns is None:
+                columns = cached[2][share.dtype.str] = tuple(column(field,share) for field in zip(*cached[1]))
+                for array in columns:
+                    array.flags.writeable = False
+            hue_a,hue_d,sat_a,sat_d,val_a,val_d = columns
+            hue = unit_remainder(hue_a+hue_d*share)
             saturation = sat_a+sat_d*share
             value = val_a+val_d*share
             # The swell deepens colour where it is: saturation rises toward 1 (never toward white), hue and value
@@ -1336,7 +1418,7 @@ class WaveformDynamics:
             vivid = self.controls.pulse.saturation*swelling*np.clip(saturation/PULSE_GREY,0.,1.)
             saturation = saturation+(1.-saturation)*vivid
             share = np.maximum(share,vivid)
-            k = (np.array((5.,3.,1.))+hue[:,:,None]*6.)%6.
+            k = sector_remainder(_HSV_OFFSETS+hue[:,:,None]*6.)
             tint[:,:,:3] = value[:,:,None]*(1.-saturation[:,:,None]*np.clip(np.minimum(k,4.-k),0.,1.))
             alpha = np.clip(share/.1,0.,1.)
             tint[:,:,3] = alpha*alpha*(3.-2.*alpha)

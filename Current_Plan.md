@@ -40,12 +40,26 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 1. **Operator-reported defects first:**
    - Extruded Spectrum does not orbit on a left-drag (Sphere does): agent in flight.
-   - Card surfaces (operator screenshot, 7 Nov): Visualizer card material, one legibility panel per card, Media's
-     volume/mute on the material. Built on its agent branch, awaiting the lead's audit (§3).
+   - Card surfaces (operator screenshot, 7 Nov): the Visualizer card takes the theme's material (Spectrum, Spline
+     Curve, Oscilloscope); one rounded legibility panel per card (2.5 px inset, radius-following, 7:1 floor so
+     faint runs keep 4.5:1); Media's transport bar, volume and mute on the material; vector transport glyphs.
+     Lead-audited; merged after its gate.
+   - **Studio (queued for the next free slot):** any reactivity edit stalls the preview until the clip loops
+     (operator: if it needs a restart, restart the loop at once). Choosing a clip ("human") can fail on the first
+     try (it stayed on ragdoll; the second try showed "analyzing" and worked).
+   - Side defects from the orbit fix: `tests/test_visualizer_control_hints.py` opens a visible window (`window.show()`
+     in `hint_scene`); switching Sphere <-> Extruded Spectrum sends no plain-orbit cancel for a held drag.
 2. **§7.1 Waveform Ribbon:** the live logical-tick cut (agent in flight; byte-identical) and the operator
    sign-offs in §2.
 3. **Expanded Visualizer M2** (plan 01; agent in flight), with the operator's M1 amendment: a mode switch never
-   re-expands; Expanded is only ever the user's explicit request.
+   re-expands; Expanded is only ever the user's explicit request. Operator, 7 Nov evening:
+   - "Full display" is the Visualizer card placed near the display extents with its border and surface kept, never
+     edge-to-edge (R-63 overscan).
+   - Capable modes: every mode except Sphere and Extruded Spectrum (Extruded Bubble, Spectrum, Oscilloscope, Spline
+     Curve, Bubble, Neon Lake, Waveform Ribbon). Waveform Ribbon's full-display cost is recorded at M6.
+   - Double-click cycling while expanded skips incapable enabled modes and stays expanded; an explicit selection of
+     an incapable mode collapses.
+   - Spectrum gains bars in proportion to the extra width (its own milestone after M2, with a fade at the edges).
 
 **Next (admitted, in this order):**
 
@@ -58,6 +72,17 @@ after the operator's yes on a question card; agents never run load (invisible ch
 8. **§8 Accepted-mode follow-ups:** the brief Bubble performance-parity check.
 
 **Then (decided 5 Nov, `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
+
+8b. **Universal visualizer performance architecture** (operator, 7 Nov; the Decision's addendum), started once the
+   current set of fixes and optimisations lands:
+   - P1: a toolchain spike for a native `QSGRenderNode` on Qt's RHI/Vulkan, packaged by Nuitka (go/no-go).
+   - P2: an out-of-process visualizer engine for every mode (byte-identical packets; the logical tick leaves the main
+     process's GIL).
+   - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
+   - P4: mixed-resolution soft layers in the core.
+
+   Triggers 2 (render-thread starvation) and nearly 1 (EB at display size over 8 ms) are met. Expanded Visualizer
+   M2-M5 continue meanwhile; M6 (4K acceptance) waits for P2 and the first P3 ports.
 
 9. **SMP & Full Display:** Expanded Visualizer first
    (`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`, EB only; its §0 holds the
@@ -109,6 +134,19 @@ cross-mode preset write (fails closed and logs every preset-file write), the Stu
 holding their press, the Unsaved Preset Changes prompt, R-172/R-173 teardown order, the engine-answer Studios'
 "uncopyable WindowsPath" start failure (fab141f0), and the post-close repaint remedy (4e423fe6; open until a field
 log confirms, §9). Card surfaces, the style pass and the 15 material themes are merged; their open items are in §4.
+
+- [ ] **Side findings of the Waveform second tick cut (7 Nov, not fixed there):**
+  - `capture_visualizer_logical_frame` refreezes the common style (`freeze_render_fields(_common_style(widget))`,
+    logical_frame_capture.py) on every tick of every mode, ~0.02-0.04 ms; a FrozenFieldsMemo would remove it.
+  - The logical-tick capture reads every Waveform control (~150 getattr) and compares the whole configuration dict
+    every tick (~0.07 ms together); a settings-change token would make the no-change tick free.
+  - overhead_baseline on main cba6ee54 counts gl 182 / py 7010 per Waveform preview frame against the 4bb2b775
+    baseline's 180 / 6987: an unattributed per-frame rise on main between those commits.
+  - 11 of the 19 recordings in `logs/visualizer_recordings` lack native capture history, so the Waveform tick (PCM
+    reanalysis) cannot replay them; identity proofs cover the other 8.
+  - The Studio's step-state copy refuses NumPy dtype objects ("uncopyable Float64DType"); a dtype-keyed cache in a
+    logical owner fails every Waveform Studio. Caught by `tests/test_waveform_studio_evaluator.py` and avoided in
+    the cut (keyed by `dtype.str`); worth a line in the Studio's step-state contract.
 
 **Active or paused (resume each with a message to the same agent, which keeps its context and worktree):**
 - **AC-01 Settings tab registry: merged 7 Nov (23240af9).** Lead audit: its tests, copied onto main, fail there for
@@ -561,6 +599,26 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
     savings ~0.1-0.2 ms). Every tick above ~16 ms offline, in both builds, is one gen2 GC (86-161 ms, about one per
     5,500 ticks): the remaining live spikes are GC, not Waveform work. Merged 7 Nov after the lead's mutation audit
     (§3). Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/logical_tick/20261107_logical_tick/` in the main checkout (local, git-ignored).
+    **Second tick cut (7 Nov, c43d6340, byte-identical; on its branch for the lead's audit).** Profile (sys.monitoring
+    per-line, P4 replay): snapshot ~0.7 ms (packet-only terms rebuilt every tick, the HSV `%` remainders ~0.08 ms,
+    the surge's broadcast gathers ~0.1 ms), capture ~0.3 ms (scene ~0.1, camera re-admission ~0.05, camera refreeze
+    ~0.04, per-tick validation imports ~0.025), burst admission ~2.3 ms per admitting tick (the emitter's cloth
+    evaluation continued an empty side on every in-anchor call), routing clamped every source per target. Cuts: the
+    packet-only terms and surge windows once per packet (~6 Hz), crest/weight and HSV columns once per card set, exact
+    remainder forms (`unit_remainder`, `sector_remainder`), take/put surge gathers, no empty-side continuation,
+    sources clamped once, a camera-admission memo and FrozenFieldsMemo on the runtime, the frame's imports resolved
+    once. Identity: 24 recorded replays (8 recordings with native capture history x P1/P4/P7, 130,944 frames) match
+    main frame by frame; the other 11 recordings cannot be replayed by the Waveform tick on either tree. Offline
+    (alternated pairs, anything_mixed2): tick median -13..-16% in the cleanest pair (P1 1.70 -> 1.45, P4 1.75 -> 1.48,
+    P7 1.74 -> 1.50 ms; p90 -6..-9%), every pair faster; calls per tick 3,137 -> 2,848. overhead_baseline (preview
+    render path, not the tick): branch = main (gl 182, py 7010). **Live, the tick is not its own cost:** one invisible
+    no-load P4 run (branch, 120 s, other processes' CPU 26%) measured a 7.49 ms tick median (duty/GIL share 0.67,
+    51.7 fps, render-mode 10.9 ms) for a tick that replays offline in ~1.5 ms. About 6 ms of each live tick is spent
+    waiting, most likely for the GIL held by the render/GUI threads' Python (each wait can last a 5 ms switch
+    interval). Next step (measure, not tune): record the logical thread's own CPU time (`time.thread_time`) beside the
+    tick's wall time in the live check, so the wait share is a number; switch-interval tuning stays banned by the
+    Performance Optimization Contract. Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/logical_tick/20261107_tick_cut2/`
+    and `.artifacts/evidence/visualizers/waveform_ribbon/live_check/20261107_tick_cut2_p4_noload/` (main checkout).
 - [~] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
   in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
