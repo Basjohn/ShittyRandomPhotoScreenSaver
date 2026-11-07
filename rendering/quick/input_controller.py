@@ -81,9 +81,11 @@ class QuickInputController(RuntimeInputOwner):
 
     @property
     def plain_orbit_admitted(self) -> bool:
+        # Every orbiting 3D mode (framed or freeform: the descriptor's view_orbit_settings, published as
+        # view-orbit admission) takes held-left orbit; the framed scene transform is a separate capability.
         state = self._state
         return bool(state.admission_open and not state.exiting and not state.context_menu_active
-                    and self._scene_transform_enabled and self._view_orbit_enabled
+                    and self._view_orbit_enabled
                     and (state.interaction_mode_enabled or state.ctrl_held))
 
     def begin_plain_orbit(self, position) -> bool:
