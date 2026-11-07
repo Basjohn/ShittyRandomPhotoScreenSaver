@@ -189,7 +189,8 @@ Item {
         naturalHeight: Math.max(artSize, textColumn.height)
 
         readonly property bool controlsShown: options.mediaControls === true
-        readonly property real artSize: Math.round(fontSize * 3.1)
+        // Square artwork as tall as the text beside it (with Media Controls too), never smaller than its own size.
+        readonly property real artSize: Math.max(Math.round(fontSize * 3.1), Math.ceil(textColumn.height))
         readonly property real gap: Math.round(fontSize * 0.55)
         readonly property real textWidthLimit: Math.max(48.0, maxContentWidth - artSize - gap)
         readonly property bool playing: !!overlays.mediaModel
