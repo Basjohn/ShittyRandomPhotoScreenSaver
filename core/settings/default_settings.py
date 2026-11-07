@@ -1294,6 +1294,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'devcurve_transient_clamp': 1.5,
                                     'devcurve_transient_pulse_gain': 1.0,
                                     'enabled': True,
+                                    'expanded_display_requested': False,
                                     'extruded_bubble_adaptive_sensitivity': True,
                                     'extruded_bubble_aperture': 0.4,
                                     'extruded_bubble_audio_block_size': 512,

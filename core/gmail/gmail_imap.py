@@ -75,17 +75,33 @@ class InterruptibleIMAP4_SSL(imaplib.IMAP4):
 
 
 def _decode_header_value(raw: Optional[str]) -> str:
-    """Decode a MIME-encoded header into a plain string."""
+    """Decode a MIME-encoded header into a plain string.
+
+    ``decode_header`` keeps each fragment's own spacing (an unencoded fragment
+    after an encoded word starts with its space, and RFC 2047 drops the space
+    between adjacent encoded words), so the fragments join without a separator.
+    ``make_header`` applies those rules; a malformed or unknown charset falls
+    back to a lenient per-fragment decode.
+    """
     if not raw:
         return ""
+    from email.header import make_header
+
     parts = _decode_header(raw)
+    try:
+        return str(make_header(parts))
+    except (LookupError, UnicodeError, ValueError):
+        pass
     decoded = []
     for fragment, charset in parts:
         if isinstance(fragment, bytes):
-            decoded.append(fragment.decode(charset or "utf-8", errors="replace"))
+            try:
+                decoded.append(fragment.decode(charset or "utf-8", errors="replace"))
+            except LookupError:
+                decoded.append(fragment.decode("utf-8", errors="replace"))
         else:
             decoded.append(fragment)
-    return " ".join(decoded)
+    return "".join(decoded)
 
 
 def _parse_date(raw: Optional[str]) -> datetime:
