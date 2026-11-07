@@ -127,56 +127,48 @@ bound. While loaded, the card's `Rectangle` keeps its border and drops its fill 
 
 ### 3.3 Legibility
 
-Inside the card the material adds a legibility layer, one inner panel 2.5 px inside the border (border width +
-2.5 px from the card edge) whose corners are concentric with the card's (card radius minus that inset) and whose
-edge is a 2 px soft step, so the darker interior reads as a deliberate panel with a thin rim, never a block (style
-pass 6 Nov; it used to stop at the padding with a 12 px feather and nearly square corners). It applies a slight
-constant shift away from the text colour (darker under light text, which is every dark theme; lighter under dark text on light themes), then a
-contrast floor that pushes further only where the blurred backdrop would leave the theme's text below a 3:1
-luminance contrast. The backdrop is heavily blurred, so the adjustment is smooth. This follows the Studio rule (a
-layer slightly darker than the base behind controls); the direction follows the text so a dark-text light theme is
-never darkened under its own text.
+**One panel per card (acceptance pass, 7 Nov; supersedes the per-line rows and per-run plates of 6 Nov).** The
+operator, on a Glass desktop: Media's darker section "should go up and slightly above the header and slightly below
+the seek track", "that glass misplacement applies to every single widget", and the panels "shouldn't be sharp
+corners ... inherit the roundness of our widget ... rather be slightly larger than slightly smaller ... 2-3 px from
+the widget border". The 6 Nov rows (a rounded box behind each list line, Media's track text, Weather's boxes) read
+as boxes hugging the text at arbitrary heights; the per-run plates as chips.
 
-**Per text run (light-theme pass, 6 Nov).** The card-wide layer works against the theme's main text colour at 3:1; on
-the light theme the small, muted runs (Reddit age tags, System Stats labels, the weather details) fell to 2.1-2.8:1 on
-Glass, Frosted and Smoked over busy wallpaper. Every `ShadowedText` run on a card whose material is active now loads
-a `TextLegibilityPlate` behind its glyph box (`ShadowedText.qml`, `TextLegibilityPlate.qml`,
-`shaders/text_legibility.frag`):
+Inside the card the material draws the card's one legibility panel (`surfaceAt` in the shaders' shared `SURFACE`
+block):
 
-- it evaluates the card surface **exactly**: the whole surface computation is one function (`surfaceAt`, the
-  `SURFACE` block) kept identical in `surface_material.frag` and `text_legibility.frag`, evaluated at the run's own
-  card-local position (ShadowedText walks its parents' x/y up to the card, re-evaluated only when something moves);
-- it measures this run's own colour against that surface in WCAG relative luminance and draws the smallest overlay
-  that reaches 4.5:1 for text under 18 px and 3:1 above (with a 10 % margin for glyph antialiasing), on the side the
-  surface already is (a mid-luminance accent label on a dark card darkens, never lightens). Where the surface already
-  meets the floor the plate draws nothing, so large text and calm regions are untouched;
-- it samples the same shared backdrop: no capture, no extra blur, no per-frame work. A run on its own fill (the
-  branded header labels) opts out with `surfacePlateEnabled: false`.
+- it covers the whole interior 2.5 px inside the border (border width + 2.5 px from the card edge), so it runs from
+  above the header to below the last element on every card, with the same inset everywhere; its edge is a 2 px soft
+  step, so it reads as a deliberate panel with a thin rim of the bare material;
+- its corners are concentric with the card: the card's own configured corner radius (the Widget Settings value the
+  card uses) minus that inset, never under 2 px, so a square or small-radius card still gets a rounded panel;
+- it applies a slight constant shift away from the text colour (darker under light text, which is every dark theme;
+  lighter under dark text on light themes), then a contrast floor that pushes further only where the blurred backdrop
+  would leave the theme's card text below **5:1** (`MaterialSurface.panelContrastFloor`: the small-text 4.5:1 with a
+  10 % margin for antialiased glyphs; it was 3:1 while rows and plates carried small text). The backdrop is heavily
+  blurred, so the adjustment is smooth; the direction follows the text so a dark-text light theme is never darkened
+  under its own text.
 
-**Rows, not chips (style pass, 6 Nov evening).** The operator: "Full rows and rounded boxes are better than individual
-pop outs." A plate per run made each list line a set of separate chips (Reddit's age, AGO and title; Weather's detail
-values without their icons). The plate is now a **row**:
+Nothing else darkens the card itself: no `LegibilityRow` sits on a card (Media, Reddit, Gmail, Feed list lines,
+Weather, the Abandonment and Achievement shelves lost theirs), and `ShadowedText` loads no plate of its own (the
+`surfacePlateEnabled` opt-out is gone with it). A `LegibilityRow` remains only where text sits on a control's own
+further fill (Feed grid tiles, Friend Pulse rows and tiles, Games You Follow story tiles, System Stats metric panels,
+Achievement capsules): it passes that fill as `underlayColor` (the floor is measured against what the text sits on),
+sits 2 px inside that panel's border and takes the panel's radius minus that inset (never under 2 px), so it follows
+the same rounded, concentric rule. It evaluates the identical surface, so where the card's panel already meets the
+floor for its colours it draws nothing: no double darkening. Bars: `tests/test_surface_material_style.py`,
+`tests/test_card_surface_panels.py`.
 
-- `LegibilityRow.qml` (an inactive `Loader` on Normal) sits behind a whole list line or panel and loads the same
-  `TextLegibilityPlate`; the runs on that line opt out of their own plates. One row per Reddit post, Gmail message,
-  Feed story (list row or grid tile), Friend Pulse row/tile, Games You Follow story tile, System Stats metric panel,
-  Abandonment Issues ledger shelf, Achievement Pulse capsule/shelf; one box for Weather's location+condition, detail
-  row (icons and values) and 5-day strip; one box for Media's track text (title, artist, album, state, steady through
-  the metadata crossfade).
-- The row holds the floor for up to three run colours (`primaryColor`, `secondaryColor`, `tertiaryColor`; a muted
-  tag, an accent label), composited with their alpha; a run too faint to reach the floor at all is held to its opaque
-  colour's floor. The overlay is **one even tone**: the shader samples the surface across the row and takes the
-  worst, instead of a patch per glyph: 18 points (two lines of nine) evaluated once per row in the
-  vertex stage; each pixel then only checks its own surface (grain excluded, inside the 10 % margin) and takes more
-  only where it is worse than every sample.
-- A row inside its own filled panel (stats panel, tile, capsule) passes `underlayColor` (the panel fill) and the
-  panel's inner radius: the floor is measured against what the text actually sits on, and the row's corners are
-  concentric with the panel. Rows on the card itself reach 4 px into the padding with corners concentric with the
-  card.
-- A lone run (a clock face, a header subtitle) keeps its own plate, now an even rounded box: the run's whole width when
-  it spans at least 85 % of the card's content (a line), otherwise its glyph box.
-- Continuous: everything is a function of the blurred backdrop, so rows fade with it and never pop; still no
-  per-frame Python, no timer, no capture.
+Muted runs (a run drawn at 60-75 % of the text colour's alpha: Media's playback state, age tags) are held only by the
+card's floor now. By the floor's arithmetic a 62 % white run over the darkest the panel allows reads about 3.5:1
+(a per-run plate held it at 4.5:1); not separately measured. The operator asked for one even panel instead of chips;
+if muted runs need more, raise `panelContrastFloor` (about 5.7 covers a 75 % run), never bring back per-line boxes.
+
+**Child controls.** Media's volume track (`spotify_volume`, the external rail) and mute button (`mute_button`) are
+material too (`ChildMaterialSurface.qml`, operator 7 Nov: "the volume child widgets inside layer should be material
+surfaced"): each loads a `MaterialSurface` through its own rounded shape, tinted by its own fill, while the card's
+material is active; the control drops its own fill (the mute button its gradient) meanwhile. On Normal it is an
+inactive `Loader` and the control is unchanged.
 
 On a material the light-theme soft text halo (a blurred `MultiEffect` silhouette) is not drawn: over a colourful blur it
 reads as haze around the glyphs, and the plate now carries the contrast. Hard (dark-theme) shadows are unchanged.
@@ -197,13 +189,41 @@ on dark tints. The outer card shadow (the shared shadow lane, R-74) is unchanged
   hard dark-theme shadow glyph (doubled names). Every shadowed run now follows the light-palette soft shadow
   (`tests/test_surface_material_style.py` checks every `ShadowedText` in the scene QML).
 
-### 3.4 The Visualizer card and the System Volume OSD are excluded
+### 3.4 The Visualizer card (included 7 Nov) and the System Volume OSD (excluded)
 
-The Visualizer card keeps its Visualizer-authored Fill/Border/Opacity (outside the Widget Theme and its reset), its
-shell is part of the protected render-node-local clip path (Compositor_Architecture §7.2, CHK26), and its interior is
-mostly live GL content. Including it would add a material quad beneath the most timing-sensitive item for little
-visible gain. The architecture does not prevent a later inclusion (the backdrop is captured below z 20, so the
-Visualizer's own pixels would still never be read), but it needs its own acceptance pass.
+**Superseded decision.** The 6 Nov version excluded the Visualizer card ("a material quad beneath the most
+timing-sensitive item for little visible gain"); the operator then saw Spectrum's opaque fill beside Glass cards
+("Spectrum doesn't have the glass but an ugly opaque"). This is the acceptance pass the exclusion asked for.
+
+- **What it is.** `VisualizerPresentation.qml` has one inactive `Loader` (`visualizerCardSurfaceMaterial`) at the card
+  background's z, under the content host; it loads the same `MaterialSurface` while the card shell is on, the
+  material is not Normal and the backdrop is bound, and the authored background `Rectangle` hides meanwhile. The
+  border, the clip host and the render node are untouched (the protected CHK26 path, commits
+  0abc479c/78ab96a5/a0bf7093, is not edited). The material is a static quad: nothing runs per Visualizer frame; it
+  samples the shared backdrop, which is captured below z 20, so the Visualizer's own pixels are never read.
+- **Which material.** The Widget Theme baseline (`resolve_global_surface_material`, the same value the Context Menu
+  takes; `engine/display_manager.py` projects it through `QuickSceneController.apply_visualizer_surface_material` once
+  per display generation). There is no per-Visualizer Surface Material row. The controller counts it as backdrop
+  demand only while the Visualizer's presentation root exists on that display, and binds the backdrop to it with the
+  other consumers.
+- **Fill and material.** The Visualizer-authored Fill is the material's tint, exactly as a card's surface colour is
+  for every other card: its alpha moves the tint opacity inside the material's own range (Glass 0.05-0.28), which
+  caps it so the glass always reads. Candidates rendered side by side (`visualizer_<mode>__glass*.png` in the
+  evidence below): the authored Fill as tint (chosen), the authored Fill with its alpha capped at 25 %, and the
+  Widget Theme's card colour ignoring the Fill. With the default Fills they are within a few levels of each other,
+  because the legibility panel's floor dominates on a busy backdrop; the chosen one keeps the user's Fill meaningful
+  (a strong Fill gives a more tinted glass) with no second colour path.
+- **Which modes show it.** Spectrum, Spline Curve and Oscilloscope leave most of the card visible (opaque coverage
+  of the interior 8 %, 9 % and 1 % in the canonical renders). Bubble, Extruded Bubble and Waveform Ribbon cover it
+  completely (no visible change; Bubble differs only on about 60 edge pixels). Neon Lake covers 65 % opaquely and
+  its translucent sky picks up a slight shift (at most about 50 levels on dark pixels, not visible at a glance).
+  Voxel Sphere and Extruded Spectrum are frameless: no card, no material.
+- **Normal.** The `Loader` is inactive: no item, no node; the scene is pixel-identical to before (renderer jitter
+  of at most 1-2 levels, the same as two runs of identical code).
+
+Evidence: `.artifacts/evidence/widgets/card_surfaces/20261107_before/`, `20261107_after/` and the per-widget
+before | after sheets in `20261107_sheets/` (`tools/card_surface_capture.py`; every card alone on PERSONALSET
+859804 under `Default Dark [Single]`, Normal and Glass, the Visualizer also Acrylic).
 
 The System Volume OSD is a transient indicator in the foreground lane whose card style comes from its own config;
 it stays Normal.
@@ -380,7 +400,7 @@ shadows hidden), 5th percentile over the glyph pixels, worst run over three wall
 
 Large text stays at 4.0 or better everywhere (floor 3:1).
 
-**Rows (style pass, 6 Nov evening).** Same measurement, now over nine cards (Weather, Media, Reddit, System Stats,
+**Rows (style pass, 6 Nov evening; superseded 7 Nov by the one card panel, 3.3).** Same measurement, now over nine cards (Weather, Media, Reddit, System Stats,
 Clock; then Gmail, World News feed, Friend Pulse, System Stats) and three wallpapers (busy 859804, mixed 670483, light
 656207); worst run per cell, before (per-run chips) → after (rows):
 

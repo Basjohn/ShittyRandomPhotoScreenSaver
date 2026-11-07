@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 DEFAULT_WALLPAPER = Path(r"C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\859804.png")
 DEFAULT_THEME = "Default Dark [Single]"
@@ -381,7 +382,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="also capture the Visualizer fill/material combination candidates")
     parser.add_argument("--sheet", type=Path, nargs=2, metavar=("BEFORE", "AFTER"))
     args = parser.parse_args(argv)
-    output = args.output or artifact_paths.evidence_dir("widgets", "card_surfaces", args.label)
+    args.output = args.output or artifact_paths.evidence_dir("widgets", "card_surfaces", args.label)
+    # PNGs are written in owner scratch and published to the evidence folder on success.
+    output = evidence_media.redirect_output(args, "output", "card_surface_capture")
     output.mkdir(parents=True, exist_ok=True)
     if args.sheet:
         for path in compose_sheets(*args.sheet, output):
@@ -422,4 +425,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

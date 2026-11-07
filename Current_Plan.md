@@ -40,12 +40,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 1. **Operator-reported defects first:**
    - Extruded Spectrum does not orbit on a left-drag (Sphere does): agent in flight.
-   - Card surfaces (operator screenshot, 7 Nov): the Visualizer card ignores the theme's material, so Spectrum,
-     Spline Curve and maybe Oscilloscope (the modes whose card background is visible) show an opaque fill instead of
-     Glass (`VisualizerPresentation.qml` draws a plain rectangle; Card_Surface_Materials §3.4 excluded it pending
-     its own acceptance pass).
-   - On every widget the darker legibility panel must run from slightly above the header to slightly below the
-     last element (Media's covers only the track text). Queued for the first free agent slot.
+   - Card surfaces (operator screenshot, 7 Nov): Visualizer card material, one legibility panel per card, Media's
+     volume/mute on the material. Built on its agent branch, awaiting the lead's audit (§3).
 2. **§7.1 Waveform Ribbon:** the live logical-tick cut (agent in flight; byte-identical) and the operator
    sign-offs in §2.
 3. **Expanded Visualizer M2** (plan 01; agent in flight), with the operator's M1 amendment: a mode switch never
@@ -147,6 +143,23 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - Manual Floor's low is 0.0 everywhere.
   - Technical tooltips use the registry names.
 
+- **Card surface acceptance pass: built 7 Nov on its agent branch, awaiting the lead's audit and merge.**
+  Rule: `Docs/Architecture/Card_Surface_Materials.md` 3.3 and 3.4. Each card's one legibility panel is the
+  material's inner panel (2.5 px inside the border, the card's own radius less the inset, never under 2 px, floor
+  5:1); card-level rows and per-run plates are gone; rows stay only inside tiles/capsules/stats panels (2 px inside,
+  concentric). The Visualizer card takes the baseline material with its Fill as tint; Media's volume track and mute
+  button take the card's material. Evidence: `.artifacts/evidence/widgets/card_surfaces/20261107_sheets/`.
+  Side defects found (not fixed here):
+  - Achievement Pulse (capture fixture, Normal too): the doubled capsule's "Unlock" text overlaps its "+2 42/63"
+    value, and the portrait artwork frame runs down over the SESSION capsule.
+  - Order pollution: run together, the 33 scene/display test files fail 4 tests (Achievement Pulse config, Gmail
+    semantic actions, Media config projection, `test_baseline_follows_the_theme...`: an active theme leaks to
+    'glass'); each passes alone, and main fails the same 4 in the same run.
+  - The Visualizer's and the Context Menu's material are projected once per display generation
+    (`_configure_quick_auxiliary`); check whether a live Style Overrides or theme change reaches them before the
+    next generation as it reaches the ordinary cards.
+  - Muted runs (60-75 % alpha) are now held only by the card's 5:1 floor (about 3.5:1 at worst by arithmetic);
+    measure with `tools/surface_material_capture.py --legibility` on the light and dark pair.
 - **AC-17 (theme material): built 7 Nov on its agent branch, awaiting the lead's audit and merge.** Operator's
   choice: cards follow the theme. A linked Widget mirror now carries its Settings theme's backdrop material
   (`widget_counterpart_for_settings_theme` projects it; 98 shipped mirrors got the one key by a fill, nothing else
