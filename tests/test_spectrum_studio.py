@@ -613,7 +613,8 @@ def test_edits_save_through_spectrums_settings_owners_and_every_exit_restores_se
     assert session.values[PREFIX + "render_mode"] == other                # nothing reverted by a later save
     bridge.requestClose()
     assert _settings_restored(controller, dialog)
-    assert tab.rainbow_enabled.isChecked() is enabled                      # Settings shows the Studio's edits
+    from ui.tabs.media.visualizer_mode_binding import FAMILY_CACHE_ATTR
+    assert getattr(tab, FAMILY_CACHE_ATTR)[PREFIX + "rainbow_enabled"] is enabled   # Settings holds the Studio's edits
     for path in ("escape", "window"):
         surfaces.clear()
         controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces))

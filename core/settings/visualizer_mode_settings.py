@@ -39,7 +39,9 @@ Each mode's audio-analysis ("technical") controls are ordinary entries too, in t
 and with ``technical_hidden_suffixes`` which of them are offered); the spec keeps label, range and the per-mode
 recommended marks. They feed the shared beat engine through the technical profile routing, so they install no
 private logical or presentation attribute and reach no renderer; the model, the Settings value cache, the Studio
-and the preset guard all admit and list them from here.
+and the preset guard all admit and list them from here. The page-level shared families (Bar Appearance: fill,
+border and border opacity; Rainbow: Taste the Rainbow and its speed) are spec entries the same way, in the non-body
+``bar_appearance`` and ``rainbow`` buckets (``shared_family_entries``), for each mode the registry says owns them.
 A control may also be shown only while another control holds a value (``when``), so a group that only
 matters while its toggle is on hides with it.
 """
@@ -607,8 +609,14 @@ class ModeSettings:
 
     @cached_property
     def body_entries(self) -> tuple[Entry, ...]:
-        """The entries the mode body and its Studio buckets lay out: everything outside the technical bucket."""
-        return tuple(entry for entry in self.entries if entry.bucket != TECHNICAL_BUCKET)
+        """The entries the mode body and its Studio buckets lay out: everything outside the non-body buckets
+        (technical, and the page's shared Bar Appearance and Rainbow families)."""
+        return tuple(entry for entry in self.entries if entry.bucket not in NON_BODY_BUCKETS)
+
+    def family_controls(self, family: str) -> tuple[Control, ...]:
+        """The mode's controls of one page-level shared family (``bar_appearance`` or ``rainbow``); () when the
+        mode does not own it."""
+        return tuple(control for control in self.controls if control.bucket == family)
 
     @cached_property
     def body_controls(self) -> tuple[Control, ...]:
@@ -683,6 +691,11 @@ class ModeSettings:
 # ---- Audio analysis (technical) ----------------------------------------------------------------
 
 TECHNICAL_BUCKET = "technical"
+BAR_APPEARANCE_BUCKET = "bar_appearance"
+RAINBOW_BUCKET = "rainbow"
+# Buckets outside every mode body: they install no private logical or presentation attribute (each is consumed
+# through its own registry routing: the technical profile, the shared bar profile, the active-mode rainbow).
+NON_BODY_BUCKETS = frozenset({TECHNICAL_BUCKET, BAR_APPEARANCE_BUCKET, RAINBOW_BUCKET})
 
 _BAR_COUNT_TIP = "How many bars are drawn: the audio is split into this many frequency bands, one bar each."
 _ANALYSIS_BANDS_TIP = ("How finely the audio is split into frequency bands before this mode reads it. It draws no bars, "
@@ -788,6 +801,35 @@ def audio_analysis_entries(mode_id: str, *, block_size: int, agc: float) -> tupl
             if mode == descriptor.mode_id:
                 label, tooltip = _MIX_PRESENTATION[suffix]
                 entries.append(Slider(key, label, 0.0, 1.0, tooltip, bucket=t, percent=True, tick=10))
+    return tuple(entries)
+
+
+def shared_family_entries(mode_id: str) -> tuple[Control, ...]:
+    """The page-level shared families the registry says ``mode_id`` owns, as spec controls: Bar Appearance (fill,
+    border, border opacity) and Rainbow (Taste the Rainbow and its speed), stored per mode. Qt-free."""
+    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+
+    entries: list[Control] = []
+    bar = get_owned_mode_setting_keys(mode_id, "shared_bar")
+    if bar:
+        b = BAR_APPEARANCE_BUCKET
+        entries += [
+            Colour(bar["bar_fill_color"], "Bar Fill Color:", "Choose Bar Fill Color", bucket=b),
+            Colour(bar["bar_border_color"], "Bar Border Color:", "Choose Bar Border Color", bucket=b),
+            Slider(bar["bar_border_opacity"], "Bar Border Opacity:", 0.0, 1.0, "Opacity of the bar borders.",
+                   bucket=b, percent=True, tick=5),
+        ]
+    rainbow = get_owned_mode_setting_keys(mode_id, "rainbow")
+    if rainbow:
+        r = RAINBOW_BUCKET
+        enabled = rainbow["rainbow_enabled"]
+        entries += [
+            Toggle(enabled, "", "Taste the Rainbow",
+                   "Slowly shift the hue of visualiser colours through the spectrum. Saved independently per "
+                   "visualizer mode.", bucket=r),
+            Slider(rainbow["rainbow_speed"], "Speed:", 0.01, 1.0, "How fast the hue cycles through the spectrum.",
+                   bucket=r, tick=10, when=(enabled, True)),
+        ]
     return tuple(entries)
 
 
@@ -1244,7 +1286,7 @@ _DEVCURVE = ModeSettings(
                'Opacity of the trail overlay.', bucket='ghost', logical=True, percent=True),
         Slider('devcurve_ghost_decay', 'Ghost Decay:', 0.1, 1.0,
                'How quickly the trail fades.', bucket='ghost', logical=True, suffix="x"),
-    ) + audio_analysis_entries("devcurve", block_size=256, agc=0.4),
+    ) + audio_analysis_entries("devcurve", block_size=256, agc=0.4) + shared_family_entries("devcurve"),
 )
 
 
@@ -1306,7 +1348,8 @@ _EXTRUDED_SPECTRUM = ModeSettings(
                'How quickly ghosts descend after a bar falls.', bucket='effects', source=True, when=('extruded_spectrum_ghosting_enabled', True)),
         Slider("extruded_spectrum_turn", "", -1.0, 1.0),
         Slider("extruded_spectrum_tilt", "", 0.0, 1.0),
-    ) + audio_analysis_entries("extruded_spectrum", block_size=128, agc=0.34),
+    ) + audio_analysis_entries("extruded_spectrum", block_size=128, agc=0.34)
+      + shared_family_entries("extruded_spectrum"),
 )
 
 
@@ -1409,7 +1452,7 @@ _SPECTRUM = ModeSettings(
                when=('spectrum_pattern', SPECTRUM_GEOMETRIC_PATTERNS)),
         Slider('spectrum_pattern_strength', 'Pattern Strength:', 0.0, 1.0, '', bucket='pattern', truncate=True,
                percent=True, tick=10, when=('spectrum_pattern', SPECTRUM_PATTERNS[1:]), bottom_padding=12),
-    ) + audio_analysis_entries("spectrum", block_size=128, agc=0.42),
+    ) + audio_analysis_entries("spectrum", block_size=128, agc=0.42) + shared_family_entries("spectrum"),
 )
 
 
@@ -1697,7 +1740,7 @@ _BUBBLE = ModeSettings(
                percent=True, tick=5, truncate=True, when=("bubble_ghosting_enabled", True)),
         Slider("bubble_ghost_decay", "Ghost Decay:", 0.1, 1.0, bucket="ghost",
                suffix="x", tick=5, bottom_padding=12, when=("bubble_ghosting_enabled", True)),
-    ) + audio_analysis_entries("bubble", block_size=256, agc=0.5),
+    ) + audio_analysis_entries("bubble", block_size=256, agc=0.5) + shared_family_entries("bubble"),
 )
 
 
@@ -2161,7 +2204,11 @@ __all__ = [
     "Triangle",
     "VISUAL_CONTROLS",
     "TECHNICAL_BUCKET",
+    "BAR_APPEARANCE_BUCKET",
+    "RAINBOW_BUCKET",
+    "NON_BODY_BUCKETS",
     "audio_analysis_entries",
+    "shared_family_entries",
     "iter_mode_settings",
     "mode_settings",
     "require_mode_settings",

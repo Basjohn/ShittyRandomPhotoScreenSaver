@@ -1228,168 +1228,44 @@ class TestVisualizerModeBinding:
     # rainbow load/collect tests below still exercise live binding functions and
     # were rewritten to set the active mode directly instead of via the combo.
 
-    def test_load_visualizer_rainbow_state_uses_registry_modes_and_active_selection(self):
+    def test_load_visualizer_family_values_holds_every_owning_mode_from_the_registry(self):
+        from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+        from ui.tabs.media.visualizer_mode_binding import FAMILY_CACHE_ATTR, load_visualizer_family_values
+
+        tab = CanonicalWidgetDefaultsStub()
+        load_visualizer_family_values(tab, {"bubble_rainbow_enabled": True, "bubble_rainbow_speed": 0.76})
+        held = getattr(tab, FAMILY_CACHE_ATTR)
+        assert held["bubble_rainbow_enabled"] is True
+        assert held["bubble_rainbow_speed"] == pytest.approx(0.76)
+        # Oscilloscope owns neither family: nothing is held for it.
+        assert not get_owned_mode_setting_keys("oscilloscope", "rainbow")
+        assert not any(key.startswith("oscilloscope_") for key in held)
+
+    def test_collect_visualizer_family_values_writes_every_rainbow_and_the_current_bar_appearance(self):
+        from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
         from ui.tabs.media.visualizer_mode_binding import (
-            load_visualizer_rainbow_state,
+            FAMILY_CACHE_ATTR, collect_visualizer_family_values, load_visualizer_family_values,
         )
 
-        class _Check:
-            def __init__(self):
-                self.checked = None
-
-            def setChecked(self, value):
-                self.checked = value
-
-        class _Slider:
-            def __init__(self):
-                self.value = None
-
-            def setValue(self, value):
-                self.value = value
-
-        class _Label:
-            def __init__(self):
-                self.text = None
-
-            def setText(self, text):
-                self.text = text
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                # V7: mode selection is context-owned, not combo-owned. The active
-                # mode is the canonical id the pills write.
-                super().__init__()
-                self._active_visualizer_mode_id = "bubble"
-                self.rainbow_enabled = _Check()
-                self.rainbow_speed_slider = _Slider()
-                self.rainbow_speed_label = _Label()
-                self.rainbow_updates = 0
-
-            def _update_rainbow_visibility(self):
-                self.rainbow_updates += 1
-
-        tab = _Tab()
-        load_visualizer_rainbow_state(
-            tab,
-            {
-                "bubble_rainbow_enabled": True,
-                "bubble_rainbow_speed": 0.76,
-            },
-        )
-
-        assert tab._rainbow_per_mode["bubble"] == (True, 76)
-        assert tab.rainbow_enabled.checked is True
-        assert tab.rainbow_speed_slider.value == 76
-        assert tab.rainbow_speed_label.text == "0.76"
-        assert tab.rainbow_updates == 1
-
-    def test_collect_visualizer_rainbow_state_writes_known_mode_keys_from_active_mode(self):
-        from ui.tabs.media.visualizer_mode_binding import (
-            collect_visualizer_rainbow_state,
-        )
-
-        class _Check:
-            def __init__(self, checked):
-                self._checked = checked
-
-            def isChecked(self):
-                return self._checked
-
-        class _Slider:
-            def __init__(self, value):
-                self._value = value
-
-            def value(self):
-                return self._value
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                # V7: the active mode is the context-owned canonical id.
-                super().__init__()
-                self._active_visualizer_mode_id = "bubble"
-                self.rainbow_enabled = _Check(True)
-                self.rainbow_speed_slider = _Slider(63)
-                self._rainbow_per_mode = {
-                    "spectrum": (False, 20),
-                }
-
-        tab = _Tab()
+        tab = CanonicalWidgetDefaultsStub()
+        load_visualizer_family_values(tab, {})
+        held = getattr(tab, FAMILY_CACHE_ATTR)
+        held["bubble_rainbow_enabled"] = True
+        held["bubble_rainbow_speed"] = 0.63
         payload = {}
-        collect_visualizer_rainbow_state(tab, payload)
-
+        collect_visualizer_family_values(tab, payload, "bubble")
         assert payload["bubble_rainbow_enabled"] is True
         assert payload["bubble_rainbow_speed"] == pytest.approx(0.63)
-        assert payload["spectrum_rainbow_enabled"] is False
-        assert payload["spectrum_rainbow_speed"] == pytest.approx(0.20)
-        # Oscilloscope does not own the shared Rainbow controls; its beam tone
-        # is driven by the mode's authored spectral reaction instead.
+        assert (payload["rainbow_enabled"], payload["rainbow_speed"]) == (True, pytest.approx(0.63))
+        for mode in ("spectrum", "devcurve"):
+            for key in get_owned_mode_setting_keys(mode, "rainbow").values():
+                assert key in payload
+            # An unselected mode's bar appearance stays as stored (the save merge), never re-written here.
+            for key in get_owned_mode_setting_keys(mode, "shared_bar").values():
+                assert key not in payload
+        for key in get_owned_mode_setting_keys("bubble", "shared_bar").values():
+            assert payload[key] == held[key]
         assert "oscilloscope_rainbow_enabled" not in payload
-        assert "oscilloscope_rainbow_speed" not in payload
-
-    def test_rainbow_controls_are_hidden_outside_custom_preset(self):
-        from ui.tabs.widgets_tab import WidgetsTab
-
-        class _Check:
-            def __init__(self, checked):
-                self._checked = checked
-
-            def isChecked(self):
-                return self._checked
-
-        class _Container:
-            def __init__(self):
-                self.visible = None
-
-            def setVisible(self, visible):
-                self.visible = bool(visible)
-
-        class _Effect:
-            def __init__(self):
-                self.enabled = None
-
-            def setEnabled(self, enabled):
-                self.enabled = bool(enabled)
-
-        class _Palette:
-            def setColor(self, *_args):
-                pass
-
-        class _Label:
-            def palette(self):
-                return _Palette()
-
-            def foregroundRole(self):
-                return object()
-
-            def setPalette(self, _palette):
-                pass
-
-        class _Tab:
-            def __init__(self, *, custom):
-                self.rainbow_enabled = _Check(True)
-                self._rainbow_controls_container = _Container()
-                self._rainbow_speed_container = _Container()
-                self._rainbow_glow_effect = _Effect()
-                self._rainbow_plain_label = _Label()
-                self._custom = custom
-
-            def _active_visualizer_preset_is_custom(self):
-                return self._custom
-
-            def _get_active_visualizer_mode(self):
-                return "spectrum"
-
-        custom_tab = _Tab(custom=True)
-        WidgetsTab._update_rainbow_visibility(custom_tab)
-        assert custom_tab._rainbow_controls_container.visible is True
-        assert custom_tab._rainbow_speed_container.visible is True
-        assert custom_tab._rainbow_glow_effect.enabled is True
-
-        preset_tab = _Tab(custom=False)
-        WidgetsTab._update_rainbow_visibility(preset_tab)
-        assert preset_tab._rainbow_controls_container.visible is False
-        assert preset_tab._rainbow_speed_container.visible is False
-        assert preset_tab._rainbow_glow_effect.enabled is False
 
     def test_collect_and_load_visualizer_preset_indices_use_shared_descriptor_contract(self):
         from core.settings.visualizer_preset_indices import resolve_preset_index_from_mapping

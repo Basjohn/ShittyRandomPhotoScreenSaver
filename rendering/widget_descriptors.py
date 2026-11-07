@@ -430,7 +430,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         persisted_widget_keys=("spotify_visualizer",),
         signal_block_attrs=(
             "visualizers_enabled", "vis_enabled_checkbox",
-            "vis_border_opacity", "spectrum_ghosting_enabled",
+            "spectrum_ghosting_enabled",
             "spectrum_ghost_alpha", "spectrum_ghost_decay",
             "devcurve_base_level",
             "devcurve_motion_power", "devcurve_idle_motion",
@@ -3065,13 +3065,8 @@ WIDGET_DEFAULT_INIT_DESCRIPTORS: tuple[WidgetDefaultInitDescriptor, ...] = (
     WidgetDefaultInitDescriptor("_media_progress_fill_color", "media", "playback_progress_fill_color", "color"),
     WidgetDefaultInitDescriptor("_media_progress_shadow_color", "media", "playback_progress_shadow_color", "color"),
     WidgetDefaultInitDescriptor("_media_progress_glow_color", "media", "playback_progress_glow_color", "color"),
-    # NOTE: _spotify_vis_fill_color / _spotify_vis_border_color are intentionally
-    # NOT seeded here. bar_fill_color / bar_border_color are per-mode keys resolved
-    # as <mode>_bar_fill_color, so there is no plain canonical
-    # widgets.spotify_visualizer.bar_fill_color to read (requesting it raised a
-    # KeyError that crashed WidgetsTab construction). ui/tabs/media/
-    # shared_appearance_controls.py is the single owner of these shared-appearance
-    # attrs and seeds them from spectrum_bar_fill_color / spectrum_bar_border_color.
+    # NOTE: the Visualizer's shared Bar Appearance colours are per-mode spec controls held in the Visualizers
+    # page's value cache (``visualizer_mode_binding.FAMILY_CACHE_ATTR``), never seeded here.
     WidgetDefaultInitDescriptor("_reddit_color", "reddit", "color", "color"),
     WidgetDefaultInitDescriptor("_reddit_bg_color", "reddit", "bg_color", "color"),
     WidgetDefaultInitDescriptor("_reddit_border_color", "reddit", "border_color", "color"),
