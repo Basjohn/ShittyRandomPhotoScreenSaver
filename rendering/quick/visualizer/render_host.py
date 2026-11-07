@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Callable
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
 
+from core.logging.logger import get_logger
 from core.performance.frame_trace import FrameTraceEvent, logical_timestamp_ns
 
 from .gl_state import InheritedGlState
@@ -25,6 +26,8 @@ from .telemetry import (
 
 if TYPE_CHECKING:
     from core.performance.frame_trace import FrameTraceSink
+
+logger = get_logger(__name__)
 
 
 def _int_state(name: int) -> int:
@@ -170,17 +173,14 @@ class QuickVisualizerRenderHost:
     ) -> str:
         mode_id = snapshot.logical.mode_id
         # A mode switch is observed on the render thread, where the GL context
-        # is legal.  Retire every previously resolved inactive implementation
-        # before lazily resolving the new one.  Lifecycle telemetry advances only
-        # on this real boundary, never on ordinary same-mode frames.
-        # ``mode_changed`` already gates the existing retirement path; guarding
-        # the telemetry note behind it (short-circuit) adds no per-frame branch,
-        # only a boundary-time None check when a switch actually happens.
+        # is legal.  The active mode draws first; every previously resolved
+        # inactive implementation is retired after it, on this boundary frame
+        # only (``_retire_inactive_at_boundary``), so a failing release can never
+        # black out the active mode.  Lifecycle telemetry advances only on this
+        # real boundary, never on ordinary same-mode frames.
         mode_changed = mode_id != self._last_render_mode_id
         if mode_changed and self._lifecycle is not None:
             self._lifecycle.note_mode_boundary(mode_id)
-        if mode_changed or len(self._implementations) > 1:
-            self.release_inactive_implementations(mode_id)
         implementation = self._implementations.get(mode_id)
         if implementation is None:
             implementation = (
@@ -268,17 +268,38 @@ class QuickVisualizerRenderHost:
                     ),
                     auxiliary=int(snapshot.logical.runtime_generation),
                 )
+            if mode_changed and len(self._implementations) > 1:
+                self._retire_inactive_at_boundary(mode_id)
         finally:
             inherited.restore_render_host()
         self._last_render_mode_id = mode_id
         return mode_id
 
+    def _retire_inactive_at_boundary(self, active_mode_id: str) -> None:
+        """Release the inactive renderers once, after the active mode has drawn.
+
+        A failure is recorded once (lifecycle note inside
+        ``release_inactive_implementations``, one log line here) and never
+        re-raised into the frame: the failed renderer stays cached and accounted,
+        and its release is retried only at the next mode boundary or at
+        ``release_resources``, never per frame.
+        """
+        try:
+            self.release_inactive_implementations(active_mode_id)
+        except Exception:
+            logger.exception(
+                "[QUICK] Visualizer inactive renderer release failed at the %s boundary; "
+                "retrying at the next mode boundary or teardown",
+                active_mode_id,
+            )
+
     def release_inactive_implementations(self, active_mode_id: str | None) -> None:
         """Release cached renderers that cannot draw the current snapshot.
 
         This method is intentionally render-thread-only.  A failed renderer
-        cleanup remains cached so a later legal render or explicit teardown can
-        retry it; successfully released implementations are removed immediately.
+        cleanup remains cached so the next mode boundary or explicit teardown can
+        retry it (``render`` never retries per frame); successfully released
+        implementations are removed immediately.
         The shared quad belongs to the host and remains available for the active
         mode.
         """

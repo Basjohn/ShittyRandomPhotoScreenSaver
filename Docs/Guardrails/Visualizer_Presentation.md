@@ -110,6 +110,13 @@ Disabled or unselected mode Settings bodies, frame runtimes and renderers stay l
 mode's logical state and consumer-owned resources do not remain parked for possible reuse unless a resource is genuinely shared
 infrastructure explicitly sanctioned by the Scene3D/resource contract.
 
+The render host (`rendering/quick/visualizer/render_host.py`) draws the active mode first and releases the inactive renderers
+after it, on the mode-boundary frame only, with a current context. A release that raises never reaches the frame: it is
+recorded once (lifecycle note and one log line), the renderer stays cached and accounted in the ownership snapshot, and the
+release is retried at the next mode boundary or at `release_resources`, never per frame. Before 7 Nov (checklist AC-04) the
+failure was re-raised on every frame and the active card stayed black until teardown;
+`tests/test_qtquick_visualizer_mode_retirement.py::test_a_failing_inactive_release_never_blacks_out_the_active_mode`.
+
 Dormancy coverage must scale from the canonical registry, so adding a mode automatically joins import/construction, logical
 advance/query, repeated-switch retirement and resource-ownership regression coverage.
 
