@@ -58,6 +58,7 @@ def _fake_display_manager_class():
         exit_requested = Signal()
         monitors_changed = Signal(int)
         displays_ready = Signal(int)
+        no_display_shown = Signal(int)
         authoritative_first_frames_ready = Signal(int)
         startup_reveal_completed = Signal(int)
         transition_completed = Signal(int)
