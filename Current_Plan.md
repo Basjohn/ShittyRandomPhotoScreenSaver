@@ -250,6 +250,16 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
   3. **Side defect found (not caused here):** light themes keep the weather detail icons white (asset images),
      faint on pale cards; a themed icon tint would fix it. (The `tests/test_surface_materials.py` access violation
      found in the same pass is fixed: R-173, the hidden scene's GL context freed before its render control.)
+  4. **Field defects (operator 7 Nov, not high priority):**
+     - **The theme's material doesn't reach the cards.** With a material theme selected and Style Override left
+       at **Theme**, the cards are opaque; forcing Glass in Style Overrides works. The theme's `surface_material`
+       is lost somewhere between the selected theme and the running cards. Trace that chain in the running app
+       (theme selection → resolved style → per-card material → `SurfaceBackdropSource`), not on a stand-in.
+       Regression bar: select a material theme with the override on Theme, and the running card draws that
+       material.
+     - **Light themes:** the widget shadows still make widgets largely unreadable. The 4.5:1 legibility check
+       measured text against its panel but not the shadow's effect. Fix the shadows, then judge the result on
+       live renders.
 - [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
   pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
   Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,
