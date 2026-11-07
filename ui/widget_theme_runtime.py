@@ -12,7 +12,10 @@ Persisted state (all in normal SRPSS Settings data — ``Custom`` is never a fil
 - ``widget_theme.custom``                 a serialized WidgetThemeSpec payload | None.
 
 ``Keep Synced`` links Widget-theme identity to the Settings theme's explicit mirror.
-Card material is intentionally not part of Widget Theme state.
+The card material a theme is designed for travels in the selected theme itself
+(``WidgetThemeSpec.surface_material``; a linked mirror carries its Settings theme's
+backdrop material, AC-17), never in this persisted selection state, and resolution
+here never reads the Settings theme.
 """
 
 from __future__ import annotations

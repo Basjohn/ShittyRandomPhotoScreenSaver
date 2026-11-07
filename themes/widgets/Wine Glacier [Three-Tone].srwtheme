@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Wine Glacier [Three-Tone] [Glass].srtheme",
   "name": "Wine Glacier [Three-Tone]",
   "linked_settings_theme_id": "file:Wine Glacier [Three-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       49,

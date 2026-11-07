@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Arcade Dreamwave [Complex] [Glass].srtheme",
   "name": "Arcade Dreamwave [Complex]",
   "linked_settings_theme_id": "file:Arcade Dreamwave [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       48,

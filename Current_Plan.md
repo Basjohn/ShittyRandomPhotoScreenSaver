@@ -108,9 +108,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   Rainbow hidden rows) is folded into the spec by the Settings SSOT fold (AC-21).
 - **Settings system and SSOT audit: done 7 Nov.** It is at `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md`. The
   lead re-checked its key lines in source, and all 7 items survived; they are promoted to the checklist as Tier S,
-  AC-17 to AC-23. Theme-material root cause (AC-17): the generated Widget mirror of each "[Glass]"/"[Acrylic]"
-  Settings theme deliberately drops the material, so the runtime never sees one. The fix waits on the operator's
-  choice.
+  AC-17 to AC-23. All seven are built (AC-17 last, below).
 - **Settings SSOT fold: merged 7 Nov (0e86b4aa).** Six items landed, each its own commit:
   - **AC-19:** Reset and Import re-derive the active Settings and Widget themes, and the Themes tab reloads.
   - **AC-22:** one MC predicate decides whether interaction is forced.
@@ -135,7 +133,12 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - Manual Floor's low is 0.0 everywhere.
   - Technical tooltips use the registry names.
 
-  **AC-17 (theme material) waits on the operator's choice.**
+- **AC-17 (theme material): built 7 Nov on its agent branch, awaiting the lead's audit and merge.** Operator's
+  choice: cards follow the theme. A linked Widget mirror now carries its Settings theme's backdrop material
+  (`widget_counterpart_for_settings_theme` projects it; 98 shipped mirrors got the one key by a fill, nothing else
+  changed). Visible change: every profile on a linked "[Glass]"/"[Acrylic]" pair with Style Overrides on Theme,
+  fresh profiles included, now draws that material; the Themes tab tags Widget theme names with their material.
+  Rule: `Docs/Architecture/Card_Surface_Materials.md` section 4.
 - [~] **Spectrum presets 2-15: re-authored by the lead (7 Nov), awaiting the operator's eyes.** The first agent
   round failed the fidelity gate (operator: "awful"). Its looks were opaque clip-art blocks, its per-bar patterns
   turned to checkerboard and tartan, its ghost trails read as soot, and Union Jack read as tartan. That round is not
@@ -359,6 +362,15 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
+- **Two more gate reds, on main too (found by the AC-17 gate, 7 Nov; each fails identically alone on main
+  `f4fdb765`):**
+  - `tests/test_engine_cleanup_joins_runtime_threads.py::test_reaching_the_display_window_guard_leaves_no_non_daemon_thread`:
+    `assert initialized is False` gets `True`. The display-window guard refuses the window ("Failed to show display
+    for screen 0 ... with --display-disruptive"), but engine initialisation still reports success. Decide whether the
+    guard's refusal should fail initialisation or the test's expectation is stale.
+  - `tests/test_s_hotkey_workflow.py::test_s_hotkey_opens_settings_without_crash` reaches the real
+    `QCoreApplication.exit(1)` (the suite's guard reports a runtime destruction-barrier timeout or similar) and is
+    skipped; the file exits 3. Find what calls `exit(1)` on the S-hotkey Settings path.
 
 **Found while landing AC-09 and AC-02 (7 Nov; fixed there or recorded):**
 - **Card border consumers disagreed on malformed values (fixed in AC-09).** Games You Follow drew 12 px for a stored
@@ -523,12 +535,14 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
      faint on pale cards; a themed icon tint would fix it. (The `tests/test_surface_materials.py` access violation
      found in the same pass is fixed: R-173, the hidden scene's GL context freed before its render control.)
   4. **Field defects (operator 7 Nov, not high priority):**
-     - **The theme's material doesn't reach the cards.** With a material theme selected and Style Override left
-       at **Theme**, the cards are opaque; forcing Glass in Style Overrides works. The theme's `surface_material`
-       is lost somewhere between the selected theme and the running cards. Trace that chain in the running app
-       (theme selection → resolved style → per-card material → `SurfaceBackdropSource`), not on a stand-in.
-       Regression bar: select a material theme with the override on Theme, and the running card draws that
-       material.
+     - **The theme's material doesn't reach the cards: root cause fixed by AC-17 (on its branch).** The chain
+       never lost the value: a linked "[Glass]" pair's Widget mirror named no material. Mirrors now carry it
+       (binder-level bar: `tests/test_theme_pair_surface_material.py`). Left: confirm it in the running app
+       during live check 1 (a "[Glass]" pair, Keep Synced, override on Theme, and the running card draws Glass).
+     - **Side defect (found by AC-17, not caused by it):** 18 of the 98 linked material mirrors sit under the
+       4.5:1 authoring bar the 15 material themes meet, mostly `widget.accent` on `widget.panel` (3 are the header
+       label on its fill). Their colours are unchanged; only their material is new. Judge them on the live
+       renders, and re-author the ones that read badly on Glass/Acrylic.
      - **Light themes:** the widget shadows still make widgets largely unreadable. The 4.5:1 legibility check
        measured text against its panel but not the shadow's effect. Fix the shadows, then judge the result on
        live renders.

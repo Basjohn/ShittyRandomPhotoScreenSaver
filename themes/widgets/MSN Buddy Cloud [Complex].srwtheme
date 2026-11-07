@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:MSN Buddy Cloud [Complex] [Glass].srtheme",
   "name": "MSN Buddy Cloud [Complex]",
   "linked_settings_theme_id": "file:MSN Buddy Cloud [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       209,

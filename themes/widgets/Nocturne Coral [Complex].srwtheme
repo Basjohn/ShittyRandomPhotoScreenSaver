@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Nocturne Coral [Complex] [Acrylic].srtheme",
   "name": "Nocturne Coral [Complex]",
   "linked_settings_theme_id": "file:Nocturne Coral [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       48,

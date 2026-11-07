@@ -241,11 +241,33 @@ widgets.<family>.surface_material       Inherit (default) | Normal | the five ma
   the strict loader (`ui/widget_theme_io.py`) accepts the key or its absence and rejects anything but a real
   material; the writer emits it only when set, so every older theme round-trips byte for byte. The Foundry editor
   (`tools/widget_theme_foundry.py`) shows and saves it; the Custom theme (a `replace` of the active spec) keeps it.
-  Existing themes name none and stay Normal under "Theme". Fifteen material themes (6 Nov, three per material,
+- **A pair's material has one owner: the mirror (AC-17, operator 7 Nov 2026: "[Glass]" and "[Acrylic]" themes give
+  Glass and Acrylic cards).** A linked Widget mirror carries its Settings theme's backdrop material:
+  `widget_counterpart_for_settings_theme` (`tools/generate_widget_theme_mirrors.py`, the one authority pack
+  generation, the Theme Foundry and the Theme Sorter call) projects `backdrop.mode` once (`glass` -> `glass`,
+  `acrylic` -> `acrylic`, `off` -> none) through `surface_material_for_settings_theme`. The runtime resolver never
+  reads the Settings theme; under Keep Synced the selected mirror simply names the material, and
+  `resolve_global_surface_material` / `theme_surface_material` read it as for any theme. So the canonical default
+  pair (`Default Dark [Single] [Glass]`, Keep Synced) draws Glass cards on a fresh profile (accepted), and Style
+  Overrides set to anything but Theme still win. The shipped mirrors got the key by a **one-key fill**
+  (`python tools/generate_widget_theme_mirrors.py --fill-materials`, like the preset repair fill), never by
+  regeneration: ten mirrors carry hand-authored colour roles (for example `media.volume.fill`) that the wholesale
+  generator would erase, and it would also delete every unlinked theme in the folder (so it now refuses both unless
+  a flag names each intent; with no arguments the script changes nothing). The fill refuses a file the canonical
+  writer would not reproduce byte for byte. Two pairs name none: `Matte Graphite [Single]` (backdrop
+  `off`) and the built-in Default Dark, whose Widget half is the compiled `DEFAULT_DARK_WIDGET_THEME`: the
+  unconditional fallback and the process's initial active theme, kept Normal so the error path and an un-themed
+  start stay dormant (its Settings half draws an Acrylic window, but its name carries no tag). The Themes tab tags
+  a Widget theme's list label with its material (`Name [Glass]`); file names and stored ids are unchanged.
+  Regression bar: `tests/test_theme_pair_surface_material.py`.
+- **Material themes.** Fifteen material themes (6 Nov, three per material,
   unlinked, `theme_id` `widget:material:*`) cover the hues the first 100 rarely use (chartreuse, green, yellow,
   violet, blue and magenta borders/accents; light cards; green/magenta, yellow/blue, violet/gold, blue/lime
-  pairings). Themes are authored content: tests check structure and that each material theme's own text roles
-  read at 4.5:1 on its own surface, never its values.
+  pairings). They are unlinked, so Keep Synced (the default) refuses them; they are reached with Independent. Themes
+  are authored content: tests check structure and that each of these unlinked material themes' own text roles reads
+  at 4.5:1 on its own surface, never its values. The linked mirrors are not held to that authoring bar (their
+  colours are their Settings theme's projection); 18 of the 98 material mirrors sit under it, mostly
+  `widget.accent` on `widget.panel` (`Current_Plan.md` §4).
 - **Baseline.** `Widgets -> General -> Style Overrides -> Surface Material` sets the baseline beside Card Border
   Width; its first option, **Theme** (the new default), follows the active Widget Theme's material and is Normal when
   the theme names none (`resolve_global_surface_material` / `theme_surface_material` in

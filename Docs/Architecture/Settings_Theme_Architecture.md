@@ -83,7 +83,7 @@ The persisted theme selection is resolved and validated before first Settings co
 
 ## Theme file storage / packaged path authority
 
-Settings Themes and the current colour-only Widget Themes share one durable **theme root** rather than inventing separate installation trees.
+Settings Themes and the current Widget Themes (colours plus an optional card material) share one durable **theme root** rather than inventing separate installation trees.
 
 Installed/frozen Windows builds use the same stable ProgramData base used by other SRPSS curated/runtime assets:
 

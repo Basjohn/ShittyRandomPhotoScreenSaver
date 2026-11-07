@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Deco Emerald [Complex] [Glass].srtheme",
   "name": "Deco Emerald [Complex]",
   "linked_settings_theme_id": "file:Deco Emerald [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       22,

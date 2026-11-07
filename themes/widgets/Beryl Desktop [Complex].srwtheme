@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Beryl Desktop [Complex] [Glass].srtheme",
   "name": "Beryl Desktop [Complex]",
   "linked_settings_theme_id": "file:Beryl Desktop [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       38,

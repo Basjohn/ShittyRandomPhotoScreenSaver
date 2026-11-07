@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Cucked Cobalt [Two-Tone] [Glass].srtheme",
   "name": "Cucked Cobalt [Two-Tone]",
   "linked_settings_theme_id": "file:Cucked Cobalt [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       29,

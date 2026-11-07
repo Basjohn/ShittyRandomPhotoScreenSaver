@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Amethyst Night [Single] [Glass].srtheme",
   "name": "Amethyst Night [Single]",
   "linked_settings_theme_id": "file:Amethyst Night [Single] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       49,
