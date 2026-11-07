@@ -376,8 +376,9 @@ next admitted edge). The checklist below stays as its review list.
 - **Now playing, bottom left:** Artist, Song and Artwork, fading in and out very gently on a track change (the Media
   model's track identity, never a second GSMTC read). The artwork is drawn with the themed card border (the one card
   chrome owner: border colour, width, radius); the text has no card, border or plate.
-- **Text:** white by default with a customizable font (a new canonical setting in the spec system, offered in Settings
-  and the Studio, authored into every preset/default per the completeness guard). Readable on bright visualizer
+- **Text:** white by default with a customizable font (a global Visualizer setting with a canonical default, offered
+  in Settings; corrected 8 Nov at M3b: not a preset value, so it is not authored into presets and the Studio, which
+  edits a mode's preset values, does not carry it). Readable on bright visualizer
   frames: a soft text shadow now; long term (separate item), a cheap luminance detection of the visualizer area under
   the text that switches the text to black where it is bright. Cheap means no per-frame CPU readback: e.g. a
   `ShaderEffect` on the text sampling the already-rendered visualizer texture, or a tiny downsampled luminance probe
@@ -397,9 +398,10 @@ next admitted edge). The checklist below stays as its review list.
     and radius, plus the active Widget Theme's surface material), wrapping the whole overlay; off by default, so the
     artwork alone keeps its themed border.
 - **Settings home:** a new Visualizers pill, **Fullscreen Mode**, placed first after Setup (before the mode pills),
-  holding every overlay option above plus the overlay font. Its values are canonical Settings keys in the spec system
-  (one owner, persisted, reset to defaults); the Studio exposes the font too. Steam-style buckets, closed by default;
-  one-sentence intros, the rest in tooltips; Title Case labels.
+  holding every overlay option above plus the overlay font. Its values are one canonical Settings value with a
+  canonical default (`widgets.spotify_visualizer.fullscreen_overlays`: one owner, persisted, reset to defaults), a
+  global Visualizer setting like `expanded_display_requested`, never a preset value (corrected at M3b; see the Text
+  bullet). Steam-style buckets, closed by default; one-sentence intros, the rest in tooltips; Title Case labels.
 - Owner: its own slice (M3b) after M3's widget suspension merges, since both touch the expanded scene hierarchy.
 
 - [ ] HUD is presentation-only. Authoritative fields derive from **existing Media model** (`MediaPresentationModel`/`MediaRuntimeSnapshot`) and the canonical volume/OSD model as applicable. Reuse semantic theme colours, font/stroke/shadow rules and artwork image provider; no second GSMTC query, network request, decoder or artwork cache.
@@ -606,20 +608,80 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 
 **Milestone 3b | Full-display overlays (operator spec, §G, 8 Nov)**
 
-- [ ] Preset-name toast top left (Title Case), gentle fade in/out on preset change; latest wins.
-- [ ] Now-playing bottom left: Artist, Song, Artwork (themed border on the artwork only), very gentle fade in/out on
+- [x] Preset-name toast top left (Title Case), gentle fade in/out on preset change; latest wins.
+- [x] Now-playing bottom left: Artist, Song, Artwork (themed border on the artwork only), very gentle fade in/out on
   track change; identity-fenced (no stale art flash), missing art falls back to theme geometry.
-- [ ] White text, customizable font (canonical setting in Settings and the Studio, authored into every preset), soft
-  shadow for legibility; the bright-area black-text switch recorded as its own follow-up.
-- [ ] Options: per-overlay corner (any of four; same-corner stacking), Always Show (crossfade on change), Media
+- [x] White text, customizable font (a global Visualizer setting with a canonical default, in Settings; corrected:
+  not a preset value, so neither presets nor the Studio carry it), soft shadow for legibility; the bright-area
+  black-text switch recorded as its own follow-up (`Current_Plan.md` §3).
+- [x] Options: per-overlay corner (any of four; same-corner stacking), Always Show (crossfade on change), Media
   Controls with the now-playing overlay (default off; the existing Media transport path), optional card border +
   theme surface material (default off).
-- [ ] Settings: a **Fullscreen Mode** pill in Visualizers, first after Setup, holding the overlay options and font as
-  canonical spec-system keys (defaults, persistence, reset); the Studio offers the font.
-- [ ] Tests: event-only visibility, fade retirement, latest-wins, Always Show keeps the overlay up and crossfades,
+- [x] Settings: a **Fullscreen Mode** pill in Visualizers, first after Setup, holding the overlay options and font as
+  one canonical value (defaults, persistence, reset).
+- [x] Tests: event-only visibility, fade retirement, latest-wins, Always Show keeps the overlay up and crossfades,
   every corner placed inside the safe area with stacking, media controls reach the one Media controller, no hit/z
   conflict with OSD/glyph/controls, consumer counts unchanged (no second Media query), dormant when not expanded,
   the pill's position (structure only, never its wording).
+- [ ] **Gate 3b:** the lead's audit; the operator's look at the overlays on the real display (fade feel, sizes,
+  legibility over bright frames, the Card on Glass).
+
+**M3b as built (8 Nov, implementing agent; the source is the authority where this plan was silent):**
+
+- *Setting.* `widgets.spotify_visualizer.fullscreen_overlays` (owner `core/settings/fullscreen_overlays.py`): per
+  overlay (`preset`, `now_playing`) `corner`, `always_show`, `card`, placement `offset_x`/`offset_y` (fractions of
+  the expanded card's safe area, screen axes) and `scale`; `now_playing.media_controls`; one `font_family` and
+  `font_size`. A global Visualizer setting with a canonical default, like `expanded_display_requested`: no mode
+  prefix, so presets and the Custom snapshot never carry it (no repair fill; the completeness guard is unaffected).
+  One normaliser (unknown members dropped, malformed members fall back to their default member by member, numbers
+  clamped), a typed model field, defaults in both profiles. M3c edits the placement through Edit; the corner is the
+  anchor the offset is relative to.
+- *Where they live.* `ExpandedVisualizerOverlays.qml` (+ `ExpandedOverlaySlot.qml` per overlay), loaded by
+  `VisualizerPresentation.qml` (z 6: above the content and frame, below every card control, the OSD lane and the
+  menu) only while `expandedOverlaysDrawn`. The owner sets that at its route's edges only: a committed swap, the
+  fade-through's midpoint (the card at zero opacity, so the overlays arrive and leave with it), display power (a
+  parked display holds none; waking re-enters) and retirement. Inside the card they inherit its fade-through and
+  the startup reveal; a restore before reveal waits for the gate to open.
+- *Sources.* The preset's display name is the preset owner's (`get_preset_names`), title-cased by the one SRPSS rule
+  (`utils.text_utils.title_case`, moved there Qt-free; Settings re-exports it), published by the display manager at
+  the mode and preset completions (a mode change changes the active preset too) and without a reveal at admission.
+  Now Playing reads the `MediaPresentationModel` the Visualizer's playback truth already binds
+  (`_quick_visualizer_media_model`): its coherent snapshot (title, artist, artwork source, can-previous/next/play)
+  and the one artwork image provider. Nothing else: no runtime call, lease or refresh.
+- *Events and fades.* Entering (once the reveal is open), a preset announcement, a track identity change (artist +
+  title). Each is one finite QML animation from the event (preset 0.7 s in, 2.6 s hold, 1.4 s out; Now Playing
+  1.3 s, 5.2 s, 2.0 s); a newer event restarts it from where it is. A showing overlay swaps by fading only its
+  content out, swapping while invisible and fading it in (the overlay, and its card, stay up); Always Show holds at
+  full. A track change latches title, artist and the artwork source together at the swap, and the artwork shown is
+  the model's only while the latched identity is the live one (never another track's art under the text). No track
+  fades Now Playing out. When a fade ends nothing runs and the item is invisible.
+- *Placement.* The safe area is the card inset by its border plus max(24, 2.5% of the shorter side). Right-hand
+  corners also keep clear of the card's controls (top: the collapse glyph, its tip and the 3D hint; bottom: Reset
+  Camera, the preset steps and their tip). An overlay is at most 45% of the safe width (text elides), so a left one
+  never reaches the right-hand controls. Two in one corner stack, the newer (by appearance, not by content swap)
+  nearer the edge; an appearing overlay waits while a showing peer makes room, and the older glides back when the
+  newer has gone. A showing OSD over an overlay keeps priority: the overlay fades aside (and takes no input) until
+  the OSD hides.
+- *Look.* Text white (on its own card: the theme's card text, so a light theme's card stays readable) with a soft
+  shadow (`ShadowedText`'s soft profile). Artwork square (as tall as the text beside it), framed with the card's own
+  chrome (border colour, the AC-09 width, the card radius) on a concentric mask; missing art shows the card surface
+  with a quiet note glyph. Card wraps an overlay in `OverlayCard` (the widget cards' own card: theme border, surface,
+  material via the shared backdrop, card shadow). Media Controls use the card's in-card control look and
+  `MediaTransportGlyph`; each consumes its own presses (double-click included); nothing else in the overlays takes
+  input, so double-click, middle-click, wheel and orbit reach the card as before.
+- *Media Controls route.* QML → `QuickSceneController.visualizer_overlay_transport_requested` → the display manager's
+  `_route_expanded_overlay_transport` (owning unit, admission open, no context menu) → `_route_quick_media_transport`,
+  the route the keyboard transport shortcuts take: the Media card's own transport owner, never fanned out.
+  Interaction Mode (or Ctrl) admits them, as every widget control.
+- *Settings.* `ui/tabs/visualizers_fullscreen_page.py`: buckets Preset Name, Now Playing and Text (`fullscreen:*` in
+  `ui.visualizer_bucket_states`), one level (each overlay has three or four options; nothing needs a second level),
+  closed by default, one open at a time, remembered as the page's editing path (`_visualizers_pill` returns
+  `fullscreen`). The page writes the one value through the tab's save and keeps the placement it does not show.
+- *Evidence.* `tests/test_visualizer_expansion_overlays.py` (hidden production scene and the production owner),
+  `tests/test_visualizer_expansion_overlay_settings.py`, `tests/test_visualizers_fullscreen_mode_pill.py` (real
+  Settings dialog); each bar was turned red by reintroducing its defect. Stills (Extruded Bubble and Spectrum on
+  PERSONALSET 859804, 1600 x 900): preset + Now Playing, Card, Media Controls, two stacked in one corner with Card,
+  missing art in the right-hand corners, Card on Glass, long names.
 
 **Milestone 3c | Fullscreen Edit (operator, 8 Nov)**
 

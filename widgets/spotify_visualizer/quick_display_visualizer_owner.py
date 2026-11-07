@@ -106,6 +106,7 @@ class QuickDisplayVisualizerOwner:
     _expanded_display = False
     _takeover: "_TakeoverFade | None" = None
     _expanded_source: Any = None
+    _expanded_overlays_drawn = False
 
     def __init__(
         self,
@@ -208,6 +209,9 @@ class QuickDisplayVisualizerOwner:
         self._expanded_display = False
         self._takeover: _TakeoverFade | None = None
         self._expanded_source: Any = None
+        # The full-display overlays (plan 01 §G, M3b) exist only while the display-wide card is drawn and the displays
+        # are on; the last value projected to the scene, so it is written at its edges only.
+        self._expanded_overlays_drawn = False
 
     @property
     def controller(self) -> Any:
@@ -240,6 +244,7 @@ class QuickDisplayVisualizerOwner:
             return False
         controller = self._controller
         self._display_power_on = on
+        self._project_expanded_overlays()
         if not on:
             if not controller.set_logical_parked(True):
                 logger.error("[SPOTIFY_VIS][DISPLAY_POWER] Logical runtime did not park; it stays requested")
@@ -806,8 +811,32 @@ class QuickDisplayVisualizerOwner:
         self._sync.set_presentation_route(resolve, commit)
         if reapply and self._started:
             self._reapply_route(request_present=True)
+        self._project_expanded_overlays()
         if on_complete is not None:
             on_complete()
+
+    def _expanded_drawn(self) -> bool:
+        """The side the card is drawn on now: display-wide or ordinary (a fade-through draws its source first)."""
+
+        takeover = self._takeover
+        return bool(takeover.drawn_expanded) if takeover is not None else self._expanded_display
+
+    def _project_expanded_overlays(self) -> None:
+        """Admit the full-display overlays exactly while the display-wide card is drawn and the displays are on.
+
+        Called at the route's edges only: a committed swap, the fade-through's midpoint (where the card is at zero
+        opacity, so the overlays appear and leave with it, never popping), display power and retirement. Parked
+        displays hold no overlay (no fade animation runs while the displays are off); waking brings them back.
+        """
+
+        drawn = bool(not self._retired and self._display_power_on and self._expanded_drawn())
+        if drawn == self._expanded_overlays_drawn:
+            return
+        runtime = self._presentation_runtime
+        setter = getattr(getattr(runtime, "scene_controller", None), "set_visualizer_expanded_overlays_drawn", None)
+        self._expanded_overlays_drawn = drawn
+        if callable(setter):
+            setter(drawn)
 
     def _resolve_expanded_presentation(self) -> Any:
         ordinary = self._resolve_current_presentation()
@@ -871,6 +900,9 @@ class QuickDisplayVisualizerOwner:
             self._apply_resolved_presentation(presentation)
         else:
             self._apply_expanded_presentation(presentation)
+        if takeover is not None and takeover.drawn_expanded != self._expanded_overlays_drawn:
+            # The fade-through's midpoint (only this route carries it, and only during the fade).
+            self._project_expanded_overlays()
         if takeover is not None and takeover.done and self._takeover is takeover:
             # The target is on screen at full opacity: commit the steady route, then report completion.
             self._finish_takeover(takeover.target, takeover.on_complete, reapply=False)
@@ -1777,6 +1809,13 @@ class QuickDisplayVisualizerOwner:
         if self._started:
             self._runtime.scene_controller.set_visualizer_double_click_admission(None)
             self._runtime.scene_controller.set_visualizer_middle_click_admission(None)
+        if self._expanded_overlays_drawn and self._presentation_runtime is not None:
+            # The full-display overlays leave with the owner (a reload or Visualizer off; a retiring scene ignores it).
+            self._expanded_overlays_drawn = False
+            setter = getattr(self._presentation_runtime.scene_controller,
+                             "set_visualizer_expanded_overlays_drawn", None)
+            if callable(setter):
+                setter(False)
         if self._bound:
             # Especially after a CUSTOM display transfer, the active scene must
             # not retain controller.set_custom_viewport_override and thereby keep

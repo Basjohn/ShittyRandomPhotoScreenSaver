@@ -292,8 +292,11 @@ Item {
             source: "VisualizerPresentation.qml"
             z: 20
             onLoaded: {
-                if (item)
+                if (item) {
                     item.externalCardShadow = true
+                    // The full-display overlays (M3b) step aside for a showing OSD: hand over its lane once.
+                    item.expandedOverlayOsdHost = systemAudioOSDForegroundHost
+                }
             }
         }
 

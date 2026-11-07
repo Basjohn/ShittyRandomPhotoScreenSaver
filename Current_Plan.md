@@ -639,6 +639,25 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   host, never `DisplayScene.qml`, so scene-level dormancy (M3's cover) is proven by the QObject census and the
   no-per-frame-work structure instead.
 
+**Found while building Expanded Visualizer M3b (8 Nov; recorded, not yet admitted):**
+- **Bright-area text switch (operator's long-term item, plan 01 §G):** the overlays' text is white with a soft
+  shadow; over a bright Visualizer area it should switch to black. Cheap means no per-frame CPU readback (a
+  `ShaderEffect` on the text sampling the already-rendered frame, or a tiny luminance probe only while an overlay
+  shows). Not built.
+- **A Card on a material shows the wallpaper, not the Visualizer:** the shared backdrop is the wallpaper layer only
+  (`Docs/Architecture/Card_Surface_Materials.md` §3), so on Glass over an opaque mode (Extruded Bubble) the card is a
+  blurred wallpaper the Visualizer hides everywhere else. It reads as a tinted panel (evidence still
+  `extruded_bubble_06_card_glass.png`); the operator's look decides whether that is acceptable.
+- **Right-hand corners sit further in than left ones:** they keep clear of the card's hover-revealed controls (about
+  80 px from the top edge for the collapse glyph, its tip and the 3D hint; the bottom for Reset Camera, the preset
+  steps and their tip). Fullscreen Edit (M3c) can move an overlay; revisit if the operator finds the gap odd.
+- **Now Playing needs an admitted Media card somewhere:** it reads the Media model the Visualizer already binds;
+  with Media off on every display there is no source and nothing shows (by design: no second Media source).
+- **The hidden render host never waits for the GPU:** `tools/expanded_visualizer_evidence.HiddenDisplayHost.render`
+  queues unthrottled frames, so the next texture upload (a glyph, a layer) waits for the whole queue (40-390 ms
+  measured on the M3b scene) and time-based QML animations jump past what a test samples. The M3b tests finish each
+  frame (`glFinish`); other users sampling animations should too, or the host could finish its frames itself.
+
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
 

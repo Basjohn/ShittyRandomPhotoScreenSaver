@@ -400,7 +400,9 @@ _MANAGER_METHODS = ("_expanded_display", "_visualizer_section", "_expanded_displ
                     "_cycle_quick_visualizer_mode",
                     "_expanded_display_requested", "_persist_expanded_display_requested",
                     "_quick_custom_layout_session_active", "_expanded_display_ready",
-                    "_expanded_display_blocks_layout")
+                    "_expanded_display_blocks_layout",
+                    # M3b: the coordinator's creation publishes the full-display overlays' inputs to the scene.
+                    "_publish_expanded_overlays", "_publish_expanded_overlay_media")
 
 
 def _manager(mode: str, *, requested: bool):
@@ -412,16 +414,22 @@ def _manager(mode: str, *, requested: bool):
     owner = _Owner(mode)
     unit = _unit()
     published = []
+    overlays = []
     unit.runtime.scene_controller = SimpleNamespace(
         set_visualizer_expand_glyph=lambda available, expanded: published.append((available, expanded)),
-        set_ordinary_widgets_covered=lambda covered, *, fade_s: published.append(("covered", covered, fade_s)))
+        set_ordinary_widgets_covered=lambda covered, *, fade_s: published.append(("covered", covered, fade_s)),
+        set_visualizer_expanded_overlay_config=lambda config: overlays.append(("config", dict(config))),
+        announce_visualizer_preset=lambda name, *, reveal: overlays.append(("preset", name, reveal)),
+        set_visualizer_overlay_media_model=lambda model: overlays.append(("media", model)))
     section = {"mode": mode, "expanded_display_requested": requested}
     manager.__dict__.update(
         _retired=False, _expanded_display_coordinator=None, _quick_visualizer_owner=owner,
         _quick_visualizer_unit=unit, settings_manager=None,
         _widgets_config_snapshot={"spotify_visualizer": section},
         _quick_custom_layout_owner=SimpleNamespace(is_active=False),
+        _quick_visualizer_media_model=None,
     )
+    manager.overlay_publications = overlays
     return manager, owner, published
 
 
@@ -430,6 +438,8 @@ def test_an_incapable_visualizer_without_intent_creates_no_coordinator():
     manager._expanded_display_ready()
     assert manager._expanded_display_coordinator is None and published == [] and owner.calls == []
     assert manager._expanded_display_blocks_layout() is False
+    # M3b: nor any full-display overlay input (they exist only where a takeover can draw them).
+    assert manager.overlay_publications == []
 
 
 @pytest.mark.parametrize("mode,requested,calls,glyph", [
@@ -444,9 +454,15 @@ def test_a_capable_visualizer_gets_one_coordinator_at_admission(mode, requested,
     # The manager's own cover service reaches the owning scene: a restored expansion hides its widgets at once.
     assert [entry for entry in published if entry[0] == "covered"] == (
         [("covered", True, 0.0)] if requested else [])
+    # M3b: the overlays' inputs reach the owning scene before the restore, the preset's name without a reveal.
+    kinds = [entry[0] for entry in manager.overlay_publications]
+    assert kinds == ["config", "preset", "media"]
+    assert manager.overlay_publications[1][2] is False
     manager._expanded_display_ready()                         # a re-admission reuses the one coordinator
     assert manager._expanded_display_coordinator is coordinator
     assert manager._expanded_display_blocks_layout() is (requested is True)
+    # ...and republishes them (a re-admitted owner may sit on another unit).
+    assert [entry[0] for entry in manager.overlay_publications] == kinds * 2
 
 
 def test_the_display_managers_double_click_cycles_through_the_takeover(monkeypatch):

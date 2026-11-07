@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, Tuple, TYPE_CHECKING
 
 from core.settings.default_contract import require_canonical_default
+from core.settings.fullscreen_overlays import normalize_fullscreen_overlays
 from rendering.gl_programs.heightfield import normalize_heightfield
 from core.settings.bubble_gradient_semantics import (
     CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION,
@@ -168,6 +169,8 @@ _CORE_SETTINGS_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "mode_activation": normalize_visualizer_mode_activation,
     # Expanded Visualizer intent: live-section state only (no mode prefix, so presets and Custom never carry it).
     "expanded_display_requested": normalize_expanded_display_requested,
+    # Expanded Visualizer overlays (M3b): one global Visualizer setting, no mode prefix (presets never carry it).
+    "fullscreen_overlays": normalize_fullscreen_overlays,
     "rainbow_enabled": bool,
     "rainbow_speed": float,
 }
@@ -436,6 +439,9 @@ def _build_visualizer_core_kwargs(
     data = _build_read_value_map(read_value, _CORE_BUILD_SPECS)
     data["expanded_display_requested"] = normalize_expanded_display_requested(
         read_value("expanded_display_requested", _visualizer_default("expanded_display_requested"))
+    )
+    data["fullscreen_overlays"] = normalize_fullscreen_overlays(
+        read_value("fullscreen_overlays", _visualizer_default("fullscreen_overlays"))
     )
     data.update(
         {
@@ -751,6 +757,11 @@ class SpotifyVisualizerSettings:
     expanded_display_requested: bool = field(
         default_factory=lambda: normalize_expanded_display_requested(_visualizer_default('expanded_display_requested'))
     )
+    # Expanded Visualizer overlays (plan 01 §G, M3b): the preset toast and Now Playing on the full display, their
+    # corners, Always Show, Media Controls, Card and font. A global setting with a canonical default, never a preset value.
+    fullscreen_overlays: Dict[str, Any] = field(
+        default_factory=lambda: normalize_fullscreen_overlays(_visualizer_default('fullscreen_overlays'))
+    )
     spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing_enabled'))
     spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing'))
     spectrum_mirrored: bool = field(default_factory=lambda: _visualizer_default('spectrum_mirrored'))
@@ -834,6 +845,7 @@ class SpotifyVisualizerSettings:
 
     def __post_init__(self):
         self.expanded_display_requested = normalize_expanded_display_requested(self.expanded_display_requested)
+        self.fullscreen_overlays = normalize_fullscreen_overlays(self.fullscreen_overlays)
         self._apply_core_visual_defaults()
         self._apply_devcurve_defaults()
         self._apply_sphere_defaults()

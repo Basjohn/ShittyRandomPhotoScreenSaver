@@ -2122,6 +2122,8 @@ class DisplayManager(QObject):
         logger.info("[SPOTIFY_VIS] Persisted Quick visualizer mode=%s", mode_id)
         coordinator = _takeover_coordinator(self)
         if coordinator is not None:
+            # The active preset changed with the mode: the full-display preset toast shows it (M3b).
+            self._announce_expanded_overlay_preset()
             coordinator.mode_activated()
 
     def _complete_quick_visualizer_preset_change(
@@ -2178,6 +2180,7 @@ class DisplayManager(QObject):
         # A preset activation advances the activation id; the takeover (and an expanded view) stays.
         coordinator = _takeover_coordinator(self)
         if coordinator is not None:
+            self._announce_expanded_overlay_preset()
             coordinator.mode_activated()
 
     def _route_quick_media_transport(self, source: QuickDisplayUnit, key: str) -> bool:
@@ -2334,6 +2337,13 @@ class DisplayManager(QObject):
                 lambda display, value: self._route_quick_visualizer_input(
                     display, self._route_quick_visualizer_expand_glyph, display, value),
                 bool(expand),
+            )
+        )
+        runtime.scene_controller.visualizer_overlay_transport_requested.connect(
+            lambda key: live_unit_route(
+                lambda display, value: self._route_quick_visualizer_input(
+                    display, self._route_expanded_overlay_transport, display, value),
+                str(key),
             )
         )
         runtime.scene_controller.custom_layout_visualizer_orbit_requested.connect(
@@ -3256,6 +3266,8 @@ class DisplayManager(QObject):
             cover_widgets=_cover_ordinary_widgets,
         ))
         self._expanded_display_coordinator = coordinator
+        # The full-display overlays' inputs exist only where a takeover can draw them (M3b).
+        self._publish_expanded_overlays()
         return coordinator
 
     def _visualizer_section(self) -> Mapping[str, Any]:
@@ -3306,7 +3318,71 @@ class DisplayManager(QObject):
             coordinator = self._expanded_display(create=True)
             if coordinator is None:
                 return
+        else:
+            # A re-admitted owner (possibly on another unit): its scene gets the overlays' inputs before any restore.
+            self._publish_expanded_overlays()
         coordinator.generation_ready()
+
+    # ----------------------------------------------------- Expanded Visualizer overlays (plan 01 §G, M3b)
+
+    def _publish_expanded_overlays(self) -> None:
+        """Project the full-display overlays' inputs onto the admitted unit's scene: their options (Settings'
+        ``fullscreen_overlays``), the active preset's name (no reveal) and the Media model the Visualizer already
+        binds. Called where a takeover can draw them (the coordinator's creation, a re-admission, a transfer); the
+        scene keeps them for its Visualizer card, whose overlay Loader stays inactive until the card is drawn
+        display-wide."""
+
+        unit = self._quick_visualizer_unit
+        if unit is None or unit.is_retired:
+            return
+        from widgets.spotify_visualizer.expanded_overlays import (
+            resolve_active_preset_display_name,
+            resolve_expanded_overlay_config,
+        )
+
+        scene = unit.runtime.scene_controller
+        section = self._visualizer_section()
+        configure = getattr(scene, "set_visualizer_expanded_overlay_config", None)
+        if callable(configure):
+            configure(resolve_expanded_overlay_config(section))
+        announce = getattr(scene, "announce_visualizer_preset", None)
+        if callable(announce):
+            announce(resolve_active_preset_display_name(section), reveal=False)
+        self._publish_expanded_overlay_media(self._quick_visualizer_media_model)
+
+    def _publish_expanded_overlay_media(self, model: Any) -> None:
+        unit = self._quick_visualizer_unit
+        if unit is None or unit.is_retired:
+            return
+        setter = getattr(unit.runtime.scene_controller, "set_visualizer_overlay_media_model", None)
+        if callable(setter):
+            setter(model)
+
+    def _announce_expanded_overlay_preset(self) -> None:
+        """A preset (or mode) activation completed: the preset toast shows the new preset's name."""
+
+        unit = self._quick_visualizer_unit
+        if unit is None or unit.is_retired:
+            return
+        announce = getattr(unit.runtime.scene_controller, "announce_visualizer_preset", None)
+        if not callable(announce):
+            return
+        from widgets.spotify_visualizer.expanded_overlays import resolve_active_preset_display_name
+
+        announce(resolve_active_preset_display_name(self._visualizer_section()), reveal=True)
+
+    def _route_expanded_overlay_transport(self, unit: QuickDisplayUnit, key: str) -> bool:
+        """A Media Controls press on the full-display Now Playing: the Media card's own transport owner, through the
+        one route keyboard shortcuts take (never a second controller, never fanned out)."""
+
+        if unit is not self._quick_visualizer_unit or unit.is_retired:
+            return False
+        if str(key) not in {"previous", "play", "next"}:
+            return False
+        state = unit.runtime.input_controller.input_state
+        if not state.admission_open or state.context_menu_active:
+            return False
+        return self._route_quick_media_transport(unit, str(key))
 
     def _expanded_display_blocks_layout(self) -> bool:
         return _takeover_blocks_layout(self)
@@ -3384,6 +3460,8 @@ class DisplayManager(QObject):
         changed.connect(self._sync_quick_visualizer_playback)
         self._quick_visualizer_media_model = model
         self._sync_quick_visualizer_playback()
+        if _takeover_coordinator(self) is not None:
+            self._publish_expanded_overlay_media(model)
 
     def _sync_quick_visualizer_playback(self) -> None:
         owner = self._quick_visualizer_owner
@@ -3420,6 +3498,12 @@ class DisplayManager(QObject):
                     logger.debug(
                         "[SPOTIFY_VIS] Media route already detached during retirement"
                     )
+            # The full-display Now Playing reads the same model: it goes with the route.
+            unit = self._quick_visualizer_unit
+            setter = getattr(getattr(getattr(unit, "runtime", None), "scene_controller", None),
+                             "set_visualizer_overlay_media_model", None)
+            if callable(setter) and not bool(getattr(unit, "is_retired", True)):
+                setter(None)
         self._quick_visualizer_media_model = None
 
     def _resolve_quick_visualizer_layout_profile(
@@ -3501,6 +3585,7 @@ class DisplayManager(QObject):
         coordinator = _takeover_coordinator(self)
         if moved and coordinator is not None:
             coordinator.display_transferred()
+            self._publish_expanded_overlays()
         return moved
 
     def _release_quick_visualizer_routes(
