@@ -36,7 +36,7 @@ class _Presenter:
         )
         # Mirrors the real display presenter default (ordinary authored layout
         # on until CUSTOM disables it); read by
-        # VisualizerHostBinding.resolve_authored_layout.
+        # VisualizerHostBinding.resolve_placement.
         self.authored_layout_enabled = True
 
     def presentation_for_widget_id(self, widget_id: str):
