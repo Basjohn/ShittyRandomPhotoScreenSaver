@@ -199,6 +199,15 @@ def teardown_display_runtime(
                 queued_callbacks,
                 retiring_generation,
             )
+    # The retiring generation's application-service leases go with its
+    # callbacks; the services themselves stay (core.application_services).
+    retire_service_leases = getattr(
+        getattr(engine, "application_services", None),
+        "retire_generation",
+        None,
+    )
+    if retiring_generation is not None and callable(retire_service_leases):
+        retire_service_leases(retiring_generation)
 
     try:
         from core.performance.resource_metrics import log_lifecycle_resource_snapshot
@@ -280,6 +289,21 @@ def retire_display_power(engine: ScreensaverEngine) -> None:
         logger.warning("Display power authority retirement failed: %s", e, exc_info=True)
 
 
+def retire_application_services(engine: ScreensaverEngine, *, reason: str) -> None:
+    """Terminal only: retire the engine's application-service tier (idempotent).
+
+    Never called by a non-terminal stop: Settings, CUSTOM and monitor-topology
+    teardowns revoke only the retiring generation's leases.
+    """
+    retire_all = getattr(getattr(engine, "application_services", None), "retire_all", None)
+    if not callable(retire_all):
+        return
+    try:
+        retire_all(reason=reason)
+    except Exception as e:
+        logger.warning("Application service retirement failed: %s", e, exc_info=True)
+
+
 def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
     """Stop-sequence finalization (worker/process shutdown, housekeeping, quit).
 
@@ -335,6 +359,9 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
         from core.network.bounded_dns import close_network_admission
 
         close_network_admission()
+        # Application services retire after the network fence (their in-flight
+        # lookups return at once) and before the pool their work runs on.
+        retire_application_services(engine, reason="application_exit")
         try:
             # wait=True so pool threads are joined here, within the timeout.
             # A worker still running afterwards is NOT killed by the OS at
@@ -354,6 +381,8 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
             logger.info("ThreadManager shutdown complete")
         except Exception as e:
             logger.warning("ThreadManager shutdown failed: %s", e, exc_info=True)
+    elif exit_app:
+        retire_application_services(engine, reason="application_exit")
 
     # Emit a concise image cache summary for profiling.
     # Dual-tagged for the PERF and cache sidecars so cache investigations
@@ -659,6 +688,9 @@ def cleanup(engine: ScreensaverEngine) -> None:
         # Unregister the process-scoped display-power source before its
         # ThreadManager (the Linux listener lane) shuts down.
         retire_display_power(engine)
+        # The application-service tier retires after the display teardown and
+        # before the ThreadManager its services' work runs on.
+        retire_application_services(engine, reason="engine_cleanup")
         # Cleanup thread manager
         if engine.thread_manager:
             try:
