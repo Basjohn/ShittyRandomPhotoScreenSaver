@@ -46,7 +46,7 @@ def spec():
 def canonical_section():
     """Test-owned inputs: the code-owned canonical defaults (never an authored preset)."""
     out = dict(require_canonical_default("widgets.spotify_visualizer"))
-    for control in spec().controls:
+    for control in spec().body_controls:
         out[control.key] = control.admit(out[control.key], out[control.key])
     return out
 
@@ -64,8 +64,8 @@ def variant_section(variant: str) -> dict:
 
 
 def technical_keys():
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    return {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)}
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    return {control.key for control in require_mode_settings(MODE).technical_controls()}
 
 
 def shipped_clip():
@@ -145,8 +145,8 @@ def _uncovered(properties) -> set:
     paths = {tuple(p.path) for p in properties}
     roots = {p.path[0] for p in properties}
     custom_keys = {key for e in spec().entries if isinstance(e, Custom) for key in e.keys}
-    keys = {c.key for c in spec().controls} | custom_keys | technical_keys()
-    alphas = {(c.key, 3) for c in spec().controls if isinstance(c, Colour) and c.alpha}
+    keys = {c.key for c in spec().body_controls} | custom_keys | technical_keys()
+    alphas = {(c.key, 3) for c in spec().body_controls if isinstance(c, Colour) and c.alpha}
     return (keys - roots) | (alphas - paths)
 
 
@@ -166,7 +166,7 @@ def test_every_oscilloscope_control_is_reachable_in_the_studio():
 
 def test_coverage_check_detects_a_missing_control_negative_control():
     properties = build_schema().properties
-    alpha = next(c.key for c in spec().controls if isinstance(c, Colour) and c.alpha)
+    alpha = next(c.key for c in spec().body_controls if isinstance(c, Colour) and c.alpha)
     for dropped in (PREFIX + "display", PREFIX + "afterglow", PREFIX + "beam_color", MODE + "_sensitivity"):
         assert dropped in _uncovered([p for p in properties if p.path[0] != dropped]), dropped
     assert (alpha, 3) in _uncovered([p for p in properties if tuple(p.path) != (alpha, 3)])
@@ -179,7 +179,7 @@ def test_instruments_bounds_choices_and_conditions_come_from_the_registry():
     from ui.studio.adapter import control_condition
     from ui.studio.schema import QUIET_PEAK
     schema = build_schema()
-    for control in spec().controls:
+    for control in spec().body_controls:
         prop = schema.find(control.key)
         if isinstance(control, Slider):
             assert (prop.minimum, prop.maximum) == (control.low, control.high), control.key
@@ -242,7 +242,7 @@ def test_mode_owned_edits_leave_the_engine_answers_unchanged(qt_app):
     values = canonical_section()
     base = extract(clip, values, seconds=1.0)
     owned = owned_keys()
-    assert owned <= build_schema().keys and owned == {c.key for c in spec().controls}
+    assert owned <= build_schema().keys and owned == {c.key for c in spec().body_controls}
     for key in sorted(owned):
         edited = {**values, key: _flipped(key, values[key])}
         assert engine_key(edited) == engine_key(values), key
@@ -636,7 +636,7 @@ def test_edits_save_through_the_settings_owners_and_every_exit_restores_settings
     other = next(v for v in display.choice_values if v != session.values[PREFIX + "display"])
     bridge.commitValue(PREFIX + "display", 0, display.choices[display.choice_values.index(other)])
     assert stored()[PREFIX + "display"] == other
-    alpha = next(c.key for c in spec().controls if isinstance(c, Colour) and c.alpha)
+    alpha = next(c.key for c in spec().body_controls if isinstance(c, Colour) and c.alpha)
     bridge.commitValue(f"{alpha}.3", 0, 120)
     assert stored()[alpha][3] == 120
     bridge.commitValue(MODE + "_input_gain", 0, 0.9)

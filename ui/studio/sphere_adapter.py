@@ -142,7 +142,7 @@ def build_schema() -> StudioSchema:
         if group not in placed[workspace]:
             placed[workspace].append(group)
 
-    for control in spec.controls:
+    for control in spec.body_controls:
         bucket = control.bucket or customs.get(control.key, "")
         if bucket:
             workspace, group = _BUCKET_WORKSPACE.get(bucket, "look"), titles.get(bucket, bucket)
@@ -428,10 +428,8 @@ class SphereStudioEvaluator:
     @staticmethod
     def _key(values: Mapping[str, Any]):
         """Every value the runtime or the capture reads: the spec controls, the zones and the technical lane."""
-        from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
         spec = require_mode_settings(MODE)
-        keys = ({c.key for c in spec.controls} | {NOTCH_KEY}
-                | {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)})
+        keys = {c.key for c in spec.controls} | {NOTCH_KEY}
         return tuple(repr(values.get(key)) for key in sorted(keys))
 
     def _reflect(self) -> None:

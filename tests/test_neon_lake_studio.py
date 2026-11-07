@@ -49,7 +49,7 @@ def spec():
 def canonical_section():
     """Test-owned inputs: the code-owned canonical defaults (never an authored preset) at a code-owned tier."""
     out = dict(require_canonical_default("widgets.spotify_visualizer"))
-    for control in spec().controls:
+    for control in spec().body_controls:
         out[control.key] = control.admit(out[control.key], out[control.key])
     out["scene3d_detail"] = TIER
     return out
@@ -73,8 +73,8 @@ def variant_section(variant: str) -> dict:
 
 
 def technical_keys():
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    return {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)}
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    return {control.key for control in require_mode_settings(MODE).technical_controls()}
 
 
 def shipped_clip():
@@ -149,8 +149,8 @@ def _vector_elements() -> set[tuple]:
     from rendering.gl_programs.neon_terrain_reaction import REACTION_LANES
     from ui.tabs.media.spectrum_shape_editor import _MAX_NODES
     canonical = require_canonical_default("widgets.spotify_visualizer")
-    out = {(c.key, 3) for c in spec().controls if isinstance(c, Colour) and c.alpha}
-    out |= {(c.key, i) for c in spec().controls if isinstance(c, SceneCameraPosition) for i in range(3)}
+    out = {(c.key, 3) for c in spec().body_controls if isinstance(c, Colour) and c.alpha}
+    out |= {(c.key, i) for c in spec().body_controls if isinstance(c, SceneCameraPosition) for i in range(3)}
     out |= {(SHAPE.nodes, i, axis) for i in range(_MAX_NODES) for axis in (0, 1)}
     for mirrored in (True, False):
         out |= {(SHAPE.notches[mirrored], i, 0) for i in range(len(canonical[SHAPE.notches[mirrored]]))}
@@ -168,7 +168,7 @@ def _uncovered(properties, schema=None) -> set:
     paths = {tuple(p.path) for p in properties}
     roots = {p.path[0] for p in properties}
     custom_keys = {key for e in spec().entries if isinstance(e, Custom) for key in e.keys}
-    keys = {c.key for c in spec().controls} | custom_keys | technical_keys()
+    keys = {c.key for c in spec().body_controls} | custom_keys | technical_keys()
     missing = (keys - roots) | {element for element in _vector_elements() if element not in paths}
     terrain_actions = {a.id for _group, actions in schema.group_actions for a in actions if a.id.startswith("terrain.")}
     if TERRAIN in roots and not terrain_actions:
@@ -212,7 +212,7 @@ def test_instruments_bounds_choices_and_conditions_come_from_the_registry():
     schema = build_schema()
     view = {a.key for a in (lambda n: (n.orbit_h, n.orbit_v, n.dolly, n.pan_x, n.pan_y))(
         NeonLakeStudioAdapter().navigation())}
-    for control in spec().controls:
+    for control in spec().body_controls:
         if isinstance(control, SceneCameraPosition):
             continue
         prop = schema.find(control.key)
@@ -300,7 +300,7 @@ def _flipped(key: str, value):
     if key == SHAPER:
         lanes = {label: 1.0 - strength for label, strength in value["lanes"].items()}
         return {**value, "lanes": lanes}
-    control = next((c for c in spec().controls if c.key == key), None)
+    control = next((c for c in spec().body_controls if c.key == key), None)
     if isinstance(value, bool):
         return not value
     if isinstance(control, SceneCameraPosition):

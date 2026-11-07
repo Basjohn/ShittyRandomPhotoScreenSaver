@@ -9,7 +9,7 @@ from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZE
 from core.waveform_ribbon_view import card_span
 
 MODE='waveform_ribbon'
-_CAMERA_KEYS=frozenset(control.key for control in require_mode_settings(MODE).controls
+_CAMERA_KEYS=frozenset(control.key for control in require_mode_settings(MODE).body_controls
                        if control.bucket=='camera' or not control.bucket)
 _VIEW_KEYS=('waveform_ribbon_turn','waveform_ribbon_tilt','waveform_ribbon_scene_scale',
             'waveform_ribbon_scene_pan_x','waveform_ribbon_scene_pan_y')
@@ -21,7 +21,7 @@ def _reads(spec):
     lists, all in the spec's order (every dict built from them keeps the order the per-tick comprehensions had). One
     resolve per spec object: control_runtime_attr is pure in the control, and the spec is immutable registry data."""
     if _READS[0] is not spec:
-        controls=tuple(spec.controls)
+        controls=tuple(spec.body_controls)
         _READS[1]=(tuple((control.key,bool(control.logical),control_runtime_attr(control)) for control in controls),
                    tuple(control.key for control in controls if control.key not in _CAMERA_KEYS),
                    tuple(control.key for control in controls if control.key.startswith('waveform_ribbon_camera_')

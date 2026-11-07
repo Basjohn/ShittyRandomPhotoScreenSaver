@@ -32,14 +32,14 @@ def spec():
 def canonical_section():
     """Test-owned inputs: the code-owned canonical defaults, never an authored preset."""
     out = dict(require_canonical_default("widgets.spotify_visualizer"))
-    for control in spec().controls:
+    for control in spec().body_controls:
         out[control.key] = control.admit(out[control.key], out[control.key])
     return out
 
 
 def technical_keys():
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    return {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)}
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    return {control.key for control in require_mode_settings(MODE).technical_controls()}
 
 
 # ------------------------------------------------------------------------------- schema
@@ -50,8 +50,8 @@ def _uncovered(properties) -> set[str]:
     paths = {tuple(p.path) for p in properties}
     roots = {p.path[0] for p in properties}
     custom_keys = {key for e in spec().entries if isinstance(e, Custom) for key in e.keys}
-    missing = {c.key for c in spec().controls if c.key not in roots} | ((technical_keys() | custom_keys) - roots)
-    for control in spec().controls:
+    missing = {c.key for c in spec().body_controls if c.key not in roots} | ((technical_keys() | custom_keys) - roots)
+    for control in spec().body_controls:
         if isinstance(control, Colour) and control.alpha and (control.key, 3) not in paths:
             missing.add(f"{control.key}.3")
     missing |= {f"{NOTCH_KEY}.{i}" for i in (1, 2) if (NOTCH_KEY, i, 0) not in paths}
@@ -71,7 +71,7 @@ def test_coverage_check_detects_a_missing_control_negative_control():
 
 def test_instruments_bounds_and_choices_come_from_the_registry():
     schema = build_schema()
-    for control in spec().controls:
+    for control in spec().body_controls:
         prop = schema.find(control.key)
         if isinstance(control, Slider):
             assert (prop.minimum, prop.maximum) == (control.low, control.high), control.key

@@ -5,11 +5,9 @@ reopening Settings. Inactive pills and unrelated tabs present as closed, includi
 ancestors remain open only to expose the selected leaf. Fresh profiles start closed. Preset choice, current mode and
 stored Settings values remain independent of disclosure state.
 
-Visualizer Technical is a child of Advanced. An open Technical leaf therefore retains both ancestors; an advanced
-Custom leaf retains Advanced; a normal Custom leaf retires both. Legacy Technical-only state acquires its required
-Advanced ancestor through the existing projection, without a new schema or persistence owner. No Visualizer mode body
-builds these disclosures today (every mode is edited in its Studio); the projection keeps the stored states
-normalized.
+The Visualizer Advanced / Technical disclosures and their Technical leaves are retired (AC-23): no mode body builds
+them (every mode is edited in its Studio), canonical defaults no longer declare their three maps, and the projection
+drops a stored profile's old members once (`Persisted_Input_Compatibility.md`).
 
 `core/settings/ui_bucket_state.py` owns canonical normalization and `project_settings_bucket_context` /
 `retire_settings_bucket_context`. The Settings dialog and tab navigation apply that projection; shared bucket helpers
@@ -29,7 +27,10 @@ its pill vocabulary there; nothing else in the dialog names it.
 
 - **Profile gating:** `available(profile)` reads `SettingsProfile.current()`, which asks the one product-identity
   predicate (`core/mc.py`); a new product profile extends that predicate, never a second resolver. An unavailable
-  tab is absent from the sidebar, the content stack and the tab-key mapping.
+  tab is absent from the sidebar, the content stack and the tab-key mapping. No Settings surface compares the store's
+  application name with a literal: "the MC build keeps Interaction Mode on" has one owner,
+  `core.mc.interaction_mode_forced` / `effective_interaction_mode`, which the Display tab, Guided Setup and the
+  runtime (context-menu lock and toggle) all call. Bar: `tests/test_mc_interaction_single_owner.py`.
 - **Remembered tab:** `ui.last_tab_key` is the memory; positions are never persisted. Hiding a tab cannot shift a
   remembered one, and a remembered tab the profile hides keeps its memory while Settings opens on its first tab.
   `ui.last_tab_index` keeps its pre-Themes meaning and is written from the key through that legacy table.
@@ -38,8 +39,15 @@ its pill vocabulary there; nothing else in the dialog names it.
 - **No hidden value owners:** a tab or mode body whose values another surface edits (the Visualizer Studios) keeps
   them in a value cache, never in hidden QWidgets. Each Visualizer mode body is the preset row with OPEN STUDIO, its
   3D Detail row where it has one, and one sentence; `_<prefix>_lazy_values` owns its body and technical (audio
-  analysis) values (`ui/tabs/media/spec_mode_builder.py`). The page's shared Bar Appearance and Rainbow rows remain
-  page-level value owners in one never-shown holder and never enter a mode body.
+  analysis) values (`ui/tabs/media/spec_mode_builder.py`). The page's shared Bar Appearance and Rainbow families are
+  spec entries of each owning mode (non-body `bar_appearance` / `rainbow` buckets) held in the page's value cache
+  `_visualizer_family_lazy_values` (`ui/tabs/media/visualizer_mode_binding.py`); the page builds no widget for them,
+  and the Studio's family load writes that cache. Bar: `tests/test_visualizer_shared_families_spec.py`.
+- **Reset and Import:** `_reload_all_tab_settings` is the one reset/import edge. It first re-derives the
+  process-local active Settings and Widget themes from persistence (`rederive_active_themes`,
+  `ui/settings_theme_selection.py`: startup's resolution against the built catalogs, persisting nothing), then
+  reloads every `reloads_with_settings` tab, Themes included. Theme activation never subscribes to store writes,
+  so an unchanged write cannot reach it (AC-07). Bar: `tests/test_settings_theme_rederive_real_dialog.py`.
 - **Helper threads:** helper sites (cache clearing, feeds, Gmail, Steam, geocoding, Guided Setup) never build
   private ThreadManagers; they look up the app-shared one (`ThreadManager.require_app_shared`). Under a runtime that
   is the engine's; a Settings-only (CONFIG) session's dialog registers one helper manager for its lifetime and

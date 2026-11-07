@@ -315,8 +315,14 @@ def test_sphere_rainbow_ui_binding_never_requires_or_persists_retired_keys() -> 
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    tab = _FakeRainbowTab("sphere")
-    module.load_visualizer_rainbow_state(
+    class _FamilyTab:
+        def _widget_default(self, _section, key):
+            assert not key.startswith("sphere_rainbow"), key
+            from core.settings.default_contract import require_canonical_default
+            return require_canonical_default(f"widgets.spotify_visualizer.{key}")
+
+    tab = _FamilyTab()
+    module.load_visualizer_family_values(
         tab,
         {
             "rainbow_enabled": False,
@@ -325,14 +331,13 @@ def test_sphere_rainbow_ui_binding_never_requires_or_persists_retired_keys() -> 
             "spectrum_rainbow_speed": 0.5,
         },
     )
-    assert "sphere" not in tab._rainbow_per_mode
-    assert tab.visibility_updates == 1
+    held = getattr(tab, module.FAMILY_CACHE_ATTR)
+    assert not any(key.startswith("sphere_") for key in held)
 
     saved = {}
-    module.collect_visualizer_rainbow_state(tab, saved)
+    module.collect_visualizer_family_values(tab, saved, "sphere")
     assert "sphere_rainbow_enabled" not in saved
     assert "sphere_rainbow_speed" not in saved
-    assert "sphere" not in tab._rainbow_per_mode
 
 
 def _load_widgets_tab_media_functions(*names: str):
@@ -387,24 +392,14 @@ class _NoSphereAppearanceDefaultTab:
 
 
 def test_sphere_shared_bar_appearance_ui_load_and_save_do_not_touch_retired_keys() -> None:
-    functions = _load_widgets_tab_media_functions(
-        "load_shared_visualizer_appearance_settings",
-        "save_visualizer_settings",
-    )
-    loader = functions["load_shared_visualizer_appearance_settings"]
+    functions = _load_widgets_tab_media_functions("save_visualizer_settings")
     saver = functions["save_visualizer_settings"]
 
-    # Inject only the globals those exact production functions need on the Sphere
-    # paths. A regression that reaches QColor/default access will fail loudly.
-    loader.__globals__.update({
-        "get_owned_mode_setting_keys": get_owned_mode_setting_keys,
-    })
-    loader(_NoSphereAppearanceDefaultTab(), {}, "sphere")
-
+    # Inject only the globals the exact production function needs on the Sphere path; the
+    # family collection itself is proven on Sphere by the binding test above.
     saver.__globals__.update({
-        "get_owned_mode_setting_keys": get_owned_mode_setting_keys,
         "collect_visualizer_mode_selection": lambda _tab: "sphere",
-        "collect_visualizer_rainbow_state": lambda _tab, _cfg: None,
+        "collect_visualizer_family_values": lambda _tab, _cfg, _mode: None,
         "collect_visualizer_preset_indices": lambda _tab, _cfg: None,
         "_VIS_MODE_CONTAINER_ATTR": {"sphere": "_sphere_settings_container"},
     })

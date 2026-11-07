@@ -104,7 +104,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   the stated defects (the hidden value holder; technical values missing from the cache; the Gmail job not requeued).
   9/9 focused files pass on the merge. The branch's impact gate passed 724/726; the two failures fail on main too.
   Its side defects are recorded below and in the checklist. The rest of A-12 (the page-level Bar Appearance and
-  Rainbow hidden rows) is open.
+  Rainbow hidden rows) is folded into the spec by the Settings SSOT fold (AC-21).
 - **Settings system and SSOT audit: done 7 Nov.** It is at `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md`. The
   lead re-checked its key lines in source, and all 7 items survived; they are promoted to the checklist as Tier S,
   AC-17 to AC-23. Theme-material root cause (AC-17): the generated Widget mirror of each "[Glass]"/"[Acrylic]"
@@ -210,18 +210,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   once, when the dialog is destroyed (before Finish & Run starts the runtime). Fold into checklist AC-13: only the
   terminal owner cancels globally; any other manager cancels only its own work. Bar: shutting down a helper manager
   leaves another owner's pending `ThreadManager.single_shot` alive.
-- **A-12 residue:** the Visualizers page's shared Bar Appearance and Rainbow rows are still page-level hidden
-  QWidget value owners (one never-shown holder, `visualizer_studio_family_values`), read by
-  `save_visualizer_settings` and the Studio's `_load_families`. Mode bodies no longer hold any. Moving the two
-  families into a value cache like the mode bodies' is the follow-up; bar: the page builds no hidden value-owner
-  QWidget and both families round-trip through the Studio and Settings save.
-- **Dead after A-12 (fold into checklist AC-14):** the technical-control widget machinery in
-  `ui/tabs/media/technical_controls.py` (`build_per_mode_technical_group`, `register_per_mode_technical_controls`,
-  `load/collect_per_mode_technical_controls` and their widget helpers) has no production caller; only
-  `tests/test_visualizer_settings_plumbing.py` reaches it. `_VISUALIZER_ADVANCED_ROOT_ATTRS`
-  (`ui/tabs/visualizer_settings_context.py`) names Advanced/normal roots no mode builds, so
-  `_auto_switch_preset_to_custom` never matches; the `ui.visualizer_adv_states` / `ui.visualizer_tech_states` /
-  `ui.visualizer_tech_bucket_states` schemas have no live disclosure (the projection keeps them normalized).
+- **Dead after A-12: removed by the Settings SSOT fold (AC-18, AC-23).** Still open from that note:
   Pre-existing: `tools/flicker_test.py`'s Widgets-tab `setup_ui_only_*` modes patch
   `widgets_tab_media.build_visualizers_ui`, which no longer exists anywhere (the Visualizer left the Widgets tab at
   V7), so those modes fail at `getattr` before measuring (its mode-body stub now targets
@@ -237,6 +226,13 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
+
+**Found during the Settings SSOT fold (7 Nov; fixed or recorded by that agent):**
+- **Neon Lake's Kick Lane Gain moves its frame but was never offered (fixed in AC-18).** The old Technical
+  definitions' mode filter (`_KICK_GAIN_MODES`) hid it from Settings and the Studio although
+  `tools/visualizer_replay/analysis_controls_audit.py` shows it moves the published frame (onset waves). Folding the
+  filter into `technical_hidden_suffixes` made the audit test fail, so Neon Lake now offers it; the stored values and
+  presets were always authored, so no value changes.
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.

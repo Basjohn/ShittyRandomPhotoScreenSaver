@@ -10,7 +10,9 @@ and the transition registry. Values never live here: defaults stay in the canoni
 Adding a transition's Settings means adding its spec here (and its defaults section); its page,
 persistence and admission follow. A page with controls no spec type describes (sliders with value
 labels, colours with alpha, controls that show or hide each other) sets ``custom`` and builds,
-hydrates and saves those itself, listing their fields in ``custom_fields``.
+hydrates and saves those itself, listing their fields in ``custom_fields``. Its numbers (and their ranges) are still
+declared here, in ``custom_controls``: the page builds, shows and saves them its own way, but takes every range from
+them, and the request resolver and the renderer admit through the same declarations.
 
 Import-safe: plain data and the light ``*_options`` modules only; no Qt, no GL, no shader module.
 """
@@ -211,6 +213,7 @@ class TransitionSettings:
     advanced: tuple[Control, ...] = ()
     custom: bool = False
     custom_fields: tuple[str, ...] = ()
+    custom_controls: tuple[Control, ...] = ()
     title: str = ""
 
     @property
@@ -226,15 +229,17 @@ class TransitionSettings:
         return self.controls + self.advanced
 
     def control(self, name: str) -> Control:
-        for item in self.all_controls:
+        for item in self.all_controls + self.custom_controls:
             if item.field == name:
                 return item
         raise KeyError(f"{self.section} declares no control {name!r}")
 
     def fields(self) -> tuple[str, ...]:
-        """Every persisted field this page owns: direction, controls and custom fields."""
+        """Every persisted field this page owns: direction, controls, a custom page's declared controls and its other
+        custom fields."""
         names = ("direction",) if self.directions is not None else ()
-        return names + tuple(item.field for item in self.all_controls) + self.custom_fields
+        return (names + tuple(item.field for item in self.all_controls)
+                + tuple(item.field for item in self.custom_controls) + self.custom_fields)
 
     def page_values(self, config: Mapping[str, object], defaults: Mapping[str, object]) -> dict[str, object]:
         """The admitted value of every number and toggle on the page (not the Advanced bucket):
@@ -539,7 +544,9 @@ _SPECS: tuple[TransitionSettings, ...] = (
     ),
     TransitionSettings(
         # Flat and 3D Slats show different controls; the Edge Softness slider is the page's own.
-        "Blinds", "blinds", custom=True, custom_fields=("feather",),
+        "Blinds", "blinds", custom=True,
+        # The page's own Edge Softness slider (whole steps; the resolver turns it into the shader's feather).
+        custom_controls=(Number("feather", "Edge Softness:", 0, 25, integer=True),),
         controls=(
             Choice("style", "Style:", BLINDS_STYLE_CHOICES,
                    "Flat: soft bands open over the picture. 3D Slats: solid slats turn over one after another, "
@@ -572,17 +579,31 @@ _SPECS: tuple[TransitionSettings, ...] = (
         advanced=_MOTION,
     ),
     TransitionSettings(
-        # Mode-dependent controls, a light-direction list stored by index and fixed trail values.
+        # Mode-dependent controls, a light-direction list stored by index, and trail values the page never shows.
         "Particle", "particle", custom=True,
-        custom_fields=("mode", "direction", "particle_radius", "overlap", "trail_length", "trail_strength",
-                       "swirl_strength", "swirl_turns", "use_3d_shading", "texture_mapping", "wobble",
-                       "gloss_size", "light_direction", "swirl_order"),
+        custom_controls=(
+            # The smallest admitted particle is the one users have always seen (smaller sizes ran at 8).
+            Number("particle_radius", "Particle Radius:", 8, 80, step=1, decimals=0),
+            Number("gloss_size", "Gloss Size:", 16, 128, step=1, decimals=0),
+            Number("swirl_turns", "Swirl Turns:", 0.5, 6.0, step=0.1, decimals=1),
+            Number("light_direction", "Light Direction:", 0, 4, integer=True),
+            Number("swirl_order", "Swirl Build Order:", 0, 2, integer=True),
+        ),
+        custom_fields=("mode", "direction", "overlap", "trail_length", "trail_strength",
+                       "swirl_strength", "use_3d_shading", "texture_mapping", "wobble"),
     ),
     TransitionSettings(
-        # Percentage sliders and colours with alpha.
+        # Percentage sliders (whole percent of each declared range) and colours with alpha.
         "Burn", "burn", custom=True,
-        custom_fields=("direction", "jaggedness", "glow_intensity", "char_width", "glow_color", "ember_color",
-                       "smoke_enabled", "smoke_density", "ash_enabled", "ash_density", "flames", "ember_veins"),
+        custom_controls=(
+            Number("jaggedness", "Jaggedness:", 0.0, 1.0),
+            Number("glow_intensity", "Glow Intensity:", 0.0, 1.0),
+            Number("char_width", "Char Width:", 0.1, 1.0),
+            Number("smoke_density", "Spark Intensity:", 0.0, 1.0),
+            Number("ash_density", "Ash Density:", 0.0, 1.0),
+        ),
+        custom_fields=("direction", "glow_color", "ember_color", "smoke_enabled", "ash_enabled", "flames",
+                       "ember_veins"),
     ),
 )
 

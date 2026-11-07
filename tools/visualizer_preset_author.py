@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 # What the Settings save drops from a preset (``ui/tabs/visualizer_settings_context.py``).
-_DEPRECATED_EXPORT_SUFFIXES = ("energy_boost", "use_raw_energy")
+from core.settings.visualizer_settings_snapshot import RETIRED_AUTHORED_TECH_SUFFIXES as _DEPRECATED_EXPORT_SUFFIXES  # noqa: E402
 
 
 def _admitted(mode: str, values: dict) -> dict:
