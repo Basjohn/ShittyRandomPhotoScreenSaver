@@ -3077,6 +3077,10 @@ class QuickSceneController(QObject):
         self._visualizer_content_host = None
         self._visualizer_root = None
         self._visualizer_loader = None
+        # The full-display overlays' retained inputs die with the scene (never pin another generation's Media model).
+        self._visualizer_overlays_drawn = False
+        self._visualizer_overlay_media_model = None
+        self._visualizer_overlay_config = {}
         self._context = None
         self._publish_readiness(
             qml_root_created=False,
