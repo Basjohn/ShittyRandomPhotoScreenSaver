@@ -899,7 +899,10 @@ def test_visualizer_mode_deadline_is_one_shot_and_never_resurrects_a_retired_own
     owner._transition_request_serial = 13
     owner._transition_recovery_issued = False
     owner._transition_failure_callback = reported.append
-    owner._transition_deadline_scheduler = lambda ms, callback: scheduled.append((ms, callback))
+    monkeypatch.setattr(
+        "core.threading.manager.ThreadManager.single_shot",
+        staticmethod(lambda ms, func, *args: scheduled.append((ms, lambda: func(*args)))),
+    )
     owner._arm_transition_deadline()
     assert len(scheduled) == 1 and scheduled[0][0] >= 3000
     scheduled[0][1]()
@@ -928,7 +931,10 @@ def test_stalled_outgoing_fade_cancels_uncommitted_switch_without_reconstruction
     owner._transition_request_serial = 7
     owner._transition_recovery_issued = False
     owner._transition_failure_callback = recovered.append
-    owner._transition_deadline_scheduler = lambda ms, callback: scheduled.append(callback)
+    monkeypatch.setattr(
+        "core.threading.manager.ThreadManager.single_shot",
+        staticmethod(lambda ms, func, *args: scheduled.append(lambda: func(*args))),
+    )
     owner._resolve_current_presentation = lambda: "outgoing_stage"
     owner._apply_resolved_presentation = presented.append
     owner._request_retained_present = lambda: presented.append("request")
