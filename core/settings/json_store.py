@@ -324,15 +324,26 @@ class JsonSettingsStore:
                 return deepcopy(self._data[key])
             return default
 
-    def setValue(self, key: str, value: Any) -> None:
+    def setValue(self, key: str, value: Any) -> bool:
+        """Store ``value``; returns whether the stored state changed."""
         with self._lock:
             # Missing and explicit JSON null are distinct persisted states.  Using
             # ``dict.get`` here made a first write of ``None`` look unchanged, so
             # canonical nullable defaults could never be seeded durably.
             if key in self._data and self._data[key] == value:
-                return
+                return False
             self._data[key] = deepcopy(value)
             self._mark_changed_locked()
+            return True
+
+    @property
+    def state_revision(self) -> int:
+        """Advanced by every write that changed the stored state (data or metadata); an unchanged write does not.
+
+        ``SettingsManager.set`` compares it around one mutation to publish only real changes (AC-07).
+        """
+        with self._lock:
+            return self._state_revision
 
     def contains(self, key: str) -> bool:
         with self._lock:
