@@ -171,7 +171,7 @@ _MEMBER_LABELS: dict[str, str] = {
     "media": "Media",
     "spotify_volume": "Volume",
     "mute_button": "Mute Button",
-    "spotify_visualizer": "Spotify Visualizer",
+    "spotify_visualizer": "Visualizer",
     "reddit": "Reddit 1",
     "reddit2": "Reddit 2",
     "feeds_custom_1": "Custom 1",

@@ -1206,7 +1206,7 @@ _DEVCURVE = ModeSettings(
         Bucket("shaper", "Shaper", "Layer-first spline editor with per-layer shape and energy arrows."),
         Bucket("core", "Core", "Global curve motion and fill styling."),
         Bucket("foreground_fx", "Foreground FX", "Optional dynamic shadow/specular effects for the current top layer."),
-        Bucket("ghost", "Ghost", "Optional trail for debug visibility.", advanced=True),
+        Bucket("ghost", "Ghost", "Optional fading trail behind the curves.", advanced=True),
     ),
     entries=(
         Custom("layers", "shaper", keys=(
