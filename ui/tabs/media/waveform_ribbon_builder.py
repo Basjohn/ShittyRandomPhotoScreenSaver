@@ -1,6 +1,6 @@
-"""Waveform's Settings body: the preset row and the Waveform Studio launcher.
+"""Waveform Ribbon's Settings body (mode id ``waveform_ribbon``): the preset row and its Studio launcher.
 
-Every Waveform control (including its audio analysis) is edited in the Studio, which has full parity
+Every Waveform Ribbon control (including its audio analysis) is edited in the Studio, which has full parity
 with the retired buckets (tests/test_waveform_studio_parity.py proves it from the registries)."""
 from ui.tabs.media.spec_mode_builder import build_studio_owned_mode_ui
 

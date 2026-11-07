@@ -1,4 +1,8 @@
-"""Authored DevCurve state advanced by the sole visualizer logical clock."""
+"""Authored Spline Curve state advanced by the sole visualizer logical clock.
+
+Spline Curve is mode id ``devcurve`` (code name DevCurve); its sibling owners are mapped in
+``Docs/Reference/Naming.md``.
+"""
 
 from __future__ import annotations
 

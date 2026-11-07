@@ -1,4 +1,8 @@
-"""Qt Quick DevCurve renderer consuming one immutable authored snapshot."""
+"""Qt Quick Spline Curve renderer consuming one immutable authored snapshot.
+
+Spline Curve is mode id ``devcurve`` (code name DevCurve); its sibling owners are mapped in
+``Docs/Reference/Naming.md``.
+"""
 
 from __future__ import annotations
 
