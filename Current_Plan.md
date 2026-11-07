@@ -253,10 +253,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   LSB** (found 7 Nov; on main too, 1 of 5 runs): one pixel of 153,600 differs by 1 (`[119, 123, 1]: 56 vs 55`). Either
   the two renders are not deterministic (a GPU timing/precision path) or the oracle needs a tolerance it does not
   state. Find which before loosening anything; bar: 20 consecutive runs identical, or a documented tolerance.
-- **`tests/test_run_matrix_harness.py::test_runs_sequentially_snapshots_logs_and_reports_distinct_failures` fails
-  in any worktree** (found 7 Nov; on main too): it asserts the checkout folder is named `ShittyRandomPhotoScreenSaver`
-  (`'agent-…' == 'ShittyRandomPhotoScreenSaver'`). Environmental like the gate note below; the harness or the test
-  should derive the expected name from the checkout root instead of pinning it.
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
