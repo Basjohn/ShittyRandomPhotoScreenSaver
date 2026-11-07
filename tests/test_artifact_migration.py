@@ -21,7 +21,9 @@ def _legacy_tree(root):
     return legacy
 
 
-def test_the_move_copies_verifies_then_deletes_and_leaves_held_folders(tmp_path):
+def test_the_move_copies_verifies_then_deletes_and_leaves_held_folders(tmp_path, monkeypatch):
+    # The test owns the held set (the real one empties once the session that held it ends).
+    monkeypatch.setattr(migration, "HELD", {"quiet_session_20261107"})
     with artifact_paths.use_root(tmp_path / ".artifacts") as root:
         legacy = _legacy_tree(root)
         units = migration.plan(legacy, None)
