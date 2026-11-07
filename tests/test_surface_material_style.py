@@ -77,7 +77,7 @@ def test_legibility_layer_reaches_within_three_px_of_the_border_with_concentric_
 def test_legibility_panel_inset_is_two_to_three_px_and_its_corners_are_never_sharp() -> None:
     for name in ("surface_material.frag", "text_legibility.frag", "text_legibility.vert"):
         shader = (QML / "shaders" / name).read_text(encoding="utf-8")
-        inset = re.search(r"float plateInset = max\(0\.0, borderWidth\) \+ ([0-9.]+);", shader)
+        inset = re.search(r"float plateInset = borderWidth < 0\.0 \? -?[0-9.]+ : borderWidth \+ ([0-9.]+);", shader)
         assert inset is not None and 2.0 <= float(inset.group(1)) <= 3.0, name
         # The panel radius is the card's configured radius less the inset, floored above 0.
         floor = re.search(r"roundedBox\(p, plateHalf, max\(([0-9.]+), r - plateInset\), plateNormal\)", shader)

@@ -83,7 +83,9 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
     // soft edge, so it reads as one
     // deliberate inner panel. Shift away from the text colour, then hold a
     // luminance-contrast floor against it where the backdrop is busy.
-    float plateInset = max(0.0, borderWidth) + 2.5;
+    // A negative border width (a child control drawing its own outline) puts the panel edge
+    // just outside the shape: its whole face is the panel, with no inner rim.
+    float plateInset = borderWidth < 0.0 ? -1.0 : borderWidth + 2.5;
     vec2 plateHalf = max(halfSize - vec2(plateInset), vec2(1.0));
     vec2 plateNormal;
     float pd = roundedBox(p, plateHalf, max(2.0, r - plateInset), plateNormal);

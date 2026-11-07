@@ -92,6 +92,7 @@ def _abandonment(scene, art):
     image = _steam_art(path, "#8e4f2d")
     model.on_abandonment_presentation(AbandonmentPreparedPresentation(
         model=card, artwork=image, artwork_identity=str(path), desaturation_bucket=0), animate=False)
+    foundry._place_preferred(scene, presentation)
     return presentation
 
 
@@ -119,6 +120,7 @@ def _achievement(scene, art):
         model=base, artwork=image, artwork_identity=str(path), artwork_key=f"{base.appid or 0}:capture",
         latest_artwork=latest_image, latest_artwork_identity=str(latest), latest_artwork_key="capture-unlock"),
         animate=False)
+    foundry._place_preferred(scene, presentation)
     return presentation
 
 
@@ -329,6 +331,47 @@ def _theme_card_colour():
     return QColor(*rgba)
 
 
+def capture_media_controls(material_scene, art: Path, materials, output: Path) -> dict:
+    """Media's transport bar (previous | play/pause | next, mute) and its volume track, cropped
+    at this scene's DPR, on each material."""
+
+    from PySide6.QtCore import QRectF
+    from tools import onboarding_preview_foundry as foundry
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+
+    k = material_scene.scene.dpr
+    media = foundry._preview_media(material_scene.scene, art)
+    material_scene.presentations = [media]
+    media.set_geometry(OverlayWidgetGeometry(*ORIGIN, media.item.width(), media.item.height()))
+    _settle(material_scene)
+
+    def scene_rect(name):
+        pending = [material_scene.scene.root]
+        while pending:
+            node = pending.pop()
+            if node.objectName() == name and node.isVisible():
+                return node.mapRectToScene(QRectF(0.0, 0.0, node.width(), node.height()))
+            pending.extend(node.childItems())
+        raise RuntimeError(f"{name} not found")
+
+    report = {}
+    tag = f"dpr{k:.1f}".replace(".", "_")
+    for material in materials:
+        material_scene.set_material(material)
+        _settle(material_scene, 0.5)
+        frame = material_scene.read()
+        for name, label in (("mediaControlsRow", "media_controls"), ("mediaAppVolumeTrack", "media_volume")):
+            rect = scene_rect(name).adjusted(-10.0, -10.0, 10.0, 10.0)
+            frame.crop((int(rect.left() * k), int(rect.top() * k), int(rect.right() * k),
+                        int(rect.bottom() * k))).save(output / f"{label}_{tag}__{material}.png")
+    material_scene.set_material("normal")
+    media.retire()
+    material_scene.presentations = []
+    material_scene.render(3)
+    report[tag] = "ok"
+    return report
+
+
 # --------------------------------------------------------------------------- sheets
 
 
@@ -381,6 +424,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fill-variants", action="store_true",
                         help="also capture the Visualizer fill/material combination candidates")
     parser.add_argument("--sheet", type=Path, nargs=2, metavar=("BEFORE", "AFTER"))
+    parser.add_argument("--media-controls", type=float, nargs="+", metavar="DPR",
+                        help="only Media's transport bar and volume track, cropped at each DPR")
     args = parser.parse_args(argv)
     args.output = args.output or artifact_paths.evidence_dir("widgets", "card_surfaces", args.label)
     # PNGs are written in owner scratch and published to the evidence folder on success.
@@ -410,6 +455,19 @@ def main(argv: list[str] | None = None) -> int:
         try:
             material_scene.set_wallpaper(smc.presentation_image(args.wallpaper, smc.SCENE, "card-surfaces"))
             material_scene.render(4)
+            if args.media_controls:
+                material_scene.close()
+                report["media_controls"] = {}
+                for dpr in args.media_controls:
+                    material_scene = smc.MaterialScene(*smc.SCENE, dpr=dpr)
+                    material_scene.set_wallpaper(smc.presentation_image(args.wallpaper, smc.SCENE, "controls"))
+                    material_scene.render(4)
+                    report["media_controls"].update(capture_media_controls(material_scene, art, args.materials,
+                                                                           output))
+                    if dpr != args.media_controls[-1]:
+                        material_scene.close()
+                (output / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+                return 0
             only = set(args.only or ())
             widgets_only = only - {"visualizer"}
             if not only or widgets_only:

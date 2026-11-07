@@ -19,11 +19,16 @@ ShaderEffect {
     property color textColor: "#ffffffff"
 
     // The card's legibility panel (2.5 px inside the border, concentric with the card's own
-    // radius) holds the card text colour at this luminance contrast: the small-text floor
-    // (4.5:1) with a 10 % margin for antialiased glyphs. It is the one darker panel on the
-    // card, from above the header to below the last element; no per-line rows or per-run
-    // plates sit on it (Card_Surface_Materials.md 3.3).
-    readonly property real panelContrastFloor: 5.0
+    // radius) holds the card text colour at this luminance contrast. It is the one darker
+    // panel on the card, from above the header to below the last element; no per-line rows or
+    // per-run plates sit on it, so it also carries the faint runs (drawn at 55-76 % of the text
+    // colour: dates, age tags, PLAYING): 7:1 for the full colour is the measured value that
+    // keeps every faint small run at 4.5:1 or better (Card_Surface_Materials.md 3.3). It acts
+    // only where the blurred backdrop is bright.
+    readonly property real panelContrastFloor: 7.0
+    // A child control without text (Media's volume track) passes false: no darker panel, no
+    // floor, so its material and backdrop read through.
+    property bool legibilityPanel: true
 
     // Presentation constants per material (one shader, different uniforms):
     //   blurTint        = (blur level 0 light .. 1 heavy, tint opacity at theme alpha 0, at 1, saturation)
@@ -48,7 +53,8 @@ ShaderEffect {
     readonly property vector2d itemSize: Qt.vector2d(width, height)
     readonly property vector4d blurTint: resolvedParameters[0]
     readonly property vector4d lightNoise: resolvedParameters[1]
-    readonly property vector4d glassLegibility: resolvedParameters[2]
+    readonly property vector4d glassLegibility: legibilityPanel ? resolvedParameters[2]
+        : Qt.vector4d(resolvedParameters[2].x, resolvedParameters[2].y, 0.0, 1.0)
 
     blending: true
     vertexShader: "shaders/surface_material.vert.qsb"
