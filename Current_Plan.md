@@ -104,15 +104,37 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   the stated defects (the hidden value holder; technical values missing from the cache; the Gmail job not requeued).
   9/9 focused files pass on the merge. The branch's impact gate passed 724/726; the two failures fail on main too.
   Its side defects are recorded below and in the checklist. The rest of A-12 (the page-level Bar Appearance and
-  Rainbow hidden rows) is open.
+  Rainbow hidden rows) is folded into the spec by the Settings SSOT fold (AC-21).
 - **Settings system and SSOT audit: done 7 Nov.** It is at `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md`. The
   lead re-checked its key lines in source, and all 7 items survived; they are promoted to the checklist as Tier S,
   AC-17 to AC-23. Theme-material root cause (AC-17): the generated Widget mirror of each "[Glass]"/"[Acrylic]"
   Settings theme deliberately drops the material, so the runtime never sees one. The fix waits on the operator's
   choice.
-- **Settings SSOT fold (Opus high, started 7 Nov):** AC-19, AC-22, AC-18, AC-21, AC-23 and AC-20, in that order,
-  each a separate commit. Each must fail on the old code first and keep the spec systems as the owners. AC-17 joins
-  once the operator chooses.
+- **Settings SSOT fold: merged 7 Nov (0e86b4aa).** Six items landed, each its own commit:
+  - **AC-19:** Reset and Import re-derive the active Settings and Widget themes, and the Themes tab reloads.
+  - **AC-22:** one MC predicate decides whether interaction is forced.
+  - **AC-18:** the Technical controls are spec entries. 3090 preset fields are identical and 27/27 replay digests
+    match; `technical_controls.py` is deleted.
+  - **AC-21:** the shared Bar Appearance and Rainbow families are spec entries; the hidden holder and
+    `shared_appearance_controls.py` are gone.
+  - **AC-23:** the dead residue is removed and three disclosure schemas are retired through the bridge.
+  - **AC-20:** the Particle, Blinds and Burn pages read their ranges from the transition spec.
+
+  **Lead audit:**
+  - Two of the new test files, copied onto main, fail there (30 failures, behavioural).
+  - Nothing imports the deleted modules.
+  - A 211-file Settings, Studio, transition, preset and lifecycle gate on the merge passed 210. The one failure was
+    a source-text test left stale by AC-01 (it sits outside the registry gate's import graph); it is fixed in
+    a4d34f71.
+
+  **Visible changes for the operator:**
+  - Neon Lake's Kick Lane Gain is now offered: the renderer always read it.
+  - The Particle radius default is 8, which is what always ran.
+  - Particle Gloss Size offers 16–128, which is what the resolver admits.
+  - Manual Floor's low is 0.0 everywhere.
+  - Technical tooltips use the registry names.
+
+  **AC-17 (theme material) waits on the operator's choice.**
 - [~] **Spectrum presets 2-15: re-authored by the lead (7 Nov), awaiting the operator's eyes.** The first agent
   round failed the fidelity gate (operator: "awful"). Its looks were opaque clip-art blocks, its per-bar patterns
   turned to checkerboard and tartan, its ghost trails read as soot, and Union Jack read as tartan. That round is not
@@ -155,6 +177,13 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `tests/test_visualizer_authored_clock.py` fails on main; the lead re-ran it there for three modes. No external
   wall-clock timestamp reaches the clock path. The rule is in the visualizer change checklist §2.
   **Now on queue item 1 (the gen2 GC stalls),** which it found itself.
+- **AC-09, then AC-02 (Opus high, started 7 Nov):** the card border width resolver first, then the host-neutral
+  Visualizer binding with Media docking as a placement policy. AC-02 is the first SMP and Expanded Visualizer
+  prerequisite. It picks up the Reset Camera fix from main before moving the click admissions, and leaves
+  queue item 5 as AC-08 only.
+- **Small-defects agent (Opus medium, started 7 Nov):** queue items 0, 2, 3 and 4 below, in that order (AC-06,
+  Reset Camera's double-click cycling the mode, AC-04, AC-05). Each is its own commit and must fail on the old
+  code first. The Waveform agent's work is complete and merged.
 **Queued, next free medium slot, in this order (small, bounded):**
 1. **GC freeze per generation: merged 7 Nov; the live check is owed (lead, quiet machine).** The minute-ly 86–161 ms
    gen2 stalls came from the replay driver: it kept every frame under the interpreter's thresholds.
@@ -190,18 +219,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   once, when the dialog is destroyed (before Finish & Run starts the runtime). Fold into checklist AC-13: only the
   terminal owner cancels globally; any other manager cancels only its own work. Bar: shutting down a helper manager
   leaves another owner's pending `ThreadManager.single_shot` alive.
-- **A-12 residue:** the Visualizers page's shared Bar Appearance and Rainbow rows are still page-level hidden
-  QWidget value owners (one never-shown holder, `visualizer_studio_family_values`), read by
-  `save_visualizer_settings` and the Studio's `_load_families`. Mode bodies no longer hold any. Moving the two
-  families into a value cache like the mode bodies' is the follow-up; bar: the page builds no hidden value-owner
-  QWidget and both families round-trip through the Studio and Settings save.
-- **Dead after A-12 (fold into checklist AC-14):** the technical-control widget machinery in
-  `ui/tabs/media/technical_controls.py` (`build_per_mode_technical_group`, `register_per_mode_technical_controls`,
-  `load/collect_per_mode_technical_controls` and their widget helpers) has no production caller; only
-  `tests/test_visualizer_settings_plumbing.py` reaches it. `_VISUALIZER_ADVANCED_ROOT_ATTRS`
-  (`ui/tabs/visualizer_settings_context.py`) names Advanced/normal roots no mode builds, so
-  `_auto_switch_preset_to_custom` never matches; the `ui.visualizer_adv_states` / `ui.visualizer_tech_states` /
-  `ui.visualizer_tech_bucket_states` schemas have no live disclosure (the projection keeps them normalized).
+- **Dead after A-12: removed by the Settings SSOT fold (AC-18, AC-23).** Still open from that note:
   Pre-existing: `tools/flicker_test.py`'s Widgets-tab `setup_ui_only_*` modes patch
   `widgets_tab_media.build_visualizers_ui`, which no longer exists anywhere (the Visualizer left the Widgets tab at
   V7), so those modes fail at `getattr` before measuring (its mode-body stub now targets
@@ -217,6 +235,13 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
+
+**Found during the Settings SSOT fold (7 Nov; fixed or recorded by that agent):**
+- **Neon Lake's Kick Lane Gain moves its frame but was never offered (fixed in AC-18).** The old Technical
+  definitions' mode filter (`_KICK_GAIN_MODES`) hid it from Settings and the Studio although
+  `tools/visualizer_replay/analysis_controls_audit.py` shows it moves the published frame (onset waves). Folding the
+  filter into `technical_hidden_suffixes` made the audit test fail, so Neon Lake now offers it; the stored values and
+  presets were always authored, so no value changes.
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.

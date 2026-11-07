@@ -63,18 +63,11 @@ def frozen(mode: str) -> dict:
 
 
 def technical_keys(mode: str) -> dict:
-    """suffix -> (storage key, defn) for every technical control the mode owns (shown or not)."""
-    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
-    from ui.tabs.media.technical_controls import _BASE_CONTROL_DEFS, _control_defs_for_mode, _storage_key
+    """suffix -> (storage key, spec control) for every technical control the mode owns (shown or not)."""
+    from core.settings.visualizer_mode_settings import require_mode_settings
 
-    out = {}
-    owned = get_owned_mode_setting_keys(mode, "technical")
-    for defn in _BASE_CONTROL_DEFS:
-        if defn.config_key in owned:
-            out[defn.config_key] = (_storage_key(mode, defn), defn)
-    for defn in _control_defs_for_mode(mode):
-        out.setdefault(defn.config_key, (_storage_key(mode, defn), defn))
-    return out
+    return {control.key.removeprefix(f"{mode}_"): (control.key, control)
+            for control in require_mode_settings(mode).technical_controls(offered=False)}
 
 
 def baseline_values(mode: str, settings: dict) -> dict:
@@ -139,13 +132,13 @@ def variations(mode: str, base: dict) -> list[dict]:
             add(suffix, label, pick(key(suffix), alts))
     if key("dynamic_range_enabled"):
         add("dynamic_range_enabled", "Output Lift", [not bool(base.get(key("dynamic_range_enabled")))])
-    for suffix, (storage, defn) in keys.items():
-        if defn.control_key == "mix_slider":
-            add(suffix, defn.label_text.rstrip(":"), pick(storage, (0.1, 0.9)))
-        elif defn.control_key == "mix_vocal_slider":
+    for suffix, (storage, control) in keys.items():
+        if suffix in ("lane_transient_mix", "transient_mix_bass"):
+            add(suffix, control.label.rstrip(":"), pick(storage, (0.1, 0.9)))
+        elif suffix == "transient_mix_vocal":
             # Bubble's vocal mix reaches only the specular wobble (Rotation Amount) through its mid transient (Pulse gain).
             forced = {f"{mode}_rotation_amount": 1.0, f"{mode}_transient_pulse_gain": 3.0, f"{mode}_transient_clamp": 3.0}
-            add(suffix, defn.label_text.rstrip(":") + " (with Rotation Amount on)", pick(storage, (0.0, 1.0)), forced=forced)
+            add(suffix, control.label.rstrip(":") + " (with Rotation Amount on)", pick(storage, (0.0, 1.0)), forced=forced)
     return out
 
 

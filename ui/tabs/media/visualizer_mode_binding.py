@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any
 
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     get_default_visualizer_mode_id,
-    get_owned_mode_setting_keys,
     iter_visualizer_mode_descriptors,
-    mode_has_rainbow_controls,
 )
 from core.settings.visualizer_presets import (
     resolve_preset_index_from_mapping,
@@ -73,94 +72,53 @@ def collect_visualizer_preset_indices(tab, spotify_vis_config: dict[str, Any]) -
         spotify_vis_config[descriptor.preset_key] = slider.preset_index()
 
 
-def load_visualizer_rainbow_state(tab, spotify_vis_config: Mapping[str, Any] | None) -> None:
-    """Load per-mode rainbow state from config into the active visualizer controls."""
+# The page-level shared families (Bar Appearance, Rainbow), stored per owning mode and declared in each mode's spec
+# (``visualizer_mode_settings.shared_family_entries``). Every mode is edited in its Studio, which edits these too, so
+# the Visualizers page builds no widget for them: this value cache is their only Settings owner.
+FAMILY_CACHE_ATTR = "_visualizer_family_lazy_values"
+
+
+def family_controls(mode_id: str, family: str | None = None) -> tuple:
+    """The mode's shared-family spec controls (one family, or both); () for a mode owning none."""
+    from core.settings.visualizer_mode_settings import BAR_APPEARANCE_BUCKET, RAINBOW_BUCKET, mode_settings
+    spec = mode_settings(mode_id)
+    if spec is None:
+        return ()
+    families = (family,) if family else (BAR_APPEARANCE_BUCKET, RAINBOW_BUCKET)
+    return tuple(control for name in families for control in spec.family_controls(name))
+
+
+def load_visualizer_family_values(tab, spotify_vis_config: Mapping[str, Any] | None) -> None:
+    """Hold every owning mode's Bar Appearance and Rainbow values from ``spotify_vis_config`` (canonical defaults
+    for missing ones), admitted by their spec controls as the model admits them."""
+    from core.settings.visualizer_mode_settings import read_control_value
     config = spotify_vis_config if isinstance(spotify_vis_config, Mapping) else {}
-    global_enabled = tab._config_bool("spotify_visualizer", config, "rainbow_enabled")
-    global_speed = int(round(
-        tab._config_float("spotify_visualizer", config, "rainbow_speed") * 100.0
-    ))
-
-    rainbow_cache = {}
+    cache = getattr(tab, FAMILY_CACHE_ATTR, None)
+    if not isinstance(cache, dict):
+        cache = {}
+        setattr(tab, FAMILY_CACHE_ATTR, cache)
     for mode_id in VISUALIZER_MODE_IDS:
-        # Capability metadata only decides whether this mode participates in
-        # the shared Rainbow product surface. Persisted values/defaults remain
-        # exclusively owned by the canonical Settings defaults/schema.
-        rainbow_keys = get_owned_mode_setting_keys(mode_id, "rainbow")
-        if not rainbow_keys:
-            continue
-        enabled_key = rainbow_keys["rainbow_enabled"]
-        speed_key = rainbow_keys["rainbow_speed"]
-        mode_enabled = config.get(enabled_key, None)
-        mode_speed = config.get(speed_key, None)
-        enabled = bool(mode_enabled) if mode_enabled is not None else global_enabled
-        if mode_speed is None:
-            speed = global_speed
-        else:
-            try:
-                speed = int(round(float(mode_speed) * 100.0))
-            except (TypeError, ValueError, OverflowError):
-                speed = int(round(tab._default_float("spotify_visualizer", speed_key) * 100.0))
-        rainbow_cache[mode_id] = (enabled, max(1, min(100, speed)))
+        for control in family_controls(mode_id):
+            default = tab._widget_default("spotify_visualizer", control.key)
+            cache[control.key] = control.admit(read_control_value(control, config.get, default), default)
 
-    tab._rainbow_per_mode = rainbow_cache
-    current_mode = collect_visualizer_mode_selection(tab)
-    if not mode_has_rainbow_controls(current_mode):
-        # An experimental mode may intentionally have no Rainbow persisted
-        # keys. Do not invent defaults or overwrite the shared presentation
-        # controls while that mode is selected; visibility owns hiding them.
-        if hasattr(tab, "_update_rainbow_visibility"):
-            tab._update_rainbow_visibility()
+
+def collect_visualizer_family_values(tab, spotify_vis_config: dict[str, Any], current_mode: str) -> None:
+    """Write the held family values: every owning mode's Rainbow, and the current mode's Bar Appearance (an
+    unselected mode's bar values stay as stored through the save merge). The unprefixed active-mode rainbow
+    mirror follows the current mode when it owns Rainbow."""
+    from core.settings.visualizer_mode_settings import RAINBOW_BUCKET, BAR_APPEARANCE_BUCKET
+    cache = getattr(tab, FAMILY_CACHE_ATTR, None)
+    if not isinstance(cache, dict):
         return
-
-    current_rainbow_keys = get_owned_mode_setting_keys(current_mode, "rainbow")
-    current_enabled, current_speed = rainbow_cache.get(
-        current_mode,
-        (
-            tab._default_bool("spotify_visualizer", current_rainbow_keys["rainbow_enabled"]),
-            int(round(tab._default_float("spotify_visualizer", current_rainbow_keys["rainbow_speed"]) * 100.0)),
-        ),
-    )
-
-    if hasattr(tab, "rainbow_enabled"):
-        tab.rainbow_enabled.setChecked(current_enabled)
-    if hasattr(tab, "rainbow_speed_slider"):
-        tab.rainbow_speed_slider.setValue(current_speed)
-    if hasattr(tab, "rainbow_speed_label"):
-        tab.rainbow_speed_label.setText(f"{current_speed / 100.0:.2f}")
-    if hasattr(tab, "_update_rainbow_visibility"):
-        tab._update_rainbow_visibility()
-
-
-def collect_visualizer_rainbow_state(tab, spotify_vis_config: dict[str, Any]) -> None:
-    """Write per-mode rainbow state from the active controls into the config mapping."""
-    rainbow_cache = {
-        mode_id: value
-        for mode_id, value in dict(getattr(tab, "_rainbow_per_mode", {})).items()
-        if mode_has_rainbow_controls(mode_id)
-    }
-    current_mode = collect_visualizer_mode_selection(tab)
-    if (
-        mode_has_rainbow_controls(current_mode)
-        and hasattr(tab, "rainbow_enabled")
-        and hasattr(tab, "rainbow_speed_slider")
-    ):
-        rainbow_cache[current_mode] = (
-            tab.rainbow_enabled.isChecked(),
-            tab.rainbow_speed_slider.value(),
-        )
-    tab._rainbow_per_mode = rainbow_cache
-
     for mode_id in VISUALIZER_MODE_IDS:
-        rainbow_keys = get_owned_mode_setting_keys(mode_id, "rainbow")
-        if not rainbow_keys:
-            continue
-        enabled_key = rainbow_keys["rainbow_enabled"]
-        speed_key = rainbow_keys["rainbow_speed"]
-        default_enabled = tab._default_bool("spotify_visualizer", enabled_key)
-        default_speed = int(round(
-            tab._default_float("spotify_visualizer", speed_key) * 100.0
-        ))
-        enabled, speed = rainbow_cache.get(mode_id, (default_enabled, default_speed))
-        spotify_vis_config[enabled_key] = enabled
-        spotify_vis_config[speed_key] = speed / 100.0
+        for control in family_controls(mode_id, RAINBOW_BUCKET):
+            if control.key in cache:
+                spotify_vis_config[control.key] = deepcopy(cache[control.key])
+    for control in family_controls(current_mode, BAR_APPEARANCE_BUCKET):
+        if control.key in cache:
+            spotify_vis_config[control.key] = deepcopy(cache[control.key])
+    for control in family_controls(current_mode, RAINBOW_BUCKET):
+        suffix = control.key.removeprefix(f"{current_mode}_")
+        if suffix in ("rainbow_enabled", "rainbow_speed") and control.key in cache:
+            spotify_vis_config[suffix] = deepcopy(cache[control.key])

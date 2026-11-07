@@ -1645,14 +1645,20 @@ class SettingsManager(QObject):
                 numeric_value = float(canonical_floor)
                 needs_cast = True
 
-            clamped = min(max(numeric_value, self._MANUAL_FLOOR_MIN), self._MANUAL_FLOOR_MAX)
+            # The range is the floor's own spec control (one domain with the worker); a key no spec declares keeps
+            # the shared 0-1 floor domain.
+            from core.settings.visualizer_mode_settings import spec_control
+            control = spec_control(key)
+            low, high = (control.low, control.high) if control is not None else (self._MANUAL_FLOOR_MIN,
+                                                                                 self._MANUAL_FLOOR_MAX)
+            clamped = min(max(numeric_value, low), high)
             requires_update = needs_cast or not math.isclose(numeric_value, clamped, rel_tol=1e-9, abs_tol=1e-9)
 
             if requires_update:
                 vis_config[key] = clamped
                 changed = True
                 repairs[f"widgets.spotify_visualizer.{key}"] = (
-                    f"Manual floor normalized to {clamped:.2f} (range {self._MANUAL_FLOOR_MIN:.2f}-{self._MANUAL_FLOOR_MAX:.2f})"
+                    f"Manual floor normalized to {clamped:.2f} (range {low:.2f}-{high:.2f})"
                 )
 
         if changed:

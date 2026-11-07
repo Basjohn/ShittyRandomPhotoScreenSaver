@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 
+from core.mc import effective_interaction_mode, interaction_mode_forced
 from core.settings.default_contract import require_canonical_default
 from core.settings.settings_manager import SettingsManager
 from core.settings.models import InputSettings
@@ -60,7 +61,7 @@ class DisplayTab(QWidget):
         
         self._settings = settings
         self.settings_manager = settings  # Also expose as property for tests
-        self._is_mc_profile = settings.get_application_name() == "Screensaver_MC"
+        self._is_mc_profile = interaction_mode_forced()
         self._loading: bool = False
         self._widget_glow_color_override: Optional[List[int]] = None
         self._setup_ui()
@@ -698,11 +699,7 @@ class DisplayTab(QWidget):
             self.sharpen_check.setChecked(sharpen)
 
             # Interaction Mode
-            interaction_mode = (
-                True
-                if self._is_mc_profile
-                else self._settings.get_bool('input.interaction_mode')
-            )
+            interaction_mode = effective_interaction_mode(self._settings.get_bool('input.interaction_mode'))
             self.interaction_mode_check.setChecked(interaction_mode)
 
             # Cursor Halo Shape
@@ -849,7 +846,7 @@ class DisplayTab(QWidget):
         # Interaction
         self._settings.set(
             'input.interaction_mode',
-            True if self._is_mc_profile else self.interaction_mode_check.isChecked(),
+            effective_interaction_mode(self.interaction_mode_check.isChecked()),
         )
 
         # Cursor Halo Shape

@@ -30,7 +30,6 @@ _SPARSE_RUNTIME_BUCKET_KEYS = (
     "gmail_bucket_states",
     "widget_bucket_states",
     "visualizer_bucket_states",
-    "visualizer_tech_bucket_states",
 )
 
 

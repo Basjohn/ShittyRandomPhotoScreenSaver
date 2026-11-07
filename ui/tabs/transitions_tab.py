@@ -107,6 +107,16 @@ def _transition_default(path: str):
     return require_canonical_default(f"transitions.{path}")
 
 
+def _spin_range(control) -> tuple[int, int]:
+    """A whole-number spin box's range: the spec control's admitted range."""
+    return int(round(float(control.low))), int(round(float(control.high)))
+
+
+def _percent_range(control) -> tuple[int, int]:
+    """A whole-percent slider's range: the spec control's admitted range in hundredths."""
+    return int(round(float(control.low) * 100)), int(round(float(control.high) * 100))
+
+
 def _transition_defaults_root() -> dict:
     """Return the complete canonical Transitions mapping or fail loudly."""
 
@@ -863,11 +873,8 @@ class TransitionsTab(QWidget):
     # ---- Pages with their own controls (spec ``custom``) ------------------
 
     def _hydrate_blinds_page(self, blinds: Mapping[str, object], canonical: Mapping[str, object]) -> None:
-        try:
-            value = int(blinds.get('feather', canonical['feather']))
-        except (TypeError, ValueError):
-            value = int(canonical['feather'])
-        self.blinds_feather_slider.setValue(value)
+        value = transition_settings("blinds").admit('feather', blinds, canonical)
+        self.blinds_feather_slider.setValue(int(value))
         self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
         self._sync_blinds_style()
 
@@ -884,30 +891,37 @@ class TransitionsTab(QWidget):
         idx = self.particle_direction_combo.findText(direction)
         if idx >= 0:
             self.particle_direction_combo.setCurrentIndex(idx)
-        self.particle_radius_spin.setValue(int(particle.get('particle_radius', canonical_particle['particle_radius'])))
+        spec = transition_settings("particle")
+        self.particle_radius_spin.setValue(int(round(spec.admit('particle_radius', particle, canonical_particle))))
         self.particle_trail_check.setChecked(particle.get('trail_strength', canonical_particle['trail_strength']) > 0.01)
         self.particle_3d_check.setChecked(particle.get('use_3d_shading', canonical_particle['use_3d_shading']))
         self.particle_texture_check.setChecked(particle.get('texture_mapping', canonical_particle['texture_mapping']))
         self.particle_wobble_check.setChecked(particle.get('wobble', canonical_particle['wobble']))
-        self.particle_gloss_spin.setValue(int(particle.get('gloss_size', canonical_particle['gloss_size'])))
-        light_idx = particle.get('light_direction', canonical_particle['light_direction'])
-        if 0 <= light_idx < self.particle_light_combo.count():
-            self.particle_light_combo.setCurrentIndex(light_idx)
-        self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', canonical_particle['swirl_turns']))
-        swirl_order_idx = particle.get('swirl_order', canonical_particle['swirl_order'])
-        if 0 <= swirl_order_idx < self.particle_swirl_order_combo.count():
-            self.particle_swirl_order_combo.setCurrentIndex(swirl_order_idx)
+        self.particle_gloss_spin.setValue(int(round(spec.admit('gloss_size', particle, canonical_particle))))
+        self.particle_light_combo.setCurrentIndex(spec.admit('light_direction', particle, canonical_particle))
+        self.particle_swirl_turns_spin.setValue(float(spec.admit('swirl_turns', particle, canonical_particle)))
+        self.particle_swirl_order_combo.setCurrentIndex(spec.admit('swirl_order', particle, canonical_particle))
         self._update_particle_mode_visibility()
     def _save_particle_page(self, values: dict) -> None:
-        trail = self.particle_trail_check.isChecked()
+        # Fields the page never shows keep their stored value (the canonical default when none is stored); the Motion
+        # Trail checkbox turns the stored trail off (zero) or back on (the stored trail when it was on, else canonical).
+        stored = self._settings.get('transitions')
+        stored = stored.get('particle', {}) if isinstance(stored, dict) else {}
+        stored = stored if isinstance(stored, dict) else {}
+        canonical = _transition_default("particle")
+        kept = {key: stored.get(key, canonical[key]) for key in ('overlap', 'swirl_strength')}
+        if not self.particle_trail_check.isChecked():
+            trail = {'trail_length': 0.0, 'trail_strength': 0.0}
+        elif float(stored.get('trail_strength', 0.0) or 0.0) > 0.01:
+            trail = {key: stored[key] if key in stored else canonical[key] for key in ('trail_length', 'trail_strength')}
+        else:
+            trail = {key: canonical[key] for key in ('trail_length', 'trail_strength')}
         values.update({
             'mode': self.particle_mode_combo.currentText(),
             'direction': self.particle_direction_combo.currentText(),
             'particle_radius': float(self.particle_radius_spin.value()),
-            'overlap': 4.0,
-            'trail_length': 0.15 if trail else 0.0,
-            'trail_strength': 0.6 if trail else 0.0,
-            'swirl_strength': 1.0,
+            **kept,
+            **trail,
             'swirl_turns': self.particle_swirl_turns_spin.value(),
             'use_3d_shading': self.particle_3d_check.isChecked(),
             'texture_mapping': self.particle_texture_check.isChecked(),
@@ -935,14 +949,12 @@ class TransitionsTab(QWidget):
                 f"Canonical burn direction is not represented by the UI: {canonical_burn_dir!r}"
             )
         self.burn_direction_combo.setCurrentIndex(idx)
-        jag = int(round(burn.get('jaggedness', canonical_burn['jaggedness']) * 100))
-        self.burn_jaggedness_slider.setValue(max(0, min(100, jag)))
+        spec = transition_settings("burn")
+        self.burn_jaggedness_slider.setValue(round(spec.admit('jaggedness', burn, canonical_burn) * 100))
         self.burn_jaggedness_label.setText(f"{self.burn_jaggedness_slider.value()}%")
-        glow_i = int(round(burn.get('glow_intensity', canonical_burn['glow_intensity']) * 100))
-        self.burn_glow_intensity_slider.setValue(max(0, min(100, glow_i)))
+        self.burn_glow_intensity_slider.setValue(round(spec.admit('glow_intensity', burn, canonical_burn) * 100))
         self.burn_glow_intensity_label.setText(f"{self.burn_glow_intensity_slider.value()}%")
-        char_w = int(round(burn.get('char_width', canonical_burn['char_width']) * 100))
-        self.burn_char_width_slider.setValue(max(10, min(100, char_w)))
+        self.burn_char_width_slider.setValue(round(spec.admit('char_width', burn, canonical_burn) * 100))
         self.burn_char_width_label.setText(f"{self.burn_char_width_slider.value()}%")
         glow_col = burn.get('glow_color', canonical_burn['glow_color'])
         if isinstance(glow_col, (list, tuple)) and len(glow_col) >= 3:
@@ -955,12 +967,10 @@ class TransitionsTab(QWidget):
                                             int(ember_col[3]) if len(ember_col) > 3 else 255)
             self._apply_burn_ember_color_btn()
         self.burn_smoke_check.setChecked(bool(burn.get('smoke_enabled', canonical_burn['smoke_enabled'])))
-        smoke_d = int(round(burn.get('smoke_density', canonical_burn['smoke_density']) * 100))
-        self.burn_smoke_density_slider.setValue(max(0, min(100, smoke_d)))
+        self.burn_smoke_density_slider.setValue(round(spec.admit('smoke_density', burn, canonical_burn) * 100))
         self.burn_smoke_density_label.setText(f"{self.burn_smoke_density_slider.value()}%")
         self.burn_ash_check.setChecked(bool(burn.get('ash_enabled', canonical_burn['ash_enabled'])))
-        ash_d = int(round(burn.get('ash_density', canonical_burn['ash_density']) * 100))
-        self.burn_ash_density_slider.setValue(max(0, min(100, ash_d)))
+        self.burn_ash_density_slider.setValue(round(spec.admit('ash_density', burn, canonical_burn) * 100))
         self.burn_ash_density_label.setText(f"{self.burn_ash_density_slider.value()}%")
         self.burn_flames_check.setChecked(bool(burn.get('flames', canonical_burn['flames'])))
         self.burn_veins_check.setChecked(bool(burn.get('ember_veins', canonical_burn['ember_veins'])))
@@ -1008,7 +1018,8 @@ class TransitionsTab(QWidget):
         blinds_layout.addWidget(self.blinds_flat_box)
         blinds_feather_row = self._aligned_row(flat_layout, "Edge Softness:")
         self.blinds_feather_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.blinds_feather_slider.setRange(0, 25)
+        _feather = transition_settings("blinds").control("feather")
+        self.blinds_feather_slider.setRange(int(_feather.low), int(_feather.high))
         self.blinds_feather_slider.setSingleStep(1)
         self.blinds_feather_slider.setValue(int(_transition_default("blinds.feather")))
         self.blinds_feather_slider.valueCommitted.connect(self._save_settings)
@@ -1057,7 +1068,8 @@ class TransitionsTab(QWidget):
 
         particle_radius_row = _aligned_row(particle_layout, "Particle Radius:")
         self.particle_radius_spin = QSpinBox()
-        self.particle_radius_spin.setRange(4, 80)
+        _particle = transition_settings("particle")
+        self.particle_radius_spin.setRange(*_spin_range(_particle.control("particle_radius")))
         self.particle_radius_spin.setValue(int(round(float(_transition_default("particle.particle_radius")))))
         self.particle_radius_spin.valueChanged.connect(self._save_settings)
         particle_radius_row.addWidget(self.particle_radius_spin)
@@ -1097,7 +1109,7 @@ class TransitionsTab(QWidget):
 
         particle_gloss_row = _aligned_row(particle_layout, "Gloss Size:")
         self.particle_gloss_spin = QSpinBox()
-        self.particle_gloss_spin.setRange(10, 200)
+        self.particle_gloss_spin.setRange(*_spin_range(_particle.control("gloss_size")))
         self.particle_gloss_spin.setValue(int(round(float(_transition_default("particle.gloss_size")))))
         self.particle_gloss_spin.valueChanged.connect(self._save_settings)
         particle_gloss_row.addWidget(self.particle_gloss_spin)
@@ -1119,8 +1131,9 @@ class TransitionsTab(QWidget):
         particle_swirl_turns_row = _aligned_row(particle_layout, "Swirl Turns:")
         self.particle_swirl_turns_spin = QDoubleSpinBox()
         self.particle_swirl_turns_spin.setDecimals(2)
-        self.particle_swirl_turns_spin.setRange(0.5, 6.0)
-        self.particle_swirl_turns_spin.setSingleStep(0.1)
+        _turns = _particle.control("swirl_turns")
+        self.particle_swirl_turns_spin.setRange(float(_turns.low), float(_turns.high))
+        self.particle_swirl_turns_spin.setSingleStep(float(_turns.step))
         self.particle_swirl_turns_spin.setValue(float(_transition_default("particle.swirl_turns")))
         self.particle_swirl_turns_spin.valueChanged.connect(self._save_settings)
         particle_swirl_turns_row.addWidget(self.particle_swirl_turns_spin)
@@ -1165,7 +1178,7 @@ class TransitionsTab(QWidget):
 
         burn_jag_row = _aligned_row(burn_layout, "Jaggedness:")
         self.burn_jaggedness_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.burn_jaggedness_slider.setRange(0, 100)
+        self.burn_jaggedness_slider.setRange(*_percent_range(transition_settings("burn").control("jaggedness")))
         burn_jaggedness_default = int(round(float(_transition_default("burn.jaggedness")) * 100.0))
         self.burn_jaggedness_slider.setValue(burn_jaggedness_default)
         self.burn_jaggedness_slider.setToolTip("Edge noise amplitude (0 = smooth wipe, 100 = very jagged)")
@@ -1180,7 +1193,7 @@ class TransitionsTab(QWidget):
 
         burn_glow_row = _aligned_row(burn_layout, "Glow Intensity:")
         self.burn_glow_intensity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.burn_glow_intensity_slider.setRange(0, 100)
+        self.burn_glow_intensity_slider.setRange(*_percent_range(transition_settings("burn").control("glow_intensity")))
         burn_glow_default = int(round(float(_transition_default("burn.glow_intensity")) * 100.0))
         self.burn_glow_intensity_slider.setValue(burn_glow_default)
         self.burn_glow_intensity_slider.setToolTip("Warm glow brightness on the burning edge")
@@ -1195,7 +1208,7 @@ class TransitionsTab(QWidget):
 
         burn_char_row = _aligned_row(burn_layout, "Char Width:")
         self.burn_char_width_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.burn_char_width_slider.setRange(10, 100)
+        self.burn_char_width_slider.setRange(*_percent_range(transition_settings("burn").control("char_width")))
         burn_char_default = int(round(float(_transition_default("burn.char_width")) * 100.0))
         self.burn_char_width_slider.setValue(burn_char_default)
         self.burn_char_width_slider.setToolTip("Width of the charred/blackened zone behind the burn front")
@@ -1245,7 +1258,7 @@ class TransitionsTab(QWidget):
 
         burn_smoke_density_row = _aligned_row(burn_layout, "Spark Intensity:")
         self.burn_smoke_density_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.burn_smoke_density_slider.setRange(0, 100)
+        self.burn_smoke_density_slider.setRange(*_percent_range(transition_settings("burn").control("smoke_density")))
         burn_smoke_density_default = int(round(float(_transition_default("burn.smoke_density")) * 100.0))
         self.burn_smoke_density_slider.setValue(burn_smoke_density_default)
         self.burn_smoke_density_slider.valueCommitted.connect(self._save_settings)
@@ -1286,7 +1299,7 @@ class TransitionsTab(QWidget):
 
         burn_ash_density_row = _aligned_row(burn_layout, "Ash Density:")
         self.burn_ash_density_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.burn_ash_density_slider.setRange(0, 100)
+        self.burn_ash_density_slider.setRange(*_percent_range(transition_settings("burn").control("ash_density")))
         burn_ash_density_default = int(round(float(_transition_default("burn.ash_density")) * 100.0))
         self.burn_ash_density_slider.setValue(burn_ash_density_default)
         self.burn_ash_density_slider.valueCommitted.connect(self._save_settings)

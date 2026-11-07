@@ -29,7 +29,7 @@ FRAMES = 8
 def _drag_keys(values):
     """Every Spectrum-owned slider with a real interval (test-owned: derived from the registry)."""
     keys = []
-    for control in spec().controls:
+    for control in spec().body_controls:
         value = values.get(control.key)
         if (control.key in spectrum_owned_keys() and isinstance(value, (int, float)) and not isinstance(value, bool)
                 and getattr(control, "low", None) is not None and control.high > control.low):

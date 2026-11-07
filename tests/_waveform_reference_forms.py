@@ -129,7 +129,7 @@ def capture_values(widget, pres, spec):
     from core.settings.visualizer_mode_settings import control_runtime_attr
     from widgets.spotify_visualizer.waveform_ribbon_capture import _CAMERA_KEYS
     values = {control.key:getattr(widget if control.logical else pres,control_runtime_attr(control))
-              for control in spec.controls}
+              for control in spec.body_controls}
     configuration = {key:value for key,value in values.items() if key not in _CAMERA_KEYS}
     camera = {key:value for key,value in values.items() if key.startswith('waveform_ribbon_camera_')
               or key in ('waveform_ribbon_turn','waveform_ribbon_tilt','waveform_ribbon_scene_scale',
