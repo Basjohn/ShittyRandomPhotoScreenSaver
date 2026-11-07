@@ -100,6 +100,10 @@ holding their press, the Unsaved Preset Changes prompt, R-172/R-173 teardown ord
 log confirms, §9). Card surfaces, the style pass and the 15 material themes are merged; their open items are in §4.
 
 **Active or paused (resume each with a message to the same agent, which keeps its context and worktree):**
+- **AC-01 Settings tab registry** (Opus high, started 7 Nov): checklist AC-01 with A-12 and A-14, proven on the real
+  SettingsDialog; side defects and conflicts reported.
+- **Spectrum presets 2 onward** (Opus medium, started 7 Nov): queue item 5 below, in progress (flags, 2000s-app
+  themes, novel 2.5D/gloss/ghost presets on Preset 1's reactivity; judged on rendered music clips).
 - **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`):
   the logical tick cut (it had computed main's identity digests and was running its branch digests and tests; the
   gate is byte-identical output, Preset 4 required; then the lead schedules the game60 live check). After the cut: a
