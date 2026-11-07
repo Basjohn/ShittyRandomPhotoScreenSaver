@@ -100,7 +100,7 @@ thawed the RUN for good, so every later gen2 rescanned the whole long-lived heap
 is `collect_retired_generations()`: once per replacement, in `_construct_and_start_replacement_runtime`, after the
 retiring generation's barrier (and the Settings dialog's) has completed and before the replacement exists (R-175). The
 RUN thresholds practically never run a deep collection, so without it every retired generation's cycles stayed for the
-session (~20 MB a Settings round trip); it costs ~60-90 ms inside the lifecycle window, never at frame time, never
+session (~11 MB of the ~20 MB a Settings round trip grew); it costs ~60-90 ms inside the lifecycle window, never at frame time, never
 during a teardown and never before the barrier has judged. A forced gen2 over a frozen
 Visualizer replay heap costs 0.01-0.09 ms against 37-44 ms unfrozen. The boundary log reports `freeze_boundary_ms` and the
 frozen count; with `--frame-trace` every collection is a `GC_BEGIN`/`GC_END` pair (`tools/frame_trace_report.py` prints

@@ -9,8 +9,8 @@ thawed at every teardown, and the first-retirement-only thaw sweep is removed (o
 `core/performance/gc_policy.py`, `tests/test_gc_freeze_per_generation.py`).
 **Later on 7 Nov (R-175):** a collection was adopted, but not at teardown: once per replacement, after the barrier has
 completed (`collect_retired_generations`). Harm 1 below no longer applies there (the barrier has already judged by
-reference counting, and still fails closed); harms 2-4 were accepted against ~20 MB of uncollected retired cycles per
-Settings round trip.
+reference counting, and still fails closed); harms 2-4 were accepted against ~5,200 objects and ~11 MB of
+uncollected retired cycles per Settings round trip.
 
 ## The failure being solved
 

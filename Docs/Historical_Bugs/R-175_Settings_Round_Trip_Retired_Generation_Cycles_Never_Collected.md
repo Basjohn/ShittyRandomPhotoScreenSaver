@@ -44,7 +44,12 @@ trip.
 
 - Waveform P4, plain live check, 9 round trips, rounds 2–8 before each teardown: main +22.4 MB RSS / +23.0 MB private
   a round trip; fix +6.3 / +6.9. No barrier timeout, every reveal re-froze.
-- Spectrum P1: main +19.1 / +22.7; fix: see `Current_Plan.md` §3.
+- Spectrum P1 (census runs): main +19.1 / +22.7; fix +6.5 / +9.1.
+- After the fix no retired display-generation object survives a reveal (the census's weakrefs), and the 11 MB
+  heap_large block a round trip is gone.
+- **Not fully flat:** against no-round-trip controls of the same build, round trips still add ~2–6 MB RSS each, in
+  the default native heap (+5–6 MB a round trip in the map, unchanged by this fix). That is a separate, still
+  unattributed native owner, tracked in `Current_Plan.md` §3.
 - `tests/test_settings_roundtrip_retired_generations.py` drives the real Settings path three times with the real
   `RuntimeGCPolicy` and automatic collection off; on main it fails with "3 retired display generation(s) and 3 retired
   Settings dialog(s) are still reachable".
