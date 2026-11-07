@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Aurora Petroleum [Complex] [Glass].srtheme",
   "name": "Aurora Petroleum [Complex]",
   "linked_settings_theme_id": "file:Aurora Petroleum [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       27,

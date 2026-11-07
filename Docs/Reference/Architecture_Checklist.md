@@ -115,14 +115,8 @@ evidence, fix and regression bar for each item. The lead re-checked the key line
 (`core/settings/visualizer_mode_settings.py`, `rendering/transition_settings.py`). Every item here folds a bypass
 into them.
 
-- [ ] **AC-17 (SS-01) A theme pair's surface material lives in two places, so a "[Glass]" theme gives Normal
-  cards.** P0, effort M.
-  - **Cause:** `tools/generate_widget_theme_mirrors.py` deliberately drops the Settings theme's backdrop material
-    from its linked Widget mirror.
-  - **Fix:** project it once in `widget_counterpart_for_settings_theme`, and fill existing mirrors with that one
-    key (never regenerate them: ten mirrors carry hand-edited colours).
-  - **Waits on the operator's choice:** the default pair would then draw Glass cards on fresh profiles. The
-    alternative is linking the 15 material themes and labelling "[Glass]" as window-only.
+None open (AC-17, the last, landed 7 Nov: a theme pair's card material is owned by its Widget mirror,
+`Docs/Architecture/Card_Surface_Materials.md` section 4).
 
 Addenda from the same audit:
 - **AC-07:** AC-19 (landed) reuses the dialog's reset/import reload edge, never a store subscription.

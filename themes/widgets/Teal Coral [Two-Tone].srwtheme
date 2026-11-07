@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Teal Coral [Two-Tone] [Acrylic].srtheme",
   "name": "Teal Coral [Two-Tone]",
   "linked_settings_theme_id": "file:Teal Coral [Two-Tone] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       20,

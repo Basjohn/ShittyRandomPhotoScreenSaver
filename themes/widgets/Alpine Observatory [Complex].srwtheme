@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Alpine Observatory [Complex] [Glass].srtheme",
   "name": "Alpine Observatory [Complex]",
   "linked_settings_theme_id": "file:Alpine Observatory [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       23,

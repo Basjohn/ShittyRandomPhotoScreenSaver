@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Winamp Electric Skin [Complex] [Glass].srtheme",
   "name": "Winamp Electric Skin [Complex]",
   "linked_settings_theme_id": "file:Winamp Electric Skin [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       31,

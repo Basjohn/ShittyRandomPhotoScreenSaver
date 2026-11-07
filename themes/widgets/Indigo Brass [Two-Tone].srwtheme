@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Indigo Brass [Two-Tone] [Glass].srtheme",
   "name": "Indigo Brass [Two-Tone]",
   "linked_settings_theme_id": "file:Indigo Brass [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       31,

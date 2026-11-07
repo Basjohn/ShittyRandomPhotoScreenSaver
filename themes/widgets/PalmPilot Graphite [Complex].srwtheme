@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:PalmPilot Graphite [Complex] [Acrylic].srtheme",
   "name": "PalmPilot Graphite [Complex]",
   "linked_settings_theme_id": "file:PalmPilot Graphite [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       211,

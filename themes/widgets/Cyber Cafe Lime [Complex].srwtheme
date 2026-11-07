@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Cyber Cafe Lime [Complex] [Glass].srtheme",
   "name": "Cyber Cafe Lime [Complex]",
   "linked_settings_theme_id": "file:Cyber Cafe Lime [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       28,

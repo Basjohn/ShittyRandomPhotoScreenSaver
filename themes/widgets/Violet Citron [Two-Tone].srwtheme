@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Violet Citron [Two-Tone] [Glass].srtheme",
   "name": "Violet Citron [Two-Tone]",
   "linked_settings_theme_id": "file:Violet Citron [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       45,

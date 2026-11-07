@@ -2151,9 +2151,9 @@ class ThemeFoundryWindow(QMainWindow):
         )
         widget_dir = themes_dir / "widgets"
         widget_dir.mkdir(parents=True, exist_ok=True)
-        # Runtime Widget themes are colour/semantic bundles only. Use the
-        # projected Widget display name so Settings-only [Glass]/[Acrylic] tags
-        # never leak back into Widget-theme filenames.
+        # The counterpart carries the pair's card material as surface_material
+        # (AC-17); its file name is the projected Widget display name, which
+        # drops the Settings [Glass]/[Acrylic] tag.
         initial = widget_dir / f"{widget_theme.name}{WIDGET_THEME_FILE_EXTENSION}"
         path_str, _ = QFileDialog.getSaveFileName(
             self,

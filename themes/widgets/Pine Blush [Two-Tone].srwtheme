@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Pine Blush [Two-Tone] [Acrylic].srtheme",
   "name": "Pine Blush [Two-Tone]",
   "linked_settings_theme_id": "file:Pine Blush [Two-Tone] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       27,

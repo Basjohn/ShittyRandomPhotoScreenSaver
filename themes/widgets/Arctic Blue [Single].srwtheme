@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Arctic Blue [Single] [Glass].srtheme",
   "name": "Arctic Blue [Single]",
   "linked_settings_theme_id": "file:Arctic Blue [Single] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       19,
