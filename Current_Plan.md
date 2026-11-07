@@ -45,7 +45,14 @@ after the operator's yes on a question card; agents never run load (invisible ch
      Glass (`VisualizerPresentation.qml` draws a plain rectangle; Card_Surface_Materials §3.4 excluded it pending
      its own acceptance pass).
    - On every widget the darker legibility panel must run from slightly above the header to slightly below the
-     last element (Media's covers only the track text). Queued for the first free agent slot.
+     last element (Media's covers only the track text). Panels are rounded, concentric with the widget's configured
+     corner radius, and sit 2-3 px inside the border (erring larger, never smaller). Volume and Mute Button children
+     take the material. Agent in flight.
+   - **Studio (queued for the next free slot):** any reactivity edit stalls the preview until the clip loops
+     (operator: if it needs a restart, restart the loop at once). Choosing a clip ("human") can fail on the first
+     try (it stayed on ragdoll; the second try showed "analyzing" and worked).
+   - Side defects from the orbit fix: `tests/test_visualizer_control_hints.py` opens a visible window (`window.show()`
+     in `hint_scene`); switching Sphere <-> Extruded Spectrum sends no plain-orbit cancel for a held drag.
 2. **§7.1 Waveform Ribbon:** the live logical-tick cut (agent in flight; byte-identical) and the operator
    sign-offs in §2.
 3. **Expanded Visualizer M2** (plan 01; agent in flight), with the operator's M1 amendment: a mode switch never
