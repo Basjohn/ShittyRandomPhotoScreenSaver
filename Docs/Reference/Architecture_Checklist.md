@@ -71,25 +71,6 @@ CUSTOM", "Runtime Widget Themes") and the Visualizer change checklist §9A.
   - **Why it matters for SMP:** live Settings (SMP plan §9) and the SMP tab will re-save whole groups; publication
     must mean change.
 
-- [ ] **AC-08 One GL state-query helper; the bench sees the production node path** (A-05 + unrelated defect 2 +
-  A-23). Severity low, reward medium (about 0.2 ms of GIL-held render-thread Python per Visualizer frame back, no
-  pixel change), effort S. **Confirmed** code sites; cost measured offscreen by the audit (PyOpenGL
-  `glGetIntegerv` 14.4 µs vs `gl_query.get_int` 3.6 µs): `rendering/quick/visualizer/clip_host.py:57` `_int_state`
-  with 14 getters plus the scissor box on every clip begin (`:211-231`, `:518-519`, `:603-605`);
-  `rendering/quick/render/background_node.py:145` on every background draw; `rendering/quick/visualizer/render_host.py:30`;
-  `rendering/quick/scene3d/waveform.py:536-537` (`GL_DRAW_FRAMEBUFFER_BINDING`, `GL_VIEWPORT` per frame in the floor
-  pass) and `scene3d/ribbon.py:356,474` (`GL_VIEWPORT`). `rendering/quick/gl_query.py` already exists for exactly this
-  and `rendering/quick/visualizer/gl_state.py:30-43` is a second private copy. `tools/overhead_baseline.py` drives the
-  render host only, so none of these fences are in its call counts.
-  - **Fix:** replace every `_int_state` / `glGetIntegerv` on a per-frame path with `gl_query.get_int/get_ints`,
-    keeping the **exact query order** (`clip_host.py:199-201` requires it; CHK25/CHK26 lineage is
-    operator-protected); fold `visualizer/gl_state.py` into `gl_query`; add a `node_path` bench case that drives
-    `VisualizerClipHost.begin/end` and `BackgroundNode._draw_base` around one mode.
-  - **Must stay true:** no steady-frame driver queries beyond those already made; pixel output identical on the
-    clip-smoke fixtures; production never re-tuned to satisfy a pixel oracle.
-  - **Regression bar:** a test records the sequence of `glGet*` names in `capture()` before and after (identical);
-    the bench's node-path GL and Python call counts appear in the baseline JSON and do not rise.
-
 - [ ] **AC-10 The Visualizer owner's mode-transition deadline joins the single-shot registry** (A-19). Severity low,
   reward low, effort S. **Confirmed:** `widgets/spotify_visualizer/quick_display_visualizer_owner.py:1010-1013` uses
   raw `QTimer.singleShot` (weakref and serial fenced, but `cancel_scheduled_single_shots` cannot cancel it). The
@@ -139,6 +120,11 @@ CUSTOM", "Runtime Widget Themes") and the Visualizer change checklist §9A.
     `multiprocessing.connection.wait([queue._reader, parent.sentinel])` with no timeout; tag the Reddit flush lambda.
   - **Regression bar:** the pool limit is bounded with `os.cpu_count` monkeypatched to 64; after N cancelled idle
     generations `len(delivered_by_generation)` stays bounded; a worker idle for 2 s loops ≤ 2 times (about 20 today).
+  - **Landed 7 Nov (one slice):** only the terminal manager cancels every pending `single_shot`. `ThreadManager.shutdown`
+    called the global `cancel_all_scheduled_single_shots()` for any manager, so a Settings/CONFIG helper manager's
+    shutdown cancelled other owners' delayed callbacks. The runtime engine's manager is now `terminal_owner=True` and
+    is the only one that does; a helper cancels only its own pools
+    (`tests/test_thread_manager_shutdown_scope.py`, with the terminal negative control). The items above remain.
 
 - [ ] **AC-14 Dead code and dead settings sweep** (A-16 + A-17 + A-18 + unrelated defect 4). Severity low, reward low,
   effort S. **Confirmed by a production-import scan (7 Nov):** no production module imports `core/lifecycle.py`,
