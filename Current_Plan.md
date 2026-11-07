@@ -255,8 +255,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `.artifacts/evidence/quiet_session_20261107/<task>/receipts.md`):**
   - **Overhead baseline: done** (`tools/baselines/overhead/2026-11-07_4bb2b775.json`, a4ec1a23). Against ed9cec6b,
     every Visualizer gains +46 Python calls a frame (AC-08), and GL calls and control-relative CPU are flat.
-    **Unexpected:** Burn gains +14 Python calls a frame (406 -> 420), from AC-20's per-frame
-    `require_transition_settings("burn").control(...)` range check in `_burn_parameters`. Side defect, small.
+    Burn's +14 Python calls a frame (AC-20's per-frame spec lookup) are fixed in d715a80b (407 again).
   - **M0 EB baseline: done for Gate 0's numbers** (`2_m0_eb_baseline/`). Four views (canonical, wide, tall, display)
     × idle/game60 on one monitor, plus canonical and display on two monitors. Only the display-sized view moves:
     under game60 its render mode is 8.2 ms against 4.4 at the card (over §0.7's 8 ms) and fps 64 against 73. Tick
