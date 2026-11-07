@@ -92,11 +92,16 @@ measured repeated allocation/task machinery
 
 Further GC work is admitted only when a similarly clear mechanism exists.
 
-`RuntimeGCPolicy` freezes the stable tracked set once per RUN after the existing startup warmup. It does not freeze on
-each display/mode generation. The existing boundary log reports `freeze_boundary_ms` for freeze, active-threshold restoration
-and frozen-object count observation; `snapshot()` retains that one observation. This adds no recurring sampler and never logs
-from a GC callback. Measure a loaded RUN before attributing a stall to this boundary; historical cost estimates are not bounds.
-The original thresholds and frozen set are restored on policy stop. Resource retirement must still break its own references.
+`RuntimeGCPolicy` freezes each display generation's tracked heap at that generation's coordinated reveal (the engine's
+warm-up end, `ScreensaverEngine._freeze_revealed_generation`, RUNNING only) and `teardown_display_runtime` thaws it before
+its destruction barrier on every path; a thaw schedules no collection, so the barrier judges every retiring generation by
+reference counting alone (R-53/R-154). (Until 7 Nov the freeze was a one-shot 45 s timer and the first Settings visit
+thawed the RUN for good, so every later gen2 rescanned the whole long-lived heap.) A forced gen2 over a frozen
+Visualizer replay heap costs 0.01-0.09 ms against 37-44 ms unfrozen. The boundary log reports `freeze_boundary_ms` and the
+frozen count; with `--frame-trace` every collection is a `GC_BEGIN`/`GC_END` pair (`tools/frame_trace_report.py` prints
+pauses per hour per generation, steady vs lifecycle) and the reveal logs a heap census before and after the freeze. No gc
+callback or census exists without the trace. The original thresholds and frozen set are restored on policy stop. Resource
+retirement must still break its own references.
 
 - [ ] Do not tune GC thresholds merely to reduce collection counts.
 - [ ] Do not trade immutable/stable input snapshots for shared mutable state without a correctness proof.

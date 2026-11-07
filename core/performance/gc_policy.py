@@ -12,11 +12,10 @@ This owner deliberately does much less:
 * observe every collection without adding a timer or polling cadence;
 * restore the interpreter's original policy when RUN lifetime ends.
 
-No manual ``gc.collect()`` occurs during active rendering. A single explicit
-stop-boundary collection is permitted only if this RUN has frozen a live Quick
-generation and that generation's Qt/GL/thread roots have all retired. This
-resolves the freeze-versus-Settings-destruction conflict without shifting an
-expensive gen2 scan into a visualizer frame.
+No manual ``gc.collect()`` ever occurs. Each display generation is frozen at its
+coordinated reveal and thawed before it retires, so the live generation's
+long-lived heap never enters a gen2 scan and a retiring one is judged by the
+strict destruction barrier exactly as an unfrozen one would be.
 """
 from __future__ import annotations
 
@@ -112,7 +111,6 @@ class RuntimeGCPolicy:
         self._warmup_thresholds = derive_warmup_thresholds(self._active_thresholds)
         self._active = False
         self._frozen = False
-        self._retirement_collection_pending = False
         self._freeze_duration_ms: float | None = None
         self._frozen_object_count = 0
         self._starts_ns = [0, 0, 0]
@@ -134,7 +132,7 @@ class RuntimeGCPolicy:
     def freeze_stable_generation(self) -> bool:
         """Move the current long-lived tracked set to the permanent generation.
 
-        Called once, from a normal (non-collection) context after startup warms.
+        Called at every display generation's coordinated reveal (its warm-up end), from a normal context.
         In-situ evidence (2026-09-03): the objects that survive to gen2 are a
         stable, long-lived set that gen2 rescans for ~28-142 ms while freeing
         almost nothing (``collected=0``), and each scan stalls the pure-Python
@@ -153,13 +151,13 @@ class RuntimeGCPolicy:
         - ordinary refcount-zero destruction still frees frozen objects
           immediately; only *cyclic* collection of the frozen set is deferred to
           ``gc.unfreeze()`` at the first runtime retirement or RUN stop;
-        - consequence: the single runtime generation live *at freeze time* has a
-          cyclic Python graph, so if it later retires it stays pinned until
-          unfreeze. This is a bounded one-generation offset, NOT unbounded
-          accumulation (later generations are not frozen and retire normally),
-          and its OS resources (threads/GL/handles) are released by explicit
-          teardown regardless. Do not move runtime-owned cyclic lifetime into the
-          pre-freeze set expecting it to be reclaimed before stop.
+        - consequence: the generation live *at freeze time* has a cyclic Python
+          graph, so every teardown thaws first (``thaw_for_runtime_retirement``,
+          from ``teardown_display_runtime``) and its barrier sweeps the retired
+          cycles once; the next generation is frozen at its own reveal. At most
+          one generation's garbage is ever pinned, and only until its teardown.
+          (Until 7 Nov the freeze was a one-shot 45 s timer and the first Settings
+          visit thawed the RUN for good: every later gen2 scanned the whole heap.)
         Idempotent; a no-op once frozen or when the policy is inactive.
         """
 
@@ -208,45 +206,22 @@ class RuntimeGCPolicy:
         return True
 
     def thaw_for_runtime_retirement(self) -> bool:
-        """Release the RUN snapshot before a frozen display generation retires.
+        """Return the revealed generation's frozen heap to the collector before it retires.
 
-        Settings/CUSTOM retirement has a strict Python-owner destruction barrier.
-        The one-shot startup freeze can capture the *current* Qt Quick generation,
-        including native-connected Python callback cycles, which cannot be
-        collected while permanently frozen. Only a RUN boundary may thaw it;
-        the normal visualizer cadence never collects or polls. The retired
-        generation is collected once, after Qt roots/resources have drained.
-        There is no second freeze in this RUN, since that would immediately pin
-        the next editable generation behind the same barrier.
+        Called on every display teardown (``teardown_display_runtime``; ``stop`` too). Thawing only makes the
+        retiring generation's objects ordinary again; it schedules no sweep. The destruction barrier stays the
+        project's cycle detector (R-53/R-154): a retiring owner must be released by reference counting alone, and a
+        cyclic one fails closed exactly as it would had it never been frozen. (Until 7 Nov the first retirement after
+        the one-shot freeze, and only that one, got a stop-boundary gen2 sweep; the 25 Oct assessment recorded that
+        inconsistency, and the 7 Nov operator session's retirement needed no sweep.) The next generation is frozen at
+        its own coordinated reveal, never while it is still being built or edited.
         """
         with self._lock:
             if not self._active or not self._frozen:
                 return False
             gc.unfreeze()
             self._frozen = False
-            self._retirement_collection_pending = True
-        logger.info("[GC_POLICY] Thawed frozen Quick generation before runtime retirement")
-        return True
-
-    @property
-    def retirement_collection_pending(self) -> bool:
-        with self._lock:
-            return self._retirement_collection_pending
-
-    def collect_thawed_retirement_cycles_once(self) -> bool:
-        """One stop-boundary gen2 sweep, only after all Qt/native roots drained.
-
-        Called by the existing destruction barrier when it sees exclusively
-        outstanding Python owners and zero live Qt/resources/thread work.
-        The barrier still requires every weak owner to disappear, and still
-        fails loudly if an actual reference leak remains. No frame-time GC.
-        """
-        with self._lock:
-            if not self._retirement_collection_pending:
-                return False
-            self._retirement_collection_pending = False
-        collected = gc.collect(2)
-        logger.info("[GC_POLICY] Stop-boundary thaw sweep collected=%d", collected)
+        logger.info("[GC_POLICY] Thawed the revealed generation before its retirement")
         return True
 
     def stop(self) -> bool:
@@ -276,7 +251,6 @@ class RuntimeGCPolicy:
                         exc_info=True,
                     )
             self._active = False
-            self._retirement_collection_pending = False
         snapshot = self.snapshot()
         logger.info(
             "[GC_POLICY] RUN policy restored original=%s collections=%s "
@@ -366,8 +340,22 @@ class RuntimeGCPolicy:
             self._slow_collections[generation] += 1
 
 
+def heap_census(top: int = 25) -> tuple[int, int, list[tuple[str, int]]]:
+    """(tracked, frozen, the ``top`` most numerous tracked types): what a gen2 scan would walk.
+
+    Diagnostic only (``--frame-trace``): one full walk of the tracked heap, at a lifecycle edge, never per frame.
+    """
+    from collections import Counter
+
+    counts = Counter(
+        f"{getattr(type(obj), '__module__', '?')}.{type(obj).__qualname__}" for obj in gc.get_objects()
+    )
+    return sum(counts.values()), gc.get_freeze_count(), counts.most_common(top)
+
+
 __all__ = [
     "GCPolicySnapshot",
+    "heap_census",
     "RuntimeGCPolicy",
     "derive_runtime_thresholds",
 ]

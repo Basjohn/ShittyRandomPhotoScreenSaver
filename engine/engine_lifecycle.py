@@ -100,6 +100,11 @@ def teardown_display_runtime(
     from core.diagnostics import lifecycle_window
 
     lifecycle_window.open_window(f"teardown:{reason}")   # closed by the next reveal, if any
+    # The generation was frozen at its reveal: thaw it before its destruction barrier, on every teardown path
+    # (stop() thaws too; this covers the topology/CUSTOM replacements that do not enter it). Idempotent.
+    thaw = getattr(getattr(engine, "_gc_policy", None), "thaw_for_runtime_retirement", None)
+    if callable(thaw):
+        thaw()
 
     retiring_generation = getattr(manager, "_runtime_generation", None)
     barrier = None
@@ -503,12 +508,9 @@ def stop(
     # Determine target state based on exit_app
     target_state = EngineState.SHUTTING_DOWN if exit_app else EngineState.STOPPING
 
-    # RUN's one-shot GC freeze may have captured this exact Quick generation.
-    # It must be thawed before the strict Settings/exit destruction barrier:
-    # frozen native/Python callback cycles cannot be collected at all. The
-    # existing barrier will perform at most one stop-only cycle sweep once
-    # every Qt object, GL resource and worker has already gone. Never weaken
-    # the barrier, and never collect during active presentation.
+    # The revealed generation is frozen (ScreensaverEngine._freeze_revealed_generation): thaw it before the strict
+    # Settings/exit destruction barrier judges its owners (teardown_display_runtime thaws again, idempotently, for
+    # the paths that do not come through here). Never weaken the barrier, and never collect.
     gc_policy = getattr(engine, "_gc_policy", None)
     thaw = getattr(gc_policy, "thaw_for_runtime_retirement", None)
     if callable(thaw):

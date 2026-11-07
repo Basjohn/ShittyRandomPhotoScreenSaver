@@ -170,6 +170,18 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
      leaves the scanned generations), plus tuned thresholds if still needed. Name the work that disappears.
    - **Prove:** gen2 pauses are rare and short live, there is no memory growth over a long run (overhead baseline),
      and lifecycle and teardown are unchanged.
+   - **Built 7 Nov, awaiting the lead's review and live check.** Measured first: the "once a minute" stalls were the
+     replay driver's (it retains every published frame and runs the interpreter's (2000, 10, 10) thresholds: 6 gen2
+     per hour at 82 ms). A production-shaped replay (frames dropped, the RUN policy's (2000, 20, 50)) ran 20 logical
+     minutes of Bubble and Waveform with no gen2, frozen or not; a forced gen2 there costs 37-44 ms unfrozen and
+     0.01-0.09 ms frozen. The operator's 7 Nov session log: frozen 186,147 objects at 45 s, thawed for good at the first
+     Settings visit (03:28), then 13 min with no gen2 but gen1 up to 31.8 ms. The defect fixed: the one-shot timer
+     freeze, never renewed after a retirement. Now every generation is frozen at its coordinated reveal and thawed at
+     every teardown, with no sweep (the barrier stays strict; the removed first-retirement-only sweep was the
+     inconsistency the 25 Oct assessment recorded). `--frame-trace` records every collection and logs a heap census at
+     the reveal. Gates: `tests/test_gc_freeze_per_generation.py` (3 of 4 fail on main), `tests/test_frame_trace_gc.py`.
+     Open: the live check (gen2/gen1 pauses per hour and the heap census with `--frame-trace`, a long run with
+     Settings round trips); evidence `.artifacts/evidence/gc_gen2/`.
 2. **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode** (operator 6 Nov
    ~22:00; `logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset
    home" x2). The pair also reached the visualizer region's double-click admission
