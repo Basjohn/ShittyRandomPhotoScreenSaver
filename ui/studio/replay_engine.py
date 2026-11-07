@@ -380,7 +380,11 @@ def _shared_types() -> tuple:
             types.BuiltinFunctionType, types.ModuleType, type, enum.Enum, np.generic, weakref.ref)
 
 
-_ATOMS = (int, float, str, bool, bytes, type(None), complex, range, slice)
+import pathlib as _pathlib
+
+# Immutable values a snapshot shares instead of copying. Paths included (7 Nov: field-only controller state held a
+# WindowsPath and every engine-answer Studio failed to start: "Step state holds an uncopyable WindowsPath").
+_ATOMS = (int, float, str, bool, bytes, type(None), complex, range, slice, _pathlib.PurePath)
 
 
 def _clone(value: Any, memo: dict, shared: tuple) -> Any:
@@ -461,8 +465,16 @@ class StepState:
 
     def _copy(self, states):
         memo = {id(obj): obj for obj in self._owners + self._keep}
-        return {owner: {name: _clone(value, memo, self._shared) for name, value in state.items()}
-                for owner, state in states.items()}
+        out = {}
+        for owner, state in states.items():
+            copied = out[owner] = {}
+            for name, value in state.items():
+                try:
+                    copied[name] = _clone(value, memo, self._shared)
+                except TypeError as exc:
+                    # Name the attribute that holds it, so a field-only failure identifies its owner.
+                    raise TypeError(f"{exc} (in {type(owner).__qualname__}.{name})") from exc
+        return out
 
     def restore(self) -> None:
         """Put the captured state back (a fresh copy each time, so the capture stays reusable)."""
