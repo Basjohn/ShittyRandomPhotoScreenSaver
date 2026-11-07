@@ -167,7 +167,66 @@ def require_canonical_default(
     return value
 
 
+# Widgets -> General "Card Border Width": the one admitted range and resolver.
+# Every card consumer (ordinary families, the Visualizer card, the Studio's live
+# card chrome) draws ``resolve_card_border_width_px``; the General page's integer
+# spin shows and writes ``resolve_card_border_width_setting_px``.
+CARD_BORDER_WIDTH_KEY = "widgets.global.card_border_width_px"
+CARD_BORDER_WIDTH_MIN_PX = 0
+CARD_BORDER_WIDTH_MAX_PX = 12
+
+
+def admit_card_border_width_px(value: object) -> float:
+    """Admit one stored card-border width as drawn pixels.
+
+    A finite number (or numeric text) is clamped to the admitted range and a
+    fractional width is drawn as stored. Anything else (missing, ``None``,
+    non-numeric, NaN, infinite) resolves to the canonical default.
+    """
+
+    canonical = float(require_canonical_default(CARD_BORDER_WIDTH_KEY))
+    try:
+        width = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError, OverflowError):
+        width = canonical
+    if width != width or width in (float("inf"), float("-inf")):
+        width = canonical
+    return max(float(CARD_BORDER_WIDTH_MIN_PX), min(float(CARD_BORDER_WIDTH_MAX_PX), width))
+
+
+def resolve_card_border_width_px(widgets_config: Mapping[str, Any] | object) -> float:
+    """Resolve the Widgets -> General card-border width every card draws."""
+
+    values = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
+    if not isinstance(values, Mapping):
+        values = {}
+    return admit_card_border_width_px(values.get("card_border_width_px"))
+
+
+def admit_card_border_width_setting_px(value: object) -> int:
+    """Admit one width as the whole pixels the General page shows and saves.
+
+    Settings admits whole pixels: the drawn width truncated, so the page never
+    disagrees with a card about anything but a hand-edited fraction.
+    """
+
+    return int(admit_card_border_width_px(value))
+
+
+def resolve_card_border_width_setting_px(widgets_config: Mapping[str, Any] | object) -> int:
+    """The General page's whole-pixel card-border width for ``widgets_config``."""
+
+    return int(resolve_card_border_width_px(widgets_config))
+
+
 __all__ = [
+    "CARD_BORDER_WIDTH_KEY",
+    "CARD_BORDER_WIDTH_MAX_PX",
+    "CARD_BORDER_WIDTH_MIN_PX",
+    "admit_card_border_width_px",
+    "admit_card_border_width_setting_px",
+    "resolve_card_border_width_px",
+    "resolve_card_border_width_setting_px",
     "MC_PROFILE",
     "MISSING_DEFAULT",
     "NORMAL_PROFILE",

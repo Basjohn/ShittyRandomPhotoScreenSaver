@@ -41,7 +41,7 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
     "which unit" decision and calls the binding. Express Media docking as one placement policy in the canonical
     layout descriptor vocabulary (`docked_to: media | none`), resolved by the binding and read by Arrange through the
     same function, so both layout authorities become one. Keep the one-owner rejection at the binding boundary. The
-    card style comes from the family binder's resolver (AC-09).
+    card border width comes from `resolve_card_border_width_px` (AC-09, landed).
   - **Must stay true:** exactly one Visualizer owner per process across construct → transfer → retire
     (`Spec.md` → Visualizer display routing); CUSTOM authority (committed geometry wins outside Edit, override wins
     while editing); the admissions cleared on route release (`display_manager.py:2215-2217, 3838-3840`); the
@@ -52,7 +52,7 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
     moving Media leaves a Visualizer with `docked_to: none` in place and moves one with `docked_to: media`; the
     parity harness maps are byte-identical before and after; `DisplayManager` no longer imports
     `QuickDisplayVisualizerOwner`.
-  - **Depends on:** AC-09 (border width resolver) is a convenient first step. **Unblocks:** Expanded Visualizer M2,
+  - **Depends on:** nothing open (AC-09 landed 7 Nov). **Unblocks:** Expanded Visualizer M2,
     SMP docked Visualizer and Pop Out, the Expanded Media milestone.
 
 - [ ] **AC-03 An application-service tier above display generations** (A-01). Severity high (for SMP), reward high,
@@ -176,17 +176,6 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
   - **Regression bar:** a test records the sequence of `glGet*` names in `capture()` before and after (identical);
     the bench's node-path GL and Python call counts appear in the baseline JSON and do not rise.
 
-- [ ] **AC-09 Card border width resolved once** (A-09). Severity low, reward low, effort S. **Confirmed:** the clamp
-  lives in `rendering/quick/widgets/family_binder.py:84-96` and is re-implemented in `engine/display_manager.py:3363-3370`,
-  `rendering/quick/widgets/games_you_follow.py:202-203`, `rendering/quick/widgets/system_audio_osd.py:98-111`, while
-  `rendering/widget_descriptors.py:3048` declares the key `"int"`.
-  - **Fix:** export `resolve_card_border_width_px(widgets_config) -> float` from the defaults-helper module the
-    family binder already imports, call it from all four consumers, and correct the descriptor type to the admitted
-    one (float if fractional widths are admitted, else clamp to int everywhere).
-  - **Regression bar:** a parametrised test feeds NaN, inf, -1, 12.5, "x" and a missing key to every consumer path
-    and gets the same value from each.
-  - **Depends on:** nothing; a convenient first step of AC-02.
-
 - [ ] **AC-10 The Visualizer owner's mode-transition deadline joins the single-shot registry** (A-19). Severity low,
   reward low, effort S. **Confirmed:** `widgets/spotify_visualizer/quick_display_visualizer_owner.py:1010-1013` uses
   raw `QTimer.singleShot` (weakref and serial fenced, but `cancel_scheduled_single_shots` cannot cancel it). The
@@ -295,7 +284,6 @@ into them.
     alternative is linking the 15 material themes and labelling "[Glass]" as window-only.
 
 Addenda from the same audit:
-- **AC-09:** the Studio's `card_style` and the General page's integer spin also restate the border clamp.
 - **AC-07:** AC-19 (landed) reuses the dialog's reset/import reload edge, never a store subscription.
 
 ---

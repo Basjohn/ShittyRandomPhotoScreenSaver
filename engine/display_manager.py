@@ -3,7 +3,6 @@ Display manager for multi-monitor support.
 
 Owns one authoritative Quick display unit for each selected screen.
 """
-import math
 import random
 import weakref
 from copy import deepcopy
@@ -3345,30 +3344,14 @@ class DisplayManager(QObject):
             min(255, int(round(channels[3] * shadow.frame_opacity))),
         )
 
+        from core.settings.default_contract import resolve_card_border_width_px
         from ui.widget_theme_active import get_active_widget_theme
 
         widget_theme = get_active_widget_theme()
-        canonical_global = get_default_setting("widgets.global")
-        persisted_global = widgets.get("global")
-        global_widgets = dict(canonical_global)
-        if isinstance(persisted_global, Mapping):
-            global_widgets.update(
-                key_value
-                for key_value in persisted_global.items()
-                if key_value[1] is not None
-            )
-        canonical_border_width = float(canonical_global["card_border_width_px"])
-        try:
-            visualizer_border_width = float(global_widgets["card_border_width_px"])
-        except (TypeError, ValueError):
-            visualizer_border_width = canonical_border_width
-        if not math.isfinite(visualizer_border_width):
-            visualizer_border_width = canonical_border_width
-        visualizer_border_width = max(0.0, min(12.0, visualizer_border_width))
         card_shadow_kwargs = {
             "background_color": widget_theme.color("card.background").as_tuple(),
             "border_color": widget_theme.color("card.border").as_tuple(),
-            "border_width": visualizer_border_width,
+            "border_width": resolve_card_border_width_px(widgets),
             "corner_radius": VISUALIZER_CARD_CORNER_RADIUS,
             "content_inset": VISUALIZER_CARD_CONTENT_INSET,
             "shadow_enabled": shadow.enabled,
