@@ -10,6 +10,16 @@ Layout (Docs/Guardrails.md "Evidence and scratch hygiene"):
 ``<area>`` comes from the declared vocabulary below (``AREAS``; ``visualizers/<mode>`` takes a registered or
 retired mode id, ``transitions/<name>`` any slug). An unknown area raises. ``<topic>`` and ``<label>`` are slugs.
 
+Visualizer folders are named by mode id. The product name is accepted too and resolves to the id (the slug of
+the registry's display name, plus the Studio title ``neon_lake``), so ``visualizers/neon_lake_basin`` and
+``visualizers/neon_lake`` both write to ``visualizers/shockwave_grid``. Mode ids with their product names
+(``python tools/artifact_paths.py areas`` prints the current list):
+
+    spectrum (Spectrum)                 oscilloscope (Oscilloscope)       bubble (Bubble)
+    devcurve (Spline Curve)             sphere (Voxel Sphere)             extruded_spectrum (Extruded Spectrum)
+    shockwave_grid (Neon Lake Basin)    extruded_bubble (Extruded Bubble) waveform_ribbon (Waveform Ribbon)
+    shared (cross-mode infrastructure); retired: blob, sine_wave
+
 Prevention: a tool takes its default destination from here, and passes any explicit output path given on its
 command line through ``checked_output``, which refuses everything outside this layout: elsewhere in the
 repository, ``%TEMP%``, a Claude session scratchpad, another drive (14.7 GB of agent output piled up in
@@ -113,11 +123,40 @@ class ArtifactPathError(ValueError):
     """A path outside the declared evidence layout, or an undeclared area."""
 
 
+# Product names the registry cannot derive; everything else comes from each mode's display name.
+_HAND_ALIASES = {"neon_lake": "shockwave_grid"}   # the Neon Lake Studio's title (ui/studio/registry.py)
+
+
+def _ensure_repo_importable() -> None:
+    """The mode registry lives in ``core``; a script run from ``tools/`` has only ``tools/`` on its path."""
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+
+
 def _visualizer_modes() -> frozenset[str]:
+    _ensure_repo_importable()
     from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
     from core.settings.visualizer_retired_modes import RETIRED_VISUALIZER_MODE_IDS
 
     return frozenset(VISUALIZER_MODE_IDS) | frozenset(RETIRED_VISUALIZER_MODE_IDS) | _VISUALIZER_SHARED
+
+
+def visualizer_product_names() -> dict[str, str]:
+    """Registered mode id -> product (display) name."""
+    _ensure_repo_importable()
+    from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_visualizer_mode_descriptor
+
+    return {mode: get_visualizer_mode_descriptor(mode).display_name for mode in VISUALIZER_MODE_IDS}
+
+
+def _visualizer_aliases() -> dict[str, str]:
+    """Accepted name -> mode id: every id, the slug of every display name, and ``_HAND_ALIASES``."""
+    aliases = {mode: mode for mode in _visualizer_modes()}
+    for mode, name in visualizer_product_names().items():
+        aliases.setdefault(slug(name), mode)
+    for name, mode in _HAND_ALIASES.items():
+        aliases.setdefault(name, mode)
+    return aliases
 
 
 def slug(value: str) -> str:
@@ -135,7 +174,7 @@ def _require_slug(kind: str, value: str) -> str:
 
 
 def area_parts(area: str) -> tuple[str, ...]:
-    """Validate ``area`` against the vocabulary; returns its path parts."""
+    """Validate ``area`` against the vocabulary; returns its path parts (a visualizer product name as its id)."""
     parts = tuple(str(area).split("/"))
     head = parts[0]
     if head not in AREAS:
@@ -144,10 +183,14 @@ def area_parts(area: str) -> tuple[str, ...]:
         if len(parts) != 2:
             raise ArtifactPathError(f"area {head!r} takes one name: '{head}/<name>', got {area!r}")
         _require_slug("area name", parts[1])
-        if head == "visualizers" and parts[1] not in _visualizer_modes():
-            raise ArtifactPathError(
-                f"unknown visualizer mode {parts[1]!r}; declared: {sorted(_visualizer_modes())}"
-            )
+        if head == "visualizers":
+            mode = _visualizer_aliases().get(parts[1])
+            if mode is None:
+                names = visualizer_product_names()
+                listing = ", ".join(f"{mode} ({names[mode]})" if mode in names else mode
+                                    for mode in sorted(_visualizer_modes()))
+                raise ArtifactPathError(f"unknown visualizer mode {parts[1]!r}; declared: {listing}")
+            parts = (head, mode)
     elif len(parts) != 1:
         raise ArtifactPathError(f"area {head!r} takes no sub-name, got {area!r}")
     return parts
@@ -242,8 +285,12 @@ def checked_output(path: str | Path, *, kind: str = "evidence") -> Path:
         relative = _relative_to_root(resolved, root.resolve())
         if relative is None:
             continue
-        if root is SCRATCH_ROOT or _layout_shaped(relative):
+        if root is SCRATCH_ROOT:
             return resolved
+        if _layout_shaped(relative):
+            depth = 2 if relative[0] in _NAMED_AREAS else 1
+            # A visualizer product name in the path lands in its mode id's folder.
+            return root.resolve().joinpath(*area_parts("/".join(relative[:depth])), *relative[depth:])
         break
     raise ArtifactPathError(
         f"refusing to write {resolved}: tool output goes only to the evidence layout under {ARTIFACTS_ROOT} "
@@ -430,7 +477,20 @@ def _cli(argv: list[str] | None = None) -> int:
     prune = sub.add_parser("prune-scratch", help="list scratch runs; with --apply delete stale ones")
     prune.add_argument("--apply", action="store_true", help="delete (default: dry run)")
     prune.add_argument("--max-age-h", type=float, default=DEFAULT_PRUNE_AGE_H)
+    sub.add_parser("areas", help="list the declared areas (visualizer mode ids with their product names)")
     args = parser.parse_args(argv)
+    if args.command == "areas":
+        names = visualizer_product_names()
+        aliases = _visualizer_aliases()
+        for area in sorted(AREAS):
+            if area != "visualizers":
+                print(area + ("/<name>" if area in _NAMED_AREAS else ""))
+                continue
+            for mode in sorted(_visualizer_modes()):
+                accepted = sorted(name for name, target in aliases.items() if target == mode and name != mode)
+                print(f"visualizers/{mode}" + (f" ({names[mode]})" if mode in names else "")
+                      + (f"  also: {', '.join(accepted)}" if accepted else ""))
+        return 0
     report = prune_scratch(apply=args.apply, max_age_h=args.max_age_h)
     total = 0
     for run in report["scratch"]:

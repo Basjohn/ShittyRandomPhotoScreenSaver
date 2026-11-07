@@ -26,7 +26,12 @@ Every tool writes evidence and scratch through one owner, `tools/artifact_paths.
 
 - `<area>` is the declared vocabulary in the owner (`visualizers/<mode id>`, `transitions/<name>`, `settings`,
   `widgets`, `studio`, `display`, `performance`, `memory`, `lifecycle`, `media`, `input`, `network`, `build`,
-  `onboarding`, `themes`, `tests`, `architecture`); an unknown area raises. From a linked worktree the layout
+  `onboarding`, `themes`, `tests`, `architecture`); an unknown area raises. Visualizer folders use mode ids;
+  the product name (or the Studio title) is accepted and resolves to the id: `spectrum` (Spectrum),
+  `oscilloscope` (Oscilloscope), `bubble` (Bubble), `devcurve` (Spline Curve), `sphere` (Voxel Sphere),
+  `extruded_spectrum` (Extruded Spectrum), `shockwave_grid` (Neon Lake Basin; also `neon_lake`),
+  `extruded_bubble` (Extruded Bubble), `waveform_ribbon` (Waveform Ribbon), plus `shared` and the retired
+  `blob`/`sine_wave`. `python tools/artifact_paths.py areas` prints the current list. From a linked worktree the layout
   resolves to the main checkout's `.artifacts`, so an agent's evidence outlives its worktree.
 - A tool's output argument defaults to the layout. An explicit one must lie inside it: anything else
   (elsewhere in the repository, `logs/`, `%TEMP%`, a Claude session scratchpad, another drive) is refused
