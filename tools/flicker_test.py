@@ -589,9 +589,7 @@ def _build_patched_widgets_tab(mode: str, settings_manager: Any, widget_defaults
             function_patches.append((media_mod, "build_media_ui", lambda tab, layout: QWidget()))
             function_patches.append((reddit_mod, "build_reddit_ui", lambda tab, layout: QWidget()))
             patches["_build_defaults_section"] = lambda self: QWidget()
-            function_patches.append(
-                (scaffold_mod, "build_per_mode_technical_group", lambda tab, layout, mode_key: QWidget())
-            )
+            # No Settings technical group exists since A-12: mode bodies hold their values in a cache.
             if mode == "setup_ui_only_visualizers_only_no_tech_unstyled":
                 from PySide6.QtWidgets import QComboBox, QFontComboBox
                 from ui.widgets import styled_combo_box as scb_mod
@@ -630,9 +628,6 @@ def _build_patched_widgets_tab(mode: str, settings_manager: Any, widget_defaults
             function_patches.append((media_mod, "build_media_ui", lambda tab, layout: QWidget()))
             function_patches.append((reddit_mod, "build_reddit_ui", lambda tab, layout: QWidget()))
             patches["_build_defaults_section"] = lambda self: QWidget()
-            function_patches.append(
-                (scaffold_mod, "build_per_mode_technical_group", lambda tab, layout, mode_key: QWidget())
-            )
 
             class _DummySignal:
                 def connect(self, *_args: Any, **_kwargs: Any) -> None:
@@ -690,18 +685,13 @@ def _build_patched_widgets_tab(mode: str, settings_manager: Any, widget_defaults
                 def preset_index(self) -> int:
                     return 0
 
-            def _stub_build_mode_scaffold(
+            def _stub_build_mode_body(
                 tab_obj: Any,
                 parent_layout: Any,
                 *,
                 mode_key: str,
                 settings_container_attr: str,
                 preset_slider_attr: str,
-                normal_attr: str,
-                advanced_host_attr: str,
-                advanced_toggle_attr: str,
-                advanced_helper_attr: str,
-                advanced_attr: str,
             ) -> Any:
                 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
@@ -713,46 +703,16 @@ def _build_patched_widgets_tab(mode: str, settings_manager: Any, widget_defaults
 
                 preset_slider = _DummyPreset()
                 setattr(tab_obj, preset_slider_attr, preset_slider)
-
-                normal_widget = QWidget()
-                normal_layout = QVBoxLayout(normal_widget)
-                normal_layout.setContentsMargins(0, 0, 0, 0)
-                normal_layout.setSpacing(12)
-                setattr(tab_obj, normal_attr, normal_widget)
-                container_layout.addWidget(normal_widget)
-
-                advanced_host = QWidget()
-                advanced_host_layout = QVBoxLayout(advanced_host)
-                advanced_host_layout.setContentsMargins(0, 0, 0, 0)
-                advanced_host_layout.setSpacing(12)
-                setattr(tab_obj, advanced_host_attr, advanced_host)
-                container_layout.addWidget(advanced_host)
-
-                advanced_widget = QWidget()
-                advanced_layout = QVBoxLayout(advanced_widget)
-                advanced_layout.setContentsMargins(0, 0, 0, 0)
-                advanced_layout.setSpacing(12)
-                setattr(tab_obj, advanced_attr, advanced_widget)
-                advanced_host_layout.addWidget(advanced_widget)
-
-                setattr(tab_obj, advanced_toggle_attr, QWidget())
-                setattr(tab_obj, advanced_helper_attr, QWidget())
-
-                technical_host = QWidget()
                 parent_layout.addWidget(container)
-
-                return scaffold_mod.ModeScaffold(
+                return scaffold_mod.ModeBody(
                     container=container,
                     layout=container_layout,
                     preset_slider=preset_slider,
-                    normal_widget=normal_widget,
-                    normal_layout=normal_layout,
-                    advanced_host=advanced_host,
-                    advanced_layout=advanced_layout,
-                    technical_host=technical_host,
                 )
 
-            function_patches.append((scaffold_mod, "build_mode_scaffold", _stub_build_mode_scaffold))
+            # Patched where the mode builders look it up.
+            from ui.tabs.media import spec_mode_builder as spec_builder_mod
+            function_patches.append((spec_builder_mod, "build_mode_body", _stub_build_mode_body))
         else:
             # "only one section active" modes:
             # start from stubbing everything, then un-stub the chosen section.

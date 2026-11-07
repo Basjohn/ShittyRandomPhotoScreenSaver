@@ -53,7 +53,6 @@ from rendering.widget_descriptors import (
     collect_widget_section_save_result,
     load_widget_section,
 )
-from ui.tabs.media.technical_controls import load_per_mode_technical_controls
 
 logger = get_logger(__name__)
 
@@ -838,7 +837,6 @@ class VisualizerSettingsContextMixin:
                         full_widgets,
                         descriptors=self._widget_section_descriptors,
                     )
-                    load_per_mode_technical_controls(self, spotify_vis_config)
                 finally:
                     self._loading = False
             if move_to_custom_pending:
@@ -887,7 +885,6 @@ class VisualizerSettingsContextMixin:
                     full_widgets,
                     descriptors=self._widget_section_descriptors,
                 )
-                load_per_mode_technical_controls(self, spotify_vis_config)
             finally:
                 self._loading = False
 

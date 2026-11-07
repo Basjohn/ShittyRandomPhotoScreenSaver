@@ -137,7 +137,15 @@ and Quick shader (`widgets/spotify_visualizer/spectrum_decor.py`, `widgets/spoti
 tip colour at the peak), the **Finish** bucket (Gloss, Fill Gradient toward a tip colour at the top of the field, Peak
 Caps resting on the existing decaying peaks) and the **Pattern** bucket (a second-colour pattern over the bar fill:
 Horizontal Bands, Scanlines, Dots, Diagonal Stripes, Grid, Chevrons; Pattern Anchor Per Bar or Shared; Colour, Scale,
-Strength). Rules:
+Strength). The Pattern choice also offers **flag sheets** (USA, Japan, UK, Jamaica, Brazil, added 7 Nov 2026).
+A flag sheet works differently from the geometric patterns:
+- It lays one flag over the whole bar field in the flag's own colours, so the bars reveal it as they rise.
+- The hoist stays put while gentle folds travel toward the fly. Spectrum's animation clock drives the folds, uploaded
+  only while a flag is shown.
+- Only Strength applies: Anchor, Colour and Scale hide.
+- Edges are box-filtered, the stars are five-point, and Brazil's band follows the official arc.
+
+Rules:
 
 - Every option at its default draws byte-identically to the decoration-free renderer; the shader takes no decoration
   branch at rest and the renderer uploads the decoration uniforms only when they change.
@@ -146,6 +154,13 @@ Strength). Rules:
   frames every pattern by the whole field: one sheet through bars and gaps), so moving bars reveal
   more or less of a fixed pattern and never shimmer.
 - Peak caps reuse Spectrum's existing peak decay (Ghost Decay Speed); they add no logical state.
+- Fill Gradient and Ghost Gradient blend by hue along the shorter arc, with saturation and value ramping. Green to red
+  passes through yellow, not olive; a grey, white or black end takes the other end's hue. Rim glow reaches at most
+  30% of a bar's width in from each side, so on 37 narrow bars it stays a rim instead of recolouring the bar
+  (`tests/test_spectrum_decor.py`, each with a negative control against the old rule).
+- Translucent ghost trails over the dark card read as dark smudges under bright caps (alpha fading over black is
+  darkening). The curated presets 2-15 therefore carry their peak memory in caps, with ghosts off; Preset 1's hollow
+  rainbow ghosts stay.
 - Toggling fades (`SpectrumDecorFade`, `FADE_SECONDS`): one envelope per option on the presentation owner, advanced
   only on the capture timestamp (no timer, thread or second clock); a pattern switched to another dips through zero.
   A fresh owner starts settled, so exact Studio replays and new activations show the settings directly.

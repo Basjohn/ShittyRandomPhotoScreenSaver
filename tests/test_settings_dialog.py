@@ -636,11 +636,13 @@ def test_settings_dialog_active_tab_is_never_requeued_for_warmup(
         dialog.deleteLater()
 
 
-def test_settings_dialog_builds_widgets_tab_in_lazy_mode():
-    """Settings dialog should opt WidgetsTab into lazy section construction."""
-    source = inspect.getsource(SettingsDialog._setup_ui)
-    assert "lazy_sections=True" in source
-    assert 'initial_view_state=self._initial_view_state_for_tab("widgets")' in source
+def test_settings_dialog_builds_widgets_tab_in_lazy_mode(qapp, settings_manager, animation_manager):
+    """Settings dialog opts WidgetsTab into lazy section construction, seeded with its remembered view."""
+    settings_manager.set("ui.tab_state", {"widgets": {"view_state": {"subtab_id": "clock"}}})
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    tab = dialog.widgets_tab
+    assert tab._lazy_sections is True
+    assert tab._initial_view_state == dialog._initial_view_state_for_tab("widgets") == {"subtab_id": "clock"}
 
 
 def test_settings_dialog_exposes_widgets_tab_via_lazy_accessor(qapp, settings_manager, animation_manager):

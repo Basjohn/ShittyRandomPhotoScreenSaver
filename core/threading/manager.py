@@ -594,6 +594,23 @@ class ThreadManager:
             return manager
 
     @classmethod
+    def require_app_shared(cls) -> "ThreadManager":
+        """Return the registered app-shared ThreadManager or fail loudly.
+
+        Helper sites (Settings tabs, Guided Setup, Gmail) never build private
+        managers: the runtime engine registers one for its generation, and a
+        Settings-only (CONFIG) session's dialog registers its own helper manager
+        for its lifetime (``SettingsDialog._register_config_helper_threads``).
+        """
+        manager = cls.get_app_shared()
+        if manager is None:
+            raise RuntimeError(
+                "No app-shared ThreadManager is registered; the runtime engine or "
+                "the Settings dialog owns it"
+            )
+        return manager
+
+    @classmethod
     def get_or_create_app_shared(
         cls,
         *,

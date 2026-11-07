@@ -24,7 +24,6 @@ class SetupPage(Page):
         from ui.onboarding.state import selected_setup_dependencies
         self._retired = threading.Event()
         self._manager = None
-        self._owns_manager = False
         self._steam_session = None
         self._identity = None
         self._completer = None
@@ -53,10 +52,8 @@ class SetupPage(Page):
         """Admit one explicit action; stale page completion never touches widgets."""
         from core.threading.manager import ThreadManager
         if self._manager is None:
-            self._manager = ThreadManager.get_app_shared()
-            self._owns_manager = self._manager is None
-            if self._manager is None:
-                self._manager = ThreadManager.create_helper_manager()
+            # The app-shared manager: the runtime's, or Settings' own in CONFIG.
+            self._manager = ThreadManager.require_app_shared()
         alive = self._retired
         owner_ref = weakref.ref(self)
         def completed(result):
@@ -92,8 +89,6 @@ class SetupPage(Page):
             self._completer.retire()
             self._completer.deleteLater()
             self._completer = None
-        if self._owns_manager and self._manager is not None:
-            self._manager.shutdown(wait=False)
         self._manager = None
 
     def _account_admitted(self, layout):
