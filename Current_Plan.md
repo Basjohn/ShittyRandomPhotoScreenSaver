@@ -225,8 +225,11 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - Each wrapper call replaces a PyOpenGL checked getter (~2.7 µs against ~13 µs a query).
   - Control-relative render CPU fell: Spectrum 2.04 → 1.26 cf, Extruded Spectrum 3.29 → 2.12 cf.
   - The baseline is re-recorded at M0.
-- **Settings round-trip memory growth (Opus high, 7 Nov): fixed on the agent's branch, awaiting the lead's audit
-  (R-175).** Classified with the live check's new opt-in `--roundtrip-memory census[,collect][,tracemalloc][,map]`:
+- **Settings round-trip memory growth (R-175): main cause merged 7 Nov (1d1540a9).** The lead audited the timing:
+  the collection runs in the replacement's construction, the barrier's continuation, and with real Qt roots that
+  continuation is queued on the barrier's completion timer. So it never runs inside a `destroyed` emission. 15/15 GC,
+  lifecycle, destruction and Settings files pass on the merge. Still open: about 2.5–6 MB per round trip of
+  unattributed native heap. Classified with the live check's new opt-in `--roundtrip-memory census[,collect][,tracemalloc][,map]`:
   - **Cause:** every round trip left its retired display generation and Settings dialog in Python reference cycles
     (wrappers of destroyed QObjects, 15 Python-owned `QQmlComponent`s, an ~11 MB heap block): ~5,200 objects and 11 MB
     a round trip, plus heap/arena growth. The RUN GC thresholds never run a deep collection (0 in 10 minutes, on main and
