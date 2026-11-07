@@ -448,3 +448,38 @@ def test_global_custom_resolves_undocked_and_never_follows_media() -> None:
     _move_media(host, 900.0, 300.0)
     assert binding.install_authored_layout(host, owner, install_observer=False) is False
     assert owner.origin == resting
+
+
+@pytest.mark.parametrize("docked", (True, False), ids=("docked", "undocked"))
+def test_arrange_and_the_saver_place_the_visualizer_through_one_policy(monkeypatch, docked) -> None:
+    from copy import deepcopy
+
+    from core.settings.default_settings import DEFAULT_SETTINGS
+    from rendering.quick.widgets.authored_layout_projection import project_authored_display_layout
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+    from widgets.spotify_visualizer.visualizer_host_binding import VisualizerHostBinding
+
+    if not docked:
+        _undock(monkeypatch)
+    widgets = deepcopy(DEFAULT_SETTINGS["widgets"])  # TEST INPUT: Media and the Visualizer on one display
+    widgets["family_activation"] = {family: family in {"media", "visualizers"}
+                                    for family in widgets["family_activation"]}
+    widgets["media"].update(enabled=True, position="Bottom Left", monitor="ALL")
+    widgets["spotify_visualizer"].update(enabled=True)
+    arranged = project_authored_display_layout(
+        widgets, display_size=(1920, 1080), ordinary=[("media", (500.0, 220.0))], visualizer_size=(420.0, 280.0),
+    )
+    media = arranged["media"]
+
+    host = _StubHost(0, media_rect=OverlayWidgetGeometry(media.x, media.y, media.width, media.height))
+    caller = _Caller([host])
+    caller.widgets = widgets
+    owner = _PlacedOwner()
+    caller.owner, caller.unit = owner, host
+    assert VisualizerHostBinding(caller.services()).install_authored_layout(host, owner, install_observer=True)
+
+    shown = arranged["spotify_visualizer"]
+    assert owner.origin == (shown.x, shown.y)
+    beside_media = shown.y + shown.height <= media.y  # Bottom Left Media: docked above it
+    assert beside_media is docked
+    assert (host.presenter.observer is not None) is docked

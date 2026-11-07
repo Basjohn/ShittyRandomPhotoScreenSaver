@@ -9,9 +9,10 @@ pure functions the runtime uses, with the runtime's inputs:
 - display-wide spill and whole-card shrink: :func:`build_display_auto_scale_plan`
   with the presenter's participants (anchor token, rounded base rectangle,
   build order, margin) and eligibility (uniform-transform resize modes);
-- Media + Visualizer: :func:`resolve_visualizer_media_origin` from Media's
-  unstacked rectangle, both reserved as obstacles with Media held fixed, or the
-  Visualizer on Media's plain slot, as ``DisplayManager`` does.
+- Media + Visualizer: :func:`resolve_visualizer_authored_placement`, the one
+  function the saver's ``VisualizerHostBinding`` places the Visualizer with
+  (Media docking is its declared ``docked_to`` policy): beside Media's unstacked
+  rectangle with both reserved and Media held fixed, or on Media's plain slot.
 
 Global CUSTOM (any effective ``Custom`` route) keeps stacking and adjacency
 dormant, as the Spec requires: widgets sit on their plain anchors and an
@@ -25,7 +26,7 @@ from dataclasses import dataclass
 
 from core.settings.default_contract import require_canonical_default
 from rendering.quick.custom_layout_size import is_uniform_transform_resize_mode
-from rendering.visualizer_media_adjacency import resolve_visualizer_media_origin
+from rendering import visualizer_placement
 from rendering.widget_descriptors import (
     get_widget_runtime_descriptor,
     is_global_custom_layout_mode_selected,
@@ -39,7 +40,7 @@ from rendering.widget_stacking import (
 from .geometry_resolver import resolve_overlay_geometry_policy
 from .host import OverlayWidgetGeometry
 
-VISUALIZER_ID = "spotify_visualizer"
+VISUALIZER_ID = visualizer_placement.VISUALIZER_ID
 _STACK_SPACING = 10
 
 
@@ -88,47 +89,19 @@ def project_authored_display_layout(
     obstacles: tuple[DisplayStackObstacle, ...] = ()
     fixed: frozenset[str] = frozenset()
     if visualizer_size is not None:
-        vis_width = max(1.0, min(float(visualizer_size[0]), float(width)))
-        vis_height = max(1.0, min(float(visualizer_size[1]), float(height)))
         media = base.get("media")
-        if authored_enabled and media is not None:
-            vis_x, vis_y, _overfull = resolve_visualizer_media_origin(
-                (media.x, media.y, media.width, media.height),
-                (vis_width, vis_height),
-                (float(width), float(height)),
-            )
-        else:
-            # Media disabled, or global CUSTOM: Media's plain authored slot.
-            plain = resolve_overlay_geometry_policy("media", widgets_config).resolve(
-                (vis_width, vis_height), bounds
-            )
-            vis_x, vis_y = plain.x, plain.y
-        # The Visualizer presentation keeps its whole card on the display.
-        vis_x = min(max(0.0, vis_x), max(0.0, width - vis_width))
-        vis_y = min(max(0.0, vis_y), max(0.0, height - vis_height))
-        placements[VISUALIZER_ID] = ProjectedPlacement(vis_x, vis_y, vis_width, vis_height)
-        if authored_enabled:
-            visualizer_obstacle = DisplayStackObstacle(
-                key=VISUALIZER_ID,
-                x=int(round(vis_x)),
-                y=int(round(vis_y)),
-                width=max(1, int(round(vis_width))),
-                height=max(1, int(round(vis_height))),
-            )
-            if media is None:
-                obstacles = (visualizer_obstacle,)
-            else:
-                obstacles = (
-                    DisplayStackObstacle(
-                        key="media",
-                        x=int(round(media.x)),
-                        y=int(round(media.y)),
-                        width=max(1, int(round(media.width))),
-                        height=max(1, int(round(media.height))),
-                    ),
-                    visualizer_obstacle,
-                )
-                fixed = frozenset({"media"})
+        # The saver's own placement function and docking policy.
+        visualizer = visualizer_placement.resolve_visualizer_authored_placement(
+            widgets_config,
+            display_size=(float(width), float(height)),
+            visualizer_size=visualizer_size,
+            media_rect=None if media is None else (media.x, media.y, media.width, media.height),
+        )
+        placements[VISUALIZER_ID] = ProjectedPlacement(
+            visualizer.x, visualizer.y, visualizer.width, visualizer.height
+        )
+        obstacles, fixed_ids = visualizer.stack_obstacles()
+        fixed = frozenset(fixed_ids)
 
     global_section = widgets_config.get("global", {})
     if not isinstance(global_section, Mapping):

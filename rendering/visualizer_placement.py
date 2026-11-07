@@ -155,6 +155,32 @@ def resolve_visualizer_authored_placement(
     )
 
 
+def resolve_authored_visualizer_outer_size(display_size: Sequence[float]) -> tuple[float, float]:
+    """The outer box of an uncommitted authored Visualizer when no owner is live.
+
+    Settings Arrange uses it where the saver asks its live owner
+    (``resolved_outer_size``): the canonical viewport at scale 1 reduced
+    uniformly to fit the display. The mode policy and card chrome shape only the
+    inside, so neutral values stand in for them.
+    """
+
+    from core.settings.visualizer_mode_registry import (
+        get_default_visualizer_mode_id,
+        get_visualizer_presentation_policy,
+    )
+    from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy(get_default_visualizer_mode_id()),
+        display_size=(display_size[0], display_size[1]),
+        border_width=0.0, corner_radius=0.0, content_inset=0.0,
+        background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0),
+        shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
+        shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0),
+    )
+    return float(presentation.outer_rect[2]), float(presentation.outer_rect[3])
+
+
 __all__ = [
     "DOCKED_TO_MEDIA",
     "DOCKED_TO_NONE",
@@ -162,6 +188,7 @@ __all__ = [
     "VISUALIZER_ID",
     "VisualizerAuthoredPlacement",
     "declared_visualizer_docked_to",
+    "resolve_authored_visualizer_outer_size",
     "resolve_visualizer_authored_placement",
     "resolve_visualizer_docked_to",
 ]

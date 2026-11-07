@@ -7,7 +7,9 @@ write to :mod:`rendering.custom_layout_commit`.
 Geometry is the saver's own: preferred sizes are measured through each family's
 QML (``OrdinaryPreferredSizeMeter``, detached items that never enter a window)
 and uncommitted widgets are placed by ``project_authored_display_layout``, the
-runtime's anchor/stacking/Media-docking functions. Apply after any placement
+runtime's anchor/stacking functions; the Visualizer through the saver's own
+placement function and ``docked_to`` policy (``rendering.visualizer_placement``).
+Apply after any placement
 saves the whole canvas, as Runtime Edit's Save does, because CUSTOM is a
 global layout mode.
 """
@@ -24,10 +26,6 @@ from PySide6.QtCore import QPoint, QRect
 from core.logging.logger import get_logger
 from core.settings.capability_activation import is_widget_family_effective
 from core.settings.monitor_routes import bound_monitor_identity
-from core.settings.visualizer_mode_registry import (
-    get_default_visualizer_mode_id,
-    get_visualizer_presentation_policy,
-)
 from core.settings.layout_slots import apply_layout_slot, get_layout_slot_payload, save_layout_slot
 from core.settings.widget_family_catalog import get_family_id_for_widget, get_widget_member_label
 from rendering.custom_layout_commit import commit_custom_session
@@ -104,30 +102,13 @@ from rendering.quick.widgets.preferred_size_measurement import (
     OrdinaryPreferredSizeMeter,
     ordinary_instance_order,
 )
-from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+from rendering.visualizer_placement import resolve_authored_visualizer_outer_size
 
 logger = get_logger(__name__)
 
 _CLOCK_IDS = frozenset({"clock", "clock2", "clock3"})
 
 
-def _visualizer_outer_size(display: "ArrangeDisplay") -> tuple[float, float]:
-    """The saver's authored Visualizer outer box on ``display`` (its own resolver).
-
-    Authored mode uses the canonical viewport at scale 1, reduced uniformly to
-    fit the display; the mode policy and card style shape the inside only, so
-    neutral values stand in for them here.
-    """
-
-    presentation = resolve_visualizer_presentation(
-        policy=get_visualizer_presentation_policy(get_default_visualizer_mode_id()),
-        display_size=(display.geometry.width(), display.geometry.height()),
-        border_width=0.0, corner_radius=0.0, content_inset=0.0,
-        background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0),
-        shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
-        shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0),
-    )
-    return float(presentation.outer_rect[2]), float(presentation.outer_rect[3])
 # The saver's provisional size until a family reports its own (display presenter).
 _PROVISIONAL_SIZE = (100.0, 100.0)
 
@@ -290,7 +271,9 @@ class ArrangeModel:
         """The saver's own outer size for this widget on ``display`` (optionally as a committed payload presents it)."""
 
         if descriptor.widget_id == "spotify_visualizer":
-            return _visualizer_outer_size(display)
+            return resolve_authored_visualizer_outer_size(
+                (display.geometry.width(), display.geometry.height())
+            )
         try:
             return self._meter.measure(
                 descriptor.widget_id, self.widgets,
