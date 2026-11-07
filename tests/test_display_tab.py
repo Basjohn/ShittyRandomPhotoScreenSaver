@@ -267,3 +267,22 @@ def test_display_tab_does_not_repair_backend_during_load_or_save():
         implementation = inspect.getsource(method)
         assert "self._settings.set('display.render_backend_mode'" not in implementation
         assert "self._settings.set('display.hw_accel'" not in implementation
+
+
+def test_every_display_slider_is_under_the_shared_slider_style(display_tab):
+    """7 Nov: the Interaction glow sliders drew Qt's native slider; every other tab binds SLIDER_STYLE."""
+    from PySide6.QtWidgets import QSlider
+
+    sliders = display_tab.findChildren(QSlider)
+    assert sliders, "the Display tab has no sliders to check"
+    unstyled = []
+    for slider in sliders:
+        node, styled = slider, False
+        while node is not None:
+            if "QSlider::groove:horizontal" in node.styleSheet():
+                styled = True
+                break
+            node = node.parentWidget()
+        if not styled:
+            unstyled.append(slider.objectName() or repr(slider))
+    assert not unstyled, f"sliders outside the shared slider style: {unstyled}"
