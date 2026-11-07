@@ -720,12 +720,12 @@ triangle peaks while others are within ~10%; time at the limiter goes from 76–
 muting in continuous play:** a kick's swell share drops in the first ~5 s of a passage while the swell fills, then
 stays flat to 55 s; gate per layer "settled vs late", not only "first seconds vs late". (6) **Vectorise before
 tuning:** the curve build vectorised byte-identically (16.8 M samples) took the tick from +25% over pre-work main to
-below it, which paid for the new reactivity. Evidence: `.artifacts/evidence/devcurve/reactivity_20261105/`
+below it, which paid for the new reactivity. Evidence: `.artifacts/evidence/visualizers/devcurve/reactivity/20261105_reactivity/`
 (`continuous_v5/`, `strips_v3/`, `tick_cost_v2.jsonl`); gates `tests/test_devcurve_reactivity.py`,
 `tests/test_devcurve_continuous_play.py`, `tests/test_devcurve_kick_headroom.py`.
 
 *Replay floors (6 Nov).* The synthetic replay floors' `output_flux` for DevCurve fell to 15-31% of the pre-rework value
-(five cases) when the rework merged. Measured (`.artifacts/evidence/devcurve/floors_20261106/`), it is the **cold start of the slow
+(five cases) when the rework merged. Measured (`.artifacts/evidence/visualizers/devcurve/floors/20261106_floors/`), it is the **cold start of the slow
 body**, not lost motion: the shipped fixtures last 0.5-2 s and carry a constant schema-1 loudness, while the body's two
 stages (0.45 s, 0.8 s) take ~3 s to settle, so a 1 s clip sees a quarter of the settled motion. Held to 8 s the same
 inputs settle at 62-95% of the pre-rework flux and ~75% of its bass amplitude (the smooth wave against the slope-limited

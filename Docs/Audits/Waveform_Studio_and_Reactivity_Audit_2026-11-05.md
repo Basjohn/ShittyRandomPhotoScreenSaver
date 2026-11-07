@@ -17,7 +17,7 @@ controller's media state paused, so the mode sees true idle while every other in
 Pitfall found while building it: setting only the replay engine's playback flag leaves the controller "playing"; the
 first "idle control" was therefore identical to music. The tool sets `controller.playing`, which the mode reads.
 
-Evidence directory: `.artifacts/evidence/waveform_ribbon/studio_20261105/` (receipts are evidence, not task status).
+Evidence directory: `.artifacts/evidence/visualizers/waveform_ribbon/studio/20261105_studio/` (receipts are evidence, not task status).
 
 ## 2. Findings: does music reach the deformation consumers?
 

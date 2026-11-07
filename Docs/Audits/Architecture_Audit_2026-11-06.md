@@ -22,7 +22,7 @@ plus the lenses SSOT, 2D/3D consistency, performance and readiness for SMP and f
 
   No app launch, no visible window, no load generator. The machine was shared with other agents (other processes'
   CPU was 55-63%), so GPU and wall times here are not comparable. Call counts and thread CPU are.
-- **Evidence:** `.artifacts/evidence/architecture_audit_20261106/` in this worktree. It holds both baseline JSONs (moved
+- **Evidence:** `.artifacts/evidence/architecture/audit/20261106_audit/` in this worktree. It holds both baseline JSONs (moved
   out of `tools/baselines/overhead/`, not committed) and both run logs. Copy it before the worktree is removed.
 
 **Known items that are not re-reported** (cross-references only):
@@ -520,7 +520,7 @@ blockers for SMP and full rearrangement, plus a handful of SSOT duplicates and b
 ### A-23: The overhead bench misses the production node fences
 
 - **Area:** dormancy and performance evidence. **Confirmed.**
-- **Evidence:** in `.artifacts/evidence/architecture_audit_20261106/overhead_visualizers_run.txt`, 2D modes record
+- **Evidence:** in `.artifacts/evidence/architecture/audit/20261106_audit/overhead_visualizers_run.txt`, 2D modes record
   17 GL calls per frame. That covers the render host only, not `clip_host`'s 17 state reads (A-05) or the
   background node.
 - **Impact:** costs on the real QSG node path (fences, clip, background) are invisible to the tool the project uses

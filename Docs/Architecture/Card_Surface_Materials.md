@@ -1,7 +1,7 @@
 # Card Surface Materials (Acrylic, Glass, Frosted, Mica, Smoked)
 
 Status: implemented 6 Nov 2026 (operator item "Widget card surfaces"), awaiting the lead's live check under game load
-and the operator's eyes. Captures, cadence and cost: `.artifacts/evidence/widget_surfaces_20261106/` (local
+and the operator's eyes. Captures, cadence and cost: `.artifacts/evidence/widgets/surfaces/20261106_surfaces/` (local
 evidence); code: `rendering/quick/render/surface_backdrop.py`, `rendering/quick/surface_backdrop_owner.py`,
 `rendering/quick/widgets/surface_material.py`, `rendering/quick/qml/MaterialSurface.qml` and its shaders. This decision **supersedes** the 2 Sep 2026 rejection of runtime card
 materials (`Docs/Contracts.md` "Runtime card surfaces", `Spec.md` Widget Themes, `Docs/Guides/10_WIDGET_GUIDELINES.md`,
@@ -392,7 +392,7 @@ Clock; then Gmail, World News feed, Friend Pulse, System Stats) and three wallpa
 | Dark, large | 6.64 → 6.64 | 3.77 → 6.84 | 3.31 → 5.73 | 3.73 → 6.83 | 5.94 → 7.08 | 4.43 → 6.98 |
 
 (The Normal 4.27 is the light theme's own muted System Stats label on its panel; Normal is not touched.) Crops at 1x
-and 3x, busy/flat/mid-transition, dark and light: `.artifacts/evidence/widget_surfaces_style_20261106/`. Normal frames differ from before only by the renderer's
+and 3x, busy/flat/mid-transition, dark and light: `.artifacts/evidence/widgets/surfaces_style/20261106_surfaces_style/`. Normal frames differ from before only by the renderer's
 run-to-run jitter (at most 2 levels on about 1,200 pixels, the same signature as two runs of identical code); dark
 material frames are unchanged outside the text runs.
 

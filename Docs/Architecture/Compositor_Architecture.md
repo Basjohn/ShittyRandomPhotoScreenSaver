@@ -353,7 +353,7 @@ retires normally (`stop()` releases a parked loop). MC (windowed) and the secure
 **Limit.** Windows exposes the console (session) display state, not per-monitor power. A monitor switched off at its own
 button over DisplayPort usually leaves the topology and already pauses through binding loss; an HDMI panel switched off at
 its button that stays enumerated is not observable and keeps running. Evidence and the injection probe:
-`tools/visualizer_live_check.py --display-off AT:FOR` (`.artifacts/evidence/display_power/`); tests
+`tools/visualizer_live_check.py --display-off AT:FOR` (`.artifacts/evidence/display/display_power/20261105_display_power/`); tests
 `tests/test_display_power.py`, `tests/test_linux_display_power.py`.
 
 ## 11. Transition model

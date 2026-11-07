@@ -15,7 +15,7 @@ preset:
 - about 13,000 lines of Neon Lake content lost.
 
 No Bubble file changed, and no log line named the write. The bad file is kept at
-`.artifacts/evidence/preset_cross_mode_write_20261106/preset_1_synthwave.bubble_content_written_2145.json`.
+`.artifacts/evidence/settings/preset_cross_mode_write/20261106_preset_write/preset_1_synthwave.bubble_content_written_2145.json`.
 
 ## Evidence
 

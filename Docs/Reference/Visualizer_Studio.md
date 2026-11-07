@@ -147,7 +147,7 @@ is optional and defaults to "not offered":
   window is 1.99-2.42 MB against the loops' 0.86-1.01 MB, and a worker takes 1.9-2.2x as long (the loops' time includes
   the 2 s lead-in): Bubble 6.5-9.1 s -> 12.9-13.8 s, Extruded Bubble 3.7-4.2 -> 8.0-8.8 s, Waveform 6.0-6.4 -> 11.8-12.7 s,
   Sphere 2.6-2.8 -> 5.3-5.7 s, Spectrum 2.9-3.1 -> 5.9-6.1 s.
-  Seam, measured (`.artifacts/evidence/studio_clip_loop_20261106/`): the loop's last 5 ms are the source's own to -37 / -46 /
+  Seam, measured (`.artifacts/evidence/studio/clip_loop/20261106_clip_loop/`): the loop's last 5 ms are the source's own to -37 / -46 /
   -57 dB (Human / Growing Pains / Rag Doll), the sample step across the join equals the source's own step, the crossfade
   holds the equal-power level within 0.23 dB, the 20 ms RMS changes 0.1-0.23 dB across the seam (the music's own 95th
   percentile is 4-8 dB), no spectral-flux burst follows it, and the beat grid steps -25 / -47 / -85 ms against the
@@ -193,7 +193,7 @@ is optional and defaults to "not offered":
   (+11%), Oscilloscope 3.8 -> 5.1 s (+35%), Neon Lake 5.8 -> 8.2 s (+41%), Bubble 10.1 -> 12.3 s (+22%), Extruded
   Bubble 4.2 -> 5.2 s (+25%), Sphere 2.0 -> 3.9 s (+100%, about 1.3 s a clip). A re-analysis runs once per release.
   DevCurve normalises its body to the song, so Sensitivity / floor / Gain move its picture only subtly, as live
-  (evidence `.artifacts/evidence/studio_completion_20261106/audio_analysis/`).
+  (evidence `.artifacts/evidence/studio/completion/20261106_completion/audio_analysis/`).
   Synthetic fixtures of such a mode are generated *audio* through the same worker, so engine-owned edits stay
   truthful for them too; each synthetic frame carries what a recording carries: its audio's analysis spectrum (the
   live engine's band math), the score's hits as the transient bus's onsets, and the loudness on the real-music scale
@@ -289,7 +289,7 @@ is optional and defaults to "not offered":
   During a stroke points are picked on the ground as it was when it began. `tests/test_visualizer_studio_parity.py`
   proves the pick against the production camera, the coalesced stroke, its save through Settings' owners, reload and
   Undo; `tools/waveform_studio_capture.py --brush` renders a stroke (evidence
-  `.artifacts/evidence/studio_completion_20261106/brush/`).
+  `.artifacts/evidence/studio/completion/20261106_completion/brush/`).
 - **Conditions.** A property's `when` terms must all hold, its `when_any` terms at least one (Settings' former OR
   rules, e.g. Bubble's particle rows while any population is on); `ui/studio/schema.condition_hidden` is the one
   evaluation the bridge's `conditionHidden` uses.
@@ -339,7 +339,7 @@ gesture evaluates with `exact=False`, which never starts one). Their sliders say
 `tools/studio_drag_profile.py` measures a drag (`Docs/Reference/Harness_Index.md`): Spectrum's mode-owned drag frames
 no longer build the settings model (evaluation per frame 29.7 -> 7.3 ms median on a loaded machine), and Waveform's
 release replay spreads over frames within the budget (one 222 ms evaluation -> about 8.4 ms per frame); evidence
-`.artifacts/evidence/studio_followups/drag_profile/`.
+`.artifacts/evidence/studio/followups/20261107_followups/drag_profile/`.
 
 A drag holds until release. Drag instruments that sit in a scrolling panel set `preventStealing: true`: the value
 slider, the colour picker's field and hue bar, gradient nodes, and the response curve in the sideways-scrolling

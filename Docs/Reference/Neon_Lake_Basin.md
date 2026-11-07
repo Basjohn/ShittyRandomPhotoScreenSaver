@@ -2,7 +2,7 @@
 
 **Accepted 7 Nov 2026 (operator):** "In general the neon lake fidelity is much improved and I would say accepted, it
 also gives us a much nicer starting line for water deformation later." The seventh pass (Water Reaction, the skyline
-sheet fix; evidence `.artifacts/evidence/neon_lake/fidelity_20261106/pass7/`) is the accepted look. The remaining
+sheet fix; evidence `.artifacts/evidence/visualizers/shockwave_grid/fidelity/20261106_fidelity/pass7/`) is the accepted look. The remaining
 gaps it recorded against the goal mocks (whole-scene high-react look, net hue, dot field, far-shore line) are future
 enhancements, not acceptance failures. Water deformation (Current_Plan §6, S3D-4 dynamic surface field) starts from
 this baseline. The camera step on real music stays open in `Current_Plan.md` §5.
@@ -425,7 +425,7 @@ coverage never fades (the camera-facing skirt fade left land floating over sky o
 and glow settle into the haze (`basinDetailFade`). The CPU mirrors (`neon_terrain_extent.far_hills`, the Studio brush's
 `neon_terrain_surface`) share the constants. Past the grid, glass takes one environment sample and land is lit
 unshadowed (that far land is most of the screen). Extreme-pose renders:
-`.artifacts/evidence/neon_lake/fidelity_20261105/camera_extremes/final/contact.png` (worktree evidence).
+`.artifacts/webp/visualizers/shockwave_grid/fidelity/20261105_fidelity_camera_extremes_final_contact.webp` (worktree evidence).
 
 The **main mountain skyline** uses depth-tested land geometry offset narrowly in
 screen space against the real surface depth; water is excluded and its **lake shoreline**
@@ -651,7 +651,7 @@ cooler sky/horizon, smaller halo (1.1) and rays (0.45), stronger and softer wisp
 (path 0.85, shore glow 0.45, halo reactivity 1.5, waves 0.025). GPU (RTX 4090, PairedBench, control-relative
 unchanged: P1 293.6 -> 293.5 cf at 1300x750, 192.2 -> 191.7 at 2560x1440; P3 323.1 -> 322.5, 219.8 -> 220.3).
 Per-frame calls unchanged (353 GL). Motion (4 s from 30 s, 60 fps): Preset 1 1.30 -> 1.095 /255, Preset 3 0.28 ->
-0.232. Evidence `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/`.
+0.232. Evidence `.artifacts/evidence/visualizers/shockwave_grid/fidelity/20261105_fidelity/pass6/`.
 
 **Seventh pass (2026-11-06; the high-react look on real music, the skyline sheet).** Music vs response
 (`tools/visualizer_replay/neon_lake_music_response.py`: the shared `music` step, then the lake's mean light, its
@@ -690,7 +690,7 @@ and 5 at 0 (pixel-identical apart from the skyline fix). GPU (RTX 4090, PairedBe
 at 1300x750, 188.6 -> 191.2 at 2560x1440; P3 318.5 -> 325.8, 220.1 -> 220.5; CPU thread unchanged (1.49 / 1.46 ms).
 Overhead baseline against 90f65ee9 (visualizers): only Neon Lake moves (+1 GL call, the uniform; +51 Python calls,
 the drive); Extruded Bubble's +51 Python calls come from main's EB work, every other mode unchanged. Evidence
-`.artifacts/evidence/neon_lake/fidelity_20261106/pass7/`.
+`.artifacts/evidence/visualizers/shockwave_grid/fidelity/20261106_fidelity/pass7/`.
 
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 

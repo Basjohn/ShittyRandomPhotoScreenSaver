@@ -193,7 +193,7 @@ set `_has_pushed_first_frame=True` by hand, which production never did.
 before the fix, off, 0.3, 0.5, 0.7 and 1.0 were byte-identical. After: mean drawn-vs-source difference and jerk
 reduction grow monotonically with strength (anything_mixed2 jerk −9% / −17% / −23% / −30% at 0.3 / 0.5 / 0.7 / 1.0;
 added velocity lag ≈ +1.1 / +2.3 / +3.4 / +5.1 ms; kick peak retention 99 / 98 / 98 / 97%).
-Evidence: `.artifacts/evidence/spectrum_smoothing_20261106/` in the main checkout (local and git-ignored; copied from
+Evidence: `.artifacts/evidence/visualizers/spectrum/smoothing/20261106_smoothing/` in the main checkout (local and git-ignored; copied from
 the fix agent's worktree on 7 Nov). It holds:
 - before/after measurement JSON and text;
 - `summary_anything_mixed2.json` (before the fix, 0.7 was identical to off);

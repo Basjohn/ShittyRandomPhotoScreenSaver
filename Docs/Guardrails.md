@@ -39,7 +39,7 @@ This is the **short preflight**, not a second documentation authority. Use the f
     worktrees, profiles) goes to `.artifacts/scratch/<owner>/`, never `%TEMP%` or the scratchpad.
   - Delete your own scratch, temporary worktrees and `tmp/` items before reporting.
   - Never touch the operator's recordings (`logs/visualizer_recordings`), `release/` or `.venv`.
-  - Listing of the 7 Nov conversion: `.artifacts/evidence/frame_webps_20261107.md`.
+  - Listing of the 7 Nov conversion: `.artifacts/evidence/architecture/frame_webps/20261107_conversion/frame_webps_20261107.md`.
 
 ## Focused owners (read the relevant ones)
 

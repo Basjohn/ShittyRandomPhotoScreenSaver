@@ -83,14 +83,14 @@ operator judgements are owned by Current_Plan section 7.1. Earlier provisional v
   cost. Keep artistic look controls in the lab recipe; no global retuning of accepted visualizers.
 - A test result is valid only when pytest itself exits zero. GL pixels/tests are scoped evidence, not operator sign-off.
 
-Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/waveform_ribbon/<new-run>`.
+Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/visualizers/waveform_ribbon/<new-run>`.
 It refuses overwrites, copies the unmodified primary, extracts provisional native-size low/high cards, and records
 archive/member/output/producer hashes, tracked diff hash, workspace status and both diagnostic projection matrices.
 The initial receipt is `.artifacts/evidence/waveform_ribbon/wr00_reference_projection/receipt.json`.
 It records no GL scene capture or cost: this is a preflight, not an image of a proposed Ribbon implementation.
 Diagnostic half-height 4/reference depth 10 are arbitrary calibration units, not an approved artistic camera fit.
 
-Current comparison evidence remains under `.artifacts/evidence/waveform_ribbon/`; receipts/captures are evidence, not
+Current comparison evidence remains under `.artifacts/evidence/visualizers/waveform_ribbon/`; receipts/captures are evidence, not
 task status. The lab authors phase/amplitude modulation and depth sway before immutable knots enter the shared ring,
 with no renderer-side simulation or new clock. Generated floor material custody/prompts are local at
 `assets/textures/waveform_floor/Source.md` (root `assets/` is excluded from normal GODZIPs). Albedo is sRGB; roughness
@@ -668,7 +668,7 @@ RMS is a visual-detail input for D, not another FFT/analyzer or literal audio-fr
 process-tree Windows Job deadline, uses project Python and an explicit FFmpeg executable, and refuses overwrites:
 
 ```powershell
-& '.\.venv\Scripts\python.exe' tools/labs/waveform_ribbon_music_bakeoff.py --recording logs/visualizer_recordings/ragdoll_quiet_intro_loud_end1.jsonl --start 20 --seconds 10 --output .artifacts/evidence/waveform_ribbon/<new-run> --ffmpeg .artifacts/scratch/wr_audio_video_tools/ffmpeg.exe
+& '.\.venv\Scripts\python.exe' tools/labs/waveform_ribbon_music_bakeoff.py --recording logs/visualizer_recordings/ragdoll_quiet_intro_loud_end1.jsonl --start 20 --seconds 10 --output .artifacts/evidence/visualizers/waveform_ribbon/<new-run> --ffmpeg .artifacts/scratch/wr_audio_video_tools/ffmpeg.exe
 ```
 
 The scratch FFmpeg binary is an isolated tool dependency, not installed into the product environment. Another
