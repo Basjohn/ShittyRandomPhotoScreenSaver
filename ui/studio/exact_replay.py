@@ -27,6 +27,16 @@ unrolled time: the history plays on through each wrap, its state carried, instea
 start (a new values signature, a seek, new answers) re-anchors to the pass the instant is in (``Anchor.rebase``), so
 it replays what it always replayed; checkpoints older than two passes are dropped, so a long run holds no more than a
 short one.
+
+**A change while playing restarts the pass** (``PassRestart``, shared with the one-shot evaluators). An exact replay of
+a change (an edit, undo, new answers or inputs) starts at the start of the pass or at a checkpoint, while a playing
+transport keeps moving on: under the frame budget the replay chases a moving instant (measured 7 Nov on Human at 6 s,
+fake 60 Hz clock, no rendering: Waveform 3.6 s frozen, DevCurve frozen through the loop's wrap; Bubble, Sphere and
+Extruded Bubble replay it in one GUI-thread evaluation, Bubble 1.5 s). The history at the current instant under the new
+values exists only by replaying from the start, so it cannot be recomputed there; instead, while the transport plays,
+a change whose replay would step more than ``RESTART_BACKLOG_S`` of history replays to the start of the pass and says
+so (``take_restart``); the Studio restarts its transport there. A seek back, a paused transport and a short replay
+behave as before.
 """
 from __future__ import annotations
 
@@ -37,7 +47,35 @@ from typing import Any, Mapping
 from ui.studio.clip_loop import Anchor
 
 
-class ExactReplay:
+class PassRestart:
+    """While the transport plays, a change that rewinds the history restarts the pass instead of replaying up to the
+    moving instant (see the module docstring). The Studio says whether it plays (``set_playing``) and, after each
+    evaluation, takes the restart (``take_restart``) to put its transport at the start of the pass."""
+
+    RESTART_BACKLOG_S = 0.25               # history a replay may chase while playing (Waveform: about 45 ms of steps)
+
+    _playing: bool = False
+    _restarted: bool = False
+
+    def set_playing(self, playing: bool) -> None:
+        """The transport plays (and no live gesture is running): a long replay of a change restarts the pass."""
+        self._playing = bool(playing)
+
+    def take_restart(self) -> bool:
+        """True once after an evaluation that restarted the pass (the Studio restarts its transport there)."""
+        restarted, self._restarted = self._restarted, False
+        return restarted
+
+    def _restart_point(self, time: float, resume: float = 0.0) -> float:
+        """The history time to replay a change to: ``time``, or the start of the pass when playing and the replay
+        from ``resume`` (the start, or a checkpoint) would step more than ``RESTART_BACKLOG_S`` of history."""
+        if self._playing and time - resume > self.RESTART_BACKLOG_S:
+            self._restarted = True
+            return 0.0
+        return time
+
+
+class ExactReplay(PassRestart):
     CHECKPOINT_TICKS = 90                  # one checkpoint per second of fixture time at the 90 Hz logical cadence
     KEPT_SIGNATURES = 3                    # the current values and the last two (undo / redo stay instant)
 
@@ -108,6 +146,7 @@ class ExactReplay:
         self._approximate = False          # stepped with values other than the current ones
         self._checkpoints: dict = {}       # signature -> {tick index: checkpoint}
         self._converging = False
+        self._fresh = True                 # a new history (inputs, answers, fixture or extent) not yet evaluated
 
     def set_frame_budget(self, seconds: float | None) -> None:
         """The GUI-thread time one evaluation may spend replaying (the Studio sets it; None: replay at once).
@@ -128,15 +167,23 @@ class ExactReplay:
                 best = checkpoint
         return best
 
-    def _rewind(self, values: Mapping[str, Any], signature, time: float) -> float:
+    def _rewind(self, values: Mapping[str, Any], signature, time: float, *, change: bool = False) -> float:
         """Put the exact history of ``signature`` at the latest checkpoint at or before ``time`` (else at the
         start, configured for it): the replay from there is the replay from the start. Returns the history time to
-        replay to (a loop re-anchors to the pass the instant is in when it has to start over)."""
+        replay to (a loop re-anchors to the pass the instant is in when it has to start over). ``change``: the
+        rewind is for a change, not a seek back (while playing, a long replay restarts the pass instead)."""
         best = self._best_checkpoint(signature, time)
         anchor = self._loop_anchor()
         if best is None and anchor.looped:
             time = anchor.rebase(self._unrolled)
             best = self._best_checkpoint(signature, time)
+        if change:
+            restart = self._restart_point(time, best[1] if best is not None else 0.0)
+            if restart != time:
+                if anchor.looped:
+                    anchor.rebase(self._unrolled)      # history time 0 is the start of the pass the instant is in
+                time = restart
+                best = self._best_checkpoint(signature, time)
         if best is not None:
             index, at, state, last, last_tick = best
             state.restore()
@@ -186,6 +233,15 @@ class ExactReplay:
 
     def _replay(self, time: float, values: Mapping[str, Any], signature, *, exact: bool, deadline: float | None):
         """The frame at ``time`` under ``values`` (``signature`` names them) on the configured history."""
+        if self._fresh:
+            # A history that starts here (new inputs or answers landing, a new fixture or extent) begins at the pass
+            # the instant is in, and while playing a long replay of it restarts the pass instead.
+            self._fresh = False
+            anchor = self._loop_anchor()
+            if anchor.looped:
+                time = anchor.rebase(self._unrolled)
+            if exact:
+                time = self._restart_point(time)
         if not exact:
             if time < self._time:
                 time = self._rewind(values, signature, time)
@@ -209,7 +265,7 @@ class ExactReplay:
                 self._converging = True
                 self._shown = self._present(values)
                 return self._shown
-            time = self._rewind(values, signature, time)
+            time = self._rewind(values, signature, time, change=time >= self._time)
             if deadline is not None and self._shown is not None and clock.perf_counter() > deadline:
                 # The rewind (a configuration build, a state restore) used this frame's budget: stepping starts on
                 # the next frame, the frame shown staying meanwhile.
@@ -225,4 +281,4 @@ class ExactReplay:
         return None if self._budget is None else clock.perf_counter() + self._budget
 
 
-__all__ = ["ExactReplay"]
+__all__ = ["ExactReplay", "PassRestart"]

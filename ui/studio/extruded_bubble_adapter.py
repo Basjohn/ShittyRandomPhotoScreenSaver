@@ -25,6 +25,7 @@ from core.settings.visualizer_mode_settings import (
     Choice, Colour, Range, SceneCameraPosition, ScenePath, Slider, Toggle, Triangle, require_mode_settings,
 )
 from ui.studio import clip_loop, framed
+from ui.studio.exact_replay import PassRestart
 from ui.studio.registry import studio_title
 from ui.studio.adapter import (RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter,
                                control_condition)
@@ -440,7 +441,7 @@ def build_frame(snapshot, parameters: Mapping[str, object]):
     return ExtrudedBubbleFrame(**kwargs)
 
 
-class ExtrudedBubbleStudioEvaluator:
+class ExtrudedBubbleStudioEvaluator(PassRestart):
     """Own frame runtime (own simulation), stepped deterministically through one fixture's inputs."""
 
     def __init__(self) -> None:
@@ -516,6 +517,13 @@ class ExtrudedBubbleStudioEvaluator:
         anchor = self._anchor = self._anchor.sync(getattr(self._inputs, "period", 0.0))
         # A seamless loop plays on through its wrap in the transport's unrolled time (``ui/studio/clip_loop.py``).
         time = max(0.0, anchor.virtual(at)) if anchor.looped else max(0.0, min(at, self.fixture.duration))
+        if self._last is None and self._time == -math.inf:
+            # A new history (new inputs: a selection, a re-analysed clip landing) begins at the pass the instant is in
+            # (it replayed every pass played so far from the clip start before), and while playing a long replay
+            # restarts the pass instead.
+            if anchor.looped:
+                time = anchor.rebase(at)
+            time = self._restart_point(time)
         if time < self._time:
             self._restart()
             if anchor.looped:
@@ -526,6 +534,7 @@ class ExtrudedBubbleStudioEvaluator:
             self._restart()
             if anchor.looped:
                 time = anchor.rebase(at)       # a replay from the start of the pass the instant is in
+            time = self._restart_point(time)   # while playing, a long replay restarts the pass instead
         elif changed:
             self._approximate = True
             if self._last_step is not None and time == self._time:

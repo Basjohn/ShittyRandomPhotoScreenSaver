@@ -48,11 +48,14 @@ after the operator's yes on a question card; agents never run load (invisible ch
      last element (Media's covers only the track text). Panels are rounded, concentric with the widget's configured
      corner radius, and sit 2-3 px inside the border (erring larger, never smaller). Volume and Mute Button children
      take the material. Agent in flight.
-   - **Studio (queued for the next free slot):** any reactivity edit stalls the preview until the clip loops
-     (operator: if it needs a restart, restart the loop at once). Choosing a clip ("human") can fail on the first
-     try (it stayed on ragdoll; the second try showed "analyzing" and worked).
-   - Side defects from the orbit fix: `tests/test_visualizer_control_hints.py` opens a visible window (`window.show()`
-     in `hint_scene`); switching Sphere <-> Extruded Spectrum sends no plain-orbit cancel for a held drag.
+   - **Studio stall, clip selection and sidecar log (fixed on the agent branch, awaiting lead review):** while
+     playing, a change whose replay would chase the moving instant restarts the pass (`exact_replay.PassRestart`,
+     every Studio-backed mode), and the transport waits for a converging replay ("Updating…"). A clip pick names
+     itself "analysing" at once and retires every other analysis (latest wins). `logs/screensaver_studio.log`
+     records selections, analysis jobs, replays after a change and preview gaps. The control-hints test runs on a
+     never-shown window (its access violation came from `shiboken6.delete` in the plain-orbit tests). A Sphere <->
+     Extruded Spectrum switch ends a held orbit. Operator check after merge: edit Reaction Mode while Waveform
+     plays; pick Human once.
 2. **§7.1 Waveform Ribbon:** the live logical-tick cut (agent in flight; byte-identical) and the operator
    sign-offs in §2.
 3. **Expanded Visualizer M2** (plan 01; agent in flight), with the operator's M1 amendment: a mode switch never
@@ -483,14 +486,19 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any fresh worktree (main
   too): it needs the untracked operator originals `assets/usu/scenes/UsuScene*.png`.
 
-**Side defects (freeform held-left orbit fix, 7 Nov):**
-- `tests/test_visualizer_control_hints.py` calls `window.show()` / `qWaitForWindowExposed` (`hint_scene`, ~line
-  128): a visible window in a test. Run in one process after the other orbit/input files it dies with an access
-  violation at `hint_scene` (main too); run alone it once failed 2 tests and then passed 12/12 (flaky).
-- A freeform-to-freeform mode switch (Sphere to Extruded Spectrum) does not send the input controller a
-  `plain_orbit_cancel_requested('mode')` edge: that edge comes only from `set_scene_transform_enabled`, which is
-  framed-only. Not verified whether the card watchers (presentationActive, geometry) always unwind a held-left orbit
-  across such a switch; add a test, or emit the edge on any orbiting-mode change.
+**Side defects (Studio stall / clip selection fix, 7 Nov):**
+- Bubble, Sphere and Extruded Bubble replay a change in one GUI-thread evaluation (no frame budget). While playing,
+  the pass now restarts, so the replay is short. Paused, an edit 6 s into Human still costs one evaluation of about
+  1.5 s (Bubble), 0.3 s (Sphere) or 0.2 s (Extruded Bubble), measured 7 Nov without load. Give them the frame budget
+  (`ExactReplay`) or accept the cost.
+- A restart still replays the clip's 2 s analysis lead-in (`clip_loop.PREROLL_S`) under the 8 ms budget. That holds
+  the preview for about 0.7 s (Waveform) or 1 s (DevCurve), shown as "Updating…". A larger budget for that one
+  replay would shorten it.
+- `tests/test_visualizer_control_hints.py::test_lazy_visualizer_root_retains_initial_hint_capability` still builds a
+  `QuickDisplayWindow` (it is never shown), which the probe rule forbids. Move it to the render-control pattern.
+- `tests/test_studio_exit_every_mode.py` still calls `shiboken6.delete(...)`. The plain-orbit file's two calls left
+  Qt Quick's pointer state dangling, and the next Quick window's mouse event in the same process crashed (the
+  control-hints access violation). Check whether this call is safe.
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.

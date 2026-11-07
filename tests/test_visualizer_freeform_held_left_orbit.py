@@ -97,7 +97,7 @@ def stage(qt_app, tmp_path, monkeypatch, request):
     monkeypatch.setattr(settings, 'replace_visualizer_runtime_preset_state', save)
     try:
         yield SimpleNamespace(mode=mode, unit=unit, window=window, visualizer=visualizer, settings=settings,
-                              controller=unit.runtime.input_controller, writes=writes, rates=rates)
+                              controller=unit.runtime.input_controller, writes=writes, rates=rates, manager=manager)
     finally:
         window.cancel_plain_orbit()
         unit.retire()
@@ -171,3 +171,41 @@ def test_wasd_orbit_freeform_view_not_framed_flight(stage):
         assert stage.rates[-1] == rate
         QCoreApplication.sendEvent(stage.window, QKeyEvent(QEvent.Type.KeyRelease, key, NONE))
         assert stage.rates[-1] == (0., 0.)
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize('stage', FREEFORM, indirect=True)
+def test_a_switch_between_the_freeform_modes_ends_a_held_orbit(stage):
+    """A held-left orbit on one freeform mode (Sphere, Extruded Spectrum) is ended by a switch to the other, as a
+    framed mode's orbit is by any mode change ('mode'): the drag, its pointer capture and its cursor fade end at the
+    switch, and the rest of the drag never orbits the new mode. Both modes are freeform, so the framed-only scene
+    transform projection does not change and only the mode edge can end it."""
+    other = next(mode for mode in FREEFORM if mode != stage.mode)
+    cancels = []
+    stage.controller.plain_orbit_cancel_requested.connect(cancels.append)
+    p = _centre(stage)
+    _send(stage, QEvent.Type.MouseButtonPress, p, LEFT, LEFT, NONE)
+    _send(stage, QEvent.Type.MouseMove, p + QPointF(20., 10.), Qt.MouseButton.NoButton, LEFT, NONE)
+    assert stage.window._plain_orbit_card is not None and stage.controller._view_orbit_drag is not None
+    stage.visualizer.controller.set_mode(other)                                   # the mode edge
+    stage.manager._configure_quick_visualizer_input_admission(stage.unit, admitted=True)
+    assert 'mode' in cancels, 'the switch did not end the held orbit'
+    assert stage.window._plain_orbit_card is None and stage.controller._view_orbit_drag is None
+    before = view_orbit_values(stage.visualizer.controller.presentation_state, other)
+    _send(stage, QEvent.Type.MouseMove, p + QPointF(60., 30.), Qt.MouseButton.NoButton, LEFT, NONE)
+    _send(stage, QEvent.Type.MouseButtonRelease, p + QPointF(60., 30.), LEFT, Qt.MouseButton.NoButton, NONE)
+    assert view_orbit_values(stage.visualizer.controller.presentation_state, other) == before
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize('stage', ['sphere'], indirect=True)
+def test_a_projection_for_the_same_freeform_mode_keeps_the_held_orbit(stage):
+    """Only a mode change ends it: the same projection again (a preset swap in the same mode) keeps the drag."""
+    cancels = []
+    stage.controller.plain_orbit_cancel_requested.connect(cancels.append)
+    p = _centre(stage)
+    _send(stage, QEvent.Type.MouseButtonPress, p, LEFT, LEFT, NONE)
+    _send(stage, QEvent.Type.MouseMove, p + QPointF(20., 10.), Qt.MouseButton.NoButton, LEFT, NONE)
+    stage.manager._configure_quick_visualizer_input_admission(stage.unit, admitted=True)
+    assert cancels == [] and stage.window._plain_orbit_card is not None
+    _send(stage, QEvent.Type.MouseButtonRelease, p + QPointF(20., 10.), LEFT, Qt.MouseButton.NoButton, NONE)

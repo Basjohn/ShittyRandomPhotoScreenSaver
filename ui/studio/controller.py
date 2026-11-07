@@ -12,6 +12,7 @@ Quick layout in this project.
 """
 from __future__ import annotations
 
+import time
 from typing import Any, Callable, ClassVar, Mapping
 
 from PySide6.QtCore import Property, QObject, Qt, Signal, Slot
@@ -135,6 +136,7 @@ class StudioBridge(QObject):
     framingChanged = Signal()
     measurementsChanged = Signal()
     responseChanged = Signal()
+    busyChanged = Signal()
 
     def __init__(self, controller: "StudioController") -> None:
         super().__init__()
@@ -154,6 +156,7 @@ class StudioBridge(QObject):
         self._objects: list[dict] = []
         self._viewport_status = "preparing"
         self._viewport_error = ""
+        self._busy = ""
         self._message = ""
         self._theme: dict[str, str] = {}
         self._framing_id = ""
@@ -962,8 +965,24 @@ class StudioBridge(QObject):
     playing = Property(bool, _playing, notify=transportChanged)
     loop = Property(bool, _loop, notify=transportChanged)
     duration = Property(float, _duration, notify=transportChanged)
+    def _pending_fixture(self) -> str:
+        return self._c.pending_source_label()
+
     fixtureId = Property(str, _fixture_id, notify=transportChanged)
     fixtures = Property("QVariantList", _fixtures, notify=transportChanged)
+    # The recorded clip asked for and still analysing ("" when none): the source picker names it at once.
+    pendingFixture = Property(str, _pending_fixture, notify=transportChanged)
+
+    def _preview_busy(self) -> str:
+        return self._busy
+
+    # What the preview is waiting for ("" when live): an analysis in the background, or a change being applied.
+    previewBusy = Property(str, _preview_busy, notify=busyChanged)
+
+    def set_busy(self, text: str) -> None:
+        if text != self._busy:
+            self._busy = text
+            self.busyChanged.emit()
 
     def _timeline(self) -> list:
         shape = getattr(self._c.evaluator, "timeline", None)
@@ -1260,6 +1279,14 @@ class StudioController(QObject):
     _active: ClassVar["StudioController | None"] = None
     # GUI-thread time one evaluation may spend on an exact replay (the rest of a ~16 ms frame stays free).
     EVALUATION_BUDGET_S: ClassVar[float] = 0.008
+    # A replay converging longer than this many frames says so ("Updating…"); a click's one-frame live-applied
+    # frame does not flash the notice.
+    APPLYING_AFTER_FRAMES: ClassVar[int] = 3
+    # A preview that should be moving (playing, or applying a change) and showed no new frame for longer than this
+    # logs the gap and its cause (``logs/screensaver_studio.log``).
+    PREVIEW_GAP_LOG_S: ClassVar[float] = 0.25
+    # A change whose replay took longer than this (or converged over frames, or restarted the pass) is logged.
+    REPLAY_LOG_S: ClassVar[float] = 0.03
 
     @classmethod
     def active(cls) -> "StudioController | None":
@@ -1304,6 +1331,16 @@ class StudioController(QObject):
         self._source_notice = ""            # the notice naming the automatically chosen source, while it is shown
         self._wanted_source: str | None = None
         self._failure_shown = ""
+        self._converging_frames = 0         # consecutive evaluations an exact replay has been converging
+        # Sidecar log (``logs/screensaver_studio.log``) of what the preview waited for: the change being replayed
+        # (its trigger, start, frames and whether it restarted the pass), the last fresh preview frame while the
+        # preview should be moving, and when each clip analysis started. Read on the frame and job edges only.
+        self._replay_reason: str | None = None
+        self._replay_started = 0.0
+        self._replay_frames = 0
+        self._replay_restarted = False
+        self._last_fresh_at: float | None = None
+        self._clip_job_started: dict[str, float] = {}
 
     # ---------------------------------------------------------------- open
     def open(self) -> bool:
@@ -1503,6 +1540,8 @@ class StudioController(QObject):
                         session.commit_count, session.preset_label)
         if self.bridge is not None:
             self.bridge.on_session_changed(reason)
+        if reason in ("commit", "undo", "redo"):
+            self._note_replay(f"{reason} {label!r}")
         self._invalidate()
         if not self.session.gesture_active:
             self.refresh_preset_previews()
@@ -1621,9 +1660,12 @@ class StudioController(QObject):
     def _on_evaluator_changed(self) -> None:
         if self.state not in ("opening", "presented"):
             return
+        logger.info("[STUDIO] analysis landed mode=%s source=%s", self.adapter.mode_id, self.evaluator.fixture.id)
+        self._note_replay("analysis landed")
         self._invalidate()
         if self.bridge is not None:
             self.bridge.transportChanged.emit()
+        self._refresh_busy()
 
     def _invalidate(self) -> None:
         self._eval_dirty = True
@@ -1666,7 +1708,13 @@ class StudioController(QObject):
             return
         if self.bridge is not None:
             self.bridge.apply_pending_previews()     # a drag's newest value, once per frame
-        moved = self.transport.on_frame()
+        if getattr(self.evaluator, "converging", False) and self.transport.playing:
+            # An exact replay is converging on the instant shown: the transport waits for it instead of running
+            # ahead (a replay chasing a moving instant froze the preview for seconds).
+            self.transport.hold()
+            moved = False
+        else:
+            moved = self.transport.on_frame()
         if moved and self.bridge is not None:
             self.bridge.timeChanged.emit()
         if self._eval_dirty or moved:
@@ -1680,28 +1728,84 @@ class StudioController(QObject):
                     # A mode whose logical step reads the card's world extent (Bubble's domain) is evaluated at
                     # the extent actually presented.
                     spatial(self.presented_extent())
+                playing = getattr(self.evaluator, "set_playing", None)
+                if callable(playing):
+                    # While playing, a change whose exact replay would chase the moving instant restarts the pass.
+                    playing(self.transport.playing and not live)
+                started = time.perf_counter()
                 frame = self.evaluator.evaluate(self.evaluation_time(), self.evaluation_values(), exact=not live,
                                                 revision=revision)
+                evaluated = time.perf_counter() - started
+                restarted = getattr(self.evaluator, "take_restart", None)
+                if callable(restarted) and restarted():
+                    # The evaluator applied a change by replaying to the start of the pass: the transport follows.
+                    self._replay_restarted = True
+                    self.transport.restart_pass()
+                    if self.bridge is not None:
+                        self.bridge.timeChanged.emit()
             except Exception as exc:
                 logger.exception("[STUDIO] Preview evaluation failed")
                 if self.bridge is not None:
                     self.bridge.set_viewport("error", f"Evaluation failed: {type(exc).__name__}: {exc}")
                 return
             self.evaluations += 1
+            fresh = frame is not self.last_frame
             self.last_frame = frame
             self.viewport.set_frame(frame)
             self._check_analysis_failure()
-            if getattr(self.evaluator, "converging", False):
+            converging = bool(getattr(self.evaluator, "converging", False))
+            if converging:
                 self._eval_dirty = True          # the exact replay continues on the next frame
+                self._converging_frames += 1
                 self.surface.request_frame()
+            else:
+                self._converging_frames = 0
+            self._log_frame(fresh, converging, evaluated)
             measure = getattr(self.evaluator, "measurements", None)
             if callable(measure) and self.bridge is not None:
                 self.bridge.push_measurements(measure())
             self.refresh_handles()
+            self._refresh_busy()
         if getattr(self, "_preview_jobs", None):
             self._serve_preview()
         if self.transport.wants_frames:
             self.surface.request_frame()
+
+    def _note_replay(self, reason: str) -> None:
+        """A change the preview has to replay (an edit, undo/redo, answers or inputs landing) starts now."""
+        self._replay_reason = reason
+        self._replay_started = time.perf_counter()
+        self._replay_frames = 0
+        self._replay_restarted = False
+
+    def _log_frame(self, fresh: bool, converging: bool, evaluated: float) -> None:
+        """Sidecar log on the frame edge: a change's replay when it completes, and a gap with no new preview frame
+        while the preview should be moving. One line per event, never per frame."""
+        now = time.perf_counter()
+        reason = self._replay_reason
+        if reason is not None:
+            self._replay_frames += 1
+            if not converging:
+                took = now - self._replay_started
+                if self._replay_restarted or self._replay_frames > 1 or took >= self.REPLAY_LOG_S:
+                    logger.info("[STUDIO] replay after %s mode=%s %.0f ms over %d frames, %s at %.2f s",
+                                reason, self.adapter.mode_id, took * 1000.0, self._replay_frames,
+                                "restarted the pass" if self._replay_restarted else "resumed",
+                                self.transport.time)
+                self._replay_reason = None
+        if fresh:
+            last = self._last_fresh_at
+            if last is not None and now - last > self.PREVIEW_GAP_LOG_S:
+                if reason is not None:
+                    cause = f"replaying {reason}"
+                elif evaluated > self.PREVIEW_GAP_LOG_S:
+                    cause = f"one evaluation took {evaluated * 1000.0:.0f} ms"
+                else:
+                    cause = "no frame was requested (window not rendering)"
+                logger.info("[STUDIO] preview gap %.0f ms mode=%s: %s", (now - last) * 1000.0,
+                            self.adapter.mode_id, cause)
+            moving = self.transport.playing or converging or self._replay_reason is not None
+            self._last_fresh_at = now if moving else None
 
     def _on_rendered(self, _serial: int) -> None:
         if self.bridge is not None:
@@ -1844,9 +1948,13 @@ class StudioController(QObject):
         # The selection the user (or, before any user choice, the default) asked for last: a background clip
         # load landing later selects itself only while it is still this one.
         self._wanted_source = fixture_id
+        self._retire_other_clip_jobs(fixture_id)
         if fixture_id.startswith("clip:") and fixture_id not in {f.id for f in self.evaluator.fixtures()}:
+            logger.info("[STUDIO] source select %s (%s): accepted, analysing first", fixture_id,
+                        "user" if user else "default")
             self._load_clip(fixture_id)
             return
+        logger.info("[STUDIO] source select %s (%s): accepted, selected", fixture_id, "user" if user else "default")
         self.evaluator.select(fixture_id)
         self.transport.set_duration(self.evaluator.fixture.duration)
         self.transport.seek(0.0)
@@ -1856,6 +1964,42 @@ class StudioController(QObject):
             self.bridge.timeChanged.emit()
         self._refresh_clip_analysis()
         self._invalidate()
+
+    def pending_source_label(self) -> str:
+        """The label of the recorded clip last asked for while it is still analysing ("" otherwise)."""
+        wanted = self._wanted_source
+        if not wanted or wanted not in self._clip_jobs or self.evaluator is None or self.evaluator.fixture.id == wanted:
+            return ""
+        clip = next((c for c in self.adapter.recorded_clips() if c.id == wanted), None)
+        return clip.label if clip is not None else ""
+
+    def preview_busy(self) -> str:
+        """What the preview waits for: the clip on screen (or the evaluator's answers) analysing for the current
+        values, or an exact replay converging (a change applied, a seek) for more than a moment ("" when live)."""
+        if self.evaluator is None:
+            return ""
+        if self.evaluator.fixture.id in self._clip_jobs or getattr(self.evaluator, "analysing", False):
+            return "Analysing…"
+        if self._converging_frames >= self.APPLYING_AFTER_FRAMES:
+            return "Updating…"
+        return ""
+
+    def _refresh_busy(self) -> None:
+        if self.bridge is not None:
+            self.bridge.set_busy(self.preview_busy())
+
+    def _retire_other_clip_jobs(self, fixture_id: str) -> None:
+        """Latest wins: every clip analysis but ``fixture_id``'s is retired when a source is asked for (it could only
+        compete with this one for the CPU and land as something nobody asked for any more). A retired refresh of a
+        clip runs again when that clip is picked again (its analysis signature stayed the old one)."""
+        for other in [clip_id for clip_id in self._clip_jobs if clip_id != fixture_id]:
+            self._clip_jobs.pop(other).cancel()
+            self._log_job_end(other, f"cancelled: superseded by {fixture_id}")
+
+    def _log_job_end(self, clip_id: str, outcome: str) -> None:
+        started = self._clip_job_started.pop(clip_id, None)
+        took = "" if started is None else f" after {(time.perf_counter() - started) * 1000.0:.0f} ms"
+        logger.info("[STUDIO] clip analysis %s %s%s", clip_id, outcome, took)
 
     def clip_status(self, clip_id: str) -> str:
         if clip_id in self._clip_jobs:
@@ -1891,26 +2035,41 @@ class StudioController(QObject):
         job = self._clip_jobs.pop(clip_id, None)
         if job is not None:
             job.cancel()
+            self._log_job_end(clip_id, "cancelled: the analysis values changed again")
         self._load_clip(clip_id, refresh=True)
 
     def _load_clip(self, clip_id: str, *, refresh: bool = False) -> None:
         if clip_id in self._clip_jobs:
+            logger.info("[STUDIO] clip analysis %s already running (kept)", clip_id)
             return
         clip = next((c for c in self.adapter.recorded_clips() if c.id == clip_id), None)
         loader = getattr(self.adapter, "start_clip_load", None)
         if clip is None or not callable(loader):
+            logger.info("[STUDIO] source select %s rejected: recorded clips are not available for mode=%s",
+                        clip_id, self.adapter.mode_id)
             self.bridge.notify("Recorded clips are not available for this mode")
             return
 
         values = self.session.committed_values
         signature = self._analysis_signature(values)
+        completed = [False]
 
         def finished(result, error: str = "") -> None:
+            completed[0] = True
             if self._clip_jobs.get(clip_id) is not job_ref[0] and job_ref[0] is not None:
                 return                                   # a newer analysis of this clip replaced this one
             self._clip_jobs.pop(clip_id, None)
             if self.state not in ("opening", "presented"):
                 return
+            if error:
+                outcome = f"failed: {error}"
+            elif refresh:
+                outcome = "finished (re-analysed, replaces the inputs on screen)"
+            elif self._wanted_source == clip_id:
+                outcome = "finished, selected"
+            else:
+                outcome = f"finished, not selected (superseded by {self._wanted_source})"
+            self._log_job_end(clip_id, outcome)
             if error:
                 self._clip_errors[clip_id] = error
                 self.bridge.notify(f"Clip analysis failed: {error}", "Retry", lambda: self.retry_clip(clip_id))
@@ -1922,6 +2081,7 @@ class StudioController(QObject):
                 self.evaluator.add_recorded(result)
                 if self.evaluator.fixture.id == clip_id:
                     self.evaluator.select(clip_id)
+                    self._note_replay("clip re-analysed")
                     self._invalidate()
                 self._refresh_clip_analysis()           # values edited again while it ran
             else:
@@ -1937,17 +2097,24 @@ class StudioController(QObject):
                         self._source_notice = f"Preview source: {clip.label} (recorded music)"
                         self.bridge.notify(self._source_notice)
             self.bridge.transportChanged.emit()
+            self._refresh_busy()
 
         job_ref = [None]
+        self._clip_job_started[clip_id] = time.perf_counter()
+        logger.info("[STUDIO] clip analysis %s started (%s)", clip_id, "refresh" if refresh else "load")
         try:
             job = loader(clip, values, finished)
-            if job is not None:
+            # A job that already finished inside the loader (a cached result, a worker that failed to start) is not
+            # running: registering it would leave the clip "analysing" for good and ignore every later selection.
+            if job is not None and not completed[0]:
                 job_ref[0] = job
                 self._clip_jobs[clip_id] = job
         except Exception as exc:
             self._clip_errors[clip_id] = str(exc)
+            self._log_job_end(clip_id, f"could not start: {exc}")
             self.bridge.notify(f"Clip analysis could not start: {exc}", "Retry", lambda: self.retry_clip(clip_id))
         self.bridge.transportChanged.emit()
+        self._refresh_busy()
 
     def retry_clip(self, clip_id: str) -> None:
         """Analyse a clip whose analysis failed again; it is selected when it lands (the user asked for it)."""
@@ -2186,6 +2353,8 @@ class StudioController(QObject):
                         timings[name])
 
         def cancel_jobs() -> None:
+            for clip_id in tuple(self._clip_jobs):
+                self._log_job_end(clip_id, "cancelled: the Studio closed")
             jobs, self._clip_jobs = tuple(self._clip_jobs.values()), {}
             for job in jobs:
                 cancel = getattr(job, "cancel", None)

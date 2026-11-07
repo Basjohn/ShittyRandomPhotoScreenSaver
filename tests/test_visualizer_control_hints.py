@@ -1,6 +1,11 @@
 """Native retained hover expiry and General global-option save ownership.
 
 Use --noconftest -p tools.pytest_qt_noenv; no environment/profile mutations.
+
+The hint scene is a Quick window bound to a render control and never shown (visible windows in tests are banned:
+operator, 7 Nov; shown after other orbit/input files in one process it crashed with an access violation). Synthetic
+mouse events sent to the window exercise Qt Quick's own hover and press delivery, as
+``tests/test_context_menu_hover_guard.py`` does.
 """
 from dataclasses import replace
 from pathlib import Path
@@ -8,9 +13,10 @@ from types import SimpleNamespace
 import uuid
 
 import pytest
-from PySide6.QtCore import QPoint, QUrl, Qt, QObject, QCoreApplication, QEvent
+from PySide6.QtCore import QPoint, QPointF, QSizeF, QUrl, Qt, QObject, QCoreApplication, QEvent
+from PySide6.QtGui import QGuiApplication, QMouseEvent
 from PySide6.QtQml import QQmlComponent, QQmlEngine
-from PySide6.QtQuick import QQuickItem, QQuickWindow
+from PySide6.QtQuick import QQuickItem, QQuickRenderControl, QQuickWindow
 from PySide6.QtTest import QTest
 
 from core.settings import SettingsManager
@@ -109,6 +115,29 @@ def test_general_controls_defer_save_and_survive_reopen_reset(qt_app, tmp_path):
         qt_app.processEvents()
 
 
+def _send(window, kind, point, button=Qt.MouseButton.NoButton, buttons=Qt.MouseButton.NoButton):
+    position = QPointF(point)
+    QGuiApplication.sendEvent(window, QMouseEvent(kind, position, position, button, buttons,
+                                                  Qt.KeyboardModifier.NoModifier))
+
+
+def _move(window, point):
+    """The pointer moves to ``point`` (window coordinates): Qt Quick's own hover delivery, no shown window."""
+    _send(window, QEvent.Type.MouseMove, point)
+
+
+def _frame(window):
+    """One scene frame: a shown window polishes and re-delivers the pointer's hover to items that appeared or moved
+    under it (Qt Quick's frame-synchronous hover) every frame; this window gets a frame only when asked."""
+    window._render_control.polishItems()
+
+
+def _click(window, point):
+    left = Qt.MouseButton.LeftButton
+    _send(window, QEvent.Type.MouseButtonPress, point, left, left)
+    _send(window, QEvent.Type.MouseButtonRelease, point, left, Qt.MouseButton.NoButton)
+
+
 @pytest.fixture
 def hint_scene(qt_app):
     ensure_core_resources()
@@ -117,20 +146,25 @@ def hint_scene(qt_app):
     assert component.isReady(), "\n".join(map(str, component.errors()))
     root = component.create()
     assert isinstance(root, QQuickItem)
-    window = QQuickWindow()
+    control = QQuickRenderControl()
+    window = QQuickWindow(control)          # bound to a render control and never shown
+    window._render_control = control
     window.resize(700, 480)
+    # A shown window sizes its content item on expose; this one never is, and the window-level hover observer
+    # lives on the content item.
+    window.contentItem().setSize(QSizeF(700, 480))
     root.setParentItem(window.contentItem())
     root.setWidth(640)
     root.setHeight(420)
     for key, value in {"presentationActive":True, "controlHintsAvailable":True,
                        "widgetGlowAdmitted":True, "cardBackgroundColor":"#30445c"}.items():
         root.setProperty(key, value)
-    window.show()
-    assert QTest.qWaitForWindowExposed(window)
-    QTest.mouseMove(window, QPoint(680,460))
+    _frame(window)                          # a window nothing renders is never polished on its own
+    _move(window, QPoint(680,460))
     QTest.qWait(50)
     observer = window.contentItem().findChild(QObject, "visualizerControlHintWindowHover")
     assert observer is not None
+    assert not window.isVisible()
     try:
         yield window, root
     finally:
@@ -143,15 +177,16 @@ def hint_scene(qt_app):
             if shiboken6.isValid(observer):
                 QCoreApplication.sendPostedEvents(observer, QEvent.Type.DeferredDelete)
             assert not shiboken6.isValid(observer), "window-level hover observer outlived its QML component"
-        window.close()
         window.deleteLater()
+        control.deleteLater()
+        engine.deleteLater()
         qt_app.processEvents()
 
 
 def test_native_hover_expires_without_internal_movement_restart_and_reenters(hint_scene, qtbot):
     window, root = hint_scene
     hint = root.findChild(QQuickItem, "visualizerControlHint")
-    QTest.mouseMove(window, QPoint(200,150))
+    _move(window, QPoint(200,150))
     qtbot.waitUntil(lambda: hint.opacity() > .85, timeout=2000)
     assert root.property("controlHintHovered") is True
     assert hint.opacity() > .85
@@ -160,16 +195,16 @@ def test_native_hover_expires_without_internal_movement_restart_and_reenters(hin
     assert 48 <= hint.width() <= 84
     assert hint.implicitWidth() == 332 and hint.implicitHeight() == 468
     qtbot.wait(2200)  # Move within this visit, before its scheduled expiry.
-    QTest.mouseMove(window, QPoint(260,180))
+    _move(window, QPoint(260,180))
     # Bound the remaining original visit: restarting on the move would need
     # another full reveal/hold/fade and must still fail this test.
     qtbot.waitUntil(lambda: hint.opacity() == 0., timeout=4500)
     assert root.property("controlHintHovered") is True
     assert hint.opacity() == pytest.approx(0., abs=.005)
-    QTest.mouseMove(window, QPoint(680,460))
+    _move(window, QPoint(680,460))
     qtbot.waitUntil(lambda: not root.property("controlHintVisitStarted")
                     and hint.opacity() == 0., timeout=1500)
-    QTest.mouseMove(window, QPoint(220,160))
+    _move(window, QPoint(220,160))
     qtbot.waitUntil(lambda: hint.opacity() > .85, timeout=2000)
     assert hint.opacity() > .85
 
@@ -177,7 +212,7 @@ def test_native_hover_expires_without_internal_movement_restart_and_reenters(hin
 def test_native_hint_admission_suppresses_edit_menu_borderless_other_mode_and_toggle(hint_scene):
     window, root = hint_scene
     hint = root.findChild(QQuickItem, "visualizerControlHint")
-    QTest.mouseMove(window, QPoint(200,150))
+    _move(window, QPoint(200,150))
     QTest.qWait(850)
     assert hint.isVisible()
     # A real content MouseArea still receives clicks through the artwork.
@@ -187,8 +222,7 @@ def test_native_hint_admission_suppresses_edit_menu_borderless_other_mode_and_to
     component.setData(b'import QtQuick; MouseArea { anchors.fill: parent; property int presses: 0; onPressed: presses += 1 }', QUrl())
     area = component.create()
     area.setParentItem(content)
-    QTest.mouseClick(window, Qt.MouseButton.LeftButton,
-                     pos=QPoint(round(hint.x()+hint.width()/2), round(hint.y()+hint.height()/2)))
+    _click(window, QPoint(round(hint.x()+hint.width()/2), round(hint.y()+hint.height()/2)))
     assert area.property("presses") == 1
     for key in ("show3DControlHints", "controlHintsAvailable", "volumeWheelEnabled",
                 "widgetGlowAdmitted", "cardShellEnabled", "presentationActive"):
@@ -197,6 +231,7 @@ def test_native_hint_admission_suppresses_edit_menu_borderless_other_mode_and_to
         assert not hint.isVisible(), key
         assert root.property("controlHintEligible") is False
         root.setProperty(key, True)
+        _frame(window)
         QTest.qWait(30)
     # Hints are independently switchable; turning off action glyphs does not
     # disable the hint's nonblocking hover observation.
@@ -270,7 +305,7 @@ def test_lazy_visualizer_root_retains_initial_hint_capability(qt_app):
 def test_native_menu_ctrl_changes_do_not_restart_current_or_expired_visit(hint_scene):
     window, root = hint_scene
     hint = root.findChild(QQuickItem, "visualizerControlHint")
-    QTest.mouseMove(window, QPoint(200,150))
+    _move(window, QPoint(200,150))
     QTest.qWait(850)
     assert hint.opacity() > .85
     # Both menu visibility and Ctrl/interaction admission project through this
@@ -285,7 +320,7 @@ def test_native_menu_ctrl_changes_do_not_restart_current_or_expired_visit(hint_s
             component.setData(b'import QtQuick; MouseArea { width: 640; height: 420; z: 100; hoverEnabled: true }', QUrl())
             cover = component.create()
             cover.setParentItem(window.contentItem())
-            QTest.mouseMove(window, QPoint(205,155))
+            _move(window, QPoint(205,155))
         QTest.qWait(600)
         assert not hint.isVisible()
         assert root.property("controlHintVisitStarted") is True
@@ -304,9 +339,9 @@ def test_native_menu_ctrl_changes_do_not_restart_current_or_expired_visit(hint_s
     assert hint.opacity() == pytest.approx(0., abs=.005)
     # A genuine exit/re-entry while suppressed rearms the next admitted visit.
     root.setProperty("widgetGlowAdmitted", False)
-    QTest.mouseMove(window, QPoint(680,460))
+    _move(window, QPoint(680,460))
     QTest.qWait(60)
-    QTest.mouseMove(window, QPoint(220,160))
+    _move(window, QPoint(220,160))
     QTest.qWait(60)
     root.setProperty("widgetGlowAdmitted", True)
     QTest.qWait(850)
@@ -319,9 +354,9 @@ def test_native_disabled_hidden_and_retired_hint_observer_is_dormant_and_rearms(
     hint = root.findChild(QQuickItem, "visualizerControlHint")
     loader = root.findChild(QQuickItem, "visualizerControlHintVisitObserver")
     for key in ("show3DControlHints", "presentationActive", "controlHintsAvailable"):
-        QTest.mouseMove(window, QPoint(680,460))
+        _move(window, QPoint(680,460))
         QTest.qWait(40)
-        QTest.mouseMove(window, QPoint(200,150))
+        _move(window, QPoint(200,150))
         QTest.qWait(850)
         assert root.property("controlHintVisitStarted") is True
         assert hint.opacity() > .85
@@ -338,15 +373,15 @@ def test_native_disabled_hidden_and_retired_hint_observer_is_dormant_and_rearms(
             QCoreApplication.sendPostedEvents(observer, QEvent.Type.DeferredDelete)
         assert not shiboken6.isValid(observer), key
         # Pointer movement while disabled has no hint handler to invoke.
-        QTest.mouseMove(window, QPoint(240,180))
+        _move(window, QPoint(240,180))
         QTest.qWait(40)
         assert window.contentItem().findChild(QObject, "visualizerControlHintWindowHover") is None
-        QTest.mouseMove(window, QPoint(680,460))
+        _move(window, QPoint(680,460))
         root.setProperty(key, True)
         QTest.qWait(40)
         assert loader.property("active") is True
         assert root.property("controlHintVisitStarted") is False
-        QTest.mouseMove(window, QPoint(220,160))
+        _move(window, QPoint(220,160))
         QTest.qWait(850)
         assert root.property("controlHintVisitStarted") is True
         assert hint.opacity() > .85

@@ -174,8 +174,11 @@ def test_every_cancellation_unwinds_once(orbit_card, cancel):
     elif cancel == 'card_hidden':
         card.card.setVisible(False)
     elif cancel == 'card_destroyed':
-        import shiboken6
-        shiboken6.delete(card.card)
+        # Destroyed the way Qt destroys a QML item (deleteLater, dispatched now), never by shiboken6.delete: a
+        # synchronous delete under a held press left Qt Quick's pointer state dangling, and the next Quick window
+        # that received a mouse event in this process crashed (test_visualizer_control_hints, 7 Nov).
+        card.card.deleteLater()
+        QCoreApplication.sendPostedEvents(card.card, QEvent.Type.DeferredDelete)
     elif cancel == 'borderless':
         card.card.setProperty('cardShellEnabled', False)
     else:
@@ -235,7 +238,9 @@ Item { property bool cardShellEnabled:true; property bool presentationActive:tru
     _press(orbit_card)
     _move(orbit_card)
     older.setWidth(120)
-    shiboken6.delete(older)
+    older.deleteLater()                       # as Qt destroys a QML item; never shiboken6.delete (see card_destroyed)
+    QCoreApplication.sendPostedEvents(older, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(older)
     assert orbit_card.capture.releases == 0
     _release(orbit_card)
     assert orbit_card.capture.releases == 1

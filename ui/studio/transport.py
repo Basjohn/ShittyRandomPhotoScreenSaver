@@ -57,6 +57,17 @@ class StudioTransport:
         self.cycles = 0
         self._last_wall = None
 
+    def hold(self) -> None:
+        """This frame time does not move (the frame shown waits for an exact replay converging on its instant); the
+        next frame re-establishes the wall reference, so the held time is never skipped."""
+        self._last_wall = None
+
+    def restart_pass(self) -> None:
+        """Back to the start of the pass playing (the passes played are kept, so a seamless loop's unrolled time is
+        the start of this pass): an evaluator restarted it to apply a change without chasing a moving instant
+        (``ui/studio/exact_replay.PassRestart``). Playback continues from there."""
+        self.time = 0.0
+
     def stop(self) -> None:
         """Retire: no further advancement or frame requests, ever."""
         self.playing = False
