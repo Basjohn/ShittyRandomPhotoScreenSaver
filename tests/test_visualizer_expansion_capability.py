@@ -24,7 +24,6 @@ from core.settings.visualizer_mode_registry import (
     build_visualizer_mode_activation,
     get_visualizer_mode_descriptor,
     iter_all_visualizer_mode_descriptors,
-    resolve_expanded_display_capable,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -43,7 +42,7 @@ def test_capability_defaults_off_and_only_extruded_bubble_opts_in():
 def test_capable_requires_registered_active_enabled_and_opted_in(mode):
     descriptor = get_visualizer_mode_descriptor(mode)
     enabled = build_visualizer_mode_activation(VISUALIZER_MODE_IDS)
-    assert resolve_expanded_display_capable(mode, enabled) is (
+    assert registry.resolve_expanded_display_capable(mode, enabled) is (
         descriptor.supports_expanded_display and registry.is_mode_active(mode)
     )
 
@@ -52,30 +51,33 @@ def test_a_disabled_capable_mode_cannot_force_expansion():
     others = tuple(m for m in VISUALIZER_MODE_IDS if m != FIRST_CAPABLE_MODE)
     activation = build_visualizer_mode_activation(others)
     assert activation[FIRST_CAPABLE_MODE] is False
-    assert resolve_expanded_display_capable(FIRST_CAPABLE_MODE, activation) is False
+    assert registry.resolve_expanded_display_capable(FIRST_CAPABLE_MODE, activation) is False
 
 
 def test_a_gated_capable_mode_cannot_force_expansion(monkeypatch):
     monkeypatch.setitem(registry._GATED_MODES, FIRST_CAPABLE_MODE, lambda: False)
     activation = build_visualizer_mode_activation(VISUALIZER_MODE_IDS)
-    assert resolve_expanded_display_capable(FIRST_CAPABLE_MODE, activation) is False
+    assert registry.resolve_expanded_display_capable(FIRST_CAPABLE_MODE, activation) is False
 
 
 @pytest.mark.parametrize("mode_id", ["", None, "nope", "EXTRUDED_BUBBLE_", "extruded bubble", 3, ["extruded_bubble"]])
 def test_unregistered_or_malformed_mode_ids_are_inert(mode_id):
     activation = build_visualizer_mode_activation(VISUALIZER_MODE_IDS)
-    assert resolve_expanded_display_capable(mode_id, activation) is False
+    assert registry.resolve_expanded_display_capable(mode_id, activation) is False
 
 
 def test_mode_id_spelling_is_canonicalised_like_the_registry():
     activation = build_visualizer_mode_activation(VISUALIZER_MODE_IDS)
-    assert resolve_expanded_display_capable(" Extruded_Bubble ", activation) is True
+    assert registry.resolve_expanded_display_capable(" Extruded_Bubble ", activation) is True
 
 
-def test_capability_is_not_a_settings_flag_or_preset_field():
+def test_capability_is_descriptor_metadata_not_a_settings_flag_or_preset_field():
     from core.settings.defaults import get_default_settings
     from core.settings.visualizer_presets import MODE_KEY_PREFIXES
 
+    # The one owner is the descriptor (plan 01 §0.3) ...
+    assert "supports_expanded_display" in {f.name for f in fields(VisualizerModeDescriptor)}
+    # ... and no persisted key or preset prefix shadows it.
     section = get_default_settings("Screensaver")["widgets"]["spotify_visualizer"]
     assert not [key for key in section if "supports_expanded" in key]
     assert not [p for prefixes in MODE_KEY_PREFIXES.values() for p in prefixes if "expanded_display".startswith(p)]
@@ -151,9 +153,15 @@ def test_fresh_interpreter_common_quick_and_every_mode_leave_the_reducer_unloade
         for name in {modules!r}:
             importlib.import_module(name)
         print({REDUCER!r} in sys.modules)
+        # The check is meaningful only for a module that exists and loads on demand without Qt or GL.
+        before = {{m for m in sys.modules if m.startswith(("PySide6", "OpenGL"))}}
+        importlib.import_module({REDUCER!r})
+        print(sorted({{m for m in sys.modules if m.startswith(("PySide6", "OpenGL"))}} - before))
         """
     )
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=240,
                             cwd=str(REPO))
     assert result.returncode == 0, result.stderr[-4000:]
-    assert result.stdout.strip().splitlines()[-1] == "False"
+    loaded_by_roots, added_by_reducer = result.stdout.strip().splitlines()[-2:]
+    assert loaded_by_roots == "False"
+    assert added_by_reducer == "[]"

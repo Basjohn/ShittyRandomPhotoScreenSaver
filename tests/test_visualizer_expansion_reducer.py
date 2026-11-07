@@ -127,6 +127,8 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
     ("a repeated press id is a duplicate",
      [ready(), glyph(1, True), glyph(1, True)],
      ["applied ordinary", "applied enter_pending BeginEnter[user,anim]", "duplicate enter_pending"]),
+    ("a re-delivered press id is a duplicate even for the opposite glyph",
+     [*EXPAND_BY_USER, glyph(1, False)], [*EXPANDED_TRACE, "duplicate expanded"]),
     ("a second expand press is coalesced",
      [*EXPAND_BY_USER, glyph(2, True)], [*EXPANDED_TRACE, "duplicate expanded"]),
     ("a glyph from an older generation is stale",
@@ -311,8 +313,14 @@ def _alphabet(s: tk.TakeoverState) -> list[tk.Event]:
         GlyphPressed(g, act, disp, nxt, True),
         GlyphPressed(g, act, disp, nxt, False),
         GlyphPressed(g, act, disp, s.last_press, True),
+        GlyphPressed(g, act, disp, s.last_press, False),
         GlyphPressed(g - 1, act, disp, nxt, True),
+        GlyphPressed(g - 1, act, disp, nxt, False),
         GlyphPressed(g, act - 1, disp, nxt, False),
+        GlyphPressed(g, act, other, nxt, False),
+        EnterCommitted(g - 1, s.txn), ExitCommitted(g - 1, s.txn), TransferFailed(g - 1, s.txn),
+        ModeActivated(g - 1, act + 1, disp, INCAPABLE, False), DisplayLost(g - 1, disp), EditEntered(g - 1),
+        SettingsOpened(g - 1), Shutdown(g - 1),
         EnterPrepared(g, s.txn), EnterFailed(g, s.txn), EnterCommitted(g, s.txn), ExitCommitted(g, s.txn),
         EnterCommitted(g, s.txn - 1),
         ModeRequested(g, 7, INCAPABLE, False), ModeRequested(g, 8, "capable-2", True),
@@ -334,6 +342,16 @@ _BEGINS = (BeginEnter, BeginExit, BeginTransfer)
 def _check(s0: tk.TakeoverState, event: tk.Event, step: tk.Step) -> None:
     s1, actions = step.state, step.actions
     ctx = f"{s0.phase.value} --{event!r}--> {_line(step)}"
+    # Fences: another generation (other than a newer readiness), a retiring generation, a foreign activation or
+    # display, or a repeated press id, never changes anything.
+    newer_ready = isinstance(event, GenerationReady) and (s0.generation is None or event.generation > s0.generation)
+    if not newer_ready and (event.generation != s0.generation or s0.phase is Phase.RETIRING):
+        assert step.outcome is Outcome.STALE, ctx
+    if isinstance(event, GlyphPressed) and event.generation == s0.generation and s0.phase is not Phase.RETIRING:
+        if event.activation != s0.activation or event.display != s0.display:
+            assert step.outcome is Outcome.STALE, ctx
+        elif event.press_id <= s0.last_press:
+            assert step.outcome is Outcome.DUPLICATE and s1 == s0, ctx
     if s0.terminal or step.outcome is Outcome.STALE:
         assert s1 == s0 and not actions, ctx
     if step.outcome in (Outcome.DUPLICATE, Outcome.IGNORED):
@@ -464,6 +482,9 @@ def _drive(state, events, coordinator: _Coordinator, *, disturb: tk.Event | None
         state = step.state
         pending.extend(step.actions)
         while pending:
+            # Every transaction is bounded by an event: a reducer that answers its own failure with a retry would
+            # loop here forever, so a runaway is a failure, never a hang.
+            assert answered < 200, f"the coordinator loop did not settle: {state}"
             if disturb is not None and answered == at:
                 step = reduce(state, disturb)
                 state = step.state
