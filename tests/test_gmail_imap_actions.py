@@ -235,3 +235,20 @@ def test_backend_tests_supplied_imap_credentials_without_saving(monkeypatch, tmp
     assert backend._imap_email is None
     assert backend._imap_password is None
     assert not backend._imap_creds_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("=?utf-8?q?Bj=C3=B6rn?= <bjorn@example.com>", "Björn <bjorn@example.com>"),
+        ("=?utf-8?q?Hello?= =?iso-8859-1?q?W=F6rld?=", "HelloWörld"),
+        ("Plain Name <a@b.c>", "Plain Name <a@b.c>"),
+        ("=?unknown-cs?q?abc?= d", "abc d"),
+        ("=?utf-8?q?bad=FF?= y", "bad� y"),
+    ],
+)
+def test_mime_headers_decode_with_their_own_spacing(raw, expected):
+    """A sender like ``=?utf-8?q?Bj=C3=B6rn?= <bjorn@example.com>`` used to show a doubled space."""
+    from core.gmail.gmail_imap import _decode_header_value
+
+    assert _decode_header_value(raw) == expected

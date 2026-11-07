@@ -66,6 +66,36 @@ def _visualizer_default(key: str) -> Any:
     return require_canonical_default(f"{_VISUALIZER_DEFAULT_PREFIX}.{key}")
 
 
+_EXPANDED_DISPLAY_TRUE = frozenset({"1", "true", "yes", "on"})
+_EXPANDED_DISPLAY_FALSE = frozenset({"0", "false", "no", "off"})
+
+
+def normalize_expanded_display_requested(value: Any) -> bool:
+    """The persisted Expanded Visualizer intent as a strict bool (plan 01 §0.3, M1).
+
+    ``widgets.spotify_visualizer.expanded_display_requested`` is a product-level user intent: one value per settings
+    profile, never part of a mode preset or the Custom payload, and never a mirror of mode, monitor or geometry.
+    Booleans pass, the usual boolean spellings (and 0/1) are read, and anything else (a malformed import, a hand
+    edit) falls back to the canonical default rather than to ``bool(value)``, so ``"off"`` or a stray list can
+    never turn expansion on.
+    """
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in _EXPANDED_DISPLAY_TRUE:
+            return True
+        if text in _EXPANDED_DISPLAY_FALSE:
+            return False
+    default = _visualizer_default("expanded_display_requested")
+    if not isinstance(default, bool):
+        raise TypeError("canonical widgets.spotify_visualizer.expanded_display_requested must be a bool")
+    return default
+
+
 def _active_visualizer_default(key: str) -> Any:
     """Return the default active-mode mirror for a non-persisted model field.
 
@@ -136,6 +166,8 @@ _CORE_SETTINGS_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     # explicit boolean, mirroring transition dormancy; the enabled-id tuple is
     # derived only for runtime/UI consumers.
     "mode_activation": normalize_visualizer_mode_activation,
+    # Expanded Visualizer intent: live-section state only (no mode prefix, so presets and Custom never carry it).
+    "expanded_display_requested": normalize_expanded_display_requested,
     "rainbow_enabled": bool,
     "rainbow_speed": float,
 }
@@ -402,6 +434,9 @@ def _build_visualizer_core_kwargs(
     rainbow_kwargs: Mapping[str, Any],
 ) -> Dict[str, Any]:
     data = _build_read_value_map(read_value, _CORE_BUILD_SPECS)
+    data["expanded_display_requested"] = normalize_expanded_display_requested(
+        read_value("expanded_display_requested", _visualizer_default("expanded_display_requested"))
+    )
     data.update(
         {
             "bar_count": int(active_technical["bar_count"]),
@@ -711,6 +746,11 @@ class SpotifyVisualizerSettings:
             _visualizer_default('mode_activation')
         )
     )
+    # Expanded Visualizer (plan 01): the user's persisted wish to show a capable mode display-wide. Whether it takes
+    # effect is the takeover reducer's decision (``core.expanded_visualizer_takeover``), never this field's.
+    expanded_display_requested: bool = field(
+        default_factory=lambda: normalize_expanded_display_requested(_visualizer_default('expanded_display_requested'))
+    )
     spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing_enabled'))
     spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing'))
     spectrum_mirrored: bool = field(default_factory=lambda: _visualizer_default('spectrum_mirrored'))
@@ -793,6 +833,7 @@ class SpotifyVisualizerSettings:
     preset_waveform_ribbon: int = field(default_factory=lambda: _visualizer_default('preset_waveform_ribbon'))
 
     def __post_init__(self):
+        self.expanded_display_requested = normalize_expanded_display_requested(self.expanded_display_requested)
         self._apply_core_visual_defaults()
         self._apply_devcurve_defaults()
         self._apply_sphere_defaults()

@@ -351,10 +351,55 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 
 **Milestone 1 | Capability + persistence + pure takeover state machine**
 
-- [ ] Add registry capability default false; EB true only. Disabled/unregistered mode cannot force expansion.
-- [ ] Add canonical default/model/normalization for persisted intent. Test preset and Custom replacement transaction preserving field/other widget subtree; reset/import/export/migration/MC profile isolation.
-- [ ] Implement pure event/action reducer for enter/exit/mode/monitor/Settings/Edit/topology with generation and idempotency rules; no GL or extra resource owners.
+- [x] Add registry capability default false; EB true only. Disabled/unregistered mode cannot force expansion.
+- [x] Add canonical default/model/normalization for persisted intent. Test preset and Custom replacement transaction preserving field/other widget subtree; reset/import/export/migration/MC profile isolation.
+- [x] Implement pure event/action reducer for enter/exit/mode/monitor/Settings/Edit/topology with generation and idempotency rules; no GL or extra resource owners.
 - [ ] **Gate 1:** all pure tests pass including stale/duplicate input and immediate accept/reject permutations; no modules eagerly imported from dormant modes.
+
+**M1 amendments (7 Nov, implementing agent; the source is the authority where this plan was silent or stale):**
+
+- *Entry order.* M1 was built ahead of the M0 receipts at the lead's direction; it changes no rendering or runtime
+  behaviour, and its branch merges only after the lead has captured M0.
+- *Reducer location.* The pure reducer is `core/expanded_visualizer_takeover.py`, not a file beside
+  `widgets/spotify_visualizer/visualizer_host_binding.py`: that package's `__init__` eagerly imports the beat engine
+  and audio worker, which a standard-library-only module must not pull in. The M2 coordinator (one per process, the
+  §0.3 owner of effective state) sits beside the binding and imports the reducer. §D's "display-manager-level
+  coordinator" means that coordinator, not `DisplayManager`.
+- *Capability.* `VisualizerModeDescriptor.supports_expanded_display` (default False; Extruded Bubble True) is read
+  only through `resolve_expanded_display_capable(mode_id, mode_activation)`: registered, active (not gated), enabled
+  by `mode_activation` and opted in. The fifth §B2 predicate, expanded-effective, is the reducer's. Events carry the
+  resolved `mode_capable` as a fact, so the reducer stays registry-free and tests can use a synthetic second capable
+  mode (as M5 asks).
+- *Intent.* `widgets.spotify_visualizer.expanded_display_requested`: canonical default (both profiles, no MC
+  override), model field, and `normalize_expanded_display_requested` (bools, 0/1 and the usual spellings; anything
+  else falls back to the canonical default, never `bool(value)`). It has no mode prefix, so preset payloads and the
+  Custom snapshot exclude it by construction: no preset repair fill, and the completeness guard is unaffected. No
+  visualizer schema bump: an older profile gains the key through the defaults merge. No UI at M1.
+- *Write rules (§D1.8, §D2.5).* The intent is written only by the user's glyph: True once, when the user's enter
+  commits; False when the user's collapse is accepted (collapse is always attainable, so a Settings visit during the
+  exit cannot resurrect it). Edit, Settings, mode changes, capability loss, monitor loss and shutdown never write it.
+- *Decision, §D3 incapable -> capable (deterministic, tested; operator may revisit as a product choice):* the
+  intent re-applies when a capable mode activates, because no automatic collapse clears it. Capable -> incapable
+  holds the request until the collapse commits, then forwards it; its rejection re-expands the source mode.
+- *Decisions on busy phases:* a mode request or transfer arriving while an enter, exit or transfer is in flight is
+  rejected (never queued); one latest opposite glyph press is held to the running transition's commit edge; a
+  failed enter restores ordinary and does not retry until a new edge (Edit exit, mode activation, readiness, press).
+- *Fences M2 must supply:* every event carries the engine generation; glyph presses and transfers carry the
+  visualizer activation (`engine.get_activation_id()`, which the reducer requires to increase within a generation)
+  and the physical display identity (the runtime's `display_identity`); completions carry the transaction id the
+  reducer issued. Loss of the owning display retires the generation (§0.5); a lost transfer target rolls back.
+- *Gate 1 evidence (7 Nov, agent; the lead signs at merge):* `tests/test_visualizer_expansion_reducer.py` (table
+  traces, an invariant walk over every short event sequence from ten reachable states, accept/reject permutations
+  through a scripted coordinator), `tests/test_visualizer_expansion_capability.py` (capability and the AST
+  import-graph scan plus a fresh interpreter) and `tests/test_visualizer_expansion_persistence.py` all fail on main
+  for their own reasons, and six reducer mutations (Settings writing the intent, an enter staying expanded under
+  Edit, a repeated press id, no generation fence, a retried failure, persisting on press) each turn them red.
+  `tools/overhead_baseline.py` call counts are identical to main's (all 38 transition, Visualizer, surface and
+  node-path cases, GL and Python). The stored `2026-11-06_ed9cec6b` baseline is already behind main by +46 Python
+  calls per Visualizer frame and +14 for Burn; M0 should re-record it on the quiet machine. The impacted-file gate
+  (`tools/impacted_tests.py --base main`, 735 files, `tests/run_chunked.py --isolated` in four batches) passed
+  734; `test_release_media.py::test_source_change_during_capture_discards_media` fails identically on a clean main
+  worktree because the untracked operator originals `assets/usu/scenes/*.png` exist only in the main checkout.
 
 **Milestone 2 | Full display viewport with intact 3D rendering**
 
