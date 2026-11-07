@@ -208,8 +208,10 @@ class TestDisplayTab:
             assert new_tab is not None
             new_tab.deleteLater()
 
-    def test_mc_profile_forces_interaction_mode_enabled_and_disabled(self, qt_app, tmp_path):
+    def test_mc_profile_forces_interaction_mode_enabled_and_disabled(self, qt_app, tmp_path, monkeypatch):
         """MC profile should present Interaction Mode as locked on."""
+        import core.mc
+        monkeypatch.setattr(core.mc, "is_mc_build", lambda: True)
         settings = SettingsManager(
             organization="Test",
             application="Screensaver_MC",
@@ -224,8 +226,10 @@ class TestDisplayTab:
 
         tab.deleteLater()
 
-    def test_mc_profile_save_keeps_interaction_mode_true(self, qt_app, tmp_path):
+    def test_mc_profile_save_keeps_interaction_mode_true(self, qt_app, tmp_path, monkeypatch):
         """MC profile save path should persist true even if settings were stale."""
+        import core.mc
+        monkeypatch.setattr(core.mc, "is_mc_build", lambda: True)
         settings = SettingsManager(
             organization="Test",
             application="Screensaver_MC",

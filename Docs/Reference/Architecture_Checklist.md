@@ -320,9 +320,6 @@ into them.
   - One range per value: the rainbow speed range is restated in four places today.
   - The preset completeness check covers them.
   - Uses AC-18's shared-entries pattern.
-- [ ] **AC-22 (SS-06) One product-identity predicate in Settings.** P2, effort S. The Display tab and Guided Setup
-  decide "is this the MC build" from the app name compared with a literal. Both read `SettingsProfile.current().mc`
-  instead, and the "MC forces interaction" rule gets one owner.
 - [ ] **AC-23 (SS-07) AC-01 residue.** P3, effort S. Folds into AC-14 and follows AC-18.
   - Delete about 600 dead lines of Technical widget code and the dead Advanced plumbing
     (`_auto_switch_preset_to_custom` never fires).

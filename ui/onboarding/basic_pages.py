@@ -458,7 +458,8 @@ class InteractionPage(Page):
         self.refresh()
 
     def _interaction_on(self):
-        return self.media_center or bool(self.settings.get("input.interaction_mode"))
+        from core.mc import effective_interaction_mode
+        return effective_interaction_mode(self.settings.get("input.interaction_mode"))
 
     def refresh(self):
         button = self.group.button(int(self._interaction_on()))

@@ -768,13 +768,10 @@ class DisplayManager(QObject):
         )
 
     def _interaction_mode_enabled(self) -> bool:
-        from core.mc import is_mc_build
+        from core.mc import effective_interaction_mode
 
-        if is_mc_build():
-            return True
-        if self.settings_manager is None:
-            return False
-        return self.settings_manager.get_bool("input.interaction_mode")
+        manager = self.settings_manager
+        return effective_interaction_mode(manager is not None and manager.get_bool("input.interaction_mode"))
 
     def _set_quick_interaction_mode_enabled(self, enabled: bool) -> None:
         """Push one Settings/context-menu interaction change to live Quick inputs."""
@@ -1437,7 +1434,7 @@ class DisplayManager(QObject):
     def _refresh_quick_context_menu(self, unit: QuickDisplayUnit) -> None:
         """Refresh one retained menu from current product authorities."""
 
-        from core.mc import is_mc_build
+        from core.mc import interaction_mode_forced
         from core.settings.settings_manager import SettingsManager
 
         transitions, current, random_enabled, random_selectable = (
@@ -1489,7 +1486,7 @@ class DisplayManager(QObject):
             visualizer_available=visualizer_available,
             dimming_enabled=dimming_enabled,
             interaction_mode_enabled=self._interaction_mode_enabled(),
-            interaction_mode_locked=is_mc_build(),
+            interaction_mode_locked=interaction_mode_forced(),
             edit_mode_active=self._quick_custom_layout_owner.is_editing,
             layout_actions_available=self._quick_custom_layout_owner.can_start(),
         )
@@ -1662,9 +1659,9 @@ class DisplayManager(QObject):
                 self._refresh_all_quick_context_menus()
                 return True
             if action == "toggle_interaction":
-                from core.mc import is_mc_build
+                from core.mc import effective_interaction_mode
 
-                persisted = True if is_mc_build() else enabled
+                persisted = effective_interaction_mode(enabled)
                 settings.set("input.interaction_mode", persisted)
                 settings.save()
                 self._set_quick_interaction_mode_enabled(persisted)
