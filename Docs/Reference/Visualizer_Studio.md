@@ -254,6 +254,27 @@ is optional and defaults to "not offered":
   drag), and when a rewind alone used the frame's budget, stepping starts on the next frame. What remains per commit
   is one configuration build (an engine-answer mode's production settings model, Waveform's compiled settings) on the
   commit frame; a single production tick cannot be split.
+- **A change while playing restarts the pass (7 Nov, `exact_replay.PassRestart`).** The replay of a change (an edit,
+  undo/redo, new answers or inputs landing, a new extent) begins at the pass start or a checkpoint, while a playing
+  transport moves on. Under the budget it chased a moving instant and the frame stayed frozen until the loop wrapped
+  (operator, Waveform Ribbon). Measured on Human at 6 s with no rendering: Waveform 3.6 s, DevCurve through the
+  wrap. The one-shot evaluators (Bubble, Sphere, Extruded Bubble) replayed it in one evaluation (Bubble 1.5 s). The
+  history at the current instant under new values exists only by replaying from the start, so it cannot be
+  recomputed in place. Instead, while playing (`set_playing`, no live gesture), a change whose replay would step more
+  than `RESTART_BACKLOG_S` of history replays to the start of the pass. The controller takes the restart
+  (`take_restart`) and puts the transport there (`StudioTransport.restart_pass`). While any exact replay converges,
+  the transport holds (`StudioTransport.hold`) instead of running ahead. A seek back, a paused transport and a short
+  replay behave as before. What remains is the clip's analysis lead-in (Waveform about 0.7 s), shown as
+  "Updating…" (`previewBusy`; "Analysing…" while the clip on screen or the answers are analysed).
+  `tests/test_studio_change_while_playing.py` covers every Studio-backed mode.
+- **Source selection: latest wins (7 Nov).** Asking for a source retires every other clip analysis
+  (`_retire_other_clip_jobs`), and the picker names an analysing clip at once (`pendingFixture`). A job that already
+  finished inside its loader is never registered as running, which would otherwise block the clip for good.
+- **Sidecar log (`logs/screensaver_studio.log`, 7 Nov).** One INFO line per event, written on the frame and job edges
+  (no timer): each source selection (accepted, analysing first, or rejected), each clip analysis (started, finished
+  and selected or superseded, failed, cancelled with its reason, all with durations), each replay after a change
+  (trigger, duration, frames, restarted or resumed), and each preview gap longer than `PREVIEW_GAP_LOG_S` while the
+  preview should move, with its cause.
 - **Drags without a model build per frame (engine-answer modes).** A live gesture dragging one numeric key that the
   production build hands through verbatim takes the latest full build with that one entry replaced
   (`EngineAnswerEvaluator._mode_kwargs_for`). A key counts as such only after a full build in this Studio differed

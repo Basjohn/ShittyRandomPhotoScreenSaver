@@ -58,13 +58,19 @@ class QuickInputController(RuntimeInputOwner):
         self._custom_layout_active_provider = custom_layout_active_provider
         self._scene_transform_enabled = False
         self._scene_transform_mode = ""
+        self._projected_mode = ""           # the mode the last capability projection was for (framed or freeform)
 
     def set_scene_transform_enabled(self, enabled: bool, *, mode_id: str = "") -> None:
-        """Event-published descriptor capability, with no passive Settings reads."""
+        """Event-published descriptor capability, with no passive Settings reads. ``mode_id`` is the mode the
+        projection is for, framed or not: a mode edge ends a held orbit (``'mode'``) even between two freeform modes
+        (Sphere and Extruded Spectrum), whose scene transform stays off on both sides of the switch."""
         enabled = bool(enabled)
-        mode_id = str(mode_id) if enabled else ""
+        projected = str(mode_id)
+        mode_switched = bool(self._projected_mode) and projected != self._projected_mode
+        self._projected_mode = projected
+        mode_id = projected if enabled else ""
         changed = self._scene_transform_enabled != enabled or self._scene_transform_mode != mode_id
-        if self._scene_transform_enabled and (not enabled or self._scene_transform_mode != mode_id):
+        if mode_switched or (self._scene_transform_enabled and (not enabled or self._scene_transform_mode != mode_id)):
             self.plain_orbit_cancel_requested.emit('mode')
             self._end_visualizer_gesture()
             if self._view_orbit_drag is not None:

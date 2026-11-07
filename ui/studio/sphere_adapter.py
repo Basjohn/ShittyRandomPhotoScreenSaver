@@ -19,6 +19,7 @@ from typing import Any, Iterable, Mapping
 
 from core.settings.visualizer_mode_settings import Choice, Colour, Custom, Slider, Toggle, require_mode_settings
 from ui.studio import clip_loop, framed
+from ui.studio.exact_replay import PassRestart
 from ui.studio.registry import studio_title
 from ui.studio.adapter import (
     REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition,
@@ -363,7 +364,7 @@ def resolved_settings(values: Mapping[str, Any]) -> dict:
 
 
 # ------------------------------------------------------------------------- evaluator
-class SphereStudioEvaluator:
+class SphereStudioEvaluator(PassRestart):
     """Own runtime controller and Sphere runtime, stepped deterministically through one fixture's ticks."""
 
     def __init__(self) -> None:
@@ -461,9 +462,12 @@ class SphereStudioEvaluator:
         time = max(0.0, anchor.virtual(at)) if anchor.looped else max(0.0, min(at, self.fixture.duration))
         key = self._key(values)
         if self._controller is None or time < self._time or (exact and key != self._values_key):
+            back = time < self._time           # a seek back (anything else is a change: values, inputs)
             self._start(values)
             if anchor.looped:
                 time = anchor.rebase(at)       # a replay from the start of the pass the instant is in
+            if not back:
+                time = self._restart_point(time)   # while playing, a long replay restarts the pass instead
         elif key != self._values_key:
             from widgets.spotify_visualizer.feature_replay import configure_offline_controller
             configure_offline_controller(self._controller, MODE, settings=resolved_settings(values))

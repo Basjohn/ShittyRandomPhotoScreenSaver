@@ -1930,6 +1930,7 @@ Rectangle {
 
                     // Toolbar groups sit on opaque themed backings (mock): the scene never shows through a chip.
                     Rectangle {
+                        id: toolbarLeft
                         objectName: "toolbarBacking"
                         x: 10; y: 8; z: 2
                         width: toolbar.width + 8; height: toolbar.height + 8
@@ -1945,6 +1946,7 @@ Rectangle {
                                            onClicked: studio.togglePlay() }
                             C.ComboBox {
                                 id: fixtureBox
+                                objectName: "fixtureBox"
                                 width: 230; height: 30
                                 model: studio.fixtures
                                 textRole: "label"
@@ -1954,7 +1956,10 @@ Rectangle {
                                         if (studio.fixtures[i].id === studio.fixtureId) return i
                                     return -1
                                 }
-                                displayText: currentIndex >= 0 ? studio.fixtures[currentIndex].label : "Choose input"
+                                // A recorded clip asked for and still analysing is named at once (the preview stays
+                                // on the previous source until it lands).
+                                displayText: studio.pendingFixture !== "" ? studio.pendingFixture + "  · analysing…"
+                                             : currentIndex >= 0 ? studio.fixtures[currentIndex].label : "Choose input"
                                 onActivated: function(index) { studio.selectFixture(studio.fixtures[index].id) }
                                 delegate: C.ItemDelegate {
                                     width: fixtureBox.width
@@ -1988,6 +1993,22 @@ Rectangle {
                                 }
                             }
                         }
+                    }
+                    Rectangle {            // what the preview waits for (an analysis, a replay); fades in and out
+                        id: busyChip
+                        objectName: "previewBusy"
+                        property string shownText: ""
+                        x: 10; y: toolbarLeft.y + toolbarLeft.height + 6; z: 2
+                        width: busyText.implicitWidth + 20; height: busyText.implicitHeight + 10
+                        radius: 6; color: shell.opaque(shell.cPanel)
+                        border.width: shell.cardBorder; border.color: shell.cOutlineSoft
+                        opacity: studio.previewBusy !== "" ? 1 : 0     // at 0 it is not drawn
+                        Behavior on opacity { NumberAnimation { duration: 180 } }
+                        Component.onCompleted: shownText = studio.previewBusy
+                        Connections { target: studio
+                                      function onBusyChanged() { if (studio.previewBusy !== "") busyChip.shownText = studio.previewBusy } }
+                        Text { id: busyText; anchors.centerIn: parent; text: busyChip.shownText
+                               color: shell.cText; font.pixelSize: shell.fontBase - 1 }
                     }
                     Rectangle {
                         objectName: "toolbarBacking"

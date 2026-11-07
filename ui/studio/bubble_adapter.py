@@ -28,6 +28,7 @@ from core.settings.visualizer_mode_settings import (
     Choice, Colour, Custom, Gradient, Slider, Toggle, require_mode_settings,
 )
 from ui.studio import clip_loop, framed
+from ui.studio.exact_replay import PassRestart
 from ui.studio.registry import studio_title
 from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition,
@@ -387,7 +388,7 @@ def presentation_keys() -> tuple[str, ...]:
 
 
 # ------------------------------------------------------------------------- evaluator
-class BubbleStudioEvaluator:
+class BubbleStudioEvaluator(PassRestart):
     """Own runtime controller and Bubble runtime, stepped deterministically through one fixture's ticks."""
 
     def __init__(self) -> None:
@@ -517,9 +518,12 @@ class BubbleStudioEvaluator:
         signature = self._simulation_signature(values)
         if self._controller is None or time < self._time or (exact and (signature != self._signature
                                                                         or self._approximate)):
+            back = time < self._time           # a seek back (anything else is a change: values, inputs, extent)
             self._start(values)
             if anchor.looped:
                 time = anchor.rebase(at)       # a replay from the start of the pass the instant is in
+            if not back:
+                time = self._restart_point(time)   # while playing, a long replay restarts the pass instead
         elif signature != self._signature:
             from widgets.spotify_visualizer.config_applier import apply_logical_vis_mode_kwargs
             apply_logical_vis_mode_kwargs(self._controller.logical_tick_state, _mode_kwargs(values))
