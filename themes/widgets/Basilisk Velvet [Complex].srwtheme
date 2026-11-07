@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Basilisk Velvet [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:Basilisk Velvet [Complex] [Mica].srtheme",
   "name": "Basilisk Velvet [Complex]",
-  "linked_settings_theme_id": "file:Basilisk Velvet [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Basilisk Velvet [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       54,

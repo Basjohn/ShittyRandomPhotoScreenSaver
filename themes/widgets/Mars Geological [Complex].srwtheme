@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Mars Geological [Complex] [Acrylic].srtheme",
+  "theme_id": "mirror:file:Mars Geological [Complex] [Smoked].srtheme",
   "name": "Mars Geological [Complex]",
-  "linked_settings_theme_id": "file:Mars Geological [Complex] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:Mars Geological [Complex] [Smoked].srtheme",
+  "surface_material": "smoked",
   "colors": {
     "card.background": [
       66,

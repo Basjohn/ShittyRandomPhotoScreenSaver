@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Nocturne Split [Three-Tone] [Glass].srtheme",
+  "theme_id": "mirror:file:Nocturne Split [Three-Tone] [Mica].srtheme",
   "name": "Nocturne Split [Three-Tone]",
-  "linked_settings_theme_id": "file:Nocturne Split [Three-Tone] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Nocturne Split [Three-Tone] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       24,

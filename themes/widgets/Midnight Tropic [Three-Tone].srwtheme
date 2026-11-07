@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Midnight Tropic [Three-Tone] [Acrylic].srtheme",
+  "theme_id": "mirror:file:Midnight Tropic [Three-Tone] [Mica].srtheme",
   "name": "Midnight Tropic [Three-Tone]",
-  "linked_settings_theme_id": "file:Midnight Tropic [Three-Tone] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:Midnight Tropic [Three-Tone] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       26,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      199,
-      99,
-      102,
-      215
+      205,
+      115,
+      117,
+      255
     ],
     "widget.gradient.start": [
       19,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      199,
-      99,
-      102,
-      215
+      205,
+      115,
+      117,
+      255
     ],
     "media.volume.outline": [
       86,
@@ -253,16 +253,16 @@
       100
     ],
     "media.progress.fill": [
-      199,
-      99,
-      102,
-      215
+      205,
+      115,
+      117,
+      255
     ],
     "media.progress.glow": [
-      199,
-      99,
-      102,
-      155
+      205,
+      115,
+      117,
+      184
     ],
     "media.progress.shadow": [
       214,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      199,
-      99,
-      102,
-      215
+      205,
+      115,
+      117,
+      255
     ],
     "gmail.sender": [
       214,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      199,
-      99,
-      102,
-      215
+      205,
+      115,
+      117,
+      255
     ],
     "context.menu.arrow": [
       152,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      199,
-      99,
-      102,
-      215
+      205,
+      115,
+      117,
+      255
     ]
   }
 }

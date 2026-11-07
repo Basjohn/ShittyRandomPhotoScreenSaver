@@ -69,8 +69,13 @@ and the [bounded native validation record](../Audits/Light_Theme_Legibility_2026
 
 A complete `.srtheme` owns:
 
-- `backdrop.mode`: `off`, `acrylic` or `glass`;
-- `backdrop.tint`: native Acrylic tint payload; retained in the schema for all modes, but Glass does not use it as a native tint;
+- `backdrop.mode`: `off`, `acrylic`, `glass`, `frosted`, `mica` or `smoked`;
+- `backdrop.tint`: native tint payload; retained in the schema for all modes, but Glass does not use it as a native
+  tint. The tinted materials need non-zero alpha. Frosted, Mica and Smoked derive their native tint from it
+  (`NativeBackdropStyle.native_tint`, renderer constants in `ui/settings_theme_spec.py`): Frosted mixes it halfway to
+  white at a heavier strength (a milky haze), Mica keeps it near-solid (the wallpaper only faintly through), Smoked
+  desaturates and darkens it. They are the card materials' family (`Card_Surface_Materials.md` 3.5) on the Settings
+  window;
 - the complete semantic colour-role map;
 - the complete semantic Settings shadow-role map;
 - the complete semantic gradient-role map.
@@ -159,7 +164,17 @@ explicit Reset All Colours and imports remain authoritative because the base is 
 Reset membership derives from the canonical widget-family catalogue, including disabled families and every Clock,
 Feeds, Steam and System Stats member. Visualizer-authored colours remain excluded; no second family list is maintained.
 
-The curated catalogue currently contains **58 Settings themes and 58 deterministic Widget mirrors**, including four genuinely light/white-adjacent themes (Porcelain Sky, Linen Sage, Pearl Blush, Alabaster Citrus) and four silver/metal themes (Polished Chrome, Brushed Nickel, Titanium Cobalt, Tungsten Blues). Mirrors use the same stable-ID projection authority as the original pack. Dark-text light/light-metal Widget mirrors also establish a high-opacity light runtime card floor because, unlike the Settings HWND, runtime cards sit directly over arbitrary wallpaper. Regeneration must remain deterministic; mirrors change only when their semantic source/mapping intentionally changes.
+The curated catalogue contains Settings themes and deterministic Widget mirrors, including genuinely light/white-adjacent themes and silver/metal themes (catalogue discovery owns membership and count).
+
+**Materials and light themes (operator, 8 Nov 2026).** A theme's material is the window's base, not decoration under an
+opaque shell: `window.dialog_glass` stays under half opacity on every theme with a material. Light themes carry a
+tinted pale material (Frosted or Mica): over untinted Glass a dark desktop shows through, so dark text could only stay
+legible by making the shell nearly opaque, which hid the material entirely (the light themes' "no material at all").
+Every text role of a light theme and of every Frosted/Mica/Smoked theme holds 4.5:1 small / 3:1 large over its
+surface stack, over its material, over a black and a white desktop (`tools/theme_legibility.py`; compositing is
+affine in the desktop colour, so those two bound every wallpaper). Bar:
+`tests/test_theme_material_legibility_contract.py`. Dark themes on untinted Glass or a light Acrylic tint do not
+meet that bar over a bright wallpaper; that is recorded in `Current_Plan.md`, not hidden. Mirrors use the same stable-ID projection authority as the original pack. Dark-text light/light-metal Widget mirrors also establish a high-opacity light runtime card floor because, unlike the Settings HWND, runtime cards sit directly over arbitrary wallpaper. Regeneration must remain deterministic; mirrors change only when their semantic source/mapping intentionally changes.
 
 ## Proven Windows backdrop mapping
 
@@ -214,7 +229,7 @@ The native mode is stateful but simple. Avoid compositor churn.
 
 - Glass -> Glass: native no-op; only semantic Qt surfaces refresh.
 - Acrylic -> Acrylic: reapply state 4 only when its native tint changes.
-- Acrylic <-> Glass: replace the AccentPolicy state directly; do not tear the shared mechanism down first unless a proven platform requirement appears.
+- Acrylic <-> Glass: replace the AccentPolicy state directly; do not tear the shared mechanism down first unless a proven platform requirement appears. Frosted, Mica and Smoked are state 4 like Acrylic, so a change between any tinted materials is a tint change.
 - Any material -> Off: state 0 disables the AccentPolicy backdrop.
 - Off -> material: install the requested state once.
 
@@ -233,8 +248,8 @@ Native Glass/Acrylic exist only on Windows. On every other platform the dialog's
 (`SettingsDialog._apply_native_backdrop_theme`) never calls `core/windows/dwm_blur.py`; it paints one opaque
 underlay beneath the dialog content instead (`ui/settings_material_underlay.py`), announced once per process with
 `[PLATFORM]`. The underlay stands in for "the blurred desktop under the material": a neutral matched to the
-palette polarity (`settings_theme_is_light`), with Acrylic's authored tint applied at its authored strength and
-Glass left untinted, exactly mirroring the native split above. Semantic surfaces paint over it unchanged and theme
+palette polarity (`settings_theme_is_light`), with the native tint (`backdrop.native_tint()`: Acrylic's authored
+tint, the other tinted materials' derived one) applied at its strength and Glass left untinted, exactly mirroring the native split above. Semantic surfaces paint over it unchanged and theme
 files carry no per-platform data. Mode `off` paints no underlay. Windows never paints it.
 
 Why opaque: Linux compositors (where present) show the raw, unblurred desktop through translucent layers, and
@@ -329,11 +344,12 @@ Theme Foundry must consume the current `SettingsThemeSpec` and `ui.settings_them
 
 Required backdrop authoring semantics:
 
-- expose `Off`, `Acrylic` and `Glass` as supported schema-v6 modes;
-- Acrylic tint controls are meaningful only for Acrylic and Acrylic alpha must remain non-zero;
+- expose `Off`, `Acrylic`, `Glass`, `Frosted`, `Mica` and `Smoked` as supported schema-v6 modes;
+- tint controls are meaningful only for the tinted materials (Acrylic, Frosted, Mica, Smoked), whose alpha must remain non-zero;
 - Glass must be described as untinted AccentPolicy state-3 blur whose visible colour/opacity comes from semantic Qt surfaces;
 - Glass must never be authored as a pale/clear Acrylic recipe;
-- unavailable Mica/system-backdrop experiments are not selectable theme modes;
+- the DWM system-backdrop experiments (Mica/transient window, rejected above) are not selectable theme modes; the
+  selectable Mica is the AccentPolicy Acrylic recipe described in the schema section;
 - save only complete themes that strict runtime loading can round-trip;
 - `Save Widget Counterpart…` is an explicit authoring action, not runtime coupling: persist the current Settings theme into the catalogue first so it has a stable `builtin:`/`file:` identity, then generate/save the `.srwtheme` through the same `widget_counterpart_for_settings_theme()` authority used by the curated mirror pack; never duplicate the semantic mapping inside Foundry.
 

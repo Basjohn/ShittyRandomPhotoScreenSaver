@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Electric Kelp [Complex] [Acrylic].srtheme",
+  "theme_id": "mirror:file:Electric Kelp [Complex] [Mica].srtheme",
   "name": "Electric Kelp [Complex]",
-  "linked_settings_theme_id": "file:Electric Kelp [Complex] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:Electric Kelp [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       25,

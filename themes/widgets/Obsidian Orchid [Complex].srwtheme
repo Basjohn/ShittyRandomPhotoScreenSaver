@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Obsidian Orchid [Complex] [Acrylic].srtheme",
+  "theme_id": "mirror:file:Obsidian Orchid [Complex] [Smoked].srtheme",
   "name": "Obsidian Orchid [Complex]",
-  "linked_settings_theme_id": "file:Obsidian Orchid [Complex] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:Obsidian Orchid [Complex] [Smoked].srtheme",
+  "surface_material": "smoked",
   "colors": {
     "card.background": [
       42,

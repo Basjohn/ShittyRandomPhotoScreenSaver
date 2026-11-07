@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:MSN Buddy Cloud [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:MSN Buddy Cloud [Complex] [Frosted].srtheme",
   "name": "MSN Buddy Cloud [Complex]",
-  "linked_settings_theme_id": "file:MSN Buddy Cloud [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:MSN Buddy Cloud [Complex] [Frosted].srtheme",
+  "surface_material": "frosted",
   "colors": {
     "card.background": [
       209,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      222,
-      96,
-      59,
-      215
+      162,
+      69,
+      43,
+      255
     ],
     "widget.gradient.start": [
       179,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      222,
-      96,
-      59,
-      215
+      162,
+      69,
+      43,
+      255
     ],
     "media.volume.outline": [
       44,
@@ -253,16 +253,16 @@
       242
     ],
     "media.progress.fill": [
-      222,
-      96,
-      59,
-      215
+      162,
+      69,
+      43,
+      255
     ],
     "media.progress.glow": [
-      222,
-      96,
-      59,
-      155
+      162,
+      69,
+      43,
+      184
     ],
     "media.progress.shadow": [
       52,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      222,
-      96,
-      59,
-      215
+      162,
+      69,
+      43,
+      255
     ],
     "gmail.sender": [
       52,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      222,
-      96,
-      59,
-      215
+      162,
+      69,
+      43,
+      255
     ],
     "context.menu.arrow": [
       23,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      222,
-      96,
-      59,
-      215
+      162,
+      69,
+      43,
+      255
     ]
   }
 }

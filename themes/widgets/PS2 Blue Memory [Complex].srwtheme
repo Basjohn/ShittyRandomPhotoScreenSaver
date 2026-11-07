@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:PS2 Blue Memory [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:PS2 Blue Memory [Complex] [Mica].srtheme",
   "name": "PS2 Blue Memory [Complex]",
-  "linked_settings_theme_id": "file:PS2 Blue Memory [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:PS2 Blue Memory [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       13,

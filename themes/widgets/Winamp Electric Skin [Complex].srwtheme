@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Winamp Electric Skin [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:Winamp Electric Skin [Complex] [Mica].srtheme",
   "name": "Winamp Electric Skin [Complex]",
-  "linked_settings_theme_id": "file:Winamp Electric Skin [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Winamp Electric Skin [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       31,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      238,
-      108,
-      88,
-      215
+      240,
+      123,
+      105,
+      255
     ],
     "widget.gradient.start": [
       17,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      238,
-      108,
-      88,
-      215
+      240,
+      123,
+      105,
+      255
     ],
     "media.volume.outline": [
       111,
@@ -253,16 +253,16 @@
       242
     ],
     "media.progress.fill": [
-      238,
-      108,
-      88,
-      215
+      240,
+      123,
+      105,
+      255
     ],
     "media.progress.glow": [
-      238,
-      108,
-      88,
-      155
+      240,
+      123,
+      105,
+      184
     ],
     "media.progress.shadow": [
       205,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      238,
-      108,
-      88,
-      215
+      240,
+      123,
+      105,
+      255
     ],
     "gmail.sender": [
       205,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      238,
-      108,
-      88,
-      215
+      240,
+      123,
+      105,
+      255
     ],
     "context.menu.arrow": [
       246,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      238,
-      108,
-      88,
-      215
+      240,
+      123,
+      105,
+      255
     ]
   }
 }

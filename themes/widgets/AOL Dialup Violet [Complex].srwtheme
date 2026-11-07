@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:AOL Dialup Violet [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:AOL Dialup Violet [Complex] [Mica].srtheme",
   "name": "AOL Dialup Violet [Complex]",
-  "linked_settings_theme_id": "file:AOL Dialup Violet [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:AOL Dialup Violet [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       35,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      165,
-      133,
-      235,
-      215
+      174,
+      145,
+      237,
+      255
     ],
     "widget.gradient.start": [
       25,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      165,
-      133,
-      235,
-      215
+      174,
+      145,
+      237,
+      255
     ],
     "media.volume.outline": [
       227,
@@ -253,16 +253,16 @@
       242
     ],
     "media.progress.fill": [
-      165,
-      133,
-      235,
-      215
+      174,
+      145,
+      237,
+      255
     ],
     "media.progress.glow": [
-      165,
-      133,
-      235,
-      155
+      174,
+      145,
+      237,
+      184
     ],
     "media.progress.shadow": [
       205,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      165,
-      133,
-      235,
-      215
+      174,
+      145,
+      237,
+      255
     ],
     "gmail.sender": [
       205,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      165,
-      133,
-      235,
-      215
+      174,
+      145,
+      237,
+      255
     ],
     "context.menu.arrow": [
       246,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      165,
-      133,
-      235,
-      215
+      174,
+      145,
+      237,
+      255
     ]
   }
 }
