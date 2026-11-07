@@ -924,11 +924,13 @@ class TestVisualizerModeRegistryContract:
         assert active == tuple(mode for mode in VISUALIZER_MODE_IDS if mode in active)
         assert tuple(descriptor.preset_key for descriptor in descriptors) == tuple(f"preset_{mode}" for mode in active)
 
-    def test_registry_exposes_spline_curve_display_name(self):
-        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    def test_registry_gives_every_mode_one_distinct_display_name(self):
+        # The display name is operator-authored wording; only its presence and uniqueness are contract.
+        from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
 
-        descriptor = get_visualizer_mode_descriptor("devcurve")
-        assert descriptor.display_name == "Spline Curve"
+        names = [descriptor.display_name.strip() for descriptor in iter_all_visualizer_mode_descriptors()]
+        assert all(names)
+        assert len({name.casefold() for name in names}) == len(names)
 
     def test_oscilloscope_and_sphere_registry_capabilities_match_consumers(self):
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor

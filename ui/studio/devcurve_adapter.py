@@ -1,4 +1,7 @@
-"""DevCurve's Studio adapter: schema, evaluator, fixtures and renderer, on the shared Studio framework.
+"""Spline Curve's Studio adapter: schema, evaluator, fixtures and renderer, on the shared Studio framework.
+
+Spline Curve is mode id ``devcurve`` (code name DevCurve); its sibling owners are mapped in
+``Docs/Reference/Naming.md``.
 
 Truthfulness: the Studio changes no DevCurve solver, timing, engine or render code and re-implements none of it.
 
@@ -36,6 +39,7 @@ from typing import Any, Callable, Mapping
 
 from core.settings.visualizer_mode_settings import Choice, Colour, Slider, Toggle, require_mode_settings
 from ui.studio import engine_answers, framed, spectrum_shape
+from ui.studio.registry import studio_title
 from ui.studio.adapter import StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition
 from ui.studio.engine_answers import EngineAnswerEvaluator, EngineAnswerMode
 from ui.studio.schema import (
@@ -414,7 +418,7 @@ def build_schema() -> StudioSchema:
                                                     f"Add a node to the {layer_label(n)} contour in its widest gap "
                                                     f"(at most {node_limits()[1]})."),))
                      for n in names)
-    return StudioSchema(MODE, "DevCurve Studio", tuple(workspaces), tuple(props), admit,
+    return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), admit,
                         group_traces=tuple(traces), group_icons=tuple(group_icons.items()), object_noun="Layer",
                         follow=follow, group_actions=add_node)
 
@@ -486,7 +490,7 @@ class DevCurveStudioRenderer(framed.ContractModeRenderer):
 # -------------------------------------------------------------------------------------- adapter
 class DevCurveStudioAdapter(StudioModeAdapter):
     mode_id = MODE
-    title = "DevCurve Studio"
+    title = studio_title(MODE)
 
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None

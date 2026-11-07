@@ -19,6 +19,7 @@ from typing import Any, Iterable, Mapping
 
 from core.settings.visualizer_mode_settings import Choice, Colour, Custom, Slider, Toggle, require_mode_settings
 from ui.studio import clip_loop, framed
+from ui.studio.registry import studio_title
 from ui.studio.adapter import (
     REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition,
 )
@@ -223,7 +224,7 @@ def build_schema() -> StudioSchema:
 
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _BUCKET_PANEL.items() if key in titles}
     group_icons.update({TECHNICAL_GROUP: "bars", VIEW_GROUP: "view"})
-    return StudioSchema(MODE, "Sphere Studio", tuple(workspaces), tuple(props), admit,
+    return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), admit,
                         group_traces=((titles.get("reaction", ""), ("Size", "Fragments", "Tracer")),
                                       (titles.get("rotation", ""), ("Spin",)),
                                       (titles.get("particle_flow", ""), ("Particles",))),
@@ -547,7 +548,7 @@ class SphereStudioRenderer(framed.ContractModeRenderer):
 
 class SphereStudioAdapter(StudioModeAdapter):
     mode_id = MODE
-    title = "Sphere Studio"
+    title = studio_title(MODE)
 
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None

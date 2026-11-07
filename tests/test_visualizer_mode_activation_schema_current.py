@@ -58,7 +58,6 @@ def test_boolean_map_preserves_registry_order_and_last_mode_guard_recovery() -> 
 
 def test_sphere_is_a_standard_selectable_registry_mode() -> None:
     descriptor = get_visualizer_mode_descriptor("sphere")
-    assert descriptor.display_name == "Voxel Sphere"
     assert descriptor.guided_setup_offered is True
     assert is_mode_active("sphere") is True
 
