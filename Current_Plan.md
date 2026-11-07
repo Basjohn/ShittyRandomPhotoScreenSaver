@@ -192,6 +192,11 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   Oscilloscope and Sphere; Spline Curve divides its body by a remembered peak (`devcurve_runtime.py`, 20 s memory,
   not opt-in). Move each to absolute audibility and fixed scales, mode by mode, with continuous-play evidence.
   `tools/labs/waveform_ribbon_recorded_input.py` still uses `musical_weight` and no longer matches production.
+  Also (guide pass, 8 Nov): Spline Curve's accents read a lane "above its own recent mean" (reactivity guide
+  §13D), another learned-level sizing to move to a fixed scale with the rest.
+- [ ] **Vocal-band scorer into the music-response tool (8 Nov):** the PCM vocal-band (300-3400 Hz) series behind the
+  mid-led routing evidence and guide §2C lives only in scratch (`lead_audit/vocal_band.py`); add it to
+  `tools/visualizer_replay/waveform_music_response.py` as a lane so it survives scratch pruning.
 - [ ] **Side findings of the Waveform second tick cut (7 Nov, not fixed there):**
   - `capture_visualizer_logical_frame` refreezes the common style (`freeze_render_fields(_common_style(widget))`,
     logical_frame_capture.py) on every tick of every mode, ~0.02-0.04 ms; a FrozenFieldsMemo would remove it.
