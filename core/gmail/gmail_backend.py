@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable, Optional
 import weakref
 
-from PySide6.QtCore import QCoreApplication, QObject, Signal
+from PySide6.QtCore import QObject, Signal
 from shiboken6 import Shiboken
 
 from core.gmail.gmail_bootstrap import (
@@ -31,6 +31,11 @@ from core.threading.manager import ThreadManager
 from core.windows.dpapi import save_encrypted
 
 logger = get_logger(__name__)
+
+
+def _retired(manager: Optional[ThreadManager]) -> bool:
+    """True when a coalesced job's manager shut down: a job it had queued never runs or calls back."""
+    return manager is not None and bool(getattr(manager, "_shutdown", False))
 
 
 class GmailBackendMode(Enum):
@@ -74,8 +79,12 @@ class GmailBackend(QObject):
         self._client_config_refreshing = False
         self._client_config_callbacks: list[Callable[[bool], None]] = []
         self._bootstrap_thread_manager: Optional[ThreadManager] = None
-        self._owns_bootstrap_thread_manager = False
-        self._bootstrap_shutdown_hook_connected = False
+        # The manager each coalesced job was queued on. A job queued on a
+        # manager that retires before running it (a runtime generation, or a
+        # CONFIG Settings dialog) never calls back, so the next request queues
+        # it again instead of waiting forever.
+        self._initializing_manager: Optional[ThreadManager] = None
+        self._client_config_manager: Optional[ThreadManager] = None
 
         self._oauth_manager.auth_completed.connect(self._on_oauth_completed)
         self._oauth_manager.auth_revoked.connect(self._on_oauth_revoked)
@@ -93,47 +102,24 @@ class GmailBackend(QObject):
         return self._app_data
 
     def get_bootstrap_thread_manager(self) -> ThreadManager:
-        """Return a process-lifetime manager for singleton bootstrap work."""
+        """The app-shared manager for singleton bootstrap work.
+
+        The runtime's, or the Settings dialog's own in a CONFIG session; the
+        backend owns none. A retired manager is replaced on the next call, and
+        work queued on it is requeued (see ``ensure_initialized``).
+        """
 
         manager = self._bootstrap_thread_manager
         if manager is not None and not getattr(manager, "_shutdown", False):
             return manager
-
-        manager = ThreadManager.get_app_shared()
-        if manager is None:
-            manager = ThreadManager.create_helper_manager()
-            self._owns_bootstrap_thread_manager = True
-        else:
-            self._owns_bootstrap_thread_manager = False
+        manager = ThreadManager.require_app_shared()
         self._bootstrap_thread_manager = manager
-
-        if not self._bootstrap_shutdown_hook_connected:
-            app = QCoreApplication.instance()
-            if app is not None:
-                try:
-                    app.aboutToQuit.connect(self.shutdown)
-                    self._bootstrap_shutdown_hook_connected = True
-                except Exception as exc:
-                    logger.debug(
-                        "[GMAIL_BACKEND] Failed to attach bootstrap shutdown hook: %s",
-                        exc,
-                    )
         return manager
 
     def shutdown(self) -> None:
-        """Release a backend-owned fallback manager at process shutdown."""
+        """Forget the borrowed bootstrap manager (its owner retires it)."""
 
-        manager = self._bootstrap_thread_manager
         self._bootstrap_thread_manager = None
-        if self._owns_bootstrap_thread_manager and manager is not None:
-            try:
-                manager.shutdown(wait=True, timeout=2.0)
-            except Exception as exc:
-                logger.debug(
-                    "[GMAIL_BACKEND] Bootstrap manager shutdown suppressed: %s",
-                    exc,
-                )
-        self._owns_bootstrap_thread_manager = False
 
     def ensure_initialized(
         self,
@@ -148,13 +134,14 @@ class GmailBackend(QObject):
             return True
         if callback is not None:
             self._initialization_callbacks.append(callback)
-        if self._initializing:
+        if self._initializing and not _retired(self._initializing_manager):
             return True
         if thread_manager is None:
             self._finish_initialization(None, "ThreadManager is not configured")
             return False
 
         self._initializing = True
+        self._initializing_manager = thread_manager
         owner_ref = weakref.ref(self)
 
         def _on_result(result) -> None:
@@ -196,6 +183,7 @@ class GmailBackend(QObject):
         callbacks = self._initialization_callbacks
         self._initialization_callbacks = []
         self._initializing = False
+        self._initializing_manager = None
         success = snapshot is not None
         if snapshot is not None:
             self._app_data = snapshot.app_data_path
@@ -235,9 +223,10 @@ class GmailBackend(QObject):
             return False
         if callback is not None:
             self._client_config_callbacks.append(callback)
-        if self._client_config_refreshing:
+        if self._client_config_refreshing and not _retired(self._client_config_manager):
             return True
         self._client_config_refreshing = True
+        self._client_config_manager = thread_manager
         owner_ref = weakref.ref(self)
         credentials_path = Path(path)
 
@@ -278,6 +267,7 @@ class GmailBackend(QObject):
         callbacks = self._client_config_callbacks
         self._client_config_callbacks = []
         self._client_config_refreshing = False
+        self._client_config_manager = None
         success = config is not None
         if config is not None:
             self._oauth_manager.install_prepared_client_config(config)
