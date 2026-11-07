@@ -203,8 +203,8 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   It broke each guarantee on purpose and showed each check catches it. 17/17 lifecycle, destruction, Settings and
   thread files pass on the merge. **All three SMP and Expanded Visualizer prerequisites (AC-01, AC-02, AC-03) have
   landed.**
-- **Expanded Visualizer M1: built 7 Nov on branch `worktree-agent-a027f2336f2235f1b`, unmerged until M0 exists**
-  (plan 01 §0.2).
+- **Expanded Visualizer M1: merged 7 Nov (3b04b18f) after the M0 receipts** (`quiet_session_20261107/2_m0_eb_baseline/`;
+  862 M1, defaults-schema and capability tests pass on the merge). Next is M2 (plan 01).
   - **Capability:** `supports_expanded_display`, Extruded Bubble only; `resolve_expanded_display_capable()`.
   - **Intent:** `expanded_display_requested`, with no mode prefix, so presets and Custom never carry it.
   - **Reducer:** the pure takeover state machine in `core/expanded_visualizer_takeover.py`; its state/event table
