@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.resources.manager import ResourceManager
 from core.steam.abandonment_cache import load_owned_game_choices_from_cache
 from core.steam.abandonment_issues import (
     AbandonmentSelection,
@@ -280,23 +279,8 @@ def _hydrate_saved_connection_status(tab: "WidgetsTab") -> None:
 
 
 def _get_steam_thread_manager(tab: "WidgetsTab") -> ThreadManager:
-    """Use the app shared manager, with the same narrow fallback as Gmail auth."""
-    manager = getattr(tab, "_steam_thread_manager", None)
-    if manager is not None:
-        return manager
-    manager = ThreadManager.get_app_shared()
-    owns_manager = manager is None
-    if manager is None:
-        manager = ThreadManager.create_helper_manager(
-            resource_manager=ResourceManager.get_app_shared(),
-        )
-    tab._steam_thread_manager = manager
-    if owns_manager:
-        try:
-            tab.destroyed.connect(lambda _obj=None, owned=manager: owned.shutdown(wait=False))
-        except Exception:
-            pass
-    return manager
+    """The app-shared manager: the runtime's, or Settings' own in a CONFIG session."""
+    return ThreadManager.require_app_shared()
 
 
 def _on_steam_check_saved_connection(tab: "WidgetsTab") -> None:

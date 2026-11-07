@@ -48,7 +48,7 @@ from typing import Union
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 from rendering.gl_programs.spectrum_options import (
-    SPECTRUM_GHOST_COLOUR_SOURCES, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS,
+    SPECTRUM_GEOMETRIC_PATTERNS, SPECTRUM_GHOST_COLOUR_SOURCES, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS,
 )
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from core.constants.neon_lake_world import TILT_RANGE as NEON_TILT_RANGE, TURN_RANGE as NEON_TURN_RANGE
@@ -1245,18 +1245,19 @@ _SPECTRUM = ModeSettings(
                'Cap height in Bars mode (Segments mode lights one whole segment).', bucket='finish',
                scale=1, decimals=0, suffix='px', integer=True, when=('spectrum_peak_caps', True)),
         Choice('spectrum_pattern', 'Pattern:', SPECTRUM_PATTERNS,
-               'A pattern drawn over the bar fill in its own colour. It stays fixed in place while the bars move.',
+               'A pattern drawn over the bar fill in its own colour, or a flag laid across the whole field and seen '
+               'through the bars as they rise. It stays in place while the bars move.',
                bucket='pattern'),
         Choice('spectrum_pattern_anchor', 'Pattern Anchor:', SPECTRUM_PATTERN_ANCHORS,
                'Per Bar: each bar carries its own copy of the pattern. Shared: one sheet laid over the whole field, '
                'running through every bar and seen only inside the bar fills.', bucket='pattern',
-               when=('spectrum_pattern', SPECTRUM_PATTERNS[1:])),
+               when=('spectrum_pattern', SPECTRUM_GEOMETRIC_PATTERNS)),
         Colour('spectrum_pattern_color', 'Pattern Colour:', 'Choose Spectrum Pattern Colour',
                "The pattern's colour; its alpha and Strength set how strongly it shows.", bucket='pattern',
-               when=('spectrum_pattern', SPECTRUM_PATTERNS[1:]), swatch_row=False),
+               when=('spectrum_pattern', SPECTRUM_GEOMETRIC_PATTERNS), swatch_row=False),
         Slider('spectrum_pattern_scale', 'Pattern Scale:', 0.5, 3.0,
                'Size of the pattern (1.00x = the standard size).', bucket='pattern', suffix='x', tick=25,
-               when=('spectrum_pattern', SPECTRUM_PATTERNS[1:])),
+               when=('spectrum_pattern', SPECTRUM_GEOMETRIC_PATTERNS)),
         Slider('spectrum_pattern_strength', 'Pattern Strength:', 0.0, 1.0, '', bucket='pattern', truncate=True,
                percent=True, tick=10, when=('spectrum_pattern', SPECTRUM_PATTERNS[1:]), bottom_padding=12),
     ),

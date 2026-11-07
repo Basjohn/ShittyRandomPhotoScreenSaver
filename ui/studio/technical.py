@@ -1,8 +1,8 @@
 """A mode's technical (audio analysis) controls as Studio properties (mode-neutral).
 
-Settings builds these in its per-mode Technical group (``ui.tabs.media.technical_controls``); the Studio shows the
-same controls with the same storage keys, ranges, choices and labels, and admits edits with the same coercion and
-clamping. Adapters call these instead of carrying their own copies.
+The controls are defined once in ``ui.tabs.media.technical_controls``; the Settings mode body holds their values in
+its value cache (no widget). The Studio shows the controls with the same storage keys, ranges, choices and labels,
+and admits edits with the same coercion and clamping. Adapters call these instead of carrying their own copies.
 """
 from __future__ import annotations
 

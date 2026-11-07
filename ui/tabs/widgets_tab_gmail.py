@@ -19,7 +19,6 @@ from shiboken6 import Shiboken
 
 from core.account_setup.controllers import GmailConnectionController, GmailOperationResult
 from core.logging.logger import get_logger
-from core.resources.manager import ResourceManager
 from core.settings.widget_capacity_policy import (
     LIST_WIDGET_MAX_CAPACITY,
     LIST_WIDGET_MIN_CAPACITY,
@@ -171,21 +170,8 @@ def _get_gmail_backend():
 
 
 def _get_gmail_thread_manager(tab: WidgetsTab) -> ThreadManager:
-    manager = getattr(tab, "_gmail_thread_manager", None)
-    if manager is None:
-        manager = ThreadManager.get_app_shared()
-        owns_manager = manager is None
-        if manager is None:
-            manager = ThreadManager.create_helper_manager(
-                resource_manager=ResourceManager.get_app_shared(),
-            )
-        tab._gmail_thread_manager = manager
-        if owns_manager:
-            try:
-                tab.destroyed.connect(lambda _obj=None, m=manager: m.shutdown(wait=False))
-            except Exception as exc:
-                logger.debug("[GMAIL_TAB] Failed to attach Gmail ThreadManager cleanup: %s", exc)
-    return manager
+    """The app-shared manager: the runtime's, or Settings' own in a CONFIG session."""
+    return ThreadManager.require_app_shared()
 
 
 def _get_gmail_bootstrap_thread_manager(tab: WidgetsTab, backend) -> ThreadManager:

@@ -10,7 +10,10 @@ from __future__ import annotations
 SPECTRUM_GHOST_COLOUR_SOURCES = ("Bar Colour", "Custom")
 
 # A second-colour pattern over the bar fill, fixed to the bar baseline and each bar's own width.
-SPECTRUM_PATTERNS = ("Off", "Horizontal Bands", "Scanlines", "Dots", "Diagonal Stripes", "Grid", "Chevrons")
+SPECTRUM_GEOMETRIC_PATTERNS = ("Horizontal Bands", "Scanlines", "Dots", "Diagonal Stripes", "Grid", "Chevrons")
+# A flag laid over the whole bar field in its own colours and seen through the bars as they rise, waving gently.
+SPECTRUM_FLAG_PATTERNS = ("USA Flag", "Japan Flag", "UK Flag", "Jamaica Flag", "Brazil Flag")
+SPECTRUM_PATTERNS = ("Off", *SPECTRUM_GEOMETRIC_PATTERNS, *SPECTRUM_FLAG_PATTERNS)
 
 # Per Bar: each bar carries its own copy of the pattern (columns fitted to its width, chevrons centred on it).
 # Shared: one sheet laid over the whole bar field, continuous across bars and gaps, seen through the bar fills.

@@ -49,7 +49,6 @@ from core.feeds.config import (
 from core.feeds.news import NEWS_WIDGET_IDS, news_category, news_providers_for
 from core.feeds.normalization import redacted_url_for_log
 from core.logging.logger import get_logger
-from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 from rendering.widget_descriptors import feed_settings_attr_stem, get_widget_position_option_labels
 from ui.tabs.shared_styles import (
@@ -112,21 +111,8 @@ def _control(tab: "WidgetsTab", widget_id: str, name: str) -> Any:
 
 
 def _get_feed_thread_manager(tab: "WidgetsTab") -> ThreadManager:
-    manager = getattr(tab, "_feeds_thread_manager", None)
-    if manager is None:
-        manager = ThreadManager.get_app_shared()
-        owns_manager = manager is None
-        if manager is None:
-            manager = ThreadManager.create_helper_manager(
-                resource_manager=ResourceManager.get_app_shared(),
-            )
-        tab._feeds_thread_manager = manager
-        if owns_manager:
-            try:
-                tab.destroyed.connect(lambda _obj=None, m=manager: m.shutdown(wait=False))
-            except Exception as exc:
-                logger.debug("[FEEDS_TAB] Failed to attach helper cleanup: %s", exc)
-    return manager
+    """The app-shared manager: the runtime's, or Settings' own in a CONFIG session."""
+    return ThreadManager.require_app_shared()
 
 
 def _set_controls_visible(tab: "WidgetsTab", widget_id: str) -> None:
