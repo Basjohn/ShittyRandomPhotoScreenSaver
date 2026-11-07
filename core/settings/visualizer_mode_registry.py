@@ -161,6 +161,10 @@ class VisualizerModeDescriptor:
     # distances, pitch/yaw mapping and eye bounds. A mode with one gets keyboard flight, Camera Position, Camera
     # Field of View and reset from the shared camera; none of that code branches on a mode id.
     framed_camera: str = ""
+    # Reset Camera for an orbiting mode WITHOUT a framed camera (checklist AC-11): "home" returns turn/tilt to the
+    # preset's home (canonical, as freeform presets author no starting view) through the same R / card-glyph route,
+    # with no physical camera, flight or lens; "none: <reason>" declines it. A framed camera is its own reset path.
+    view_camera_reset: str = ""
     # Optional framed scene pose (scale, screen-normalized pan x/y). These
     # capabilities target the scene inside the card, never CUSTOM geometry.
     # Canonical presentation specs own the numeric ranges and defaults.
@@ -302,7 +306,10 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         backdrop_setting="sphere_mirror",
         view_orbit_settings=("sphere_turn", "sphere_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
+        # Freeform (AC-11): coasts after a drag and wraps round the ball; Reset Camera returns to its home view.
         view_orbit_inertia=True,
+        view_orbit_turn_wraps=True,
+        view_camera_reset="home",
         geometry_kind="freeform_3d",
         layout_profile="3d:sphere",
     ),
@@ -337,6 +344,11 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_overflow_setting="extruded_spectrum_allow_overflow",
         view_orbit_settings=("extruded_spectrum_turn", "extruded_spectrum_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),          # 2 degrees each way per key event
+        # Freeform (AC-11): its own orbit policy, declared unchanged (no inertia; turn wraps); Reset Camera
+        # returns to its home view.
+        view_orbit_inertia=False,
+        view_orbit_turn_wraps=True,
+        view_camera_reset="home",
         prepared_reveal=True,
         backdrop_setting="extruded_spectrum_face_mirror",
         geometry_kind="freeform_3d",
@@ -513,6 +525,22 @@ def get_visualizer_view_pose_keys(mode_id: str) -> tuple[str, ...]:
     """
     descriptor = get_visualizer_mode_descriptor(mode_id)
     return tuple((*descriptor.view_orbit_settings, *descriptor.scene_transform_settings))
+
+
+def visualizer_camera_reset_path(mode_id: str) -> str:
+    """How an orbiting mode's Reset Camera works: "framed" (the shared physical camera's home, lens and position),
+    "home" (turn/tilt to the preset home, no physical camera), "none: <reason>", or "" for a mode that does not
+    orbit. One answer for the R key, the card glyph and the registry contract test."""
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    if not descriptor.view_orbit_settings:
+        return ""
+    if descriptor.framed_camera:
+        return "framed"
+    return descriptor.view_camera_reset
+
+
+def visualizer_camera_reset_offered(mode_id: str) -> bool:
+    return visualizer_camera_reset_path(mode_id) in ("framed", "home")
 
 
 def get_visualizer_layout_profile(mode_id: str) -> str:

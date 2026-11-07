@@ -19,7 +19,7 @@ the prerequisite phase P-A (§0.1) has landed. The existing ordered `Current_Pla
 | Checklist item | Must land before | Why |
 | --- | --- | --- |
 | **AC-02** Visualizer host binding extracted from `DisplayManager`; Media docking a declared placement policy | **M2** (the takeover transaction binds to the owner); M1's pure reducer may start on today's owner | The takeover state machine (§D) must be a sibling of one host-neutral Visualizer owner, not a fourth concern inside the 6k-line `DisplayManager`. Doing it afterwards moves the new code twice. |
-| **AC-11** one 3D camera control contract (operator decision) | a second mode opts into expansion | At full display the card is large and orbiting likely; Sphere and Extruded Spectrum have no Reset Camera today. EB (the first mode) already has the framed camera. |
+| **AC-11** one 3D camera control contract (operator decision; **landed 7 Nov**, `Docs/Reference/Visualizer_Reference.md` → Live view pose) | a second mode opts into expansion | At full display the card is large and orbiting likely; Sphere and Extruded Spectrum now reset to their home view. EB (the first mode) already has the framed camera. |
 | **AC-04** inactive-renderer release failure no longer blacks out the active mode (**landed 7 Nov**) | M5 (mode requests while expanded) | Capable -> incapable collapses and switches mode; a stuck release would black out the whole display, not a card. |
 | **AC-09** one card border width resolver | M2 (expanded card chrome) | The expanded presentation variant must not inherit `DisplayManager`'s private copy. |
 
