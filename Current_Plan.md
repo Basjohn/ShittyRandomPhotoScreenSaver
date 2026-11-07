@@ -232,13 +232,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
      `[GC_POLICY]` lines. Commands in the agent's report; evidence `.artifacts/evidence/gc_gen2/`.
    - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
      they are collections.
-2. **Checklist AC-11, decided (operator 7 Nov): "don't ruin the bordered 3D cameras so adjust the freeform Sphere
-   but ideally in a way that does not ruin its look/capabilities".** The framed (bordered) 3D cameras of Extruded
-   Bubble, Neon Lake and Waveform stay exactly as they are. Sphere (freeform) gains a Reset Camera to its preset home
-   and declared inertia/wrap, without changing its look, framing or orbit freedom; Extruded Spectrum gets the same
-   treatment where it applies. Prove it pixel-identical at the preset home and identical under orbit before and after.
-   The in-card Reset Camera button already consumes its own presses (landed 7 Nov:
-   `Docs/Guardrails/Visualizer_Presentation.md` §14A); a new Sphere / Extruded Spectrum control follows the same rule.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 - **Dead after A-12: removed by the Settings SSOT fold (AC-18, AC-23).** Still open from that note:
@@ -249,14 +242,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **SMP import scan vs the registry:** `ui/settings_tabs.py` imports the existing tabs' modules at import time (as
   the dialog did). The SMP plan's §14 bar ("no saver module is imported by opening Settings in the SMP profile")
   needs those imports moved into the builders when the SMP descriptor lands.
-- **`tests/test_waveform_floor_give.py::test_floor_give_off_is_pixel_identical_to_the_rigid_floor` is flaky by one
-  LSB** (found 7 Nov; on main too, 1 of 5 runs): one pixel of 153,600 differs by 1 (`[119, 123, 1]: 56 vs 55`). Either
-  the two renders are not deterministic (a GPU timing/precision path) or the oracle needs a tolerance it does not
-  state. Find which before loosening anything; bar: 20 consecutive runs identical, or a documented tolerance.
-- **`tests/test_run_matrix_harness.py::test_runs_sequentially_snapshots_logs_and_reports_distinct_failures` fails
-  in any worktree** (found 7 Nov; on main too): it asserts the checkout folder is named `ShittyRandomPhotoScreenSaver`
-  (`'agent-…' == 'ShittyRandomPhotoScreenSaver'`). Environmental like the gate note below; the harness or the test
-  should derive the expected name from the checkout root instead of pinning it.
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
