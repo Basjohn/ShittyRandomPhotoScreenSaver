@@ -61,7 +61,7 @@ Rectangle {
 
     // Window chrome as Settings draws it (ui/studio/theme.py): the native backdrop mode of the active theme, the
     // title bar roles, the forged edge, and Settings' panel cast scaled to the Studio's gutters.
-    readonly property bool translucent: tc("backdrop", "off") === "acrylic" || tc("backdrop", "off") === "glass"
+    readonly property bool translucent: tc("backdrop", "off") !== "off"
     readonly property color cWindow: tc("windowSurface", cBg)
     readonly property color cTitlebar: tc("titlebar", cHeader)
     readonly property color cTitleText: tc("titlebarText", cText)

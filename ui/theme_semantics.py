@@ -11,6 +11,24 @@ def _relative_luminance(color: Rgba) -> float:
     return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
 
 
+def relative_luminance(color: Rgba) -> float:
+    """WCAG relative luminance of ``color``'s RGB (alpha ignored)."""
+    return _relative_luminance(color)
+
+
+def contrast_ratio(first: Rgba, second: Rgba) -> float:
+    """WCAG contrast ratio of two colours' RGB (alpha ignored: composite first, see :func:`composite_over`)."""
+    high, low = sorted((_relative_luminance(first), _relative_luminance(second)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def composite_over(top: Rgba, bottom: Rgba) -> Rgba:
+    """``top`` source-over an opaque ``bottom``, as the compositor blends a translucent surface; opaque result."""
+    weight = top.a / 255.0
+    return Rgba(*(round(t * weight + b * (1.0 - weight))
+                  for t, b in ((top.r, bottom.r), (top.g, bottom.g), (top.b, bottom.b))), 255)
+
+
 def uses_dark_text_on_light_surface(foreground: Rgba, surface: Rgba) -> bool:
     """The existing light-palette hierarchy, independent of backdrop/material alpha.
 

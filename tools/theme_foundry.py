@@ -143,6 +143,7 @@ from ui.settings_theme_spec import (  # noqa: E402
     GradientStyle,
     Rgba,
     SettingsThemeSpec,
+    TINTED_BACKDROP_MODES,
     ShadowStyle,
 )
 
@@ -569,7 +570,7 @@ class ThemeFoundryWindow(QMainWindow):
 
         layout.addWidget(QLabel("Material"), 0, 0)
         self.backdrop_mode = QComboBox()
-        for mode in ("off", "acrylic", "glass"):
+        for mode in BACKDROP_MODE_LABELS:
             self.backdrop_mode.addItem(BACKDROP_MODE_LABELS[mode], mode)
         self.backdrop_mode.setMinimumWidth(220)
         layout.addWidget(self.backdrop_mode, 0, 1)
@@ -1759,7 +1760,7 @@ class ThemeFoundryWindow(QMainWindow):
             idx = self.backdrop_mode.findData(mode)
             self.backdrop_mode.setCurrentIndex(max(0, idx))
             self.backdrop_note.setText(BACKDROP_MODE_DESCRIPTIONS[mode])
-            is_acrylic = mode == "acrylic"
+            is_acrylic = mode in TINTED_BACKDROP_MODES
             self.acrylic_preset.setEnabled(is_acrylic)
             self.backdrop_swatch.setEnabled(is_acrylic)
             self.backdrop_alpha.setEnabled(is_acrylic)
@@ -1771,7 +1772,7 @@ class ThemeFoundryWindow(QMainWindow):
             self.acrylic_preset.setCurrentIndex(max(0, pidx))
             if is_acrylic:
                 self.backdrop_value_label.setText(
-                    f"Native Acrylic tint: {rgba_summary(tint)} · alpha {tint.a}/255"
+                    f"Native {BACKDROP_MODE_LABELS[mode]} tint: {rgba_summary(tint)} · alpha {tint.a}/255"
                 )
             elif mode == "glass":
                 self.backdrop_value_label.setText(
@@ -1791,10 +1792,10 @@ class ThemeFoundryWindow(QMainWindow):
         if mode not in BACKDROP_MODE_LABELS:
             return
         old_mode = self.draft.backdrop_mode
-        if old_mode == "acrylic" and self.draft.backdrop_tint.a > 0:
+        if old_mode in TINTED_BACKDROP_MODES and self.draft.backdrop_tint.a > 0:
             self._last_acrylic_tint = self.draft.backdrop_tint
         self.draft.backdrop_mode = mode
-        if mode == "acrylic" and self.draft.backdrop_tint.a == 0:
+        if mode in TINTED_BACKDROP_MODES and self.draft.backdrop_tint.a == 0:
             self.draft.backdrop_tint = self._last_acrylic_tint
         elif mode == "glass" and old_mode != "glass":
             # Make newly-authored Glass files visibly honest: native Glass does
@@ -1807,7 +1808,7 @@ class ThemeFoundryWindow(QMainWindow):
         self._set_status(BACKDROP_MODE_DESCRIPTIONS[mode])
 
     def _acrylic_preset_changed(self, index: int) -> None:
-        if self._updating or self.draft.backdrop_mode != "acrylic":
+        if self._updating or self.draft.backdrop_mode not in TINTED_BACKDROP_MODES:
             return
         name = self.acrylic_preset.itemData(index)
         for preset in ACRYLIC_TINT_PRESETS:
@@ -1820,7 +1821,7 @@ class ThemeFoundryWindow(QMainWindow):
                 return
 
     def _choose_backdrop_tint(self) -> None:
-        if self.draft.backdrop_mode != "acrylic":
+        if self.draft.backdrop_mode not in TINTED_BACKDROP_MODES:
             return
         chosen = self._choose_qcolor(self.draft.backdrop_tint, "Choose Native Acrylic Tint / Strength")
         if chosen is None:
@@ -1834,7 +1835,7 @@ class ThemeFoundryWindow(QMainWindow):
         self._update_dirty_status()
 
     def _backdrop_alpha_changed(self, value: int) -> None:
-        if self._updating or self.draft.backdrop_mode != "acrylic":
+        if self._updating or self.draft.backdrop_mode not in TINTED_BACKDROP_MODES:
             return
         tint = self.draft.backdrop_tint
         self.draft.backdrop_tint = Rgba(tint.r, tint.g, tint.b, max(1, int(value)))
@@ -2186,7 +2187,8 @@ class ThemeFoundryWindow(QMainWindow):
             return
         material = BACKDROP_MODE_LABELS[spec.backdrop.mode]
         native = (
-            f"native tint {rgba_summary(spec.backdrop.tint)}" if spec.backdrop.mode == "acrylic"
+            f"native tint {rgba_summary(spec.backdrop.native_tint())}"
+            if spec.backdrop.mode in TINTED_BACKDROP_MODES
             else "native tint ignored; Qt semantic surfaces own Glass appearance" if spec.backdrop.mode == "glass"
             else "native backdrop disabled"
         )

@@ -15,7 +15,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-import re
 import sys
 import types
 
@@ -34,7 +33,7 @@ if "ui" not in sys.modules:
     sys.modules["ui"] = ui_package
 
 from ui.settings_theme_io import load_settings_theme_file
-from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME, Rgba, SettingsThemeSpec
+from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME, Rgba, SettingsThemeSpec, strip_material_tag
 from ui.theme_semantics import settings_theme_is_light
 from ui.widget_theme_io import load_widget_theme_file, widget_theme_to_json
 from ui.widget_theme_spec import DEFAULT_DARK_WIDGET_THEME, WidgetThemeSpec
@@ -113,14 +112,16 @@ def _runtime_secondary_text(
         return Rgba(color.r, color.g, color.b, 255)
     return _scaled_alpha(color, dark_theme_alpha_scale)
 
-_MATERIAL_SUFFIX_RE = re.compile(r"\s+\[(?:Glass|Acrylic)\]\s*$", re.IGNORECASE)
-
 # A pair's card material is its Settings theme's backdrop material (operator, 7 Nov
-# 2026: "[Glass]" and "[Acrylic]" themes give Glass and Acrylic cards). ``off`` names
-# none, so the cards stay Normal under Style Overrides' "Theme".
+# 2026: "[Glass]" and "[Acrylic]" themes give Glass and Acrylic cards; 8 Nov: the
+# Settings window takes Frosted, Mica and Smoked too, one material per pair). ``off``
+# names none, so the cards stay Normal under Style Overrides' "Theme".
 _SURFACE_MATERIAL_FOR_BACKDROP_MODE: dict[str, str | None] = {
     "glass": "glass",
     "acrylic": "acrylic",
+    "frosted": "frosted",
+    "mica": "mica",
+    "smoked": "smoked",
     "off": None,
 }
 
@@ -144,7 +145,7 @@ def _widget_display_name(settings_name: str) -> str:
     Themes tab shows it as a tag on the Widget list label.
     """
 
-    return _MATERIAL_SUFFIX_RE.sub("", str(settings_name or "").strip()).strip()
+    return strip_material_tag(settings_name)
 
 
 def mirrored_widget_theme(

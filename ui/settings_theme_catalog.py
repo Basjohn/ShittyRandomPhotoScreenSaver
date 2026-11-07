@@ -34,6 +34,7 @@ from ui.settings_theme_runtime import set_active_settings_theme
 from ui.settings_theme_spec import (
     DEFAULT_DARK_SETTINGS_THEME,
     SettingsThemeSpec,
+    strip_material_tag,
 )
 
 
@@ -271,6 +272,28 @@ def read_persisted_theme_id(
     return normalized or BUILTIN_DEFAULT_THEME_ID
 
 
+def _retagged_entry(catalog: SettingsThemeCatalog, filename: str | None) -> SettingsThemeCatalogEntry | None:
+    """The one catalogue theme a missing ``file:`` identity names under a different material tag.
+
+    A curated theme's file name ends with its material ("Pearl Blush [Three-Tone] [Glass].srtheme"); when the
+    pack moves it to another material the file is renamed, and a stored selection of the old name still means it.
+    Only a tagged name is bridged, only to exactly one theme with the same untagged stem.
+    """
+
+    if not filename:
+        return None
+    stem = Path(filename).stem
+    base = strip_material_tag(stem)
+    if not base or base == stem:
+        return None
+    matches = [
+        entry for entry in catalog.entries
+        if not entry.is_builtin and entry.source_path is not None
+        and strip_material_tag(Path(entry.source_path).stem).casefold() == base.casefold()
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 def resolve_theme_selection(
     catalog: SettingsThemeCatalog,
     requested_theme_id: str | None,
@@ -295,6 +318,15 @@ def resolve_theme_selection(
         )
 
     filename = _filename_from_theme_id(requested)
+    retagged = _retagged_entry(catalog, filename)
+    if retagged is not None:
+        # A curated theme whose material changed keeps its identity (Persisted_Input_Compatibility.md).
+        return SettingsThemeSelectionResolution(
+            requested_theme_id=requested,
+            entry=retagged,
+            used_fallback=False,
+            error=None,
+        )
     if filename is None and requested != BUILTIN_DEFAULT_THEME_ID:
         error = f"Invalid persisted Settings theme identity: {requested!r}"
     elif filename is not None:

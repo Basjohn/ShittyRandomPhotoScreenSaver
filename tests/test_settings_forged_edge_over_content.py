@@ -44,13 +44,16 @@ def manager(tmp_path, monkeypatch):
     from core.settings.settings_manager import SettingsManager
     from ui.settings_theme_runtime import get_active_settings_theme, set_active_settings_theme
     from ui.styled_popup import StyledPopup
+    from ui.widget_theme_active import get_active_widget_theme, set_active_widget_theme
 
     monkeypatch.setattr(StyledPopup, "exec", lambda popup: setattr(popup, "_result_value", None))
     before = get_active_settings_theme()
+    before_widget = get_active_widget_theme()
     manager = SettingsManager(application="forged_edge_over_content", storage_base_dir=tmp_path)
     manager.set("sources.folders", [str(tmp_path)])
     yield manager
     assert manager.flush(timeout=5.0)
+    set_active_widget_theme(before_widget)
     set_active_settings_theme(before)
 
 

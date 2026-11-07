@@ -23,6 +23,8 @@ independently themeable colour.
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
@@ -66,14 +68,44 @@ WHITE = Rgba(255, 255, 255, 255)
 BLACK = Rgba(0, 0, 0, 255)
 
 
-NATIVE_BACKDROP_MODES = frozenset({"off", "acrylic", "glass"})
+NATIVE_BACKDROP_MODES = frozenset({"off", "acrylic", "glass", "frosted", "mica", "smoked"})
+# The materials that lay a tint over the blurred desktop (AccentPolicy Acrylic); each needs a non-zero tint alpha.
+TINTED_BACKDROP_MODES = frozenset({"acrylic", "frosted", "mica", "smoked"})
+
+# Material recipes: how Frosted, Mica and Smoked derive their native tint from the theme's authored tint, the same
+# family the card materials use (Docs/Architecture/Card_Surface_Materials.md 3.5). Renderer constants, not theme data.
+FROSTED_WHITE_MIX = 0.5      # milky haze toward white
+FROSTED_MIN_ALPHA = 176
+MICA_MIN_ALPHA = 216         # near-solid theme surface, the desktop only faintly through
+SMOKED_DESATURATION = 0.6    # toward the tint's own grey
+SMOKED_BLACK_MIX = 0.5
+SMOKED_MIN_ALPHA = 168
+
+
+# A curated Settings theme's name ends with its material tag ("[Glass]", "[Mica]", ...): the pair's material.
+MATERIAL_TAG_RE = re.compile(r"\s+\[(?:Glass|Acrylic|Frosted|Mica|Smoked)\]\s*$", re.IGNORECASE)
+
+
+def strip_material_tag(name: str) -> str:
+    """``name`` without its trailing material tag (a Widget counterpart's name; a renamed theme's stable stem)."""
+    return MATERIAL_TAG_RE.sub("", str(name or "").strip()).strip()
+
+
+def material_tag(mode: str) -> str:
+    """The name tag of a backdrop ``mode`` ("[Mica]"), or "" for ``off``."""
+    return "" if mode == "off" else f"[{mode.title()}]"
+
+
+def _mix_channel(value: int, target: float, weight: float) -> int:
+    return max(0, min(255, round(value + (target - value) * weight)))
 
 
 @dataclass(frozen=True, slots=True)
 class NativeBackdropStyle:
     """Theme-facing request for the Settings native Windows backdrop.
 
-    ``mode`` is one of ``off``, ``acrylic`` or ``glass``:
+    ``mode`` is one of ``off``, ``acrylic``, ``glass``, ``frosted``, ``mica`` or ``smoked``
+    (Frosted, Mica and Smoked: see :meth:`native_tint`):
 
     * ``off`` disables the native composition backdrop;
     * ``acrylic`` uses theme-tinted AccentPolicy Acrylic and requires non-zero
@@ -104,11 +136,38 @@ class NativeBackdropStyle:
                 f"{sorted(NATIVE_BACKDROP_MODES)!r}, got {self.mode!r}"
             )
         object.__setattr__(self, "mode", mode)
-        if mode == "acrylic" and self.tint.a == 0:
+        if mode in TINTED_BACKDROP_MODES and self.tint.a == 0:
             raise ValueError(
-                "Settings Acrylic backdrop must use non-zero tint alpha; "
+                f"Settings {mode.title()} backdrop must use non-zero tint alpha; "
                 "use mode='off' or mode='glass' instead"
             )
+
+    def native_tint(self) -> Rgba | None:
+        """The tint the native material lays over the blurred desktop, or None (Glass, Off: the desktop itself).
+
+        Frosted, Mica and Smoked are tinted AccentPolicy Acrylic with a tint derived from the authored one, so they
+        stay on the physically validated composition family (no DWM system backdrop; see
+        ``Docs/Architecture/Settings_Theme_Architecture.md``):
+
+        * ``frosted``: the tint mixed halfway to white, at least ``FROSTED_MIN_ALPHA``: a milky, heavier haze;
+        * ``mica``: the tint itself at least ``MICA_MIN_ALPHA``: a near-solid theme surface, wallpaper-tinted;
+        * ``smoked``: the tint desaturated and darkened, at least ``SMOKED_MIN_ALPHA``.
+        """
+
+        tint = self.tint
+        if self.mode == "acrylic":
+            return tint
+        if self.mode == "frosted":
+            return Rgba(_mix_channel(tint.r, 255, FROSTED_WHITE_MIX), _mix_channel(tint.g, 255, FROSTED_WHITE_MIX),
+                        _mix_channel(tint.b, 255, FROSTED_WHITE_MIX), max(tint.a, FROSTED_MIN_ALPHA))
+        if self.mode == "mica":
+            return Rgba(tint.r, tint.g, tint.b, max(tint.a, MICA_MIN_ALPHA))
+        if self.mode == "smoked":
+            grey = 0.2126 * tint.r + 0.7152 * tint.g + 0.0722 * tint.b
+            channels = [_mix_channel(_mix_channel(value, grey, SMOKED_DESATURATION), 0, SMOKED_BLACK_MIX)
+                        for value in (tint.r, tint.g, tint.b)]
+            return Rgba(*channels, max(tint.a, SMOKED_MIN_ALPHA))
+        return None
 
     @property
     def enabled(self) -> bool:
@@ -665,6 +724,10 @@ DEFAULT_DARK_SETTINGS_THEME = SettingsThemeSpec(
 
 __all__ = [
     "NATIVE_BACKDROP_MODES",
+    "TINTED_BACKDROP_MODES",
+    "MATERIAL_TAG_RE",
+    "material_tag",
+    "strip_material_tag",
     "NativeBackdropStyle",
     "BLACK",
     "DEFAULT_DARK_SETTINGS_THEME",

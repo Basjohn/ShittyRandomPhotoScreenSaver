@@ -154,15 +154,23 @@ def test_the_studio_window_is_frameless_with_the_settings_title_bar_and_edge(stu
 
 
 # ----------------------------------------------------------------- material follows the theme
-@pytest.mark.parametrize("theme_glob, mode", [("Matte Graphite*.srtheme", "off"),
-                                              ("Default Dark.srtheme", "acrylic"),
-                                              ("Pearl Blush*.srtheme", "glass")])
-def test_normal_and_materials_follow_the_active_theme(studio, monkeypatch, theme_glob, mode):
+def _theme_with_mode(mode):
+    """The first shipped Settings theme on ``mode`` (themes are authored content: picked by property, never name)."""
+    from pathlib import Path
+    from ui.settings_theme_io import load_settings_theme_file
+    for path in sorted(Path("themes").glob("*.srtheme")):
+        theme = load_settings_theme_file(path)
+        if theme.backdrop.mode == mode:
+            return theme
+    pytest.skip(f"no shipped Settings theme uses {mode}")
+
+
+@pytest.mark.parametrize("mode", ["off", "acrylic", "glass", "frosted", "mica", "smoked"])
+def test_normal_and_materials_follow_the_active_theme(studio, monkeypatch, mode):
     from core import platform_paths
     from ui.studio.surface import StudioWindowSurface
     from ui.studio.theme import studio_theme
-    theme = _theme(theme_glob)
-    assert theme.backdrop.mode == mode
+    theme = _theme_with_mode(mode)
     tokens = studio_theme(theme)
     assert tokens["backdrop"] == mode
     window_alpha = QColor(tokens["windowSurface"]).alphaF()
@@ -183,7 +191,7 @@ def test_normal_and_materials_follow_the_active_theme(studio, monkeypatch, theme
         assert (window_surface.window.format().alphaBufferSize() == 8) == (mode != "off")
         window_surface.apply_backdrop()
         window_surface.apply_backdrop()                      # once, like Settings' first show
-        assert calls == ([] if mode == "off" else [(mode, theme.backdrop.tint)])
+        assert calls == ([] if mode == "off" else [(mode, theme.backdrop.native_tint())])
     finally:
         window_surface.host.retire()
         window_surface.window.deleteLater()

@@ -191,13 +191,22 @@ def disable_blur(hwnd: int) -> bool:
     )
 
 
+# The tinted materials: each is AccentPolicy Acrylic (state 4) with the material's own native tint.
+_TINTED_MODES = frozenset({"acrylic", "frosted", "mica", "smoked"})
+
+
 def apply_backdrop(hwnd: int, mode: str, tint=None) -> bool:
-    """Apply one theme backdrop mode (``off`` / ``acrylic`` / ``glass``) to ``hwnd``; True when a material is on.
+    """Apply one theme backdrop mode to ``hwnd``; True when a material is on.
 
     The single mode -> AccentPolicy mapping, used by every SRPSS frameless window that carries the Settings theme's
-    material (Settings, the Studio). ``tint`` is the theme's ``backdrop.tint`` (Acrylic only)."""
+    material (Settings, the Studio, the Foundry previews). ``off``: no backdrop; ``glass``: untinted blur-behind
+    (state 3); ``acrylic`` / ``frosted`` / ``mica`` / ``smoked``: Acrylic (state 4) with ``tint``, which is the
+    theme's ``backdrop.native_tint()`` (the authored tint for Acrylic, the material's derived tint for the others;
+    ``ui.settings_theme_spec.NativeBackdropStyle``). Mica deliberately stays on this AccentPolicy family rather
+    than the DWM system backdrop, which is rejected for this HWND (Docs/Architecture/Settings_Theme_Architecture.md).
+    """
 
-    if mode == "acrylic":
+    if mode in _TINTED_MODES:
         return enable_acrylic_blur(hwnd, tint_r=tint.r, tint_g=tint.g, tint_b=tint.b, tint_alpha=tint.a)
     if mode == "glass":
         return enable_glass_blur(hwnd)

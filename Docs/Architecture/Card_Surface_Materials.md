@@ -288,8 +288,9 @@ widgets.<family>.surface_material       Inherit (default) | Normal | the five ma
 - **A pair's material has one owner: the mirror (AC-17, operator 7 Nov 2026: "[Glass]" and "[Acrylic]" themes give
   Glass and Acrylic cards).** A linked Widget mirror carries its Settings theme's backdrop material:
   `widget_counterpart_for_settings_theme` (`tools/generate_widget_theme_mirrors.py`, the one authority pack
-  generation, the Theme Foundry and the Theme Sorter call) projects `backdrop.mode` once (`glass` -> `glass`,
-  `acrylic` -> `acrylic`, `off` -> none) through `surface_material_for_settings_theme`. The runtime resolver never
+  generation, the Theme Foundry and the Theme Sorter call) projects `backdrop.mode` once (each material to the
+  same card material, `off` -> none; since 8 Nov 2026 the Settings window also takes Frosted, Mica and Smoked, so a
+  pair keeps one material for the window and the cards) through `surface_material_for_settings_theme`. The runtime resolver never
   reads the Settings theme; under Keep Synced the selected mirror simply names the material, and
   `resolve_global_surface_material` / `theme_surface_material` read it as for any theme. So the canonical default
   pair (`Default Dark [Single] [Glass]`, Keep Synced) draws Glass cards on a fresh profile (accepted), and Style

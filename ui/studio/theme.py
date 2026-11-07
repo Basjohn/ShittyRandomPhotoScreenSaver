@@ -149,7 +149,7 @@ def studio_theme(theme=None) -> dict[str, str]:
     # panels let the material through at the theme's polarity with an opacity floor (dense instruments sit on
     # them over an arbitrary desktop), their colour the contrast-checked one above.
     mode = str(theme.backdrop.mode)
-    translucent = mode in ("acrylic", "glass")
+    translucent = mode != "off"
     titlebar_colour, titlebar_alpha = token("window.titlebar.surface", (12, 12, 12, 209))
     title_text = _ensure(token("window.titlebar.text", (255, 255, 255, 255))[0], header, 4.5, light)
 

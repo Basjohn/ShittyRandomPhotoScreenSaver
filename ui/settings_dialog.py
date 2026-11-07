@@ -951,7 +951,7 @@ class SettingsDialog(QDialog):
             hwnd = int(self.winId())
             backdrop = theme.backdrop
             mode = backdrop.mode
-            tint = backdrop.tint
+            tint = backdrop.native_tint()
             previous_mode = self._native_backdrop_mode
 
             if (
