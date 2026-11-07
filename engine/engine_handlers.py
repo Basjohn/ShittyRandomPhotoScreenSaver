@@ -393,7 +393,7 @@ def on_settings_requested(
 
 
 def _exit_after_lifecycle_failure(engine: ScreensaverEngine, reason: str) -> None:
-    """A failed Settings teardown or cancellation is fatal for the process (Spec.md → Lifecycle).
+    """A failed Settings teardown is fatal for the process (Spec.md → Lifecycle).
 
     No half-retired generation can be proven gone, so there is no safe host for a
     replacement. Live application services are retired first, exactly once and
@@ -617,7 +617,8 @@ def _open_settings_after_runtime_destroyed(
                 dialog_barrier.cancel_for_terminal_shutdown()
             engine._active_settings_dialog = None
             engine._settings_dialog_active = False
-            _exit_after_lifecycle_failure(engine, "settings_cancellation_failed")
+            # Off the UI thread: services are not retired from here.
+            QCoreApplication.exit(1)
             return
 
         engine._active_settings_dialog = None

@@ -290,13 +290,14 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   presets were always authored, so no value changes.
 
 **Found while landing AC-03 (7 Nov; record, not yet admitted):**
-- **Two fatal exits skip the service tier (no live service today; close before SMP M3).** The replacement barrier's
-  timeout (`engine/runtime_destruction.py::_on_timeout`, `QCoreApplication.exit(1)`) and any other bare
+- **Fatal exits other than a failed Settings teardown skip the service tier (no live service today; close before
+  SMP M3).** The replacement barrier's timeout (`engine/runtime_destruction.py::_on_timeout`), the Settings
+  single-shot cancellation failure (off the UI thread, so it must not retire services there) and any other bare
   `QCoreApplication.exit(1)` end the loop without the terminal stop finalization, so application services, the
   ProcessSupervisor and the ThreadManager are not retired (`main.run_screensaver` never calls `engine.cleanup()`).
-  The two Settings exits retire the tier first (`engine_handlers._exit_after_lifecycle_failure`). Fix candidate: one
-  backstop `retire_application_services` after `app.exec()` returns in `run_screensaver` (idempotent), with a
-  barrier-timeout test.
+  Only the Settings-teardown failure retires the tier first (`engine_handlers._exit_after_lifecycle_failure`). Fix
+  candidate: one backstop `retire_application_services` on the UI thread after `app.exec()` returns in
+  `run_screensaver` (idempotent), with a barrier-timeout test.
 - **Production never calls `engine_lifecycle.cleanup`.** The terminal path is `stop(exit_app=True)` and its barrier
   finalization; `cleanup()` is reached only by tests. AC-03 retires the tier on both paths (idempotent); a change to
   one terminal path must check the other.

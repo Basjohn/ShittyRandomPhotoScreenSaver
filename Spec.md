@@ -966,10 +966,9 @@ registry, modelled on the display-power authority; it is no module global and no
   implementation inside the call. Standard SRPSS declares no service and creates nothing.
 - **Service rules:** every service exposes `retire()`. A service never tags its own delayed work with a display or
   Settings generation; it uses `service_owner_key(name)` and cancels that key itself.
-- **Settings-teardown failure stays fatal.** When `stop(reason="settings")` raises, or the dialog's callbacks cannot
-  be cancelled, no half-retired generation can be proven gone, so there is no safe host for a replacement. Live
-  services are retired first (exactly once) so devices and database handles close deterministically, then the
-  process exits with code 1. MC Settings therefore keeps playback alive across an ordinary Settings visit but not
+- **Settings-teardown failure stays fatal.** When `stop(reason="settings")` raises, no half-retired generation can be
+  proven gone, so there is no safe host for a replacement. Live services are retired first (exactly once, on the UI
+  thread) so devices and database handles close deterministically, then the process exits with code 1. MC Settings therefore keeps playback alive across an ordinary Settings visit but not
   across a failed teardown. SMP's live Settings (SMP plan §9) is a separate application policy that never enters
   this teardown path.
 
