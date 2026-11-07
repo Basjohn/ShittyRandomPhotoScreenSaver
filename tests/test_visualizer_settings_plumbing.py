@@ -686,7 +686,7 @@ class TestBubbleSimulationThreadSafety:
 
 
 class TestPerModeTechnicalRoundTrip:
-    """Ensure per-mode technical overrides survive load/save paths."""
+    """Ensure per-mode technical overrides survive load/save paths (test-owned values the controls admit)."""
 
     def _sample_payload(self):
         from core.settings.models import PER_MODE_TECHNICAL_MODES
@@ -697,10 +697,10 @@ class TestPerModeTechnicalRoundTrip:
         for idx, mode in enumerate(PER_MODE_TECHNICAL_MODES, start=1):
             overrides = {
                 "bar_count": 12 + idx,
-                "manual_floor": round(1.0 + idx * 0.1, 2),
+                "manual_floor": round(0.1 + idx * 0.05, 2),
                 "dynamic_floor": idx % 2 == 0,
                 "dynamic_range_enabled": idx % 3 == 0,
-                "audio_block_size": 64 * idx,
+                "audio_block_size": (0, 128, 256, 512, 1024)[idx % 5],
                 "adaptive_sensitivity": idx % 2 == 1,
                 "sensitivity": round(0.5 + idx * 0.15, 2),
             }
@@ -859,316 +859,6 @@ class TestPerModeTechnicalRoundTrip:
             "transient_clamp",
         ):
             assert f"widgets.spotify_visualizer.{legacy_key}" not in serialized
-
-# ===========================================================================
-# 9a-ii. Per-mode technical UI collection (new controls)
-# ===========================================================================
-
-
-class _StubSlider:
-    def __init__(self, value: int):
-        self._value = value
-
-    def value(self) -> int:
-        return self._value
-
-    def blockSignals(self, _blocked: bool) -> None:
-        return None
-
-    def setValue(self, value: int) -> None:
-        self._value = value
-
-
-class _StubCombo:
-    def __init__(self, data: int, options: list[int] | None = None):
-        self._options = list(options or [0, 128, 256, 512, 1024])
-        try:
-            self._index = self._options.index(data)
-        except ValueError:
-            self._index = 0
-
-    def currentData(self) -> int:
-        return self._options[self._index]
-
-    def blockSignals(self, _blocked: bool) -> None:
-        return None
-
-    def setCurrentIndex(self, index: int) -> None:
-        if 0 <= index < len(self._options):
-            self._index = index
-
-    def findData(self, value: int) -> int:
-        try:
-            return self._options.index(value)
-        except ValueError:
-            return -1
-
-
-class _StubCheck:
-    def __init__(self, checked: bool):
-        self._checked = checked
-
-    def isChecked(self) -> bool:
-        return self._checked
-
-    def blockSignals(self, _blocked: bool) -> None:
-        return None
-
-    def setChecked(self, checked: bool) -> None:
-        self._checked = checked
-
-
-class _StubLabel:
-    def __init__(self):
-        self.text = ""
-
-    def setText(self, text: str) -> None:
-        self.text = text
-
-
-class TestPerModeTechnicalControlsCollection:
-    def test_collect_per_mode_controls_includes_input_gain_and_block_size(self):
-        from ui.tabs.media import technical_controls as tc
-
-        class _DummyTab:
-            pass
-
-        tab = _DummyTab()
-        tc.register_per_mode_technical_controls(
-            tab,
-            "bubble",
-            controls={
-                "input_gain_slider": _StubSlider(130),
-                "block_size": _StubCombo(128),
-                "adaptive": _StubCheck(True),
-                "sensitivity_slider": _StubSlider(110),
-                "dynamic_floor": _StubCheck(True),
-                "manual_floor": _StubSlider(20),
-                "dynamic_range": _StubCheck(False),
-                "agc_strength_slider": _StubSlider(55),
-            },
-            update_sensitivity=lambda: None,
-            update_manual_floor=lambda: None,
-        )
-
-        config: dict[str, float | int | bool] = {}
-        tc.collect_per_mode_technical_controls(tab, config)
-
-        assert config["bubble_audio_block_size"] == 128
-        assert config["bubble_input_gain"] == pytest.approx(1.30)
-
-
-class TestPerModeTechnicalControlPresentation:
-    def test_block_size_combo_tints_mode_recommended_entry(self, qtbot):
-        from PySide6.QtCore import Qt
-        from PySide6.QtWidgets import QVBoxLayout, QWidget
-        from ui.tabs.media import technical_controls as tc
-        from ui.widgets import StyledComboBox
-
-        class _DummySettings:
-            def get(self, *_args, **_kwargs):
-                return {}
-
-        class _DummyTab(CanonicalWidgetDefaultsStub, QWidget):
-            def __init__(self):
-                QWidget.__init__(self)
-                CanonicalWidgetDefaultsStub.__init__(self)
-                self._settings = _DummySettings()
-
-            def _save_settings(self):
-                return None
-
-            def _auto_switch_preset_to_custom(self):
-                return None
-
-        tab = _DummyTab()
-        qtbot.addWidget(tab)
-        host = QWidget()
-        qtbot.addWidget(host)
-        layout = QVBoxLayout(host)
-
-        controls = tc._build_control(
-            tab,
-            layout,
-            "bubble",
-            next(defn for defn in tc._BASE_CONTROL_DEFS if defn.control_key == "block_size"),
-        )
-        combo = controls["block_size"]
-        assert isinstance(combo, StyledComboBox)
-        idx = combo.findData(256)
-        assert idx >= 0
-        tinted = combo.itemData(idx, Qt.ItemDataRole.ForegroundRole)
-        assert isinstance(tinted, QColor)
-        assert tinted == tc._RECOMMENDED_COMBO_COLOR
-
-    def test_collect_per_mode_controls_keeps_direct_transient_keys_unprefixed(self):
-        from ui.tabs.media import technical_controls as tc
-
-        class _DummyTab:
-            pass
-
-        tab = _DummyTab()
-        tc.register_per_mode_technical_controls(
-            tab,
-            "spectrum",
-            controls={
-                "mix_slider": _StubSlider(63),
-                "mix_config_key": "spectrum_lane_transient_mix",
-            },
-            update_sensitivity=lambda: None,
-            update_manual_floor=lambda: None,
-        )
-        tc.register_per_mode_technical_controls(
-            tab,
-            "bubble",
-            controls={
-                "mix_vocal_slider": _StubSlider(28),
-            },
-            update_sensitivity=lambda: None,
-            update_manual_floor=lambda: None,
-        )
-
-        config: dict[str, float | int | bool] = {}
-        tc.collect_per_mode_technical_controls(tab, config)
-
-        assert config["spectrum_lane_transient_mix"] == pytest.approx(0.63)
-        assert config["bubble_transient_mix_vocal"] == pytest.approx(0.28)
-        assert "spectrum_spectrum_lane_transient_mix" not in config
-        assert "bubble_bubble_transient_mix_vocal" not in config
-
-    def test_shared_technical_copy_clarifies_recommended_sensitivity_and_noise_floor(self):
-        from ui.tabs.media import technical_controls as tc
-
-        defs = {defn.control_key: defn for defn in tc._control_defs_for_mode("spectrum")}
-
-        assert defs["adaptive"].checkbox_text == "Use Recommended Sensitivity"
-        assert defs["dynamic_range"].checkbox_text == "Output Lift"
-        assert defs["manual_floor"].label_text == "Noise Floor\nBaseline:"
-        assert "Recommended for Spectrum: 128 samples." in tc._audio_block_tooltip("spectrum")
-        assert "not live adaptive analysis" in tc._recommended_sensitivity_tooltip("spectrum")
-        assert "groove marker shows the recommended starting position" in tc._agc_tooltip("spectrum")
-
-        extruded = {
-            defn.control_key: defn
-            for defn in tc._control_defs_for_mode("extruded_spectrum")
-        }
-        assert "kick_gain_slider" in extruded
-        assert "mix_slider" in extruded
-        assert extruded["mix_slider"].config_key == "extruded_spectrum_lane_transient_mix"
-        assert "Recommended for Extruded Spectrum: 128 samples." in tc._audio_block_tooltip("extruded_spectrum")
-
-    @pytest.mark.parametrize(
-        "mode_key",
-        [
-            "spectrum",
-            "extruded_spectrum",
-            "shockwave_grid",
-        ],
-    )
-    def test_agc_slider_uses_mode_specific_recommended_marker(self, qt_app, mode_key):
-        from PySide6.QtWidgets import QVBoxLayout, QWidget
-        from ui.tabs.media import technical_controls as tc
-        from ui.tabs.shared_styles import RecommendedMarkSlider
-
-        class _DummyTab(QWidget):
-            def _default_bool(self, *_args):
-                return False
-
-            def _default_int(self, *_args):
-                return 32
-
-            def _default_float(self, *_args):
-                return 0.5
-
-            def _save_settings(self):
-                return None
-
-            def _auto_switch_preset_to_custom(self):
-                return None
-
-        tab = _DummyTab()
-        layout = QVBoxLayout(tab)
-        defs = {defn.control_key: defn for defn in tc._control_defs_for_mode(mode_key)}
-
-        controls = tc._build_control(tab, layout, mode_key, defs["agc_strength_slider"])
-        slider = controls["agc_strength_slider"]
-
-        assert isinstance(slider, RecommendedMarkSlider)
-        assert slider.recommended_value() == round(tc._recommended_agc_value(mode_key) * 100)
-
-    def test_load_per_mode_controls_reads_direct_transient_keys(self):
-        from ui.tabs.media import technical_controls as tc
-
-        class _DummyTab:
-            def _default_bool(self, *_args):
-                return False
-
-            def _default_int(self, *_args):
-                return 32
-
-            def _default_float(self, *_args):
-                return 0.5
-
-        tab = _DummyTab()
-        tc.register_per_mode_technical_controls(
-            tab,
-            "spectrum",
-            controls={
-                "mix_slider": _StubSlider(0),
-                "mix_label": _StubLabel(),
-                "mix_config_key": "spectrum_lane_transient_mix",
-            },
-            update_sensitivity=lambda: None,
-            update_manual_floor=lambda: None,
-        )
-
-        tc.load_per_mode_technical_controls(
-            tab,
-            {
-                "spectrum_lane_transient_mix": 0.71,
-            },
-        )
-
-        controls = tc.get_per_mode_controls_for_mode(tab, "spectrum")
-        assert controls is not None
-        assert controls["mix_slider"].value() == 71
-        assert controls["mix_label"].text == "71%"
-
-    @pytest.mark.parametrize("block_size", [128, 512])
-    def test_load_per_mode_controls_preserves_valid_combo_block_sizes(self, block_size):
-        from ui.tabs.media import technical_controls as tc
-
-        class _DummyTab:
-            def _default_bool(self, *_args):
-                return False
-
-            def _default_int(self, *_args):
-                return 0
-
-            def _default_float(self, *_args):
-                return 0.5
-
-        tab = _DummyTab()
-        tc.register_per_mode_technical_controls(
-            tab,
-            "oscilloscope",
-            controls={
-                "block_size": _StubCombo(0),
-            },
-            update_sensitivity=lambda: None,
-            update_manual_floor=lambda: None,
-        )
-
-        tc.load_per_mode_technical_controls(
-            tab,
-            {
-                "oscilloscope_audio_block_size": block_size,
-            },
-        )
-
-        controls = tc.get_per_mode_controls_for_mode(tab, "oscilloscope")
-        assert controls is not None
-        assert controls["block_size"].currentData() == block_size
 
 
 class TestVisualizerPresetDefaultResolution:
@@ -1538,168 +1228,44 @@ class TestVisualizerModeBinding:
     # rainbow load/collect tests below still exercise live binding functions and
     # were rewritten to set the active mode directly instead of via the combo.
 
-    def test_load_visualizer_rainbow_state_uses_registry_modes_and_active_selection(self):
+    def test_load_visualizer_family_values_holds_every_owning_mode_from_the_registry(self):
+        from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+        from ui.tabs.media.visualizer_mode_binding import FAMILY_CACHE_ATTR, load_visualizer_family_values
+
+        tab = CanonicalWidgetDefaultsStub()
+        load_visualizer_family_values(tab, {"bubble_rainbow_enabled": True, "bubble_rainbow_speed": 0.76})
+        held = getattr(tab, FAMILY_CACHE_ATTR)
+        assert held["bubble_rainbow_enabled"] is True
+        assert held["bubble_rainbow_speed"] == pytest.approx(0.76)
+        # Oscilloscope owns neither family: nothing is held for it.
+        assert not get_owned_mode_setting_keys("oscilloscope", "rainbow")
+        assert not any(key.startswith("oscilloscope_") for key in held)
+
+    def test_collect_visualizer_family_values_writes_every_rainbow_and_the_current_bar_appearance(self):
+        from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
         from ui.tabs.media.visualizer_mode_binding import (
-            load_visualizer_rainbow_state,
+            FAMILY_CACHE_ATTR, collect_visualizer_family_values, load_visualizer_family_values,
         )
 
-        class _Check:
-            def __init__(self):
-                self.checked = None
-
-            def setChecked(self, value):
-                self.checked = value
-
-        class _Slider:
-            def __init__(self):
-                self.value = None
-
-            def setValue(self, value):
-                self.value = value
-
-        class _Label:
-            def __init__(self):
-                self.text = None
-
-            def setText(self, text):
-                self.text = text
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                # V7: mode selection is context-owned, not combo-owned. The active
-                # mode is the canonical id the pills write.
-                super().__init__()
-                self._active_visualizer_mode_id = "bubble"
-                self.rainbow_enabled = _Check()
-                self.rainbow_speed_slider = _Slider()
-                self.rainbow_speed_label = _Label()
-                self.rainbow_updates = 0
-
-            def _update_rainbow_visibility(self):
-                self.rainbow_updates += 1
-
-        tab = _Tab()
-        load_visualizer_rainbow_state(
-            tab,
-            {
-                "bubble_rainbow_enabled": True,
-                "bubble_rainbow_speed": 0.76,
-            },
-        )
-
-        assert tab._rainbow_per_mode["bubble"] == (True, 76)
-        assert tab.rainbow_enabled.checked is True
-        assert tab.rainbow_speed_slider.value == 76
-        assert tab.rainbow_speed_label.text == "0.76"
-        assert tab.rainbow_updates == 1
-
-    def test_collect_visualizer_rainbow_state_writes_known_mode_keys_from_active_mode(self):
-        from ui.tabs.media.visualizer_mode_binding import (
-            collect_visualizer_rainbow_state,
-        )
-
-        class _Check:
-            def __init__(self, checked):
-                self._checked = checked
-
-            def isChecked(self):
-                return self._checked
-
-        class _Slider:
-            def __init__(self, value):
-                self._value = value
-
-            def value(self):
-                return self._value
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                # V7: the active mode is the context-owned canonical id.
-                super().__init__()
-                self._active_visualizer_mode_id = "bubble"
-                self.rainbow_enabled = _Check(True)
-                self.rainbow_speed_slider = _Slider(63)
-                self._rainbow_per_mode = {
-                    "spectrum": (False, 20),
-                }
-
-        tab = _Tab()
+        tab = CanonicalWidgetDefaultsStub()
+        load_visualizer_family_values(tab, {})
+        held = getattr(tab, FAMILY_CACHE_ATTR)
+        held["bubble_rainbow_enabled"] = True
+        held["bubble_rainbow_speed"] = 0.63
         payload = {}
-        collect_visualizer_rainbow_state(tab, payload)
-
+        collect_visualizer_family_values(tab, payload, "bubble")
         assert payload["bubble_rainbow_enabled"] is True
         assert payload["bubble_rainbow_speed"] == pytest.approx(0.63)
-        assert payload["spectrum_rainbow_enabled"] is False
-        assert payload["spectrum_rainbow_speed"] == pytest.approx(0.20)
-        # Oscilloscope does not own the shared Rainbow controls; its beam tone
-        # is driven by the mode's authored spectral reaction instead.
+        assert (payload["rainbow_enabled"], payload["rainbow_speed"]) == (True, pytest.approx(0.63))
+        for mode in ("spectrum", "devcurve"):
+            for key in get_owned_mode_setting_keys(mode, "rainbow").values():
+                assert key in payload
+            # An unselected mode's bar appearance stays as stored (the save merge), never re-written here.
+            for key in get_owned_mode_setting_keys(mode, "shared_bar").values():
+                assert key not in payload
+        for key in get_owned_mode_setting_keys("bubble", "shared_bar").values():
+            assert payload[key] == held[key]
         assert "oscilloscope_rainbow_enabled" not in payload
-        assert "oscilloscope_rainbow_speed" not in payload
-
-    def test_rainbow_controls_are_hidden_outside_custom_preset(self):
-        from ui.tabs.widgets_tab import WidgetsTab
-
-        class _Check:
-            def __init__(self, checked):
-                self._checked = checked
-
-            def isChecked(self):
-                return self._checked
-
-        class _Container:
-            def __init__(self):
-                self.visible = None
-
-            def setVisible(self, visible):
-                self.visible = bool(visible)
-
-        class _Effect:
-            def __init__(self):
-                self.enabled = None
-
-            def setEnabled(self, enabled):
-                self.enabled = bool(enabled)
-
-        class _Palette:
-            def setColor(self, *_args):
-                pass
-
-        class _Label:
-            def palette(self):
-                return _Palette()
-
-            def foregroundRole(self):
-                return object()
-
-            def setPalette(self, _palette):
-                pass
-
-        class _Tab:
-            def __init__(self, *, custom):
-                self.rainbow_enabled = _Check(True)
-                self._rainbow_controls_container = _Container()
-                self._rainbow_speed_container = _Container()
-                self._rainbow_glow_effect = _Effect()
-                self._rainbow_plain_label = _Label()
-                self._custom = custom
-
-            def _active_visualizer_preset_is_custom(self):
-                return self._custom
-
-            def _get_active_visualizer_mode(self):
-                return "spectrum"
-
-        custom_tab = _Tab(custom=True)
-        WidgetsTab._update_rainbow_visibility(custom_tab)
-        assert custom_tab._rainbow_controls_container.visible is True
-        assert custom_tab._rainbow_speed_container.visible is True
-        assert custom_tab._rainbow_glow_effect.enabled is True
-
-        preset_tab = _Tab(custom=False)
-        WidgetsTab._update_rainbow_visibility(preset_tab)
-        assert preset_tab._rainbow_controls_container.visible is False
-        assert preset_tab._rainbow_speed_container.visible is False
-        assert preset_tab._rainbow_glow_effect.enabled is False
 
     def test_collect_and_load_visualizer_preset_indices_use_shared_descriptor_contract(self):
         from core.settings.visualizer_preset_indices import resolve_preset_index_from_mapping

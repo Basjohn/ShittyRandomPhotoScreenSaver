@@ -6,7 +6,9 @@ Every mode is edited in its Studio (``ui/studio``), which has parity+ with the b
 with its OPEN STUDIO launcher, its 3D Detail row where it has one, and one sentence; no other widget is built, hidden
 or not (Neon Lake's terrain is painted with the Studio's brush). The section-lazy cache (``_<prefix>_lazy_values``)
 is the only owner of the body's values, the technical (audio analysis) values included, so loading, collecting,
-saving, preset switching and Custom snapshots run through the unchanged owners without a QWidget value owner.
+saving, preset switching and Custom snapshots run through the unchanged owners without a QWidget value owner. The
+technical values are the spec's offered ``technical`` controls (``ModeSettings.technical_controls``), admitted like
+every other control; a hidden one holds no value here and keeps its stored value on save.
 """
 from __future__ import annotations
 
@@ -21,7 +23,6 @@ from core.settings.visualizer_mode_registry import get_visualizer_mode_descripto
 from core.settings.visualizer_mode_settings import Colour, Custom, read_control_value, require_mode_settings
 from ui.tabs.media import framed_camera_editor as fce
 from ui.tabs.media.builder_scaffold import build_mode_body
-from ui.tabs.media.technical_controls import admitted_technical_values, technical_storage_keys
 
 
 def _resolve(path: str):
@@ -41,7 +42,7 @@ def body_keys(mode_id: str) -> tuple[str, ...]:
     descriptor = get_visualizer_mode_descriptor(mode_id)
     view = set(descriptor.view_orbit_settings) | set(descriptor.scene_transform_settings)
     out: list[str] = []
-    for entry in spec.entries:
+    for entry in spec.body_entries:
         if isinstance(entry, Custom):
             out.extend(entry.keys)
         elif entry.bucket or entry.key not in view:
@@ -49,12 +50,17 @@ def body_keys(mode_id: str) -> tuple[str, ...]:
     return tuple(out)
 
 
+def technical_keys(mode_id: str) -> tuple[str, ...]:
+    """The persisted keys of the mode's offered technical (audio analysis) controls, in Settings' order."""
+    return tuple(control.key for control in require_mode_settings(mode_id).technical_controls())
+
+
 def technical_values(tab, mode_id: str) -> dict[str, Any]:
     """The mode's technical values as the cache holds them ({} while its body is unbuilt)."""
     cache = getattr(tab, f"_{require_mode_settings(mode_id).prefix}_lazy_values", None)
     if not isinstance(cache, dict):
         return {}
-    return {key: cache[key] for key in technical_storage_keys(mode_id) if key in cache}
+    return {key: cache[key] for key in technical_keys(mode_id) if key in cache}
 
 
 def _admitted(tab, spec, key: str, config) -> Any:
@@ -85,8 +91,7 @@ def build_studio_owned_mode_ui(tab, parent_layout, mode_id: str, intro: str) -> 
         settings_container_attr=f"_{prefix}_settings_container",
         preset_slider_attr=get_visualizer_mode_descriptor(mode_id).preset_slider_attr,
     )
-    cache = {key: _admitted(tab, spec, key, {}) for key in body_keys(mode_id)}
-    cache.update(admitted_technical_values(tab, mode_id, {}))
+    cache = {key: _admitted(tab, spec, key, {}) for key in body_keys(mode_id) + technical_keys(mode_id)}
     setattr(tab, f"_{prefix}_lazy_values", cache)
     text = QLabel(intro)
     text.setObjectName(f"{mode_id}_studio_intro")
@@ -128,9 +133,8 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
     spec = require_mode_settings(mode_id)
     config = config if isinstance(config, dict) else {}
     cache = getattr(tab, f"_{spec.prefix}_lazy_values")
-    for key in body_keys(mode_id):
+    for key in body_keys(mode_id) + technical_keys(mode_id):
         cache[key] = _admitted(tab, spec, key, config)
-    cache.update(admitted_technical_values(tab, mode_id, config))
     if spec_for_mode(mode_id) is not None:
         fce.hydrate_pose(tab, mode_id, config)
         fce.refresh_editors(tab, mode_id)
@@ -144,7 +148,7 @@ def collect_spec_mode_settings(tab, mode_id: str) -> dict[str, Any]:
     for key in body_keys(mode_id):
         value = cache[key]
         values[key] = list(value) if isinstance(_control(spec, key), Colour) else deepcopy(value)
-    for key in technical_storage_keys(mode_id):
+    for key in technical_keys(mode_id):
         values[key] = cache[key]
     if spec_for_mode(mode_id) is not None:
         values = fce.collected(tab, mode_id, values)
@@ -159,4 +163,4 @@ def _control(spec, key: str):
 
 
 __all__ = ["body_keys", "build_studio_owned_mode_ui", "collect_spec_mode_settings", "container_attr",
-           "load_spec_mode_settings", "technical_values"]
+           "load_spec_mode_settings", "technical_keys", "technical_values"]

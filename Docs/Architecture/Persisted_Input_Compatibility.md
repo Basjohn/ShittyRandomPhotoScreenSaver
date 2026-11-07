@@ -211,6 +211,13 @@ without the safe path below.
   fail-loud in memory, one open bucket per scope
   (`core.settings.ui_bucket_state.normalize_single_open_bucket_states()`). Do
   not complicate it to reject harmless old `false` members.
+- **Retired Visualizer disclosure schemas (7 Nov, AC-23).** `ui.visualizer_adv_states`,
+  `ui.visualizer_tech_states` and `ui.visualizer_tech_bucket_states` (and the `:rainbow` / `:bar_appearance` members
+  of `ui.visualizer_bucket_states`) had no live builder. Canonical defaults no longer declare them; an old profile's
+  members are accepted at input (the bucket normalizer ignores unknown members) and
+  `project_settings_bucket_context` removes the three retired maps once, a second projection writing nothing.
+  Old-input fixture: `tests/fixtures/settings_bucket_state_full_map_profile.json`; bar:
+  `tests/test_settings_ac01_residue_retired.py`.
 
 ## Removing a bridge safely (only when the operator closes its horizon)
 

@@ -49,7 +49,8 @@ _RETIRED_AUTHORED_SHARED_VISUAL_KEYS = frozenset(
         "bar_border_opacity",
     }
 )
-_RETIRED_AUTHORED_TECH_SUFFIXES = frozenset({"energy_boost", "use_raw_energy"})
+RETIRED_AUTHORED_TECH_SUFFIXES = frozenset({"energy_boost", "use_raw_energy"})
+_RETIRED_AUTHORED_TECH_SUFFIXES = RETIRED_AUTHORED_TECH_SUFFIXES
 
 _RETIRED_GROWTH_KEYS = frozenset(
     {

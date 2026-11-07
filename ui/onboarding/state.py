@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
+from core.mc import effective_interaction_mode, interaction_mode_forced
 from core.settings.capability_activation import is_widget_family_effective
 from core.settings.visualizer_mode_registry import resolve_admissible_enabled_modes
 from core.settings.widget_family_catalog import get_widget_family_catalog
@@ -62,10 +63,10 @@ def route_widgets_to_single_display(settings) -> bool:
     return True
 
 
-def is_media_center_profile(settings) -> bool:
-    """The Media Center build forces interaction on (same test as the Display tab)."""
-    name = getattr(settings, "get_application_name", None)
-    return callable(name) and name() == "Screensaver_MC"
+def is_media_center_profile(settings=None) -> bool:
+    """The Media Center build forces interaction on: the one product predicate's rule (``core.mc``), shared with
+    the Display tab and the runtime. ``settings`` is accepted for callers' convenience and not consulted."""
+    return interaction_mode_forced()
 
 
 def selected_setup_dependencies(settings) -> tuple[str, ...]:
@@ -127,4 +128,4 @@ def current_setup_summary(settings) -> dict[str, object]:
         and bool(visualizer.get("enabled"))
         and is_widget_family_effective(widgets, "visualizers")
     )
-    return {"sources": sources, "folders": len(settings.get("sources.folders") or ()), "feeds": online_source_count(settings), "displays": display, "unavailable_displays": unavailable_displays, "interaction": is_media_center_profile(settings) or bool(settings.get("input.interaction_mode")), "families": enabled, "accounts": saved_account_states(settings), "visualizer_modes": modes if visualizer_active else (), "transitions": sum(bool(value) for value in activation.values()) if isinstance(activation, Mapping) else 0}
+    return {"sources": sources, "folders": len(settings.get("sources.folders") or ()), "feeds": online_source_count(settings), "displays": display, "unavailable_displays": unavailable_displays, "interaction": effective_interaction_mode(settings.get("input.interaction_mode")), "families": enabled, "accounts": saved_account_states(settings), "visualizer_modes": modes if visualizer_active else (), "transitions": sum(bool(value) for value in activation.values()) if isinstance(activation, Mapping) else 0}

@@ -113,10 +113,9 @@ def run_settings_import(parent, settings, path: str | None = None) -> bool:
 
 
 def _activate_imported_theme(settings) -> None:
-    """An imported theme choice applies now, not only after a restart."""
+    """An imported theme choice applies now, not only after a restart (a linked or an Independent Widget theme)."""
     try:
-        from ui.settings_theme_catalog import get_current_settings_theme_catalog, read_persisted_theme_id
-        from ui.settings_theme_selection import apply_settings_theme_selection
-        apply_settings_theme_selection(settings, get_current_settings_theme_catalog(), read_persisted_theme_id(settings))
+        from ui.settings_theme_selection import rederive_active_themes
+        rederive_active_themes(settings)
     except Exception:
         logger.warning("Imported Settings theme could not be applied live", exc_info=True)

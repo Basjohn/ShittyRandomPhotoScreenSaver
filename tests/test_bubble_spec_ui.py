@@ -104,8 +104,6 @@ def test_bubble_builder_failure_restores_previous_mode_without_orphan(body, monk
     assert host.selected_mode == "spectrum"
     assert tab._get_active_visualizer_mode() == "spectrum"
     assert tab._mode_pills["spectrum"].isChecked()
-    assert tab._base_appearance_group.parentWidget() is tab._studio_family_values
-    assert tab._rainbow_controls_container.parentWidget() is tab._studio_family_values
     assert not any(
         item.widget() is not None and item.widget().objectName() == "visualizer_mode_body_bubble"
         for item in (tab._mode_body_layout.itemAt(i)

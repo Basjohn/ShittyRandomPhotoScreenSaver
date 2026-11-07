@@ -8,7 +8,7 @@ from core.settings.visualizer_mode_settings import Range, require_mode_settings
 
 
 def test_eb_visible_controls_have_unique_keys_and_useful_tooltips():
-    entries = [entry for entry in require_mode_settings("extruded_bubble").entries if entry.bucket]
+    entries = [entry for entry in require_mode_settings("extruded_bubble").body_entries if entry.bucket]
     assert entries, "the EB Settings spec must expose controls"
     assert len({entry.key for entry in entries}) == len(entries)
     for entry in entries:
@@ -23,7 +23,7 @@ def test_eb_visible_controls_have_unique_keys_and_useful_tooltips():
 
 def test_each_eb_music_range_explains_both_ends_of_its_response():
     # New ranges are automatically admitted; no hardcoded list of today's controls.
-    entries = [entry for entry in require_mode_settings("extruded_bubble").entries
+    entries = [entry for entry in require_mode_settings("extruded_bubble").body_entries
                if entry.bucket and isinstance(entry, Range)]
     assert entries, "the EB spec must retain at least one musical response range"
     for entry in entries:

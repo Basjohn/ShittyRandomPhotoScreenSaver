@@ -148,7 +148,7 @@ def build_schema() -> StudioSchema:
     props: list[StudioProperty] = []
     low, high = _path_bounds()
     placed: dict[str, list[str]] = {w[0]: [] for w in _WORKSPACES}
-    for control in spec.controls:
+    for control in spec.body_controls:
         bucket = control.bucket
         if not bucket:
             continue                               # the live view pose: View group below
@@ -767,7 +767,7 @@ class ExtrudedBubbleStudioAdapter(StudioModeAdapter):
     @staticmethod
     def _clip_key(clip: StudioFixture, values: Mapping[str, Any]) -> str:
         import json
-        authored = {control.key for control in require_mode_settings(MODE).controls}
+        authored = {control.key for control in require_mode_settings(MODE).body_controls}
         analysis = {key: value for key, value in values.items() if key not in authored}
         return clip.description + "|" + json.dumps(analysis, sort_keys=True, default=str)
 

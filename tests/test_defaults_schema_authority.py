@@ -119,10 +119,7 @@ def test_fresh_profile_collapsible_bucket_states_are_boolean_maps() -> None:
     for state_map_name in (
         "gmail_bucket_states",
         "widget_bucket_states",
-        "visualizer_adv_states",
         "visualizer_bucket_states",
-        "visualizer_tech_states",
-        "visualizer_tech_bucket_states",
     ):
         state_map = ui[state_map_name]
         assert isinstance(state_map, dict) and state_map, (
@@ -657,7 +654,6 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
         "gmail_bucket_states",
         "widget_bucket_states",
         "visualizer_bucket_states",
-        "visualizer_tech_bucket_states",
     )
     for state_map_name in sparse_bucket_maps:
         assert state_map_name not in fresh["ui"]

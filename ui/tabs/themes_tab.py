@@ -310,6 +310,20 @@ class ThemesTab(QWidget):
             self._loading_selection=False
         self.theme_list.currentItemChanged.connect(self._on_theme_selection_changed)
 
+    def load_from_settings(self) -> None:
+        """Reset/Import edge: show the persisted selections again (the dialog has already re-derived the active
+        themes). Both lists keep their items and connections; only the selection, link state and status follow."""
+        resolution=resolve_persisted_settings_theme(self._settings,self._catalog)
+        self._loading_selection=True
+        try:
+            self._select_theme_id(resolution.entry.theme_id)
+        finally:
+            self._loading_selection=False
+        self.theme_list.set_favourites(read_theme_favourites(self._settings, "settings"))
+        if resolution.error:
+            self.theme_status.setText(resolution.error)
+        self._refresh_widget_theme_page_from_state()
+
     def _select_theme_id(self,theme_id):
         for row in range(self.theme_list.count()):
             item=self.theme_list.item(row)

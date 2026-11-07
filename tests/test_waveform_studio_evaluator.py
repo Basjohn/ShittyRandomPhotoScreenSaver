@@ -174,7 +174,8 @@ def test_every_registry_control_is_reachable_in_the_studio():
     by_key: dict[str, list] = {}
     for prop in schema.properties:
         by_key.setdefault(prop.path[0], []).append(prop)
-    missing = [c.key for c in spec.controls if c.key not in by_key]
+    # Every body control and every offered audio-analysis control (hidden ones are never offered anywhere).
+    missing = [c.key for c in spec.body_controls + spec.technical_controls() if c.key not in by_key]
     assert missing == [], f"Registry controls unreachable in the Studio: {missing}"
     tuned = {pid for t in schema.response.targets for c in t.cells for pid in (c.gain, c.power)}
     for key, props in by_key.items():

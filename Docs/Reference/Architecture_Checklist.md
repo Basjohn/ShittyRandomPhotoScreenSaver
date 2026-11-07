@@ -293,37 +293,10 @@ into them.
     key (never regenerate them: ten mirrors carry hand-edited colours).
   - **Waits on the operator's choice:** the default pair would then draw Glass cards on fresh profiles. The
     alternative is linking the 15 material themes and labelling "[Glass]" as window-only.
-- [ ] **AC-18 (SS-02) Fold the audio-analysis Technical controls into each mode's spec.** P1, effort M-L.
-  - Today they are declared in five places with disagreeing ranges (manual floor: 0.05 vs 0.0).
-  - The settings model does not clamp them (a bar count of 500 stays 500).
-  - The preset completeness check and repair fill cannot see them.
-  - The registry keeps membership; the spec gains range and presentation, and a single mode filter folds in.
-- [ ] **AC-19 (SS-03) Reset and Import re-derive the active Settings and Widget themes.** P1, effort S.
-  - Today the Settings window and the rebuilt cards keep the old theme until restart or the next Settings open.
-  - An imported Independent Widget theme is not applied until restart.
-  - **Fix:** hang the re-derivation off the existing reset/import edge; this must not trigger on every unchanged
-    write (AC-07). The Themes tab also reloads with Settings.
-- [ ] **AC-20 (SS-04) The Particle, Blinds and Burn pages go through the transition spec.** P2, effort M.
-  - Particle's default radius of 7 always runs as 8. Its gloss offers 10–200 where 16–128 is admitted.
-  - The Particle save overwrites four fields it doesn't show with literals.
-  - **Radius decision (lead):** keep what users already see, so admit a minimum of 8 and make the default 8.
-- [ ] **AC-21 (SS-05) The shared Bar Appearance and Rainbow families join the spec.** P2, effort M.
-  - This finishes A-12: the page builds no hidden value-owner widget.
-  - One range per value: the rainbow speed range is restated in four places today.
-  - The preset completeness check covers them.
-  - Uses AC-18's shared-entries pattern.
-- [ ] **AC-22 (SS-06) One product-identity predicate in Settings.** P2, effort S. The Display tab and Guided Setup
-  decide "is this the MC build" from the app name compared with a literal. Both read `SettingsProfile.current().mc`
-  instead, and the "MC forces interaction" rule gets one owner.
-- [ ] **AC-23 (SS-07) AC-01 residue.** P3, effort S. Folds into AC-14 and follows AC-18.
-  - Delete about 600 dead lines of Technical widget code and the dead Advanced plumbing
-    (`_auto_switch_preset_to_custom` never fires).
-  - Delete a dead copy of the preset rule that wrongly admits `monitor` as a global key.
-  - Retire the three bucket-state schemas through the bridge procedure.
 
 Addenda from the same audit:
 - **AC-09:** the Studio's `card_style` and the General page's integer spin also restate the border clamp.
-- **AC-07:** AC-19 must reuse its edge.
+- **AC-07:** AC-19 (landed) reuses the dialog's reset/import reload edge, never a store subscription.
 
 ---
 

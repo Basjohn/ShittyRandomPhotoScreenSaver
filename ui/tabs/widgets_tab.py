@@ -1581,7 +1581,6 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         if getattr(self, "_loading", False):
             return
         self._refresh_custom_resize_lock_state()
-        self._auto_switch_preset_to_custom()
         self._save_coalesce_pending = True
         self._save_coalesce_token += 1
         token = self._save_coalesce_token

@@ -157,7 +157,7 @@ def build_schema() -> StudioSchema:
         props.append(StudioProperty(id=key_id, path=path, label=label, workspace=workspace, group=group,
                                     instrument=instrument, **extra))
 
-    for control in spec.controls:
+    for control in spec.body_controls:
         bucket = control.bucket or custom_bucket.get(control.key, "")
         if not bucket:
             continue
@@ -204,14 +204,16 @@ def build_schema() -> StudioSchema:
         add(f"{key}.3", (key, 3), f"{label} Opacity", "bars", BAR_COLOUR_GROUP, SCALAR, minimum=0.0,
             maximum=255.0, decimals=0, integer=True, icon="", priority=_PRIORITY.get(key, 100) + 1)
     border = shared["bar_border_opacity"]
-    add(border, (border,), "Border Opacity", "bars", BAR_COLOUR_GROUP, SCALAR, minimum=0.0, maximum=1.0, decimals=2,
-        tooltip="Opacity of the bar borders.")
+    opacity = spec.control(border)                      # ranges from the spec's shared-family entries
+    add(border, (border,), "Border Opacity", "bars", BAR_COLOUR_GROUP, SCALAR, minimum=opacity.low,
+        maximum=opacity.high, decimals=2, tooltip=opacity.tooltip)
     rainbow = _family_keys("rainbow")
+    speed = spec.control(rainbow["rainbow_speed"])
     add(rainbow["rainbow_enabled"], (rainbow["rainbow_enabled"],), "Taste the Rainbow", "colour", RAINBOW_GROUP,
         SWITCH, tooltip="Slowly shift the hue of the bars through the spectrum. Saved per visualizer mode.")
     add(rainbow["rainbow_speed"], (rainbow["rainbow_speed"],), "Rainbow Speed", "colour", RAINBOW_GROUP, SCALAR,
-        minimum=0.01, maximum=1.0, decimals=2, when=((rainbow["rainbow_enabled"], (True,)),),
-        tooltip="How fast the hue cycles through the spectrum.")
+        minimum=speed.low, maximum=speed.high, decimals=2, when=((rainbow["rainbow_enabled"], (True,)),),
+        tooltip=speed.tooltip)
 
     # The shape editor (Custom): layout, curve nodes, frequency boundaries and lane strengths.
     shape = titles["shape"]
@@ -243,8 +245,7 @@ def build_schema() -> StudioSchema:
         workspaces.append(Workspace(workspace_id, title, tuple(groups), open_groups=tuple(groups), icon=icon,
                                     help=help_text, columns=tuple(columns)))
 
-    controls = {control.key: control for control in spec.controls}
-    colours = {shared["bar_fill_color"], shared["bar_border_color"]}
+    controls = {control.key: control for control in spec.controls}     # the shared families included
 
     def admit(key: str, candidate: Any, previous: Any) -> Any:
         if key in technical:
@@ -254,13 +255,9 @@ def build_schema() -> StudioSchema:
         shaped = spectrum_shape.admit_shape(SHAPE, key, candidate, previous)
         if shaped is not NotImplemented:
             return shaped
-        if key in colours:
-            return spectrum_shape.admit_colour(candidate, previous)
-        if key == rainbow["rainbow_speed"]:
-            return spectrum_shape.percent(candidate, previous, low=0.01)
-        if key in (border, PREFIX + "visual_smoothing"):
+        if key == PREFIX + "visual_smoothing":
             return spectrum_shape.percent(candidate, previous)
-        if key in (smoothing_on, rainbow["rainbow_enabled"]):
+        if key == smoothing_on:
             return bool(candidate)
         raise KeyError(f"{key} is not a Spectrum Studio value")
 

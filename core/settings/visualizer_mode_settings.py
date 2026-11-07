@@ -33,6 +33,15 @@ Visual controls (``Range``, ``Triangle``, ``Direction``) persist short lists and
 ``ui/widgets/visual_controls.py``; prefer them to number pairs for spans, proportions and directions.
 
 Adding a setting to a spec'd mode is its default plus one control here; the renderer reads it by key.
+
+Each mode's audio-analysis ("technical") controls are ordinary entries too, in the non-body ``technical`` bucket
+(``TECHNICAL_BUCKET``), built by ``audio_analysis_entries``: the registry keeps membership (which keys a mode owns,
+and with ``technical_hidden_suffixes`` which of them are offered); the spec keeps label, range and the per-mode
+recommended marks. They feed the shared beat engine through the technical profile routing, so they install no
+private logical or presentation attribute and reach no renderer; the model, the Settings value cache, the Studio
+and the preset guard all admit and list them from here. The page-level shared families (Bar Appearance: fill,
+border and border opacity; Rainbow: Taste the Rainbow and its speed) are spec entries the same way, in the non-body
+``bar_appearance`` and ``rainbow`` buckets (``shared_family_entries``), for each mode the registry says owns them.
 A control may also be shown only while another control holds a value (``when``), so a group that only
 matters while its toggle is on hides with it.
 """
@@ -239,6 +248,9 @@ class Choice:
     # Authoring availability only: preserve stored experimental values during
     # hydration/import/repair rather than destructively normalizing them away.
     unavailable_choices: tuple[tuple[str, str], ...] = ()
+    # The persisted values are the whole numbers in ``choices`` themselves (an audio block size), shown by
+    # ``labels``; a stored number outside them becomes the default.
+    numeric: bool = False
 
     def _normalize(self, value: object) -> object:
         if self.normalizer:
@@ -258,6 +270,11 @@ class Choice:
             if number is None or number != int(number):
                 return int(default)
             return max(0, min(len(self.choices) - 1, int(number)))
+        if self.numeric:
+            number = None if isinstance(value, bool) else _finite(value)
+            if number is not None and number == int(number) and int(number) in self.choices:
+                return int(number)
+            return int(default)
         if isinstance(value, str) and value in self.choices:
             return value
         if self.ingress_strict:
@@ -265,7 +282,7 @@ class Choice:
         return str(default)
 
     def coerce(self, value: object) -> str | int:
-        return int(value) if self.indexed else str(value)
+        return int(value) if self.indexed or self.numeric else str(value)
 
     def admit_runtime(self, value: object, default: object) -> str | int:
         value = self._normalize(value)
@@ -590,6 +607,35 @@ class ModeSettings:
     def controls(self) -> tuple[Control, ...]:
         return tuple(entry for entry in self.entries if not isinstance(entry, Custom))
 
+    @cached_property
+    def body_entries(self) -> tuple[Entry, ...]:
+        """The entries the mode body and its Studio buckets lay out: everything outside the non-body buckets
+        (technical, and the page's shared Bar Appearance and Rainbow families)."""
+        return tuple(entry for entry in self.entries if entry.bucket not in NON_BODY_BUCKETS)
+
+    def family_controls(self, family: str) -> tuple[Control, ...]:
+        """The mode's controls of one page-level shared family (``bar_appearance`` or ``rainbow``); () when the
+        mode does not own it."""
+        return tuple(control for control in self.controls if control.bucket == family)
+
+    @cached_property
+    def body_controls(self) -> tuple[Control, ...]:
+        return tuple(entry for entry in self.body_entries if not isinstance(entry, Custom))
+
+    @cached_property
+    def _technical(self) -> tuple[tuple[Control, ...], tuple[Control, ...]]:
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        owned = tuple(control for control in self.controls if control.bucket == TECHNICAL_BUCKET)
+        hidden = {f"{self.mode_id}_{suffix}"
+                  for suffix in get_visualizer_mode_descriptor(self.mode_id).technical_hidden_suffixes}
+        return owned, tuple(control for control in owned if control.key not in hidden)
+
+    def technical_controls(self, *, offered: bool = True) -> tuple[Control, ...]:
+        """The mode's audio-analysis controls in Settings' order: those Settings and the Studio offer, or with
+        ``offered=False`` every one the mode owns (hidden ones stay stored, serialized and admitted)."""
+        owned, shown = self._technical
+        return shown if offered else owned
+
     def control(self, key: str) -> Control:
         for control in self.controls:
             if control.key == key:
@@ -610,7 +656,7 @@ class ModeSettings:
 
     @cached_property
     def _presentation_controls(self) -> tuple[Control, ...]:
-        return tuple(control for control in self.controls
+        return tuple(control for control in self.body_controls
                      if (not control.logical or getattr(control, "also_presentation", False)) and not control.source
                      and not getattr(control, "authoring", False))
 
@@ -624,7 +670,7 @@ class ModeSettings:
 
     @cached_property
     def _logical_controls(self) -> tuple[Control, ...]:
-        return tuple(control for control in self.controls if control.logical and not control.source
+        return tuple(control for control in self.body_controls if control.logical and not control.source
                      and not getattr(control, "authoring", False))
 
     def authoring_controls(self) -> tuple[Control, ...]:
@@ -640,6 +686,151 @@ class ModeSettings:
     @cached_property
     def _source_controls(self) -> tuple[Control, ...]:
         return tuple(control for control in self.controls if control.source)
+
+
+# ---- Audio analysis (technical) ----------------------------------------------------------------
+
+TECHNICAL_BUCKET = "technical"
+BAR_APPEARANCE_BUCKET = "bar_appearance"
+RAINBOW_BUCKET = "rainbow"
+# Buckets outside every mode body: they install no private logical or presentation attribute (each is consumed
+# through its own registry routing: the technical profile, the shared bar profile, the active-mode rainbow).
+NON_BODY_BUCKETS = frozenset({TECHNICAL_BUCKET, BAR_APPEARANCE_BUCKET, RAINBOW_BUCKET})
+
+_BAR_COUNT_TIP = "How many bars are drawn: the audio is split into this many frequency bands, one bar each."
+_ANALYSIS_BANDS_TIP = ("How finely the audio is split into frequency bands before this mode reads it. It draws no bars, "
+                       "but more or fewer bands change how bass, mids and treble are measured, so the picture moves "
+                       "a little differently.")
+_BLOCK_SIZES = ((0, "Auto (Driver)"), (128, "128 samples"), (256, "256 samples"), (512, "512 samples"),
+                (1024, "1024 samples"))
+# The transient mix keys a mode owns beyond the shared suffixes (``SPECIAL_PER_MODE_KEYS``), by suffix.
+_MIX_PRESENTATION = {
+    "lane_transient_mix": ("Kick Lane Mix:", "How much transient energy feeds the kick express lane (0%-100%).\n"
+                                             "Higher = snappier kick response."),
+    "transient_mix_bass": ("Transient Bass Mix:", "Transient bass energy weight for the pulse (0%-100%).\n"
+                                                  "Higher = stronger kick punch."),
+    "transient_mix_vocal": ("Transient Vocal Mix:", "Transient vocal/mid energy weight for the pulse (0%-100%).\n"
+                                                    "Higher = more mid-range response."),
+}
+
+
+def audio_analysis_entries(mode_id: str, *, block_size: int, agc: float) -> tuple[Control, ...]:
+    """The mode's audio-analysis controls, one per technical key the registry says it owns (its suffix map, plus
+    its transient mix keys), in Settings' order, in the non-body ``technical`` bucket. ``block_size`` and ``agc``
+    are the mode's recommended Audio Block Size and AGC Strength marks (never defaults). Qt-free."""
+    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys, get_visualizer_mode_descriptor
+    from core.settings.visualizer_settings_contract import SPECIAL_PER_MODE_KEYS
+
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    owned = get_owned_mode_setting_keys(mode_id, "technical")
+    name = descriptor.display_name
+    t = TECHNICAL_BUCKET
+    if descriptor.draws_bars:
+        bars = dict(label="Bar Count:", suffix=" bars", tooltip=_BAR_COUNT_TIP)
+    else:
+        bars = dict(label="Analysis Bands:", suffix=" bands", tooltip=_ANALYSIS_BANDS_TIP)
+    candidates = {
+        # The worker accepts any count of at least one; Settings, the Studio and the model admit 8-96.
+        "bar_count": lambda key: Slider(key, bars["label"], 8, 96, bars["tooltip"], bucket=t, scale=1, decimals=0,
+                                        integer=True, truncate=True, suffix=bars["suffix"], runtime_low=1),
+        "audio_block_size": lambda key: Choice(
+            key, "Audio Block Size:", tuple(size for size, _label in _BLOCK_SIZES),
+            "How many PCM samples the visualizer groups into each FFT update.\n"
+            "Lower = faster, twitchier reaction with more jitter risk.\n"
+            "Higher = steadier bars with more latency and softer kick pickup.\n"
+            f"Recommended for {name}: {block_size} samples.",
+            bucket=t, numeric=True, labels=tuple(label for _size, label in _BLOCK_SIZES)),
+        "adaptive_sensitivity": lambda key: Toggle(
+            key, "", "Use Recommended Sensitivity",
+            f"Use the curated fixed sensitivity target for {name}.\n"
+            "This is not live adaptive analysis; it simply uses the tuned recommended multiplier.\n"
+            "Turn it off to author the manual Sensitivity slider directly.", bucket=t),
+        "sensitivity": lambda key: Slider(
+            key, "Sensitivity:", 0.25, 2.5,
+            f"Manual FFT sensitivity multiplier for {name}.\n"
+            "Lower = calmer bars and more headroom.\n"
+            "Higher = stronger motion but easier clipping/noise pickup.\n"
+            "This only takes ownership when 'Use Recommended Sensitivity' is off.", bucket=t, tick=25, suffix="x"),
+        "dynamic_range_enabled": lambda key: Toggle(
+            key, "", "Output Lift",
+            f"Apply a small output lift to {name}'s post-FFT bar energy.\n"
+            "Off = calmer default headroom.\n"
+            "On = a brighter, slightly louder visual read without changing the authored shaper.", bucket=t),
+        "agc_strength": lambda key: Slider(
+            key, "AGC Strength:", 0.0, 1.0,
+            f"AGC normalization aggressiveness for {name} (0%=off, 100%=max compression).\n"
+            "Lower values preserve more dynamic range and punch. Higher values level quiet/loud phrases more "
+            "aggressively.\nThe groove marker shows the recommended starting position.",
+            bucket=t, percent=True, tick=10, recommended=agc),
+        "input_gain": lambda key: Slider(
+            key, "Input Gain:", 0.05, 2.0,
+            f"Pre-FFT signal gain for {name} (5%-200%).\n"
+            "This behaves like changing the source volume before analysis, without changing actual playback "
+            "volume.\nLower = calmer visualizer, higher = stronger pickup. 100% = no change.",
+            bucket=t, percent=True, tick=25),
+        "kick_lane_gain": lambda key: Slider(
+            key, "Kick Lane Gain:", 0.0, 2.0,
+            "Kick event gain (0%-200%). Controls how strongly discrete kick help\n"
+            "pushes the mode's fast-react path. 0% = disabled, 100% = unity, 200% = double.",
+            bucket=t, percent=True, tick=25),
+        "transient_pulse_gain": lambda key: Slider(
+            key, "Transient Pulse:", 0.0, 3.0,
+            "Transient pulse gain (0%-300%). Controls how strongly transient\n"
+            "bass energy mixes into the pulse amplitude.\n0% = disabled, 100% = unity, 300% = triple.",
+            bucket=t, percent=True, tick=50),
+        "transient_clamp": lambda key: Slider(
+            key, "Transient Clamp:", 0.0, 3.0,
+            "Maximum transient-boosted bass energy (0%-300%). Prevents\n"
+            "transient spikes from blowing out the visualizer.", bucket=t, percent=True, tick=50),
+        "dynamic_floor": lambda key: Toggle(
+            key, "", "Dynamic Noise Floor",
+            f"Let {name} move its technical noise floor with the incoming signal.\n"
+            "On = better resilience across quiet/loud tracks.\n"
+            "Off = use the fixed Noise Floor Baseline slider exactly.", bucket=t),
+        # One domain with the worker and the startup repair (0.0-1.0): a stored floor below 0.05 runs as authored,
+        # and a Settings or Studio save keeps it.
+        "manual_floor": lambda key: Slider(
+            key, "Noise Floor Baseline:", 0.0, 1.0,
+            "The technical noise floor: the fixed floor when Dynamic Noise Floor is off, its baseline when on.\n"
+            "Lower = more low-level pickup and more jitter risk.\n"
+            "Higher = calmer floor and stronger noise rejection.", bucket=t, tick=10),
+    }
+    entries: list[Control] = [candidates[suffix](owned[suffix]) for suffix in candidates if suffix in owned]
+    if owned:
+        for mode, suffix, key, _coerce in SPECIAL_PER_MODE_KEYS:
+            if mode == descriptor.mode_id:
+                label, tooltip = _MIX_PRESENTATION[suffix]
+                entries.append(Slider(key, label, 0.0, 1.0, tooltip, bucket=t, percent=True, tick=10))
+    return tuple(entries)
+
+
+def shared_family_entries(mode_id: str) -> tuple[Control, ...]:
+    """The page-level shared families the registry says ``mode_id`` owns, as spec controls: Bar Appearance (fill,
+    border, border opacity) and Rainbow (Taste the Rainbow and its speed), stored per mode. Qt-free."""
+    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+
+    entries: list[Control] = []
+    bar = get_owned_mode_setting_keys(mode_id, "shared_bar")
+    if bar:
+        b = BAR_APPEARANCE_BUCKET
+        entries += [
+            Colour(bar["bar_fill_color"], "Bar Fill Color:", "Choose Bar Fill Color", bucket=b),
+            Colour(bar["bar_border_color"], "Bar Border Color:", "Choose Bar Border Color", bucket=b),
+            Slider(bar["bar_border_opacity"], "Bar Border Opacity:", 0.0, 1.0, "Opacity of the bar borders.",
+                   bucket=b, percent=True, tick=5),
+        ]
+    rainbow = get_owned_mode_setting_keys(mode_id, "rainbow")
+    if rainbow:
+        r = RAINBOW_BUCKET
+        enabled = rainbow["rainbow_enabled"]
+        entries += [
+            Toggle(enabled, "", "Taste the Rainbow",
+                   "Slowly shift the hue of visualiser colours through the spectrum. Saved independently per "
+                   "visualizer mode.", bucket=r),
+            Slider(rainbow["rainbow_speed"], "Speed:", 0.01, 1.0, "How fast the hue cycles through the spectrum.",
+                   bucket=r, tick=10, when=(enabled, True)),
+        ]
+    return tuple(entries)
 
 
 # ---- Shockwave Grid ----------------------------------------------------------------------------
@@ -937,7 +1128,7 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_scene_scale", "", 0.25, 4.0),
         Slider("shockwave_grid_scene_pan_x", "", -2.0, 2.0),
         Slider("shockwave_grid_scene_pan_y", "", -2.0, 2.0),
-    ),
+    ) + audio_analysis_entries("shockwave_grid", block_size=256, agc=0.4),
 )
 
 
@@ -1001,7 +1192,7 @@ def _oscilloscope() -> ModeSettings:
             Colour("osc_graticule_color", "Graticule Colour:", "Choose Graticule Colour",
                    "The scale's colour; its alpha sets how faint it is.", bucket="screen",
                    when=("osc_graticule", ("Grid", "Crosshair"))),
-        ),
+        ) + audio_analysis_entries("oscilloscope", block_size=128, agc=0.4),
     )
 
 
@@ -1095,7 +1286,7 @@ _DEVCURVE = ModeSettings(
                'Opacity of the trail overlay.', bucket='ghost', logical=True, percent=True),
         Slider('devcurve_ghost_decay', 'Ghost Decay:', 0.1, 1.0,
                'How quickly the trail fades.', bucket='ghost', logical=True, suffix="x"),
-    ),
+    ) + audio_analysis_entries("devcurve", block_size=256, agc=0.4) + shared_family_entries("devcurve"),
 )
 
 
@@ -1157,7 +1348,8 @@ _EXTRUDED_SPECTRUM = ModeSettings(
                'How quickly ghosts descend after a bar falls.', bucket='effects', source=True, when=('extruded_spectrum_ghosting_enabled', True)),
         Slider("extruded_spectrum_turn", "", -1.0, 1.0),
         Slider("extruded_spectrum_tilt", "", 0.0, 1.0),
-    ),
+    ) + audio_analysis_entries("extruded_spectrum", block_size=128, agc=0.34)
+      + shared_family_entries("extruded_spectrum"),
 )
 
 
@@ -1260,7 +1452,7 @@ _SPECTRUM = ModeSettings(
                when=('spectrum_pattern', SPECTRUM_GEOMETRIC_PATTERNS)),
         Slider('spectrum_pattern_strength', 'Pattern Strength:', 0.0, 1.0, '', bucket='pattern', truncate=True,
                percent=True, tick=10, when=('spectrum_pattern', SPECTRUM_PATTERNS[1:]), bottom_padding=12),
-    ),
+    ) + audio_analysis_entries("spectrum", block_size=128, agc=0.42) + shared_family_entries("spectrum"),
 )
 
 
@@ -1368,7 +1560,7 @@ _SPHERE = ModeSettings(
                'Sphere-only render capability. Other visualizer modes remain on the existing clipped path.', bucket='effects', logical=True, runtime_bool=True),
         Slider("sphere_turn", "", -1.0, 1.0, runtime_strict=True),
         Slider("sphere_tilt", "", 0.0, 1.0, runtime_strict=True),
-    ),
+    ) + audio_analysis_entries("sphere", block_size=256, agc=0.4),
 )
 
 
@@ -1548,7 +1740,7 @@ _BUBBLE = ModeSettings(
                percent=True, tick=5, truncate=True, when=("bubble_ghosting_enabled", True)),
         Slider("bubble_ghost_decay", "Ghost Decay:", 0.1, 1.0, bucket="ghost",
                suffix="x", tick=5, bottom_padding=12, when=("bubble_ghosting_enabled", True)),
-    ),
+    ) + audio_analysis_entries("bubble", block_size=256, agc=0.5) + shared_family_entries("bubble"),
 )
 
 
@@ -1763,7 +1955,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Slider("extruded_bubble_scene_scale", "", 0.2, 5.0),  # physical dolly: 75..3 world units at default pivot, FOV unchanged
         Slider("extruded_bubble_scene_pan_x", "", -0.5, 0.5),
         Slider("extruded_bubble_scene_pan_y", "", -0.5, 0.5),
-    ),
+    ) + audio_analysis_entries("extruded_bubble", block_size=256, agc=0.4),
 )
 
 def _waveform_ribbon() -> ModeSettings:
@@ -1935,7 +2127,8 @@ def _waveform_ribbon() -> ModeSettings:
                     Slider(prefix+'turn','',-1.,1.),Slider(prefix+'tilt','',-.5,.5),
                     Slider(prefix+'scene_scale','',.25,4.),Slider(prefix+'scene_pan_x','',-.5,.5),
                     Slider(prefix+'scene_pan_y','',-.5,.5)))
-    return ModeSettings('waveform_ribbon',buckets,tuple(entries))
+    return ModeSettings('waveform_ribbon',buckets,
+                        tuple(entries)+audio_analysis_entries('waveform_ribbon',block_size=256,agc=0.4))
 
 
 _WAVEFORM_RIBBON = _waveform_ribbon()
@@ -2010,6 +2203,12 @@ __all__ = [
     "Toggle",
     "Triangle",
     "VISUAL_CONTROLS",
+    "TECHNICAL_BUCKET",
+    "BAR_APPEARANCE_BUCKET",
+    "RAINBOW_BUCKET",
+    "NON_BODY_BUCKETS",
+    "audio_analysis_entries",
+    "shared_family_entries",
     "iter_mode_settings",
     "mode_settings",
     "require_mode_settings",
