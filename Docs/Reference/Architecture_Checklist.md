@@ -190,8 +190,8 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
     that does not need a physical camera (reset turn/tilt to the preset's authored values). Then inertia and wrap
     become declared per-mode choices with a reason in `Docs/Reference/Visualizer_Reference.md` → Live view pose.
   - **Must stay true:** the framed-camera standard is the one shared camera (memory: never per-mode cameras); a
-    landscape keeps wrap off on purpose; the queued Reset Camera double-click defect (`Current_Plan.md`) is fixed at
-    the in-card control, not here.
+    landscape keeps wrap off on purpose; an in-card control consumes its own double-click
+    (`Docs/Guardrails/Visualizer_Presentation.md` §14A).
   - **Regression bar:** a registry test lists every mode with `view_orbit_settings`: each declares a reset path
     (framed spec or explicit `camera_reset: none` with a reason) and its inertia/wrap matches the reference table.
   - **Must land before** a second mode opts into the Expanded Visualizer (where the card is large and orbiting
@@ -312,8 +312,7 @@ Addenda from the same audit:
   Normal; timers weak-ref + token fenced; Settings destruction barrier; supervisor per-role locks; Studio workers in
   Job Objects; GC policy-owned; steady publications early-return; no environment-variable flags; bounded image,
   exact-replay, engine-answer and DevCurve caches; every QML file and every `tools/*.py` referenced.
-- **Known elsewhere, not re-listed:** the Studio controller leak and 18 s post-Studio stall, Reset Camera reaching
-  the double-click mode cycle, the Waveform logical tick starving the render thread, the 15 s usage-sample hitch, the
+- **Known elsewhere, not re-listed:** the Studio controller leak and 18 s post-Studio stall, the Waveform logical tick starving the render thread, the 15 s usage-sample hitch, the
   Bubble `max_disp *= 0.72` side defect, the Studio exact-replay frame budget: all live in `Current_Plan.md`.
 
 ## Appendix: challenged and why
