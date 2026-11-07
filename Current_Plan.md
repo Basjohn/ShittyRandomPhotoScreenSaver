@@ -441,8 +441,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **Operator's call:** Neon Lake vs Neon Lake (edit only the registry `display_name`, then run
   `tools/naming_reference.py --write`); the "Spotify Visualizer" widget label and Spline Curve's Ghost tooltip
   ("for debug visibility") are audit #6, not done.
-- `Docs/Reference/Visualizer_Reference.md` (Gated modes paragraph) still describes Sine as a gated, registered mode;
-  Sine is retired and `_GATED_MODES` is empty. Outside this pass's doc scope.
 - `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any fresh worktree (main
   too): it needs the untracked operator originals `assets/usu/scenes/UsuScene*.png`.
 
