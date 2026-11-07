@@ -449,10 +449,10 @@ def test_conditional_rows_hide_and_show_live_in_the_studio(studio_on, mode):
 # collected and every row its spec and hand-written conditions hid (Bubble's Swirl and Particles rules, now
 # StudioProperty.when / when_any in the Bubble adapter). The bodies are now the preset row and the launcher.
 @pytest.mark.parametrize("mode", MODES)
-def test_the_settings_body_collects_exactly_the_body_keys(studio_on, mode):
+def test_the_settings_body_collects_exactly_the_body_and_technical_keys(studio_on, mode):
     from ui.tabs.media.spec_mode_builder import body_keys, collect_spec_mode_settings
     tab = studio_on.make_tab(mode, get_custom_preset_index(mode))
-    assert set(collect_spec_mode_settings(tab, mode)) == set(body_keys(mode))
+    assert set(collect_spec_mode_settings(tab, mode)) == set(body_keys(mode)) | _technical_keys(mode)
 
 
 @pytest.mark.parametrize("mode", MODES)
@@ -466,18 +466,18 @@ def test_the_settings_body_is_only_the_preset_row_and_the_launcher(studio_on, mo
     assert body.isAncestorOf(button) and not button.isHidden()
     for bucket in spec.buckets:
         assert body.findChild(QWidget, f"{mode}_bucket_{bucket.key}") is None, bucket.key
-    holder = body.findChild(QWidget, f"{mode}_studio_owned_values")
-    assert holder is not None and holder.isHidden()
-    # The page's shared Bar Appearance and Rainbow rows are value owners only: with the mode's other value
-    # owners in the hidden holder when the mode owns them, else parked hidden; never on the page.
+    # No hidden value owners: the body's values live in its value cache (A-12).
+    assert body.findChild(QWidget, f"{mode}_studio_owned_values") is None
+    # The page's shared Bar Appearance and Rainbow rows are value owners only, in the page's never-shown family
+    # holder, never in a mode body and never on the page.
     tab._update_rainbow_visibility()
     for accessory in (tab._base_appearance_group, tab._rainbow_controls_container):
-        assert holder.isAncestorOf(accessory) or accessory.isHidden()
-        assert not accessory.isVisibleTo(tab) or holder.isAncestorOf(accessory)
+        assert not body.isAncestorOf(accessory)
+        assert not accessory.isVisibleTo(tab)
     quality = getattr(tab, f"_{mode}_quality_controls", None)          # the 3D Detail row (Settings' 3D page owner)
     for widget in body.findChildren(QAbstractButton) + body.findChildren(QAbstractSlider) \
             + body.findChildren(QComboBox):
-        if holder.isAncestorOf(widget) or widget is button or slider.isAncestorOf(widget):
+        if widget is button or slider.isAncestorOf(widget):
             continue
         if widget.isHidden() or isinstance(widget, QScrollBar):
             continue
@@ -486,7 +486,7 @@ def test_the_settings_body_is_only_the_preset_row_and_the_launcher(studio_on, mo
         pytest.fail(f"unexpected Settings control {widget.objectName() or widget!r}")
     # On a curated preset too, the launcher stays offered.
     slider._slider.setValue(0)
-    assert not button.isHidden() and holder.isHidden()
+    assert not button.isHidden()
 
 
 # ------------------------------------------------------------------------------------- the terrain brush

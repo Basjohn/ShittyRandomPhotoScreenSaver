@@ -637,6 +637,39 @@ def _coerce_value(value: Any, defn: _ControlDef, fallback: Any) -> Any:
     return float(_clamp_numeric(coerced, defn))
 
 
+def admit_technical_value(defn: _ControlDef, value: Any, default: Any) -> Any:
+    """``value`` admitted exactly as the technical control would hold and collect it: coerced and clamped, a
+    choice outside the options falls to the first option, and a slider value lands on its slider step."""
+    admitted = _coerce_value(value, defn, default)
+    if defn.widget_kind == "combo":
+        options = [option for _label, option in defn.options]
+        return admitted if admitted in options or not options else options[0]
+    if defn.widget_kind == "slider":
+        return _clamp_numeric(_slider_value_from_actual(float(admitted), defn) / defn.scale, defn)
+    return admitted
+
+
+def technical_storage_keys(mode_key: str) -> tuple[str, ...]:
+    """The persisted keys of the mode's technical (audio analysis) values, () for a mode without them."""
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    if not get_visualizer_mode_descriptor(mode_key).technical_controls:
+        return ()
+    return tuple(_storage_key(mode_key, defn) for defn in _control_defs_for_mode(mode_key))
+
+
+def admitted_technical_values(tab, mode_key: str, config: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """``config``'s technical values for the mode (canonical defaults when absent), as the controls admit them.
+    The Settings mode body keeps these in its value cache (``spec_mode_builder``); no widget owns them."""
+    if not technical_storage_keys(mode_key):
+        return {}
+    return {
+        _storage_key(mode_key, defn): admit_technical_value(
+            defn, _resolve_loaded_value(config, mode_key, defn), _resolve_default(tab, mode_key, defn),
+        )
+        for defn in _control_defs_for_mode(mode_key)
+    }
+
+
 def _slider_value_from_actual(value: float, defn: _ControlDef) -> int:
     return int(round(_clamp_numeric(value, defn) * defn.scale))
 

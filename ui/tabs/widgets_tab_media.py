@@ -44,10 +44,6 @@ from ui.tabs.shared_styles import (
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.widgets.outlined_button import OutlinedButton
-from ui.tabs.media.technical_controls import (
-    collect_per_mode_technical_controls,
-    load_per_mode_technical_controls,
-)
 from ui.tabs.media.bubble_settings_binding import (
     collect_bubble_mode_settings,
     load_bubble_mode_settings,
@@ -786,12 +782,6 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
     else:
         load_spec_mode_settings(tab, mode_id, cfg)
 
-    # The section-level technical-controls loader runs before this body existed,
-    # so hydrate this freshly-built mode's technical controls now. Scoped to this
-    # mode only, so building it never re-hydrates (and clobbers unsaved edits in)
-    # another already-built mode.
-    load_per_mode_technical_controls(tab, cfg, only_mode=mode_id)
-
     slider = getattr(tab, get_preset_slider_attr(mode_id), None)
     if slider is not None:
         slider.set_preset_index(resolve_preset_index_from_mapping(mode_id, cfg))
@@ -1211,8 +1201,6 @@ def load_visualizer_settings(
     tab.vis_enabled_checkbox.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'enabled')
     )
-    load_per_mode_technical_controls(tab, spotify_vis_config)
-
     load_shared_visualizer_appearance_settings(
         tab, spotify_vis_config, active_vis_mode
     )
@@ -1362,7 +1350,6 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
             spotify_vis_config.update(collect_bubble_mode_settings(tab))
         else:
             spotify_vis_config.update(collect_spec_mode_settings(tab, _cur_mode))
-    collect_per_mode_technical_controls(tab, spotify_vis_config, current_mode=_cur_mode)
 
     collect_visualizer_preset_indices(tab, spotify_vis_config)
 
