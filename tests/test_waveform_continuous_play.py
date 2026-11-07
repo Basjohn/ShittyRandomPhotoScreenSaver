@@ -4,7 +4,11 @@ especially bad 30 s into a song on a sustained passage". Test-owned controls; st
 The force a routine kick earns is guarded at the frame runtime (tests/test_waveform_ribbon_dynamics.py,
 test_a_steady_beat_keeps_its_force_and_a_bigger_hit_still_lands_bigger, which fails on the former running-mean
 contrast). Here the body itself: the visible swell ONE extra kick adds (with minus without, same everything else)
-40 s into a sustained, beating passage stays that of the same kick 3 s in."""
+40 s into a sustained, beating passage stays that of the same kick 3 s in.
+
+With the framed view production always supplies, at Pulse Count 3 (a kick can launch its own pulse). At a lower count a
+kick between launches strengthens the newest pulse instead, a smaller visible step by design (operator, 7 Nov night:
+Pulse Count is the author's choice); on recorded music 2% of onsets reached a pulse already at full strength."""
 from dataclasses import replace
 import numpy as np
 import core.waveform_ribbon_dynamics as dyn
@@ -21,7 +25,8 @@ def visible_swell(model):
 
 def sustained(extra=None, until=None):
     """2 s of silence, then a sustained passage with a beat every 0.5 s; an extra identical kick at tick ``extra``."""
-    model = primed(replace(controls(), pulse=PulseControls(speed=12., fade=2.5)))
+    model = primed(replace(controls(), pulse=PulseControls(speed=12., fade=2.5, count=3)))
+    model.advance(0., bands=(0., 0., 0.), intensity=0., presence=0., view_span=(-16., 16.))
     frames = []
     for index in range(until):
         on = index >= 2/DT

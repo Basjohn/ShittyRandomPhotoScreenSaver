@@ -53,11 +53,14 @@ def unreacted(model):
     twin = copy.deepcopy(model)
     twin._pulse[:] = 0.
     twin._fresh[:] = 0.
-    twin._held[:] = 0.
+    twin._bands = []
+    twin._band_presence[:] = 0.
+    twin._band_light[:] = 0.
     twin._whole = twin._whole_fresh = 0.
     for name in ('_drift', '_level', '_focus', '_geom'):
         setattr(twin, name, np.zeros(PULSE_GRID.size))
     twin._frozen_swell = None
+    twin._frozen_gain_cells = twin._frozen_gain_shown = twin._frozen_surge = None   # Frozen Past's held swell and surge
     twin._snapshot = None
     return twin.snapshot()
 
@@ -123,6 +126,7 @@ def test_the_surge_slides_knots_along_the_curve_without_changing_it(mode, monkey
     model._snapshot = None
     surged = model.snapshot()
     monkeypatch.setattr(dyn, 'PULSE_SURGE', 0.)
+    monkeypatch.setattr(model, '_frozen_surge', None)   # Frozen Past's surge is the displacement held on its cells
     model._snapshot = None
     still = model.snapshot()
     moved_any = False
@@ -155,69 +159,114 @@ def test_travelling_pulse_is_the_default_mode_and_selecting_it_explicitly_is_ide
     # No absolute digest: pulse constants are tuned artistic values, never a regression oracle.
 
 
-def test_frozen_past_holds_the_shaped_cloth_then_a_later_swell_replaces_it():
-    model = model_for('Frozen Past', speed=3., fade=1.5)
-    model.advance(1/90, hit=1., **QUIET)
-    for _ in range(round(1.4*90)):
-        model.advance(1/90, **QUIET)
-    # The cloth cell holding the strongest memory, tracked by its cloth coordinate (it flows with the history).
-    cell = float(PULSE_GRID[int(np.argmax(model._held[0]))])
-    u = cell+model.travel
-    def here():
-        x = u-model.travel
-        return float(np.interp(x, PULSE_GRID, model._held[0])), float(np.interp(x, PULSE_GRID, model._pulse.sum(0)))
-    strong, _ = here()
-    assert strong > .3
-    previous = strong
-    for _ in range(round(2.*90)):
-        model.advance(1/90, **QUIET)
-        held, travelling = here()
-        assert abs(held-previous) < .02  # never jumps
-        previous = held
-    held, travelling = here()
-    assert held > .9*strong and travelling < .3*strong  # the swell has left; its shape is held
-    # A weaker swell reaches the cell and smoothly replaces the held state with its own passage peak.
-    model.advance(1/90, hit=.35, **QUIET)
-    history = []
-    for _ in range(round(6.*90)):
-        model.advance(1/90, **QUIET)
-        history.append(here()[0])
-    steps = np.abs(np.diff(history))
-    assert steps.max() < .03*strong  # smooth replacement (FROZEN_REPLACE), never a jump
-    assert history[-1] < .8*strong and history[-1] > .05
+# Frozen Past (operator, 7 Nov night): "The pulse is a relatively small horizontal width and the full vertical width
+# (except center out where it is 2x). each part stays frozen until the pulse reaches it, then it moves to match the
+# current values low or high and freezes again when the pulse leaves."
+LOUD = {'bands': (.9, .8, .7), 'intensity': .95, 'presence': 1.}
+SOFT = {'bands': (.15, .12, .1), 'intensity': .2, 'presence': 1.}
 
 
-def test_frozen_past_memory_is_bounded_and_fades_in_silence_without_vanishing():
-    model = beats(model_for('Frozen Past'))
-    assert model._held.shape[1] == PULSE_GRID.size
-    for _ in range(round(2.*90)):
+def frozen(**pulse):
+    """A Frozen Past model with the framed view production always supplies (a pulse leaves through its far edge and
+    frees its place under Pulse Count)."""
+    model = model_for('Frozen Past', **{'direction': 'Tail To Head', 'width': 3., 'speed': 6., 'fade': 4., **pulse})
+    model.advance(0., bands=(0., 0., 0.), intensity=0., presence=0., view_span=(-16., 16.))
+    return model
+
+
+def cloth(snapshot):
+    """Ribbon 0's knots as {cloth coordinate: (scene x, y)}: a knot's cloth coordinate never changes while it lives. The
+    packet's knot x is relative to its world origin, which re-bases now and then, so the key adds the origin back."""
+    path = data(snapshot)[0]
+    count, start, capacity = int(path[0, 0]), int(path[1, 1]), int(path[1, 2])
+    order = (start+np.arange(count)) % capacity
+    u, y = path[4::5, 0][order].astype(np.float64), path[4::5, 1][order].astype(np.float64)
+    u = u+snapshot.packet.world_origin[0]
+    x = u+snapshot.head_x-snapshot.travel
+    return {round(float(a), 3): (float(b), float(c)) for a, b, c in zip(u, x, y)}
+
+
+@pytest.mark.parametrize('falloff', (.5, 2.))
+def test_frozen_past_moves_only_where_a_band_is(falloff):
+    model = frozen(falloff=falloff)
+    # Half a band's window (its Pulse Width core, 3, and its Pulse Falloff at one side), a grid cell, and the reach of
+    # the held surge (cloth a band slid shows the band's own body).
+    radius = 1.5+falloff+dyn.PULSE_DX+1.
+    still, guarded, moving, previous, bounds = [], [], [], None, None
+    for index in range(round(10/(1/90))):
+        music = LOUD if (index//45) % 2 else SOFT          # the music changes every half second
+        snapshot = model.advance(1/90, hit=1. if index % 45 == 0 else 0., **music)
+        now = cloth(snapshot)
+        # _surge's fold guard scales a whole ribbon's surge when it would fold the cloth (SURGE_MAX_COMPRESSION). Frozen
+        # Past limits the held surge locally, but with this strong Pulse Strength range the end taper still engages the
+        # guard; a CHANGE of that scale moves a whole ribbon a little (none measurable on recorded music).
+        now_bounds = {key: bound for key, (bound, _) in model._surge_bound.items()}
+        guard = bounds is not None and (bounds.keys() != now_bounds.keys()
+                                        or any(abs(now_bounds[key]-bounds[key]) > 1e-6 for key in bounds))
+        bounds = now_bounds
+        if previous is not None and index*(1/90) > 3.:
+            centres = [band[0] for band in model._bands if band[3] >= dyn.BAND_PRESENT]
+            for u, (x, y) in now.items():
+                if u in previous and abs(x) < 12.:   # inside the test scene's ribbon, away from its history ends
+                    change = abs(y-previous[u][1])
+                    near = min((abs(x-c) for c in centres), default=99.)
+                    if near < 1.:
+                        moving.append(change)
+                    elif near > radius:
+                        (guarded if guard else still).append(change)
+        previous = now
+    assert len(still) > 200 and len(moving) > 50
+    # Frozen: nothing outside a band moves (the held state lives on cloth-fixed cells, so it never melts) ...
+    assert np.percentile(still, 99) < 1e-4 and max(still) < 2e-3, (np.percentile(still, 99), max(still))
+    # ... while under a band it follows the music; even while the fold guard scales a ribbon's surge (this extreme
+    # loud/soft toggle; no measurable effect on recorded music) the cloth outside the bands stays nearly still.
+    everything = still+guarded
+    assert np.percentile(everything, 99) < .15*np.percentile(moving, 90), (np.percentile(everything, 99),
+                                                                             np.percentile(moving, 90))
+
+
+def test_frozen_past_follows_the_current_values_low_or_high_and_holds_after():
+    model = frozen(speed=8.)
+    height = list(dyn.FROZEN_BODY).index('height')
+
+    def held_here(cell_u):
+        return float(np.interp(cell_u-model.travel, model._frozen_cells(), model._frozen_state[height]))
+
+    def presence_here(cell_u):
+        return float(np.interp(cell_u-model.travel, dyn.PULSE_GRID, model._band_presence))
+
+    for index in range(round(3/(1/90))):                       # loud: bands pass and shape the cloth loud
+        model.advance(1/90, hit=1. if index % 90 == 0 else 0., **LOUD)
+    newest = min(model._bands, key=lambda band: band[4])
+    # A cell just behind the newest band (bands travel toward +x, the cloth flows toward -x): the band covered it a
+    # moment ago and no band reaches it again until the next onset.
+    cell = newest[0]-3.+model.travel
+    assert presence_here(cell) == 0.
+    loud_held = held_here(cell)
+    assert abs(loud_held-model.drive['height']) < .05          # it matched the current (high) values
+    for _ in range(round(1.5/(1/90))):                         # soft, no onsets: no band, the cell holds
+        model.advance(1/90, **SOFT)
+    assert model.drive['height'] < loud_held-.2                # the live body really fell
+    assert abs(held_here(cell)-loud_held) < .01                # but the cell stayed frozen at its loud values
+    covered = []                                               # the live height while a band covers the cell
+    for index in range(round(1.5/(1/90))):                     # soft onsets: bands pass and the cell follows LOW
+        model.advance(1/90, hit=.3 if index % 90 == 0 else 0., **SOFT)
+        if presence_here(cell) > .99:
+            covered.append(model.drive['height'])
+    assert len(covered) > 15 and presence_here(cell) == 0.     # a band crossed the cell and has left it again
+    assert abs(held_here(cell)-covered[-1]) < .05              # it matched the values current when the band left
+    assert held_here(cell) < loud_held-.2                      # low as well as high
+
+
+def test_frozen_past_silence_launches_nothing_and_erases_nothing():
+    model = frozen()
+    for index in range(round(3/(1/90))):
+        model.advance(1/90, hit=1. if index % 45 == 0 else 0., **LOUD)
+    launched = len(model._bands)
+    for _ in range(round(6/(1/90))):
         model.advance(1/90, **SILENT)
-    level = model._held[0].max()
-    assert level > 0.
-    for _ in range(round(3.*90)):
-        model.advance(1/90, **SILENT)
-    after = model._held[0].max()
-    assert .7*level < after < level  # persists, decays very slowly
-
-
-def test_frozen_past_keeps_the_size_it_was_shaped_at_when_the_music_softens():
-    # Operator, 5 Nov: "Frozen History doesn't seem to leave a Frozen trail". The memory was held but re-scaled by the
-    # CURRENT Pulse Strength, so it shrank to the quiet strength as soon as the passage softened. A held shape keeps the
-    # strength its passage was shaped with; only the memory's own slow fade shrinks it.
-    for direction in ('Head To Tail', 'Centre Out'):
-        model = model_for('Frozen Past', direction=direction, speed=6.)
-        model.controls = replace(model.controls, ranges={**model.controls.ranges, 'bend': (.2, 3.)})
-        loud = {'bands': (.9, .8, .7), 'intensity': 1., 'presence': 1.}
-        soft_music = {'bands': (.06, .05, .04), 'intensity': .08, 'presence': .2}
-        beats(model, count=8, spacing=.3, after=.8, inputs=loud)
-        def visible():
-            model._geom_share = (1., None)
-            return float((model.geometric_gain(model._value('bend'))-1.).max())
-        shaped = visible()
-        for _ in range(round(4.*90)):
-            model.advance(1/90, **soft_music)
-        assert model._value('bend') < .35*3.          # the music really softened the live strength
-        assert visible() > .75*shaped, direction       # the frozen trail is still there at its shaped size
+    assert len(model._bands) <= launched and not any(band[4] < 6. for band in model._bands)   # no new band in silence
+    assert model._frozen_state is not None and np.ptp(model._frozen_state[0]) > 0.   # the held shape is still there
 
 
 def test_whole_swell_is_spatially_uniform_and_nothing_travels():
@@ -270,7 +319,7 @@ def test_silence_injects_nothing_in_any_mode(mode):
     model = model_for(mode)
     for _ in range(round(3.*90)):
         model.advance(1/90, **SILENT)
-    assert not model._pulse.any() and not model._held.any() and model._whole == 0.
+    assert not model._pulse.any() and not model._bands and model._whole == 0.
     assert not model._drift.any() and not model._level.any() and not model._geom.any()
     assert model.snapshot().packet.payload == unreacted(model).packet.payload
 

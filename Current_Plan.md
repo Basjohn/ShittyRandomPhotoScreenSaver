@@ -50,8 +50,34 @@ after the operator's yes on a question card; agents never run load (invisible ch
      replays after a change and preview gaps. The control-hints test runs on a never-shown window (its access
      violation came from `shiboken6.delete` in the plain-orbit tests). A Sphere <-> Extruded Spectrum switch ends a
      held orbit. Operator check: edit Reaction Mode while Waveform plays; pick Human once.
-2. **§7.1 Waveform Ribbon:** the live logical-tick cut (agent in flight; byte-identical) and the operator
-   sign-offs in §2.
+2. **§7.1 Waveform Ribbon reactivity (lead, 7 Nov night; operator: "Adaptivity is the enemy").** Landed: the response
+   is memoryless (no phrase-mean widening, learn gate, Breathing contrast about a mean or presence-ratio gate;
+   Adaptive Response retired as a setting); the body lets go within the authored Decay (`CASCADE_SHARE`), and the raw
+   path takes a fixed pre-FFT gain instead of the block peak normaliser. Travelling Pulse and Frozen Past travel as
+   discrete pulse bands (operator: "a relatively small horizontal width and the full vertical width"), with Pulse
+   Count (1-3 at once) and Pulse Falloff in Settings and the Studio; Frozen Past holds everything that moves the cloth
+   on cloth-fixed cells, so each part stays frozen until a pulse reaches it (Preset 5 on Human: motion outside the
+   pulses .002 against .46 world units/s inside); a kick the pulses cannot show goes to Kick Accent (roll, twist,
+   sparks, strands); optional Freeze Deflate. Measured on eight recordings back to back against the songs' own PCM
+   (Presets 1/4/5/6/7): view-amplitude correlation with loudness up against main in every mode that follows the music.
+   Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/memoryless_reactivity/` (`20261107_lead/`,
+   `20261107_bands/`) and `.artifacts/webp/visualizers/waveform_ribbon/memoryless_reactivity/`. Operator check:
+   Frozen Past (Preset 5) live, and Pulse Count / Pulse Falloff / Freeze Deflate in the Studio. Next, in order:
+   - **Vocals first** (operator: "Vocals ARE more important than bass, secondary to vocals are changes (like kicks or
+     vocals) during sustained bass"): score a PCM vocal band beside the music trace, then route the core reaction so
+     vocals lead and bass cannot drown them. Every preset routes Pulse Strength from bass only, so a dense vocal
+     section with little bass (Don't You See, 0-28 s) draws weak swells; the routing is authored, so the fix needs
+     the operator's yes. Measured and rejected: a 2048-sample 30-150 Hz bass lane (Rag Doll's sub-bass entry is
+     invisible to the 256-sample lane) drowned the vocals (Human +.55 -> +.15); rebalancing phrase-energy weights
+     toward mids moved tracking by only +.03.
+   - **Breathing as a swell and release with proper motion** (operator: 2D Bubble's breathing is the reference;
+     guide §13A). Breathing is now only a faster release in soft passages.
+   - The onset reward is still sized by the bus's adaptive flux threshold (about 1 s of context: the same kick right
+     after a dense passage scores .22 against .61); size it on the fixed scale.
+   - Group Wave still reads close to Travelling Pulse on rendered strips (it keeps the summed travelling field; its
+     sets need their own pass), and its Pulse Width is not yet the band core the other two modes use.
+   - Pulse bands' colour edges read crisp at Pulse Falloff below ~1 on wide bands (Preset 5's vertical colour columns);
+     judge on the operator's look whether the light's falloff should follow the geometry's broader envelope.
 3. **Expanded Visualizer M2** (plan 01; merged 7 Nov, 2c6872dc, after the lead's Gate 2 audit;
    next: M2b, Spectrum's width-scaled bar count, then M3), with the operator's M1 amendment: a mode switch never
    re-expands; Expanded is only ever the user's explicit request. Operator, 7 Nov evening:
@@ -137,6 +163,12 @@ holding their press, the Unsaved Preset Changes prompt, R-172/R-173 teardown ord
 "uncopyable WindowsPath" start failure (fab141f0), and the post-close repaint remedy (4e423fe6; open until a field
 log confirms, §9). Card surfaces, the style pass and the 15 material themes are merged; their open items are in §4.
 
+- [ ] **Learned levels still in other modes (lead audit, 7 Nov; operator: "Adaptivity is the enemy"):** the bus presence
+  ratio (`musical_weight`, a 6 s running level) still gates Spline Curve (`devcurve_frame_runtime.py`), Extruded Bubble
+  (`extruded_bubble_frame_runtime.py`), Neon Lake (`logical_frame_capture.py`, `shockwave_frame_runtime.py`),
+  Oscilloscope and Sphere; Spline Curve divides its body by a remembered peak (`devcurve_runtime.py`, 20 s memory,
+  not opt-in). Move each to absolute audibility and fixed scales, mode by mode, with continuous-play evidence.
+  `tools/labs/waveform_ribbon_recorded_input.py` still uses `musical_weight` and no longer matches production.
 - [ ] **Side findings of the Waveform second tick cut (7 Nov, not fixed there):**
   - `capture_visualizer_logical_frame` refreezes the common style (`freeze_render_fields(_common_style(widget))`,
     logical_frame_capture.py) on every tick of every mode, ~0.02-0.04 ms; a FrozenFieldsMemo would remove it.

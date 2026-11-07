@@ -8,6 +8,9 @@ from typing import Any, Dict, Mapping
 # leaf and Custom snapshot are dropped, and every sine_* setting leaves the section.
 RETIRED_VISUALIZER_MODE_IDS = frozenset({"blob", "sine_wave"})
 _RETIRED_VISUALIZER_KEYS = frozenset({
+    # Waveform's Adaptive Response (a remembered-peak gain), retired 7 Nov 2026: the response is memoryless (operator:
+    # "Adaptivity is the enemy"); saved profiles, custom presets and exports drop it.
+    'waveform_ribbon_adaptive_response',
     # Rejected Waveform bank/fringe and independent floor haze; one new atmosphere replaces them.
     'waveform_ribbon_fog_billows',
     'waveform_ribbon_fog_fringe',

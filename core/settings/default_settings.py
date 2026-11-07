@@ -939,7 +939,6 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                          'text_opacity': 0.39},
              'spotify_visualizer': {
                                     'preset_waveform_ribbon': 2,
-                                    'waveform_ribbon_adaptive_response': False,
                                     'waveform_ribbon_adaptive_sensitivity': True,
                                     'waveform_ribbon_attack': 0.045,
                                     'waveform_ribbon_breathing': 0.7,
@@ -954,6 +953,9 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'waveform_ribbon_tilt_shift': False,
                                     'waveform_ribbon_pulse_direction': 'Head To Tail',
                                     'waveform_ribbon_pulse_width': 2.5,
+                                    'waveform_ribbon_pulse_count': 2,
+                                    'waveform_ribbon_pulse_falloff': 1.0,
+                                    'waveform_ribbon_frozen_deflate': 0.0,
                                     'waveform_ribbon_pulse_speed': 12.0,
                                     'waveform_ribbon_pulse_colour': 0.6,
                                     'waveform_ribbon_pulse_fade': 2.5,

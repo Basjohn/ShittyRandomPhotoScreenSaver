@@ -4,7 +4,7 @@ import math
 from collections.abc import Mapping
 from core.waveform_ribbon_dynamics import WaveformDynamics, HybridControls
 from widgets.spotify_visualizer.frame_runtime_lifecycle import RetirableFrameRuntime, retirement_fenced
-from widgets.spotify_visualizer.transient_bus import musical_weight,musical_emphasis,passage_ramp
+from widgets.spotify_visualizer.transient_bus import audible,musical_emphasis,passage_ramp
 from widgets.spotify_visualizer.render_state import FrozenFieldsMemo
 from widgets.spotify_visualizer.view_orbit import CameraAdmissionMemo
 from core.logging.logger import get_logger,is_viz_diagnostics_enabled
@@ -75,7 +75,11 @@ class WaveformRibbonFrameRuntime(RetirableFrameRuntime):
         dt = 0. if self._last_ts is None else min(.1,max(0.,now-self._last_ts))
         self._last_ts = now
         live = bool(playing) and tuple(source_identity)==tuple(identity)[1:] and all(v>=0 for v in identity)
-        weight = musical_weight(loudness,presence) if live else 0.
+        # Absolute audibility only (operator, 7 Nov: "Adaptivity is the enemy"). The bus's presence (loudness over its
+        # own 6 s running level) gated the body and every kick, so a quieter passage after a loud one drew less until
+        # the running level caught up, then more: the same music, a different body. Its dips (below .5 on 4% of music
+        # ticks of recorded continuous play) also reset the former learn rate. Near-silence still reads 0.
+        weight = audible(loudness) if live else 0.
         hit = accent = 0.
         components=[0.,0.,0.]
         for onset in onsets:
@@ -83,7 +87,7 @@ class WaveformRibbonFrameRuntime(RetirableFrameRuntime):
                 continue
             self._onset_serial = onset.serial
             if live and self._model.ready:
-                support=musical_weight(onset.loudness,onset.presence)
+                support=audible(onset.loudness)   # near-silence buys nothing; a quieter passage is not gated
                 magnitude=max(0.,float(onset.magnitude))
                 if self._accent_time is not None and now-self._accent_time>1.5:
                     self._accent_mean.clear()

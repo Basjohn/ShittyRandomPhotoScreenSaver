@@ -54,8 +54,22 @@ constants); all state integrates on the sole logical clock and the projection on
   (Head To Tail, Tail To Head, Centre Out); edge origins sit just beyond the view, so a swell slides in already
   formed. Travelling Pulse's edge swells use the view the card's camera really shows (`core/waveform_ribbon_view.py`
   `card_span`, passed by the capture and the Studio as `view_span`): born `VIEW_MARGIN` envelope sigmas beyond its edge
-  (never farther than `PULSE_ORIGIN`), ageing only once seen. Centre Out and the other modes ignore it. Energy travels at Pulse Speed, spreads gently and fades over Pulse Fade on one bounded 1D field per travel
-  direction. There is no steady baseline injection. The Bend range is presented as **Pulse Strength**.
+  (never farther than `PULSE_ORIGIN`), ageing only once seen. Centre Out and the other modes ignore it. There is no
+  steady baseline injection. The Bend range is presented as **Pulse Strength**.
+- **Discrete pulse bands** (Travelling Pulse and Frozen Past, 7 Nov night; operator: "The pulse is a relatively small
+  horizontal width and the full vertical width (except center out where it is 2x)"). A band launches on a musical
+  onset while fewer than **Pulse Count** (1-3; operator: "editable 1-3 or so at once") pulses are still to come or in
+  the framed view (a Centre Out pair is one pulse; a pulse that has left through the far edge frees its place), once
+  the newest has travelled `BAND_SPACING` Pulse Widths plus its falloff at both sides; the release in between
+  strengthens the newest band (capped at `BAND_STRENGTH_MAX`). Each band rises over `PULSE_RISE`, travels at Pulse
+  Speed and fades over Pulse Fade (an edge band only once seen, a Centre Out pair from birth; each of the pair is a full
+  pulse). A band is full over its Pulse Width core and fades out over **Pulse Falloff** at each side (smoothstep): that
+  window is its light and its Frozen Past presence. Bands combine by maximum, never a sum, so overlapping bands never
+  inflate the view; the swell is `soft(BAND_GEOM_GAIN x` the broad envelope`)` (.6: the measured knee, above which a
+  Pulse Width band meets the flow-rule bound and only flattens its top). Every band publishes `RIM_EDGE_SHARE` of its
+  light for Pulse Rim. Measured on recorded music (Human, Don't You See): Travelling Pulse tracks loudness best at
+  Pulse Count 2 (1 loses about .15 correlation); Frozen Past is the same at 1-3. Group Wave keeps the summed travelling
+  field (its sets), Whole Swell its one global level; neither reads Pulse Count or Pulse Falloff.
 - **Flow rule.** Geometry multiplies the waveform's own displacement about its axis by a broad envelope (sign never
   flips) whose slope and curvature are bounded relative to the carrier wavenumber, so a swell may deepen existing
   curvature but never reverse it, add an inflection or dent a curve inward. The bounding share relaxes upward
@@ -80,33 +94,44 @@ constants); all state integrates on the sole logical clock and the projection on
   only into the headroom left after the authored Spark Count; Pulse Strands gives a restrained lean/chance/glow
   near the swell.
 - **Reaction Modes** (`REACTION_MODES`, Settings "Reaction Mode"): **Travelling Pulse** (default); **Frozen Past**
-  (a per-cell passage peak held on the cloth and advected with it, so shaped parts keep their size/colour until the
-  next swell, decaying slowly in silence and never vanishing); **Whole Swell** (one global level, ignores direction,
+  (operator, 7 Nov night: "each part stays frozen until the pulse reaches it, then it moves to match the current
+  values low or high and freezes again when the pulse leaves"): every cloth cell holds everything that moves it (the
+  `FROZEN_BODY` drives, Pulse Strength, each ribbon's shape springs, the logical clock, the unwrapped roll and twist
+  phase, the passage, the swell, the final bounded gain, each ribbon's vertical offset and the surge displacement).
+  The held cells are fixed to the cloth: whole cells roll with the history and are never re-interpolated (re-sampling
+  them onto the scene grid each tick melted sharp held features, ~1.7 units of blur in 10 s), new cloth enters at the
+  live values, and a cell follows the live values (`FROZEN_FOLLOW`) only where a band's window covers it, fully over
+  the core and partly over the falloff. The held surge's compression is limited on the band's own cells
+  (`SURGE_MAX_COMPRESSION`), so `_surge`'s per-ribbon fold guard rarely has to scale held cloth. Not smoothed: a
+  geometric-kernel low-pass (+-3 sigma) spread every band's update across the gaps (Preset 5 moved as much outside its
+  bands as inside); Pulse Falloff softens the band edges instead. On recorded music (Preset 5, Human 22-30 s) cloth
+  motion outside the bands is median .002 world units/s against .46 inside. Leaving the mode blends into the live
+  state over `FROZEN_BODY_RELEASE` (smoothstep, never a pop). Silence launches no band and erases nothing
+  (`tests/test_waveform_reaction_modes.py`, `tests/test_waveform_pulse_count_and_falloff.py`); **Whole Swell** (one global level, ignores direction,
   width and speed); **Group Wave** (each swell arrives as a set spanning several carrier wavelengths, leaning toward
   its leading edge with a stronger surge; like Travelling Pulse, its geometry and surge follow the fresh field: built
   from the long-fade field its peak-keeping set envelope pinned the swell at the soft bound over the view, 5 Nov
   Preset 7). Every mode obeys the flow rule and the no-twitch rules.
-- **Fixed response (6 Nov; Adaptive Response is an opt-in).** Geometry drives are a fixed function of the routed
-  target on the real-music scale, the same for every song: `fixed_response` = gain x target^curve (`FIXED_RESPONSE`:
-  height and lift on the curve fitted to the remembered-peak gain's output quantiles on seven recordings back to back;
-  every other drive `FIXED_RESPONSE_DEFAULT`), eased above `RESPONSE_FIXED_KNEE` toward `RESPONSE_FIXED_CEILING` (.92,
-  as the remembered peak landed a sustained loud passage at .85). Each phrase is then widened about Breathing's
-  heard-only 3 s mean of the drive (`PHRASE_DIP` below it, `PHRASE_RISE` above it, eased again under the ceiling),
-  as the remembered peak's fast reach and slow release did; after real silence that mean rises up to
-  1/`PHRASE_SETTLE_MIN` times faster for `PHRASE_SETTLE` seconds (it still falls at the Breathing rate), so music that
-  returns louder than it left is not widened upward against the mean the break left behind (spliced breaks: the
-  following 10 s had grown 2-17%). Calibrated to main's VISIBLE behaviour, not hotter (lead
-  review 6 Nov rejected a hotter curve that pinned Pulse Strength, flattened passages and pushed crests out of the card).
-  Each target's Range (Quiet→Peak) maps the drive to size, so the Ranges are the authored reactivity. Nothing is remembered: a break, a loud chorus
-  or a quiet intro never re-scales what follows (operator, 6 Nov: "Adaptive is a very problematic approach"; guide 2A).
-  The former remembered-peak gain stays behind the **Adaptive Response** toggle (off in every preset); its peak now
-  learns only from heard music, so a break cannot lower it (it had sized the 10 s after a spliced 5 s break in Rag
-  Doll's loud end 5-9% up, Preset 4). Breathing's
-  phrase-scale mean learns only from heard music and holds through a break and the passage's return
-  (`BREATHING_HEARD_RETURN`); its contrast is not applied to a returning passage. **Kick Accent** (0..1, .7 in every
-  preset but Preset 4, which ships 0): when the bend drive has little headroom, the share of a kick the geometry cannot
-  show goes to an eased roll-speed nudge bounded at `KICK_ROLL_SHARE` of the roll's own speed (unbounded, dense kicks
-  overlapped into a ~2x spin) and spark births on the swell (`KICK_SENSE_*`, `KICK_ROLL`, `KICK_BIRTHS`). Light, colour and
+- **Memoryless fixed response (7 Nov; operator: "Adaptivity is the enemy").** Geometry drives are a pure function of
+  the current routed target on the real-music scale, the same for every song: `fixed_response` = gain x target^curve
+  (`FIXED_RESPONSE`: height and lift on the curve fitted 6 Nov to the former remembered-peak gain's output quantiles;
+  every other drive `FIXED_RESPONSE_DEFAULT`), eased above `RESPONSE_FIXED_KNEE` toward `RESPONSE_FIXED_CEILING`
+  (.92). Nothing is remembered: no phrase mean, no widening about it, no learn rate, no remembered peak (the Adaptive
+  Response setting is retired: `visualizer_retired_modes`), and the body and its kicks are gated by absolute
+  audibility only (`transient_bus.audible`), never the bus presence ratio. The body lets go within the authored Decay:
+  each stage of a two-stage cascade takes `CASCADE_SHARE` of Attack/Decay, the phrase energy settles over
+  `PHRASE_RELEASE` (.6 s) and the body's attack floor is per stage (`GLOBAL_ATTACK`). Breathing is a faster release
+  in soft passages (`BREATHING_REACH`), a function of the current passage only. The raw musical-signal path takes a
+  fixed pre-FFT gain (`bar_computation.RAW_SIGNAL_INPUT_GAIN`) instead of the block peak normaliser. Lead audit and
+  evidence: `MEMORYLESS` in `core/waveform_ribbon_dynamics.py`, guide §2A/§13D, `Current_Plan.md` §1 item 2. **Kick Accent** (0..1, .7 in every
+  preset but Preset 4, which ships 0): when the bend drive has little headroom, or (7 Nov night, operator: "You can
+  also twist, particle flair, strand and rotate when capped") a kick cannot launch its own pulse (Pulse Count full, or
+  the newest too close) and the newest pulse sits above the knee of its strength, the share of a kick the ribbon
+  cannot show goes to an eased roll-speed nudge bounded at `KICK_ROLL_SHARE` of the roll's own speed (unbounded, dense
+  kicks overlapped into a ~2x spin), spark births on the swell, an eased twist nudge bounded the same way against the
+  twist's own speed (`KICK_TWIST`), and a stronger lean of free strands toward the pulse (`KICK_STRAND_LEAN`)
+  (`KICK_SENSE_*`, `KICK_ROLL`, `KICK_BIRTHS`). **Freeze Deflate** (Frozen Past, 0-120 s, 0 in every preset): over that
+  time held cloth eases back toward the current body where no pulse reaches it; 0 keeps the pure freeze. Light, colour and
   sparkle keep the fixed calibrated anchors. The whole body's size (height, lift, width) follows the passage, not each beat; beats
   belong to the pulse. Measured in continuous play the gain is not what muted mid-song kicks (removing it lowers kick
   response 40-50% at every point of a song); the frame runtime's per-kind running-mean contrast was (below).
@@ -116,12 +141,10 @@ constants); all state integrates on the sole logical clock and the projection on
   looked reactive at the start and muted in the middle. Accent admission (sparks, strands) keeps the contrast.
 - **Breathing** (5 Nov, Reaction bucket). Softness = Breathing x how far the published passage sits below
   `BREATHING_LOUD`; a soft passage releases its geometry drives faster (up to `BREATHING_REACH` of Decay, on both
-  stages) and widens each drive's swings about its own phrase-scale mean (up to `1 + BREATHING_CONTRAST`), so it
-  swells and lets go within its phrases instead of holding. Loud passages keep Decay, targets and reach. Breathing
-  also holds the adaptive gain's memory through a quieter PASSAGE (`RESPONSE_MEMORY x (1 + Breathing x (RESPONSE_HOLD
-  - 1))`, engaged only while the slow sustained level sits below `HOLD_BELOW` of the loud level the peaks were set at,
-  never between beats), so a quieter passage after a loud one is not re-normalised to loud reach.
-  Breathing 0 is bit-exact with the 5 Nov baseline (Preset 4).
+  stages), so it swells and lets go within its phrases instead of holding. Loud passages keep Decay and targets.
+  Since 7 Nov it is a function of the current passage only: the former widening about a phrase-scale mean and the
+  adaptive gain's memory hold are retired with the adaptive response. Swell-and-release breathing on the 2D Bubble
+  method is open work (`Current_Plan.md` §1 item 2).
 - **Anchored history ends** (5 Nov, side-angle tail stagger). The packet header carries the history ring's admission
   phase (`extra.w`); the drawn history ends `ANCHOR_INSET` knots inside each end at anchors fixed in the scene, and the
   C2 continuation starts from the spline's own jet there (`core/ribbon_continuation.py` mirror, ribbon/atmosphere

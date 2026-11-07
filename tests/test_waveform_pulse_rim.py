@@ -143,7 +143,9 @@ def test_snapshot_publishes_the_pulse_appearance_field_and_the_frame_carries_it(
         snapshot = model.advance(1/90, bands=(.6, .4, .3), intensity=.6, presence=1., hit=1. if tick < 3 else 0.)
     field = np.frombuffer(snapshot.pulse, np.float32)
     assert field.shape == PULSE_GRID.shape and field.max() > .05
-    np.testing.assert_array_equal(field, model.pulse_at(PULSE_GRID).astype(np.float32))
+    share = model._rim_share   # RIM_EDGE_SHARE for bands (every band carries a full release), 1 for the set modes
+    expected = model.pulse_at(PULSE_GRID) if share == 1. else model.pulse_at(PULSE_GRID)*share
+    np.testing.assert_array_equal(field, expected.astype(np.float32))
     state = _state(values, configuration, snapshot)
     assert state.pulse == snapshot.pulse
     with pytest.raises(ValueError):
@@ -303,5 +305,8 @@ def test_every_reaction_mode_brightens_its_own_published_field(qt_app, monkeypat
     mirrored = np.corrcoef(share, response(field, -columns)[rims]/CEILING)[0, 1]
     assert agreement > .9, agreement
     assert agreement > mirrored+.3, (agreement, mirrored)
-    assert share[expected < .05].max(initial=0.) < .3     # (the bloom carries a little light sideways)
+    # Columns away from the pulse stay nearly as they were (the bloom carries a little light sideways). The response is
+    # squared, so its tail falls steeply: columns between .01 and .05 are the band's edge, where the surge compresses
+    # the cloth and the centreline's column mapping stalls for a few columns.
+    assert share[expected < .01].max(initial=0.) < .3
     assert share[expected > .9].min(initial=1.) > .6

@@ -29,7 +29,7 @@ A source that is excellent for one job may be actively harmful for another. Sphe
 | Signal family | Good uses | Bad uses / proven traps |
 | --- | --- | --- |
 | **Raw pre-shape / pre-AGC analysis spectrum** | onset/flux, local spectral change, fast contrast, peak-picking | directly driving every continuous visual dimension; using raw magnitude without local normalization/headroom |
-| **Live pre-AGC band energy** | current acoustic presence, silence gating, sustained passage weight, slow adaptive floor/peak, local positive-jump evidence | absolute event magnitude, particle count, or any response whose full range would become normal in loud passages |
+| **Live pre-AGC band energy** | current acoustic presence, silence gating, sustained passage weight on a fixed scale, local positive-jump evidence | absolute event magnitude, particle count, or any response whose full range would become normal in loud passages |
 | **Control-normalized/support-aware energy** | continuous articulation, contour, broad routing, bounded mode-local pressure | treating a hard-clamped control value as proof that every hot-passage event is maximum strength |
 | **Smoothed/post-AGC/display bars** | stable displayed bars/curves, deliberately sustained envelopes, visual settling | local onset/event detection when attack/freshness matters; feeding one mode from another mode's presentation-shaped signal |
 | **Typed transient/event bus** | semantic kick/vocal/snare/onset admission and consume-once accents | polling/reusing one event as a level signal; using clamped event confidence as maximum presentation velocity/power |
@@ -58,9 +58,20 @@ Consequences, all learned the hard way:
   Every learned level tried (a slowly falling peak, a 20 s usual level, a learned usual onset presence) flattened a
   sustained loud chorus as it learned it, so reactions faded inside the same chorus, and resets re-seeded it so modes
   overreacted after a preset hotswap. A fixed scale follows playback volume instead: quieter listening reacts less,
-  consistently. `musical_weight` still gates near-silence (absolute) and a passage far quieter than the last few
-  seconds (presence against the 6 s running level, which saturates at 0.8 so a sustained chorus is never gated). This
-  is the one definition; Shockwave Grid, Voxel Sphere and DevCurve use it.
+  consistently. Near-silence is gated on the absolute scale only (`transient_bus.audible`). `musical_weight`'s second
+  factor, presence against a 6 s running level, is itself a learned level: a quieter passage after a loud one reads
+  less until the running level catches up, then more. Waveform Ribbon dropped it (7 Nov); the other modes still use it
+  and are on the plan to follow.
+- **Memoryless means the same music draws the same response (operator, 7 Nov 2026: "Adaptivity is the enemy").** "A
+  soft start with vocals peaking should read the same as a chorus dropping to soft and vocals peaking there if they
+  match." Music cannot be analysed ahead of time, so any running mean, remembered peak, learned floor or ratio against
+  recent history in a response path makes the same moment look different depending on what came before. Smoothing the
+  CURRENT level (attack/release followers) is allowed and needed; comparing against a learned level is not. Good
+  reaction without memory comes from fixed references placed on real music (§13A), a release that actually lets go
+  (the visible release of cascaded stages is their sum), and the travelling or event channels for beats. Every
+  history-dependent stage agents added since (remembered-peak gains, phrase means with contrast widened about them,
+  learn-rate gates, presence gates on bodies) re-created the "hot-chorus flatlining" and "better later in the song"
+  failures this section was written against.
 - **A clamp is not a normaliser.** The 2.5 clamp on the live lane is a safety bound; ordinary music saturates it, so
   no contrast survives there.
 - **Silence must not teach a running level.** A running reference that decays through a pause makes the music's
@@ -100,6 +111,11 @@ raw analysis spectrum
     + adaptive local threshold
     -> flux / threshold contrast
 ```
+
+The adaptive threshold answers only "did an event happen?" (a short local context, about a second). Never size a
+reaction from that ratio alone: the same kick just after a dense passage scores far lower (lead audit 7 Nov, synthetic:
+reward .22 against .61 at 50 ms after the drop, equal after ~2 s). Size rewards on the fixed scale (`musical_emphasis`,
+`passage_ramp`).
 
 Typed events remain valid evidence over a loud bed. Do **not** reduce a kick/vocal because the surrounding passage is loud. Instead, separate the question “did the event happen?” from “how much presentation reward did this event earn?”
 
@@ -162,8 +178,9 @@ gentle fall, and each one ramps on its own: particle population and power, fragm
 fires*, tracer speed, spin velocity, glow. Scaling only the size of a reward while its admission frequency stays
 constant reads as "reacts to everything the same" (Sphere's 2026-10-03 log: ~2 packets per 0.5 s at every level).
 
-The shared ramp is `transient_bus.passage_ramp(intensity, quiet)`: `quiet` in the track's quietest passage, 1 in
-its loudest, convex. Multiply by `musical_weight(loudness, presence)` so near-silence earns nothing. Any lane that is
+The shared ramp is `transient_bus.passage_ramp(intensity, quiet)`: `quiet` for a quiet passage, 1 for a loud one,
+on the FIXED real-music scale (`PassageIntensity`), convex. Multiply by an absolute near-silence gate
+(`transient_bus.audible`) so near-silence earns nothing. Any lane that is
 **self-relative** (the bus's `bass/mid/high_transient` is flux over its own adaptive threshold) needs this ramp at
 its consumer: on its own, a kick in a quiet passage reads as large as one in a loud passage, and near-silence fires
 hardest. DevCurve's transients layer was inverted this way (Human's quiet passages swung it twice as hard as its loud
@@ -191,7 +208,8 @@ it changes with frame rate. (Superseded in part 2026-11-05: the heights now pass
 
 ### Slow sustained response
 
-Whole-object fullness/growth should use a much slower envelope and/or slow adaptive floor/peak. Sphere's sustained body weight is deliberately slow so a loud passage reads heavier without becoming a giant beat pulse.
+Whole-object fullness/growth should use a slower envelope of the current level on a fixed scale (never a learned
+floor or peak: §2A). Sphere's sustained body weight is deliberately slow so a loud passage reads heavier without becoming a giant beat pulse.
 
 ### Presentation-only interpolation
 
@@ -629,6 +647,22 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` �
   once with the strength drive: no decay in soft passages, flat sustained passages, and a full-size swell whenever that
   drive's band rose (Preset 7 on Rag Doll, 5 Nov). For every style, measure on recorded continuous play: median/max of the swell over the
   visible span, the share of it at the soft bound, and its rise and fall within 3 s windows.
+- **A pulse is a band, and a freeze holds everything that moves.** (Waveform, operator 7 Nov: "The pulse is a
+  relatively small horizontal width and the full vertical width"; Frozen Past: "each part stays frozen until the pulse
+  reaches it, then it moves to match the current values low or high and freezes again when the pulse leaves.") A
+  travelling field that sums every hit covers the whole view on dense music, so "where the pulse is" means everywhere:
+  launch discrete bands on onsets (spaced at least two widths apart, later energy strengthening the newest), combine
+  them by maximum, cap how many are in view (Pulse Count) and gate a freeze on each band's window (a full core and a
+  Pulse Falloff at each side). A frozen region must hold every quantity that moves it, not just the body drives: the
+  swell, the final bounded gain (one shared bound rescales every held swell), vertical offsets (a whole-ribbon lift
+  moves frozen cloth), the surge displacement (a scene-fixed drift field moves cloth flowing through it, and so does
+  scaling it by a live strength), shape springs, roll and twist phase, idle motion and the clock. Hold it on cells
+  FIXED TO THE CLOTH: re-interpolating held state onto a scene grid every tick is numerical diffusion, and the held
+  shape slowly melts. Never low-pass the shown held state with a wide kernel either: it carries each band's update into
+  the gaps; soften the band's own edges instead. Prove it on a space-time map of each cloth point's vertical motion
+  (cloth coordinate keyed on the history's absolute coordinate, never the packet-relative one that re-bases) on a REAL
+  preset (a synthetic test with narrow bands and wide gaps passed while Preset 5's 6-unit bands moved everywhere) and on
+  rendered frames: motion outside the bands must be noise (Frozen Past, 7 Nov night: median .002 vs .46 world units/s).
 - **Measure over what the camera actually shows.** The visible span is the production aperture times the authored
   lens (Waveform: about +-14 scene units at the capture aperture, not the lens' +-4 nor the +-30 the constants assume).
   Metrics over a wider span hide a pinned field; metrics over a narrower one miss swells arriving from the edge.
@@ -642,24 +676,28 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` �
   and it re-normalises a long quieter passage. Map the routed target with a FIXED function on the real-music scale and
   let each target's Range be the authored reactivity. Calibrate it to what the replaced path VISIBLY did, not hotter:
   fit gain x target^curve to the paired output/target quantiles on long recordings played back to back, ease the top
-  toward where it landed sustained loud passages (Waveform: .92), and restore the phrase-scale swings its fast reach and
-  slow release created by widening each drive about a heard-only 3 s mean of itself. A hotter curve (lead review
+  toward where it landed sustained loud passages (Waveform: .92). **Superseded 7 Nov:** the phrase-scale swings were
+  then "restored" by widening each drive about a learned 3 s mean of itself, behind a learn-rate gate that collapsed
+  at every presence dip (below .5 on 39% of music ticks): the same soft->loud step drew x1.0 to x3.4 depending on that
+  gate, and a loud passage started big and shrank as the mean caught up. Removed; swings come from a release that lets
+  go (below) and fixed placement, never from a mean. A hotter curve (lead review
   6 Nov) pinned Pulse Strength (3 s contrast -34..-39%), flattened passages and pushed crests out of the card; a drive
   parked in the easing knee loses contrast even when it never pins, so check each drive's own 3 s contrast, not only the
   visible size. Gate the result per preset against main: visible size p10/p50/p90, 3 s contrast, time near the top,
-  kicks per time bin, the card's top edge. Any adaptive
-  path that survives is an opt-in control whose off position is the fixed path, with a negative-control test.
+  kicks per time bin, the card's top edge. Waveform's former remembered-peak path survives only as the opt-in
+  Adaptive Response control (off in every preset); add no new adaptive path.
 - **A break is a test of every running reference.** Splice 2-5 s of near-silence into recorded music (scale the PCM,
   re-analyse it through the production chain) and compare what follows against the unbroken clip per layer: engine
   adaptive sensitivity (Waveform's raw lanes and bus loudness are before it: no effect), the bus (its passage level
-  climbs back over about a second), the response gain, Breathing. A phrase-scale mean must learn only from heard music
-  and not from the passage's own return; contrast about it must not widen a returning passage.
+  climbs back over about a second), the response gain, Breathing. A memoryless response passes trivially once its
+  followers settle; anything that still differs is a running reference to remove.
 - **A sustained kick with no geometry headroom still needs a sense.** When the drive that sizes the swell sits near the
   top of its Range, send the share of the kick the geometry cannot show to channels that do not fight the shape (an
   eased roll-speed impulse, spark births on the swell), on the fixed reward scale, never a clamped confidence. Bound
   any continuous channel per kick against its own base (Waveform: at most 15% of the roll's speed): unbounded, dense
   kicks overlapped into a sustained ~2x spin. Measure the mean and the acceleration tail in loud songs, not one kick.
-- **Hold the gain's memory through a quieter PASSAGE, never through beat gaps.** A 30 s relaxation re-normalises a
+- **(Opt-in Adaptive Response only; superseded 7 Nov for every preset: there is no gain memory to hold.)** Hold the
+  gain's memory through a quieter PASSAGE, never through beat gaps. A 30 s relaxation re-normalises a
   quieter passage back up to loud reach within one verse (a passage at 70% of the loud input reached Pulse Strength .88
   against the loud passage's .87 after 25 s): "it swelled up to full power when the song went quieter". Keying a
   longer memory to the drive being below its peak is wrong: a drive sits below its peak between almost every pair of
@@ -674,9 +712,11 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` �
   reset and tabulate each onset's response by time in song and by passage. Two stacked adaptations (an onset already
   measured against an adaptive threshold, then judged again against a running mean of its own kind) muted every
   routine kick of a sustained passage while the start of each song looked fine.
-- **Soft passages must breathe.** A cascaded release doubles the authored decay and fills the dips between soft
-  phrases; measure peak-to-trough contrast in 3 s windows of soft vs loud passages, and shorten the release / widen the
-  swings about the drive's own phrase mean only as the passage gets softer, so loud reach is untouched.
+- **Soft passages must breathe.** A cascaded release adds up: Waveform's passage, phrase energy, bus intensity and
+  two drive stages each released over .65-1.5 s, so a dip shorter than ~3 s never showed and the next loud moment had
+  nothing to rise from (7 Nov lead audit). Measure the music's own steps (PCM RMS changes of 3 dB or more) against the
+  drive's change over the next 1.5 s, and shorten the cascade so the visible release is about the authored Decay
+  (§13A: Extruded Bubble's large body releases over ~0.3 s in music). Never widen swings about a running mean.
 - **History ends move continuously.** Anything anchored to the oldest/newest stored sample (a continuation, an end
   taper) steps at every admission; anchor it at a point that advances with the admission phase on a smooth curve.
 
@@ -688,7 +728,8 @@ ticks (bass input p05 = p50 = p95 = 1.0 on two songs), beat modulation of the di
 windows differed by ≤ 1.4×, and the smoothness slope limiter held the bass curve on 72–98% of ticks. Fix, owner
 `widgets/spotify_visualizer/devcurve_runtime.py`: each layer's level = its share × the bus loudness (fixed real
 scale); the height is a slow **body** plus fast **accents**: only the body (two slow stages) is divided by the
-remembered peak (floor in loudness units, landing at 1.0 of the drive), while accents — the body layers' flux lane above its
+remembered peak (floor in loudness units, landing at 1.0 of the drive; **a learned level that breaks §2A**: on the
+plan to remove, 7 Nov), while accents — the body layers' flux lane above its
 own recent mean, the transients layer's flux spike above its body, captured and held 0.06 s — are read on fixed
 scales into the reserved room above it, then eased by two stages of (0.025, 0.15) s (each second stage follows its
 first as it stood at the start of the tick, so a hit's first tick never jumps the velocity). A first cut normalised

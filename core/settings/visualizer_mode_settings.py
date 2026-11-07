@@ -2015,6 +2015,9 @@ def _waveform_ribbon() -> ModeSettings:
         bucket='pulse',logical=True,tooltip='Travelling Pulse: swells travel along the waveform. Frozen Past: the parts a '
         'swell shaped keep that look until the next swell reaches them. Whole Swell: the whole waveform swells at once '
         '(ignores direction, width and speed). Group Wave: swells travel as groups that rise toward their leading edge.'))
+    entries.append(Slider(prefix+'frozen_deflate','Freeze Deflate:',0.,120.,bucket='pulse',logical=True,suffix=' s',
+        when=(prefix+'reaction_mode','Frozen Past'),tooltip='Frozen Past: seconds over which the held shape eases back '
+        'toward the current body where no pulse reaches it. 0 keeps it frozen until a pulse arrives.'))
     entries.append(Choice(prefix+'height_mode','Floor Clearance:',('Dynamic Height Shift','Static Height'),
         bucket='shape',logical=True,tooltip='Dynamic Height Shift: a ribbon whose lower edge nears the floor rises as a '
         'whole, then settles back down. Static Height: every ribbon holds the highest safe point all the time.'))
@@ -2026,15 +2029,19 @@ def _waveform_ribbon() -> ModeSettings:
         'and fall instead of holding, and a quieter passage after a loud one stays quieter instead of growing back to '
         'full size. Loud passages keep the Decay set in Response.'))
     entries.append(Slider(prefix+'kick_accent','Kick Accent:',0.,1.,bucket='reaction',logical=True,tooltip='How much '
-        'of a kick the ribbon cannot show in a loud, full passage goes to a brief faster roll and a burst of sparks '
-        'at the swell; 0 leaves loud passages to the swell alone.'))
-    entries.append(Toggle(prefix+'adaptive_response','','Adaptive Response',bucket='reaction',logical=True,
-        tooltip="Sizes the ribbon against each song's own recent peaks instead of the fixed real-music scale; turn it "
-        'off if the ribbon grows or shrinks after a break or a loud chorus fades the longer it plays.'))
+        'of a kick the ribbon cannot show (a loud, full passage, or every pulse already on screen) goes to a brief '
+        'faster roll and twist, a burst of sparks at the swell and free strands leaning toward it; 0 leaves those '
+        'kicks to the swell alone.'))
     entries.append(Choice(prefix+'pulse_direction','Pulse Direction:',('Head To Tail','Tail To Head','Centre Out'),
         bucket='pulse',logical=True,tooltip='Where musical swells start and which way they travel.'))
     for key,label,low,high,tip in (
-        ('pulse_width','Pulse Width',.5,24.,'Length of each travelling swell along the waveform (world units).'),
+        ('pulse_width','Pulse Width',.5,24.,'Length of each travelling swell along the waveform (world units); Pulse '
+         'Falloff softens its sides.'),
+        ('pulse_count','Pulse Count',1.,3.,'How many pulses may be on screen at once (Travelling Pulse and Frozen '
+         'Past; a Centre Out pair counts as one). Music between launches strengthens the newest pulse.'),
+        ('pulse_falloff','Pulse Falloff',.25,12.,'How far each pulse fades out at each side of its width (world units): '
+         'low is a crisp band, high a soft one. In Frozen Past the cloth follows the music fully inside the width and '
+         'partly in the falloff.'),
         ('pulse_speed','Pulse Speed',0.,30.,'How fast swells travel along the waveform (world units per second).'),
         ('pulse_colour','Pulse Colour Shift',0.,1.,'How far a passing swell shifts the ribbon toward its peak colour.'),
         ('pulse_fade','Pulse Fade',.2,20.,'Seconds a travelling swell takes to fade to about a third.'),
@@ -2047,7 +2054,8 @@ def _waveform_ribbon() -> ModeSettings:
         ('pulse_rim','Pulse Rim',0.,4.,'Makes the ribbon edges brighter still where a swell is, fading softly along '
          'the edge on either side, so the eye can follow the pulse. 0 leaves the edges as they are.')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket='pulse',logical=True,tooltip=tip,
-                              suffix=' s' if key=='pulse_fade' else ''))
+                              suffix=' s' if key=='pulse_fade' else '',
+                              **({'integer':True,'scale':1,'decimals':0} if key=='pulse_count' else {})))
     entries.append(Choice(prefix+'travel_direction','Travel Direction:',('Right To Left','Left To Right'),
         bucket='flow',logical=True,tooltip='Which way the waveform history travels across the view: new history '
         'enters on one side and flows to the other. Pulse Direction, held swells, sparks, strands and the floor all '

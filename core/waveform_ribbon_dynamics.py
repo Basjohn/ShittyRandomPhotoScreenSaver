@@ -30,8 +30,17 @@ BAND_SPAN = ((.25, .85), (.10, .82), (.02, .80))
 PASSAGE_SPAN = (.45, .80)
 ENERGY_SPAN = (.25, .75)
 ENERGY_WEIGHTS = (.5, .35, .15)
-# Phrase-scale body energy: rises within a bar, settles over a phrase. Beats articulate through the band sources.
-PHRASE_ATTACK, PHRASE_RELEASE = .35, 1.5
+# Phrase-scale body energy: rises within a bar, settles within about a beat and a half. Beats articulate through the
+# band sources. RELEASE THAT LETS GO (lead audit, 7 Nov; guide §13A/§13D "Soft passages must breathe"): the body's size
+# was the sum of a cascade, bus intensity (1.2 s fall), this phrase energy (1.5 s), the passage follower and two drive
+# stages (the authored Decay, .65 s, EACH), so a dip shorter than ~3 s never showed and the next loud moment had nothing
+# to rise from. Each stage of a cascade now takes CASCADE_SHARE of the authored Attack/Decay (two stages: the visible
+# release is about the Decay itself), the phrase energy settles over .6 s and the body's attack floor is per stage.
+# On eight recordings back to back (chain8, PCM RMS steps of 3 dB or more): the height drive's change per dB 1.5 s after
+# a step .019 -> .034 (rises) / .036 (falls), 1 s correlation with the song's RMS +.42 -> +.54; a linear response curve
+# instead lost range (rejected).
+PHRASE_ATTACK, PHRASE_RELEASE = .35, .6
+CASCADE_SHARE = .5
 # Optional Dynamic Zoom (operator, 5 Nov): the view extent widens up to 20% quickly in heavy sustained passages and
 # narrows up to 20% slowly in soft or idle ones. Sustain is the published level held over seconds, so single hits
 # never pump the camera; the zoom itself is a smooth logical state, frozen while the user operates the camera.
@@ -61,7 +70,8 @@ VIEW_MARGIN = 2.5
 # its sources). An edge swell carries all of it, and once seen at full strength its in-view field is twice Centre Out's
 # (6 Nov, recorded continuous play at +-16: peak p50 .42 vs .21, median .19 vs .10), which lit the rims at their ceiling
 # over 43% of the view. Such a swell publishes RIM_EDGE_SHARE of its level for the rim (peak .21, median .09: the same
-# response as Centre Out's). Centre Out and every swell still born at PULSE_ORIGIN publish the level itself.
+# response as Centre Out's). Since 7 Nov night every band (Travelling Pulse, Frozen Past) carries a full release, Centre
+# Out's two as well, so every band publishes RIM_EDGE_SHARE of its light; Group Wave and Whole Swell publish the level.
 RIM_EDGE_SHARE = .5
 PULSE_RISE = .08             # seconds: a beat lands quickly (DevCurve: fast rise, gentle settle), never a one-tick pop
 PULSE_DIFFUSION = .35        # world units^2 per second: packets widen gently as they travel
@@ -118,34 +128,15 @@ GEOMETRY_ATTACK = .06
 # The whole body's size (height, lift, width) follows the passage, not each beat (operator, 5 Nov: "no reactivity besides
 # the twitch"; space-time maps showed the whole view pumping in unison on every beat, drowning the travelling pulse).
 # Beats belong to the travelling pulse, which makes the biggest reaction where it is.
-# Adaptive response gain (see advance): geometry drives use each song's own recent peak over the full
-# authored Quiet->Peak ramp. Light, colour and sparkle (particles, strands) keep their calibrated mapping.
-RESPONSE_REACH, RESPONSE_MEMORY, RESPONSE_PEAK_FLOOR, RESPONSE_TOP = .5, 30., .45, .85
 RESPONSE_TARGETS = frozenset(('height','width','bend','torsion','twist','stretch','lift','spread','depth'))
 GLOBAL_TARGETS = frozenset(('height','lift','width'))
-GLOBAL_ATTACK = .35
-# Breathing (operator, 5 Nov: soft passages "look sustained instead of feeling their big changes"). Two causes, measured
-# on continuous play: Decay is the release of BOTH cascaded stages of every geometry drive, so the body let go of a swell
-# over about twice the authored Decay and the dips between a soft passage's phrases filled in; and a soft passage's drives
-# move little around their own level. Softness is how far the published passage sits below BREATHING_LOUD (0 at or above
-# it), times Breathing. A soft passage then (1) releases faster, by up to BREATHING_REACH of Decay, and (2) widens each
-# geometry drive's swings about its own phrase-scale mean (a BREATHING_BASE-second follower of the drive's target) by up
-# to BREATHING_CONTRAST: it swells AND lets go without being lifted as a whole. Loud passages keep their authored Decay,
-# their targets and their reach. Attack, both follower stages and the rate limits are unchanged (no twitch).
-BREATHING_REACH, BREATHING_CONTRAST, BREATHING_LOUD, BREATHING_BASE = .75, 1.5, .8, 3.
-# Breathing also keeps a quieter PASSAGE quiet (see advance). The gain memory is held only while the slow sustained
-# level (the published passage held over seconds, ZOOM_SUSTAIN_ATTACK/RELEASE: it never dips between beats) sits
-# clearly below the loud level the remembered peaks were set at: from HOLD_BELOW[0] of it (no hold) to HOLD_BELOW[1]
-# (full hold), the memory relaxes over up to RESPONSE_MEMORY x (1 + Breathing x (RESPONSE_HOLD - 1)). That loud level
-# rises with the sustained level at once and relaxes with the memory, so a song that stays softer is re-normalised
-# over minutes. Sustained music, and Breathing 0, keep RESPONSE_MEMORY exactly.
-RESPONSE_HOLD, HOLD_BELOW = 6., (.8, .7)
-# Silence must not teach a running level (guide 2A). Breathing's phrase-scale mean learns at the rate of BREATHING_HEARD,
-# which drops to 0 with the musical weight at once and returns over BREATHING_HEARD_RETURN seconds: through a break and
-# the passage's own return (the shared passage level climbs back over about a second) the mean holds, so the music's
-# return is not swelled against a mean that fell with the silence.
-BREATHING_HEARD_RETURN = 1.5
-# Fixed response (Adaptive Response off, operator 6 Nov: "Adaptive is a very problematic approach"; guide 2A: never
+GLOBAL_ATTACK = .175   # per stage (two stages: about .35 s to the passage's size)
+# Breathing (operator, 5 Nov: soft passages "look sustained instead of feeling their big changes"). Softness is how far
+# the published passage sits below BREATHING_LOUD (0 at or above it), times Breathing: a soft passage releases faster,
+# by up to BREATHING_REACH of Decay. A function of the current level only; loud passages keep their authored Decay. (Its
+# former second half widened each drive about a learned 3 s mean of itself: removed 7 Nov, see MEMORYLESS.)
+BREATHING_REACH, BREATHING_LOUD = .75, .8
+# Fixed response (operator 6 Nov: "Adaptive is a very problematic approach"; guide 2A: never
 # learn a level from the track). Each geometry drive's routed target is already on the fixed real-music scale (BAND_SPAN,
 # PASSAGE_SPAN, ENERGY_SPAN); its drive target is gain x target^curve, eased above RESPONSE_FIXED_KNEE toward 1, the same
 # for every song, and the Ranges map it to size. Nothing is remembered, so a break, a loud chorus or a quiet intro never
@@ -155,26 +146,17 @@ BREATHING_HEARD_RETURN = 1.5
 # rms; height and lift (the body's size) fit 1.17-1.20 x t^.75-.82, every other drive 1.24-1.32 x t^.86-.91. Above
 # RESPONSE_FIXED_KNEE the drive eases toward RESPONSE_FIXED_CEILING, as the remembered peak landed a sustained loud
 # passage at .85: with an easing toward 1 the crests of loud passages topped the card on 2-6% of frames where main did
-# on .8-2.9% (lead review captures, 640x560).
+# on .8-2.9% (lead review captures, 640x560). Nothing is widened about a running mean (MEMORYLESS below).
 FIXED_RESPONSE = {'height':(1.2,.75),'lift':(1.2,.82)}
 FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CEILING = (1.12,.86), .8, .92
-# The remembered peak's fast reach (.5 s) and slow release (30 s) also widened every phrase: a swell overshot before the
-# peak caught up and the moments after it were scaled down. A static curve fitted to its levels kept 85-91% of its 3 s
-# contrast; the fixed response widens a phrase about Breathing's 3 s mean of the drive (which learns only from heard
-# music) by PHRASE_DIP below it and PHRASE_RISE above it, eased again under RESPONSE_FIXED_CEILING. With the fitted
-# gain (1.25) and a rise of 1.5 Pulse Strength sat high in the knee through sustained loud passages (its 3 s contrast
-# 92% of main's, Preset 7's view contrast 99.5%); the other drives' gain sits at 1.12 (still on the fitted curve's
-# shape) and phrases rise by 2 (chain7: 3 s view contrast 103-105% of main on Presets 1/3/4/7 at both card sizes,
-# Pulse Strength contrast 98% / 105% (Preset 4), above .9 in loud passages 8% against main's 10-15%).
-PHRASE_DIP, PHRASE_RISE = 1., 2.
-# The phrase mean holds through a break (it learns only from heard music), so music that came back louder than it left
-# was widened upward against the mean the silence left behind (spliced 2-5 s breaks in recorded music: the following
-# 10 s 2-17% larger than the unbroken clip; without the widening 0-4%). After real silence (the musical weight under
-# PHRASE_SILENCE; `_settled` falls over PHRASE_SETTLE_DROP and comes back over PHRASE_SETTLE) the mean RISES up to
-# 1/PHRASE_SETTLE_MIN times faster, so it catches up with the louder music, and it still falls at BREATHING_BASE, so
-# the passage's own quieter return is not learnt (6 Nov: the following 10 s -7..+9% of the unbroken clip on Presets
-# 1/7 against main's +4..+10%, -5..+5% on Preset 4). Continuous music keeps settled at 1 (BREATHING_BASE exactly).
-PHRASE_SETTLE, PHRASE_SETTLE_DROP, PHRASE_SILENCE, PHRASE_SETTLE_MIN = 8., .5, .1, .1
+# MEMORYLESS (operator, 7 Nov: "Adaptivity is the enemy"; guide §2A). The fixed response is a pure function of the
+# current routed target: the same music draws the same body at any time in a song, after any break, louder or softer
+# passage. Removed 7 Nov after a lead audit on eight recordings played back to back (chain8): a 3 s phrase mean widened
+# each drive's swings (PHRASE_DIP/PHRASE_RISE) at a learn rate that fell to 0 at every dip of the presence ratio and came
+# back over 1.5 s, so it was below .5 on 39% of music ticks. The same soft->loud step drew x1.0 to x3.4 the memoryless
+# rise depending on that gate (Anything: none for 30 s; Growing Pains, 1985: x2.7-3.4), and the widened swell sank back
+# over 3 s as the mean caught up, so a loud passage started big and shrank: the behaviour change through a song the
+# operator saw in live play. Breathing's contrast about the same mean went with it; Breathing keeps its faster release.
 # Kick Accent (operator 6 Nov: "many sustained kicks ignored (consider maybe increasing particle count at the sustained
 # points or rotation speed? Something for a sense of them?)"). In a sustained loud passage the geometry has little
 # headroom: the bend drive (it sets Pulse Strength) sits near its top, so a kick's swell barely rises above the swells
@@ -189,6 +171,13 @@ PHRASE_SETTLE, PHRASE_SETTLE_DROP, PHRASE_SILENCE, PHRASE_SETTLE_MIN = 8., .5, .
 # KICK_SENSE_KNEE x Kick Accent. A passage with headroom is unchanged.
 KICK_SENSE_KNEE, KICK_SENSE_REF, KICK_ROLL, KICK_BIRTHS, KICK_ROLL_SHARE = .55, .15, 45., 4., .15
 KICK_SENSE_HOLD, KICK_SENSE_ATTACK, KICK_SENSE_RELEASE = .05, .07, .25
+# A kick the PULSES cannot show is the same case (operator, 7 Nov night: "You can also twist, particle flair, strand and
+# rotate when capped"): in Travelling Pulse and Frozen Past a kick that cannot launch its own pulse (Pulse Count full,
+# or the newest too close) strengthens the newest, which shows it only below the knee of its strength (KICK_SENSE_KNEE,
+# as the bend drive's headroom). How far the newest sits above that knee feeds the same Kick Accent, which also nudges
+# the twist phase (KICK_TWIST radians per second per unit, bounded at KICK_ROLL_SHARE of the twist's own speed, then
+# eased like the roll) and leans free strands toward the pulse (Pulse Strands x (1 + KICK_STRAND_LEAN x the eased share)).
+KICK_TWIST, KICK_STRAND_LEAN = .6, 1.5
 
 # Floor clearance (operator, 5 Nov; see WaveformDynamics._floor_room): the packet origin sits PACKET_FLOOR_HEIGHT above
 # the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
@@ -238,6 +227,47 @@ REACTION_MODES = ('Travelling Pulse', 'Frozen Past', 'Whole Swell', 'Group Wave'
 # Where no swell is present, memory and peak decay over FROZEN_DECAY: held state persists in silence and fades,
 # never vanishes. FROZEN_RISING is the relative hysteresis that tells a real rise from interpolation noise.
 FROZEN_PRESENT, FROZEN_RISE, FROZEN_REPLACE, FROZEN_DECAY, FROZEN_RISING = .05, .06, .5, 45., .003
+# The frozen body (operator, 7 Nov: "frozen pulse does not freeze the parts it is not touching defeating the entire point
+# of the freeze"). The held swell kept its gain, but the whole ribbon was still scaled by the LIVE height, width, spread,
+# depth, twist and torsion drives (Preset 5: height .45-2.1, width .6-1.8), so every untouched part pumped with the music.
+# In Frozen Past each cloth cell holds those drives as a swell last shaped it: a cell takes the live drive only while a
+# swell rises over it (FROZEN_RISE), holds it otherwise, follows it over FROZEN_DECAY where no swell is present (fades in
+# silence, never vanishes), and new cloth enters at the live drive. Leaving the mode blends the held body into the live
+# one over FROZEN_BODY_RELEASE (smoothstep: never a pop). Lift (.8-1.2) stays whole-body: a per-cell offset would bend
+# the shape.
+FROZEN_BODY = ('height','width','spread','depth','twist','torsion')
+FROZEN_BODY_RELEASE = 1.5
+# DISCRETE PULSE BANDS (operator, 7 Nov night: "The pulse is a relatively small horizontal width and the full vertical
+# width (except center out where it is 2x). each part stays frozen until the pulse reaches it, then it moves to match the
+# current values low or high and freezes again when the pulse leaves"). The former transport summed every beat into one
+# energy field and diffused it: on recorded music (Human, Preset 5) it sat above the presence threshold over 100% of the
+# view at every instant, so the "pulse" was a whole-view inflation in Travelling Pulse and Frozen Past updated everything.
+# Each musical event (an admitted hit, or a rise of body energy) now launches a BAND per source: Pulse Width across (a
+# Gaussian of the authored width), travelling at Pulse Speed from the edge the camera sees, its strength rising with the
+# release (PULSE_RISE) and fading over Pulse Fade once in view. Onsets come 7-9.5 a second on recorded music (kicks
+# ~3.5), so a band per onset tiles the view: a band launches on an admitted onset only while fewer than Pulse Count
+# pulses are still to come or in view (operator, 7 Nov night: "editable 1-3 or so at once") and once the newest has
+# travelled BAND_SPACING Pulse Widths plus its falloff at both sides; the release in between strengthens the newest band.
+# A band covers its Pulse Width (a flat core) and fades out over Pulse Falloff at each side (smoothstep): that window is
+# its light and, in Frozen Past, where the cloth follows the music. Its swell is a Gaussian of the width. Bands combine by MAXIMUM,
+# never by sum, so they are never a pile. Centre Out launches two bands from the centre, one each way, each a full
+# pulse: splitting a release between them conserved nothing (bands are not summed) and halved Preset 4's swell. Travelling
+# Pulse and Frozen Past travel as bands; Group Wave keeps the summed transport (its sets need their own pass).
+BAND_SPACING, MAX_BANDS, BAND_PRESENT = 2., 24, .05
+# A band holds at most one full hit's energy (BAND_STRENGTH_MAX = PULSE_HIT_GAIN): accumulating every release between
+# launches drove the swell into its soft bound across the band, a flat-topped, boxy plateau (7 Nov frames, Preset 5 on
+# Human 27.5 s). Its swell is BAND_GEOM_GAIN x the band: .6 is the knee measured on Human (7 Nov) for Presets 1/4/5. Above
+# it the swell barely grows (a Pulse Width band meets the flow-rule bound) while band peaks sit near the soft bound (.7:
+# Preset 4 within 15% of it 17% of the time, boxy tops); at .6 4.6%, and Presets 1/5 never.
+BAND_STRENGTH_MAX, BAND_GEOM_GAIN = 2., .6
+# Frozen Past: a cell follows the current values within FROZEN_FOLLOW while a band covers it (the band's own Gaussian,
+# for bands of at least BAND_PRESENT strength) and holds them once it leaves: the body drives, Pulse Strength, the swell,
+# the kick springs, the axial roll, the twist phase and the idle motion (its clock), so nothing outside a band moves but
+# the history flow itself.
+FROZEN_FOLLOW = .1
+# What is SHOWN of the held state is the held state low-passed over the flow rule's envelope (the geometric kernel, unit
+# sum): a band updates exactly its Pulse Width, but the held amplitude changes there while its neighbour stays, and shown
+# raw that step drew flat-topped boxes with vertical sides (7 Nov frames, Preset 5 on Human 27.6 s).
 # Whole Swell: one global level (DevCurve). Rise = PULSE_RISE (80 ms); settle = Pulse Fade/4 within these bounds.
 WHOLE_SETTLE = (.65, 1.5)
 # Group Wave: each swell arrives as a SET. Its envelope spans GROUP_WAVES carrier wavelengths, so several consecutive
@@ -266,6 +296,9 @@ class PulseControls:
     particles: float = 0.        # swell-carried births and the lean of accent births toward the swell
     strands: float = 0.          # restrained lean/chance/glow of accent strands near the swell
     mode: str = 'Travelling Pulse'  # REACTION_MODES; Whole Swell ignores direction, width and speed
+    count: int = 2               # Travelling Pulse / Frozen Past: pulses still to come or in view at once (a Centre Out pair is one)
+    falloff: float = 1.          # world units over which a band fades out at each side of its Pulse Width core
+    deflate: float = 0.          # Frozen Past: seconds over which held cloth eases back toward the current body (0: never)
 
     def __post_init__(self):
         pulse_sources(self.direction)
@@ -277,6 +310,9 @@ class PulseControls:
         if not (math.isfinite(self.saturation) and 0.<=self.saturation<=1. and math.isfinite(self.particles)
                 and 0.<=self.particles<=2. and math.isfinite(self.strands) and 0.<=self.strands<=1.):
             raise ValueError('Waveform pulse needs saturation 0..1, particles 0..2 and strands 0..1')
+        if not (isinstance(self.count,int) and 1<=self.count<=3 and math.isfinite(self.falloff) and .25<=self.falloff<=12.
+                and math.isfinite(self.deflate) and 0.<=self.deflate<=120.):
+            raise ValueError('Waveform pulse needs count 1..3, falloff 0.25..12 and deflate 0..120')
 
 
 def span(value, low, high):
@@ -406,6 +442,34 @@ def soft(value):
     return PULSE_SATURATION*np.tanh(value/PULSE_SATURATION)
 
 
+def _limit_fold(values,free,limit):
+    """Keep ``values`` (on PULSE_GRID spacing) from falling faster than ``limit`` per unit x, moving only the ``free``
+    cells: each run of free cells is raised from its left neighbour, then lowered from its right one. (On the
+    tilted values v + limit*x the rule is "never decreasing": a running maximum, then a running minimum.)"""
+    ramp = limit*PULSE_DX*np.arange(values.size)
+    tilted = values+ramp
+    edges = np.flatnonzero(np.diff(np.concatenate(([0],free.astype(np.int8),[0]))))
+    for start,end in zip(edges[::2],edges[1::2]):
+        low,high = max(start-1,0),min(end+1,values.size)
+        tilted[low:end] = np.maximum.accumulate(tilted[low:end])
+        tilted[start:high] = np.minimum.accumulate(tilted[start:high][::-1])[::-1]
+        values[start:end] = tilted[start:end]-ramp[start:end]
+
+
+def _roll(rows,cells,fill):
+    """Roll ``rows`` (last axis: the held cells) ``cells`` toward index 0 in place; the cells entering at the head take
+    ``fill`` (one value per row, or a scalar for one row)."""
+    if cells<=0:
+        return
+    fill = np.asarray(fill,dtype=float)
+    fill = fill[...,None] if fill.ndim else fill
+    if cells>=rows.shape[-1]:
+        rows[...] = fill
+        return
+    rows[...,:-cells] = rows[...,cells:]
+    rows[...,-cells:] = fill
+
+
 def unit_remainder(value):
     """``value % 1.`` (``np.remainder``) of a float array, bit for bit, without its per-element divmod (the slowest
     operation of the colour pass). NumPy's remainder is ``fmod(v, 1)``, plus 1 when that is negative, and +0.0 when it
@@ -455,7 +519,6 @@ class HybridControls:
     height_mode: str = 'Dynamic Height Shift'
     tilt_shift: bool = False
     breathing: float = 0.
-    adaptive_response: bool = False   # True: the remembered-peak gain (pre-6 Nov); False: FIXED_RESPONSE
     kick_accent: float = 0.           # share of a sustained kick the geometry cannot show sent to roll and sparks
     floor_give: float = 0.            # Floor Give (the floor yields): the lift keeps FLOOR_GIVE_LIFT_MAX
 
@@ -548,13 +611,12 @@ class WaveformDynamics:
                                edge_colours=[(*c['quiet'][1],1.) for c in controls.cards],period=.5)
         self.time = self.travel = self.angle = self.angular_speed = self.twist_phase = self._hit = 0.
         self._kick_impulse = self._kick_stage = self.kick_sense = 0.   # Kick Accent: held share, eased stages
-        self._heard = 1.   # how fully Breathing's mean may learn (BREATHING_HEARD_RETURN)
-        self._settled = 1. # 1 in continuous music; 0 just after real silence (the phrase mean's catch-up, PHRASE_SETTLE)
+        self._pulse_lack = 0.     # how far a kick is beyond what the pulses can show (Kick Accent; 0 while one can launch)
+        self._kick_twist = 0.     # Kick Accent's eased twist nudge (radians per second)
         self.phase = controls.scene.flow.phase
         self.bands, self.power = (0.,0.,0.),0.
         self.passage = self.phrase = 0.
         self.zoom, self._sustain = 1., 0.
-        self._loud_level = 0.  # the sustained level the remembered peaks were set at (Breathing's quieter-passage hold)
         self._glow = 0.  # swell-shaped light response to hits (rise HIT_GLOW_RISE, settle HIT_GLOW_SETTLE)
         self._pulse = np.zeros((2,PULSE_GRID.size))  # travelling toward -x, toward +x
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
@@ -563,13 +625,31 @@ class WaveformDynamics:
         self._view_world = None  # (low, high) world x of the scene axis the framed camera shows (capture-supplied)
         self._view_top = None    # world y of the card's top edge above the scene axis (capture-supplied), or None
         self._seen = (None,None)  # cached (key, per-direction seen weights) for the age-once-seen fade
-        self._rim_share = 1.      # share of the appearance level published for Pulse Rim (RIM_EDGE_SHARE once seen)
+        self._rim_share = 1.      # share of the appearance level published for Pulse Rim (RIM_EDGE_SHARE for bands)
         self._trough_stage,self._trough_lift,self._trough_time = np.zeros((RIBBON_CAPACITY,1)),np.zeros((RIBBON_CAPACITY,1)),None
         self._tilt_lead,self._tilt_time = np.zeros((RIBBON_CAPACITY,1)),None
-        # Frozen Past on the cloth: memory, peak, previous swell, rising, and the Pulse Strength the passage was shaped with
-        # (passage) and that the memory carries (carried), so a held shape keeps its size when the music later softens.
-        self._held = np.zeros((6,PULSE_GRID.size))
-        self._frozen_swell = None   # Frozen Past: (live travelling envelope, held swell in strength units) for the gain
+        self._frozen_swell = None   # Frozen Past: (live band envelope under presence, held swell) for the response tools
+        self._frozen_body_on = False   # the held body is applied (in Frozen Past, and while blending out of it)
+        self._frozen_body_share = 1.   # 1 in Frozen Past; falls to 0 over FROZEN_BODY_RELEASE after leaving it
+        self._bands = []               # discrete pulse bands: [position, direction sign, strength, target, age]
+        self._band_presence = np.zeros(PULSE_GRID.size)   # where a band of BAND_PRESENT strength covers (0..1)
+        self._band_light = np.zeros(PULSE_GRID.size)      # the bands' light: each band's Pulse Width, by its strength
+        self._angle_total = self._twist_total = 0.   # unwrapped roll and twist phase (Frozen Past holds them per cell)
+        self._frozen_state = None      # Frozen Past per-cell scalars (rows: _frozen_rows) on the cloth-fixed grid
+        self._frozen_geom = np.zeros(PULSE_GRID.size)     # Frozen Past per-cell swell (geometric units), cloth-fixed
+        self._frozen_geom_shown = np.zeros(PULSE_GRID.size)   # ... resampled on PULSE_GRID for publication
+        # The held grid is fixed to the cloth: cell k sits at scene x PULSE_GRID[k] - _frozen_shift (0 <= shift < PULSE_DX);
+        # whole cells roll toward -x as the history flows (_frozen_rolled counts them), so nothing is re-interpolated.
+        self._frozen_shift = 0.
+        self._frozen_rolled = 0
+        self._frozen_gain_cells = None   # the shown final gain on the held cells (blended into the live gain while leaving)
+        self._frozen_offset_rolled = 0
+        self._frozen_surge = None        # Frozen Past: surge displacement (PULSE_SURGE x Pulse Strength x drift) held per cell
+        self._frozen_surge_rolled = 0
+        self._frozen_gain = None       # Frozen Past per-cell final gain (after the flow-rule bound), and as shown
+        self._frozen_gain_shown = None
+        self._frozen_offset = None     # Frozen Past per-ribbon, per-cell vertical offset (lift + floor lift)
+        self._frozen_offset_time = None
         self._whole = self._whole_fresh = 0.         # Whole Swell global raw level and its short-fade copy
         self._drift_stage = np.zeros(PULSE_GRID.size)  # first stage of the surge's easing
         self._drift = np.zeros(PULSE_GRID.size)      # rate-limited signed surge field (swell units)
@@ -587,8 +667,6 @@ class WaveformDynamics:
         self._push = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]  # undelivered kick momentum (IMPULSE_SPREAD)
         self.drive = {key:0. for key in TARGETS}
         self._drive_stage = {key:0. for key in SMOOTH_TARGETS}
-        self._breath_base = {key:0. for key in RESPONSE_TARGETS}  # phrase-scale mean of each drive's target (Breathing)
-        self._response_peak = {key:RESPONSE_PEAK_FLOOR for key in RESPONSE_TARGETS}  # recent peak per drive (gain)  # first stage of the geometry drives' smoothing
         self.count_share = [1. if index < controls.count else 0. for index in range(RIBBON_CAPACITY)]
         self.direction = controls.scene.flow.direction
         self._direction_phase = self.direction_share = 1.   # linear fade phase and its smoothstep share
@@ -677,7 +755,7 @@ class WaveformDynamics:
         self.phrase = follower(self.phrase,energy,dt,PHRASE_ATTACK,PHRASE_RELEASE)
         power = unit(.5*span(unit(intensity)*unit(presence),*PASSAGE_SPAN)+.5*span(self.phrase,*ENERGY_SPAN))
         self.bands, self.power = bands,power
-        self.passage = follower(self.passage,power,dt,c.attack,c.release)
+        self.passage = follower(self.passage,power,dt,c.attack,CASCADE_SHARE*c.release)
         # Event strength already has its own acoustic support at admission. Passage weight must not attenuate
         # an admitted kick a second time; near-silence still forbids new input.
         hit = unit(hit)*unit(presence)
@@ -703,53 +781,17 @@ class WaveformDynamics:
         gate = .35+.65*self.passage
         energy_shaped = sum(weight*value for weight,value in zip(ENERGY_WEIGHTS,bands))
         hold = unit(c.breathing)
+        # Breathing's softness is a function of the published passage (the current level on the fixed scale): a soft
+        # passage lets go faster. Nothing here remembers anything.
         softness = hold*unit((BREATHING_LOUD-self.passage)/BREATHING_LOUD)
-        quieter = unit((HOLD_BELOW[0]-self._sustain/max(self._loud_level,1e-6))/(HOLD_BELOW[0]-HOLD_BELOW[1]))
-        memory = RESPONSE_MEMORY*(1.+hold*quieter*(RESPONSE_HOLD-1.)) if hold and quieter else RESPONSE_MEMORY
-        self._loud_level = max(self._sustain,follower(self._loud_level,self._sustain,dt,0.,memory))
-        geometry_release = c.release*(1.-BREATHING_REACH*softness)
-        learn = self._learn_rate(dt,presence)
-        # Breathing's phrase mean re-learns the music fast after a break (PHRASE_SETTLE), so a phrase is not widened
-        # against a mean the silence left stale; the remembered-peak path keeps BREATHING_BASE.
-        mean_tau = BREATHING_BASE if c.adaptive_response else BREATHING_BASE*max(PHRASE_SETTLE_MIN,self._settled)
+        geometry_release = CASCADE_SHARE*c.release*(1.-BREATHING_REACH*softness)   # per stage of two
         clamped = clamp_sources(sources)   # once for every target (route clamped them per target)
         for key in TARGETS:
             target = route_clamped(c.routing[key],clamped,passage=gate)
             if key in RESPONSE_TARGETS:
-                # Every song uses the whole authored Quiet->Peak ramp (operator, 5 Nov: "reactivity needs much more
-                # granularity and to actually hit that granularity"; no geometry drive ever passed .79 and a fixed
-                # span over-drove soft songs while heavy ones stayed low). Gain only: each drive is divided by a
-                # memory of its own recent peak (reached in RESPONSE_REACH seconds, relaxing over RESPONSE_MEMORY,
-                # never below RESPONSE_PEAK_FLOOR), so a song's loudest moments reach Peak while a quiet passage after
-                # a loud one stays quiet (an offset window re-expanded quiet intros to full size). The remembered
-                # peak lands at RESPONSE_TOP, so a sustained loud passage keeps headroom for its accents instead of
-                # pinning at Peak (operator: sustained passages need the most judgement).
-                # Breathing holds the memory only through a quieter PASSAGE (``memory`` above): the passage-scale 30 s
-                # memory re-normalised a passage at 70% of the loud input back up to loud reach (Pulse Strength .73 ->
-                # .88, above the loud passage's .87) within 25 s. Keyed to the drive's own dips it held every song
-                # (the drive sits below its peak between almost every pair of beats). Rises still reach in RESPONSE_REACH.
-                if c.adaptive_response:
-                    # The remembered peak learns only from heard music (``learn``): a break can no longer lower it
-                    # and size the music's return up (spliced 5 s break, Rag Doll's loud end: +5-9% for 10 s).
-                    self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
-                        self._response_peak[key],target,dt*learn,RESPONSE_REACH,memory))
-                    target = unit(RESPONSE_TOP*target/self._response_peak[key])
-                else:
-                    target = fixed_response(target,key)
-                # Breathing's phrase-scale mean learns only from heard music (BREATHING_HEARD_RETURN): it fell with a
-                # break, so the music's return swelled against it (spliced 2-5 s breaks on recorded music: +4..11%
-                # height for 10 s on every Breathing preset, 0..1% with Breathing 0).
-                base = self._breath_base[key] = follower(self._breath_base[key],target,dt*learn,mean_tau,BREATHING_BASE)
-                if softness:  # Breathing 0 (or a loud passage) keeps the exact unwidened target
-                    # A passage returning from a break is not widened while it returns (its deficit against the held
-                    # mean is the silence, not a phrase): the contrast comes back with the learning rate.
-                    target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness*learn))
-                if not c.adaptive_response and (target<base or PHRASE_RISE):
-                    # The fixed response widens a phrase about its mean (PHRASE_DIP below it, PHRASE_RISE above it,
-                    # eased again under the ceiling), as the remembered peak's fast reach and slow release did.
-                    widen = PHRASE_DIP if target<base else PHRASE_RISE
-                    target = base+(target-base)*(1.+widen*learn)
-                    target = unit(ease_top(target) if target>base else target)
+                # Fixed response: gain x target^curve on the real-music scale, eased under the ceiling. A pure function
+                # of now: no mean, no peak, no learn rate (see MEMORYLESS above).
+                target = fixed_response(target,key)
             if key in SMOOTH_TARGETS:
                 # Geometry never snaps (operator, 5 Nov: "twitch"): two cascaded followers, so the drive's VELOCITY
                 # is continuous. A single 45 ms first-order attack made lift/bend/width/twist jump on every transient
@@ -760,7 +802,7 @@ class WaveformDynamics:
             else:
                 self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
         if c.kick_accent>0. or self.kick_sense>0.:
-            lack = unit((self.drive['bend']-KICK_SENSE_KNEE)/(1.-KICK_SENSE_KNEE))*unit(c.kick_accent)
+            lack = max(unit((self.drive['bend']-KICK_SENSE_KNEE)/(1.-KICK_SENSE_KNEE)),self._pulse_lack)*unit(c.kick_accent)
             share = (1.-math.exp(-hit/KICK_SENSE_REF))*lack
             self._kick_impulse = max(share,self._kick_impulse*math.exp(-dt/KICK_SENSE_HOLD))
             self._kick_stage = follower(self._kick_stage,self._kick_impulse,dt,KICK_SENSE_ATTACK,KICK_SENSE_RELEASE)
@@ -777,8 +819,19 @@ class WaveformDynamics:
         self.angular_speed = follower(self.angular_speed,target_speed,dt,c.rotation_attack,c.rotation_release)
         roll = self.angular_speed+(math.copysign(KICK_ROLL*self.kick_sense,target_speed) if c.rotation_enabled else 0.)
         self.angle = math.remainder(self.angle+math.radians(roll)*dt,2*math.pi)
+        self._angle_total += math.radians(roll)*dt
         low,high = c.twist_speed
-        self.twist_phase = math.remainder(self.twist_phase+(low+(high-low)*self.drive['twist'])*dt,2*math.pi)
+        twist_speed = low+(high-low)*self.drive['twist']
+        if self._kick_stage>0. or self._kick_twist>0.:
+            # Kick Accent's twist nudge, as the roll's: a second eased stage toward the share, bounded by the twist's own
+            # speed (bounded first, then eased, so the twist's speed never steps), in the twist's own direction.
+            goal = min(KICK_TWIST*self._kick_stage,KICK_ROLL_SHARE*abs(twist_speed))
+            self._kick_twist = follower(self._kick_twist,goal,dt,KICK_SENSE_ATTACK,KICK_SENSE_RELEASE)
+            if self._kick_twist<1e-9 and not goal:
+                self._kick_twist = 0.
+            twist_speed += math.copysign(self._kick_twist,twist_speed)
+        self.twist_phase = math.remainder(self.twist_phase+twist_speed*dt,2*math.pi)
+        self._twist_total += twist_speed*dt
         for index in range(RIBBON_CAPACITY):
             self.count_share[index] = follower(self.count_share[index],float(index<c.count),dt,.5,.5)
             if abs(self.count_share[index]-float(index<c.count)) < 1e-4:
@@ -814,7 +867,8 @@ class WaveformDynamics:
         else:
             if self._strand_cohorts is None:self._strand_cohorts=RibbonStrandCohorts(snapshot.packet.instances)
             payload=self._strand_cohorts.update(snapshot,c.strands,accent,history=self._base_packet,knot_hz=c.scene.flow.knot_hz,
-                                                swell=self.pulse_focus,gather=c.pulse.strands)
+                                                swell=self.pulse_focus,
+                                                gather=c.pulse.strands*(1.+KICK_STRAND_LEAN*self._kick_stage))
             self._snapshot=replace(self._snapshot,strands=payload,strand_origin=self._strand_cohorts.origin)
         if self.direction_share < 1.:
             self._snapshot = self._direction_faded(self._snapshot,self.direction_share)
@@ -871,7 +925,7 @@ class WaveformDynamics:
         self._pulse_pending -= release
         sigma = p.width/2.3548
         sources,seen = self._view_sources(p)
-        self._rim_share = 1. if seen is None else RIM_EDGE_SHARE
+        self._rim_share = RIM_EDGE_SHARE if p.mode in ('Travelling Pulse','Frozen Past') else 1.
         shift = p.speed*dt
         blur = min(.24,PULSE_DIFFUSION*dt/(PULSE_DX*PULSE_DX))
         fades = (p.fade,min(p.fade,FRESH_FADE))
@@ -879,7 +933,12 @@ class WaveformDynamics:
         if seen is not None:
             decays = tuple(np.exp((-dt/fade)*seen) for fade in fades)  # per direction: ages only once seen
         travelling = p.mode!='Whole Swell'
-        self._carry_fields(decays,seen,sources,sigma,shift,blur,release,travelling)
+        if p.mode not in ('Travelling Pulse','Frozen Past'):
+            self._pulse_lack = 0.
+        if p.mode in ('Travelling Pulse','Frozen Past'):
+            self._advance_bands(dt,release,p,sources,sigma,hit>0.)
+        else:
+            self._carry_fields(decays,seen,sources,sigma,shift,blur,release,travelling)
         # Whole Swell: nothing travels; one level rises with the shared release and settles gently.
         settle = min(WHOLE_SETTLE[1],max(WHOLE_SETTLE[0],.25*p.fade))
         self._whole = self._whole*math.exp(-dt/settle)+(0. if travelling else release)
@@ -910,6 +969,77 @@ class WaveformDynamics:
                         field += release/len(sources)*self._source_shape(origin,sigma)
                 field[field<1e-9] = 0.  # after injection, so a zero-length step changes nothing
 
+    def _advance_bands(self,dt,release,p,sources,sigma,onset=False):
+        """Launch, strengthen, carry and fade the discrete pulse bands; publish them (maximum, never a sum) into the long
+        and fresh fields and the band presence (see DISCRETE PULSE BANDS)."""
+        view = self._view_world
+        if view is not None and self.direction < 0.:
+            view = (-view[1],-view[0])
+        reach = .5*p.width+p.falloff   # half a band's window: its Pulse Width core and the falloff at one side
+        low,high = view if view is not None else (PULSE_GRID[0],PULSE_GRID[-1])
+
+        def live_pulses():
+            """Bands still to come or in view: present, and not yet past the far edge (a Centre Out pair is one pulse)."""
+            live = [band for band in self._bands if band[3] >= BAND_PRESENT
+                    and (band[0]-reach <= high if band[1] > 0. else band[0]+reach >= low)]
+            return live,min((band[4] for band in live),default=None)
+
+        if release > 0.:
+            live,age = live_pulses()
+            newest = [band for band in live if band[4] == age]
+            # A band launches on a musical onset while fewer than Pulse Count pulses are live, once the newest has
+            # travelled BAND_SPACING widths plus its falloff at both sides; the release in between (the rest of a hit,
+            # rises of body energy) strengthens the newest band.
+            if len({band[4] for band in live}) < p.count and (
+                    not newest or (onset and age*p.speed >= BAND_SPACING*p.width+2.*p.falloff)):
+                for origin,sign in sources:
+                    self._bands.append([origin,sign,0.,min(BAND_STRENGTH_MAX,release),0.])
+            else:
+                for band in newest:
+                    band[3] = min(BAND_STRENGTH_MAX,band[3]+release)
+        # The next kick's case for Kick Accent: it cannot launch its own pulse (every place taken, or the newest too
+        # close), so it strengthens the newest, which shows it only below the knee of its strength (as the bend drive's
+        # headroom: KICK_SENSE_KNEE).
+        live,age = live_pulses()
+        launch = len({band[4] for band in live}) < p.count and (
+            age is None or age*p.speed >= BAND_SPACING*p.width+2.*p.falloff)
+        strength = max((band[3] for band in live if band[4] == age),default=0.)
+        self._pulse_lack = 0. if launch else unit((strength/BAND_STRENGTH_MAX-KICK_SENSE_KNEE)/(1.-KICK_SENSE_KNEE))
+        rise = 1.-math.exp(-dt/PULSE_RISE)
+        fade = math.exp(-dt/max(p.fade,1e-5))
+        kept = []
+        for band in self._bands:
+            band[0] += band[1]*p.speed*dt
+            band[4] += dt
+            band[2] += (band[3]-band[2])*rise
+            # An edge-born band ages only once seen (it is born just beyond the edge); a Centre Out band from its birth.
+            if view is None or p.direction=='Centre Out' or view[0]-sigma <= band[0] <= view[1]+sigma:
+                band[2] *= fade
+                band[3] *= fade
+            if abs(band[0]) <= PULSE_GRID[-1]+4.*sigma and band[3] > 1e-4:
+                kept.append(band)
+        self._bands = kept[-MAX_BANDS:]
+        long = np.zeros((2,PULSE_GRID.size))
+        fresh = np.zeros((2,PULSE_GRID.size))
+        presence = np.zeros(PULSE_GRID.size)
+        light = np.zeros(PULSE_GRID.size)
+        for position,sign,strength,target,age in self._bands:
+            window = np.exp(-.5*((PULSE_GRID-position)/sigma)**2)
+            index = 0 if sign < 0. else 1
+            np.maximum(long[index],strength*window,out=long[index])
+            np.maximum(fresh[index],strength*math.exp(-age/FRESH_FADE)*window,out=fresh[index])
+            edge = np.clip((reach-np.abs(PULSE_GRID-position))/p.falloff,0.,1.)   # core, then Pulse Falloff
+            edge = edge*edge*(3.-2.*edge)
+            np.maximum(light,(1.-math.exp(-strength/APP_SCALE))*edge,out=light)   # the band itself: Pulse Width wide
+            if target >= BAND_PRESENT:
+                np.maximum(presence,edge,out=presence)
+        long[long<1e-9] = 0.
+        fresh[fresh<1e-9] = 0.
+        self._pulse[:] = long
+        self._fresh[:] = fresh
+        self._band_presence = presence
+        self._band_light = light
+
     def _source_shape(self,origin,sigma):
         """The injected Gaussian of a source on PULSE_GRID; recomputed only when its origin or width changes."""
         key = (origin,sigma)
@@ -924,7 +1054,7 @@ class WaveformDynamics:
     def _view_sources(self,p):
         """Pulse sources and, when the camera's span is known and Travelling Pulse travels in from an edge, the
         per-direction seen weights (0 beyond the entry edge, 1 inside it; see VIEW_MARGIN). Otherwise (sources, None)."""
-        if self._view_world is None or p.mode!='Travelling Pulse' or p.direction=='Centre Out':
+        if self._view_world is None or p.mode not in ('Travelling Pulse','Frozen Past') or p.direction=='Centre Out':
             return pulse_sources(p.direction),None
         low,high = self._view_world
         if self.direction < 0.:   # the history axis is mirrored into the world (Travel Direction)
@@ -940,39 +1070,111 @@ class WaveformDynamics:
         weights,sources = self._seen[1]
         return sources,weights
 
+    def _frozen_rows(self):
+        """The live per-cell scalars Frozen Past holds: the body drives and Pulse Strength (drive units), each ribbon's
+        two shape springs (m, h), the logical clock, the unwrapped roll and twist phase, and the passage (idle motion)."""
+        springs = (3.*np.tanh(np.asarray(self.spring)/3.))[:,1:]
+        return np.concatenate((
+            [unit(self.drive[key]) for key in FROZEN_BODY], [unit(self.drive['bend'])], springs.reshape(-1),
+            [self.time,self._angle_total,self._twist_total,self.passage]))[:,None]
+
+    def _frozen_advect(self,flow):
+        """Move the cloth-fixed held grid with the history by ``flow``: whole cells roll toward -x (exact), the sub-cell
+        remainder only moves where the grid sits. Returns the cells rolled."""
+        self._frozen_shift += flow
+        cells = int(self._frozen_shift//PULSE_DX)
+        self._frozen_shift -= cells*PULSE_DX
+        self._frozen_rolled += cells
+        return cells
+
+    def _frozen_cells(self):
+        """Scene x of each held cell."""
+        return PULSE_GRID-self._frozen_shift
+
+    def _frozen_follow(self,dt,presence):
+        """Per held cell, the share of the way to the live value this tick: FROZEN_FOLLOW under a band (``presence``),
+        and with Freeze Deflate everywhere over that many seconds (0: held cloth never moves outside a band)."""
+        follow = (1.-math.exp(-dt/FROZEN_FOLLOW))*presence
+        deflate = self.controls.pulse.deflate
+        if deflate>0.:
+            settle = 1.-math.exp(-dt/deflate)
+            follow = follow+(1.-follow)*settle
+        return follow
+
     def _advance_frozen(self,dt,active,strength=0.):
-        """Per-cell passage peak held on the cloth; bounded fixed grid advected with the history flow."""
-        held,peak,previous,rising,passage,carried = self._held
+        """Frozen Past (operator, 7 Nov night): each cell stays frozen until a pulse band reaches it, then follows the
+        current values (low or high) and freezes again when the band leaves. The held grid is fixed to the cloth (whole
+        cells roll with the history, never re-interpolated: a held shape never melts) and new cloth enters at the
+        current values. Leaving the mode blends the held state into the live one over FROZEN_BODY_RELEASE (smoothstep:
+        never a pop), the held grid still travelling with the cloth."""
         flow = self.controls.scene.flow.speed*dt
+        live = self._frozen_rows()
+        kernel,_ = self._blur_kernel(GEOM_WAVES)
+        fresh = self._pulse[0]+self._pulse[1]
+        if kernel.size==1:
+            wide = fresh*kernel[0]
+        else:
+            offset = (kernel.size-1)//2
+            wide = np.convolve(fresh,kernel)[offset:offset+fresh.size]
+        geom_live = soft(BAND_GEOM_GAIN*wide)
         if not active:
-            if self._held.any():
-                # Leaving the mode fades the memory instead of dropping it.
-                held *= math.exp(-dt/FROZEN_REPLACE)
-                held[held<1e-6] = 0.
-                peak[:] = previous[:] = rising[:] = passage[:] = 0.
+            if self._frozen_body_on:
+                self._frozen_body_share = max(0.,self._frozen_body_share-dt/FROZEN_BODY_RELEASE)
+                if not self._frozen_body_share:
+                    self._frozen_body_on = False
+                    self._frozen_state = self._frozen_gain = self._frozen_gain_shown = self._frozen_offset = None
+                    self._frozen_gain_cells = self._frozen_offset_time = self._frozen_surge = None
+                    self._frozen_shift,self._frozen_rolled,self._frozen_offset_rolled = 0.,0,0
+                    self._frozen_surge_rolled = 0
+                elif self._frozen_state is not None:
+                    cells = self._frozen_advect(flow)
+                    _roll(self._frozen_state,cells,live[:,0])
+                    share = self._frozen_body_share
+                    share = share*share*(3.-2.*share)
+                    live_gain = self._bounded_gain(.7*self._value('bend')*self._geom)
+                    if self._frozen_gain is not None:
+                        _roll(self._frozen_gain,cells,live_gain[-1])
+                        here = np.interp(self._frozen_cells(),PULSE_GRID,live_gain)
+                        self._frozen_gain_cells = here+(self._frozen_gain-here)*share
+                        self._frozen_gain_shown = np.interp(PULSE_GRID,self._frozen_cells(),self._frozen_gain_cells)
             return
-        if flow:
-            for row in self._held:
-                row[:] = np.interp(PULSE_GRID+flow,PULSE_GRID,row,left=0.,right=0.)
-        now = self._pulse[0]+self._pulse[1]
-        present = now>FROZEN_PRESENT
-        up_now = present & (now>previous*(1.+FROZEN_RISING)+1e-4)
-        start = up_now & (rising<.5)
-        peak[:] = np.where(start,now,np.where(up_now,np.maximum(peak,now),peak))
-        # The passage's Pulse Strength: the strongest reached while its swell rose here. The memory carries it with the
-        # same rules as the held level, so a held shape stays the size it was shaped at (operator, 5 Nov: re-scaling
-        # the memory by today's strength made the frozen trail vanish as soon as the music softened).
-        passage[:] = np.where(start,strength,np.where(up_now,np.maximum(passage,strength),passage))
-        rise = 1.-math.exp(-dt/FROZEN_RISE)
-        settle = 1.-math.exp(-dt/FROZEN_REPLACE)
-        grow = peak>held
-        carried[:] = np.where(grow,carried+(passage-carried)*rise,np.where(up_now,carried,carried+(passage-carried)*settle))
-        held[:] = np.where(grow,held+(peak-held)*rise,np.where(up_now,held,held+(peak-held)*settle))
-        fade = math.exp(-dt/FROZEN_DECAY)
-        held[~present] *= fade
-        peak[~present] *= fade
-        previous[:] = now
-        rising[:] = up_now
+        state = self._frozen_state
+        if not self._frozen_body_on or state is None or state.shape[0]!=live.shape[0]:
+            state = self._frozen_state = np.repeat(live,PULSE_GRID.size,axis=1)
+            self._frozen_geom = geom_live.copy()
+            self._frozen_gain = self._frozen_surge = None
+            self._frozen_shift,self._frozen_rolled,self._frozen_offset_rolled = 0.,0,0
+            self._frozen_surge_rolled = 0
+            self._frozen_body_on = True
+        elif self._frozen_body_share<1.:
+            # Back while still blending out: the cloth holds the state it shows now, so nothing jumps.
+            share = self._frozen_body_share
+            share = share*share*(3.-2.*share)
+            state[:] = live+(state-live)*share
+            self._frozen_geom[:] = geom_live+(self._frozen_geom-geom_live)*share
+        self._frozen_body_share = 1.
+        cells = self._frozen_advect(flow)
+        _roll(state,cells,live[:,0])                       # new cloth enters at the live state
+        _roll(self._frozen_geom,cells,geom_live[-1])
+        where = self._frozen_cells()
+        follow = self._frozen_follow(dt,np.interp(where,PULSE_GRID,self._band_presence))
+        state += (live-state)*follow
+        self._frozen_geom += (np.interp(where,PULSE_GRID,geom_live)-self._frozen_geom)*follow
+        self._frozen_geom_shown = np.interp(PULSE_GRID,where,self._frozen_geom)
+        self._frozen_swell = (geom_live*self._band_presence,self._frozen_geom_shown)
+        # The final gain after the flow-rule bound: one share bounds the whole field, so a band anywhere would rescale
+        # every held swell; each cell holds the gain it had when its band left.
+        live_gain = self._bounded_gain(.7*self._value('bend')*geom_live)
+        here = np.interp(where,PULSE_GRID,live_gain)
+        if self._frozen_gain is None:
+            self._frozen_gain = here.copy()
+        else:
+            _roll(self._frozen_gain,cells,live_gain[-1])
+            self._frozen_gain += (here-self._frozen_gain)*follow
+        # Shown as held: smoothing it (the geometric kernel, +-3 sigma) carried every band's update into the gaps
+        # between bands (7 Nov: Preset 5 moved as much outside its bands as inside). Pulse Falloff softens the edges.
+        self._frozen_gain_cells = self._frozen_gain
+        self._frozen_gain_shown = np.interp(PULSE_GRID,where,self._frozen_gain)
 
     def _blur_kernel(self,waves=GEOM_WAVES):
         """Gaussian that widens the authored-width field to the geometric envelope (>= ``waves`` wavelengths)."""
@@ -1014,17 +1216,14 @@ class WaveformDynamics:
             self._focus = self._level
             self._geom = np.full(PULSE_GRID.size,float(soft(self._whole)))
         elif p.mode=='Frozen Past':
-            memory = np.maximum(travelling,self._held[0])
-            # Held cloth keeps the settled look of its passage; the travelling band stays brighter over it.
-            self._level = np.maximum(look,APP_BASE*(1.-np.exp(-self._held[0]/APP_SCALE)))
-            self._focus = look
-            self._geom = soft(broad(memory))
-            # The gain uses the live swell at today's strength and the held memory at the strength it was shaped with
-            # (strength-weighted local average, so a held shape's edges keep its own strength).
-            held = self._held[0]
-            shaped = broad(held*self._held[5])/np.maximum(broad(held),1e-9)
-            self._frozen_swell = (soft(broad(travelling)),.7*soft(broad(held))*shaped)
-            drift_target = soft(broad(self._pulse[1]))-soft(broad(self._pulse[0]))
+            # The light is the bands (the pulse is where it is); the geometry is the held swell, which follows the live
+            # swell only under a band (_advance_frozen); the surge moves only under a band too (below).
+            self._level = self._band_light
+            self._focus = self._band_light
+            self._geom = self._frozen_geom_shown
+            self._frozen_swell = (soft(BAND_GEOM_GAIN*broad(travelling))*self._band_presence,self._frozen_geom_shown)
+            drift_target = (soft(BAND_GEOM_GAIN*broad(self._pulse[1]))-soft(BAND_GEOM_GAIN*broad(self._pulse[0])))\
+                *self._band_presence
         elif p.mode=='Group Wave':
             # The light covers the set: the look spread over the group envelope (unit-sum, so it never brightens).
             self._level = np.minimum(1.,broad(look)*(p.width/2.3548)/sigma_g)
@@ -1043,28 +1242,43 @@ class WaveformDynamics:
                 drift_target += sign*GROUP_SURGE*soft(weighted)
             self._geom = soft(total)
         else:
-            self._level = look
-            self._focus = look
-            # Geometry and surge follow the FRESH energy (the same transport with a short fade): each beat is a
-            # travelling bump with calmer waveform around it. Driven by the long-fade field the swells overlapped
-            # into one uniform inflation of the whole view (5 Nov: median/max .98 over the visible span), so the
-            # operator could not see a pulse at all. Light keeps its own fresh-led look above.
-            self._geom = soft(PULSE_FRESH_GAIN*broad(self._fresh[0]+self._fresh[1]))
-            drift_target = soft(PULSE_FRESH_GAIN*broad(self._fresh[1]))-soft(PULSE_FRESH_GAIN*broad(self._fresh[0]))
+            # Travelling Pulse: each band swells the waveform where it is, for its whole journey (fading with Pulse
+            # Fade), and its light is the band itself. The bands never pile (they combine by maximum), so the calmer
+            # waveform between them stays calm (5 Nov: the summed field was a uniform inflation, median/max .98).
+            self._level = self._band_light
+            self._focus = self._band_light
+            self._geom = soft(BAND_GEOM_GAIN*broad(self._pulse[0]+self._pulse[1]))
+            drift_target = soft(BAND_GEOM_GAIN*broad(self._pulse[1]))-soft(BAND_GEOM_GAIN*broad(self._pulse[0]))
         # The surge eases (two cascaded followers, SURGE_EASE each) so the cloth's sideways velocity is continuous; the
         # old clipped step had piecewise-constant velocity, a sideways jolt at every change (operator, 5 Nov: lattice
         # twitching left and right). SURGE_RATE still bounds the change per second.
         ease = 1.-math.exp(-dt/SURGE_EASE) if dt>0. else 0.
+        if p.mode=='Frozen Past':
+            ease = ease*self._band_presence   # outside a band the surge holds where it is
         self._drift_stage = self._drift_stage+(drift_target-self._drift_stage)*ease
         step = SURGE_RATE*dt
         self._drift = self._drift+np.clip((self._drift_stage-self._drift)*ease,-step,step)
+        if self._frozen_body_on and self._frozen_state is not None:
+            self._hold_frozen_surge(dt,p.mode=='Frozen Past')
 
-    def _learn_rate(self,dt,presence):
-        """Share of real time Breathing's phrase-scale mean learns this tick: 0 with the musical weight, back over
-        BREATHING_HEARD_RETURN seconds (see BREATHING_HEARD_RETURN)."""
-        self._heard = follower(self._heard,unit(presence),dt,BREATHING_HEARD_RETURN,0.)
-        self._settled = follower(self._settled,1. if presence>PHRASE_SILENCE else 0.,dt,PHRASE_SETTLE,PHRASE_SETTLE_DROP)
-        return self._heard
+    def _hold_frozen_surge(self,dt,follow):
+        """Frozen Past: the surge displacement held on the cloth cells, following the live one only under a band, so a
+        stretch of cloth a band slid stays slid as it flows (rolled with the cells; while leaving the mode it only rolls)."""
+        where = self._frozen_cells()
+        live = np.interp(where,PULSE_GRID,PULSE_SURGE*self._value('bend')*self._drift)
+        held = self._frozen_surge
+        if held is None:
+            held = live.copy()
+        else:
+            _roll(held,self._frozen_rolled-self._frozen_surge_rolled,live[-1])
+            if follow:
+                presence = np.interp(where,PULSE_GRID,self._band_presence)
+                follow = self._frozen_follow(dt,presence)
+                held += (live-held)*follow
+                # The fold guard, locally: where a band changed the held surge, its compression stays within
+                # SURGE_MAX_COMPRESSION, so _surge's per-ribbon guard (a whole-ribbon scale) never moves held cloth.
+                _limit_fold(held,follow>0.,.98*SURGE_MAX_COMPRESSION)
+        self._frozen_surge,self._frozen_surge_rolled = held,self._frozen_rolled
 
     def _advance_pulse_births(self,dt,released):
         """Injected energy buys a bounded number of swell-carried births, released over the swell's journey and
@@ -1095,12 +1309,14 @@ class WaveformDynamics:
         return np.interp(x,PULSE_GRID,self._drift)
 
     def geometric_gain(self,strength):
-        """Gain envelope on the pulse grid, bounded at the owner by the flow rule (see GEOM_SLOPE/GEOM_CURVE)."""
-        if self._frozen_swell is None:
-            swell = .7*strength*self._geom
-        else:
-            live,held = self._frozen_swell
-            swell = np.maximum(.7*strength*live,held)
+        """Gain envelope on the pulse grid, bounded at the owner by the flow rule (see GEOM_SLOPE/GEOM_CURVE). Frozen Past
+        returns the gain held on each cell (_advance_frozen), which follows the live bounded gain only under a band."""
+        if self._frozen_body_on and self._frozen_gain_shown is not None:
+            return self._frozen_gain_shown
+        return self._bounded_gain(.7*strength*self._geom)
+
+    def _bounded_gain(self,swell):
+        """1 + share x swell, with the largest share the flow rule admits (rising at most GEOM_SHARE_RISE per second)."""
         if not np.any(swell):
             self._geom_share = (1.,self.time)
             return np.ones(PULSE_GRID.size)
@@ -1126,14 +1342,14 @@ class WaveformDynamics:
         self._geom_share = (share,self.time)
         return 1.+share*swell
 
-    def _surge(self,data,x,y,z,amount):
+    def _surge(self,data,x,y,z,amount,drift=None):
         """Slide each knot ALONG its own curve by the signed swell: the body is resampled at the shifted positions
         (cubic Hermite through the unsurged knots), so the curve itself never changes, only its cloth moves.
 
         Ribbons sharing one history window (count, start, capacity) are resampled together as rows: the same
         element-wise arithmetic as one ribbon at a time (``row_gradient`` reproduces ``np.gradient``), so the
         published packet is byte-identical, at a fraction of the per-ribbon NumPy dispatch (5 Nov profile)."""
-        drift = self.pulse_drift(x)*amount
+        drift = self.pulse_drift(x)*amount if drift is None else drift
         if not np.any(drift):
             return x,y,z
         x,y,z = x.copy(),y.copy(),z.copy()
@@ -1237,6 +1453,29 @@ class WaveformDynamics:
         low,high = cached[2]
         return (x>low)&(x<high),.5*(low+high),.5*(high-low)
 
+    def _frozen_vertical(self,x,live):
+        """Frozen Past: each ribbon's vertical offset (lift + floor lift) held per cell, following the live offset only
+        under a band (the lift moved the whole ribbon at once); on the cloth-fixed held cells, updated once per logical
+        time."""
+        live = np.broadcast_to(live,x.shape)
+        where = self._frozen_cells()
+        grid_live = np.stack([np.interp(where,x[ribbon],live[ribbon]) for ribbon in range(x.shape[0])])
+        held = self._frozen_offset
+        if held is None or held.shape != grid_live.shape:
+            held = grid_live.copy()
+        elif self._frozen_offset_time is not None and self.time > self._frozen_offset_time:
+            dt = self.time-self._frozen_offset_time
+            _roll(held,self._frozen_rolled-self._frozen_offset_rolled,grid_live[:,-1])
+            presence = np.interp(where,PULSE_GRID,self._band_presence)
+            held += (grid_live-held)*self._frozen_follow(dt,presence)
+        self._frozen_offset,self._frozen_offset_time,self._frozen_offset_rolled = held,self.time,self._frozen_rolled
+        shown = np.stack([np.interp(x[ribbon],where,held[ribbon]) for ribbon in range(x.shape[0])])
+        share = self._frozen_body_share
+        if share >= 1.:
+            return shown
+        blend = share*share*(3.-2.*share)
+        return live+(shown-live)*blend
+
     def _height_shift(self,height,hang,room,x,soft=None,headroom=None):
         """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor, never
         lifting a crest through the card's top edge (``headroom``: see _floor_room)."""
@@ -1330,27 +1569,57 @@ class WaveformDynamics:
         # envelope so whole waves swell together and the curvature keeps its own sign (flow rule).
         swell = self.pulse_at(x)
         # Beyond the field the published edge value continues (a Whole Swell never ends at the grid edge).
-        broad = np.interp(x,PULSE_GRID,self.geometric_gain(values['bend']))
+        frozen = self._frozen_body_on and self._frozen_state is not None
+        if frozen and self._frozen_gain_cells is not None:
+            broad = np.interp(x,self._frozen_cells(),self._frozen_gain_cells)
+        else:
+            broad = np.interp(x,PULSE_GRID,self.geometric_gain(values['bend']))
         geometric = np.interp(x,PULSE_GRID,self._geom)
         gain = broad
-        cy = carrier*values['height']*gain
-        cz = depth_wave*values['height']*gain+separation*values['spread']
-        cosine,sine = math.cos(self.angle),math.sin(self.angle)
+        shape = values
+        clock,angle,twist_phase,passage = self.time,self.angle,self.twist_phase,self.passage
+        if frozen:
+            # Frozen Past: every knot reads the state held on its cloth cell (blended into the live state while leaving).
+            share = self._frozen_body_share
+            blend = share*share*(3.-2.*share)
+            state,live,where = self._frozen_state,self._frozen_rows()[:,0],self._frozen_cells()
+            def cell(index):
+                held = np.interp(x,where,state[index])
+                return held if share>=1. else live[index]+(held-live[index])*blend
+            shape = dict(values)
+            for index,key in enumerate(FROZEN_BODY):
+                low,high = self.controls.ranges[key]
+                shape[key] = low+(high-low)*cell(index)
+            base = len(FROZEN_BODY)+1
+            m = np.stack([cell(base+2*ribbon)[ribbon] for ribbon in range(RIBBON_CAPACITY)])
+            h = np.stack([cell(base+2*ribbon+1)[ribbon] for ribbon in range(RIBBON_CAPACITY)])
+            base += 2*RIBBON_CAPACITY
+            clock,angle,twist_phase,passage = cell(base),cell(base+1),cell(base+2),cell(base+3)
+        cy = carrier*shape['height']*gain
+        cz = depth_wave*shape['height']*gain+separation*shape['spread']
+        cosine,sine = (math.cos(self.angle),math.sin(self.angle)) if angle is self.angle else (np.cos(angle),np.sin(angle))
         y,z = cosine*cy-sine*cz,sine*cy+cosine*cz
         # Depth sway acts in world space after the roll and travels with the cloth. The former standing bend
         # (a fixed spatial sine the ribbon slid through) is replaced by the travelling pulse above.
-        z = z+.4*values['depth']*m*terms.depth_sway
-        idle=self.controls.idle_motion*(1.-self.passage)
-        y+=idle*.08*np.sin(.45*self.time+terms.idle_y+_OWNER)
-        z+=idle*.05*np.cos(.33*self.time+terms.idle_z-_OWNER)
-        x,y,z = self._surge(data,x,y,z,PULSE_SURGE*values['bend'])
+        z = z+.4*shape['depth']*m*terms.depth_sway
+        idle=self.controls.idle_motion*(1.-passage)
+        y+=idle*.08*np.sin(.45*clock+terms.idle_y+_OWNER)
+        z+=idle*.05*np.cos(.33*clock+terms.idle_z-_OWNER)
+        if frozen and self._frozen_surge is not None:
+            held = np.interp(x,where,self._frozen_surge)
+            if share<1.:
+                live_drift = self.pulse_drift(x)*(PULSE_SURGE*values['bend'])
+                held = live_drift+(held-live_drift)*blend
+            x,y,z = self._surge(data,x,y,z,None,held)
+        else:
+            x,y,z = self._surge(data,x,y,z,PULSE_SURGE*values['bend'])
         rows[:,:,0] = x-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
         # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values. Peaks
         # are meant to rise high: the framing makes room for them, the body is never capped to fit a frame.
-        rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*values['width']*(1.+.35*geometric)/3.5)
+        rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*shape['width']*(1.+.35*geometric)/3.5)
         rows[:,:,2] = 5.*np.tanh(z/5.)
-        twist = terms.twist*values['twist']+values['torsion']*(1.6*m*terms.torsion_a+.12*h*terms.torsion_b)
-        data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+terms.idle_twist+_OWNER)
+        twist = terms.twist*shape['twist']+shape['torsion']*(1.6*m*terms.torsion_a+.12*h*terms.torsion_b)
+        data[:,5::KNOT_ROWS,1] = twist+twist_phase+angle+idle*.18*np.sin(.28*clock+terms.idle_twist+_OWNER)
         data[:,1,0] = 0.
         # Admission phase of the history ring in [0, 1) (header extra.w): the renderer anchors the visible ends inside
         # the history and continues from there, so admitting/evicting a knot never steps the ends (core.ribbon_continuation).
@@ -1368,7 +1637,10 @@ class WaveformDynamics:
         headroom = None if self._view_top is None else \
             (self._view_top-PACKET_FLOOR_HEIGHT)*self.zoom-TOP_CLEARANCE-values['lift']
         rise = self._height_shift(y,hang,room,x,soft_y,headroom)
-        rows[:,:,1] = soft_y+values['lift']+rise
+        offset = values['lift']+rise
+        if frozen:
+            offset = self._frozen_vertical(x,offset)
+        rows[:,:,1] = soft_y+offset
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
         # All cards at once as rows; each card's Python scalars become a column in exactly the dtype NumPy would

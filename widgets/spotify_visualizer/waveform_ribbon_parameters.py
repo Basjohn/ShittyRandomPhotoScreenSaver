@@ -51,9 +51,10 @@ class CompiledWaveformSettings:
             pulse=PulseControls(str(read('pulse_direction')),float(read('pulse_width')),float(read('pulse_speed')),
                                 float(read('pulse_colour')),float(read('pulse_fade')),float(read('pulse_saturation')),
                                 float(read('pulse_particles')),float(read('pulse_strands')),
-                                mode=str(read('reaction_mode'))),
+                                mode=str(read('reaction_mode')),count=int(read('pulse_count')),
+                                falloff=float(read('pulse_falloff')),deflate=float(read('frozen_deflate'))),
             height_mode=str(read('height_mode')),tilt_shift=bool(read('tilt_shift')),breathing=float(read('breathing')),
-            adaptive_response=bool(read('adaptive_response')),kick_accent=float(read('kick_accent')),
+            kick_accent=float(read('kick_accent')),
             floor_give=float(read('floor_give')))
 
     def _scene_plan(self):

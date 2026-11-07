@@ -3,8 +3,8 @@ became more reactive pointing to bad adaptive logic. Adaptive is a very problema
 ignored ... Something for a sense of them?"; "make whatever adaptive remains turn off able").
 
 Test-owned controls and inputs with the production constants; structure only, never authored values. Negative
-controls: Adaptive Response on (the remembered-peak gain) re-scales what follows a break and remembers a prelude;
-Breathing's mean learning through the silence (the former behaviour) swells the return; Kick Accent 0 adds nothing."""
+controls: a test-owned remembered-peak gain (the retired Adaptive Response, 7 Nov) re-scales what follows a break and
+remembers a prelude; Kick Accent 0 adds nothing. The response is memoryless (tests/test_waveform_memoryless_response.py)."""
 import math
 from dataclasses import replace
 import numpy as np
@@ -14,6 +14,19 @@ from tests.test_waveform_no_twitch import accelerations
 
 DT = 1/90
 SILENT = dict(bands=(0., 0., 0.), intensity=0., presence=0.)
+
+
+def remembered_peak(monkeypatch):
+    """Negative control: a test-owned running-level normaliser (each drive divided by a 10 s mean of its own target, the
+    shape of every learned level agents added). Proves the measurement sees a response that remembers the music."""
+    import math as _math
+    means = {}
+
+    def adaptive(target, key):
+        mean = means.get(key, target)
+        mean = means[key] = target+(mean-target)*_math.exp(-(1/90)/10.)
+        return min(1., .6*target/max(.2, mean))
+    monkeypatch.setattr(dyn, 'fixed_response', adaptive)
 
 
 def phrase(t, level=1., uneven=False):
@@ -59,17 +72,11 @@ def break_change(c, length, signed=False):
 def test_a_two_to_five_second_break_does_not_rescale_what_follows(monkeypatch):
     c = replace(controls(), breathing=1.)
     for length in (2., 5.):
-        # Never a swell (the operator's "everything became more reactive"); the phrase mean catching up with the
-        # song's rare peaks after the silence may leave what follows a little smaller (6 Nov: -5.1% / -5.6%).
-        assert break_change(c, length, signed=True) < .015, length
-        assert break_change(c, length) < .065, length
-    # Negative control: the remembered peak (Adaptive Response on) sizes what follows differently until the song's
-    # next peak.
-    assert break_change(replace(c, adaptive_response=True), 5.) > .075            # 8.7%
-    # Negative control: Breathing's mean learning through the silence (the former code) swells the return against a
-    # mean that fell with it.
-    monkeypatch.setattr(dyn.WaveformDynamics, '_learn_rate', lambda self, dt, presence: 1.)
-    assert break_change(c, 5., signed=True) > .1                                   # 18%
+        # Memoryless: once the followers have taken the music back (1.5 s), what follows is what the unbroken song draws.
+        assert break_change(c, length) < .01, length
+    # Negative control: a remembered peak sizes what follows differently until the song's next peak.
+    remembered_peak(monkeypatch)
+    assert break_change(c, 5.) > .05
 
 
 def louder_after_break_change(c, length=5.):
@@ -89,25 +96,23 @@ def louder_after_break_change(c, length=5.):
 
 
 def test_a_break_where_the_song_gets_louder_does_not_swell_what_follows(monkeypatch):
-    """Recorded music with spliced 2-5 s breaks: the phrase widening (PHRASE_RISE) of a returning passage against the
-    mean held through the silence sized the following 10 s 7-17% up; it now comes back over PHRASE_SETTLE."""
+    """Recorded music with spliced 2-5 s breaks: the former phrase widening of a returning passage against a mean held
+    through the silence sized the following 10 s 7-17% up. Memoryless, the return is the unbroken song."""
     c = replace(controls(), breathing=0.)
     settled = louder_after_break_change(c)
-    assert settled < .04, settled
-    # Negative control: widening at once with the heard return (the former code) swells the return.
-    monkeypatch.setattr(dyn, 'PHRASE_SETTLE', 1e-3)
+    assert settled < .01, settled
+    remembered_peak(monkeypatch)   # negative control
     assert louder_after_break_change(c) > settled+.03
 
 
-def test_adaptive_response_off_remembers_nothing():
-    """Off is the fixed calibration: beyond the 3 s phrase mean the dip is measured against, what came before (a loud
-    or a quiet prelude) never changes the size of what follows. On, the remembered peak sizes the same passage
-    differently for its 30 s memory (negative control)."""
+def test_the_response_remembers_nothing(monkeypatch):
+    """What came before (a loud or a quiet prelude) never changes the size of what follows. A remembered peak sizes the
+    same passage differently for its 30 s memory (negative control)."""
     c = replace(controls(), breathing=0.)
     loud, quiet = run(c, 20., prelude=1., level=.6), run(c, 20., prelude=.3, level=.6)
     assert np.abs(after(loud, 16., 20.)-after(quiet, 16., 20.)).max() < 5e-3
-    a = replace(c, adaptive_response=True)
-    loud, quiet = run(a, 20., prelude=1., level=.6), run(a, 20., prelude=.3, level=.6)
+    remembered_peak(monkeypatch)
+    loud, quiet = run(c, 20., prelude=1., level=.6), run(c, 20., prelude=.3, level=.6)
     assert np.abs(after(loud, 16., 20.)-after(quiet, 16., 20.)).max() > .05
 
 

@@ -87,8 +87,18 @@ def test_tilt_shift_leads_on_the_travel_side_rising_and_settling():
     velocity = np.gradient(lifts, axis=0)*90.
     moving = np.abs(velocity) > .2
     assert moving.sum() > 50 and (velocity[moving] > 0).any() and (velocity[moving] < 0).any()
-    # Where the lift clearly moves, the travel side leads in the same direction (allowing for the lead's own easing).
-    agree = np.sign(lead[moving]) == np.sign(velocity[moving])
+    # Where the lift clearly moves, the travel side leads in the same direction, once the lead's own easing (TILT_EASE)
+    # has had time to turn after the lift reversed.
+    ease = round(dyn.TILT_EASE*90)
+    turned = np.zeros_like(moving)
+    for ribbon in range(velocity.shape[1]):
+        direction, since = np.sign(velocity[:, ribbon]), 0
+        for index in range(1, len(direction)):
+            since = 0 if direction[index] != direction[index-1] and direction[index] else since+1
+            turned[index, ribbon] = since > ease
+    settled = moving & turned
+    assert settled.sum() > .5*moving.sum()
+    agree = np.sign(lead[settled]) == np.sign(velocity[settled])
     assert agree.mean() > .9
     for frame in frames:
         for offset in frame:

@@ -46,6 +46,7 @@ _SCAN_EXCLUDED_PARTS = frozenset({
 # once failed to parse and turned the audit red (2026-10-03).
 _SCAN_EXCLUDED_ROOTS = frozenset({
     ".claude",  # agent tooling: git worktrees of this repository (copies, not source) live under .claude/worktrees
+    ".artifacts",  # tool output and owner scratch (tools/artifact_paths), where worktrees and probe scripts go
     "build",
     "release",
     "temp",

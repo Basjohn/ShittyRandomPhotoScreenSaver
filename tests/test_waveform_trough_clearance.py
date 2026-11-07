@@ -56,5 +56,6 @@ def test_the_floor_rule_only_lifts_each_ribbon_as_a_whole_and_keeps_it_off_the_f
     # extreme case the bounded rise cannot clear every swell-deepened trough; the optional floor deformation does.)
     for q in (10, 50, 90):
         assert np.percentile(lowest, q) > np.percentile(unbounded_lowest, q)+.5
-    # The rise eases (attack/release on the logical clock), never in one jump.
-    assert np.abs(np.diff(rises[:, :, 0], axis=0)).max() < .05
+    # The rise eases (attack/release on the logical clock), never in one jump: no tick carries more than a fortieth
+    # of the largest rise (a jump would carry all of it).
+    assert np.abs(np.diff(rises[:, :, 0], axis=0)).max() < .025*rises.max()

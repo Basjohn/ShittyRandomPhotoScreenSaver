@@ -21,6 +21,12 @@ This is the **short preflight**, not a second documentation authority. Use the f
 - Settings remembers only the active tab/pill editing path and necessary ancestors. Inactive buckets close; Settings values and presets remain freely editable.
 - Use the present virtual environment and bounded focused tests. **No test-command environment-variable writes, no local frozen builds.** Prefer agent-executable verification; subjective appearance requires operator acceptance.
 - Treat source-only validation as source evidence. Do not close an unverified functional or visual failure.
+- **No load runs by agents (operator, 7 Nov 2026).** `game60` / `tools/gpu_load_generator.py` / `--load` is the rare
+  end-of-chain worst-case proof, never a baseline or a routine check ("it is hard on my entire system"). Only the lead
+  runs it, at most 10 minutes, after the operator's yes. Agents never start it.
+- **Reactivity is memoryless (operator, 7 Nov 2026: "Adaptivity is the enemy").** The same music at the same playback
+  level draws the same response at any time in a song, after any break or louder/softer passage: no learned mean,
+  peak, floor or ratio against recent history in a response path. See `Docs/Guides/Visualizer_Reactivity_Authoring.md` §2A.
 - **Evidence and scratch hygiene (operator, 7 Nov 2026: "agents have littered").**
   - **PNGs are not barred.** Stills (screenshots, contact sheets, comparisons) stay PNG, and tools and compare
     steps produce and read PNG as they need. Only a sequence of single frames used to show motion is replaced, by

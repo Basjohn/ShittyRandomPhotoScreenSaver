@@ -17,7 +17,7 @@ import numpy as np
 from core.ribbon_continuation import ANCHOR_INSET, anchored_values, anchors, continued_values
 from core.ribbon_packet import KNOT_ROWS, RibbonPacket
 from core.waveform_ribbon_authoring import RIBBON_CAPACITY, TARGETS
-from core.waveform_ribbon_dynamics import (HIT_GLOW, HybridSnapshot, PACKET_FLOOR_HEIGHT, PULSE_GLOW, PULSE_GREY,
+from core.waveform_ribbon_dynamics import (FROZEN_BODY, HIT_GLOW, HybridSnapshot, PACKET_FLOOR_HEIGHT, PULSE_GLOW, PULSE_GREY,
                                            PULSE_GRID, PULSE_SURGE, TOP_CLEARANCE, TROUGH_CLEARANCE, TROUGH_ROOM_MIN,
                                            unit)
 
@@ -97,29 +97,59 @@ def snapshot(self):
     # envelope so whole waves swell together and the curvature keeps its own sign (flow rule).
     swell = self.pulse_at(x)
     # Beyond the field the published edge value continues (a Whole Swell never ends at the grid edge).
-    broad = np.interp(x,PULSE_GRID,self.geometric_gain(values['bend']))
+    frozen = self._frozen_body_on and self._frozen_state is not None
+    if frozen and self._frozen_gain_cells is not None:
+        broad = np.interp(x,self._frozen_cells(),self._frozen_gain_cells)
+    else:
+        broad = np.interp(x,PULSE_GRID,self.geometric_gain(values['bend']))
     geometric = np.interp(x,PULSE_GRID,self._geom)
     gain = broad
-    cy = carrier*values['height']*gain
-    cz = depth_wave*values['height']*gain+separation*values['spread']
-    cosine,sine = math.cos(self.angle),math.sin(self.angle)
+    shape = values
+    clock,angle,twist_phase,passage = self.time,self.angle,self.twist_phase,self.passage
+    if frozen:
+        # Frozen Past: every knot reads the state held on its cloth cell (blended into the live state while leaving).
+        share = self._frozen_body_share
+        blend = share*share*(3.-2.*share)
+        state,live,where = self._frozen_state,self._frozen_rows()[:,0],self._frozen_cells()
+        def cell(index):
+            held = np.interp(x,where,state[index])
+            return held if share>=1. else live[index]+(held-live[index])*blend
+        shape = dict(values)
+        for index,key in enumerate(FROZEN_BODY):
+            low,high = self.controls.ranges[key]
+            shape[key] = low+(high-low)*cell(index)
+        base = len(FROZEN_BODY)+1
+        m = np.stack([cell(base+2*ribbon)[ribbon] for ribbon in range(RIBBON_CAPACITY)])
+        h = np.stack([cell(base+2*ribbon+1)[ribbon] for ribbon in range(RIBBON_CAPACITY)])
+        base += 2*RIBBON_CAPACITY
+        clock,angle,twist_phase,passage = cell(base),cell(base+1),cell(base+2),cell(base+3)
+    cy = carrier*shape['height']*gain
+    cz = depth_wave*shape['height']*gain+separation*shape['spread']
+    cosine,sine = (math.cos(self.angle),math.sin(self.angle)) if angle is self.angle else (np.cos(angle),np.sin(angle))
     y,z = cosine*cy-sine*cz,sine*cy+cosine*cz
     # Depth sway acts in world space after the roll and travels with the cloth. The former standing bend
     # (a fixed spatial sine the ribbon slid through) is replaced by the travelling pulse above.
-    z = z+.4*values['depth']*m*np.cos(.65*u+owner)
-    idle=self.controls.idle_motion*(1.-self.passage)
-    y+=idle*.08*np.sin(.45*self.time+.6*u+owner)
-    z+=idle*.05*np.cos(.33*self.time+.4*u-owner)
-    x,y,z = self._surge(data,x,y,z,PULSE_SURGE*values['bend'])
+    z = z+.4*shape['depth']*m*np.cos(.65*u+owner)
+    idle=self.controls.idle_motion*(1.-passage)
+    y+=idle*.08*np.sin(.45*clock+.6*u+owner)
+    z+=idle*.05*np.cos(.33*clock+.4*u-owner)
+    if frozen and self._frozen_surge is not None:
+        held = np.interp(x,where,self._frozen_surge)
+        if share<1.:
+            live_drift = self.pulse_drift(x)*(PULSE_SURGE*values['bend'])
+            held = live_drift+(held-live_drift)*blend
+        x,y,z = self._surge(data,x,y,z,None,held)
+    else:
+        x,y,z = self._surge(data,x,y,z,PULSE_SURGE*values['bend'])
     rows[:,:,0] = x-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
     # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values. Peaks
     # are meant to rise high: the framing makes room for them, the body is never capped to fit a frame.
-    rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*values['width']*(1.+.35*geometric)/3.5)
+    rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*shape['width']*(1.+.35*geometric)/3.5)
     rows[:,:,2] = 5.*np.tanh(z/5.)
     origin_twist = (data[:,1,0,None]+math.pi)%(2*math.pi)-math.pi
     twist = data[:,5::KNOT_ROWS,1]+origin_twist
-    twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.45*u+owner)+.12*h*np.sin(.7*u-owner))
-    data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*u+owner)
+    twist = twist*shape['twist']+shape['torsion']*(1.6*m*np.sin(.45*u+owner)+.12*h*np.sin(.7*u-owner))
+    data[:,5::KNOT_ROWS,1] = twist+twist_phase+angle+idle*.18*np.sin(.28*clock+.3*u+owner)
     data[:,1,0] = 0.
     # Admission phase of the history ring in [0, 1) (header extra.w): the renderer anchors the visible ends inside
     # the history and continues from there, so admitting/evicting a knot never steps the ends (core.ribbon_continuation).
@@ -137,7 +167,10 @@ def snapshot(self):
     headroom = None if self._view_top is None else \
         (self._view_top-PACKET_FLOOR_HEIGHT)*self.zoom-TOP_CLEARANCE-values['lift']
     rise = self._height_shift(y,hang,room,x,soft_y,headroom)
-    rows[:,:,1] = soft_y+values['lift']+rise
+    offset = values['lift']+rise
+    if frozen:
+        offset = self._frozen_vertical(x,offset)
+    rows[:,:,1] = soft_y+offset
     # Strong local musical regions change colour immediately, even before new head history enters view.
     # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
     # All cards at once as rows; each card's Python scalars become a column in exactly the dtype NumPy would

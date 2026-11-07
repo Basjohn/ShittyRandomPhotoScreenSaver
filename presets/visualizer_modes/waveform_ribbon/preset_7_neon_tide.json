@@ -13,7 +13,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "waveform_ribbon_adaptive_response": false,
         "waveform_ribbon_adaptive_sensitivity": true,
         "waveform_ribbon_attack": 0.045,
         "waveform_ribbon_breathing": 0.7,
@@ -58,6 +57,9 @@
         "waveform_ribbon_pulse_speed": 16.0,
         "waveform_ribbon_pulse_strands": 0.6,
         "waveform_ribbon_pulse_width": 3.5,
+        "waveform_ribbon_pulse_count": 2,
+        "waveform_ribbon_pulse_falloff": 1.5,
+        "waveform_ribbon_frozen_deflate": 0.0,
         "waveform_ribbon_depth": [
           0.15,
           1.8

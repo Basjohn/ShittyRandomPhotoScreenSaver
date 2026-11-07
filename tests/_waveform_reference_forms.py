@@ -61,8 +61,8 @@ def carry_fields(self, decays, seen, sources, sigma, shift, blur, release, trave
             field[field<1e-9] = 0.
 
 
-def surge(self, data, x, y, z, amount):
-    drift = self.pulse_drift(x)*amount
+def surge(self, data, x, y, z, amount, drift=None):
+    drift = self.pulse_drift(x)*amount if drift is None else drift
     if not np.any(drift):
         return x,y,z
     x,y,z = x.copy(),y.copy(),z.copy()

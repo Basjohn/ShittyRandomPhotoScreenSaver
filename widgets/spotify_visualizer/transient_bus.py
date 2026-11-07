@@ -93,10 +93,15 @@ def _smoothstep(edge0: float, edge1: float, value: float) -> float:
     return t * t * (3.0 - 2.0 * t)
 
 
+def audible(loudness: float) -> float:
+    """0..1 on the absolute scale only: 0 in near-silence, 1 for any music (MUSICAL_QUIET). Never relative to the
+    track: Waveform Ribbon gates its body and kicks with it (no presence ratio, operator 7 Nov)."""
+    return _smoothstep(MUSICAL_QUIET[0], MUSICAL_QUIET[1], loudness)
+
+
 def musical_weight(loudness: float, presence: float) -> float:
     """0..1: how much an onset at ``loudness`` and ``presence`` (``MusicalOnset``) counts at all."""
-    return (_smoothstep(MUSICAL_QUIET[0], MUSICAL_QUIET[1], loudness)
-            * _smoothstep(MUSICAL_PRESENCE[0], MUSICAL_PRESENCE[1], presence))
+    return audible(loudness) * _smoothstep(MUSICAL_PRESENCE[0], MUSICAL_PRESENCE[1], presence)
 
 
 def musical_emphasis(loudness: float) -> float:

@@ -29,7 +29,10 @@ def contrast(series, period=3.):
 
 
 def test_a_soft_passage_swells_and_releases_within_its_phrases():
-    held, breathing = contrast(phrases(0., .35)), contrast(phrases(1., .35))
+    """Breathing is a faster release in soft passages (its former widening about a learned 3 s mean was removed 7 Nov:
+    memoryless). The body already lets go within the authored Decay, so 3 s phrases release fully either way; Breathing
+    shows the short dips (half-second gaps between phrases) that Decay alone fills in."""
+    held, breathing = contrast(phrases(0., .35, period=1.5), 1.5), contrast(phrases(1., .35, period=1.5), 1.5)
     assert breathing >= 1.3*held, (breathing, held)
 
 

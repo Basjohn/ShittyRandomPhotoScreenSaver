@@ -23,6 +23,10 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# Fixed pre-FFT gain of the raw musical-signal path (see compute_bars_from_samples).
+RAW_SIGNAL_INPUT_GAIN = 2.8
+
+
 def _should_emit_bars_snapshot(worker: "SpotifyVisualizerAudioWorker", now: float) -> bool:
     """Return True when the periodic BARS snapshot should actually be emitted."""
     if not is_viz_diagnostics_enabled() or not logger.isEnabledFor(logging.INFO):
@@ -1063,7 +1067,14 @@ def compute_bars_from_samples(
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             peak_raw = 0.0
 
-        if 0.05 <= peak_raw <= 5.0:
+        if worker._raw_musical_signals:
+            # Raw musical signals (Waveform Ribbon) read every lane on a FIXED scale, so the block is never normalised to
+            # its own peak: a peak normaliser turns a louder, peakier passage down against a softer one (operator, 7 Nov:
+            # "Adaptivity is the enemy"). The fixed gain is the one the normaliser always landed on in real playback (block
+            # peaks .14-.30 on eight recordings: 1.6/peak clamped at 2.8), so every calibrated raw anchor is unchanged;
+            # louder playback is no longer squashed, and near-silence no longer steps by 2.8x at a .05 peak.
+            mono = mono * RAW_SIGNAL_INPUT_GAIN
+        elif 0.05 <= peak_raw <= 5.0:
             try:
                 target_peak = 1.6
                 gain = target_peak / max(peak_raw, 1e-6)

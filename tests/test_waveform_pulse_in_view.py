@@ -38,7 +38,9 @@ def beating(model, seconds=12., every=.5, sample=None):
 def test_a_head_to_tail_swell_is_visible_inside_the_framed_view():
     seen, unseen = np.median(beating(model_for())), np.median(beating(model_for(span=None)))
     assert seen >= .5, seen          # a beat's swell reaches the view at strength (Centre Out's in-view level ~1)
-    assert unseen < .25*seen, unseen  # negative control: born at PULSE_ORIGIN it arrives faded
+    # Negative control: born at PULSE_ORIGIN it arrives faded. (Pulse Count caps the pulses on their way in, so the
+    # release between launches strengthens fewer, stronger bands: about two thirds of the seen swell, never as much.)
+    assert unseen < .7*seen, unseen
 
 
 def test_the_swell_is_born_beyond_the_view_and_slides_in_formed():
@@ -63,9 +65,11 @@ def test_tail_to_head_is_born_at_the_other_edge():
     assert SPAN[0]-20. < x < SPAN[0], x
 
 
-def test_centre_out_and_the_other_modes_ignore_the_span_byte_for_byte():
-    for direction, mode in (('Centre Out', 'Travelling Pulse'), ('Head To Tail', 'Group Wave'),
-                            ('Tail To Head', 'Frozen Past'), ('Head To Tail', 'Whole Swell')):
+def test_the_modes_without_bands_ignore_the_span_byte_for_byte():
+    """Travelling Pulse and Frozen Past read the span: their edge bands enter from the edge the camera sees, and a pulse
+    that has left the view frees its place under Pulse Count (Centre Out included). The other modes never read it."""
+    for direction, mode in (('Centre Out', 'Group Wave'), ('Head To Tail', 'Group Wave'),
+                            ('Head To Tail', 'Whole Swell')):
         payload = lambda m, s: s.packet.payload + s.pulse
         with_span = beating(model_for(direction, mode), seconds=6., sample=payload)
         without = beating(model_for(direction, mode, span=None), seconds=6., sample=payload)
