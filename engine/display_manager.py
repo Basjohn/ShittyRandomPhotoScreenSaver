@@ -149,6 +149,24 @@ def _visualizer_host_binding(manager: Any) -> "VisualizerHostBinding":
         live._quick_scene_view_gesture = None
         live._quick_view_pose_owner = None
 
+    # Input admissions live on a scene controller: a late click after the
+    # manager is gone is ignored, never raised into Qt's event handler.
+    def _cycle_mode() -> None:
+        live = manager_ref()
+        if live is not None:
+            live._cycle_quick_visualizer_mode()
+
+    def _cycle_preset() -> None:
+        live = manager_ref()
+        if live is not None:
+            live._cycle_quick_visualizer_preset()
+
+    def _volume_step(direction: int) -> bool:
+        live = manager_ref()
+        return False if live is None else bool(
+            live._request_quick_app_volume_step_from_visualizer(direction)
+        )
+
     return VisualizerHostBinding(VisualizerHostServices(
         admitted_owner=lambda: _live()._quick_visualizer_owner,
         admitted_unit=lambda: _live()._quick_visualizer_unit,
@@ -175,9 +193,9 @@ def _visualizer_host_binding(manager: Any) -> "VisualizerHostBinding":
         disconnect_media=lambda: _live()._disconnect_quick_visualizer_media_route(),
         publish_view_orbit_admission=lambda: _live()._publish_quick_view_orbit_admission(),
         release_view_state=_release_view_state,
-        install_input_admissions=lambda unit, owner: (
-            _live()._install_quick_visualizer_input_admissions(unit, owner)
-        ),
+        cycle_mode=_cycle_mode,
+        cycle_preset=_cycle_preset,
+        volume_step=_volume_step,
         refresh_context_menus=lambda: _live()._refresh_all_quick_context_menus(),
         refresh_transfer_glyphs=lambda: _live()._refresh_quick_visualizer_transfer_glyphs(),
     ))
@@ -3101,51 +3119,6 @@ class DisplayManager(QObject):
         """
 
         return _visualizer_host_binding(self).construct(chosen)
-
-    def _install_quick_visualizer_input_admissions(
-        self,
-        chosen: QuickDisplayUnit,
-        owner: Any,
-    ) -> None:
-        """Wire the admitted owner's double-click, middle-click and wheel input."""
-
-        from rendering.quick.visualizer.double_click_admission import (
-            QuickVisualizerDoubleClickAdmission,
-        )
-        from rendering.quick.visualizer.middle_click_admission import (
-            QuickVisualizerMiddleClickAdmission,
-        )
-
-        def _visualizer_region_contains(
-            scene_position: Any,
-            admitted: Any = owner,
-        ) -> bool:
-            return bool(
-                admitted.presentation_runtime.scene_controller
-                .visualizer_contains_scene_position(scene_position)
-            )
-
-        chosen.runtime.scene_controller.set_visualizer_double_click_admission(
-            QuickVisualizerDoubleClickAdmission(
-                region_contains=_visualizer_region_contains,
-                is_active=lambda admitted=owner: (
-                    admitted.is_started and not admitted.is_retired
-                ),
-                cycle_mode=self._cycle_quick_visualizer_mode,
-            )
-        )
-        chosen.runtime.scene_controller.set_visualizer_middle_click_admission(
-            QuickVisualizerMiddleClickAdmission(
-                region_contains=_visualizer_region_contains,
-                is_active=lambda admitted=owner: (
-                    admitted.is_started and not admitted.is_retired
-                ),
-                cycle_preset=self._cycle_quick_visualizer_preset,
-            )
-        )
-        chosen.runtime.scene_controller.set_visualizer_volume_wheel_handler(
-            self._request_quick_app_volume_step_from_visualizer
-        )
 
     def _request_quick_app_volume_step_from_visualizer(self, direction: int) -> bool:
         """Route Visualizer wheel input through an already-admitted Media owner.

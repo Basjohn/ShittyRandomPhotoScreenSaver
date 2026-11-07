@@ -69,7 +69,10 @@ class VisualizerHostServices:
     disconnect_media: Callable[[], None]
     publish_view_orbit_admission: Callable[[], None]
     release_view_state: Callable[[], None]
-    install_input_admissions: Callable[[Any, Any], None]
+    # Input consequences the caller routes (mode/preset requests, Media volume).
+    cycle_mode: Callable[[], None]
+    cycle_preset: Callable[[], None]
+    volume_step: Callable[[int], bool]
     refresh_context_menus: Callable[[], None]
     refresh_transfer_glyphs: Callable[[], None]
 
@@ -118,6 +121,56 @@ def resolve_visualizer_card_shadow_kwargs(
             shadow.direction, shadow.frame_extra_offset
         ),
     }
+
+
+def install_visualizer_input_admissions(
+    unit: Any,
+    owner: Any,
+    services: VisualizerHostServices,
+) -> None:
+    """Admit double-click (next mode), middle-click (next preset) and wheel (volume).
+
+    The admissions travel with the retained scene on a cross-display transfer
+    (``VisualizerSceneTransfer``). In-card controls consume their own presses
+    before any of these see them (``QuickDisplayWindow``).
+    """
+
+    from rendering.quick.visualizer.double_click_admission import (
+        QuickVisualizerDoubleClickAdmission,
+    )
+    from rendering.quick.visualizer.middle_click_admission import (
+        QuickVisualizerMiddleClickAdmission,
+    )
+
+    def _visualizer_region_contains(
+        scene_position: Any,
+        admitted: Any = owner,
+    ) -> bool:
+        return bool(
+            admitted.presentation_runtime.scene_controller
+            .visualizer_contains_scene_position(scene_position)
+        )
+
+    scene = unit.runtime.scene_controller
+    scene.set_visualizer_double_click_admission(
+        QuickVisualizerDoubleClickAdmission(
+            region_contains=_visualizer_region_contains,
+            is_active=lambda admitted=owner: (
+                admitted.is_started and not admitted.is_retired
+            ),
+            cycle_mode=services.cycle_mode,
+        )
+    )
+    scene.set_visualizer_middle_click_admission(
+        QuickVisualizerMiddleClickAdmission(
+            region_contains=_visualizer_region_contains,
+            is_active=lambda admitted=owner: (
+                admitted.is_started and not admitted.is_retired
+            ),
+            cycle_preset=services.cycle_preset,
+        )
+    )
+    scene.set_visualizer_volume_wheel_handler(services.volume_step)
 
 
 def clear_visualizer_input_admissions(unit: Any) -> None:
@@ -435,7 +488,7 @@ class VisualizerHostBinding:
                 services.bind_media(media_model)
             chosen.attach_visualizer_owner(owner)
             self.install_authored_layout(chosen, owner, install_observer=True)
-            services.install_input_admissions(chosen, owner)
+            install_visualizer_input_admissions(chosen, owner, services)
             services.refresh_context_menus()
         except Exception:
             services.set_construct_outcome(
@@ -666,5 +719,6 @@ __all__ = [
     "VisualizerHostBinding",
     "VisualizerHostServices",
     "clear_visualizer_input_admissions",
+    "install_visualizer_input_admissions",
     "resolve_visualizer_card_shadow_kwargs",
 ]

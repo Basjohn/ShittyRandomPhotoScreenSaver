@@ -169,7 +169,7 @@ class _Caller:
         self.unit = None
         self.retired = False
         self.outcomes: list[tuple] = []
-        self.admission_installs: list[tuple] = []
+        self.input_calls: list = []
         self.widgets = {
             "family_activation": {"media": True, "visualizers": True},
             "media": {"enabled": True, "position": "Top Left", "monitor": "1"},
@@ -183,10 +183,6 @@ class _Caller:
 
         def _record(owner, unit) -> None:
             self.owner, self.unit = owner, unit
-
-        def _install(unit, owner) -> None:
-            self.admission_installs.append((unit, owner))
-            unit.runtime.scene_controller.set_visualizer_double_click_admission(("double", owner))
 
         return VisualizerHostServices(
             admitted_owner=lambda: self.owner,
@@ -210,7 +206,9 @@ class _Caller:
             disconnect_media=lambda: None,
             publish_view_orbit_admission=lambda: None,
             release_view_state=lambda: None,
-            install_input_admissions=_install,
+            cycle_mode=lambda: self.input_calls.append("cycle_mode"),
+            cycle_preset=lambda: self.input_calls.append("cycle_preset"),
+            volume_step=lambda direction: self.input_calls.append(("volume", direction)) or True,
             refresh_context_menus=lambda: None,
             refresh_transfer_glyphs=lambda: None,
         )
@@ -247,7 +245,6 @@ def test_one_owner_across_construct_transfer_retire_onto_a_stub_second_host(cons
     (owner,) = constructed
     assert (caller.owner, caller.unit) == (owner, display)
     assert display.visualizer_owner is owner
-    assert caller.admission_installs == [(display, owner)]
 
     # A second construction anywhere is rejected at the binding and builds nothing.
     assert binding.construct(second_host) is False
@@ -276,6 +273,25 @@ def test_one_owner_across_construct_transfer_retire_onto_a_stub_second_host(cons
     assert binding.construct(second_host) is True
     assert len(constructed) == 2
     assert sum(not candidate.is_retired for candidate in constructed) == 1
+
+
+def test_the_binding_admits_card_input_and_clears_it_on_route_release(constructed) -> None:
+    from widgets.spotify_visualizer.visualizer_host_binding import VisualizerHostBinding
+
+    host = _StubHost(3)
+    caller = _Caller([host])
+    binding = VisualizerHostBinding(caller.services())
+    assert binding.construct(host) is True
+    scene = host.runtime.scene_controller
+
+    assert scene.double_click.handles_semantic_double_click_at(object()) is True
+    assert scene.middle_click.handles_semantic_middle_click_at(object()) is True
+    assert scene.volume_wheel(-1) is True
+    assert caller.input_calls == ["cycle_mode", "cycle_preset", ("volume", -1)]
+
+    assert binding.release_routes(host) is True
+    assert (scene.double_click, scene.middle_click, scene.volume_wheel) == (None, None, None)
+    assert (caller.owner, caller.unit) == (None, None)
 
 
 def test_a_failed_transfer_leaves_the_owner_on_its_host(constructed) -> None:
