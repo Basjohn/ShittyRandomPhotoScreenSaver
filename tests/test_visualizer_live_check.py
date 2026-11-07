@@ -34,13 +34,14 @@ def test_observation_reads_the_applied_worker_instead_of_requested_settings(qt_a
     engine=configured()
     try:
         engine.set_input_gain(.37)
-        engine.set_floor_config(False,.12)
         engine._audio_worker.set_audio_block_size(256)
         actual=waveform_worker_configuration(engine)
         assert actual['waveform_ribbon_input_gain']==.37
-        assert actual['waveform_ribbon_dynamic_floor'] is False
-        assert actual['waveform_ribbon_manual_floor']==.12
         assert actual['waveform_ribbon_audio_block_size']==256
+        # Only the analysis settings Waveform owns are reported (its sensitivity and floor ones are retired).
+        from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+        owned=set(get_owned_mode_setting_keys('waveform_ribbon','technical').values())
+        assert set(actual)-{'waveform_ribbon_raw_musical_signals'}==owned
     finally:engine.force_stop()
 
 

@@ -13,7 +13,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "waveform_ribbon_adaptive_sensitivity": true,
         "waveform_ribbon_attack": 0.045,
         "waveform_ribbon_breathing": 0.7,
         "waveform_ribbon_kick_accent": 0.7,
@@ -64,7 +63,6 @@
           0.15,
           1.8
         ],
-        "waveform_ribbon_dynamic_floor": false,
         "waveform_ribbon_elastic_frequency": 0.85,
         "waveform_ribbon_exposure": 0.9,
         "waveform_ribbon_floor_brightness": [
@@ -109,7 +107,6 @@
           0.6,
           1.4
         ],
-        "waveform_ribbon_manual_floor": 0.12,
         "waveform_ribbon_material_body_alpha": [
           0.025,
           0.06
@@ -767,7 +764,6 @@
             ]
           ]
         },
-        "waveform_ribbon_sensitivity": 0.4,
         "waveform_ribbon_spark_drift": [
           1.0,
           2.2

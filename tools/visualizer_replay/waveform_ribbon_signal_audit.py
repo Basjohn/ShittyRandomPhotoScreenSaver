@@ -39,7 +39,11 @@ def audit(args):
                 controller=VisualizerRuntimeController(runtime_generation=0,initial_mode='waveform_ribbon',engine_factory=lambda _:engine)
                 controller.engine=engine
                 _configure(controller,'waveform_ribbon',args.preset-1,
-                           overrides={'waveform_ribbon_dynamic_floor':dynamic,'waveform_ribbon_audio_block_size':args.block})
+                           overrides={'waveform_ribbon_audio_block_size':args.block})
+                # Waveform owns no floor setting (retired 8 Nov: nothing it reads sits behind the floor); the A/B
+                # moves the shared worker's floor directly, which its raw lanes must ignore.
+                worker=engine._audio_worker
+                engine.set_floor_config(dynamic,worker._manual_floor)
                 reanalysis=PcmReanalysis()
                 try:
                     for feature in frames:

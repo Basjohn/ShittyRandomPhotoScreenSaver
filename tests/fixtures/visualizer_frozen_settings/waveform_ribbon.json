@@ -5609,7 +5609,6 @@
  "transient_clamp": 1.5,
  "transient_pulse_gain": 1.0,
  "visualizers_enabled": true,
- "waveform_ribbon_adaptive_sensitivity": true,
  "waveform_ribbon_attack": 0.045,
  "waveform_ribbon_audio_block_size": 256,
  "waveform_ribbon_auto_rotate": false,
@@ -5642,7 +5641,6 @@
   0.2,
   2.0
  ],
- "waveform_ribbon_dynamic_floor": false,
  "waveform_ribbon_dynamic_zoom": false,
  "waveform_ribbon_elastic_frequency": 0.85,
  "waveform_ribbon_exposure": 1.0,
@@ -5727,7 +5725,6 @@
   0.55,
   1.3
  ],
- "waveform_ribbon_manual_floor": 0.12,
  "waveform_ribbon_material_body_alpha": [
   0.025,
   0.025
@@ -6401,7 +6398,6 @@
  "waveform_ribbon_scene_pan_x": 0.0,
  "waveform_ribbon_scene_pan_y": 0.0,
  "waveform_ribbon_scene_scale": 1.0,
- "waveform_ribbon_sensitivity": 0.4,
  "waveform_ribbon_spark_count": [
   0.0,
   64.0

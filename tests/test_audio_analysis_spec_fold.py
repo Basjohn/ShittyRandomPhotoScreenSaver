@@ -61,10 +61,11 @@ def _wild(mode):
     """Test-owned values a stored profile or imported SST could hold: far above any bar count, a floor a tenth of
     the canonical one, a gain far above unity. Derived from the canonical defaults only."""
     default = lambda suffix: require_canonical_default(f"widgets.spotify_visualizer.{mode}_{suffix}")  # noqa: E731
-    wanted = {"bar_count": int(default("bar_count")) * 20,
-              "manual_floor": float(default("manual_floor")) / 10.0,
-              "input_gain": float(default("input_gain")) * 7.0}
-    return {f"{mode}_{suffix}": value for suffix, value in wanted.items() if _offered(mode, suffix)}
+    # Lazily: a mode that owns no floor (Waveform) has no canonical floor default to derive from.
+    wanted = {"bar_count": lambda: int(default("bar_count")) * 20,
+              "manual_floor": lambda: float(default("manual_floor")) / 10.0,
+              "input_gain": lambda: float(default("input_gain")) * 7.0}
+    return {f"{mode}_{suffix}": value() for suffix, value in wanted.items() if _offered(mode, suffix)}
 
 
 @pytest.fixture

@@ -808,6 +808,10 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   workers' frames move on `ProductionLaneEngine` and stay bit-identical on the old recorded lanes (negative control),
   the engine-answer workers equal the production replay on re-analysed lanes, and a bridge edit re-analyses the
   selected clip and moves the frame on screen (without re-analysis it does not);
+- `tests/test_waveform_analysis_ownership.py` — Waveform owns no sensitivity or floor setting (retired 8 Nov): on
+  re-analysed PCM the shared worker's sensitivity and floor leave its frame bit-identical while the post-floor lanes
+  move (control) and Input Gain moves the frame (control); no owner offers, stores or authors them, and saved profiles
+  and imported presets drop them while keeping Input Gain;
 - `tests/test_waveform_studio_framing.py` — the Studio opens on the live card's world (Fill), measured as production
   measures it;
 - `tests/test_waveform_studio_editors.py`, `tests/test_waveform_studio_theme.py` — direct editors, handles, tiles,
