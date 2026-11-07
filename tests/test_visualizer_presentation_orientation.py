@@ -163,6 +163,7 @@ def test_per_mode_rotation_roundtrip_stays_on_existing_custom_layout_owner() -> 
     assert "content_rotation_by_mode=item.current_size_payload.get(" in custom_owner
     assert "CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY" in scene
     assert "resolve_content_rotation_for_mode" in scene
+    binding = (root / "widgets/spotify_visualizer/visualizer_host_binding.py").read_text(encoding="utf-8")
     assert "CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY" in display
-    assert "content_rotation_by_mode=custom_entry.size_payload.get(" in display
+    assert "content_rotation_by_mode=custom_entry.size_payload.get(" in binding
     assert "commit_content_rotation_map(content_rotation_by_mode)" in quick_owner
