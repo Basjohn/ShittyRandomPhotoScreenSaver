@@ -237,8 +237,8 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - **Waveform P4, plain live check, 9 round trips:** main +22.4 MB RSS / +23.0 MB private a round trip; fix +6.3 /
     +6.9. Spectrum P1 (census): main +19.1 / +22.7; fix +6.5 / +9.1. No barrier timeouts; every reveal re-froze.
   - **Not flat yet: a smaller native residual remains, open.** Against no-round-trip controls of the same build
-    (Waveform +1.8 MB RSS a minute, ~3.8 on its steady stretch; Spectrum +0.3), round trips every 60 s still add
-    ~2–4 MB RSS each on Waveform and ~3.5–6 on Spectrum. The memory map puts it in the default native heap (+5–6 MB
+    (Waveform +1.8 MB RSS a minute, ~3.8 on its steady stretch, main +2.6; Spectrum +0.3), round trips every 60 s
+    still add ~2.5–4.5 MB RSS each on Waveform and ~3.5–6 on Spectrum (main: ~19–20). The memory map puts it in the default native heap (+5–6 MB
     a round trip on both modes, before and after the fix); it is not Python (tracemalloc ~1 MB a round, mostly the
     harness and the probe), not retired wrappers (none survive but one dialog placeholder), not the Settings dialog
     (built and retired 12 times in isolation: +0.1–0.25 MB each), not the QML engine and its components
@@ -386,7 +386,8 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   (fix branch, `wf_p4_no_roundtrip_fix`; ~3.8 MB a minute on the steady stretch between image steps). tracemalloc
   puts the Python share at ~1 MB a minute, mostly the harness's own per-frame lists (`tools/eb_live_phases.py`
   `_frames`, `_waveform_signals`, unbounded for the run) and the probe; the rest is native heap, unattributed. It
-  bounds any round-trip slope from a 60 s schedule. Next: the same run on main and overnight (R-97 method). The
+  bounds any round-trip slope from a 60 s schedule. Main does the same (`wf_p4_no_roundtrip_main`: +2.6 MB RSS a
+  minute; branch +1.8). Next: overnight, R-97 method. The
   Spectrum P1 control (`sp_p1_no_roundtrip_fix`) kept RSS flat (+0.3 MB a minute) but private bytes jumped +476 MB
   at ~7 min, non-resident, and fell by 216 MB two minutes later: committed-not-touched memory, R-97/R-99 territory.
 - **One `QWidget` wrapper of every Settings dialog outlives it:** the initial tab's placeholder
