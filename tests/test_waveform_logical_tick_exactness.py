@@ -22,11 +22,13 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
+import core.ribbon_bursts as bursts
 from core.ribbon_packet import KNOT_ROWS
 from core.ribbon_style import RibbonMaterial, _MATERIAL_FIELDS
 import core.waveform_ribbon_dynamics as dyn
 from core.waveform_ribbon_dynamics import WaveformDynamics
 from tests import _waveform_reference_forms as reference
+from tests import _waveform_reference_forms_cut2 as reference_cut2
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
 from widgets.spotify_visualizer.waveform_ribbon_parameters import CompiledWaveformSettings
 
@@ -93,12 +95,112 @@ _REFERENCE = ((WaveformDynamics, '_advance_springs', reference.advance_springs),
               (dyn, 'uniform_gradient', lambda field, spacing: np.gradient(field, spacing)))
 
 
+# The second cut (7 Nov, main cba6ee54): the snapshot's per-packet terms, card crest and HSV columns, exact remainders
+# and flat-index surge gathers; the spark emitter's cloth evaluation; the drive routing's clamped sources. The snapshot's
+# reference form has no packet terms, so it always runs with the surge's reference form.
+_REFERENCE_CUT2 = ((WaveformDynamics, 'snapshot', reference_cut2.snapshot),
+                   (WaveformDynamics, '_surge', reference.surge),
+                   (bursts, 'cloth_values', reference_cut2.cloth_values),
+                   (dyn, 'clamp_sources', lambda sources: sources),
+                   (dyn, 'route_clamped', reference_cut2.route))
+
+
 @pytest.mark.parametrize('case', sorted(_CASES))
 def test_every_published_frame_is_byte_identical_to_the_straightforward_forms(case):
     production = _published(case)
     with _with(_REFERENCE):
         straightforward = _published(case)
     assert production == straightforward
+    with _with(_REFERENCE_CUT2):
+        assert _published(case) == production
+
+
+def _crest_fp64(self, cards, n):
+    """Negative control: the card crest against float64 heights (NumPy would have cast them to the carrier's float32)."""
+    magnitude = np.abs(self.carrier[:n])
+    crest = np.clip(magnitude/np.asarray([max(1.5*card['height'], 1e-5) for card in cards])[:, None], 0., 1.)
+    return crest, .25+.75*crest
+
+
+def test_the_digest_sees_a_float64_crest_slip():
+    production = _published('travelling_edge')
+    with _with(((dyn._PacketTerms, 'crest', _crest_fp64),)):
+        assert _published('travelling_edge') != production
+
+
+def _float32_band(centre, count=50_000):
+    """Every float32 within ``count`` steps of ``centre`` on its side of zero (zero itself included)."""
+    bits = np.int32(np.float32(centre).view(np.int32))
+    band = np.arange(max(int(bits)-count, 0 if centre >= 0 else int(np.float32(-0.).view(np.int32))),
+                     int(bits)+count+1, dtype=np.int64).astype(np.int32)
+    return band.view(np.float32)
+
+
+def test_the_colour_remainders_are_numpys_remainder_bit_for_bit():
+    rng = np.random.default_rng(3)
+    edges = [0., -0., .5, -.5, 1., -1., 2., -2., 1e-30, -1e-30, 1e30, -1e30, np.inf, -np.inf, np.nan]
+    for dtype in (np.float32, np.float64):
+        for scale in (1e-6, .5, 1., 3., 1e7):
+            values = np.concatenate([(rng.standard_normal(200_000)*scale).astype(dtype), np.asarray(edges, dtype)])
+            with np.errstate(invalid='ignore'):
+                expected, produced = np.remainder(values, 1.), dyn.unit_remainder(values.copy())
+            finite = np.isfinite(values)
+            assert produced.dtype == expected.dtype
+            assert produced[finite].tobytes() == expected[finite].tobytes()
+            assert np.isnan(produced[~finite]).all() and np.isnan(expected[~finite]).all()
+    for centre in (0., -0., .5, -.5, 1., -1., 2., -2.):
+        values = _float32_band(centre)
+        assert dyn.unit_remainder(values.copy()).tobytes() == np.remainder(values, 1.).tobytes()
+    # The HSV sector: every element in [0, 12).
+    for dtype in (np.float32, np.float64):
+        values = (rng.random(400_000)*12.).astype(dtype)
+        values = np.concatenate([values[values < 12.], np.asarray([0., 1., 6., 11.], dtype),
+                                 np.nextafter(np.asarray([6., 6., 12.], dtype), np.asarray([0., 12., 0.], dtype))])
+        assert dyn.sector_remainder(values.copy()).tobytes() == np.remainder(values, 6.).tobytes()
+    for centre in (0., 1., 6.):
+        values = _float32_band(centre)
+        assert dyn.sector_remainder(values.copy()).tobytes() == np.remainder(values, 6.).tobytes()
+    below_twelve = _float32_band(np.nextafter(np.float32(12.), np.float32(0.)))
+    below_twelve = below_twelve[below_twelve < 12.]
+    assert dyn.sector_remainder(below_twelve.copy()).tobytes() == np.remainder(below_twelve, 6.).tobytes()
+
+
+def test_routing_from_clamped_sources_is_the_straightforward_routing():
+    from core.waveform_ribbon_authoring import clamp_sources, route, route_clamped
+    rng = random.Random(11)
+    for _ in range(20_000):
+        row = [[rng.uniform(0., 2.), rng.uniform(.25, 4.)] for _ in range(6)]
+        sources = [rng.choice((rng.uniform(-.5, 1.5), 0., 1., -0., rng.uniform(0., 1e-6))) for _ in range(6)]
+        passage = rng.uniform(.35, 1.)
+        expected = reference_cut2.route(row, sources, passage=passage)
+        assert repr(route_clamped(row, clamp_sources(sources), passage=passage)) == repr(expected)
+        assert repr(route(row, sources, passage=passage)) == repr(expected)
+
+
+def test_the_camera_admission_memo_admits_what_a_fresh_admission_admits():
+    from core.settings.framed_camera import admit_camera_parameters, spec_for_mode
+    from widgets.spotify_visualizer.view_orbit import CameraAdmissionMemo, _camera_values
+    spec = spec_for_mode('waveform_ribbon')
+    turn, pan, position = spec.key('turn'), spec.key('scene_pan_x'), spec.key('camera_position')
+    base = _camera_values(SimpleNamespace(), spec)   # every camera input at its canonical value
+    base[position] = tuple(base[position])
+    memo = CameraAdmissionMemo()
+    # (values, whether it repeats the previous inputs strictly, so the memo must hand back the very same offset)
+    sequence = [(base, False), (dict(base), True), ({**base, turn: .25}, False), ({**base, turn: .25}, True),
+                ({**base, pan: .5}, False), ({**base, pan: .5}, True), ({**base, pan: 0.}, False),
+                ({**base, pan: -0.}, False), ({**base, position: list(base[position])}, False),
+                ({**base, position: list(base[position])}, False), ({**base, position: (9., 9., 9.)}, False),
+                (dict(base), False)]
+    previous = None
+    for values, repeat in sequence:
+        admitted = memo.admit(spec, values)
+        assert admitted == admit_camera_parameters(spec, values)
+        if repeat:
+            assert admitted is previous   # an unchanged camera is not solved again
+        previous = admitted
+    with pytest.raises((TypeError, ValueError, KeyError)):
+        memo.admit(spec, {key: value for key, value in base.items() if key != turn})
+    assert memo.admit(spec, base) == admit_camera_parameters(spec, base)
 
 
 def _fade_ribbons_fp64(self, data, rows):

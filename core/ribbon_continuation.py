@@ -119,13 +119,16 @@ def cloth_values(knots, xs, phase=None):
     axial=controls[:,:,0,0]
     u=np.clip((xs-axial[:,1])/(axial[:,2]-axial[:,1]),0,1)
     def weights(u):
-        return np.stack(((1-u)**3,3*u**3-6*u*u+4,-3*u**3+3*u*u+3*u+1,u**3),1)/6
+        cube=u**3   # u**3 once (it was evaluated three times; the same values)
+        return np.stack(((1-u)**3,3*cube-6*u*u+4,-3*cube+3*u*u+3*u+1,cube),1)/6
     for _ in range(5):
         dw=np.stack((-3*(1-u)**2,9*u*u-12*u,-9*u*u+6*u+3,3*u*u),1)/6
         u=np.clip(u-((weights(u)*axial).sum(1)-xs)/(dw*axial).sum(1),0,1)
     result=(weights(u)[:,:,None]*values).sum(1)
     for before,mask in ((True,xs<knots[0,0,0]),(False,xs>knots[-1,0,0])):
-        result[mask]=continued_values(knots,xs[mask],before)
+        # Only a side with points beyond the history is continued (an empty side used to evaluate the whole
+        # endpoint jet for nothing: always so inside the anchors, the anchored call's common case).
+        if mask.any():result[mask]=continued_values(knots,xs[mask],before)
     return result
 
 

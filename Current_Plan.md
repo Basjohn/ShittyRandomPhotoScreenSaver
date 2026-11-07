@@ -139,6 +139,19 @@ holding their press, the Unsaved Preset Changes prompt, R-172/R-173 teardown ord
 "uncopyable WindowsPath" start failure (fab141f0), and the post-close repaint remedy (4e423fe6; open until a field
 log confirms, §9). Card surfaces, the style pass and the 15 material themes are merged; their open items are in §4.
 
+- [ ] **Side findings of the Waveform second tick cut (7 Nov, not fixed there):**
+  - `capture_visualizer_logical_frame` refreezes the common style (`freeze_render_fields(_common_style(widget))`,
+    logical_frame_capture.py) on every tick of every mode, ~0.02-0.04 ms; a FrozenFieldsMemo would remove it.
+  - The logical-tick capture reads every Waveform control (~150 getattr) and compares the whole configuration dict
+    every tick (~0.07 ms together); a settings-change token would make the no-change tick free.
+  - overhead_baseline on main cba6ee54 counts gl 182 / py 7010 per Waveform preview frame against the 4bb2b775
+    baseline's 180 / 6987: an unattributed per-frame rise on main between those commits.
+  - 11 of the 19 recordings in `logs/visualizer_recordings` lack native capture history, so the Waveform tick (PCM
+    reanalysis) cannot replay them; identity proofs cover the other 8.
+  - The Studio's step-state copy refuses NumPy dtype objects ("uncopyable Float64DType"); a dtype-keyed cache in a
+    logical owner fails every Waveform Studio. Caught by `tests/test_waveform_studio_evaluator.py` and avoided in
+    the cut (keyed by `dtype.str`); worth a line in the Studio's step-state contract.
+
 **Active or paused (resume each with a message to the same agent, which keeps its context and worktree):**
 - **AC-01 Settings tab registry: merged 7 Nov (23240af9).** Lead audit: its tests, copied onto main, fail there for
   the stated defects (the hidden value holder; technical values missing from the cache; the Gmail job not requeued).
@@ -571,6 +584,26 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
     savings ~0.1-0.2 ms). Every tick above ~16 ms offline, in both builds, is one gen2 GC (86-161 ms, about one per
     5,500 ticks): the remaining live spikes are GC, not Waveform work. Merged 7 Nov after the lead's mutation audit
     (§3). Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/logical_tick/20261107_logical_tick/` in the main checkout (local, git-ignored).
+    **Second tick cut (7 Nov, c43d6340, byte-identical; on its branch for the lead's audit).** Profile (sys.monitoring
+    per-line, P4 replay): snapshot ~0.7 ms (packet-only terms rebuilt every tick, the HSV `%` remainders ~0.08 ms,
+    the surge's broadcast gathers ~0.1 ms), capture ~0.3 ms (scene ~0.1, camera re-admission ~0.05, camera refreeze
+    ~0.04, per-tick validation imports ~0.025), burst admission ~2.3 ms per admitting tick (the emitter's cloth
+    evaluation continued an empty side on every in-anchor call), routing clamped every source per target. Cuts: the
+    packet-only terms and surge windows once per packet (~6 Hz), crest/weight and HSV columns once per card set, exact
+    remainder forms (`unit_remainder`, `sector_remainder`), take/put surge gathers, no empty-side continuation,
+    sources clamped once, a camera-admission memo and FrozenFieldsMemo on the runtime, the frame's imports resolved
+    once. Identity: 24 recorded replays (8 recordings with native capture history x P1/P4/P7, 130,944 frames) match
+    main frame by frame; the other 11 recordings cannot be replayed by the Waveform tick on either tree. Offline
+    (alternated pairs, anything_mixed2): tick median -13..-16% in the cleanest pair (P1 1.70 -> 1.45, P4 1.75 -> 1.48,
+    P7 1.74 -> 1.50 ms; p90 -6..-9%), every pair faster; calls per tick 3,137 -> 2,848. overhead_baseline (preview
+    render path, not the tick): branch = main (gl 182, py 7010). **Live, the tick is not its own cost:** one invisible
+    no-load P4 run (branch, 120 s, other processes' CPU 26%) measured a 7.49 ms tick median (duty/GIL share 0.67,
+    51.7 fps, render-mode 10.9 ms) for a tick that replays offline in ~1.5 ms. About 6 ms of each live tick is spent
+    waiting, most likely for the GIL held by the render/GUI threads' Python (each wait can last a 5 ms switch
+    interval). Next step (measure, not tune): record the logical thread's own CPU time (`time.thread_time`) beside the
+    tick's wall time in the live check, so the wait share is a number; switch-interval tuning stays banned by the
+    Performance Optimization Contract. Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/logical_tick/20261107_tick_cut2/`
+    and `.artifacts/evidence/visualizers/waveform_ribbon/live_check/20261107_tick_cut2_p4_noload/` (main checkout).
 - [~] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
   in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's

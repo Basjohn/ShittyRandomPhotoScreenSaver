@@ -3,7 +3,7 @@ from core.settings.visualizer_mode_settings import require_mode_settings, contro
 from widgets.spotify_visualizer import config_applier
 from widgets.spotify_visualizer.logical_frame_capture import (
     _mode_frame_runtime_type, _resolve_current_mode_runtime, _base_extras)
-from widgets.spotify_visualizer.render_state import WaveformRibbonFrame, freeze_render_fields
+from widgets.spotify_visualizer.render_state import WaveformRibbonFrame
 from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion, view_camera_operated
 from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
 from core.waveform_ribbon_view import card_span
@@ -48,7 +48,7 @@ def capture_waveform_ribbon(widget,engine,context):
         loudness,presence=engine.get_musical_level()
     # The renderer needs the resolved immutable scene and compact view parameters, not the complete authoring matrix.
     camera={key:values[key] for key in camera_keys}
-    camera=apply_view_orbit_motion(pres,MODE,camera,context.now_ts)
+    camera=apply_view_orbit_motion(pres,MODE,camera,context.now_ts,runtime.camera_admission)
     # Configuration only (as Bubble reads it): the part of the scene axis this card's camera shows, so Travelling
     # Pulse swells are born at its edge (core.waveform_ribbon_dynamics.VIEW_MARGIN). Cached per camera/extent.
     view_span=card_span(camera,controller.presentation_viewport_extent,CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
@@ -62,7 +62,7 @@ def capture_waveform_ribbon(widget,engine,context):
     frame=WaveformRibbonFrame(snapshot.packet,configuration.scene(snapshot),snapshot.time,snapshot.travel,
         snapshot.rotation_angle,snapshot.rotation_speed,snapshot.drives,snapshot.realized,
         ready=snapshot.ready,particles=snapshot.particles,particle_origin=snapshot.particle_origin,
-        particle_serial=snapshot.particle_serial,passage=snapshot.passage,parameters=freeze_render_fields(camera),
+        particle_serial=snapshot.particle_serial,passage=snapshot.passage,parameters=runtime.parameter_fields.freeze(camera),
         strands=snapshot.strands,strand_origin=snapshot.strand_origin,zoom=snapshot.zoom,pulse=snapshot.pulse)
     extra=_base_extras(widget,MODE,engine)
     extra['_quick_mode_changed']=True
