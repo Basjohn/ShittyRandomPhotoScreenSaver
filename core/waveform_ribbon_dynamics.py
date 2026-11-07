@@ -300,13 +300,23 @@ def follower(value, target, dt, attack, release):
 
 def elastic(position, velocity, target, dt, frequency, damping):
     """Exact underdamped step for a constant target; no Euler instability or render-rate solver."""
+    return elastic_step(position, velocity, target, elastic_terms(dt, frequency, damping))
+
+
+def elastic_terms(dt, frequency, damping):
+    """The step's terms that depend only on dt and the spring (shared by every ribbon on that spring this tick)."""
     omega = 2*math.pi*frequency
     wd = omega*math.sqrt(1.-damping*damping)
     decay = math.exp(-damping*omega*dt)
-    sine, cosine = math.sin(wd*dt), math.cos(wd*dt)
+    return omega, wd, decay, math.sin(wd*dt), math.cos(wd*dt), damping*omega
+
+
+def elastic_step(position, velocity, target, terms):
+    """``elastic`` with its ``elastic_terms``: the same operations in the same order."""
+    omega, wd, decay, sine, cosine, dw = terms
     offset = position-target
-    x = target+decay*(offset*cosine+(velocity+damping*omega*offset)*sine/wd)
-    v = decay*(velocity*cosine-(omega*omega*offset+damping*omega*velocity)*sine/wd)
+    x = target+decay*(offset*cosine+(velocity+dw*offset)*sine/wd)
+    v = decay*(velocity*cosine-(omega*omega*offset+dw*velocity)*sine/wd)
     return x,v
 
 
@@ -462,6 +472,7 @@ class WaveformDynamics:
         self._pulse = np.zeros((2,PULSE_GRID.size))  # travelling toward -x, toward +x
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
         self._pulse_pending = 0.
+        self._source_shapes = {}  # (origin, sigma) -> injected Gaussian on PULSE_GRID (see _source_shape)
         self._view_world = None  # (low, high) world x of the scene axis the framed camera shows (capture-supplied)
         self._view_top = None    # world y of the card's top edge above the scene axis (capture-supplied), or None
         self._seen = (None,None)  # cached (key, per-direction seen weights) for the age-once-seen fade
@@ -672,19 +683,7 @@ class WaveformDynamics:
                 self._pulse_births = min(float(MAX_BURST),self._pulse_births+KICK_BIRTHS*share)
         released = self._advance_pulse(dt,hit,energy_shaped)
         self._advance_pulse_births(dt,released)
-        for owner,card in enumerate(c.cards):
-            support = 1. if card['band']=='All' else bands[('Bass','Mids','Highs').index(card['band'])]
-            for index,target in enumerate((self.drive['bend'],self.drive['torsion'],self.drive['depth'])):
-                # A kick is delivered as a short force (IMPULSE_SPREAD), not an instantaneous velocity jump: the same
-                # momentum, but the sway/torsion velocity stays continuous (operator, 5 Nov: the lattice twitched
-                # left and right in every mode on each hit).
-                self._push[owner][index] += support*impulses[index]*c.impulse*self._impulse_scales[index]
-                delivered = self._push[owner][index]*(1.-math.exp(-dt/IMPULSE_SPREAD))
-                self._push[owner][index] -= delivered
-                self.velocity[owner][index] += delivered
-                self.spring[owner][index],self.velocity[owner][index] = elastic(
-                    self.spring[owner][index],self.velocity[owner][index],target*support,dt,
-                    self._elastic_frequencies[index],c.damping)
+        self._advance_springs(dt,bands,impulses)
         target_speed = self._value('rotation') if c.rotation_enabled else 0.
         self.angular_speed = follower(self.angular_speed,target_speed,dt,c.rotation_attack,c.rotation_release)
         roll = self.angular_speed+(math.copysign(KICK_ROLL*self.kick_sense,target_speed) if c.rotation_enabled else 0.)
@@ -732,6 +731,26 @@ class WaveformDynamics:
             self._snapshot = self._direction_faded(self._snapshot,self.direction_share)
         return self._snapshot
 
+    def _advance_springs(self,dt,bands,impulses):
+        """Each ribbon's bend/torsion/depth springs. A kick is delivered as a short force (IMPULSE_SPREAD), not an
+        instantaneous velocity jump: the same momentum, but the sway/torsion velocity stays continuous (operator,
+        5 Nov: the lattice twitched left and right in every mode on each hit). The step's dt-and-spring terms are
+        shared by every ribbon on that spring (elastic_terms; the same operations as ``elastic`` per ribbon)."""
+        c = self.controls
+        springs = tuple(elastic_terms(dt,frequency,c.damping) for frequency in self._elastic_frequencies)
+        spread = 1.-math.exp(-dt/IMPULSE_SPREAD)
+        targets = (self.drive['bend'],self.drive['torsion'],self.drive['depth'])
+        for owner,card in enumerate(c.cards):
+            support = 1. if card['band']=='All' else bands[('Bass','Mids','Highs').index(card['band'])]
+            push,velocity,spring = self._push[owner],self.velocity[owner],self.spring[owner]
+            for index,target in enumerate(targets):
+                push[index] += support*impulses[index]*c.impulse*self._impulse_scales[index]
+                delivered = push[index]*spread
+                push[index] -= delivered
+                velocity[index] += delivered
+                spring[index],velocity[index] = elastic_step(spring[index],velocity[index],target*support,
+                                                             springs[index])
+
     @staticmethod
     def _direction_faded(snapshot,share):
         """Sparks and strands dim with their ribbons through a Travel Direction change (light only; their births,
@@ -771,20 +790,7 @@ class WaveformDynamics:
         if seen is not None:
             decays = tuple(np.exp((-dt/fade)*seen) for fade in fades)  # per direction: ages only once seen
         travelling = p.mode!='Whole Swell'
-        for fields,decay in zip((self._pulse,self._fresh),decays):
-            for index,sign in enumerate((-1.,1.)):
-                field = fields[index]
-                if not field.any() and not (travelling and release):
-                    continue
-                if shift:
-                    field[:] = np.interp(PULSE_GRID-sign*shift,PULSE_GRID,field,left=0.,right=0.)
-                if blur:
-                    field[1:-1] += blur*(field[:-2]-2.*field[1:-1]+field[2:])
-                field *= decay if seen is None else decay[index]
-                for origin,direction in sources:
-                    if travelling and direction==sign and release:
-                        field += release/len(sources)*np.exp(-.5*((PULSE_GRID-origin)/sigma)**2)
-                field[field<1e-9] = 0.  # after injection, so a zero-length step changes nothing
+        self._carry_fields(decays,seen,sources,sigma,shift,blur,release,travelling)
         # Whole Swell: nothing travels; one level rises with the shared release and settles gently.
         settle = min(WHOLE_SETTLE[1],max(WHOLE_SETTLE[0],.25*p.fade))
         self._whole = self._whole*math.exp(-dt/settle)+(0. if travelling else release)
@@ -792,6 +798,39 @@ class WaveformDynamics:
         self._advance_frozen(dt,p.mode=='Frozen Past',self._value('bend'))
         self._publish_fields(dt)
         return release
+
+    def _carry_fields(self,decays,seen,sources,sigma,shift,blur,release,travelling):
+        """Carry, spread and fade both pulse fields (long fade and fresh) in both directions, then inject the
+        release at the sources. The shifted grid is shared by both fields of a direction and each source's Gaussian
+        is reused until its origin or width changes (_source_shape): the same values as recomputing them."""
+        shifted = [None,None]   # PULSE_GRID-sign*shift per direction, shared by both fields
+        for fields,decay in zip((self._pulse,self._fresh),decays):
+            for index,sign in enumerate((-1.,1.)):
+                field = fields[index]
+                if not field.any() and not (travelling and release):
+                    continue
+                if shift:
+                    if shifted[index] is None:
+                        shifted[index] = PULSE_GRID-sign*shift
+                    field[:] = np.interp(shifted[index],PULSE_GRID,field,left=0.,right=0.)
+                if blur:
+                    field[1:-1] += blur*(field[:-2]-2.*field[1:-1]+field[2:])
+                field *= decay if seen is None else decay[index]
+                for origin,direction in sources:
+                    if travelling and direction==sign and release:
+                        field += release/len(sources)*self._source_shape(origin,sigma)
+                field[field<1e-9] = 0.  # after injection, so a zero-length step changes nothing
+
+    def _source_shape(self,origin,sigma):
+        """The injected Gaussian of a source on PULSE_GRID; recomputed only when its origin or width changes."""
+        key = (origin,sigma)
+        shape = self._source_shapes.get(key)
+        if shape is None:
+            if len(self._source_shapes) >= 4:
+                self._source_shapes.clear()
+            shape = self._source_shapes[key] = np.exp(-.5*((PULSE_GRID-origin)/sigma)**2)
+            shape.flags.writeable = False
+        return shape
 
     def _view_sources(self,p):
         """Pulse sources and, when the camera's span is known and Travelling Pulse travels in from an edge, the
@@ -909,7 +948,7 @@ class WaveformDynamics:
                 # Pulse Fade seconds into one bound: the swell sat at PULSE_SATURATION over 67% of the view (median/max
                 # .98), so the whole body inflated at once with the Pulse Strength drive and never let go.
                 wide = PULSE_FRESH_GAIN*broad(self._fresh[index])
-                lead = -sign*sigma_g*np.gradient(wide,PULSE_DX)/(wide+1e-6)
+                lead = -sign*sigma_g*uniform_gradient(wide,PULSE_DX)/(wide+1e-6)
                 weighted = wide*(1.+GROUP_LEAD*np.tanh(lead))
                 total += weighted
                 drift_target += sign*GROUP_SURGE*soft(weighted)
@@ -1022,6 +1061,7 @@ class WaveformDynamics:
             if not moving.any():
                 continue
             rows,xs,ds = rows[moving],xs[moving],ds[moving]
+            line = np.arange(len(rows))[:,None]   # row index for the per-row gathers below
             # The ends never slide: a smooth taper of fixed length (a taper sized from the current drift changed length
             # every tick and jittered the knots near the head; 5 Nov per-tick acceleration probe).
             edge = np.clip(np.minimum(xs-xs[:,:1],xs[:,-1:]-xs)/SURGE_TAPER,0.,1.)
@@ -1040,7 +1080,8 @@ class WaveformDynamics:
             target = xs+ds
             cell = np.stack([np.searchsorted(row,goal) for row,goal in zip(xs,target)])
             cell = np.clip(cell-1,0,count-2)
-            left,right = np.take_along_axis(xs,cell,1),np.take_along_axis(xs,cell+1,1)
+            after = cell+1
+            left,right = xs[line,cell],xs[line,after]
             h = right-left
             t = (target-left)/h
             cube = t**3
@@ -1048,8 +1089,7 @@ class WaveformDynamics:
             # y and z resampled together as one (2, rows, knots) stack: the same element-wise arithmetic in one pass.
             vs = np.stack((y[rows,order],z[rows,order]))
             slope = apply_row_gradient(vs,row_gradient_coefficients(xs))
-            pick = lambda field,at: np.take_along_axis(field,at[None],2)
-            resampled = (h00*pick(vs,cell)+h10*h*pick(slope,cell)+h01*pick(vs,cell+1)+h11*h*pick(slope,cell+1))
+            resampled = (h00*vs[:,line,cell]+h10*h*slope[:,line,cell]+h01*vs[:,line,after]+h11*h*slope[:,line,after])
             y[rows,order],z[rows,order] = resampled[0],resampled[1]
             x[rows,order] = target
         return x,y,z
@@ -1139,6 +1179,24 @@ class WaveformDynamics:
     def _value(self,key):
         low,high = self.controls.ranges[key]
         return low+(high-low)*unit(self.drive[key])
+
+    def _fade_ribbons(self,data,rows):
+        """Each ribbon's header colours and its count/direction fade (light, width, transverse offsets), all ribbons
+        at once: each Python share is cast to the packet's float32 before it multiplies (NumPy's scalar rule), so a
+        float32 column reproduces the former per-ribbon loop exactly."""
+        shares = np.asarray([share*self.direction_share for share in self.count_share],np.float32)
+        cached = getattr(self,'_quiet_header',None)   # the cards' quiet header colours, per card set
+        if cached is None or cached[0] is not self.controls.cards:
+            cached = self._quiet_header = (self.controls.cards,
+                np.asarray([card['quiet'][0] for card in self.controls.cards],np.float32),
+                np.asarray([card['quiet'][1] for card in self.controls.cards],np.float32))
+        data[:,2,:3] = cached[1]
+        data[:,3,:3] = cached[2]
+        rows[:,:,1:3] *= shares[:,None,None]
+        rows[:,:,3] = np.maximum(1e-5,rows[:,:,3]*shares[:,None])
+        data[:,2:4,3] *= shares[:,None]
+        data[:,7::KNOT_ROWS,3] *= shares[:,None]
+        data[:,6::KNOT_ROWS,3] *= shares[:,None]
 
     def snapshot(self):
         if self._snapshot is not None:
@@ -1269,15 +1327,7 @@ class WaveformDynamics:
             tint[:,:,:3] = value[:,:,None]*(1.-saturation[:,:,None]*np.clip(np.minimum(k,4.-k),0.,1.))
             alpha = np.clip(share/.1,0.,1.)
             tint[:,:,3] = alpha*alpha*(3.-2.*alpha)
-        for index,share in enumerate(self.count_share):
-            share = share*self.direction_share
-            data[index,2,:3] = self.controls.cards[index]['quiet'][0]
-            data[index,3,:3] = self.controls.cards[index]['quiet'][1]
-            rows[index,:,1:3] *= share
-            rows[index,:,3] = np.maximum(1e-5,rows[index,:,3]*share)
-            data[index,2:4,3] *= share
-            data[index,7::KNOT_ROWS,3] *= share
-            data[index,6::KNOT_ROWS,3] *= share
+        self._fade_ribbons(data,rows)
         packet = RibbonPacket(data.tobytes(),raw.instances,raw.vertices,(raw.world_origin[0],2.,0.),raw.coordinate_origin)
         self._snapshot = HybridSnapshot(packet,self.time,self.travel,self.angle,self.angular_speed,self.twist_phase,
             tuple(self.drive.items()),tuple(values.items()),self.ready,passage=self.passage,
