@@ -406,6 +406,8 @@ class QuickSceneController(QObject):
     jedi_mode_requested = Signal(str, str)
     hover_edit_glyph_requested = Signal(str, str)
     visualizer_camera_reset_requested = Signal()
+    # Expanded Visualizer glyph (plan 01 M2): True = expand to the display, False = collapse.
+    visualizer_expand_requested = Signal(bool)
     visualizer_preset_step_requested = Signal(int)
     custom_layout_save_requested = Signal()
     # Semantic Edit-only routes.  The native input block remains intact while
@@ -454,6 +456,7 @@ class QuickSceneController(QObject):
         self._visualizer_startup_reveal_opacity = 1.0
         self._visualizer_camera_reset_available = False
         self._visualizer_display_transfer_available = (False, False)
+        self._visualizer_expand_glyph = (False, False)
         self._visualizer_control_hints_available = False
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
@@ -2282,6 +2285,23 @@ class QuickSceneController(QObject):
             self._visualizer_root.setProperty("displayTransferLeftAvailable", value[0])
             self._visualizer_root.setProperty("displayTransferRightAvailable", value[1])
 
+    def set_visualizer_expand_glyph(self, available: bool, expanded: bool) -> None:
+        """Project the Expanded Visualizer glyph (offered, and which direction), including for lazy roots.
+
+        Published by the takeover coordinator at its event edges only; the QML glyph draws and reports presses.
+        """
+        value = bool(available), bool(expanded)
+        if value == self._visualizer_expand_glyph:
+            return
+        self._visualizer_expand_glyph = value
+        if self._visualizer_root is not None:
+            self._visualizer_root.setProperty("expandGlyphAvailable", value[0])
+            self._visualizer_root.setProperty("expandedDisplay", value[1])
+
+    @property
+    def visualizer_expand_glyph(self) -> tuple[bool, bool]:
+        return self._visualizer_expand_glyph
+
     def set_visualizer_control_hints_available(self, available: bool) -> None:
         """Project framed-camera capability at mode admission, including lazy roots."""
         self._visualizer_control_hints_available = bool(available)
@@ -2479,6 +2499,8 @@ class QuickSceneController(QObject):
         root.setProperty("cameraResetAvailable", self._visualizer_camera_reset_available)
         root.setProperty("displayTransferLeftAvailable", self._visualizer_display_transfer_available[0])
         root.setProperty("displayTransferRightAvailable", self._visualizer_display_transfer_available[1])
+        root.setProperty("expandGlyphAvailable", self._visualizer_expand_glyph[0])
+        root.setProperty("expandedDisplay", self._visualizer_expand_glyph[1])
         root.setProperty("controlHintsAvailable", self._visualizer_control_hints_available)
         if self._input_state is not None:
             self._apply_visualizer_input_state(self._input_state)
@@ -2493,6 +2515,9 @@ class QuickSceneController(QObject):
         camera_reset = getattr(root, "cameraResetRequested", None)
         if camera_reset is not None and hasattr(camera_reset, "connect"):
             camera_reset.connect(self.visualizer_camera_reset_requested.emit)
+        expand_glyph = getattr(root, "expandGlyphRequested", None)
+        if expand_glyph is not None and hasattr(expand_glyph, "connect"):
+            expand_glyph.connect(self.visualizer_expand_requested.emit)
         volume_step_signal = getattr(root, "appVolumeStepRequested", None)
         if volume_step_signal is not None and hasattr(volume_step_signal, "connect"):
             volume_step_signal.connect(self._handle_visualizer_app_volume_step)

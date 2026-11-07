@@ -222,6 +222,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         # projection forces ghosting off before logical capture, even when
         # the authored Spectrum preset explicitly enables it.
         spectrum_ghost_controls=True,
+        # Expanded Visualizer (operator, 7 Nov). Until its bar-count milestone (plan 01 M2b) the bars widen.
+        supports_expanded_display=True,
     ),
     VisualizerModeDescriptor(
         "oscilloscope",
@@ -244,6 +246,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         rainbow_controls=False,
         shared_bar_appearance=False,
         prepared_reveal=True,
+        supports_expanded_display=True,                # Expanded Visualizer (operator, 7 Nov)
     ),
     VisualizerModeDescriptor(
         "bubble",
@@ -261,6 +264,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         # No authored Spectrum shaping runs for Bubble, so the AGC and Output Lift stage after it is never reached; the
         # Spectrum-family kick lane is not its transient path.
         technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled", "kick_lane_gain"),
+        supports_expanded_display=True,                # Expanded Visualizer (operator, 7 Nov)
     ),
     VisualizerModeDescriptor(
         "devcurve",
@@ -278,6 +282,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         # Same stage as Bubble: it reads the pre-AGC control lanes, never shaped bars, and neither the kick lane nor
         # Bubble's pulse.
         technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled", "kick_lane_gain", "transient_pulse_gain"),
+        supports_expanded_display=True,                # Expanded Visualizer (operator, 7 Nov)
     ),
     VisualizerModeDescriptor(
         "sphere",
@@ -398,6 +403,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         prepared_reveal=True,
         geometry_kind="planar",
         layout_profile="planar",
+        supports_expanded_display=True,                # Expanded Visualizer (operator, 7 Nov)
     ),
     # Its own mode (not original Bubble): a framed underwater volume of traced glass bubbles with its own simulation
     # (``extruded_bubble_simulation``), Settings and presets. Offered since 2026-10-18 (operator) for its physical
@@ -437,7 +443,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         prepared_reveal=True,
         geometry_kind="planar",
         layout_profile="planar",
-        # The first (and so far only) mode admitted to the Expanded Visualizer (plan 01).
+        # The first mode admitted to the Expanded Visualizer (plan 01).
         supports_expanded_display=True,
     ),
     VisualizerModeDescriptor(
@@ -464,6 +470,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         scene_pan_envelope=(.5,.5,.5,.15,.85),
         scene_transform_settings=('waveform_ribbon_scene_scale','waveform_ribbon_scene_pan_x','waveform_ribbon_scene_pan_y'),
         prepared_reveal=True,geometry_kind='planar',layout_profile='planar',
+        # Expanded Visualizer (operator, 7 Nov): capable with no perf gate on the flag; its full-display figures are
+        # recorded at plan 01 M6 (already over budget under game load at the card).
+        supports_expanded_display=True,
     ),
 )
 

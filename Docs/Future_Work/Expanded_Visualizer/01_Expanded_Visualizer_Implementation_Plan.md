@@ -8,7 +8,11 @@ corrected where the review found drift.
 **Status:** FUTURE, NOT ADMITTED. This is a detailed implementation plan, not a patch, an approved runtime contract change, a build instruction, or authority to bypass `Current_Plan.md`.  
 **Entry gate:** Begin **only when Waveform Ribbon is physically accepted and its live checklist closed**, and only after  
 the prerequisite phase P-A (§0.1) has landed. The existing ordered `Current_Plan.md` retains authority until the operator explicitly admits this feature and adjusts the plan. Do not erase or silently reorder the later 3D work.  
-**Initial supported visualizer:** Extruded Bubble (EB), only. Subsequent modes opt in explicitly by descriptor and pass identical gates.  
+**Supported visualizers (operator, 7 Nov):** every mode except Voxel Sphere (`sphere`) and Extruded Spectrum
+(`extruded_spectrum`): Extruded Bubble (the first, the gate mode), Spectrum, Oscilloscope, Spline Curve (`devcurve`),
+Bubble, Neon Lake (`shockwave_grid`) and Waveform Ribbon, each by one descriptor flag. Waveform Ribbon is already over
+budget under game load at the card (41-44 fps); its full-display figures are recorded at M6 against §0.7 (its
+live-tick cut is in flight on another branch); the flag carries no perf gate.  
 **Products:** existing Standard SRPSS and existing Media Center (MC) sharing the current Quick scene. No additional screensaver window, no product fork.  
 **Companion:** `02_ShittyMusicPlayer_Implementation_Plan.md` begins after this plan's acceptance and reuses its proven presentation **semantics**, not the screensaver's physical window manager.
 
@@ -36,7 +40,8 @@ owner that signs it. The original milestones (§H) keep their checklists; this t
 | **P-A** AC-02 host binding | Waveform accepted; `Current_Plan.md` admits P-A | AC-02's regression bar green; Edit/Arrange parity maps byte-identical; `DisplayManager` no longer constructs the owner | lead |
 | **M0** baseline | P-A merged; operator admits plan 01 | EB baseline receipts at canonical, wide/tall and display-sized views, one and two monitors, idle and game60: fps, tick median/p90, GIL share, frame age, lease counts; written to `.artifacts/evidence/expanded_visualizer/baseline/`; no Visualizer code changed | lead |
 | **M1** capability + persistence + reducer | M0 receipts exist | all pure reducer tests green incl. stale generation, duplicate glyph, Edit cancel, topology loss; `replace_visualizer_runtime_preset_state` round-trips the intent; no dormant-mode import (import scan) | agent |
-| **M2** full-display viewport | M1 green; AC-02, AC-09 merged | production-host screenshots at 16:9, 16:10, 21:9, portrait, mixed DPR show the display-wide viewport; reactivity packet digests identical to M0 on recorded clips; ordinary rect round-trips to the byte | lead + operator look |
+| **M2** full-display viewport | M1 green; AC-02, AC-09 merged | production-host renders at 16:9, 16:10, 21:9, portrait, mixed DPR show the Visualizer card near the display's visible extents (inset by the card's edge margin, never the R-63 overscanned window) with its chrome; reactivity packet digests identical to M0 on recorded clips for every capable mode; ordinary rect round-trips to the byte | lead + operator look |
+| **M2b** Spectrum bar count at full display | M2 accepted | expanded bar count = card bar count x the width ratio (clamped to the DSP maximum), so bar width stays as authored; the DSP band layout is recomputed at the expand and collapse edges behind a fade (never a jump); Spectrum's digests differ at full display by design (per-band history re-mapped), every other mode's stay identical | lead + operator look |
 | **M3** fades, HUD, widget suspension | M2 accepted | consumer counts equal before/after N cycles (Media, OSD, Gmail, Feeds, Steam leases); no QObject/subscription growth over 20 cycles; HUD visible only on events, fades within its bounded window | agent |
 | **M4** wallpaper policy and GPU savings | E0 state diagram written and reviewed | batch traces: expected/published/covered identities, zero stalled batch, zero backlog on collapse; measured GPU and render-thread CPU delta on the covered display vs M0 (relative, load recorded) | lead |
 | **M5** transactional lifecycle | M3, M4 green | deterministic event traces for capable->capable, capable->incapable, failed activation, transfer at mixed DPI, Settings open/close x10, Edit Save/Cancel, hotplug; resource counts flat | agent |
@@ -46,10 +51,10 @@ owner that signs it. The original milestones (§H) keep their checklists; this t
 
 | Thing | Owner | Never |
 | --- | --- | --- |
-| mode capability `supports_expanded_display` | `core/settings/visualizer_mode_registry.py` descriptor (default False; EB True first) | a Settings flag, a preset field |
+| mode capability `supports_expanded_display` | `core/settings/visualizer_mode_registry.py` descriptor (default False; every mode but Sphere and Extruded Spectrum declares True) | a Settings flag, a preset field |
 | persisted intent `widgets.spotify_visualizer.expanded_display_requested` | canonical defaults + `SettingsManager` normaliser; excluded from mode/Custom payload | a sidecar file, a per-preset copy |
 | effective state (DORMANT..RETIRING) | the takeover coordinator next to the Visualizer host binding (AC-02), one per process | QML state, `DisplayManager` ad hoc flags |
-| expanded viewport geometry | `ResolvedVisualizerPresentation` variant from the canonical presentation resolver | a stretched texture, authored CUSTOM geometry |
+| expanded viewport geometry | `resolve_expanded_visualizer_presentation` (`widgets/spotify_visualizer/presentation_geometry.py`), a variant of the ordinary `ResolvedVisualizerPresentation`; its edge margin is the card's ordinary one (`resolve_overlay_geometry_policy("media")`, the slot the Visualizer sits on) | a stretched texture, authored CUSTOM geometry, the overscanned window rect |
 | widget visibility while covered | one display-local transient visual policy on the retained host (§F) | `widgets.<id>.enabled`, family activation, layout slots |
 | per-display wallpaper admission | one policy at the engine/manager batch seam (§E) | a second queue, dropped callbacks |
 | HUD data | existing Media model / volume model (§G) | a second GSMTC query, decoder or art cache |
@@ -89,6 +94,21 @@ Prove, not assert, each of these at M1 and again at M6:
 
 Every registered mode must look and behave as the same mode at the card and at the display; expansion is a viewport,
 not a different renderer.
+
+- **Full display is not edge to edge (operator, 7 Nov):** "we have the overscan rule to stop opengl artifacting for a
+  good reason. In my opinion a full screen visualizer would place the widget card of the visualizer near the display
+  extents. You'd still see it's border colour and surface type if relevant." The expanded card is the display's
+  logical rect (the monitor, never the R-63 window) inset on every side by the card's ordinary edge margin, and keeps
+  its chrome: border colour and width, corner radius, shadow and surface material (the Visualizer card's material is
+  its own open item in `Current_Plan.md`; the expanded card inherits whatever the card draws).
+- **The world is contained, never cropped or stretched (M2):** the ordinary viewport extent grows on the inset card's
+  long axis only (a wider card keeps the height and widens; a portrait one keeps the width and grows taller), and one
+  uniform scale maps it onto the card. The logical runtime keeps the ordinary extent (the controller is never handed
+  the display-wide record), so every mode's frames are those of its card.
+- **Cycling while expanded (operator, 7 Nov):** a double-click to the next mode skips enabled modes that are not
+  capable and goes to the next enabled capable mode, staying expanded; with no other enabled capable mode it stays
+  on the current mode, still expanded. An explicit selection of an incapable mode (Settings, the context menu) still
+  collapses and clears the intent (§D3).
 
 - **Clip policy stays mode-owned.** `CARD_INTERIOR` modes (Bubble, Spectrum, Neon Lake, Extruded Bubble, Waveform)
   keep their card interior semantics scaled to the display rect; `VIEWPORT_RECT` modes (Sphere, Extruded Spectrum)
@@ -174,13 +194,13 @@ Repository `Basjohn/ShittyRandomPhotoScreenSaver`, default `main`, examined 2026
 
 ## B. Product behaviour / scoped definitions
 
-1. **Expanded** means the *existing selected Quick display scene's logical display rectangle*, not exclusive OS fullscreen, a new window or altered screen/desktop shell. It covers all compositor space intended by the product, respecting actual selected display geometry and viewport/DPR, not an arbitrary 16:9 crop. Preserve current screen-window policy and monitor identity.
+1. **Expanded** means the *existing selected Quick display scene's logical display rectangle* inset by the card's edge margin (operator, 7 Nov: the card sits near the display's visible extents with its chrome; §0.6), not exclusive OS fullscreen, a new window or altered screen/desktop shell. It covers all compositor space intended by the product, respecting actual selected display geometry and viewport/DPR, not an arbitrary 16:9 crop. Preserve current screen-window policy and monitor identity.
 2. **Entering:** operator presses a contextual diagonal upper-right expansion glyph on a capable visualizer. Normal hover/interaction eligibility applies. User sees a short, gentle coordinated transition from ordinary visualizer rect to display-wide viewport; ordinary widgets on **that** display fade out. Other displays behave normally. OSD remains available. There is no extra mode activation.
 3. **Exiting:** reverse glyph (diagonal lower-left), explicit collapse, Edit entry, loss of capability, or relocation. Return exact authored pre-expansion presentation rather than saving the temporary screen-sized rect. Collapse/restore is independent of preset and CUSTOM values.
-4. **Mode selection:** ordinary double-click and context-menu mode switches retain current meaning. Capable -> capable stays expanded through the canonical activation (when more capabilities exist). Capable -> incapable collapses in a strictly ordered handoff, then changes mode. A rejected mode request leaves the current mode/expansion intact. Middle-click still cycles preset only.
+4. **Mode selection:** ordinary double-click and context-menu mode switches retain current meaning, except that a double-click while expanded cycles only through capable modes (§0.6). Capable -> capable stays expanded through the canonical activation. Capable -> incapable collapses in a strictly ordered handoff, then changes mode. A rejected mode request leaves the current mode/expansion intact. Middle-click still cycles preset only.
 5. **Other display:** no fades, audio change, transition suppression, image queue mutation or OSD change, except legitimate shared-source work already occurring. A shared provider survives while any real consumer still needs it.
 6. **HUD:** tiny, tasteful bottom-right media information (artist/title/cover and volume rail, optional playback state). Event-revealed by track, play/pause, eligible volume or pointer activity; fade away after a short bounded visibility period. No permanent timer/poller, no duplicate transport controller, and no overlap/hitbox conflict with OSD, camera, presets or collapse glyph.
-7. **Persistence:** expansion is a user intent, per existing settings profile. It is effective only if the currently resolved mode supports it, owner is live, monitor participates, and Edit/Settings/retirement aren't active. Losing eligibility must not rewrite user intent as a false 'off' unless the user explicitly toggles it off; a deliberately selected incapable mode can normalize effective state off without destroying the original authored layout.
+7. **Persistence:** expansion is a user intent, per existing settings profile. It is effective only if the currently resolved mode supports it, owner is live, monitor participates, and Edit/Settings/retirement aren't active. Losing eligibility must not rewrite user intent as a false 'off' unless the user explicitly toggles it off; a deliberately selected incapable mode can normalize effective state off without destroying the original authored layout. (Operator, 7 Nov: selecting an incapable mode also clears the intent, so a later capable mode starts ordinary; §D3.)
 8. **Restore:** startup/Settings restart/topology replacement re-evaluates persisted intent **once at an already-defined readiness edge**; no unguarded early fade, first-wallpaper duplication or reentry loop. Missing explicit target remains unadmitted (no theft of another display), and later reconnection restores safely.
 9. **DPR/size:** recompute physical frame/viewport from target display and its existing display identity, not from screen-1 cached values. Treat camera, frustum, stream volume, near field, lighting reach, translucency and particles as authored mode semantics, not as a stretched old texture.
 10. **No accidental global style changes:** preserve selected themes, card chrome policy, opacity, OSD palette, default user content and existing settings. SMP later reuses the **semantic display takeover contract**, not this screensaver-only physical compositor.
@@ -268,7 +288,12 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 
 - [ ] **Capable -> capable:** precompute new mode's expanded viewport and controller activation using existing request-completion edge; retain the takeover and wallpaper policy. Do not shrink to a card before a valid new frame. No controller duplication; failed activation keeps the previous mode and UI state.
 - [ ] **Capable -> incapable:** hold mode activation until orderly collapse; use current `_request_quick_visualizer_mode` call and its existing `on_complete` after the collapse has committed. If target admission fails after that temporary collapse, **roll back by re-expanding the still-active capable source mode** (subject to its current eligibility), not by silently leaving the old mode miniaturized. Do not persist an inconsistent mode or lose user geometry.
-- [ ] **Incapable -> capable:** select mode normally; do **not** silently reenter expansion unless persisted user intent is explicitly defined to reapply after capabilities become eligible. Make this decision deterministic and test it.
+- [x] **Incapable -> capable:** select mode normally; never re-enter expansion. **Decided by the operator (7 Nov):**
+  "Fullscreen is a special explicitly asked for function for the visualizer so a preset should not have the power to
+  decide it." A switch to an incapable mode clears the persisted intent once that mode is the Visualizer's and the
+  collapse has committed (also when the intent was only held, e.g. under Edit, and when a generation becomes ready on
+  an incapable mode chosen in Settings), so a later capable mode starts ordinary. A rejected incapable target leaves
+  the capable mode and its intent, and re-expands it (above). Tested in `tests/test_visualizer_expansion_reducer.py`.
 - [ ] Middle click/preset Previous/Next must not toggle expansion, destroy it, or reset playback; `replace_visualizer_runtime_preset_state` preserves the product-level intent and geometry.
 - [ ] Request rejection vs preparation failure vs accepted completion has distinct outcomes; stale completion cannot resurrect an expanded state on another display.
 
@@ -375,12 +400,18 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   else falls back to the canonical default, never `bool(value)`). It has no mode prefix, so preset payloads and the
   Custom snapshot exclude it by construction: no preset repair fill, and the completeness guard is unaffected. No
   visualizer schema bump: an older profile gains the key through the defaults merge. No UI at M1.
-- *Write rules (§D1.8, §D2.5).* The intent is written only by the user's glyph: True once, when the user's enter
-  commits; False when the user's collapse is accepted (collapse is always attainable, so a Settings visit during the
-  exit cannot resurrect it). Edit, Settings, mode changes, capability loss, monitor loss and shutdown never write it.
-- *Decision, §D3 incapable -> capable (deterministic, tested; operator may revisit as a product choice):* the
-  intent re-applies when a capable mode activates, because no automatic collapse clears it. Capable -> incapable
-  holds the request until the collapse commits, then forwards it; its rejection re-expands the source mode.
+- *Write rules (§D1.8, §D2.5; amended by the operator 7 Nov).* True is written only by the user's glyph, once, when
+  the user's enter commits on a capable mode. False is written when the user's collapse is accepted (collapse is
+  always attainable, so a Settings visit during the exit cannot resurrect it), and when an incapable mode becomes the
+  Visualizer's: at the activation if nothing is drawn expanded, otherwise at the edge where the collapse commits; and
+  at a generation's readiness on an incapable mode. Edit, Settings, monitor loss and shutdown never write it, so the
+  intent survives a Settings round trip and a restart while the capable mode stays selected. Presets and Custom
+  never carry it.
+- *Decision, §D3 incapable -> capable (operator, 7 Nov, superseding the agent's first choice that the intent
+  re-applies):* a mode switch never re-expands; a capable mode reached from an incapable one starts ordinary.
+  Capable -> incapable holds the request until the collapse commits, then forwards it; its rejection re-expands the
+  still-active source mode (the mode never changed, so its intent stands). Capable -> capable keeps the takeover
+  (or a held intent).
 - *Decisions on busy phases:* a mode request or transfer arriving while an enter, exit or transfer is in flight is
   rejected (never queued); one latest opposite glyph press is held to the running transition's commit edge; a
   failed enter restores ordinary and does not retry until a new edge (Edit exit, mode activation, readiness, press).
@@ -403,10 +434,63 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 
 **Milestone 2 | Full display viewport with intact 3D rendering**
 
-- [ ] Implement single resolved display-space presentation variant through scene controller/retained node. No new render path, no preset changes, no whole-widget final-pixel stretching.
-- [ ] Add contextually admitted vector ↗/↙ glyph with safe hitboxes and event-bound hover fade; preserve existing reset/preset and semantic double/middle clicks.
-- [ ] Prove viewport clips and camera on 16:9, 16:10, 21:9, portrait and mixed DPR, with screen/window-bound geometry and safe GL target resize/retirement.
-- [ ] **Gate 2:** screenshot/production-host geometry is truly display-wide and reactivity/payload numerical identities remain untouched; ordinary view can round-trip pixel geometry.
+- [x] Implement single resolved display-space presentation variant through scene controller/retained node. No new render path, no preset changes, no whole-widget final-pixel stretching.
+- [x] Add contextually admitted vector ↗/↙ glyph with safe hitboxes and event-bound hover fade; preserve existing reset/preset and semantic double/middle clicks.
+- [x] Prove viewport clips and camera on 16:9, 16:10, 21:9, portrait and mixed DPR, with screen/window-bound geometry and safe GL target resize/retirement.
+- [ ] **Gate 2:** production-host geometry is the card near the display's visible extents (edge margin, chrome kept), and reactivity/payload numerical identities remain untouched for every capable mode; ordinary view round-trips its geometry to the byte. Lead signs; operator looks.
+
+**M2 as built (7 Nov, implementing agent; the source is the authority where this plan was silent):**
+
+- *Geometry.* `resolve_expanded_visualizer_presentation(ordinary, display_size, edge_margin, dpr)`: outer rect =
+  the display's logical rect inset by `edge_margin` on every side, exactly (the inset rect is the stage authority,
+  never re-derived from extent x scale); extent contained (§0.6); shell, clip, border, radius, colours, shadow and
+  orientation from the ordinary record; DPR the target display's. The display manager passes the card's ordinary
+  edge margin (`resolve_overlay_geometry_policy("media")`, Media's anchored slot, which the Visualizer sits on; 30 px
+  canonical); the owner caps it at a quarter of the shorter side.
+- *Owner route.* `QuickDisplayVisualizerOwner.set_expanded_display(expanded, animate, on_complete, edge_margin)`
+  swaps the publication sync's resolve/commit pair (`QuickVisualizerPresentationSync.set_presentation_route`) at the
+  event edge, so the steady path carries no per-frame branch and a collapse restores the ordinary methods
+  themselves. The display-wide commit hands the controller the ordinary record's metrics, never its own, so the
+  logical world, CUSTOM, presets and Settings never see the display rect. `resolved_outer_size` (layout planning)
+  stays ordinary. Animated changes fade the whole presentation out where it is, swap the viewport at the midpoint
+  and fade in at the target (two smoothstep halves of the mode transition's 0.25 s), sampled on the existing
+  publication edge on the owner's transition clock: one GL target reallocation at the swap, no geometry tween, no
+  timer. The readiness restore and Edit's collapse are unanimated.
+- *Coordinator.* `widgets/spotify_visualizer/expanded_display_coordinator.py`, a plain object the display manager
+  creates lazily (only for a capable mode or a saved intent) beside the host binding; it feeds the reducer and
+  performs its actions: the owner route, one narrow intent write (`settings.set` + `save`), the canonical mode path
+  (held until a collapse commits for an incapable target), the glyph. Its takeover generation is its own admission
+  serial: the engine's generation advances with every preset and mode activation, so it cannot fence a takeover.
+  Glyph presses carry the activation the glyph was published for and the owning display's key.
+- *Wiring.* Owner admission (`_construct_quick_visualizer_owner_on`, before reveal) -> readiness; the one place an
+  admission ends (the binding's `record_admission(None, None)`) -> `OwnerRetired`; explicit mode requests ->
+  `ModeRequested`; the double-click cycle -> `ModeCycleRequested`; mode and preset completions -> `ModeActivated`;
+  Edit start -> `EditEntered` before capture (immediate collapse), Save/Cancel -> `EditExited`; an ordinary CUSTOM
+  transfer -> one ordinary transfer transaction. While the view is (or is becoming) display-wide, direct Alt
+  gestures, the Edit hover glyphs and display transfers are refused (expanded transfer is M5).
+- *Glyph.* `VisualizerPresentation.qml` `visualizerExpandGlyph`: vector arrow (↗, turned to ↙ when expanded), upper
+  right inside the card, Reset Camera's admission and hover fade, a delayed "FULL DISPLAY" / "EXIT FULL DISPLAY"
+  tip, consumes its own presses including a double-click's second; the control hint moves left of it; the Edit
+  hover glyphs are withdrawn while expanded. The coordinator publishes it (`set_visualizer_expand_glyph`).
+- *Reducer additions.* `ModeCycleRequested` (the cycling rule, §0.6) and `OwnerRetired` (reload, Visualizer off,
+  failed construction: the state dies, the intent persists).
+- *Not M2:* fades of the other widgets (M3), wallpaper policy (M4), expanded transfer (M5), the Spectrum bar count
+  (M2b). Until M2b Spectrum's bars widen with the card.
+- *Gate 2 evidence:* `tools/expanded_visualizer_evidence.py` (digests through the production owner for every capable
+  mode, a leak negative control, the ordinary round trip, hidden production-host renders); receipts in
+  `.artifacts/evidence/visualizers/extruded_bubble/expanded_m2/20261107_gate2/`.
+
+**Milestone 2b | Spectrum bar count at full display (operator, 7 Nov; after M2)**
+
+> "Spectrum would need to add a percentage of bars though based on how much wider it is when it goes full screen."
+
+- [ ] Expanded bar count = the card's bar count x (expanded content width / card content width), clamped to the
+  DSP's maximum, so a bar keeps its authored width.
+- [ ] The DSP band layout is recomputed at the expand and collapse edges behind a fade (never a jump), through the
+  one controller-owned BeatEngine reconfiguration path (bar count, engine generation and the logical display-bar
+  mirror stay coherent, `Docs/Guardrails/Visualizer_Presentation.md` §1).
+- [ ] Spectrum's reactivity digests differ at full display by design (per-band history is re-mapped); every other
+  mode's digests stay identical (the M2 harness keeps proving it).
 
 **Milestone 3 | Display-local fading, HUD + safe widget suspension**
 

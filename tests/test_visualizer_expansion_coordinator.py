@@ -1,0 +1,405 @@
+"""Expanded Visualizer M2: the takeover coordinator beside the host binding (plan 01 §0.3, §D, §0.5).
+
+The coordinator feeds events to the pure reducer and performs its actions through the owner's display-wide route,
+one narrow intent write, the canonical mode path and the glyph. These bars drive it with a recording stand-in owner
+(the route's own behaviour is covered with the production owner in ``test_visualizer_expansion_geometry.py``) and
+check the operator's rule end to end: full display is only ever the user's request, so a mode switch never
+re-expands (7 Nov). The display manager's lazy wiring is checked at the end: an incapable Visualizer without a saved
+intent creates no coordinator.
+"""
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+from core.expanded_visualizer_takeover import Phase
+from widgets.spotify_visualizer.expanded_display_coordinator import (
+    ExpandedDisplayCoordinator,
+    ExpandedDisplayServices,
+    display_key,
+)
+
+def _registry_capability() -> tuple[frozenset[str], tuple[str, ...]]:
+    from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
+
+    descriptors = tuple(iter_all_visualizer_mode_descriptors())
+    return (frozenset(d.mode_id for d in descriptors if d.supports_expanded_display),
+            tuple(d.mode_id for d in descriptors if not d.supports_expanded_display))
+
+
+#: Membership is the registry's capability flag; the labels below are just members of each side.
+CAPABLE_SET, _INCAPABLE = _registry_capability()
+CAPABLE = "extruded_bubble"
+CAPABLE_2D = sorted(CAPABLE_SET - {CAPABLE})[0]
+INCAPABLE, INCAPABLE_2 = _INCAPABLE[0], _INCAPABLE[-1]
+assert CAPABLE in CAPABLE_SET and len(_INCAPABLE) >= 2
+
+
+class _Engine:
+    def __init__(self) -> None:
+        self.activation = 1
+
+    def get_activation_id(self) -> int:
+        return self.activation
+
+
+class _Owner:
+    """Records route calls; an animated change completes when the test says so (the publication edge)."""
+
+    def __init__(self, mode: str) -> None:
+        self.controller = SimpleNamespace(mode_id=mode, engine=_Engine())
+        self.is_retired = False
+        self.expanded_display = False
+        self.calls: list[tuple[bool, bool]] = []
+        self.pending = None
+
+    @property
+    def expanded_display_transition_active(self) -> bool:
+        return self.pending is not None
+
+    def set_expanded_display(self, expanded, *, animate=False, on_complete=None, edge_margin=None):
+        if self.is_retired:
+            return False
+        self.calls.append((bool(expanded), bool(animate)))
+        self.pending = None
+        if animate:
+            self.pending = (bool(expanded), on_complete)
+        else:
+            self.expanded_display = bool(expanded)
+            if on_complete is not None:
+                on_complete()
+        return True
+
+    def finish(self) -> None:
+        expanded, on_complete = self.pending
+        self.pending = None
+        self.expanded_display = expanded
+        if on_complete is not None:
+            on_complete()
+
+    def activate(self, mode: str) -> None:
+        self.controller.mode_id = mode
+        self.controller.engine.activation += 1
+
+
+def _unit(index: int = 0, key: str = "lg-tv"):
+    identity = SimpleNamespace(screen_key=key, geometry=(0, 0, 2560, 1440))
+    return SimpleNamespace(screen_index=index, is_retired=False, runtime=SimpleNamespace(display_identity=identity))
+
+
+class _Host:
+    def __init__(self, mode: str = CAPABLE, *, requested: bool = False) -> None:
+        self.owner = _Owner(mode)
+        self.unit = _unit()
+        self.requested = requested
+        self.writes: list[bool] = []
+        self.edit = False
+        self.glyphs: list[tuple[str, bool, bool]] = []
+        self.coordinator = ExpandedDisplayCoordinator(ExpandedDisplayServices(
+            admitted_owner=lambda: self.owner,
+            admitted_unit=lambda: self.unit,
+            requested=lambda: self.requested,
+            persist_requested=self._persist,
+            mode_capable=lambda mode: mode in CAPABLE_SET,
+            edge_margin=lambda: 30.0,
+            edit_active=lambda: self.edit,
+            publish_glyph=lambda unit, available, expanded: self.glyphs.append(
+                (display_key(unit), bool(available), bool(expanded))),
+        ))
+
+    def _persist(self, value: bool) -> None:
+        self.requested = bool(value)
+        self.writes.append(bool(value))
+
+    @property
+    def glyph(self) -> tuple[bool, bool]:
+        return self.glyphs[-1][1:]
+
+    def press(self, expand: bool, unit=None) -> bool:
+        return self.coordinator.glyph_pressed(unit or self.unit, expand)
+
+    def request_mode(self, mode: str, *, accept: bool = True) -> tuple[bool, list[str]]:
+        forwarded: list[str] = []
+
+        def forward() -> bool:
+            forwarded.append(mode)
+            return accept
+        return self.coordinator.mode_requested(mode, forward), forwarded
+
+    def request_cycle(self, order: tuple[str, ...]) -> tuple[bool, list[str]]:
+        requested: list[str] = []
+
+        def request(mode: str) -> bool:
+            requested.append(mode)
+            return True
+        return self.coordinator.mode_cycle_requested(order, request), requested
+
+    def complete_mode(self, mode: str) -> None:
+        self.owner.activate(mode)
+        self.coordinator.mode_activated()
+
+
+def _expanded_by_user() -> _Host:
+    host = _Host()
+    host.coordinator.generation_ready()
+    assert host.press(True)
+    host.owner.finish()
+    assert host.coordinator.phase is Phase.EXPANDED and host.writes == [True]
+    return host
+
+
+def test_readiness_restores_a_saved_intent_before_reveal_without_writing_it():
+    host = _Host(requested=True)
+    host.coordinator.generation_ready()
+    assert host.owner.calls == [(True, False)]               # unanimated: no ordinary-card flash, no double fade
+    assert host.coordinator.phase is Phase.EXPANDED and host.writes == []
+    assert host.glyph == (True, True)                        # the glyph offers the collapse
+
+
+def test_readiness_on_an_incapable_mode_clears_a_saved_intent():
+    host = _Host(INCAPABLE, requested=True)
+    host.coordinator.generation_ready()
+    assert host.writes == [False] and host.owner.calls == []
+    assert host.glyph == (False, False)
+
+
+def test_the_users_expand_persists_only_when_it_commits_and_collapse_writes_off_at_once():
+    host = _Host()
+    host.coordinator.generation_ready()
+    assert host.glyph == (True, False)
+    assert host.press(True)
+    assert host.owner.calls == [(True, True)] and host.writes == []    # the fade is running: nothing persisted
+    host.owner.finish()
+    assert host.writes == [True] and host.glyph == (True, True)
+    assert host.press(False)
+    assert host.writes == [True, False] and host.owner.calls[-1] == (False, True)
+    host.owner.finish()
+    assert host.coordinator.phase is Phase.ORDINARY and host.glyph == (True, False)
+
+
+def test_a_mode_switch_never_re_expands_operator_7_nov():
+    """Expanded EB -> an incapable mode -> back to a capable mode: the second capable activation starts ordinary."""
+    host = _expanded_by_user()
+    accepted, forwarded = host.request_mode(INCAPABLE)
+    assert accepted and forwarded == []                       # held until the collapse commits
+    assert host.owner.calls[-1] == (False, True)
+    host.owner.finish()
+    assert forwarded == [INCAPABLE]                           # then the canonical request
+    host.complete_mode(INCAPABLE)
+    assert host.writes == [True, False]                       # the incapable mode cleared the intent
+    assert host.glyph == (False, False)
+    calls = len(host.owner.calls)
+    accepted, forwarded = host.request_mode(CAPABLE)
+    assert accepted and forwarded == [CAPABLE]
+    host.complete_mode(CAPABLE)
+    assert host.coordinator.phase is Phase.ORDINARY
+    assert len(host.owner.calls) == calls                     # nothing re-expanded
+    assert host.glyph == (True, False)
+
+
+def test_a_rejected_incapable_target_re_expands_the_unchanged_capable_mode():
+    host = _expanded_by_user()
+    accepted, forwarded = host.request_mode(INCAPABLE, accept=False)
+    assert accepted
+    host.owner.finish()                                       # collapse committed -> forward -> refused
+    assert forwarded == [INCAPABLE]
+    assert host.owner.calls[-1] == (True, True)               # rollback: re-expand the capable mode
+    host.owner.finish()
+    assert host.coordinator.phase is Phase.EXPANDED and host.writes == [True]
+
+
+def test_capable_to_capable_keeps_the_takeover():
+    host = _expanded_by_user()
+    accepted, forwarded = host.request_mode(CAPABLE)          # the same capable mode family, e.g. a preset path
+    assert accepted and forwarded == [CAPABLE]
+    host.complete_mode(CAPABLE)
+    assert host.coordinator.phase is Phase.EXPANDED and host.owner.expanded_display
+
+
+@pytest.mark.parametrize("order,target", [
+    ((INCAPABLE, INCAPABLE_2, CAPABLE_2D, CAPABLE), CAPABLE_2D),       # skips the incapable ones
+    ((INCAPABLE_2, CAPABLE), CAPABLE),                                 # wraps round: an earlier capable mode
+])
+def test_a_double_click_while_expanded_goes_to_the_next_capable_mode_and_stays_expanded(order, target):
+    host = _expanded_by_user()
+    accepted, requested = host.request_cycle(order)
+    assert accepted and requested == [target]
+    calls = len(host.owner.calls)
+    host.complete_mode(target)
+    assert host.coordinator.phase is Phase.EXPANDED and len(host.owner.calls) == calls   # never collapsed
+    assert host.writes == [True]
+
+
+def test_a_double_click_while_expanded_with_no_other_capable_mode_stays_put():
+    host = _expanded_by_user()
+    accepted, requested = host.request_cycle((INCAPABLE, INCAPABLE_2))
+    assert not accepted and requested == []
+    assert host.coordinator.phase is Phase.EXPANDED and host.owner.expanded_display
+
+
+def test_an_explicit_incapable_selection_while_expanded_still_collapses():
+    host = _expanded_by_user()
+    accepted, forwarded = host.request_mode(INCAPABLE)                 # Settings / context menu
+    assert accepted and forwarded == [] and host.owner.calls[-1] == (False, True)
+
+
+def test_a_double_click_on_an_ordinary_card_takes_the_next_enabled_mode():
+    host = _Host()
+    host.coordinator.generation_ready()
+    accepted, requested = host.request_cycle((INCAPABLE, CAPABLE_2D))
+    assert accepted and requested == [INCAPABLE]
+
+
+def test_the_display_wide_card_is_inset_by_the_edge_margin():
+    host = _Host()
+    host.coordinator.generation_ready()
+    margins = []
+    original = host.owner.set_expanded_display
+
+    def recording(expanded, *, animate=False, on_complete=None, edge_margin=None):
+        margins.append(edge_margin)
+        return original(expanded, animate=animate, on_complete=on_complete)
+    host.owner.set_expanded_display = recording
+    host.press(True)
+    assert margins == [30.0]
+
+
+def test_a_mode_request_during_a_transition_is_refused_without_change():
+    host = _Host()
+    host.coordinator.generation_ready()
+    host.press(True)                                          # entering
+    accepted, forwarded = host.request_mode(INCAPABLE)
+    assert not accepted and forwarded == []
+
+
+def test_edit_collapses_at_once_and_its_exit_restores_without_writing():
+    host = _expanded_by_user()
+    host.edit = True
+    host.coordinator.edit_entered()
+    assert host.owner.calls[-1] == (False, False)             # Edit never shows an expanded state
+    assert host.coordinator.phase is Phase.ORDINARY and host.glyph == (False, False)
+    host.edit = False
+    host.coordinator.edit_exited(saved=True)
+    assert host.owner.calls[-1] == (True, True)
+    host.owner.finish()
+    assert host.coordinator.phase is Phase.EXPANDED and host.writes == [True]
+
+
+def test_a_direct_layout_gesture_fails_the_preflight():
+    host = _Host()
+    host.coordinator.generation_ready()
+    host.edit = True                                          # an Alt drag (no Edit event): the preflight refuses
+    host.press(True)
+    assert host.owner.calls == [] and host.writes == [] and host.coordinator.phase is Phase.ORDINARY
+
+
+def test_owner_retirement_withdraws_the_glyph_and_fences_late_completions():
+    host = _Host()
+    host.coordinator.generation_ready()
+    host.press(True)
+    late = host.owner.pending
+    host.coordinator.owner_retired("reload")
+    assert host.glyph == (False, False) and host.coordinator.phase is Phase.RETIRING
+    late[1]()                                                 # the old owner's completion arrives late
+    assert host.writes == [] and host.coordinator.phase is Phase.RETIRING
+    assert not host.press(False)
+    # The replacement owner re-evaluates once (no intent was ever written).
+    host.owner = _Owner(CAPABLE)
+    host.coordinator.generation_ready()
+    assert host.coordinator.phase is Phase.ORDINARY and host.owner.calls == []
+
+
+def test_presses_are_fenced_to_the_owning_display_and_follow_a_transfer():
+    host = _Host()
+    host.coordinator.generation_ready()
+    other = _unit(1, "second")
+    assert not host.press(True, unit=other) and host.owner.calls == []
+    host.unit = other                                         # the CUSTOM transaction moved it (ordinary)
+    host.coordinator.display_transferred()
+    assert host.glyphs[-2][1:] == (False, False)              # withdrawn from the old display
+    assert host.glyphs[-1] == (display_key(other), True, False)
+    assert host.press(True, unit=other) and host.owner.calls == [(True, True)]
+
+
+def test_after_retire_nothing_is_called():
+    host = _expanded_by_user()
+    host.coordinator.retire()
+    calls, writes = list(host.owner.calls), list(host.writes)
+    host.coordinator.generation_ready()
+    host.press(False)
+    host.coordinator.mode_activated()
+    assert host.owner.calls[: len(calls)] == calls and host.writes == writes
+
+
+# ----------------------------------------------------------------------------- display manager: lazy, dormant
+
+
+_MANAGER_METHODS = ("_expanded_display", "_visualizer_section", "_expanded_display_mode_capable",
+                    "_expanded_display_edge_margin", "_cycle_quick_visualizer_mode",
+                    "_expanded_display_requested", "_persist_expanded_display_requested",
+                    "_quick_custom_layout_session_active", "_expanded_display_ready",
+                    "_expanded_display_blocks_layout")
+
+
+def _manager(mode: str, *, requested: bool):
+    """The display manager's Expanded Visualizer methods on a plain host (the QObject needs a whole runtime)."""
+    from engine.display_manager import DisplayManager
+
+    host_type = type("_ManagerHost", (), {name: getattr(DisplayManager, name) for name in _MANAGER_METHODS})
+    manager = host_type()
+    owner = _Owner(mode)
+    unit = _unit()
+    published = []
+    unit.runtime.scene_controller = SimpleNamespace(
+        set_visualizer_expand_glyph=lambda available, expanded: published.append((available, expanded)))
+    section = {"mode": mode, "expanded_display_requested": requested}
+    manager.__dict__.update(
+        _retired=False, _expanded_display_coordinator=None, _quick_visualizer_owner=owner,
+        _quick_visualizer_unit=unit, settings_manager=None,
+        _widgets_config_snapshot={"spotify_visualizer": section},
+        _quick_custom_layout_owner=SimpleNamespace(is_active=False),
+    )
+    return manager, owner, published
+
+
+def test_an_incapable_visualizer_without_intent_creates_no_coordinator():
+    manager, owner, published = _manager(INCAPABLE, requested=False)
+    manager._expanded_display_ready()
+    assert manager._expanded_display_coordinator is None and published == [] and owner.calls == []
+    assert manager._expanded_display_blocks_layout() is False
+
+
+@pytest.mark.parametrize("mode,requested,calls,glyph", [
+    (CAPABLE, False, [], (True, False)),
+    (CAPABLE, True, [(True, False)], (True, True)),
+])
+def test_a_capable_visualizer_gets_one_coordinator_at_admission(mode, requested, calls, glyph):
+    manager, owner, published = _manager(mode, requested=requested)
+    manager._expanded_display_ready()
+    coordinator = manager._expanded_display_coordinator
+    assert coordinator is not None and owner.calls == calls and published[-1] == glyph
+    manager._expanded_display_ready()                         # a re-admission reuses the one coordinator
+    assert manager._expanded_display_coordinator is coordinator
+    assert manager._expanded_display_blocks_layout() is (requested is True)
+
+
+def test_the_display_managers_double_click_cycles_through_the_takeover(monkeypatch):
+    """The manager's cycle while expanded: Oscilloscope after Extruded Bubble's incapable neighbours, kept expanded;
+    on main the plain next enabled mode (Waveform Ribbon, Voxel Sphere...) was requested and an expanded view would
+    have collapsed for it."""
+    from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, build_visualizer_mode_activation
+
+    manager, owner, _published = _manager(CAPABLE, requested=True)
+    owner.controller.settings_model = SimpleNamespace(
+        mode_activation=build_visualizer_mode_activation(VISUALIZER_MODE_IDS))
+    manager._expanded_display_ready()
+    assert manager._expanded_display_coordinator.phase is Phase.EXPANDED
+    requested = []
+    manager._request_quick_visualizer_mode = lambda target, **kw: requested.append((target, kw)) or True
+    manager._cycle_quick_visualizer_mode()
+    capable = CAPABLE_SET
+    assert len(requested) == 1
+    target, kwargs = requested[0]
+    assert target in capable - {CAPABLE} and kwargs == {"_through_takeover": False}
+    assert owner.calls == [(True, False)]                     # only the restore: the cycle never collapsed

@@ -18,7 +18,9 @@ import core.expanded_visualizer_takeover as tk
 from core.expanded_visualizer_takeover import (
     BeginEnter, BeginExit, BeginTransfer, CancelEnter, DisplayLost, EditEntered, EditExited,
     EditResolutionDeclined, EnterCommitted, EnterFailed, EnterPrepared, ExitCommitted, ForwardModeRequest,
-    GenerationReady, GlyphPressed, ModeActivated, ModeRejected, ModeRequested, Outcome, PersistIntent, Phase,
+    GenerationReady, GlyphPressed, ModeActivated, ModeCycleRequested, ModeRejected, ModeRequested, Outcome,
+    OwnerRetired, PersistIntent,
+    Phase,
     RejectModeRequest, RejectTransfer, RetireTakeover, RollbackTransfer, RunEnter,
     SettingsOpened, Shutdown, TransferCommitted, TransferFailed, TransferRequested, reduce,
 )
@@ -119,8 +121,10 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
     ("startup restores intent once, unanimated, never writes it",
      [ready(requested=True), prepared, committed],
      ["applied enter_pending BeginEnter[restore,still]", "applied entering RunEnter", "applied expanded"]),
-    ("startup on an incapable mode keeps the intent and stays dormant",
-     [ready(requested=True, capable=False)], ["applied dormant"]),
+    ("startup on an incapable mode (one chosen in Settings) clears the intent and stays dormant",
+     [ready(requested=True, capable=False)], ["applied dormant Persist[False]"]),
+    ("startup on an incapable mode without intent writes nothing",
+     [ready(capable=False)], ["applied dormant"]),
     ("startup with no visualizer owner is dormant",
      [ready(requested=True, act=None, disp=None)], ["applied dormant"]),
     ("user expand persists only when it commits", EXPAND_BY_USER, EXPANDED_TRACE),
@@ -196,19 +200,74 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
     ("capable -> capable keeps the takeover through the canonical activation",
      [*EXPAND_BY_USER, ModeRequested(GEN, 7, "capable-2", True), activated("capable-2", True, act=2)],
      [*EXPANDED_TRACE, "applied expanded Forward[capable-2,keep]", "applied expanded"]),
-    ("capable -> incapable collapses first, then changes mode; the intent survives",
+    ("capable -> incapable collapses first, then changes mode; the intent is cleared once the mode is incapable",
      [*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False), exited, activated(INCAPABLE, False, act=2)],
      [*EXPANDED_TRACE, "applied exiting BeginExit[mode_incapable]", f"applied ordinary Forward[{INCAPABLE},plain]",
-      "applied dormant"]),
+      "applied dormant Persist[False]"]),
+    ("expanded -> incapable -> capable does not re-expand (operator, 7 Nov)",
+     [*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False), exited, activated(INCAPABLE, False, act=2),
+      ModeRequested(GEN, 8, CAPABLE, True), activated(CAPABLE, True, act=3)],
+     [*EXPANDED_TRACE, "applied exiting BeginExit[mode_incapable]", f"applied ordinary Forward[{INCAPABLE},plain]",
+      "applied dormant Persist[False]", f"applied dormant Forward[{CAPABLE},plain]", "applied ordinary"]),
+    ("a held intent (Edit) is cleared by a switch to an incapable mode",
+     [ready(requested=True), EditEntered(GEN), activated(INCAPABLE, False, act=2), activated(CAPABLE, True, act=3),
+      EditExited(GEN, saved=False)],
+     ["applied enter_pending BeginEnter[restore,still]", "applied ordinary CancelEnter",
+      "applied dormant Persist[False]", "applied ordinary", "applied ordinary"]),
+    ("a capable -> capable switch keeps a held intent",
+     [ready(requested=True), EditEntered(GEN), activated("capable-2", True, act=2), EditExited(GEN, saved=True)],
+     ["applied enter_pending BeginEnter[restore,still]", "applied ordinary CancelEnter", "applied ordinary",
+      "applied enter_pending BeginEnter[restore,anim]"]),
+    ("an incapable activation during a pending restore cancels it and clears the intent",
+     [ready(requested=True), activated(INCAPABLE, False, act=2)],
+     ["applied enter_pending BeginEnter[restore,still]", "applied dormant CancelEnter,Persist[False]"]),
+    ("an incapable activation while a user enter runs never persists the intent",
+     [ready(), glyph(1, True), prepared, activated(INCAPABLE, False, act=2), committed, exited],
+     ["applied ordinary", "applied enter_pending BeginEnter[user,anim]", "applied entering RunEnter",
+      "applied entering", "applied exiting BeginExit[capability_lost]", "applied dormant"]),
+    ("an incapable activation while a restore runs clears the intent after the collapse commits",
+     [ready(requested=True), prepared, activated(INCAPABLE, False, act=2), committed, exited],
+     ["applied enter_pending BeginEnter[restore,still]", "applied entering RunEnter", "applied entering",
+      "applied exiting BeginExit[capability_lost]", "applied dormant Persist[False]"]),
+    ("an incapable activation while a restore fails clears the intent at the cancel",
+     [ready(requested=True), prepared, activated(INCAPABLE, False, act=2), failed],
+     ["applied enter_pending BeginEnter[restore,still]", "applied entering RunEnter", "applied entering",
+      "applied dormant CancelEnter,Persist[False]"]),
+    ("an incapable activation during an ordinary transfer clears the intent when it lands",
+     [ready(requested=True), prepared, committed, EditEntered(GEN), exited, EditExited(GEN, saved=True),
+      failed, TransferRequested(GEN, ACT, 5, B, True), activated(INCAPABLE, False, act=2), moved],
+     ["applied enter_pending BeginEnter[restore,still]", "applied entering RunEnter", "applied expanded",
+      "applied exiting BeginExit[edit]", "applied ordinary", "applied enter_pending BeginEnter[restore,anim]",
+      "applied ordinary CancelEnter", f"applied transfer_pending BeginTransfer[{B},ordinary]",
+      "applied transfer_pending", "applied dormant Persist[False]"]),
     ("a rejected incapable target re-expands the still-active capable mode",
      [*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False), exited, ModeRejected(GEN, 7), prepared, committed],
      [*EXPANDED_TRACE, "applied exiting BeginExit[mode_incapable]", f"applied ordinary Forward[{INCAPABLE},plain]",
       "applied enter_pending BeginEnter[rollback,anim]", "applied entering RunEnter", "applied expanded"]),
+    ("a cycle while expanded skips incapable modes and stays expanded on the next capable one",
+     [*EXPAND_BY_USER, ModeCycleRequested(GEN, 7, ((INCAPABLE, False), ("incapable-2", False), ("capable-2", True))),
+      activated("capable-2", True, act=2)],
+     [*EXPANDED_TRACE, "applied expanded Forward[capable-2,keep]", "applied expanded"]),
+    ("a cycle while expanded wraps around to a capable mode before the current one",
+     [*EXPAND_BY_USER, ModeCycleRequested(GEN, 7, ((INCAPABLE, False), ("capable-0", True), ("incapable-2", False)))],
+     [*EXPANDED_TRACE, "applied expanded Forward[capable-0,keep]"]),
+    ("a cycle while expanded with no other capable mode stays on the current mode, expanded",
+     [*EXPAND_BY_USER, ModeCycleRequested(GEN, 7, ((INCAPABLE, False), ("incapable-2", False)))],
+     [*EXPANDED_TRACE, "rejected expanded RejectModeRequest"]),
+    ("an explicit incapable selection while expanded still collapses (Settings, context menu)",
+     [*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False)],
+     [*EXPANDED_TRACE, "applied exiting BeginExit[mode_incapable]"]),
+    ("a cycle from an ordinary card takes the next enabled mode, capable or not",
+     [ready(), ModeCycleRequested(GEN, 7, ((INCAPABLE, False), ("capable-2", True)))],
+     ["applied ordinary", f"applied ordinary Forward[{INCAPABLE},plain]"]),
+    ("a cycle during a transition is refused",
+     [ready(), glyph(1, True), ModeCycleRequested(GEN, 7, (("capable-2", True),))],
+     ["applied ordinary", "applied enter_pending BeginEnter[user,anim]", "rejected enter_pending RejectModeRequest"]),
     ("an unrelated mode rejection has no takeover consequence",
      [ready(), ModeRejected(GEN, 99)], ["applied ordinary", "ignored ordinary"]),
-    ("incapable -> capable re-applies a persisted intent",
+    ("incapable -> capable never re-expands, even from a saved intent",
      [ready(requested=True, capable=False), activated(CAPABLE, True, act=2)],
-     ["applied dormant", "applied enter_pending BeginEnter[restore,anim]"]),
+     ["applied dormant Persist[False]", "applied ordinary"]),
     ("incapable -> capable without intent rests ordinary",
      [ready(capable=False), activated(CAPABLE, True, act=2)], ["applied dormant", "applied ordinary"]),
     ("an older activation completion is stale",
@@ -216,9 +275,13 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
     ("a mode request during a transition is rejected and changes nothing",
      [ready(), glyph(1, True), ModeRequested(GEN, 7, INCAPABLE, False)],
      ["applied ordinary", "applied enter_pending BeginEnter[user,anim]", "rejected enter_pending RejectModeRequest"]),
-    ("capability lost while expanded collapses automatically and keeps the intent",
+    ("an incapable activation while expanded collapses, then clears the intent once the collapse commits",
      [*EXPAND_BY_USER, activated(INCAPABLE, False, act=2), exited],
-     [*EXPANDED_TRACE, "applied exiting BeginExit[capability_lost]", "applied dormant"]),
+     [*EXPANDED_TRACE, "applied exiting BeginExit[capability_lost]", "applied dormant Persist[False]"]),
+    ("the intent survives a Settings round trip and a restart while the capable mode stays selected",
+     [*EXPAND_BY_USER, SettingsOpened(GEN), ready(requested=True, gen=2), prepared, committed, Shutdown(2)],
+     [*EXPANDED_TRACE, "applied retiring Retire[settings]", "applied enter_pending BeginEnter[restore,still]",
+      "applied entering RunEnter", "applied expanded", "applied retiring Retire[shutdown]"]),
     ("an expand glyph on an incapable mode is rejected",
      [ready(capable=False), glyph(1, True)], ["applied dormant", "rejected dormant"]),
     ("expanded transfer is one transaction and lands expanded on the target",
@@ -255,6 +318,10 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
     ("Settings retires the state, not the intent; the next generation restores it",
      [*EXPAND_BY_USER, SettingsOpened(GEN), glyph(2, False), ready(requested=True, gen=2)],
      [*EXPANDED_TRACE, "applied retiring Retire[settings]", "stale retiring",
+      "applied enter_pending BeginEnter[restore,still]"]),
+    ("a retired owner (runtime reload) retires the state, not the intent; the replacement restores it",
+     [*EXPAND_BY_USER, OwnerRetired(GEN, "reload"), glyph(2, False), ready(requested=True, gen=2)],
+     [*EXPANDED_TRACE, "applied retiring Retire[reload]", "stale retiring",
       "applied enter_pending BeginEnter[restore,still]"]),
     ("an older generation's readiness is stale",
      [ready(gen=3), ready(gen=2)], ["applied ordinary", "stale ordinary"]),
@@ -326,16 +393,20 @@ def _alphabet(s: tk.TakeoverState) -> list[tk.Event]:
         ModeRequested(g, 7, INCAPABLE, False), ModeRequested(g, 8, "capable-2", True),
         ModeActivated(g, act + 1, disp, INCAPABLE, False), ModeActivated(g, act + 1, disp, "capable-2", True),
         ModeRejected(g, 7),
+        ModeCycleRequested(g, 11, ((INCAPABLE, False), ("capable-2", True))),
+        ModeCycleRequested(g, 12, ((INCAPABLE, False),)), ModeCycleRequested(g, 13, ()),
         TransferRequested(g, act, 9, other, True), TransferRequested(g, act, 9, other, False),
         TransferCommitted(g, s.txn), TransferFailed(g, s.txn),
         DisplayLost(g, disp), DisplayLost(g, other),
         EditEntered(g), EditExited(g, False), EditResolutionDeclined(g), SettingsOpened(g), Shutdown(g),
+        OwnerRetired(g, "reload"), OwnerRetired(g - 1, "reload"),
     ]
 
 
-_NON_WRITERS = (GenerationReady, EnterPrepared, EnterFailed, ExitCommitted, ModeRequested, ModeActivated,
+_NON_WRITERS = (GenerationReady, EnterPrepared, EnterFailed, ExitCommitted, ModeRequested, ModeCycleRequested,
+                ModeActivated,
                 ModeRejected, TransferRequested, TransferCommitted, TransferFailed, DisplayLost, EditEntered,
-                EditExited, EditResolutionDeclined, SettingsOpened, Shutdown)
+                EditExited, EditResolutionDeclined, SettingsOpened, OwnerRetired, Shutdown)
 _BEGINS = (BeginEnter, BeginExit, BeginTransfer)
 
 
@@ -376,31 +447,51 @@ def _check(s0: tk.TakeoverState, event: tk.Event, step: tk.Step) -> None:
         if isinstance(a, (CancelEnter, RollbackTransfer, RunEnter)):
             assert a.txn == s0.txn, ctx
     assert s1.txn >= s0.txn, ctx
-    # Only the user's glyph (or the commit of the user's enter) ever writes the intent.
+    # Only the user's glyph (or the commit of the user's enter, on a capable mode) writes the intent True; False
+    # is the user's collapse, or an incapable mode clearing it where nothing is drawn expanded any more.
     writes = [a for a in actions if isinstance(a, PersistIntent)]
     assert len(writes) <= 1, ctx
     if writes:
-        assert not isinstance(event, _NON_WRITERS), ctx
         if writes[0].requested:
-            assert isinstance(event, EnterCommitted), ctx
+            assert isinstance(event, EnterCommitted) and s1.mode_capable, ctx
+        elif isinstance(event, _NON_WRITERS):
+            incapable_edge = isinstance(event, (ModeActivated, GenerationReady)) and not event.mode_capable
+            assert incapable_edge or getattr(s0, "clear_intent_at_rest", False), ctx
+            assert s1.phase not in (Phase.ENTERING, Phase.EXPANDED, Phase.TRANSFER_PENDING), ctx
         assert s1.requested is writes[0].requested, ctx
     elif not isinstance(event, GenerationReady):
         assert s1.requested is s0.requested, ctx
+    # A mode switch never re-expands: an incapable mode never rests holding the intent, and a capable activation
+    # never begins an enter from a collapsed view unless the intent was held across a capable -> capable switch.
+    if s1.phase in tk.RESTING_PHASES and s1.activation is not None and not s1.mode_capable:
+        assert not s1.requested and not getattr(s1, "clear_intent_at_rest", False), ctx
+    if s1.phase in (Phase.DORMANT, Phase.ORDINARY):
+        assert not getattr(s1, "clear_intent_at_rest", False), ctx
     # Retirement only on the three retiring edges.
     if any(isinstance(a, RetireTakeover) for a in actions):
-        assert isinstance(event, (SettingsOpened, Shutdown, DisplayLost)) and s1.phase is Phase.RETIRING, ctx
+        assert isinstance(event, (SettingsOpened, OwnerRetired, Shutdown, DisplayLost)), ctx
+        assert s1.phase is Phase.RETIRING, ctx
     # Keep-expanded forwards only a capable target from EXPANDED; an incapable one is held until the collapse.
     for a in actions:
         if isinstance(a, ForwardModeRequest) and a.keep_expanded:
             assert s0.phase is Phase.EXPANDED and s1.phase is Phase.EXPANDED, ctx
     if isinstance(event, ModeRequested) and not event.mode_capable and s0.phase is Phase.EXPANDED:
         assert not [a for a in actions if isinstance(a, ForwardModeRequest)] and s1.phase is Phase.EXITING, ctx
+    # A cycle never collapses an expanded view and never forwards an incapable mode from it.
+    if isinstance(event, ModeCycleRequested) and s0.phase is Phase.EXPANDED and step.outcome is not Outcome.STALE:
+        assert s1 == s0, ctx
+        capable = {mode for mode, ok in event.candidates if ok}
+        for a in actions:
+            if isinstance(a, ForwardModeRequest):
+                assert a.keep_expanded and a.mode_id in capable, ctx
 
 
 _STARTS = {
     "fresh": tk.initial_state(),
     "ordinary": _run([ready()])[0],
-    "dormant-with-intent": _run([ready(requested=True, capable=False)])[0],
+    "dormant-after-incapable": _run([ready(requested=True, capable=False)])[0],
+    "edit-held-intent": _run([ready(requested=True), EditEntered(GEN)])[0],
+    "entering-then-incapable": _run([ready(requested=True), prepared, activated(INCAPABLE, False, act=2)])[0],
     "restore-pending": _run([ready(requested=True)])[0],
     "entering": _run([ready(), glyph(1, True), prepared])[0],
     "expanded": _run(EXPAND_BY_USER)[0],
@@ -552,9 +643,10 @@ def test_immediate_accepts_reach_the_expected_end_states():
     expanded = _drive(tk.initial_state(), [ready(), glyph(1, True)], c)
     assert expanded.phase is Phase.EXPANDED and c.writes == [True]
     to_incapable = _drive(expanded, [ModeRequested(GEN, 7, INCAPABLE, False)], c)
-    assert to_incapable.phase is Phase.DORMANT and to_incapable.mode_id == INCAPABLE and to_incapable.requested
+    assert to_incapable.phase is Phase.DORMANT and to_incapable.mode_id == INCAPABLE and not to_incapable.requested
     back = _drive(to_incapable, [ModeRequested(GEN, 8, CAPABLE, True)], c)
-    assert back.phase is Phase.EXPANDED and c.writes == [True]
+    # Full display is only ever the user's request: switching back to a capable mode starts ordinary.
+    assert back.phase is Phase.ORDINARY and not back.requested and c.writes == [True, False]
 
 
 def test_immediate_rejects_leave_mode_and_expansion_intact():

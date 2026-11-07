@@ -328,6 +328,84 @@ def resize_visualizer_presentation(
     )
 
 
+def resolve_expanded_visualizer_presentation(
+    ordinary: ResolvedVisualizerPresentation,
+    *,
+    display_size: Sequence[object],
+    edge_margin: float = 0.0,
+    dpr: float | None = None,
+) -> ResolvedVisualizerPresentation:
+    """The display-wide variant of one resolved ordinary presentation (Expanded Visualizer, plan 01 §B2/§0.6).
+
+    Expansion is a viewport, not a layout, and full display is not edge to edge (operator, 7 Nov): the Visualizer
+    card is placed near the display's visible extents, inset on every side by ``edge_margin`` (the card's ordinary
+    edge margin, the one Media's anchored slot uses), and keeps its chrome: border colour and width, corner radius,
+    shadow and surface. ``display_size`` is the display's logical rect (the monitor, never the R-63 overscanned
+    window). The ordinary record it derives from is never changed or persisted. The world grows on the card's long
+    axis only, so the
+    whole ordinary world stays in view (its extent is contained, never cropped): on an inset card wider than the
+    ordinary world's aspect the extent keeps its height and widens to the card's aspect; on a narrower (e.g.
+    portrait) display it keeps its width and grows taller. Uniform scale then maps that world onto the inset card, so
+    nothing is stretched anisotropically and pixel-like sizes follow the uniform scale as at the card. A framed 3D
+    camera keeps its lens and pose; its aperture follows the extent's height exactly as an edge-resized card's does
+    (``framed_aperture_scale``). Shell, clip, card chrome (border width, corner radius, colours) and content
+    orientation are the ordinary record's, through the same canonical resolver; only DPR may differ (the target
+    display's).
+    """
+
+    if not isinstance(ordinary, ResolvedVisualizerPresentation):
+        raise TypeError("ordinary must be a ResolvedVisualizerPresentation")
+    display_width, display_height = _positive_size(display_size, name="display size")
+    margin = _non_negative(edge_margin, name="edge margin")
+    card_width, card_height = display_width - 2.0 * margin, display_height - 2.0 * margin
+    if card_width <= 0.0 or card_height <= 0.0:
+        raise ValueError("edge margin leaves no card on this display")
+    extent_width, extent_height = ordinary.viewport_extent
+    card_aspect = card_width / card_height
+    if card_aspect >= extent_width / extent_height:
+        expanded_extent = (extent_height * card_aspect, extent_height)
+        scale = card_height / extent_height
+    else:
+        expanded_extent = (extent_width, extent_width / card_aspect)
+        scale = card_width / extent_width
+    resolved_dpr = ordinary.dpr if dpr is None else _finite(dpr, name="DPR")
+    style = ordinary.shell_style
+    baseline_scale = ordinary.uniform_visual_scale
+
+    def _authored(name: str) -> float:
+        return float(style[name]) / baseline_scale
+
+    shadow_offset = style["shadow_offset"]
+    return resolve_visualizer_presentation(
+        policy=VisualizerModePresentationPolicy(
+            shell_policy=ordinary.shell_policy,
+            clip_policy=ordinary.clip_policy,
+            viewport_resize_capable=ordinary.viewport_resize_capable,
+        ),
+        display_size=(display_width, display_height),
+        outer_origin=(margin, margin),
+        dpr=resolved_dpr,
+        uniform_visual_scale=scale,
+        viewport_extent=expanded_extent,
+        # The inset display rect is the one stage authority: exact, never re-derived from extent x scale.
+        committed_outer_size=(card_width, card_height),
+        content_rotation_quarters=ordinary.content_rotation_quarters,
+        scene_fade=ordinary.scene_fade,
+        content_fade=ordinary.content_fade,
+        border_width=float(style["authored_border_width"]),
+        corner_radius=float(style["authored_corner_radius"]),
+        content_inset=_authored("content_inset"),
+        background_color=style["background_color"],
+        border_color=style["border_color"],
+        shadow_enabled=bool(style["shadow_enabled"]),
+        shadow_color=style["shadow_color"],
+        shadow_blur=_authored("shadow_blur"),
+        shadow_offset=(float(shadow_offset[0]) / baseline_scale, float(shadow_offset[1]) / baseline_scale),
+        shadow_spread=_authored("shadow_spread"),
+        shadow_extensions=tuple(float(value) / baseline_scale for value in style["shadow_extensions"]),
+    )
+
+
 def framed_aperture_scale(presentation: ResolvedVisualizerPresentation, *, content: bool = False) -> float:
     """Sensor height relative to the canonical authored window.
 
@@ -370,6 +448,7 @@ __all__ = [
     "CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO",
     "CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE",
     "resize_visualizer_presentation",
+    "resolve_expanded_visualizer_presentation",
     "resize_visualizer_presentation_uniformly",
     "resolve_visualizer_presentation",
     "framed_aperture_scale",

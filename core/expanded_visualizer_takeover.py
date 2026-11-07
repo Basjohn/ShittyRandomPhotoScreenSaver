@@ -19,6 +19,8 @@ Vocabulary (plan 01 §D)::
 
 Rules this reducer enforces:
 
+* **Retirement.** Settings, a runtime reload or the Visualizer turning off (``OwnerRetired``), the owning display's
+  loss and shutdown retire the generation's state; the persisted intent is untouched.
 * **Fences.** Every event names the runtime generation; anything older than the state's generation, or any event
   for a retiring generation, is ``STALE`` and changes nothing. A newer generation is adopted only at its readiness
   edge (``GenerationReady``), which re-evaluates the persisted intent exactly once. Glyph presses must also name the
@@ -26,17 +28,22 @@ Rules this reducer enforces:
 * **Idempotency.** Glyph press ids only increase; a repeated id is ``DUPLICATE``. A press the current phase already
   satisfies (expand while entering or expanded, collapse while collapsing) is coalesced as ``DUPLICATE``. One
   latest opposite press during a running transition is held to its commit edge; there is no queue.
-* **Intent.** ``requested`` mirrors ``widgets.spotify_visualizer.expanded_display_requested``. Only the user's glyph
-  changes it: ``PersistIntent(True)`` is emitted once, when a user-initiated enter commits (never on press or
-  failure), and ``PersistIntent(False)`` when the user's collapse is accepted. Edit, Settings, mode changes,
-  capability loss, monitor loss and shutdown collapse or retire without writing it, so the intent re-applies at the
-  next eligible edge (Edit exit, a capable mode activating, a new generation's readiness).
+* **Intent.** ``requested`` mirrors ``widgets.spotify_visualizer.expanded_display_requested``. Full display is the
+  user's explicit request (operator, 7 Nov: "a preset should not have the power to decide it"), so only two things
+  write it. The user's glyph: ``PersistIntent(True)`` once, when a user-initiated enter commits on a capable mode
+  (never on press or failure), and ``PersistIntent(False)`` when the user's collapse is accepted. And a switch to an
+  incapable mode: ``PersistIntent(False)`` once that mode is the Visualizer's and nothing is drawn expanded any more
+  (the collapse has committed), whether it was expanded or only held the intent, and when a generation becomes ready
+  on an incapable mode (a mode chosen in Settings). A later capable mode therefore starts ordinary: a mode switch
+  never re-expands. Edit, Settings, monitor loss and shutdown collapse or retire without writing it, so the intent
+  re-applies at the next eligible edge while the capable mode stays selected (Edit exit, a new generation's
+  readiness).
 * **Eligibility.** Expansion is effective only when the mode is capable (the caller resolves ``mode_capable`` with
   ``core.settings.visualizer_mode_registry.resolve_expanded_display_capable``: registered, active, enabled and
   opted in), an owner and display are bound, and Edit is not active. EXPANDED never holds while any of those fails.
 * **Rollback.** A failed enter restores ORDINARY without touching the intent and without retrying; a failed or lost
   transfer restores the source exactly as it was; a mode request held for a capable -> incapable collapse that is
-  then rejected re-expands the still-active capable mode.
+  then rejected re-expands the still-active capable mode (the mode never changed, so the intent still stands).
 """
 
 from __future__ import annotations
@@ -144,6 +151,17 @@ class ModeRequested:
 
 
 @dataclass(frozen=True, slots=True)
+class ModeCycleRequested:
+    """The double-click's "next mode" (operator, 7 Nov): ``candidates`` are the other enabled modes in cycle order
+    after the current one, wrapping, each with its resolved capability. While expanded the cycle skips incapable
+    modes and stays expanded; with no other capable mode it stays where it is. A collapsed view takes the next one."""
+
+    generation: int
+    request_id: int
+    candidates: tuple[tuple[str, bool], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ModeActivated:
     """The owner's canonical activation completed. Activation ids only increase within a generation."""
 
@@ -211,14 +229,23 @@ class SettingsOpened:
 
 
 @dataclass(frozen=True, slots=True)
+class OwnerRetired:
+    """The Visualizer owner of this generation retired for another reason (a runtime reload, the Visualizer turned
+    off, a failed construction): like Settings, the state dies with it and the intent persists."""
+
+    generation: int
+    reason: str = "owner"
+
+
+@dataclass(frozen=True, slots=True)
 class Shutdown:
     generation: int
 
 
 Event = (
     GenerationReady | GlyphPressed | EnterPrepared | EnterFailed | EnterCommitted | ExitCommitted | ModeRequested
-    | ModeActivated | ModeRejected | TransferRequested | TransferCommitted | TransferFailed | DisplayLost
-    | EditEntered | EditExited | EditResolutionDeclined | SettingsOpened | Shutdown
+    | ModeCycleRequested | ModeActivated | ModeRejected | TransferRequested | TransferCommitted | TransferFailed | DisplayLost
+    | EditEntered | EditExited | EditResolutionDeclined | SettingsOpened | OwnerRetired | Shutdown
 )
 
 
@@ -357,6 +384,9 @@ class TakeoverState:
     edit_expand_press: int | None = None
     transfer_target: str | None = None
     transfer_resume_expanded: bool = False
+    #: An incapable mode activated while the view was still expanded (or entering, exiting, transferring): the intent
+    #: is cleared at the edge where nothing is drawn expanded any more.
+    clear_intent_at_rest: bool = False
 
     @property
     def eligible(self) -> bool:
@@ -418,7 +448,21 @@ def _begin_exit(state: TakeoverState, reason: ExitReason, animate: bool = True) 
 def _user_collapse(state: TakeoverState) -> tuple[TakeoverState, tuple[Action, ...]]:
     """Accept the user's collapse: the intent is written False now (collapse is always attainable)."""
     if state.requested:
-        return replace(state, requested=False), (PersistIntent(False),)
+        return replace(state, requested=False, clear_intent_at_rest=False), (PersistIntent(False),)
+    return replace(state, clear_intent_at_rest=False), ()
+
+
+def _clear_intent(state: TakeoverState) -> tuple[TakeoverState, tuple[Action, ...]]:
+    """An incapable mode is the Visualizer's and nothing is drawn expanded: drop the intent (one write)."""
+    if state.requested:
+        return replace(state, requested=False, clear_intent_at_rest=False), (PersistIntent(False),)
+    return replace(state, clear_intent_at_rest=False), ()
+
+
+def _flush_cleared_intent(state: TakeoverState) -> tuple[TakeoverState, tuple[Action, ...]]:
+    """At a collapsed edge, perform the clear an incapable activation deferred while the view was expanded."""
+    if state.clear_intent_at_rest:
+        return _clear_intent(state)
     return state, ()
 
 
@@ -481,6 +525,11 @@ def _generation_ready(state: TakeoverState, event: GenerationReady) -> Step:
         requested=bool(event.requested),
         txn=state.txn,
     )
+    if has_owner and not fresh.mode_capable and fresh.requested:
+        # The generation shows an incapable mode (one chosen in Settings, or the capable one is no longer enabled):
+        # the intent does not survive the mode, so a later capable mode starts ordinary.
+        fresh, writes = _clear_intent(fresh)
+        return _applied(_rest(fresh), *writes)
     # Startup / Settings return / topology replacement: one evaluation, before any retained root is exposed, so the
     # restore is not animated (no ordinary-card flash, no double fade).
     return _settle_resting(fresh, animate=False)
@@ -547,8 +596,11 @@ def _enter_prepared(state: TakeoverState, event: EnterPrepared) -> Step:
 def _enter_failed(state: TakeoverState, event: EnterFailed) -> Step:
     if state.phase not in (Phase.ENTER_PENDING, Phase.ENTERING) or event.txn != state.txn:
         return _unchanged(state, Outcome.STALE, "no such enter in flight")
-    # Restore ordinary exactly; the intent is untouched and nothing retries until a new edge.
-    return _applied(_rest(state), CancelEnter(state.txn))
+    # Restore ordinary exactly; the intent is untouched (unless an incapable mode activated meanwhile) and nothing
+    # retries until a new edge.
+    txn = state.txn
+    state, writes = _flush_cleared_intent(_rest(state))
+    return _applied(state, CancelEnter(txn), *writes)
 
 
 def _enter_committed(state: TakeoverState, event: EnterCommitted) -> Step:
@@ -556,8 +608,9 @@ def _enter_committed(state: TakeoverState, event: EnterCommitted) -> Step:
         return _unchanged(state, Outcome.STALE, "no such enter running")
     expanded = replace(state, phase=Phase.EXPANDED)
     writes: tuple[Action, ...] = ()
-    if state.txn_origin is Origin.USER and state.deferred_expand is not False and not state.requested:
-        # The user's expand succeeded: the only point the intent is written True (D1 step 8).
+    if (state.txn_origin is Origin.USER and state.deferred_expand is not False and not state.requested
+            and state.mode_capable):
+        # The user's expand succeeded on a capable mode: the only point the intent is written True (D1 step 8).
         expanded = replace(expanded, requested=True)
         writes = (PersistIntent(True),)
     return _after_expanded(expanded, *writes)
@@ -568,15 +621,17 @@ def _exit_committed(state: TakeoverState, event: ExitCommitted) -> Step:
         return _unchanged(state, Outcome.STALE, "no such exit running")
     held = state.held_mode_request
     deferred = state.deferred_expand
-    rested = _rest(replace(state, held_mode_request=None))
+    rested, writes = _flush_cleared_intent(_rest(replace(state, held_mode_request=None)))
     if held is not None:
-        # Capable -> incapable: the mode changes only after the collapse has committed (D3).
+        # Capable -> incapable: the mode changes only after the collapse has committed (D3); the intent is cleared
+        # when that mode activates (a rejection leaves the capable mode, and the intent, in place).
         rested = replace(rested, awaiting_mode_request=held.request_id)
-        return _applied(rested, ForwardModeRequest(held.request_id, held.mode_id, False))
+        return _applied(rested, *writes, ForwardModeRequest(held.request_id, held.mode_id, False))
     if deferred is True and rested.phase is Phase.ORDINARY and rested.eligible:
         rested, begin = _begin_enter(rested, Origin.USER, True)
-        return _applied(rested, begin)
-    return _settle_resting(rested, animate=True)
+        return _applied(rested, *writes, begin)
+    step = _settle_resting(rested, animate=True)
+    return _applied(step.state, *writes, *step.actions)
 
 
 def _mode_requested(state: TakeoverState, event: ModeRequested) -> Step:
@@ -593,20 +648,47 @@ def _mode_requested(state: TakeoverState, event: ModeRequested) -> Step:
                 f"busy: {phase.value}")
 
 
+def _mode_cycle_requested(state: TakeoverState, event: ModeCycleRequested) -> Step:
+    phase = state.phase
+    candidates = tuple((str(mode), bool(capable)) for mode, capable in event.candidates)
+    if phase in (Phase.DORMANT, Phase.ORDINARY):
+        if not candidates:
+            reason = "no other enabled mode"
+            return Step(state, (RejectModeRequest(event.request_id, reason),), Outcome.REJECTED, reason)
+        return _applied(state, ForwardModeRequest(event.request_id, candidates[0][0], False))
+    if phase is Phase.EXPANDED:
+        # Skip enabled modes that cannot be expanded; stay expanded on the next capable one (operator, 7 Nov).
+        target = next((mode for mode, capable in candidates if capable), None)
+        if target is None:
+            reason = "no other enabled capable mode"
+            return Step(state, (RejectModeRequest(event.request_id, reason),), Outcome.REJECTED, reason)
+        return _applied(state, ForwardModeRequest(event.request_id, target, True))
+    reason = f"busy: {phase.value}"
+    return Step(state, (RejectModeRequest(event.request_id, reason),), Outcome.REJECTED, reason)
+
+
 def _mode_activated(state: TakeoverState, event: ModeActivated) -> Step:
     if state.activation is not None and event.activation <= state.activation:
         return _unchanged(state, Outcome.STALE, "activation not newer")
     state = replace(state, activation=event.activation, display=event.display, mode_id=event.mode_id,
                     mode_capable=bool(event.mode_capable), awaiting_mode_request=None)
     phase = state.phase
+    incapable_with_intent = not state.mode_capable and state.requested
     if phase in (Phase.DORMANT, Phase.ORDINARY):
-        # Incapable -> capable re-applies a persisted intent (deterministic: the intent was never cleared).
-        return _settle_resting(state, animate=True)
+        # Nothing is drawn expanded: an incapable mode clears a held intent now, so a later capable mode starts
+        # ordinary (a mode switch never re-expands). A capable -> capable switch keeps a held intent.
+        state, writes = _clear_intent(state) if incapable_with_intent else (state, ())
+        step = _settle_resting(state, animate=True)
+        return _applied(step.state, *writes, *step.actions)
     if phase is Phase.ENTER_PENDING:
         # The preflight belonged to the previous activation: abandon it, then re-evaluate for this one.
         cancelled = CancelEnter(state.txn)
+        state, writes = _clear_intent(state) if incapable_with_intent else (state, ())
         step = _settle_resting(state, animate=state.txn_animate)
-        return _applied(step.state, cancelled, *step.actions)
+        return _applied(step.state, cancelled, *writes, *step.actions)
+    if incapable_with_intent:
+        # Still drawn expanded (or entering, exiting, moving): clear once the collapse has committed.
+        state = replace(state, clear_intent_at_rest=True)
     if phase is Phase.EXPANDED and not state.mode_capable:
         state, exit_ = _begin_exit(state, ExitReason.CAPABILITY_LOST)
         return _applied(state, exit_)
@@ -651,7 +733,8 @@ def _transfer_rollback(state: TakeoverState) -> Step:
         restored = replace(state, phase=Phase.EXPANDED, transfer_target=None, transfer_resume_expanded=False)
         step = _after_expanded(restored)
         return _applied(step.state, RollbackTransfer(txn), *step.actions)
-    return _applied(_rest(state), RollbackTransfer(txn))
+    state, writes = _flush_cleared_intent(_rest(state))
+    return _applied(state, RollbackTransfer(txn), *writes)
 
 
 def _transfer_committed(state: TakeoverState, event: TransferCommitted) -> Step:
@@ -660,7 +743,9 @@ def _transfer_committed(state: TakeoverState, event: TransferCommitted) -> Step:
     moved = replace(state, display=state.transfer_target, transfer_target=None)
     if state.transfer_resume_expanded:
         return _after_expanded(replace(moved, phase=Phase.EXPANDED, transfer_resume_expanded=False))
-    return _settle_resting(moved, animate=True)
+    moved, writes = _flush_cleared_intent(moved)
+    step = _settle_resting(moved, animate=True)
+    return _applied(step.state, *writes, *step.actions)
 
 
 def _transfer_failed(state: TakeoverState, event: TransferFailed) -> Step:
@@ -722,6 +807,10 @@ def _settings_opened(state: TakeoverState, event: SettingsOpened) -> Step:
     return _applied(replace(state, phase=Phase.RETIRING), RetireTakeover("settings"))
 
 
+def _owner_retired(state: TakeoverState, event: OwnerRetired) -> Step:
+    return _applied(replace(state, phase=Phase.RETIRING), RetireTakeover(str(event.reason) or "owner"))
+
+
 def _shutdown(state: TakeoverState, event: Shutdown) -> Step:
     return _applied(replace(state, phase=Phase.RETIRING, terminal=True), RetireTakeover("shutdown"))
 
@@ -733,6 +822,7 @@ _HANDLERS = {
     EnterCommitted: _enter_committed,
     ExitCommitted: _exit_committed,
     ModeRequested: _mode_requested,
+    ModeCycleRequested: _mode_cycle_requested,
     ModeActivated: _mode_activated,
     ModeRejected: _mode_rejected,
     TransferRequested: _transfer_requested,
@@ -743,6 +833,7 @@ _HANDLERS = {
     EditExited: _edit_exited,
     EditResolutionDeclined: _edit_resolution_declined,
     SettingsOpened: _settings_opened,
+    OwnerRetired: _owner_retired,
     Shutdown: _shutdown,
 }
 
@@ -751,7 +842,7 @@ __all__ = [
     "Action", "BeginEnter", "BeginExit", "BeginTransfer", "CancelEnter", "DisplayLost", "EditEntered",
     "EditExited", "EditResolutionDeclined", "EnterCommitted", "EnterFailed", "EnterPrepared", "Event",
     "ExitCommitted", "ExitReason", "ForwardModeRequest", "GenerationReady", "GlyphPressed", "HeldModeRequest",
-    "ModeActivated", "ModeRejected", "ModeRequested", "Origin", "Outcome", "PersistIntent", "Phase",
+    "ModeActivated", "ModeCycleRequested", "ModeRejected", "ModeRequested", "Origin", "Outcome", "OwnerRetired", "PersistIntent", "Phase",
     "RESTING_PHASES", "RejectModeRequest", "RejectTransfer", "RequestEditResolution", "RetireTakeover",
     "RollbackTransfer", "RunEnter", "SettingsOpened", "Shutdown", "Step", "TRANSACTION_PHASES", "TakeoverState",
     "TransferCommitted", "TransferFailed", "TransferRequested", "initial_state", "reduce",

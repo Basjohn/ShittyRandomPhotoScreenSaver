@@ -51,7 +51,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
      in `hint_scene`); switching Sphere <-> Extruded Spectrum sends no plain-orbit cancel for a held drag.
 2. **§7.1 Waveform Ribbon:** the live logical-tick cut (agent in flight; byte-identical) and the operator
    sign-offs in §2.
-3. **Expanded Visualizer M2** (plan 01; agent in flight), with the operator's M1 amendment: a mode switch never
+3. **Expanded Visualizer M2** (plan 01; built on its agent branch 7 Nov, awaiting the lead's Gate 2 audit;
+   Spectrum's bar count is milestone M2b), with the operator's M1 amendment: a mode switch never
    re-expands; Expanded is only ever the user's explicit request. Operator, 7 Nov evening:
    - "Full display" is the Visualizer card placed near the display extents with its border and surface kept, never
      edge-to-edge (R-63 overscan).
@@ -287,8 +288,10 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - 0 call-count differences against main across 38 overhead cases.
   - The impacted gate passed 734/735 (the Usu assets, environmental).
 
-  **For the operator (a product choice the agent made):** switching from an incapable mode back to a capable one
-  re-applies a saved "expanded" intent.
+  **Amended by the operator (7 Nov), built on the M2 branch:** a mode switch never re-expands. Switching to an
+  incapable mode clears the saved "expanded" intent once the collapse has committed (also a held intent, and a
+  generation that starts on an incapable mode chosen in Settings), so a capable mode reached afterwards starts
+  ordinary. The intent still survives a Settings round trip and a restart while the capable mode stays selected.
   **Overhead drift (attributed by the lead, 7 Nov): not a regression.** The +46 Python calls per Visualizer frame
   (Spectrum 757 → 803, Extruded Spectrum 1179 → 1225) arrive exactly at 700799e7: AC-08's `rendering/quick/gl_query.py`.
   - AC-12 adds none: 757 before and after it.
@@ -519,6 +522,23 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `plain_orbit_cancel_requested('mode')` edge: that edge comes only from `set_scene_transform_enabled`, which is
   framed-only. Not verified whether the card watchers (presentationActive, geometry) always unwind a held-left orbit
   across such a switch; add a test, or emit the edge on any orbiting-mode change.
+
+**Found while building Expanded Visualizer M2 (7 Nov; recorded, not yet admitted):**
+- **The engine generation cannot fence a takeover.** M1's notes said every takeover event carries the engine
+  generation, but `BeatEngine._commit_activation_generation` advances generation and activation together on every
+  preset and mode activation, so a preset step would have made every later takeover event stale. The coordinator
+  uses its own owner-admission serial (plan 01 M2 notes). Nothing else relies on that note.
+- **Extruded Bubble drift family revisions are process-global** (`extruded_bubble_drift_log._REVISIONS`): two
+  identical replays in one process publish different labels, so in-process digest comparisons of EB (and the
+  Studio's packet-hash proofs, if they ever replay EB twice in one process) differ for no behavioural reason. The M2
+  harness numbers each replay from 1 (`fresh_drift_revisions`). A per-runtime counter would remove the trap.
+- **A takeover fade completes on the publication edge only.** Like the activation fade it has no deadline: with no
+  logical publication (displays off, parked) an expand or collapse in flight waits and finishes when publications
+  resume. The coordinator meanwhile refuses mode requests and transfers as busy. Watch for it at M5 (display power).
+- **The expanded card inherits the Visualizer card's missing surface material** (§1 item 1: the card draws a plain
+  rectangle). Once the card gets the theme's material, the expanded card shows it with no M2 change.
+- **Display-wide renders reach 4K device pixels per scene target** (3840 x 2160 at 150 %); M0 already measured EB's
+  render-mode median over 8 ms at display size under game60. Per-mode full-display budgets stay with M6 (§0.7).
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.

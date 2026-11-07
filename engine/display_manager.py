@@ -131,6 +131,9 @@ def _visualizer_host_binding(manager: Any) -> "VisualizerHostBinding":
         live = _live()
         live._quick_visualizer_owner = owner
         live._quick_visualizer_unit = unit
+        if owner is None:
+            # The one place an admission ends (retire, reload, Settings, topology, a failed construction).
+            _takeover_owner_retired(live)
 
     def _record_unit(unit: Any) -> None:
         _live()._quick_visualizer_unit = unit
@@ -201,6 +204,39 @@ def _visualizer_host_binding(manager: Any) -> "VisualizerHostBinding":
     ))
 
 
+# ---------------------------------------------------------------- Expanded Visualizer (plan 01 M2) helpers
+# Module functions over the manager's one optional coordinator, so the routes that consult it read nothing that a
+# manager without one (none created yet, or a partially built stand-in) lacks.
+
+
+def _takeover_coordinator(manager: Any) -> Any | None:
+    return getattr(manager, "_expanded_display_coordinator", None)
+
+
+def _takeover_blocks_layout(manager: Any) -> bool:
+    """An expanded (or changing) view: ordinary layout gestures, edit glyphs and transfers wait."""
+    coordinator = _takeover_coordinator(manager)
+    return coordinator is not None and coordinator.blocks_ordinary_layout
+
+
+def _takeover_owner_retired(manager: Any) -> None:
+    coordinator = _takeover_coordinator(manager)
+    if coordinator is not None:
+        coordinator.owner_retired()
+
+
+def _takeover_edit_exited(manager: Any, *, saved: bool) -> None:
+    coordinator = _takeover_coordinator(manager)
+    if coordinator is not None and not manager._quick_custom_layout_owner.is_active:
+        coordinator.edit_exited(saved=saved)
+
+
+def _publish_expand_glyph(unit: Any, available: bool, expanded: bool) -> None:
+    setter = getattr(unit.runtime.scene_controller, "set_visualizer_expand_glyph", None)
+    if callable(setter):
+        setter(available, expanded)
+
+
 class DisplayManager(QObject):
     """
     Manage authoritative Quick display units across multiple monitors.
@@ -219,6 +255,9 @@ class DisplayManager(QObject):
     
     exit_requested = Signal()
     monitors_changed = Signal(int)  # new monitor count
+    # Not retired until retire_runtime; __init__ owns the instance value (a class default, like the owner's
+    # display-power defaults, so a route reached on a manager built without __init__ reads it too).
+    _retired = False
     displays_ready = Signal(int)  # startup generation ready for image replay
     # Startup generation in which every display's show failed (the last pending one included): nothing is on screen.
     no_display_shown = Signal(int)
@@ -311,6 +350,9 @@ class DisplayManager(QObject):
         self._quick_ctrl_coordinator = SharedCtrlCoordinator()
         self._quick_readiness_by_screen: dict[int, QuickSceneReadiness] = {}
         self._quick_visualizer_owner: Any | None = None
+        # Expanded Visualizer (plan 01 M2): the takeover coordinator beside the host binding. Created only when a
+        # capable mode or a saved intent needs it, so an incapable Visualizer constructs and imports nothing new.
+        self._expanded_display_coordinator: Any | None = None
         # Console display power as last applied by the engine's process-scoped
         # core.display_power authority; new units and owners inherit it.
         self._display_power_on = True
@@ -1278,7 +1320,7 @@ class DisplayManager(QObject):
         owner = self._quick_custom_layout_owner
         if owner.is_direct:
             return True
-        if owner.is_active:
+        if owner.is_active or _takeover_blocks_layout(self):
             return False
         self._set_quick_authored_layout_enabled(False, restore_base=False)
         try:
@@ -1784,6 +1826,7 @@ class DisplayManager(QObject):
         mode_id: str,
         *,
         completion_observer: Callable[[str], None] | None = None,
+        _through_takeover: bool = True,
     ) -> bool:
         """Resolve and request one canonical activation on the admitted owner.
 
@@ -1873,17 +1916,31 @@ class DisplayManager(QObject):
                     # product Settings or a completed retained activation.
                     logger.exception("[SPOTIFY_VIS] Optional mode-completion observer failed")
 
-        return bool(
-            owner.request_mode_change(
-                target,
-                settings_model=model,
-                resolved_activation=activation,
-                technical_cache=technical_cache,
-                logical_kwargs=asdict(model),
-                presentation_kwargs=self._visualizer_presentation_kwargs(model, target),
-                on_complete=on_complete,
+        def _forward() -> bool:
+            return bool(
+                owner.request_mode_change(
+                    target,
+                    settings_model=model,
+                    resolved_activation=activation,
+                    technical_cache=technical_cache,
+                    logical_kwargs=asdict(model),
+                    presentation_kwargs=self._visualizer_presentation_kwargs(model, target),
+                    on_complete=on_complete,
+                )
             )
-        )
+
+        # Expanded Visualizer: capable -> incapable collapses first and only then requests the mode (§D3).
+        if not _through_takeover:
+            # The takeover coordinator already admitted this request (a cycle it resolved).
+            return _forward()
+        coordinator = _takeover_coordinator(self)
+        if coordinator is None and self._expanded_display_mode_capable(target):
+            coordinator = self._expanded_display(create=True)
+            if coordinator is not None:
+                coordinator.generation_ready()
+        if coordinator is None:
+            return _forward()
+        return coordinator.mode_requested(target, _forward)
 
     def _cycle_quick_visualizer_mode(self) -> None:
         owner = self._quick_visualizer_owner
@@ -1897,6 +1954,16 @@ class DisplayManager(QObject):
         # be reachable by double-click/context-menu cycling.
         model = getattr(owner.controller, "settings_model", None)
         mode_activation = getattr(model, "mode_activation", None)
+        coordinator = _takeover_coordinator(self)
+        if coordinator is not None:
+            # Expanded Visualizer: while expanded the cycle skips modes that cannot be expanded (operator, 7 Nov).
+            from rendering.quick.visualizer.double_click_admission import visualizer_mode_cycle_order
+
+            coordinator.mode_cycle_requested(
+                visualizer_mode_cycle_order(owner.controller.mode_id, mode_activation),
+                lambda target: self._request_quick_visualizer_mode(target, _through_takeover=False),
+            )
+            return
         self._request_quick_visualizer_mode(
             next_visualizer_mode_id(owner.controller.mode_id, mode_activation)
         )
@@ -2046,6 +2113,9 @@ class DisplayManager(QObject):
         self._publish_quick_view_orbit_admission()
         self._refresh_quick_visualizer_edit_content_envelope()
         logger.info("[SPOTIFY_VIS] Persisted Quick visualizer mode=%s", mode_id)
+        coordinator = _takeover_coordinator(self)
+        if coordinator is not None:
+            coordinator.mode_activated()
 
     def _complete_quick_visualizer_preset_change(
         self,
@@ -2098,6 +2168,10 @@ class DisplayManager(QObject):
             target.target_index,
             target.custom_presets_changed,
         )
+        # A preset activation advances the activation id; the takeover (and an expanded view) stays.
+        coordinator = _takeover_coordinator(self)
+        if coordinator is not None:
+            coordinator.mode_activated()
 
     def _route_quick_media_transport(self, source: QuickDisplayUnit, key: str) -> bool:
         """Route a shortcut to one live Media owner, regardless of focused screen.
@@ -2246,6 +2320,13 @@ class DisplayManager(QObject):
         runtime.scene_controller.hover_edit_glyph_requested.connect(
             lambda action, widget_id: live_unit_route(
                 self._route_hover_edit_glyph, str(action), str(widget_id)
+            )
+        )
+        runtime.scene_controller.visualizer_expand_requested.connect(
+            lambda expand: live_unit_route(
+                lambda display, value: self._route_quick_visualizer_input(
+                    display, self._route_quick_visualizer_expand_glyph, display, value),
+                bool(expand),
             )
         )
         runtime.scene_controller.custom_layout_visualizer_orbit_requested.connect(
@@ -2409,6 +2490,8 @@ class DisplayManager(QObject):
             or action not in {"close", "restore", "rotate", "lock", "transfer_left", "transfer_right"}
         ):
             return False
+        if widget_id == "spotify_visualizer" and _takeover_blocks_layout(self):
+            return False
         scene = source.runtime.scene_controller
         state = getattr(scene, "_input_state", None)
         if (
@@ -2514,6 +2597,10 @@ class DisplayManager(QObject):
             self._finish_quick_visualizer_gesture()
         if self._quick_custom_layout_owner.is_active:
             return True
+        # Edit never shows an expanded state: an expanded view collapses first, before capture.
+        coordinator = _takeover_coordinator(self)
+        if coordinator is not None:
+            coordinator.edit_entered()
         # Quiesce placement callbacks before capture, preserving the visible
         # stacked/Media-relative rectangles as the initial edit geometry.
         self._set_quick_authored_layout_enabled(False, restore_base=False)
@@ -2522,10 +2609,12 @@ class DisplayManager(QObject):
         except Exception:
             if self._authored_layout_allowed_by_settings():
                 self._set_quick_authored_layout_enabled(True, restore_base=False)
+            _takeover_edit_exited(self, saved=False)
             raise
         if not started:
             if self._authored_layout_allowed_by_settings():
                 self._set_quick_authored_layout_enabled(True, restore_base=False)
+            _takeover_edit_exited(self, saved=False)
             return False
         self._refresh_quick_visualizer_edit_content_envelope()
         self._refresh_all_quick_context_menus()
@@ -2538,6 +2627,7 @@ class DisplayManager(QObject):
             # placement dormant now that persisted CUSTOM owns the geometry.
             self._refresh_all_quick_context_menus()
             self._refresh_quick_visualizer_edit_content_envelope()
+            _takeover_edit_exited(self, saved=True)
         return saved
 
     def cancel_custom_layout_session(self) -> bool:
@@ -2549,6 +2639,7 @@ class DisplayManager(QObject):
                 self._set_quick_authored_layout_enabled(True, restore_base=False)
             self._refresh_all_quick_context_menus()
             self._refresh_quick_visualizer_edit_content_envelope()
+            _takeover_edit_exited(self, saved=False)
         return cancelled
 
     def _save_layout_slot(self, slot_id: str) -> bool:
@@ -3124,7 +3215,110 @@ class DisplayManager(QObject):
         layout and admissions; this manager only chose ``chosen``.
         """
 
-        return _visualizer_host_binding(self).construct(chosen)
+        admitted = _visualizer_host_binding(self).construct(chosen)
+        if admitted:
+            # One evaluation of the persisted intent, before the generation is revealed.
+            self._expanded_display_ready()
+        return admitted
+
+    # ------------------------------------------------------------- Expanded Visualizer (plan 01 M2)
+
+    def _expanded_display(self, *, create: bool) -> Any | None:
+        coordinator = _takeover_coordinator(self)
+        if coordinator is not None or not create or self._retired:
+            return coordinator
+        from widgets.spotify_visualizer.expanded_display_coordinator import (
+            ExpandedDisplayCoordinator,
+            ExpandedDisplayServices,
+        )
+
+        manager_ref = weakref.ref(self)
+
+        def _call(name: str, *args: Any, default: Any = None) -> Any:
+            live = manager_ref()
+            return default if live is None else getattr(live, name)(*args)
+
+        coordinator = ExpandedDisplayCoordinator(ExpandedDisplayServices(
+            admitted_owner=lambda: getattr(manager_ref(), "_quick_visualizer_owner", None),
+            admitted_unit=lambda: getattr(manager_ref(), "_quick_visualizer_unit", None),
+            requested=lambda: bool(_call("_expanded_display_requested", default=False)),
+            persist_requested=lambda value: _call("_persist_expanded_display_requested", value),
+            mode_capable=lambda mode_id: bool(_call("_expanded_display_mode_capable", mode_id, default=False)),
+            edit_active=lambda: bool(_call("_quick_custom_layout_session_active", default=False)),
+            publish_glyph=_publish_expand_glyph,
+            edge_margin=lambda: float(_call("_expanded_display_edge_margin", default=0.0)),
+        ))
+        self._expanded_display_coordinator = coordinator
+        return coordinator
+
+    def _visualizer_section(self) -> Mapping[str, Any]:
+        settings = self.settings_manager
+        section = settings.get("widgets.spotify_visualizer") if settings is not None else None
+        if not isinstance(section, Mapping):
+            section = self._widgets_config_snapshot.get("spotify_visualizer", {})
+        return section if isinstance(section, Mapping) else {}
+
+    def _expanded_display_mode_capable(self, mode_id: object) -> bool:
+        from core.settings.visualizer_mode_registry import resolve_expanded_display_capable
+
+        return bool(resolve_expanded_display_capable(mode_id, self._visualizer_section().get("mode_activation")))
+
+    def _expanded_display_requested(self) -> bool:
+        from core.settings.models import normalize_expanded_display_requested
+
+        return normalize_expanded_display_requested(
+            self._visualizer_section().get("expanded_display_requested", False)
+        )
+
+    def _persist_expanded_display_requested(self, requested: bool) -> None:
+        """The intent's one narrow canonical write (only the reducer asks for it)."""
+
+        settings = self.settings_manager
+        if settings is None:
+            return
+        settings.set("widgets.spotify_visualizer.expanded_display_requested", bool(requested))
+        settings.save()
+        section = self._widgets_config_snapshot.get("spotify_visualizer")
+        if isinstance(section, dict):
+            section["expanded_display_requested"] = bool(requested)
+        logger.info("[EXPANDED_VIS] Persisted expanded_display_requested=%s", bool(requested))
+
+    def _expanded_display_edge_margin(self) -> float:
+        """The Visualizer card's ordinary edge margin: the anchored slot it sits on is Media's (the one owner,
+        ``resolve_overlay_geometry_policy``), so the display-wide card keeps that distance from every edge."""
+        from rendering.quick.widgets.geometry_resolver import resolve_overlay_geometry_policy
+
+        return float(resolve_overlay_geometry_policy("media", self._widgets_config_snapshot).margin)
+
+    def _quick_custom_layout_session_active(self) -> bool:
+        layout = getattr(self, "_quick_custom_layout_owner", None)
+        return bool(layout is not None and layout.is_active)
+
+    def _expanded_display_ready(self) -> None:
+        owner = self._quick_visualizer_owner
+        if owner is None or owner.is_retired:
+            return
+        coordinator = _takeover_coordinator(self)
+        if coordinator is None:
+            if not (self._expanded_display_mode_capable(owner.controller.mode_id)
+                    or self._expanded_display_requested()):
+                return
+            coordinator = self._expanded_display(create=True)
+            if coordinator is None:
+                return
+        coordinator.generation_ready()
+
+    def _expanded_display_blocks_layout(self) -> bool:
+        return _takeover_blocks_layout(self)
+
+    def _route_quick_visualizer_expand_glyph(self, unit: QuickDisplayUnit, expand: bool) -> bool:
+        if unit is not self._quick_visualizer_unit or unit.is_retired:
+            return False
+        state = unit.runtime.input_controller.input_state
+        if not state.admission_open or state.context_menu_active:
+            return False
+        coordinator = _takeover_coordinator(self)
+        return False if coordinator is None else coordinator.glyph_pressed(unit, bool(expand))
 
     def _request_quick_app_volume_step_from_visualizer(self, direction: int) -> bool:
         """Route Visualizer wheel input through an already-admitted Media owner.
@@ -3300,7 +3494,14 @@ class DisplayManager(QObject):
     def _transfer_quick_visualizer_unit(self, target: QuickDisplayUnit) -> bool:
         """Move the single visualizer to ``target`` through the host binding's transaction."""
 
-        return _visualizer_host_binding(self).transfer(target)
+        if _takeover_blocks_layout(self):
+            # An expanded transfer is one collapse + transfer + expand transaction (plan 01 M5): not yet.
+            raise RuntimeError("visualizer display transfer refused while the view is display-wide")
+        moved = _visualizer_host_binding(self).transfer(target)
+        coordinator = _takeover_coordinator(self)
+        if moved and coordinator is not None:
+            coordinator.display_transferred()
+        return moved
 
     def _release_quick_visualizer_routes(
         self,
@@ -5325,6 +5526,9 @@ class DisplayManager(QObject):
         if self._retired:
             return
         self._cancel_idle_transition_warmup()
+        coordinator = _takeover_coordinator(self)
+        if coordinator is not None:
+            coordinator.retire()
         self._retired = True
         self._cancel_quick_startup_reveal()
         self.disconnect_monitor_detection()
