@@ -295,8 +295,9 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 
   The new tests fail on main for the stated reasons. 16/16 lifecycle and Settings files pass on the merge, and Tier 2
   of the checklist is complete.
-  **New side defect:** a Gmail IMAP `LOGIN` in flight held the Settings display barrier for 6.2 s. The candidate fix
-  is a bounded, interruptible IMAP transport (like `core/network/bounded_dns.py`).
+  **Side defect found here (Gmail IMAP `LOGIN` held the Settings barrier 6.2 s): fixed on branch
+  `worktree-agent-ab77df54c8fe5d4a6`, awaiting the lead's audit** (interruptible raw-socket sessions;
+  `Docs/Contracts.md` Network transports).
 **Queued, next free medium slot, in this order (small, bounded):**
 1. **GC freeze per generation: merged 7 Nov; the live check is owed (lead, quiet machine).** The minute-ly 86–161 ms
    gen2 stalls came from the replay driver: it kept every frame under the interpreter's thresholds.
@@ -375,14 +376,20 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   finalization (and the post-loop `finalize_after_event_loop` backstop); `cleanup()` is reached only by tests. AC-03
   retires the tier on both paths (idempotent); a change to one terminal path must check the other.
 
-**Found while building the live check's Settings round trip (7 Nov; record, not yet admitted):**
-- **A Gmail IMAP login holds the Settings display barrier for seconds.** In the smoke run, Settings requested 0.25 s
-  after the startup reveal: the display barrier (reason `settings`, generation 0) completed only after 6183 ms, the
-  moment the Gmail runtime's in-flight `LOGIN` returned (`[UNAVAILABLE] Temporary System Error`); the later round
-  trip's barrier took 618 ms. The dialog cannot open until the generation's network work drains, so a slow or hung
-  IMAP server delays Settings by its whole login time. Fix candidate: a bounded/interruptible IMAP transport (as
-  `core/network/bounded_dns.py` bounds DNS) so retirement never waits on a login. Figures in the AC lifecycle
-  agent's report (`--settings-roundtrip 10,25`).
+**Found while centralizing tool output (7 Nov; record, not yet admitted):**
+- **Preset rollback recovery copies go to `%TEMP%`.** `core/visualizer_preset_tree.py` writes the before-images of a
+  failed preset-replacement rollback to `tempfile.mkdtemp(prefix='srpss_preset_recovery_')` and names the folder in
+  the error. It is user-facing recovery data in a folder Windows Storage Sense may empty and nothing ever removes;
+  a location beside the preset tree (or the data root) may be intended. Product behaviour unchanged pending the
+  operator's call (the test redirects it to `tmp_path`).
+- **A third evidence root lives in `Docs/`:** `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
+  referenced by `Docs/Reference/Extruded_Bubble/Investigation.md`). Not part of the 7 Nov migration mapping; move it
+  into the layout (`visualizers/extruded_bubble/...`) on the operator's word.
+- **Dead evidence references** (the folders no longer exist; `tools/artifact_migration.py refs` lists them):
+  `logs/evidence_chest/08_*` in Historical_Bugs R-53/56/57/58/59/60/62, `.artifacts/evidence/{ribbon_path,
+  ribbon_frames,ribbon_strip,expanded_visualizer,oscilloscope}` and several `waveform_ribbon/wr*` folders in
+  `Docs/Reference/Ribbon_Path.md`, `Waveform_Ribbon_Lab_Plan.md` and `Waveform_Ribbon_Mist_Failure_and_Replacement.md`.
+  Left unchanged; prune or mark historical on review.
 
 **Found while fixing the Settings round-trip memory growth (7 Nov; record, not yet admitted):**
 - **The invisible Waveform live check grows with no round trips at all:** +7.2 MB private a minute over a 600 s run

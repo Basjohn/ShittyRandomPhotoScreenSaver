@@ -3,9 +3,9 @@
 
 No window is shown: the Studio shell renders through QQuickRenderControl into a GL
 texture (Windows QPA). The store is in-memory (a resolved preset copy), so nothing is
-saved. Writes one PNG per workspace plus a JSON record of frame/evaluation timings.
+saved. Writes one image per workspace (published as WebP) plus a JSON record of frame/evaluation timings.
 
-    .venv\\Scripts\\python.exe tools\\waveform_studio_capture.py --output .artifacts\\evidence\\...\\studio
+    .venv\\Scripts\\python.exe tools\\waveform_studio_capture.py      # default: .artifacts/evidence/studio/waveform_capture/
     .venv\\Scripts\\python.exe tools\\waveform_studio_capture.py --mode extruded_bubble --preset 1 --output ...
 """
 from __future__ import annotations

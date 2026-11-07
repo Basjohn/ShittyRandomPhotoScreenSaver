@@ -8,8 +8,8 @@ The camera is a historical WR-00 analytic Orthographic fit to the traced landmar
 5 Nov 2026; the product camera is Perspective only).
 
     .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_targets.py
-        --cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection
-        --output .artifacts/evidence/waveform_ribbon/<new-run>
+        --cards <lossless preflight cards: a waveform_ribbon_preflight run with --output under .artifacts/scratch/<owner>/>
+        --output .artifacts/evidence/visualizers/waveform_ribbon/targets/<YYYYMMDD>_<label>
 """
 from __future__ import annotations
 
