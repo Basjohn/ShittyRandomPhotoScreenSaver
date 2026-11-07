@@ -151,6 +151,39 @@ class DisplayWindowBlocked(RuntimeError):
     """A test reached ``QuickDisplayWindow.show_on_screen`` without --display-disruptive."""
 
 
+# The refusal's log record must not keep the refused runtime alive. Production's show-failure path logs the error
+# with ``exc_info`` and the exception as an argument; production's queued handler snapshots every record without its
+# traceback (``core/logging/logger.py:_snapshot_log_record``), but pytest's log capture keeps the record itself for the
+# whole test. Its traceback's frames chain back (``f_back``) to ``DisplayManager.initialize_displays``, whose locals
+# hold every display unit it built, so a runtime-destruction barrier waiting for those units timed out and reached
+# the real ``QCoreApplication.exit(1)`` (``test_s_hotkey_workflow.py``, 7 Nov). Records about the guard's own refusal
+# are detached the way production detaches them: the traceback is rendered to text, the exception to its message.
+# Every other record keeps its ``exc_info`` for tests that inspect it.
+def _install_display_guard_record_detach() -> None:
+    import logging
+    import traceback
+
+    previous = logging.getLogRecordFactory()
+    if getattr(previous, "_srpss_display_guard_detach", False):
+        return
+
+    def detach_display_guard_refusals(*args, **kwargs):
+        record = previous(*args, **kwargs)
+        exc_info = record.exc_info
+        if exc_info and isinstance(exc_info[1], DisplayWindowBlocked):
+            record.exc_text = "".join(traceback.format_exception(*exc_info)).rstrip()
+            record.exc_info = None
+        if isinstance(record.args, tuple) and any(isinstance(arg, DisplayWindowBlocked) for arg in record.args):
+            record.args = tuple(str(arg) if isinstance(arg, DisplayWindowBlocked) else arg for arg in record.args)
+        return record
+
+    detach_display_guard_refusals._srpss_display_guard_detach = True
+    logging.setLogRecordFactory(detach_display_guard_refusals)
+
+
+_install_display_guard_record_detach()
+
+
 def _install_display_window_guard(module) -> None:
     window = module.QuickDisplayWindow
     if getattr(window.show_on_screen, "_srpss_guard", False):

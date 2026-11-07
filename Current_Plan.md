@@ -362,15 +362,13 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
-- **Two more gate reds, on main too (found by the AC-17 gate, 7 Nov; each fails identically alone on main
-  `f4fdb765`):**
-  - `tests/test_engine_cleanup_joins_runtime_threads.py::test_reaching_the_display_window_guard_leaves_no_non_daemon_thread`:
-    `assert initialized is False` gets `True`. The display-window guard refuses the window ("Failed to show display
-    for screen 0 ... with --display-disruptive"), but engine initialisation still reports success. Decide whether the
-    guard's refusal should fail initialisation or the test's expectation is stale.
-  - `tests/test_s_hotkey_workflow.py::test_s_hotkey_opens_settings_without_crash` reaches the real
-    `QCoreApplication.exit(1)` (the suite's guard reports a runtime destruction-barrier timeout or similar) and is
-    skipped; the file exits 3. Find what calls `exit(1)` on the S-hotkey Settings path.
+- **Side defect (found 7 Nov while fixing two gate reds; latent, not reached by any test): a startup whose every
+  display fails to show leaves a windowless engine.** `DisplayManager.initialize_displays` shows screen 0 at once and
+  staggers the rest onto later UI turns, so `_initialize_display` returns success while those are pending (correct).
+  If every deferred show then fails too, `_show_display_widget` empties `displays`, the startup-ready set empties
+  without emitting, and nothing reports it: the engine stays initialized and running with no window to take input.
+  The display manager should signal "no display could be shown" once the last pending show fails, and the engine
+  handle it as it handles a failed `_initialize_display`.
 
 **Found while landing AC-09 and AC-02 (7 Nov; fixed there or recorded):**
 - **Card border consumers disagreed on malformed values (fixed in AC-09).** Games You Follow drew 12 px for a stored
