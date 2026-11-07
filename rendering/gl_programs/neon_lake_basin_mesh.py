@@ -1,4 +1,4 @@
-"""Static, mode-owned landscape overscan lattice for Neon Lake Basin.
+"""Static, mode-owned landscape overscan lattice for Neon Lake.
 
 The authored rectangle stays an exact 0..1 sub-lattice. The continuation extends
 on every side with geometrically growing cell widths, so density is preserved

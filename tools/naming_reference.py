@@ -205,7 +205,7 @@ GLASS_SENSES: tuple[tuple[str, str, Claim], ...] = (
     ("3D Block Spins **edge glass**", "`transitions.blockspin.edge_glass`",
      Claim("`rendering/quick/transitions/parameter_resolution.py`",
            (_p("rendering/quick/transitions/parameter_resolution.py", r'"edge_glass"'),))),
-    ("Neon Lake Basin **surface style** glass", "a `shockwave_grid_*` value",
+    ("Neon Lake **surface style** glass", "a `shockwave_grid_*` value",
      Claim("`core/settings/visualizer_mode_settings.py` (`_BASIN_GLASS`)",
            (_p("core/settings/visualizer_mode_settings.py", r"^_BASIN_GLASS = "),))),
     ("Extruded Bubble **Glass bucket** and Lit Glass", "`extruded_bubble_*` keys",
@@ -222,7 +222,7 @@ ACRYLIC = Claim(
      _p("Docs/Architecture/Card_Surface_Materials.md", r"R-61")))
 
 HAZARDS: tuple[Claim, ...] = (
-    Claim('"shockwave" is also Neon Lake Basin\'s **onset-wave concept** (`ShockwaveEvent`, `SHOCKWAVE_WAVE_GLSL`, '
+    Claim('"shockwave" is also Neon Lake\'s **onset-wave concept** (`ShockwaveEvent`, `SHOCKWAVE_WAVE_GLSL`, '
           "`SHOCKWAVE_DEPTH`), not only its old name: never rewrite `shockwave` to `neon_lake` mechanically",
           (_p("rendering/gl_programs/neon_lake_basin_program.py", r"\bSHOCKWAVE_WAVE_GLSL\b"),
            _p("rendering/gl_programs/neon_lake_basin_program.py", r"\bSHOCKWAVE_DEPTH\b"),
@@ -404,7 +404,7 @@ def generate() -> str:
         "",
         "- **Product names** (a mode's `display_name`, a transition label, a widget label) are what users and the "
         "operator say. Docs write the product name first with the id in backticks on first use in a section: "
-        "Neon Lake Basin (`shockwave_grid`), Spline Curve (`devcurve`).",
+        "Neon Lake (`shockwave_grid`), Spline Curve (`devcurve`).",
         "- **Ids are persisted** (settings keys, preset folders, goldens, evidence folders) and are the code's "
         "name. Never rename one to match a product name; that needs a compatibility bridge "
         "(`Docs/Architecture/Persisted_Input_Compatibility.md`).",

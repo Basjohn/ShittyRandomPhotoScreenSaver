@@ -11,13 +11,13 @@ Layout (Docs/Guardrails.md "Evidence and scratch hygiene"):
 retired mode id, ``transitions/<name>`` any slug). An unknown area raises. ``<topic>`` and ``<label>`` are slugs.
 
 Visualizer folders are named by mode id. The product name is accepted too and resolves to the id (the slug of
-the registry's display name, plus the Studio title ``neon_lake``), so ``visualizers/neon_lake_basin`` and
-``visualizers/neon_lake`` both write to ``visualizers/shockwave_grid``. Mode ids with their product names
+the registry's display name, plus Neon Lake's former name ``neon_lake_basin``), so ``visualizers/neon_lake`` and
+``visualizers/neon_lake_basin`` both write to ``visualizers/shockwave_grid``. Mode ids with their product names
 (``python tools/artifact_paths.py areas`` prints the current list):
 
     spectrum (Spectrum)                 oscilloscope (Oscilloscope)       bubble (Bubble)
     devcurve (Spline Curve)             sphere (Voxel Sphere)             extruded_spectrum (Extruded Spectrum)
-    shockwave_grid (Neon Lake Basin)    extruded_bubble (Extruded Bubble) waveform_ribbon (Waveform Ribbon)
+    shockwave_grid (Neon Lake)    extruded_bubble (Extruded Bubble) waveform_ribbon (Waveform Ribbon)
     shared (cross-mode infrastructure); retired: blob, sine_wave
 
 Prevention: a tool takes its default destination from here, and passes any explicit output path given on its
@@ -124,7 +124,7 @@ class ArtifactPathError(ValueError):
 
 
 # Product names the registry cannot derive; everything else comes from each mode's display name.
-_HAND_ALIASES = {"neon_lake": "shockwave_grid"}   # the Neon Lake Studio's title (ui/studio/registry.py)
+_HAND_ALIASES = {"neon_lake_basin": "shockwave_grid"}   # Neon Lake's former product name (until 7 Nov 2026)
 
 
 def _ensure_repo_importable() -> None:

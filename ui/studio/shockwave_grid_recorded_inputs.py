@@ -1,4 +1,4 @@
-"""Neon Lake Basin's engine answers, per production tick, recorded through the production replay (out of process).
+"""Neon Lake's engine answers, per production tick, recorded through the production replay (out of process).
 
 Neon Lake (mode id ``shockwave_grid``) runs Spectrum's own frame runtime and capture (``_capture_spectrum_family``)
 under its own identity, plus the transient bus's onsets, the musical level / intensity and the pre-AGC analysis

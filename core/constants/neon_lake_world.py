@@ -1,4 +1,4 @@
-"""Neon Lake Basin's fixed world dimensions, shared by rendering and its framed camera (pure imports)."""
+"""Neon Lake's fixed world dimensions, shared by rendering and its framed camera (pure imports)."""
 from __future__ import annotations
 
 DEPTH = 2.4    # the basin's length into the distance, in field heights

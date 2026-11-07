@@ -364,7 +364,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
     # owns a separate freeform stage profile. Camera pose remains mode-local.
     VisualizerModeDescriptor(
         "shockwave_grid",
-        "Neon Lake Basin",
+        "Neon Lake",
         "_shockwave_grid_preset_slider",
         ("shockwave_grid_",),
         VisualizerModePresentationPolicy(

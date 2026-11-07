@@ -573,10 +573,10 @@ their Quick window/context and retire through one-shot render events on admissio
 the replacement mode obtains a frame. Sync and pointer movement create no cleanup polling or repeated frame requests.
 Sphere owns only the descriptor-declared technical inputs its analysis consumes, plus the two selected frequency splits.
 Startup, legacy Custom-cache and SST migration seed absent owned values from the former RAW Spectrum profile once before
-defaults; later Spectrum preset or Custom changes cannot affect Sphere. **Sphere runs the existing shared FFT/energy/transient worker in activation-scoped analysis-only mode:** it retains frequency-zone, floor, onset and pre-AGC inputs but does **not** project or evaluate Spectrum visual shape nodes, lane strengths, mirrored shaping or bar post-processing. This is enforced on each switch, including back to Spectrum and Shockwave. **Neon Lake Basin retains the Shockwave source identity:** its owned Advanced Frequency Response editor still shapes
+defaults; later Spectrum preset or Custom changes cannot affect Sphere. **Sphere runs the existing shared FFT/energy/transient worker in activation-scoped analysis-only mode:** it retains frequency-zone, floor, onset and pre-AGC inputs but does **not** project or evaluate Spectrum visual shape nodes, lane strengths, mirrored shaping or bar post-processing. This is enforced on each switch, including back to Spectrum and Shockwave. **Neon Lake retains the Shockwave source identity:** its owned Advanced Frequency Response editor still shapes
 bars for ridge lighting and separate terrain-growth envelopes. Its primary Terrain editor authors land/water heights,
 not audio coordinates; the onset ring continues to drive water independently. See
-[Neon Lake Basin](Reference/Neon_Lake_Basin.md). Do not skip Shockwave shaping while fixing Sphere or allow the analysis-only policy to leak across activations. Unused worker knobs otherwise take canonical engine defaults without creating dead Sphere settings. Fill/edge/tracer alpha and Rainbow speed/extent retain direct renderer consumers; each mode's curated snapshots and Custom cache remain operator-authored, editable data, not frozen behavioural test oracles.
+[Neon Lake](Reference/Neon_Lake_Basin.md). Do not skip Shockwave shaping while fixing Sphere or allow the analysis-only policy to leak across activations. Unused worker knobs otherwise take canonical engine defaults without creating dead Sphere settings. Fill/edge/tracer alpha and Rainbow speed/extent retain direct renderer consumers; each mode's curated snapshots and Custom cache remain operator-authored, editable data, not frozen behavioural test oracles.
 
 ### Visualizer Studio
 
@@ -666,11 +666,11 @@ direct gesture commits through its existing Save boundary before target-profile 
 
 **View pose and artistic presets are separate from layout geometry.** Descriptor `view_orbit_settings` and optional
 `scene_transform_settings` identify canonical mode-specific view settings. Sphere and Extruded declare turn/tilt;
-framed Neon Lake Basin additionally declares internal scene scale and pan X/Y. All five Neon view keys persist through
+framed Neon Lake additionally declares internal scene scale and pan X/Y. All five Neon view keys persist through
 the existing view owner and are excluded from curated art presets and Custom art snapshots. View gestures do not
 select Custom art; art application cannot overwrite the view. Material and response remain artistic settings. A visible
 3D pose combines the active `layout_profile` (stage position/size/viewport) with its mode's presentation view state.
-Neither authority may infer or overwrite the other. See [Neon Lake Basin](Reference/Neon_Lake_Basin.md).
+Neither authority may infer or overwrite the other. See [Neon Lake](Reference/Neon_Lake_Basin.md).
 
 Freeform-3D Edit framing shows multiple derivative views of that same one geometry owner. The persisted CUSTOM rectangle is the
 stage/viewport; the renderer-derived content envelope remains the honest projected footprint/hit cue; and a projected **3D cage**
@@ -684,7 +684,7 @@ Alt-right move and Alt-wheel resize use the current `CustomLayoutSession`. Frame
 Alt-right/Alt-wheel gestures to their shared internal-camera pan/scale capability: their card rectangle, viewport and CUSTOM
 geometry never change from those inputs. Plain CUSTOM geometry controls retain their ordinary behavior. Its fixed card
 rectangle owns selection; the projected internal guide is clipped derivative paint. See
-[Neon Lake Basin](Reference/Neon_Lake_Basin.md). Wheel input preserves signed movement on either Qt axis; zero
+[Neon Lake](Reference/Neon_Lake_Basin.md). Wheel input preserves signed movement on either Qt axis; zero
 movement is a no-op. Geometry/settings/orbit edges refresh framing; ordinary audio and closed/deselected Edit add no continuing
 projection work. Gesture hit regions remain frozen while derivative paint follows the projection; persisted stage handle paint
 stays secondary until hovered or dragged.

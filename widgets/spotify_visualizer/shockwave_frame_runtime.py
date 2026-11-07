@@ -1,4 +1,4 @@
-"""Activation-fenced authored state for the Neon Lake Basin Visualizer mode (mode id ``shockwave_grid``).
+"""Activation-fenced authored state for the Neon Lake Visualizer mode (mode id ``shockwave_grid``).
 
 Its owners span three vocabularies (``shockwave_grid_*``, this ``shockwave_*`` file, ``neon_*``), all mapped in
 ``Docs/Reference/Naming.md``; here "shockwave" is also the mode's onset-wave concept, not only its old name.

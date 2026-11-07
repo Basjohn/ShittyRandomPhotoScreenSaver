@@ -364,7 +364,7 @@ def test_pytest_never_pins_a_shared_basetemp():
 
 
 def test_product_names_resolve_to_the_mode_id_folder(tmp_path):
-    """Folders use mode ids; the product name (and the Studio's title) are accepted and resolve to the id."""
+    """Folders use mode ids; the product name (and Neon Lake's former name) are accepted and resolve to the id."""
     with artifact_paths.use_root(tmp_path / ".artifacts") as root:
         expected = root / "evidence" / "visualizers" / "shockwave_grid" / "capture" / "20261107_a"
         for name in ("neon_lake_basin", "neon_lake", "shockwave_grid"):

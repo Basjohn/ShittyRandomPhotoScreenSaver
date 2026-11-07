@@ -36,11 +36,11 @@ Treat concrete, architecture, and lights as **required scene content and render 
 
 The mock exaggerates the tall peak for artistic readability. Its exact height/shape is **not promised by a basic heightfield**; that must be proved on rendered pixels at real card sizes before accepting the full target.
 
-## 3. What makes this **different from Neon Lake Basin's water**
+## 3. What makes this **different from Neon Lake's water**
 
 This separation is an admission gate, not merely different names, colours, or shaders.
 
-| Dimension | Neon Lake Basin | Reactive Liquid / Audio Melt Pool |
+| Dimension | Neon Lake | Reactive Liquid / Audio Melt Pool |
 | --- | --- | --- |
 | **Primary identity** | Landscape, skyline, horizon, authored raised terrain and regions classified as water | A **contained, heavy, deliberately viscous molten material** inside an architectural chamber |
 | **Geometry ownership** | Authored basin/terrain heightfield, its land/water classification, coastline and long-reaching horizon | Dedicated **liquid-only dynamic surface** with a fixed concrete vessel; no land-vs-water map or landscape horizon |
