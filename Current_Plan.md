@@ -218,8 +218,8 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
    once, retry at the next boundary.
 4. **Checklist AC-05:** one beat-engine authority (delete `_global_beat_engine`; the tick uses
    `controller.ensure_engine()` or raises). Lands before any SMP PCM source.
-5. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame
-   fences with the query order preserved, plus the bench node-path case). Mechanical, pixel-identical.
+5. **Checklist AC-08** (one GL state-query helper on the per-frame fences with the query order preserved, plus the
+   bench node-path case). Mechanical, pixel-identical. (AC-09, the card border width resolver, landed 7 Nov.)
 6. **Checklist AC-11, decided (operator 7 Nov): "don't ruin the bordered 3D cameras so adjust the freeform Sphere
    but ideally in a way that does not ruin its look/capabilities".** The framed (bordered) 3D cameras of Extruded
    Bubble, Neon Lake and Waveform stay exactly as they are. Sphere (freeform) gains a Reset Camera to its preset home
