@@ -70,7 +70,7 @@ TEMP_ALLOWED = {
 
 _OUTPUT_ARG = re.compile(
     r"^--(out|output|outdir|out-dir|output-dir|output-json|output-text|report|save|json|png-all|"
-    r"write|write-visual|evidence|destination)$"
+    r"write|write-visual|evidence)$"
 )
 
 
