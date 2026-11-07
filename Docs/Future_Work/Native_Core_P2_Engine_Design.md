@@ -138,7 +138,9 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
 
 - **Import weight in the worker:** the tick modules import Qt (`QObject` in the beat engine, settings helpers). The
   worker must import QtCore at most; P2a keeps the beat engine in the main process, so the first worker imports only the
-  tick and mode runtimes. An import scan test pins it.
+  tick and mode runtimes. Measured 8 Nov: the logical runtime, the tick pipeline, render state, the ABI, the codec and
+  all eight mode frame runtimes import QtCore only (no QtGui/QtQml/QtQuick); about 0.9-1.1 s cold and ~350 modules
+  each. `tests/test_visualizer_engine_import_weight.py` pins it.
 - **Hidden GUI-thread reads inside the tick:** every attribute the tick reads from the owner/widget must become a
   control input. The audit for step 4 lists them from `logical_tick`'s reads; a missed one shows up as an identity
   failure, not silently.
