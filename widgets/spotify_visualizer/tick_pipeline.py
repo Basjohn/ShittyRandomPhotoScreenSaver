@@ -959,14 +959,13 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
 
     Returns (changed, any_nonzero).
     """
-    from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
-
     _ensure_fresh_generation_state(widget)
 
     engine = widget._engine
     if engine is None:
-        engine = get_shared_spotify_beat_engine(widget._bar_count)
-        widget._engine = engine
+        # The controller's own engine or factory, never a process service: a Studio or offline controller
+        # built without one raises instead of silently taking the live capture engine.
+        engine = widget.runtime_controller.ensure_engine()
         engine.set_smoothing(widget._smoothing)
 
     changed = False

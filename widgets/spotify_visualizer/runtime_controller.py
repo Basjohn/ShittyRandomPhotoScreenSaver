@@ -311,18 +311,21 @@ class VisualizerRuntimeController:
         self._engine = value
 
     def ensure_engine(self) -> Any:
+        """This controller's engine, made by its ``engine_factory`` on first use.
+
+        The controller never resolves a process service itself: the production
+        owner injects the shared registry engine as its factory, and Studio /
+        offline controllers inject theirs. Neither an engine nor a factory is an
+        error, never a silent bind to the live capture engine.
+        """
         with self._lock:
             if self._engine is not None:
                 return self._engine
             factory = self._engine_factory
             if factory is None:
-                # Lazy so importing the controller does not import the
-                # QObject-backed source implementation or presentation code.
-                from widgets.spotify_visualizer.beat_engine import (
-                    get_shared_spotify_beat_engine,
+                raise RuntimeError(
+                    "visualizer controller has neither a beat engine nor an engine_factory"
                 )
-
-                factory = get_shared_spotify_beat_engine
             engine = factory(self._bar_count)
             self._engine = engine
             return engine

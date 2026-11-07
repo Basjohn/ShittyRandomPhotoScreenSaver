@@ -84,25 +84,6 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
 
 ## Tier 2: defects to fix soon (small, real)
 
-- [ ] **AC-05 One beat-engine authority: delete the module global and the in-tick fallback** (A-07 + A-08). Severity
-  medium, reward medium, effort S. **Confirmed:** `widgets/spotify_visualizer/beat_engine.py:1973-1988`
-  `get_shared_spotify_beat_engine` writes `_global_beat_engine`, which `BeatEngineRegistry.clear()` (`:1952-1969`)
-  never clears and `set_engine` (`:1944-1950`) never updates; `engine/engine_lifecycle.py:292-295` force-stops
-  through the global first. `widgets/spotify_visualizer/tick_pipeline.py:965-969` binds the process engine when
-  `widget._engine is None`, bypassing `runtime_controller.ensure_engine()` / `_engine_factory` and the owner lease
-  (`quick_display_visualizer_owner.py:1505-1530`). No production trigger of the fallback was found; a Studio or
-  offline controller built without its engine would silently take the live capture engine.
-  - **Fix:** `get_shared_spotify_beat_engine` returns `BeatEngineRegistry.get_instance().get_engine(bar_count)` and
-    the global is deleted; `engine_lifecycle` calls only the registry's `clear()`; the tick uses
-    `controller.ensure_engine()` and raises when the controller has neither an engine nor a factory. The tick must
-    never resolve a process service.
-  - **Must stay true:** exactly one production `_SpotifyBeatEngine` (`Docs/Contracts.md` → Transition / visualizer);
-    `clear()` retains the engine while native capture ownership drains; Studio/offline paths inject through
-    `engine_factory` only.
-  - **Regression bar:** after `clear()` a `weakref` to the engine dies once the test drops its own reference with gc
-    disabled; `set_engine(x)` then terminal stop force-stops `x`; a tick on a controller with `engine_factory=stub`
-    and `engine=None` uses the stub, a tick with neither raises, and neither touches `BeatEngineRegistry`.
-
 - [ ] **AC-07 Unchanged settings writes still publish** (A-13). Severity low, reward medium, effort S. **Confirmed
   (code):** `core/settings/json_store.py:332-333` drops an unchanged write, but `SettingsManager.set`
   (`core/settings/settings_manager.py:1099-1172`) always calls `sync()` and `_publish_store_change`, which fans out to
@@ -290,7 +271,7 @@ Addenda from the same audit:
 
 ## Where the rest of the audit went
 
-- **Healthy** (checked, no item): one Visualizer owner and one beat engine (apart from AC-05's handle); render
+- **Healthy** (checked, no item): one Visualizer owner and one beat engine (one registry holder, controllers by factory); render
   resources released at the mode boundary behind a context check, after the active mode draws; card materials dormant when
   Normal; timers weak-ref + token fenced; Settings destruction barrier; supervisor per-role locks; Studio workers in
   Job Objects; GC policy-owned; steady publications early-return; no environment-variable flags; bounded image,
