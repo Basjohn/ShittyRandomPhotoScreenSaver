@@ -809,15 +809,22 @@ class EngineAnswerEvaluator(ExactReplay):
         if self._engine is None:
             self._engine = ReplayBeatEngine(32)
         controller = self.mode.configure(self._engine, self._effective(values, inputs), environment=self._environment)
+        # An offline replay is not a presentation: it never records into the live --frame-trace sink.
+        controller.logical_mailbox.detach_frame_trace()
         if self._extent is not None:
             controller.hydrate_committed_layout_metrics(self._extent, 0)
-        self._view = RecordedEngineAnswers(self._engine, inputs.arrays)
-        controller.engine = self._view
+        view = RecordedEngineAnswers(self._engine, inputs.arrays)
+        controller.engine = view
+        # Capture the pristine step state BEFORE committing the controller: if the capture fails, nothing is left
+        # half-started (7 Nov: a failed capture left ``_pristine`` None and every later frame raised "'NoneType'
+        # object has no attribute 'restore'"); the next evaluation starts again and reports the real error.
+        pristine = StepState(controller, keep=(self._engine, view, *inputs.arrays))
+        self._view = view
         self._controller = controller
         self._inputs = inputs
         self._ticks = clip_loop.unrolled_ticks(inputs, self.fixture.duration)
         self._signature = self._pristine_signature = self.mode.own_signature(values)
-        self._pristine = StepState(controller, keep=self._shared())
+        self._pristine = pristine
         self.replays += 1
 
     def _shared(self) -> tuple:

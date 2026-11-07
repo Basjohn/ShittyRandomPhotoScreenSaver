@@ -356,27 +356,30 @@ class WindowPresence:
             widget.raise_()
             widget.activateWindow()
         self.reveal_count += 1
-        self.repaint_revealed()
         window = widget.windowHandle()
         logger.info("[STUDIO] Settings revealed (qt visible=%s enabled=%s exposed=%s native=%s)",
                     widget.isVisible(), widget.isEnabled(), window.isExposed() if window is not None else None, native)
         try:
-            self.watch = RevealWatch(widget)
+            self.watch = RevealWatch(widget)              # armed first, so it sees the reveal's own repaint
         except Exception:
             logger.exception("[STUDIO] Reveal input watch unavailable")
+        self.repaint_revealed()
 
     def repaint_revealed(self) -> None:
-        """Ask Qt itself to repaint the revealed window. A layered window (Settings is frameless and translucent)
-        never receives WM_PAINT, so the native re-expose alone can leave Qt with nothing scheduled: the 7 Nov field log
-        shows a click delivered 853 ms after a reveal with no Expose, UpdateRequest or Paint since (the "frozen"
-        Settings showing its pre-Studio picture). Called at the reveal and again when the Studio window is gone."""
+        """Repaint the revealed window NOW (synchronously). The native show puts back Settings' last layered picture,
+        from before the Studio; a layered window never receives WM_PAINT, and an asynchronous ``update()`` can be
+        dropped after the native hide/show (7 Nov field logs: a click 853 ms and 1577 ms after a reveal with no Expose,
+        UpdateRequest or Paint since, even with ``update()`` requested). Until something repainted, Settings showed the
+        stale picture (the "freeze"); a late repaint swapped it for the current one (a visible jump). ``repaint()``
+        paints and flushes the current state inside the reveal. Called at the reveal and when the Studio window is
+        gone."""
         widget = self._widget
         try:
             import shiboken6
             if widget is not None and shiboken6.isValid(widget) and widget.isVisible():
-                widget.update()
+                widget.repaint()
         except Exception:
-            logger.exception("[STUDIO] Settings repaint request failed")
+            logger.exception("[STUDIO] Settings repaint failed")
 
 
 __all__ = ["WindowPresence"]

@@ -376,8 +376,15 @@ def _shared_types() -> tuple:
     import weakref
     import numpy as np
     from PySide6.QtCore import QObject
+    from core.performance.frame_trace import FrameTraceSink
+    from core.performance.gui_stall_sampler import GuiStallSampler
+    # The process-wide diagnostic sinks (--frame-trace's ring buffer, --gui-stall-stacks' sampler) are cached by
+    # production objects at construction; a snapshot shares them, never copies them (7 Nov: copying the frame-trace
+    # sink failed every engine-answer Studio for an operator running with --frame-trace, first on its WindowsPath,
+    # then its bytearray).
     return (type(threading.RLock()), type(threading.Lock()), QObject, types.FunctionType, types.MethodType,
-            types.BuiltinFunctionType, types.ModuleType, type, enum.Enum, np.generic, weakref.ref)
+            types.BuiltinFunctionType, types.ModuleType, type, enum.Enum, np.generic, weakref.ref, FrameTraceSink,
+            GuiStallSampler)
 
 
 import pathlib as _pathlib
