@@ -541,7 +541,6 @@ OverlayWidget {
 
                     ShadowedText {
                         id: listTitle
-                        surfacePlateEnabled: false   // the story's LegibilityRow
                         textFormat: Text.PlainText
                         x: listRow.titleX
                         y: 4.0
@@ -565,7 +564,6 @@ OverlayWidget {
 
                     ShadowedText {
                         id: ageText
-                        surfacePlateEnabled: false   // the story's LegibilityRow
                         textFormat: Text.PlainText
                         x: listRow.ageX
                         y: 5.0
@@ -589,7 +587,6 @@ OverlayWidget {
                         textFormat: Text.PlainText
                         x: listRow.titleX
                         y: listTitle.y + listTitle.height + 2.0
-                        surfacePlateEnabled: false   // the story's LegibilityRow
                         width: Math.max(0.0, listRow.titleRight - x)
                         height: Math.max(0.0, listRow.height - y - 3.0)
                         visible: feedRoot.feedModel.viewMode !== "compact"
@@ -615,20 +612,6 @@ OverlayWidget {
                         onTapped: feedRoot.openItemRequested(feedUrl)
                     }
 
-                    // On a surface material: one rounded row behind the whole story line
-                    // (title, source/age and summary opt out of their own plates).
-                    // Inactive on Normal.
-                    LegibilityRow {
-                        objectName: "feedListLegibilityRow"
-                        x: -4.0
-                        y: 1.0
-                        width: listRow.width + 8.0
-                        height: Math.max(0.0, listRow.height - 2.0)
-                        primaryColor: feedRoot.feedModel.textColor
-                        secondaryColor: ageText.color
-                        tertiaryColor: Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
-                                               feedRoot.feedModel.textColor.b, feedRoot.feedModel.textColor.a * 0.70)
-                    }
                 }
             }
         }
@@ -820,7 +803,6 @@ OverlayWidget {
 
                     ShadowedText {
                         id: gridTitle
-                        surfacePlateEnabled: false   // the tile's LegibilityRow
                         textFormat: Text.PlainText
                         x: gridCard.textX
                         y: gridCard.textTop
@@ -853,7 +835,6 @@ OverlayWidget {
 
                     ShadowedText {
                         id: gridSummary
-                        surfacePlateEnabled: false   // the tile's LegibilityRow
                         textFormat: Text.PlainText
                         x: gridCard.textX
                         y: gridTitle.y + gridTitle.height + 2.0
@@ -881,7 +862,6 @@ OverlayWidget {
 
                     ShadowedText {
                         id: gridAge
-                        surfacePlateEnabled: false   // the tile's LegibilityRow
                         textFormat: Text.PlainText
                         x: gridCard.contentMargin
                         y: gridCard.height - 24.0
@@ -913,7 +893,7 @@ OverlayWidget {
                     // concentric with the tile's corners. Inactive on Normal.
                     LegibilityRow {
                         objectName: "feedGridLegibilityRow" + index
-                        readonly property real inset: gridCard.border.width + 1.0
+                        readonly property real inset: gridCard.border.width + 2.0
                         x: inset
                         y: inset
                         width: Math.max(0.0, gridCard.width - 2.0 * inset)

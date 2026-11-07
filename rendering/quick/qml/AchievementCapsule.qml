@@ -68,7 +68,7 @@ Item {
         // On a surface material: one pill filling the capsule (its label opts out
         // of its own plate), concentric with the capsule. Inactive on Normal.
         LegibilityRow {
-            readonly property real inset: capsule.strokeWidth + 1.0
+            readonly property real inset: capsule.strokeWidth + 2.0
             x: inset
             y: inset
             z: 0
@@ -83,7 +83,6 @@ Item {
             anchors.fill: parent
             anchors.leftMargin: 7.0
             anchors.rightMargin: 7.0
-            surfacePlateEnabled: false   // the capsule's LegibilityRow
             text: capsule.doubled
                 ? (capsule.fieldId === "previous"
                     ? "PREVIOUSLY" : capsule.fieldLabel.toUpperCase())
@@ -132,7 +131,7 @@ Item {
         // On a surface material: one pill filling the capsule (its label opts out
         // of its own plate), concentric with the capsule. Inactive on Normal.
         LegibilityRow {
-            readonly property real inset: capsule.strokeWidth + 1.0
+            readonly property real inset: capsule.strokeWidth + 2.0
             x: inset
             y: inset
             z: 0
@@ -147,7 +146,6 @@ Item {
             anchors.fill: parent
             anchors.leftMargin: 7.0
             anchors.rightMargin: 7.0
-            surfacePlateEnabled: false   // the capsule's LegibilityRow
             text: capsule.fieldValue.toUpperCase()
             color: capsule.textColor
             font.family: capsule.fontFamily
@@ -168,17 +166,6 @@ Item {
         objectName: "achievementShelf_" + capsule.fieldId
         visible: capsule.shelfStyle
         anchors.fill: parent
-
-        // On a surface material: one rounded row behind the shelf's label and value
-        // (both opt out of their own plates). Inactive on Normal.
-        LegibilityRow {
-            y: 1.0
-            width: parent.width
-            height: Math.max(0.0, parent.height - 3.0)
-            primaryColor: capsule.textColor
-            secondaryColor: Qt.rgba(capsule.textColor.r, capsule.textColor.g, capsule.textColor.b,
-                                    Math.max(0.47, capsule.textColor.a * 0.72))
-        }
 
         Rectangle {
             anchors.left: parent.left
@@ -208,7 +195,6 @@ Item {
             height: parent.height
             text: capsule.fieldId === "previous"
                 ? "PREVIOUSLY" : capsule.fieldLabel.toUpperCase()
-            surfacePlateEnabled: false   // the shelf's LegibilityRow
             color: Qt.rgba(
                 capsule.textColor.r,
                 capsule.textColor.g,
@@ -234,7 +220,6 @@ Item {
             width: (parent.width - 13.0) * 0.45
             height: parent.height
             text: capsule.shelfValueText(capsule.fieldValue)
-            surfacePlateEnabled: false   // the shelf's LegibilityRow
             color: capsule.textColor
             font.family: capsule.fontFamily
             font.pointSize: capsule.capsuleFontSize * 0.82

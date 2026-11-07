@@ -1,13 +1,13 @@
 import QtQuick
 
-// One rounded legibility row behind a whole list line on a card surface material
-// (Docs/Architecture/Card_Surface_Materials.md, 3.3): Reddit posts, Feed and Gmail rows,
-// System Stats rows, Steam rows, Weather's detail row, Media's text lines. The runs in
-// the line opt out of their own plate (`surfacePlateEnabled: false`) and this row holds
-// the contrast floor for all of them: `primaryColor`, `secondaryColor` and
-// `tertiaryColor` are the line's run colours. On Normal (or before the card's material
-// is bound) it is an inactive Loader: no item, no scene-graph node. The site sets its
-// geometry, reaching about 4 px past the line's runs so glyphs never touch its edge.
+// One rounded legibility row inside a control's own filled panel on a card surface material
+// (Docs/Architecture/Card_Surface_Materials.md, 3.3): Feed grid tiles, Friend Pulse rows and
+// tiles, Games You Follow story tiles, System Stats metric panels, Achievement capsules. The
+// card itself has one legibility panel (the material's, 2.5 px inside the border); a row is
+// only for text that sits on a further fill, which the site passes as `underlayColor`, with
+// that panel's inner radius. It holds the contrast floor for the line's run colours
+// (`primaryColor`, `secondaryColor`, `tertiaryColor`). On Normal (or before the card's
+// material is bound) it is an inactive Loader: no item, no scene-graph node.
 Loader {
     id: row
     objectName: "legibilityRow"

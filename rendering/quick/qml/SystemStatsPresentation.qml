@@ -275,7 +275,7 @@ OverlayWidget {
         // text, concentric with the panel's corners. Inactive on Normal.
         LegibilityRow {
             objectName: panel.objectPrefix + "LegibilityRow"
-            readonly property real inset: panel.border.width + 1.0
+            readonly property real inset: panel.border.width + 2.0
             x: inset
             y: inset
             z: 0
@@ -290,7 +290,6 @@ OverlayWidget {
 
         ShadowedText {
             objectName: panel.objectPrefix + "Label"
-            surfacePlateEnabled: false   // the panel's LegibilityRow
             readonly property real baseY: Math.min(
                 18.0, 9.0 + Math.max(0.0, panel.height - 72.0) * 0.10
             )
@@ -319,7 +318,6 @@ OverlayWidget {
 
         ShadowedText {
             objectName: panel.objectPrefix + "Detail"
-            surfacePlateEnabled: false   // the panel's LegibilityRow
             readonly property real baseY: Math.min(
                 parent.height - 31.0,
                 31.0 + Math.max(0.0, panel.height - 72.0) * 0.30
@@ -348,7 +346,6 @@ OverlayWidget {
 
         ShadowedText {
             objectName: panel.objectPrefix + "Value"
-            surfacePlateEnabled: false   // the panel's LegibilityRow
             readonly property real baseY: Math.min(
                 17.0, 8.0 + Math.max(0.0, panel.height - 72.0) * 0.10
             )

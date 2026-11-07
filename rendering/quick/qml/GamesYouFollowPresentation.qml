@@ -299,7 +299,7 @@ OverlayWidget {
                     // plates), concentric with its corners. Inactive on Normal.
                     LegibilityRow {
                         objectName: "followedStoryLegibilityRow" + storySlot
-                        readonly property real inset: tileFrame.border.width + 1.0
+                        readonly property real inset: tileFrame.border.width + 2.0
                         x: inset
                         y: inset
                         z: 0   // under the artwork's contact shadow (same z, created first)
@@ -438,7 +438,6 @@ OverlayWidget {
                 ShadowedText {
                     id: game
                     objectName: "followedStoryGame" + storySlot
-                    surfacePlateEnabled: false   // the tile's LegibilityRow
                     parent: tileFrame
                     z: 4
                     visible: storyGame.length > 0
@@ -463,7 +462,6 @@ OverlayWidget {
                 ShadowedText {
                     id: headline
                     objectName: "followedStoryHeadline" + storySlot
-                    surfacePlateEnabled: false   // the tile's LegibilityRow
                     parent: tileFrame
                     z: 4
                     x: tile.textX
@@ -680,7 +678,6 @@ OverlayWidget {
                 }
                 ShadowedText {
                     objectName: "followedStoryPreview" + storySlot
-                    surfacePlateEnabled: false   // the tile's LegibilityRow
                     parent: tileFrame
                     z: 4
                     visible: storyPreview.length > 0 && tile.height >= 108.0 && tile.textW >= 105.0
@@ -708,7 +705,6 @@ OverlayWidget {
                 }
                 ShadowedText {
                     objectName: "followedStorySource" + storySlot
-                    surfacePlateEnabled: false   // the tile's LegibilityRow
                     parent: tileFrame
                     z: 4
                     x: tile.textX

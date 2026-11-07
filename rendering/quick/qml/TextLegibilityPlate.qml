@@ -38,9 +38,10 @@ ShaderEffect {
     readonly property real cornerRadius: card ? card.cornerRadius : 0.0
     readonly property real contentInset: card ? card.padding : 0.0
     readonly property real borderWidth: card ? card.borderWidth : 0.0
-    // Rows reach 4 px into the card's padding; their corners follow the card's radius less
-    // that gap (concentric with the card), never sharper than 4 px.
-    readonly property real rowRadius: Math.min(height / 2.0, radiusOverride >= 0.0 ? radiusOverride
+    // A row in its own panel passes that panel's inner radius (never under 2 px); otherwise its
+    // corners follow the card's radius less its gap into the padding (concentric),
+    // never sharper than 4 px.
+    readonly property real rowRadius: Math.min(height / 2.0, radiusOverride >= 0.0 ? Math.max(2.0, radiusOverride)
         : Math.max(4.0, cornerRadius - Math.max(0.0, contentInset - 4.0)))
     readonly property var parameters: card ? card.surfaceMaterialParameters : null
     readonly property vector4d blurTint: parameters ? parameters[0] : Qt.vector4d(0, 0, 0, 1)

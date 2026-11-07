@@ -1483,9 +1483,11 @@ class DisplayManager(QObject):
         # per-family layer); Normal creates nothing (Card_Surface_Materials.md).
         from rendering.quick.widgets.surface_material import resolve_global_surface_material
 
-        unit.runtime.scene_controller.apply_context_menu_surface_material(
-            resolve_global_surface_material(self._widgets_config_snapshot)
-        )
+        baseline_material = resolve_global_surface_material(self._widgets_config_snapshot)
+        unit.runtime.scene_controller.apply_context_menu_surface_material(baseline_material)
+        # The Visualizer card takes the same baseline (Card_Surface_Materials.md 3.4); its
+        # authored Fill tints the material.
+        unit.runtime.scene_controller.apply_visualizer_surface_material(baseline_material)
 
     def _quick_context_transition_state(
         self,

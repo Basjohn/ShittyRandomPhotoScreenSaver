@@ -18,21 +18,28 @@ ShaderEffect {
     property color tintColor: "#b3101010"
     property color textColor: "#ffffffff"
 
+    // The card's legibility panel (2.5 px inside the border, concentric with the card's own
+    // radius) holds the card text colour at this luminance contrast: the small-text floor
+    // (4.5:1) with a 10 % margin for antialiased glyphs. It is the one darker panel on the
+    // card, from above the header to below the last element; no per-line rows or per-run
+    // plates sit on it (Card_Surface_Materials.md 3.3).
+    readonly property real panelContrastFloor: 5.0
+
     // Presentation constants per material (one shader, different uniforms):
     //   blurTint        = (blur level 0 light .. 1 heavy, tint opacity at theme alpha 0, at 1, saturation)
     //   lightNoise      = (luminosity pull toward the tint, grain, haze toward white, smoke darkening)
     //   glassLegibility = (edge highlight, refraction px, legibility shift, contrast floor)
     readonly property var parameters: ({
         "acrylic": [Qt.vector4d(1.0, 0.42, 0.70, 1.35), Qt.vector4d(0.30, 0.030, 0.0, 0.0),
-                    Qt.vector4d(0.0, 0.0, 0.10, 3.0)],
+                    Qt.vector4d(0.0, 0.0, 0.10, surface.panelContrastFloor)],
         "glass": [Qt.vector4d(0.0, 0.05, 0.28, 1.15), Qt.vector4d(0.0, 0.0, 0.0, 0.0),
-                  Qt.vector4d(0.20, 5.0, 0.14, 3.0)],
+                  Qt.vector4d(0.20, 5.0, 0.14, surface.panelContrastFloor)],
         "frosted": [Qt.vector4d(1.0, 0.20, 0.42, 0.80), Qt.vector4d(0.0, 0.045, 0.22, 0.0),
-                    Qt.vector4d(0.05, 0.0, 0.10, 3.0)],
+                    Qt.vector4d(0.05, 0.0, 0.10, surface.panelContrastFloor)],
         "mica": [Qt.vector4d(1.0, 0.72, 0.86, 0.70), Qt.vector4d(0.45, 0.0, 0.0, 0.0),
-                 Qt.vector4d(0.0, 0.0, 0.06, 3.0)],
+                 Qt.vector4d(0.0, 0.0, 0.06, surface.panelContrastFloor)],
         "smoked": [Qt.vector4d(0.45, 0.35, 0.58, 0.55), Qt.vector4d(0.0, 0.012, 0.0, 0.45),
-                   Qt.vector4d(0.06, 0.0, 0.08, 3.0)]
+                   Qt.vector4d(0.06, 0.0, 0.08, surface.panelContrastFloor)]
     })
     readonly property var resolvedParameters: parameters[material] || parameters["acrylic"]
 
