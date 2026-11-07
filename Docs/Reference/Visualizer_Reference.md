@@ -397,7 +397,7 @@ approximate the live engine's while structural facts (a control that reaches not
 | Extruded Bubble | onsets from the bus; fixed-scale body bands | all offered; Sensitivity and the floors reach it only through onset detection (the body bands sit ahead of them) | none offered |
 | Voxel Sphere | the analysis spectrum (Analysis Bands), live pre-AGC lanes, onsets | all offered | none offered |
 | Spline Curve (`devcurve`) | the pre-AGC control lanes, transient lanes, musical level and intensity | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Clamp | **AGC Strength, Output Lift, Kick Lane Gain, Transient Pulse** (hidden) |
-| Waveform | fixed-scale raw body bands, raw-scale bus onsets, level and intensity | Bar Count, Block Size, Input Gain | **Use Recommended Sensitivity, Sensitivity, Dynamic Noise Floor, Noise Floor Baseline** (hidden) |
+| Waveform | fixed-scale raw body bands, raw-scale bus onsets, level and intensity | all it owns: Bar Count (Analysis Bands), Block Size, Input Gain | none owned: its Use Recommended Sensitivity, Sensitivity, Dynamic Noise Floor and Noise Floor Baseline were hidden here, then **retired 8 Nov 2026** |
 
 A control a mode provably never reads is hidden with the descriptor's `technical_hidden_suffixes`
 (`core/settings/visualizer_mode_registry.py`), the one offered/hidden mechanism (the former Kick Lane Gain / Transient
@@ -406,6 +406,13 @@ the Settings value cache and the Studio's Audio Analysis group (both read the mo
 `ModeSettings.technical_controls()`, `core/settings/visualizer_mode_settings.py`) do not offer it; a mode that starts
 reading it drops it from the tuple. `tests/test_audio_analysis_controls.py` derives both directions from the registry: every hidden control leaves the
 published frame bit-identical, every offered one moves it, and hidden values round-trip through the model and the real tab.
+A mode that declares its own subset (`technical_setting_suffixes`) owns only what it consumes, so an inert control there
+is retired rather than hidden: Waveform's four sensitivity and floor settings left its subset on 8 Nov 2026 (operator
+asked "what is Waveform's sensitivity"; it is **Input Gain**, the pre-FFT gain every lane it reads scales with) and
+joined the forward-retired keys (`core/settings/visualizer_retired_modes.py`). While Waveform runs, the shared worker's
+sensitivity and floor resolve to Spectrum's canonical defaults (the model's unowned-key rule), which shape only lanes
+it never reads; `tests/test_waveform_analysis_ownership.py` proves that on re-analysed PCM, with the post-floor lanes
+moving in the same replay as the negative control.
 Bar Count is not hidden anywhere (it moves every mode's frame). It is the drawn bar count only on a mode whose
 descriptor `draws_bars` (Spectrum, Extruded Spectrum; the same fact shows the page's Bar Appearance family there);
 everywhere else the spec's `audio_analysis_entries` labels it **Analysis Bands** with a tooltip saying it is the analysis

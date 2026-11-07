@@ -194,11 +194,10 @@ def _install_waveform() -> None:
 
 
 def waveform_worker_configuration(engine):
-    """Observe applied worker values, rather than assuming a requested technical cache reached it."""
+    """Observe applied worker values, rather than assuming a requested technical cache reached it: the analysis
+    settings Waveform owns (its sensitivity and floor settings are retired: nothing it reads sits behind them)."""
     worker=engine._audio_worker
-    attrs={'bar_count':'_bar_count','audio_block_size':'_preferred_block_size',
-           'adaptive_sensitivity':'_use_recommended','sensitivity':'_user_sensitivity',
-           'dynamic_floor':'_use_dynamic_floor','manual_floor':'_manual_floor','input_gain':'_input_gain',
+    attrs={'bar_count':'_bar_count','audio_block_size':'_preferred_block_size','input_gain':'_input_gain',
            'raw_musical_signals':'_raw_musical_signals'}
     return {'waveform_ribbon_'+key:getattr(worker,attribute) for key,attribute in attrs.items()}
 

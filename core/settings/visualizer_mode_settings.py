@@ -766,7 +766,10 @@ def audio_analysis_entries(mode_id: str, *, block_size: int, agc: float) -> tupl
             key, "Input Gain:", 0.05, 2.0,
             f"Pre-FFT signal gain for {name} (5%-200%).\n"
             "This behaves like changing the source volume before analysis, without changing actual playback "
-            "volume.\nLower = calmer visualizer, higher = stronger pickup. 100% = no change.",
+            "volume.\nLower = calmer visualizer, higher = stronger pickup. 100% = no change."
+            # A mode that owns no Sensitivity reads only lanes ahead of it (raw signals): this is its sensitivity.
+            + ("" if "sensitivity" in owned else f"\n{name} has no Sensitivity setting: this is how strongly it "
+                                                 "hears the music."),
             bucket=t, percent=True, tick=25),
         "kick_lane_gain": lambda key: Slider(
             key, "Kick Lane Gain:", 0.0, 2.0,

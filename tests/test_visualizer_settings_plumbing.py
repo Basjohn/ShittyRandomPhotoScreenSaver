@@ -713,14 +713,9 @@ class TestPerModeTechnicalRoundTrip:
 
     def _assert_model_matches(self, model, per_mode):
         for mode, overrides in per_mode.items():
-            assert model.resolve_bar_count(mode) == overrides["bar_count"]
-            assert model.resolve_manual_floor(mode) == overrides["manual_floor"]
-            assert model.resolve_dynamic_floor(mode) == overrides["dynamic_floor"]
-            if "dynamic_range_enabled" in overrides:
-                assert model.resolve_dynamic_range_enabled(mode) == overrides["dynamic_range_enabled"]
-            assert model.resolve_audio_block_size(mode) == overrides["audio_block_size"]
-            assert model.resolve_adaptive_sensitivity(mode) == overrides["adaptive_sensitivity"]
-            assert model.resolve_sensitivity(mode) == overrides["sensitivity"]
+            assert "bar_count" in overrides            # every technical mode owns its analysis resolution
+            for key, value in overrides.items():       # exactly the keys the mode owns (``_sample_payload``)
+                assert getattr(model, f"resolve_{key}")(mode) == value, (mode, key)
 
     def _assert_dict_matches(self, data, per_mode):
         from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys

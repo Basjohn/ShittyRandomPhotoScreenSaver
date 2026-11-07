@@ -456,13 +456,14 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_module='ui.tabs.media.waveform_ribbon_builder',
         settings_builder_factory='build_waveform_ribbon_ui',
         capture_module='widgets.spotify_visualizer.waveform_ribbon_capture',capture_factory='capture_waveform_ribbon',
-        technical_setting_suffixes=('bar_count','audio_block_size','adaptive_sensitivity','sensitivity',
-                                    'dynamic_floor','manual_floor','input_gain'),
+        # Raw musical signals: every lane it reads (fixed-scale body bands, the bus's onsets, level and intensity) sits
+        # ahead of the sensitivity and noise-floor stage, so it owns only the analysis settings that reach its frame.
+        # Use Recommended Sensitivity, Sensitivity, Dynamic Noise Floor and Noise Floor Baseline never did (measured
+        # on PCM through the production DSP): retired 8 Nov 2026 (visualizer_retired_modes), not hidden. Input Gain
+        # is what scales what the ribbon hears.
+        technical_setting_suffixes=('bar_count','audio_block_size','input_gain'),
         rainbow_controls=False,shared_bar_appearance=False,
         raw_musical_signals=True,
-        # Raw musical signals: the lanes it reads sit on a fixed analysis scale ahead of the sensitivity and floor
-        # stage, so these four never reach its frame (Bar Count, Audio Block Size and Input Gain still do).
-        technical_hidden_suffixes=('adaptive_sensitivity','sensitivity','dynamic_floor','manual_floor'),
         view_orbit_settings=('waveform_ribbon_turn','waveform_ribbon_tilt'),
         view_orbit_steps=(2./180.,2./90.),view_orbit_inertia=True,view_orbit_turn_wraps=False,
         view_auto_rotate_settings=('waveform_ribbon_auto_rotate','waveform_ribbon_auto_rotate_after','waveform_ribbon_auto_rotate_speed'),

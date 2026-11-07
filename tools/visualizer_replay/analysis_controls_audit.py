@@ -203,8 +203,9 @@ def _channels(frame, mode: str) -> dict[str, tuple[float, ...]]:
     return out
 
 
-def replay(mode: str, clip, overrides: dict):
-    """The mode's published frame vectors over ``clip`` with the settings overridden."""
+def replay(mode: str, clip, overrides: dict, *, prepare=None):
+    """The mode's published frame vectors over ``clip`` with the settings overridden. ``prepare(engine)`` runs once the
+    controller is configured, before the first frame (worker-level analysis state a mode does not own, a probe)."""
     from PySide6.QtCore import QCoreApplication, QEvent, QThread
     from widgets.spotify_visualizer.feature_replay import configure_offline_controller, deterministic_clock
     from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
@@ -220,6 +221,8 @@ def replay(mode: str, clip, overrides: dict):
                                                  engine_factory=lambda _count: engine)
         controller.engine = engine
         configure_offline_controller(controller, mode, 0, None, settings)
+        if prepare is not None:
+            prepare(engine)
         try:
             for index, feature in enumerate(clip.frames):
                 clock[0] = feature.timestamp_us / 1_000_000.0

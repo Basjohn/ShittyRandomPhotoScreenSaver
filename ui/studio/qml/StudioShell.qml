@@ -2563,6 +2563,10 @@ Rectangle {
             StudioFrame {                     // the dock's surface, one-path border and cast (the dock clips)
                 objectName: "panelFrame"
                 parent: bottomArea
+                // Under the dock, by z: both are reparented into bottomArea, so their sibling order is not their
+                // declaration order (the frame landed last and its fill covered the whole editor, which read as a
+                // ghosted, empty panel).
+                z: -1
                 visible: responseDock.visible
                 x: responseDock.x; y: responseDock.y
                 width: responseDock.width + shell.shadowX; height: responseDock.height + shell.shadowY
@@ -2605,20 +2609,29 @@ Rectangle {
                 }
 
                 // Narrow windows: the editor keeps its working width and scrolls sideways (never squeezes/overlaps).
+                // Short windows: it keeps its height too and scrolls down, as every dashboard panel scrolls on its
+                // own (at the default window on a 1440p / 150% screen its Range row was cut off, out of reach).
                 Flickable {
                     id: dockFlick
                     objectName: "responseScroll"
                     anchors.fill: parent; anchors.margins: 12; anchors.topMargin: dockTitle.height + 8
                     anchors.bottomMargin: contentWidth > width ? 18 : 12
                     clip: true
-                    contentWidth: Math.max(width, 820); contentHeight: height
-                    flickableDirection: Flickable.HorizontalFlick
+                    contentWidth: Math.max(width, 820)
+                    contentHeight: Math.max(height, mixColumn.implicitHeight, curveColumn.implicitHeight)
+                    flickableDirection: Flickable.AutoFlickIfNeeded
                     boundsBehavior: Flickable.StopAtBounds
-                    interactive: contentWidth > width
+                    interactive: contentWidth > width || contentHeight > height
                     C.ScrollBar.horizontal: C.ScrollBar { policy: dockFlick.contentWidth > dockFlick.width
                                                                   ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
+                    // In the dock's right margin, beside the editor: never over its fields.
+                    C.ScrollBar.vertical: C.ScrollBar {
+                        objectName: "responseScrollVertical"
+                        parent: responseDock
+                        x: dockFlick.x + dockFlick.width + 2; y: dockFlick.y; width: 8; height: dockFlick.height
+                        policy: dockFlick.contentHeight > dockFlick.height ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
                 Row {
-                    width: dockFlick.contentWidth; height: dockFlick.height
+                    width: dockFlick.contentWidth; height: dockFlick.contentHeight
                     spacing: 14
 
                     // Targets, with their live drive
@@ -2727,6 +2740,7 @@ Rectangle {
 
                     // Transfer curve for the chosen source, then the target's quiet/peak endpoints
                     Column {
+                        id: curveColumn
                         width: 330
                         spacing: 6
                         Text { text: "Response Curve — " + responseDock.sourceLabel(studio.selectedSource)

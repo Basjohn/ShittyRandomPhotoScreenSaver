@@ -11,6 +11,13 @@ _RETIRED_VISUALIZER_KEYS = frozenset({
     # Waveform's Adaptive Response (a remembered-peak gain), retired 7 Nov 2026: the response is memoryless (operator:
     # "Adaptivity is the enemy"); saved profiles, custom presets and exports drop it.
     'waveform_ribbon_adaptive_response',
+    # Waveform's sensitivity and noise-floor analysis settings, retired 8 Nov 2026: it reads only raw lanes ahead of
+    # that stage, so they never changed what it shows (they had been owned but hidden since 6 Nov). Saved profiles,
+    # custom presets and exports drop them; Input Gain is Waveform's sensitivity.
+    'waveform_ribbon_adaptive_sensitivity',
+    'waveform_ribbon_sensitivity',
+    'waveform_ribbon_dynamic_floor',
+    'waveform_ribbon_manual_floor',
     # Rejected Waveform bank/fringe and independent floor haze; one new atmosphere replaces them.
     'waveform_ribbon_fog_billows',
     'waveform_ribbon_fog_fringe',
