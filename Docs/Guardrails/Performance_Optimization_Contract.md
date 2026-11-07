@@ -96,7 +96,12 @@ Further GC work is admitted only when a similarly clear mechanism exists.
 warm-up end, `ScreensaverEngine._freeze_revealed_generation`, RUNNING only) and `teardown_display_runtime` thaws it before
 its destruction barrier on every path; a thaw schedules no collection, so the barrier judges every retiring generation by
 reference counting alone (R-53/R-154). (Until 7 Nov the freeze was a one-shot 45 s timer and the first Settings visit
-thawed the RUN for good, so every later gen2 rescanned the whole long-lived heap.) A forced gen2 over a frozen
+thawed the RUN for good, so every later gen2 rescanned the whole long-lived heap.) The policy's one explicit collection
+is `collect_retired_generations()`: once per replacement, in `_construct_and_start_replacement_runtime`, after the
+retiring generation's barrier (and the Settings dialog's) has completed and before the replacement exists (R-175). The
+RUN thresholds practically never run a deep collection, so without it every retired generation's cycles stayed for the
+session (~11 MB of the ~20 MB a Settings round trip grew); it costs ~60-90 ms inside the lifecycle window, never at frame time, never
+during a teardown and never before the barrier has judged. A forced gen2 over a frozen
 Visualizer replay heap costs 0.01-0.09 ms against 37-44 ms unfrozen. The boundary log reports `freeze_boundary_ms` and the
 frozen count; with `--frame-trace` every collection is a `GC_BEGIN`/`GC_END` pair (`tools/frame_trace_report.py` prints
 pauses per hour per generation, steady vs lifecycle) and the reveal logs a heap census before and after the freeze. No gc

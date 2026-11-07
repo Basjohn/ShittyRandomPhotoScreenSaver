@@ -225,11 +225,29 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - Each wrapper call replaces a PyOpenGL checked getter (~2.7 µs against ~13 µs a query).
   - Control-relative render CPU fell: Spectrum 2.04 → 1.26 cf, Extruded Spectrum 3.29 → 2.12 cf.
   - The baseline is re-recorded at M0.
-- **Settings round-trip memory growth (Opus high, started 7 Nov):** about 20 MB per Settings round trip, linear,
-  pre-existing (see the GC item in the queue).
-  - Classify it: Python cycles, live references, Qt/QML native, GL/driver.
-  - Fix it at the owner.
-  - Prove a flat slope over 9 round trips, with a structural regression test.
+- **Settings round-trip memory growth (Opus high, 7 Nov): fixed on the agent's branch, awaiting the lead's audit
+  (R-175).** Classified with the live check's new opt-in `--roundtrip-memory census[,collect][,tracemalloc][,map]`:
+  - **Cause:** every round trip left its retired display generation and Settings dialog in Python reference cycles
+    (wrappers of destroyed QObjects, 15 Python-owned `QQmlComponent`s, an ~11 MB heap block): ~5,200 objects and 11 MB
+    a round trip, plus heap/arena growth. The RUN GC thresholds never run a deep collection (0 in 10 minutes, on main and
+    before the GC change), and each reveal re-froze the garbage. Native QObject trees, GL accounting, threads, handles
+    and the driver heap were flat.
+  - **Fix:** `RuntimeGCPolicy.collect_retired_generations()`, once per replacement, in
+    `_construct_and_start_replacement_runtime`, after the barrier(s) completed (60–90 ms, ~5,200 objects).
+  - **Waveform P4, plain live check, 9 round trips:** main +22.4 MB RSS / +23.0 MB private a round trip; fix +6.3 /
+    +6.9. Spectrum P1 (census): main +19.1 / +22.7; fix +6.5 / +9.1. No barrier timeouts; every reveal re-froze.
+  - **Not flat yet: a smaller native residual remains, open.** Against no-round-trip controls of the same build
+    (Waveform +1.8 MB RSS a minute, ~3.8 on its steady stretch, main +2.6; Spectrum +0.3), round trips every 60 s
+    still add ~2.5–4.5 MB RSS each on Waveform and ~3.5–6 on Spectrum (main: ~19–20). The memory map puts it in the default native heap (+5–6 MB
+    a round trip on both modes, before and after the fix); it is not Python (tracemalloc ~1 MB a round, mostly the
+    harness and the probe), not retired wrappers (none survive but one dialog placeholder), not the Settings dialog
+    (built and retired 12 times in isolation: +0.1–0.25 MB each), not the QML engine and its components
+    (`QuickSceneFactory` 14 times: flat), and not GL accounting, threads, handles or the driver's `private_other`.
+    Left: the Quick window, its GL context and scene graph, and the Visualizer's GL programs per generation. Next:
+    a heap-block histogram per reveal, or an offscreen render-control loop (the Studio saw 1–2 MB a session).
+  - **Test:** `tests/test_settings_roundtrip_retired_generations.py` fails on main (3 retired display generations and
+    3 dialogs still reachable) and passes on the fix.
+  - Evidence: `.artifacts/evidence/settings_roundtrip_memory/`.
 - **Lead, the next quiet machine (no agents running):**
   - the M0 baseline receipts (plan 01 §0.2);
   - the GC freeze live check with Settings round trips (once the harness lands);
@@ -306,6 +324,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
        | Main | +24 MB | +25 MB |
 
      - The GC change may add a few MB through uncollected retired cycles. That is unproven and close to noise.
+       (Classified since: uncollected retired cycles on both builds, R-175; fixed on the agent's branch.)
      - Evidence: `.artifacts/evidence/gc_gen2/live_roundtrip_wf_p4_{main,pregc}/`. Investigation: §3, the
        Settings round-trip memory agent.
 
@@ -361,6 +380,26 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   IMAP server delays Settings by its whole login time. Fix candidate: a bounded/interruptible IMAP transport (as
   `core/network/bounded_dns.py` bounds DNS) so retirement never waits on a login. Figures in the AC lifecycle
   agent's report (`--settings-roundtrip 10,25`).
+
+**Found while fixing the Settings round-trip memory growth (7 Nov; record, not yet admitted):**
+- **The invisible Waveform live check grows with no round trips at all:** +7.2 MB private a minute over a 600 s run
+  (fix branch, `wf_p4_no_roundtrip_fix`; ~3.8 MB a minute on the steady stretch between image steps). tracemalloc
+  puts the Python share at ~1 MB a minute, mostly the harness's own per-frame lists (`tools/eb_live_phases.py`
+  `_frames`, `_waveform_signals`, unbounded for the run) and the probe; the rest is native heap, unattributed. It
+  bounds any round-trip slope from a 60 s schedule. Main does the same (`wf_p4_no_roundtrip_main`: +2.6 MB RSS a
+  minute; branch +1.8). Next: overnight, R-97 method. The
+  Spectrum P1 control (`sp_p1_no_roundtrip_fix`) kept RSS flat (+0.3 MB a minute) but private bytes jumped +476 MB
+  at ~7 min, non-resident, and fell by 216 MB two minutes later: committed-not-touched memory, R-97/R-99 territory.
+- **One `QWidget` wrapper of every Settings dialog outlives it:** the initial tab's placeholder
+  (`ui/settings_dialog.py` `_build_tab_by_key`: `removeWidget` + `deleteLater`). Its C++ object is destroyed, no
+  Python object refers to it, a full collection leaves it: shiboken keeps the wrapper. One small wrapper a round trip.
+- **The Settings dialog barrier's `destroyed` callbacks outlive it in the live run:** tracemalloc shows 459
+  `functools.partial` objects from `RuntimeDestructionBarrier.watch_qobject` (`engine/runtime_destruction.py:250`)
+  added and kept every round trip (~36 KB; the dialog barrier watches 467 objects). Not reproduced with a bare dialog
+  (298 watched, all released).
+- **`QuickSceneFactory` is per display generation, not process-level as its docstring says,** and its
+  `QQmlComponent`s have no QObject parent: Python owns them, so they outlive their engine for as long as their
+  wrappers do (until R-175's collection).
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
