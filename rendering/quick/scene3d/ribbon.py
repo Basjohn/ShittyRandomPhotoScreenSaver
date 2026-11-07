@@ -353,7 +353,7 @@ class RibbonPrimitive:
         if shaded is not None:
             # Edge-on widening works in pixels: the caller's current viewport is the scene target's.
             shaded['uViewport'] = (tuple(float(v) for v in viewport) if viewport is not None else
-                                   tuple(float(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4]))
+                                   tuple(float(v) for v in gl_query.get_ints(gl.GL_VIEWPORT, 4)[2:4]))
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING) if restore else None
         rim_bound = False
@@ -471,7 +471,7 @@ class RibbonPrimitive:
                     gl.glUniform1f(u['uStrayBirthNow'],float(now)-float(strand_origin))
                     gl.glUniform2f(u['uStrayPulse'],strays.pulse_growth,strays.pulse_glow)
                 gl.glUniform2f(u['uViewport'], *(float(v) for v in viewport) if viewport is not None else
-                               (float(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4]))
+                               (float(v) for v in gl_query.get_ints(gl.GL_VIEWPORT, 4)[2:4]))
             mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **(mist or {})}
             gl.glUniform4f(u['uMist'], *mist_values['uMist'])
             gl.glUniform4f(u['uMistShape'], *mist_values['uMistShape'])

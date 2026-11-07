@@ -17,6 +17,7 @@ from PySide6.QtQuick import QSGRenderNode
 
 from core.logging.logger import get_logger
 from core.performance.frame_trace import FrameTraceEvent, FrameTraceSink
+from .. import gl_query
 from ..image_state import PresentationImage
 from ..transitions.render_contract import QuickTransitionRenderFrame
 from ..transitions.render_host import QuickTransitionRenderHost
@@ -141,13 +142,6 @@ def _gl_string(name: int) -> str:
         return value.decode("utf-8", errors="replace")
     return str(value or "")
 
-
-def _int_state(name: int) -> int:
-    value = gl.glGetIntegerv(name)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return int(value[0])
 
 
 def _set_enabled(capability: int, enabled: bool) -> None:
@@ -596,21 +590,20 @@ class BackgroundRenderNode(QSGRenderNode):
         viewport: tuple[int, int, int, int],
         matrix_values: tuple[float, ...],
     ) -> None:
-        prior_viewport_value = gl.glGetIntegerv(gl.GL_VIEWPORT)
-        prior_viewport = tuple(int(value) for value in prior_viewport_value)
+        prior_viewport = gl_query.get_ints(gl.GL_VIEWPORT, 4)
         if len(prior_viewport) != 4:
             raise RuntimeError(f"invalid inherited Quick GL viewport: {prior_viewport}")
 
-        prior_program = _int_state(gl.GL_CURRENT_PROGRAM)
-        prior_vao = _int_state(gl.GL_VERTEX_ARRAY_BINDING)
-        prior_array_buffer = _int_state(gl.GL_ARRAY_BUFFER_BINDING)
-        prior_active_texture = _int_state(gl.GL_ACTIVE_TEXTURE)
+        prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
+        prior_vao = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
+        prior_array_buffer = gl_query.get_int(gl.GL_ARRAY_BUFFER_BINDING)
+        prior_active_texture = gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
         gl.glActiveTexture(gl.GL_TEXTURE0)
-        prior_texture = _int_state(gl.GL_TEXTURE_BINDING_2D)
-        prior_blend = bool(gl.glIsEnabled(gl.GL_BLEND))
-        prior_cull = bool(gl.glIsEnabled(gl.GL_CULL_FACE))
-        prior_depth = bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
-        prior_stencil = bool(gl.glIsEnabled(gl.GL_STENCIL_TEST))
+        prior_texture = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
+        prior_blend = gl_query.is_enabled(gl.GL_BLEND)
+        prior_cull = gl_query.is_enabled(gl.GL_CULL_FACE)
+        prior_depth = gl_query.is_enabled(gl.GL_DEPTH_TEST)
+        prior_stencil = gl_query.is_enabled(gl.GL_STENCIL_TEST)
 
         try:
             gl.glDisable(gl.GL_BLEND)

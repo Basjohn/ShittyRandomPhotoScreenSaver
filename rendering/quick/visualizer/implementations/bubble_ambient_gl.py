@@ -26,7 +26,7 @@ import numpy as np
 from OpenGL import GL as gl
 
 from rendering.quick.render.gl_resources import compile_program
-from rendering.quick.visualizer.gl_state import _GL_FUNCTION, _GL_LIBRARY, _bool_states, _int_state, _int_states, _is_enabled
+from rendering.quick import gl_query
 from widgets.spotify_visualizer.bubble_ambient import (
     MAX_MICROBUBBLES, MAX_PARTICLES, RECORD_STRIDE,
 )
@@ -190,17 +190,9 @@ void main() {
 """
 
 
-# The state fence reads the GL entry points directly, as the shared Quick fence does
-# (gl_state.py): PyOpenGL's wrappers allocate a numpy array per query, and this pass makes
-# twenty of them every frame. Same driver functions, same names, same order.
-_glint = _int_state
-_glGetFloatv = _GL_FUNCTION(None, ctypes.c_uint, ctypes.POINTER(ctypes.c_float))(("glGetFloatv", _GL_LIBRARY))
-
-
-def _float_states(name: int, count: int) -> tuple[float, ...]:
-    values = (ctypes.c_float * count)()
-    _glGetFloatv(name, values)
-    return tuple(float(value) for value in values)
+# The state fence reads through ``rendering.quick.gl_query`` (the GL entry points directly, as the shared
+# Quick fence does): PyOpenGL's wrappers allocate a numpy array per query, and this pass makes twenty of
+# them every frame. Same driver functions, same names, same order.
 
 
 def _points_glow(points: tuple[float, ...]) -> bool:
@@ -344,25 +336,25 @@ class QuickBubbleAmbientPoints:
         light = _points_glow(points)
         # Preserve inherited Quick state; Qt may have an active rounded-stencil
         # clip on the display FBO. It must not apply to our texture-local FBO.
-        draw_fb = _glint(gl.GL_DRAW_FRAMEBUFFER_BINDING)
-        read_fb = _glint(gl.GL_READ_FRAMEBUFFER_BINDING)
-        viewport = _int_states(gl.GL_VIEWPORT, 4)
-        program = _glint(gl.GL_CURRENT_PROGRAM)
-        vao = _glint(gl.GL_VERTEX_ARRAY_BINDING)
-        buffer = _glint(gl.GL_ARRAY_BUFFER_BINDING)
-        texture_unit = _glint(gl.GL_ACTIVE_TEXTURE)
+        draw_fb = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
+        read_fb = gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING)
+        viewport = gl_query.get_ints(gl.GL_VIEWPORT, 4)
+        program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
+        vao = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
+        buffer = gl_query.get_int(gl.GL_ARRAY_BUFFER_BINDING)
+        texture_unit = gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
         gl.glActiveTexture(gl.GL_TEXTURE0)
-        texture_before = _glint(gl.GL_TEXTURE_BINDING_2D)
-        blend = _is_enabled(gl.GL_BLEND)
-        depth = _is_enabled(gl.GL_DEPTH_TEST)
-        stencil = _is_enabled(gl.GL_STENCIL_TEST)
-        scissor = _is_enabled(gl.GL_SCISSOR_TEST)
-        point_size = _is_enabled(gl.GL_PROGRAM_POINT_SIZE)
-        blend_factors = tuple(_glint(p) for p in (gl.GL_BLEND_SRC_RGB, gl.GL_BLEND_DST_RGB,
+        texture_before = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
+        blend = gl_query.is_enabled(gl.GL_BLEND)
+        depth = gl_query.is_enabled(gl.GL_DEPTH_TEST)
+        stencil = gl_query.is_enabled(gl.GL_STENCIL_TEST)
+        scissor = gl_query.is_enabled(gl.GL_SCISSOR_TEST)
+        point_size = gl_query.is_enabled(gl.GL_PROGRAM_POINT_SIZE)
+        blend_factors = tuple(gl_query.get_int(p) for p in (gl.GL_BLEND_SRC_RGB, gl.GL_BLEND_DST_RGB,
                          gl.GL_BLEND_SRC_ALPHA,gl.GL_BLEND_DST_ALPHA))
-        blend_eq = tuple(_glint(p) for p in (gl.GL_BLEND_EQUATION_RGB,gl.GL_BLEND_EQUATION_ALPHA))
-        clear_color = _float_states(gl.GL_COLOR_CLEAR_VALUE, 4)
-        color_mask = _bool_states(gl.GL_COLOR_WRITEMASK, 4)
+        blend_eq = tuple(gl_query.get_int(p) for p in (gl.GL_BLEND_EQUATION_RGB,gl.GL_BLEND_EQUATION_ALPHA))
+        clear_color = gl_query.get_floats(gl.GL_COLOR_CLEAR_VALUE, 4)
+        color_mask = gl_query.get_bools(gl.GL_COLOR_WRITEMASK, 4)
         try:
             self._initialize()
             self._ensure_target(width,height,light)
