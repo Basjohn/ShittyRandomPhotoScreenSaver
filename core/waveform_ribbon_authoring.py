@@ -36,8 +36,18 @@ def route(row, sources, *, passage=1.):
     # Independent gains add; the target's normalized domain is the explicit upper bound.
     # Fast bands articulate inside sustained passage weight. Loudness already IS that weight; admitted
     # events have their own shared passage reward, and Head Wave is an explicitly authored idle source.
-    return min(1., sum(gain * max(0., min(1., source)) ** power * (passage if index<3 else 1.)
-                       for index,((gain, power), source) in enumerate(zip(row, sources))))
+    return route_clamped(row, clamp_sources(sources), passage=passage)
+
+
+def clamp_sources(sources):
+    """Each source on its unit domain, as ``route`` reads it (shared by every target routed from the same sources)."""
+    return tuple(max(0., min(1., source)) for source in sources)
+
+
+def route_clamped(row, clamped, *, passage=1.):
+    """``route`` from already clamped sources (``clamp_sources``): the same terms, summed in the same order."""
+    return min(1., sum(gain * source ** power * (passage if index<3 else 1.)
+                       for index,((gain, power), source) in enumerate(zip(row, clamped))))
 
 
 def admit_ribbons(value):

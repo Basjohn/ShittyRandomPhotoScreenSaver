@@ -5,6 +5,8 @@ from collections.abc import Mapping
 from core.waveform_ribbon_dynamics import WaveformDynamics, HybridControls
 from widgets.spotify_visualizer.frame_runtime_lifecycle import RetirableFrameRuntime, retirement_fenced
 from widgets.spotify_visualizer.transient_bus import musical_weight,musical_emphasis,passage_ramp
+from widgets.spotify_visualizer.render_state import FrozenFieldsMemo
+from widgets.spotify_visualizer.view_orbit import CameraAdmissionMemo
 from core.logging.logger import get_logger,is_viz_diagnostics_enabled
 
 logger=get_logger(__name__)
@@ -23,6 +25,10 @@ class WaveformRibbonFrameRuntime(RetirableFrameRuntime):
     def __init__(self):
         super().__init__()
         self.reset()
+        # The capture's camera, admitted and frozen on the logical thread: an unchanged camera is neither re-solved
+        # nor refrozen (the same results; only the repeated work disappears).
+        self.camera_admission = CameraAdmissionMemo()
+        self.parameter_fields = FrozenFieldsMemo()
 
     def reset(self):
         self._model = None
