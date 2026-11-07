@@ -243,11 +243,18 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 
   **Lead:** 35/35 camera and orbit files pass on the merge. Open for the operator: should Extruded Spectrum coast
   like Sphere? It wraps but has no inertia today.
-- **Settings round-trip live harness + lifecycle hygiene (Opus medium, started 7 Nov):**
-  1. `tools/visualizer_live_check.py --settings-roundtrip`, which drives the real Settings path invisibly;
-  2. the fatal-exit terminal backstop (an AC-03 side defect);
-  3. AC-10;
-  4. AC-07.
+- **Settings round-trip live harness + lifecycle hygiene: merged 7 Nov (5716b3c6).**
+  1. `tools/visualizer_live_check.py --settings-roundtrip AT,...` drives the real Settings path invisibly. Per
+     round trip it records barrier times, generations, memory and GC thaw/re-freeze, and fails the run on a barrier
+     timeout or a missing re-freeze.
+  2. **Fatal-exit backstop:** terminal retirement runs once, even after a bare `exit(1)`.
+  3. **AC-10:** the mode-transition deadline joins the single-shot registry.
+  4. **AC-07:** unchanged writes no longer publish. Two no-edit saves drop from 38 publications to 2.
+
+  The new tests fail on main for the stated reasons. 16/16 lifecycle and Settings files pass on the merge, and Tier 2
+  of the checklist is complete.
+  **New side defect:** a Gmail IMAP `LOGIN` in flight held the Settings display barrier for 6.2 s. The candidate fix
+  is a bounded, interruptible IMAP transport (like `core/network/bounded_dns.py`).
 **Queued, next free medium slot, in this order (small, bounded):**
 1. **GC freeze per generation: merged 7 Nov; the live check is owed (lead, quiet machine).** The minute-ly 86–161 ms
    gen2 stalls came from the replay driver: it kept every frame under the interpreter's thresholds.
