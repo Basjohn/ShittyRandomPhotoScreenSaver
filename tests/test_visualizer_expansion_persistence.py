@@ -17,7 +17,8 @@ import pytest
 
 from core.settings.default_contract import MC_PROFILE, NORMAL_PROFILE, require_canonical_default
 from core.settings.defaults import get_default_settings
-from core.settings.models import SpotifyVisualizerSettings, normalize_expanded_display_requested
+from core.settings import models
+from core.settings.models import SpotifyVisualizerSettings
 from core.settings.settings_manager import SettingsManager
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_preset_key, is_mode_active
 from core.settings.visualizer_presets import (
@@ -82,12 +83,12 @@ def test_typed_model_field_defaults_from_canonical_authority_and_serialises():
     ("false", False), ("OFF", False), ("no", False), ("0", False),
 ])
 def test_normaliser_reads_boolean_spellings(raw, expected):
-    assert normalize_expanded_display_requested(raw) is expected
+    assert models.normalize_expanded_display_requested(raw) is expected
 
 
 @pytest.mark.parametrize("raw", [None, "", "maybe", 2, -1, 0.5, [], [True], {"on": True}, object()])
 def test_normaliser_falls_back_to_the_canonical_default_for_malformed_input(raw):
-    assert normalize_expanded_display_requested(raw) is _canonical()
+    assert models.normalize_expanded_display_requested(raw) is _canonical()
 
 
 def test_model_construction_normalises_a_hand_built_value():
@@ -117,15 +118,14 @@ def test_section_normaliser_repairs_a_malformed_intent_and_fills_a_missing_one()
 # ------------------------------------------------------------------------------ preset and Custom exclusion
 
 
-def test_no_mode_prefix_can_claim_the_intent():
-    owners = [mode for mode, prefixes in MODE_KEY_PREFIXES.items() if any(KEY.startswith(p) for p in prefixes)]
-    assert owners == []
-
-
 @pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
 def test_mode_payload_and_custom_snapshot_exclude_the_intent(mode):
+    # A live-section key no mode prefix can claim ...
+    assert not [p for p in MODE_KEY_PREFIXES[mode] if KEY.startswith(p)]
     section = _section()
     section.update({"mode": mode, KEY: _flipped()})
+    assert normalize_visualizer_section_mapping(section)[KEY] is _flipped()
+    # ... so the mode payload, a Custom snapshot and a leaked Custom cache entry never carry it.
     assert KEY not in normalize_visualizer_mode_payload(mode, section)
     assert KEY not in build_normalized_custom_snapshot(mode, section)
     leaked = normalize_visualizer_custom_snapshot_cache({mode: {"mode": mode, KEY: _flipped()}})
@@ -134,6 +134,9 @@ def test_mode_payload_and_custom_snapshot_exclude_the_intent(mode):
 
 @pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
 def test_no_curated_preset_carries_the_intent(mode):
+    # The key is a canonical live-section default (structure only, its value is not pinned) ...
+    assert KEY in _section()
+    # ... that no curated preset of the mode authors.
     for index in range(get_preset_count(mode)):
         assert KEY not in get_preset_settings(mode, index)
 
