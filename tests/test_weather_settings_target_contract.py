@@ -63,7 +63,8 @@ def test_settings_dialog_target_overrides_persisted_navigation_without_timer() -
     dialog = _source("ui/settings_dialog.py")
 
     assert "resolve_settings_launch_target(initial_target)" in dialog
-    assert 'self._initial_view_state_for_tab("widgets")' in dialog
+    # The tab registry (AC-01) resolves the launch target's tab key, then its initial view state.
+    assert "self._initial_view_state_for_tab(initial_key)" in dialog
     assert "self._launch_target is not None" in dialog
     assert "_apply_initial_launch_target_focus" in dialog
     # Semantic navigation/focus is synchronous after lazy construction; do not
