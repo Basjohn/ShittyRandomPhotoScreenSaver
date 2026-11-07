@@ -251,11 +251,28 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - **Test:** `tests/test_settings_roundtrip_retired_generations.py` fails on main (3 retired display generations and
     3 dialogs still reachable) and passes on the fix.
   - Evidence: `.artifacts/evidence/settings_roundtrip_memory/`.
-- **Lead, the next quiet machine (no agents running):**
-  - the M0 baseline receipts (plan 01 §0.2);
-  - the GC freeze live check with Settings round trips (once the harness lands);
-  - the Waveform tick cut under game60;
-  - the card-materials live check.
+- **Lead, the quiet machine, 7 Nov session (stopped early by the lead; evidence
+  `.artifacts/evidence/quiet_session_20261107/<task>/receipts.md`):**
+  - **Overhead baseline: done** (`tools/baselines/overhead/2026-11-07_4bb2b775.json`, a4ec1a23). Against ed9cec6b,
+    every Visualizer gains +46 Python calls a frame (AC-08), and GL calls and control-relative CPU are flat.
+    **Unexpected:** Burn gains +14 Python calls a frame (406 -> 420), from AC-20's per-frame
+    `require_transition_settings("burn").control(...)` range check in `_burn_parameters`. Side defect, small.
+  - **M0 EB baseline: done for Gate 0's numbers** (`2_m0_eb_baseline/`). Four views (canonical, wide, tall, display)
+    × idle/game60 on one monitor, plus canonical and display on two monitors. Only the display-sized view moves:
+    under game60 its render mode is 8.2 ms against 4.4 at the card (over §0.7's 8 ms) and fps 64 against 73. Tick
+    (5.1 ms game60, 2.7 idle) and GIL do not depend on size. Not covered: GPU `TIME_ELAPSED` (the live check has
+    none), p95/p99, lease/pool counts beyond the media leases, audio-to-photo freshness, and an unexplained
+    two-monitor canonical game60 outlier (48.6 fps) that was never repeated.
+  - **Waveform tick cut under game60: one clean round** (`3_waveform_tick_cut/`). Round 2 overlapped the lead's WebP
+    job and is tainted. Main against `cc493199^`: tick −5 to −10 %, fps +6-12 % on P1/P4/P7. Indicative only, and
+    confounded by the other 193 commits. Waveform stays far over budget under game60 (GIL >0.7, render 16-21 ms).
+    Owed: a second clean round.
+  - **GC freeze steady check: Bubble clean, Waveform tainted** (`4_gc_freeze_steady/`). Bubble P1, 600 s game60: no
+    steady gen1/gen2, heap 180,685 frozen at reveal and 87 left. Waveform P4 (tainted): no steady gen2, 3 gen1 of
+    9-11 ms. Owed: a clean Waveform P4 run, and the long run with Settings round trips.
+  - **Card materials: incomplete, one Glass/Normal pair** (`5_card_materials/`). Glass costs about +16 % of a core
+    on the render thread (53.7 against 37.5), with publish→swap +3 ms and hitches 2.46 against 2.05 a minute, at
+    the same late %. Owed: the alternated second pair.
 - **Small-defects agent (Opus medium): its first four items were merged 7 Nov (c9b4e8ac):**
   - **AC-06:** the Studio's clip caches are bounded, and the clip parse runs off the GUI thread.
   - **Reset Camera:** in-card controls own their double-click, so it never cycles the mode.
