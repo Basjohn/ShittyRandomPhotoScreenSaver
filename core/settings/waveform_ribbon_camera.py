@@ -1,4 +1,7 @@
-"""Waveform's fixed floor and forward clipping contract for the shared framed camera.
+"""Waveform Ribbon's fixed floor and forward clipping contract for the shared framed camera.
+
+Its framed camera ``SPEC`` (pivot, distances, eye bounds) is not here: it lives in ``core/waveform_ribbon_scene.py``
+(the descriptor's ``framed_camera``); see ``Docs/Reference/Naming.md``.
 
 The spec remains with the authored scene. Admission, flight and raster rendering
 all consume this floor through its spec hook. Perspective (the only projection)

@@ -1,4 +1,7 @@
-"""Dev Curve runtime spline solver.
+"""Spline Curve runtime spline solver.
+
+Spline Curve is mode id ``devcurve`` (code name DevCurve); its sibling owners are mapped in
+``Docs/Reference/Naming.md``.
 
 Computes full-width smooth layered curves for bass/vocals/mids/transients.
 """

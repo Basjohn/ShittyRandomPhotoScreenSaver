@@ -316,13 +316,13 @@ eager when their cost is effectively nil and doing so prevents duplication. Dorm
 it is not a requirement to hide zero-cost helpers behind artificial import machinery.
 
 **Framed 3D Visualizer camera is a reusable opt-in capability, not a separate camera system per mode.**
-Neon Lake establishes the accepted direction: fixed ordinary card/border, bounded orbit/pan/zoom *inside* its
+Neon Lake Basin (`shockwave_grid`) establishes the accepted direction: fixed ordinary card/border, bounded orbit/pan/zoom *inside* its
 clipped viewport, one canonical persisted presentation-view owner separate from artwork and Edit/CUSTOM
 stage geometry, near-plane-safe projection and composition-aware limits. Framed presets may supply validated
 starting-view metadata to that owner on explicit preset selection; ordinary hydration/resume preserves the live pose.
 §4A's FC gate consolidates that existing
 capability before Extruded Bubble. Individual framed modes choose their own safe bounds/pivot/fit; this does not
-change the unframed Sphere or Extruded Spectrum controls. Do not clone Neon Lake's special-case bounds or create
+change the unframed Voxel Sphere (`sphere`) or Extruded Spectrum (`extruded_spectrum`) controls. Do not clone Neon Lake Basin's special-case bounds or create
 an independent controller, gesture timer, view-pose persistence schema or per-mode GPU camera owner. Large and small
 card pixels/DPR require deliberate fit, LOD and glow-footprint validation, not a global bloom boost.
 
@@ -339,7 +339,7 @@ stream transport is independent of bubble size/fusion. Rays have honest strength
 and shimmer. Drift uses signed per-consumer gains on the sole logical clock; free populations default0 while wakes
 retain parent path/history/inertia. Combined recorded/native and later performance gates remain distinct.
 
-**Extruded Bubble** owns its logical 3D population, reactive evolution, Settings and frame runtime on the sole
+**Extruded Bubble** (`extruded_bubble`) owns its logical 3D population, reactive evolution, Settings and frame runtime on the sole
 Visualizer clock, using existing audio feeds. Original Bubble remains independent and supplies the minimum
 musical response-scale reference. Large-body phrase-edge support must not outlive the current positive body change
 and pin size through falling music. In idle every reactive aspect settles slowly into its collapsed/resting state,
@@ -378,7 +378,7 @@ No separate rendered eye, camera-following actors, count multiplication or artif
 boundary. Legal canonical home remains unchanged. Domain containment does not establish visual density or idle readability.
 Preset starting-view metadata owns pose; independently admitted Camera Field of View remains an authorable mode
 control in the normal preset snapshot. A reset's canonical lens policy does not prohibit that authored value.
-**Perspective is the only camera projection** for every framed 3D mode (EB, Waveform, Neon Lake and future modes).
+**Perspective is the only camera projection** for every framed 3D mode (Extruded Bubble, Waveform Ribbon (`waveform_ribbon`), Neon Lake Basin and future modes).
 Orthographic was removed outright on 5 Nov 2026 (operator: "you can kill it"): there is no Projection control, no
 per-mode `*_camera_projection` key and no parallel-ray code path. A saved or authored `Orthographic` value is
 forward-stripped on load as a retired key (`core/settings/visualizer_retired_modes.py`) and the scene renders through
@@ -510,7 +510,7 @@ fades in, settles with no running animation while hovered, and only begins a gen
 discrete presses select the last-clicked ordinary card or retained Visualizer without consuming its semantic action;
 that click glow remains settled until a later admitted press selects another target or empty space, then fades out.
 The retained Visualizer uses the same primitive only while its real card/frame shell is rendered. `cardShellEnabled` is
-the single glow-eligibility truth for ordinary widgets and the Visualizer: frameless presentations (including Sphere,
+the single glow-eligibility truth for ordinary widgets and the Visualizer: frameless presentations (including Voxel Sphere (`sphere`),
 frameless Clock, Media, Reddit, Weather, or any future shell-less family) receive no hover glow, no click-glow target
 and no Jedi Mode trigger. Losing the shell clears any retained click selection. Only state edges trigger finite Quick
 animations; there is no new poller, timer, worker, independent frame loop or visualizer clock. Runtime theme colours
@@ -639,7 +639,7 @@ Outer geometry is Python/session-owned. Variant key supports `(widget_id, displa
 Clock digital/analogue are the first required example. **That existing variant axis is also the only admitted persistence seam
 for Visualizer pose compatibility.** Visualizer descriptor `geometry_kind` selects mechanics (`planar` / `freeform_3d`) while
 `layout_profile` selects the existing CUSTOM variant slot. Current profiles are `planar`, `3d:extruded_spectrum` and `3d:sphere`. All framed Visualizers, including framed 3D
-modes such as Neon Lake Basin and Extruded Bubble, share the exact `planar` rectangle/viewport and resize rules; only
+modes such as Neon Lake Basin (`shockwave_grid`) and Extruded Bubble (`extruded_bubble`), share the exact `planar` rectangle/viewport and resize rules; only
 frameless/freeform 3D modes own separate `3d:*` stage profiles. Future freeform modes may share a profile only by explicit
 descriptor choice when their stage geometry is compatible. The split remains inside the same `custom_layout` map, `CustomLayoutSession` and commit/hydration owner; it may
 not introduce parallel 2D/3D roots, per-mode X/Y settings or a second geometry service. When source and target share the same layout profile, activation leaves the committed rectangle/viewport untouched and does
@@ -699,9 +699,9 @@ Visualizer geometry is capability-driven. Modes using the shared reflowing card 
 A bordered/framed 3D Visualizer uses the normal card shell with an orbitable 3D scene **inside** it. CARD / CARD_INTERIOR
 keeps the scene inside the border at every pose, scale, viewport and Edit state; orbit rotates the scene, not the card.
 Applicable 3D geometry/layout-profile contracts still apply, but no overflow option can bypass the interior clip.
-Neon Lake Basin uses this presentation contract; `Docs/Reference/Neon_Lake_Basin.md` owns its terrain and lifecycle detail.
+Neon Lake Basin (`shockwave_grid`) uses this presentation contract; `Docs/Reference/Neon_Lake_Basin.md` owns its terrain and lifecycle detail.
 
-Free-form 3D (Spectrum/Sphere) retains WASD orbit and Alt+left drag. Framed Extruded Bubble instead uses **plain WASD for physical camera-relative travel**, **Shift+W/S for pitch and Shift+A/D for yaw**, plus Q/E as alternative yaw keys, and Alt+left drag for orbit; Alt+right pan and Alt+scroll card scaling retain their established meanings. EB travel does not alter scene zoom or lens FOV. Neon Lake is pending a separate mode-capability audit, not implicitly changed by this binding.
+Free-form 3D (Extruded Spectrum (`extruded_spectrum`) and Voxel Sphere (`sphere`)) retains WASD orbit and Alt+left drag. Framed Extruded Bubble instead uses **plain WASD for physical camera-relative travel**, **Shift+W/S for pitch and Shift+A/D for yaw**, plus Q/E as alternative yaw keys, and Alt+left drag for orbit; Alt+right pan and Alt+scroll card scaling retain their established meanings. EB travel does not alter scene zoom or lens FOV. Neon Lake Basin is pending a separate mode-capability audit, not implicitly changed by this binding.
 For framed 3D modes these operations affect internal scene turn/tilt/pan/scale only; they never change the outer card's
 geometry or viewport. The canonical view-pose owner persists them separately from art presets and CUSTOM geometry.
 Save Preset As can capture the settled pose as optional `starting_view` metadata, outside its artwork snapshot;
@@ -770,9 +770,9 @@ Line-visualizer glow spreads perpendicular to the curve and scales with visible 
 420x280. A huge saved world at a small uniform scale must not weaken a halo on the same visible footprint.
 Glow size/intensity and line-core antialiasing remain independent.
 
-Sphere is a **standard registered Visualizer mode** with the same canonical per-mode activation/selection semantics as other modes; registry growth must not require rewriting this contract. The current representation is **Voxel Sphere**: a frameless transparent stepped-voxel shell using one static cube mesh and one static instance buffer with vertex-shader deformation. Its current musical behaviour—event-owned fragmentation/cohorts, stable four-corner population identity, sustained body growth, event-stepped tracer travel, continuous rotation and vocal-linked intake recoil—is a golden preservation target. Presentation or maintenance work may not reduce its reactivity/freshness or introduce ambient/private cadence.
+Voxel Sphere (`sphere`) is a **standard registered Visualizer mode** with the same canonical per-mode activation/selection semantics as other modes; registry growth must not require rewriting this contract. The current representation is **Voxel Sphere**: a frameless transparent stepped-voxel shell using one static cube mesh and one static instance buffer with vertex-shader deformation. Its current musical behaviour—event-owned fragmentation/cohorts, stable four-corner population identity, sustained body growth, event-stepped tracer travel, continuous rotation and vocal-linked intake recoil—is a golden preservation target. Presentation or maintenance work may not reduce its reactivity/freshness or introduce ambient/private cadence.
 
-Sphere uses the shared Scene3D resource/ring substrate while its reaction remains mode-owned. Its descriptor lazily resolves its Settings builder, capture, frame runtime and renderer; heavy resources stay dormant while disabled and retire through the normal render-context lifecycle. Canonical `sphere_*` state owns the descriptor-declared consumed technical inputs and selected frequency splits. Missing old values are promoted once from the former RAW Spectrum profile before defaults, including Custom-cache and SST inputs; there is no live Spectrum dependency. Only Spectrum, Extruded Spectrum and Shockwave Grid enter the Spectrum-authored bar-shaping pipeline; Neon Lake Basin preserves that frequency profile for terrain lighting and its separate growth response; the terrain editor owns spatial height authoring. Bubble and Sphere consume shared FFT/zone/control/transient analysis without Spectrum shape nodes or lane interpolation. Sine heartbeat and Dev Curve get pre-AGC musical energy independently of bar shapes; Dev Curve owns its separate layer editor. Activation fencing carries the policy across the existing shared BeatEngine and detached compute snapshots. The original Sphere isolation was operator-accepted in R150, expanded here to all mode capabilities. Direct fill/edge/tracer RGBA and Sphere-local Rainbow speed/extent retain their renderer consumers without opting into unused shared Rainbow/bar-appearance controls. Product admission is standard: Settings and Guided Setup expose Voxel Sphere normally, while renderer/runtime imports and heavy resources remain lazy and dormant whenever the mode is disabled or inactive. `Docs/Reference/Sphere_Visualizer.md` owns the detailed settings contract.
+Sphere uses the shared Scene3D resource/ring substrate while its reaction remains mode-owned. Its descriptor lazily resolves its Settings builder, capture, frame runtime and renderer; heavy resources stay dormant while disabled and retire through the normal render-context lifecycle. Canonical `sphere_*` state owns the descriptor-declared consumed technical inputs and selected frequency splits. Missing old values are promoted once from the former RAW Spectrum profile before defaults, including Custom-cache and SST inputs; there is no live Spectrum dependency. Only Spectrum (`spectrum`), Extruded Spectrum and Neon Lake Basin (`shockwave_grid`) enter the Spectrum-authored bar-shaping pipeline; Neon Lake Basin preserves that frequency profile for terrain lighting and its separate growth response; the terrain editor owns spatial height authoring. Bubble (`bubble`) and Voxel Sphere consume shared FFT/zone/control/transient analysis without Spectrum shape nodes or lane interpolation. Spline Curve (`devcurve`) gets pre-AGC musical energy independently of bar shapes and owns its separate layer editor. Activation fencing carries the policy across the existing shared BeatEngine and detached compute snapshots. The original Sphere isolation was operator-accepted in R150, expanded here to all mode capabilities. Direct fill/edge/tracer RGBA and Sphere-local Rainbow speed/extent retain their renderer consumers without opting into unused shared Rainbow/bar-appearance controls. Product admission is standard: Settings and Guided Setup expose Voxel Sphere normally, while renderer/runtime imports and heavy resources remain lazy and dormant whenever the mode is disabled or inactive. `Docs/Reference/Sphere_Visualizer.md` owns the detailed settings contract.
 
 The reusable architectural asset is the **experimental host/isolation seam**—descriptor-driven lazy wiring, independent dormancy/retirement, private setting prefix and explicit shared-family opt-outs. It is suitable for future experimental modes. Sphere audio logic, voxel settings, shader semantics and mode-specific capability memberships are not a shared foundation and must not be generalized merely to make that seam look cleaner. Any future experimental mode begins isolated; sharing beyond the host seam requires an explicitly scoped promotion.
 
@@ -783,7 +783,7 @@ The currently curated Sphere presentation examples include **Glass Current** (Pr
 Future modes use the lab-first method and shared offscreen target described in `Docs/Guides/Visualizer_Labs.md`.
 Labs compose production primitives or the retained production render host, with explicit time and legal context-owned
 retirement. They introduce no runtime scheduler, palette or persistence authority.
-Waveform Ribbon must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` for reference custody, architecture dependencies,
+Waveform Ribbon (`waveform_ribbon`) must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` for reference custody, architecture dependencies,
 staged work packages, current operator mock authority and A–H visual evidence. The concept brief supplies original
 intent; newer operator direction and the current visual gap checklist (§0B) are recorded in that lab plan, and
 Current_Plan owns order. Surface smoothness, optical reflection blur and source illumination are separate controls;
@@ -1011,9 +1011,9 @@ Current source must be reasoned about from present owners/contracts rather than 
 
 ## Runtime integration details
 
-### Sphere orbit, authored alpha and quarantined Extruded cast shadows
+### Voxel Sphere orbit, authored alpha and quarantined Extruded cast shadows
 
-Sphere's instanced voxel shells project through the shared Scene3D camera with one CPU mirror for Edit bounds. The operator accepted normal Sphere orbit/spin in runtime; an Alt+left-drag release adds a **finite** momentum tail evaluated against the existing logical capture clock. The transient velocity is not preset state or a second camera/animation owner. Persist only the analytically resolved endpoint; re-grab, held-key orbit and preset activation cancel the old tail. Sphere's authored perpetual base spin continues independently. Momentum was physically accepted on Windows (R132); Sphere is operator-accepted; any later loaded-GPU-tail anomaly belongs to the conditional watchlist in `Current_Plan.md`.
+Voxel Sphere's (`sphere`) instanced voxel shells project through the shared Scene3D camera with one CPU mirror for Edit bounds. The operator accepted normal Sphere orbit/spin in runtime; an Alt+left-drag release adds a **finite** momentum tail evaluated against the existing logical capture clock. The transient velocity is not preset state or a second camera/animation owner. Persist only the analytically resolved endpoint; re-grab, held-key orbit and preset activation cancel the old tail. Sphere's authored perpetual base spin continues independently. Momentum was physically accepted on Windows (R132); Sphere is operator-accepted; any later loaded-GPU-tail anomaly belongs to the conditional watchlist in `Current_Plan.md`.
 
 Extruded bodies consume fill-swatch alpha and their independent edge lines consume border-swatch alpha; the retired Body Alpha multiplier has no authority. **Extruded cast shadows are disabled** across the renderer, Edit bounds and greyed-out Settings. Historical shadow settings survive for compatibility but cannot reactivate the GL pass. The disabled feature's failed implementations belong in `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md`; no shadow physics acceptance is claimed.
 

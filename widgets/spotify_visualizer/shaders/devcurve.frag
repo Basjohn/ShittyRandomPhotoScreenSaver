@@ -1,5 +1,6 @@
 #version 460 core
-// Dev Curve: smooth full-width spline-like filled curves.
+// Spline Curve (mode id devcurve): smooth full-width spline-like filled curves.
+// Its sibling owners are mapped in Docs/Reference/Naming.md.
 
 in vec2 v_uv;
 out vec4 fragColor;
