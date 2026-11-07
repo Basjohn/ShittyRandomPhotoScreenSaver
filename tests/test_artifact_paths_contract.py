@@ -362,3 +362,17 @@ def test_pytest_removes_passing_tmp_paths_and_never_pins_a_shared_basetemp():
     config.read(ROOT / "tests" / "pytest.ini", encoding="utf-8")
     assert config.get("pytest", "tmp_path_retention_policy", fallback="").strip() == "failed"
     assert "--basetemp" not in config.get("pytest", "addopts", fallback="")
+
+
+def test_product_names_resolve_to_the_mode_id_folder(tmp_path):
+    """Folders use mode ids; the product name (and the Studio's title) are accepted and resolve to the id."""
+    with artifact_paths.use_root(tmp_path / ".artifacts") as root:
+        expected = root / "evidence" / "visualizers" / "shockwave_grid" / "capture" / "20261107_a"
+        for name in ("neon_lake_basin", "neon_lake", "shockwave_grid"):
+            assert artifact_paths.evidence_dir(f"visualizers/{name}", "capture", "a", date="20261107") == expected
+        assert artifact_paths.webp_path("visualizers/spline_curve", "strip", "a", date="20261107") == (
+            root / "webp" / "visualizers" / "devcurve" / "strip" / "20261107_a.webp")
+        given = root / "evidence" / "visualizers" / "neon_lake" / "capture" / "20261107_a" / "summary.json"
+        assert artifact_paths.checked_output(given) == expected.resolve() / "summary.json"
+        with pytest.raises(artifact_paths.ArtifactPathError):
+            artifact_paths.evidence_dir("visualizers/neon_pond", "capture", "a")
