@@ -285,6 +285,8 @@ source identity.
 - [ ] Requested-monitor/fallback and committed/CUSTOM geometry semantics are preserved.
 - [ ] Non-owning displays do not construct duplicate controller/source/logical runtime ownership.
 - [ ] Retained visualizer double-click cycles mode before display-level next-image fallback.
+- [ ] A new in-card control's MouseArea declares `consumesDoubleClick: true` and accepts `onDoubleClicked`, so a
+  double-click on it never cycles the mode (`Docs/Guardrails/Visualizer_Presentation.md` §14A).
 
 ## 9B. Retirement barrier
 

@@ -171,16 +171,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
      `[GC_POLICY]` lines. Commands in the agent's report; evidence `.artifacts/evidence/gc_gen2/`.
    - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
      they are collections.
-2. **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode** (operator 6 Nov
-   ~22:00; `logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset
-   home" x2). The pair also reached the visualizer region's double-click admission
-   (`QuickVisualizerDoubleClickAdmission`, `cycle_mode=self._cycle_quick_visualizer_mode`,
-   `engine/display_manager.py` ~3529). That cycled to the next mode in `mode_activation` (after Extruded Bubble comes
-   Waveform) and wrote `widgets.spotify_visualizer.mode` (~1939). The one-Visualizer contract held: EB's last tick was
-   22:04:34 and Waveform's first was 22:04:36, never overlapping. Fix at the owner: the camera hint buttons (Reset
-   Camera and any other in-card control) consume their presses, including the second press of a double-click, so no
-   in-card control press reaches mode cycling. Regression bar: a double-click on Reset Camera resets once or twice but
-   never cycles; a double-click on the card's empty area still cycles.
 3. **Checklist AC-04:** a failing inactive-renderer release blacks out the active mode on every frame
    (`rendering/quick/visualizer/render_host.py:182-183, 304-329`); render the active mode first, record the failure
    once, retry at the next boundary.
@@ -193,7 +183,8 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
    Bubble, Neon Lake and Waveform stay exactly as they are. Sphere (freeform) gains a Reset Camera to its preset home
    and declared inertia/wrap, without changing its look, framing or orbit freedom; Extruded Spectrum gets the same
    treatment where it applies. Prove it pixel-identical at the preset home and identical under orbit before and after.
-   The in-card Reset Camera button must consume its own presses (item 2).
+   The in-card Reset Camera button already consumes its own presses (landed 7 Nov:
+   `Docs/Guardrails/Visualizer_Presentation.md` §14A); a new Sphere / Extruded Spectrum control follows the same rule.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 - **Any ThreadManager shutdown cancels every pending single-shot in the process.** `ThreadManager.shutdown`

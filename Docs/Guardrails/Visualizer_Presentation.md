@@ -467,7 +467,13 @@ activation; other displays construct none. Preserve committed/CUSTOM geometry an
 semantics.
 
 Double-click inside the retained visualizer cycles visualizer mode. Only if family/visualizer semantic hit admission declines
-the event may the display-level fallback advance to the next image.
+the event may the display-level fallback advance to the next image. An in-card control (Reset Camera, the preset steps, the
+hover edit glyphs, and any control added to the card) consumes all of its own presses, a double-click's second press
+included: its MouseArea accepts `onDoubleClicked` and declares `consumesDoubleClick: true`, and
+`QuickDisplayWindow._double_click_owned_by_control` ends a double-click whose exclusive grabber declares it before any
+semantic admission or fallback (Qt Quick does not report the MouseArea's acceptance on the window's event). Two quick clicks
+on Reset Camera reset once or twice and never cycle the mode (operator 6 Nov);
+`tests/test_visualizer_in_card_control_double_click.py`.
 
 ## 14B. Hard retirement barrier
 
