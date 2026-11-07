@@ -397,13 +397,13 @@ def test_live_visualizer_card_shadow_is_externalized_below_ordinary_widgets() ->
 
 def test_visualizer_shadow_projection_is_owner_time_and_cached() -> None:
     root = Path(__file__).resolve().parents[1]
-    display_manager = (root / "engine" / "display_manager.py").read_text(encoding="utf-8")
+    binding = (root / "widgets" / "spotify_visualizer" / "visualizer_host_binding.py").read_text(encoding="utf-8")
     owner = (root / "widgets" / "spotify_visualizer" / "quick_display_visualizer_owner.py").read_text(encoding="utf-8")
     qml = (root / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml").read_text(encoding="utf-8")
 
-    assert "card_shadow_kwargs = {" in display_manager
-    assert "resolve_directional_extensions(" in display_manager
-    assert "card_shadow_kwargs=card_shadow_kwargs" in display_manager
+    assert "def resolve_visualizer_card_shadow_kwargs(" in binding
+    assert "resolve_directional_extensions(" in binding
+    assert "card_shadow_kwargs=card_shadow_kwargs" in binding
     assert "self._card_shadow_kwargs = dict(card_shadow_kwargs)" in owner
     assert "**self._card_shadow_kwargs" in owner
 
