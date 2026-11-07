@@ -316,8 +316,8 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - The one-pixel `test_waveform_floor_give.py` flake is fixed: it was MSAA rasterisation noise, so the test now
     renders single-sample, and 20/20 runs pass.
 
-  **Lead:** 35/35 camera and orbit files pass on the merge. Open for the operator: should Extruded Spectrum coast
-  like Sphere? It wraps but has no inertia today.
+  **Lead:** 35/35 camera and orbit files pass on the merge. Operator (7 Nov): Extruded Spectrum does not coast; a
+  released drag stops dead (inertia stays off).
 - **Settings round-trip live harness + lifecycle hygiene: merged 7 Nov (5716b3c6).**
   1. `tools/visualizer_live_check.py --settings-roundtrip AT,...` drives the real Settings path invisibly. Per
      round trip it records barrier times, generations, memory and GC thaw/re-freeze, and fails the run on a barrier
