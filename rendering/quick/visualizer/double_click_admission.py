@@ -54,6 +54,27 @@ def next_visualizer_mode_id(
     return ids[(idx + 1) % len(ids)]
 
 
+def visualizer_mode_cycle_order(
+    current_mode_id: str,
+    mode_activation: object = None,
+) -> tuple[str, ...]:
+    """Every other enabled mode in cycle order after ``current_mode_id``, wrapping (the same order and enabled set
+    as ``next_visualizer_mode_id``, whose answer is the first entry). The Expanded Visualizer's cycle walks it to
+    skip modes that cannot be expanded."""
+
+    if mode_activation is None:
+        ids = tuple(desc.mode_id for desc in iter_visualizer_mode_descriptors())
+    else:
+        ids = resolve_effective_enabled_modes(mode_activation)
+    current = coerce_visualizer_mode_id(current_mode_id)
+    try:
+        idx = ids.index(current)
+    except ValueError:
+        idx = -1
+    return tuple(ids[(idx + step) % len(ids)] for step in range(1, len(ids) + 1)
+                 if ids[(idx + step) % len(ids)] != current)
+
+
 class QuickVisualizerDoubleClickAdmission:
     """Retained semantic hit/action admission for the visualizer double-click.
 

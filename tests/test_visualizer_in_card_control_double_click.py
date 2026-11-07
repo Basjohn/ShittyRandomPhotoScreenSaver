@@ -30,7 +30,7 @@ def admitted_card(production_card):
     card.cycles = cycles
     root = card.scene._visualizer_root
     for name, value in (("cameraResetAvailable", True), ("alwaysShowGlyphs", True), ("widgetGlowAdmitted", True),
-                        ("volumeWheelEnabled", True)):
+                        ("volumeWheelEnabled", True), ("expandGlyphAvailable", True)):
         root.setProperty(name, value)
     return card
 
@@ -43,7 +43,7 @@ def _control(card, object_name):
         return next((hit for child in item.childItems() if (hit := find(child)) is not None), None)
     item = find(card.scene._visualizer_root)
     assert item is not None, object_name
-    holder = item if object_name == "visualizerCameraResetGlyph" else item.parentItem()
+    holder = item if object_name in ("visualizerCameraResetGlyph", "visualizerExpandGlyph") else item.parentItem()
     holder.setProperty("opacity", .92)
     holder.setEnabled(True)
     assert item.isVisible() and item.isEnabled()
@@ -63,6 +63,7 @@ def _double_click(card, p):
 @pytest.mark.parametrize("object_name,signal", [
     ("visualizerCameraResetGlyph", "cameraResetRequested"),
     ("visualizerNextPresetGlyph", "presetStepRequested"),
+    ("visualizerExpandGlyph", "expandGlyphRequested"),        # Expanded Visualizer (plan 01 §B1)
 ])
 def test_a_double_click_on_an_in_card_control_never_cycles_the_mode(admitted_card, object_name, signal):
     card = admitted_card

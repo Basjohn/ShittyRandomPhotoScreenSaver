@@ -15,6 +15,11 @@ Item {
     signal appVolumeStepRequested(int direction)
     property bool cameraResetAvailable: false
     signal cameraResetRequested()
+    // Expanded Visualizer (plan 01 §B1): offered for a capable mode outside Edit; the takeover coordinator
+    // publishes both values at its event edges. expandedDisplay turns the glyph into the collapse.
+    property bool expandGlyphAvailable: false
+    property bool expandedDisplay: false
+    signal expandGlyphRequested(bool expand)
     signal presetStepRequested(int direction)
     property real authoredSceneOpacity: 1.0
     property real startupRevealOpacity: 1.0
@@ -301,6 +306,121 @@ Item {
         }
     }
 
+    // Expand / collapse: a vector diagonal arrow in the upper-right corner, a distinct semantic action (not an
+    // Edit glyph). Same admission and hover fade as Reset Camera; it consumes all of its own presses.
+    property real expandTipProgress: 0.0
+    NumberAnimation {
+        id: expandTipReveal
+        target: visualizerPresentationRoot
+        property: "expandTipProgress"
+        from: 0.0
+        to: 1.0
+        duration: 1800
+        easing.type: Easing.Linear
+    }
+    Rectangle {
+        id: expandGlyph
+        objectName: "visualizerExpandGlyph"
+        width: 26
+        height: 26
+        readonly property real inset: Math.max(10, visualizerPresentationRoot.cardBorderWidth + 6)
+        x: Math.max(6, parent.width - width - inset)
+        y: inset
+        radius: width / 2
+        z: 12
+        color: "#bb20262c"
+        border.width: 1
+        border.color: "#c2ffffff"
+        visible: visualizerPresentationRoot.expandGlyphAvailable
+            && visualizerPresentationRoot.widgetGlowAdmitted
+            && visualizerPresentationRoot.visible
+        opacity: (visualizerPresentationRoot.alwaysShowGlyphs
+                  && cameraResetHover.hovered) ? 0.92 : 0.0
+        enabled: visible && visualizerPresentationRoot.alwaysShowGlyphs
+            && cameraResetHover.hovered && opacity > 0.05
+        Behavior on opacity {
+            NumberAnimation {
+                duration: cameraResetHover.hovered ? 700 : 1200
+                easing.type: Easing.InOutSine
+            }
+        }
+        onEnabledChanged: if (!enabled) {
+            expandTipReveal.stop()
+            visualizerPresentationRoot.expandTipProgress = 0.0
+        }
+        Canvas {
+            id: expandArrow
+            objectName: "visualizerExpandGlyphArrow"
+            anchors.centerIn: parent
+            width: 18
+            height: 18
+            readonly property bool collapse: visualizerPresentationRoot.expandedDisplay
+            onCollapseChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                ctx.save()
+                // Expand points up-right; collapse is the same arrow turned to point down-left.
+                if (collapse) { ctx.translate(width, height); ctx.rotate(Math.PI) }
+                ctx.strokeStyle = "#f2f4f7"
+                ctx.lineWidth = 2.0
+                ctx.lineCap = "round"
+                ctx.lineJoin = "round"
+                ctx.beginPath()
+                ctx.moveTo(4.5, 13.5)
+                ctx.lineTo(13.5, 4.5)
+                ctx.moveTo(7.5, 4.5)
+                ctx.lineTo(13.5, 4.5)
+                ctx.lineTo(13.5, 10.5)
+                ctx.stroke()
+                ctx.restore()
+            }
+        }
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            propagateComposedEvents: false
+            onEntered: expandTipReveal.restart()
+            onExited: {
+                expandTipReveal.stop()
+                visualizerPresentationRoot.expandTipProgress = 0.0
+            }
+            onPressed: function(mouse) { mouse.accepted = true }
+            readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+            onDoubleClicked: function(mouse) { mouse.accepted = true }
+            onClicked: function(mouse) {
+                mouse.accepted = true
+                visualizerPresentationRoot.expandGlyphRequested(!visualizerPresentationRoot.expandedDisplay)
+            }
+        }
+    }
+    Rectangle {
+        id: expandTooltip
+        objectName: "visualizerExpandTooltip"
+        visible: expandGlyph.visible && opacity > 0.0
+        opacity: Math.max(0.0, Math.min(1.0,
+            (visualizerPresentationRoot.expandTipProgress - 0.56) / 0.44))
+        width: expandTooltipText.implicitWidth + 16
+        height: expandTooltipText.implicitHeight + 8
+        x: Math.max(3, expandGlyph.x + expandGlyph.width - width)
+        y: expandGlyph.y + expandGlyph.height + 7
+        radius: 4
+        z: 13
+        enabled: false
+        color: "#e61b1e23"
+        border.width: 1
+        border.color: "#bdc38e88"
+        Text {
+            id: expandTooltipText
+            anchors.centerIn: parent
+            text: visualizerPresentationRoot.expandedDisplay ? "EXIT FULL DISPLAY" : "FULL DISPLAY"
+            color: "#f6f6f8"
+            font.pixelSize: 11
+            font.weight: Font.Medium
+        }
+    }
+
     Row {
         id: presetControls
         objectName: "visualizerPresetControls"
@@ -407,9 +527,11 @@ Item {
         objectName: "visualizerHoverGlyphLoader"
         anchors.fill: parent
         z: 11
+        // Edit glyphs edit the ordinary card; a display-wide view offers none of them.
         active: visualizerPresentationRoot.alwaysShowGlyphs
             && visualizerPresentationRoot.widgetGlowAdmitted
             && visualizerPresentationRoot.presentationActive
+            && !visualizerPresentationRoot.expandedDisplay
         sourceComponent: WidgetHoverEditGlyphs {
             objectName: "visualizerHoverEditGlyphs"
             anchors.fill: parent
@@ -489,6 +611,8 @@ Item {
         anchors.right: parent.right
         readonly property real inset: Math.max(12, visualizerPresentationRoot.cardBorderWidth + 6)
         anchors.margins: inset
+        // Keep the safe zone of the expand glyph clear (plan 01 §B1).
+        anchors.rightMargin: inset + (expandGlyph.visible ? expandGlyph.width + 6 : 0)
         width: Math.min(Math.max(0, parent.width - 2 * inset),
                         Math.max(0, parent.height - 2 * inset) * artworkAspect,
                         Math.round(Math.max(48, Math.min(84, Math.min(parent.width, parent.height) * 0.085))))

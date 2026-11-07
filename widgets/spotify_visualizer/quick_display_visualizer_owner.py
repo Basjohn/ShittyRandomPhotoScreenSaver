@@ -44,6 +44,27 @@ _PREPARED_REVEAL_DEADLINE_S = 1.5
 _ACTIVATION_TRANSACTION_DEADLINE_MS = 6000
 
 
+class _TakeoverFade:
+    """One display-wide viewport change in flight (Expanded Visualizer, plan 01 §D1.7/§D2.4).
+
+    The whole Visualizer presentation fades out where it is, the viewport swaps at the midpoint, and it fades in
+    at the target: one GL target reallocation, at the swap, never one per frame of a geometry tween. It is sampled
+    on the existing publication edge against the owner's transition clock, like the activation and mode fades; it
+    owns no timer.
+    """
+
+    __slots__ = ("target", "source", "started_at", "on_complete", "drawn_expanded", "done")
+
+    def __init__(self, *, target: bool, source: bool, started_at: float,
+                 on_complete: Callable[[], None] | None) -> None:
+        self.target = target
+        self.source = source
+        self.started_at = started_at
+        self.on_complete = on_complete
+        self.drawn_expanded = source
+        self.done = False
+
+
 def _shared_beat_engine(bar_count: int) -> Any:
     """The production engine factory: the registry's one shared beat engine (imported on first use, so building
     an owner imports no capture code)."""
@@ -176,6 +197,14 @@ class QuickDisplayVisualizerOwner:
         # Console display power (core.display_power), applied by DisplayManager.
         self._display_power_on = True
         self._engine_released_for_display_power = False
+        # Expanded Visualizer (plan 01 M2): the display-wide viewport is a presentation route, swapped at event
+        # edges only. ``_expanded_display`` is the committed route; ``_takeover`` a fade-through in flight;
+        # ``_expanded_source`` the ordinary record the last display-wide one derived from (its metrics, never the
+        # display-wide ones, reach the controller, so the ordinary geometry round-trips untouched).
+        self._expanded_display = False
+        self._takeover: _TakeoverFade | None = None
+        self._expanded_source: Any = None
+        self._expanded_edge_margin = 0.0
 
     @property
     def controller(self) -> Any:
@@ -671,18 +700,181 @@ class QuickDisplayVisualizerOwner:
             return False
         self._authored_outer_origin = origin
         if self._configured:
-            presentation = self._resolve_current_presentation()
             if self._started:
-                self._apply_resolved_presentation(presentation)
+                # Through the current route: an expanded view stays display-wide while its ordinary rect moves.
+                self._reapply_route()
             else:
-                self._controller.commit_presentation_metrics(presentation)
+                self._controller.commit_presentation_metrics(self._resolve_current_presentation())
         return True
 
     def resolved_outer_size(self) -> tuple[float, float]:
-        """Return current outer size for ordinary layout planning."""
+        """Return current outer size for ordinary layout planning (the ordinary rect, also while expanded)."""
 
         presentation = self._resolve_current_presentation()
         return (float(presentation.outer_rect[2]), float(presentation.outer_rect[3]))
+
+    # ------------------------------------------------- display-wide viewport (Expanded Visualizer, plan 01 M2)
+
+    @property
+    def expanded_display(self) -> bool:
+        """True once the display-wide route is committed (and while a collapse from it is still fading)."""
+
+        return self._expanded_display
+
+    @property
+    def expanded_display_transition_active(self) -> bool:
+        return self._takeover is not None
+
+    def set_expanded_display(
+        self,
+        expanded: bool,
+        *,
+        animate: bool = False,
+        on_complete: Callable[[], None] | None = None,
+        edge_margin: float | None = None,
+    ) -> bool:
+        """Show the Visualizer card near the display's extents, or back at its ordinary rect, at this event edge.
+
+        ``edge_margin`` (logical px, the card's ordinary edge margin) insets the display-wide card on every side;
+        ``None`` keeps the last one.
+
+        The display-wide record is a variant of the ordinary one (``resolve_expanded_visualizer_presentation``);
+        it never reaches the controller's committed metrics, CUSTOM, presets or Settings, so collapsing restores
+        the ordinary rect exactly. ``animate`` fades the whole presentation out, swaps the viewport and fades it
+        back in on the publication edge, then calls ``on_complete`` once; without it the route swaps now (the
+        readiness restore before reveal, or Edit's collapse) and ``on_complete`` runs before this returns. A new
+        call supersedes one in flight (its ``on_complete`` is dropped). Returns False, changing nothing, when the
+        owner is retired or not bound.
+        """
+
+        if self._retired or self._sync is None:
+            return False
+        expanded = bool(expanded)
+        if edge_margin is not None:
+            margin = float(edge_margin)
+            self._expanded_edge_margin = margin if math.isfinite(margin) and margin > 0.0 else 0.0
+        self._takeover = None
+        if not animate:
+            self._finish_takeover(expanded, on_complete, reapply=True)
+            return True
+        self._takeover = _TakeoverFade(
+            target=expanded,
+            source=self._expanded_display,
+            started_at=float(self._transition_clock()),
+            on_complete=on_complete,
+        )
+        self._sync.set_presentation_route(
+            self._resolve_takeover_presentation, self._commit_takeover_presentation
+        )
+        if self._started:
+            # Present the first faded frame now; later frames ride the logical publications.
+            self._reapply_route()
+        return True
+
+    def _route_pair(self) -> tuple[Callable[[], Any], Callable[[Any], None]]:
+        if self._takeover is not None:
+            return self._resolve_takeover_presentation, self._commit_takeover_presentation
+        if self._expanded_display:
+            return self._resolve_expanded_presentation, self._apply_expanded_presentation
+        return self._resolve_current_presentation, self._apply_resolved_presentation
+
+    def _reapply_route(self) -> None:
+        """Resolve and commit once through the current route at an event edge (not a cadence)."""
+
+        resolve, commit = self._route_pair()
+        presentation = resolve()
+        if presentation is None:
+            return
+        commit(presentation)
+        scene = self._presentation_runtime.scene_controller
+        request = getattr(scene, "request_visualizer_present", None)
+        if callable(request):
+            request()
+
+    def _finish_takeover(
+        self, expanded: bool, on_complete: Callable[[], None] | None, *, reapply: bool
+    ) -> None:
+        self._takeover = None
+        self._expanded_display = bool(expanded)
+        if not expanded:
+            self._expanded_source = None
+        resolve, commit = self._route_pair()
+        self._sync.set_presentation_route(resolve, commit)
+        if reapply and self._started:
+            self._reapply_route()
+        if on_complete is not None:
+            on_complete()
+
+    def _resolve_expanded_presentation(self) -> Any:
+        ordinary = self._resolve_current_presentation()
+        if ordinary is None:
+            return None
+        from widgets.spotify_visualizer.presentation_geometry import (
+            resolve_expanded_visualizer_presentation,
+        )
+
+        _x, _y, width, height = self._presentation_runtime.display_identity.geometry
+        self._expanded_source = ordinary
+        return resolve_expanded_visualizer_presentation(
+            ordinary,
+            display_size=(float(width), float(height)),
+            # Never more than a quarter of the shorter side: a card always remains.
+            edge_margin=min(self._expanded_edge_margin, min(float(width), float(height)) / 4.0),
+        )
+
+    def _apply_expanded_presentation(self, presentation: Any) -> None:
+        """Commit a display-wide record: the scene shows it; the controller keeps the ordinary metrics."""
+
+        self._presentation_runtime.scene_controller.apply_visualizer_presentation(
+            presentation,
+            active=True,
+        )
+        ordinary = self._expanded_source
+        if ordinary is not None and not self._controller.has_custom_viewport_override:
+            self._controller.commit_presentation_metrics(ordinary)
+        self._committed_layout_extent = None
+
+    def _takeover_fade(self, takeover: _TakeoverFade) -> float:
+        """Sample the fade-through and pick the side drawn now (smoothstep each half)."""
+
+        half = self._transition_half_duration_s
+        elapsed = max(0.0, float(self._transition_clock()) - takeover.started_at)
+        if half <= 0.0 or elapsed >= 2.0 * half:
+            takeover.drawn_expanded = takeover.target
+            takeover.done = True
+            return 1.0
+        if elapsed < half:
+            takeover.drawn_expanded = takeover.source
+            linear = 1.0 - elapsed / half
+        else:
+            takeover.drawn_expanded = takeover.target
+            linear = (elapsed - half) / half
+        return linear * linear * (3.0 - 2.0 * linear)
+
+    def _resolve_takeover_presentation(self) -> Any:
+        takeover = self._takeover
+        if takeover is None:
+            resolve, _commit = self._route_pair()
+            return resolve()
+        fade = self._takeover_fade(takeover)
+        base = (
+            self._resolve_expanded_presentation()
+            if takeover.drawn_expanded
+            else self._resolve_current_presentation()
+        )
+        if base is None:
+            return None
+        return replace(base, scene_fade=float(base.scene_fade) * fade)
+
+    def _commit_takeover_presentation(self, presentation: Any) -> None:
+        takeover = self._takeover
+        if takeover is None or not takeover.drawn_expanded:
+            self._apply_resolved_presentation(presentation)
+        else:
+            self._apply_expanded_presentation(presentation)
+        if takeover is not None and takeover.done and self._takeover is takeover:
+            # The target is on screen at full opacity: commit the steady route, then report completion.
+            self._finish_takeover(takeover.target, takeover.on_complete, reapply=False)
 
     def configure_committed_layout(
         self,
@@ -1050,7 +1242,7 @@ class QuickDisplayVisualizerOwner:
             self._mode_transition_started_at = 0.0
             self._mode_transition_fade = 1.0
             try:
-                self._apply_resolved_presentation(self._resolve_current_presentation())
+                self._reapply_route()
                 self._request_retained_present()
             except Exception:
                 logger.exception("[SPOTIFY_VIS] Could not restore stalled outgoing scene")
@@ -1618,6 +1810,10 @@ class QuickDisplayVisualizerOwner:
         self._publication_wake = None
         self._pending_mode_activation = None
         self._preparing_activation = None
+        # A takeover fade dies with the owner; its completion is never reported to a retired generation.
+        self._takeover = None
+        self._expanded_display = False
+        self._expanded_source = None
         self._transition_request_serial += 1  # disarm any queued one-shot
         self._transition_failure_callback = None
         self._presentation_resolver = None

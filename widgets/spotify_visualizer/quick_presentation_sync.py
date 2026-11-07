@@ -146,6 +146,23 @@ class QuickVisualizerPresentationSync:
         self._stall_sampler = current_gui_stall_sampler()     # --frame-trace only (N1e)
         self._authored_view_publication_callback: Callable[[Any, ResolvedVisualizerPresentation], None] | None = None
 
+    def set_presentation_route(
+        self,
+        resolve_presentation: PresentationResolver,
+        commit_presentation: Optional[PresentationCommitter],
+    ) -> None:
+        """Replace the resolve/commit pair at an event edge (the owner's display-wide viewport, plan 01 M2).
+
+        The owner swaps the pair when the takeover enters or leaves, so the steady publication path carries no
+        per-frame branch for a variant that is not in use. Called on the GUI thread only, like ``sync_latest``.
+        """
+        if not callable(resolve_presentation):
+            raise TypeError("resolve_presentation must be callable")
+        if commit_presentation is not None and not callable(commit_presentation):
+            raise TypeError("commit_presentation must be callable or None")
+        self._resolve_presentation = resolve_presentation
+        self._commit_presentation = commit_presentation
+
     def set_authored_view_publication_callback(
         self, callback: Callable[[Any, ResolvedVisualizerPresentation], None] | None,
     ) -> None:
