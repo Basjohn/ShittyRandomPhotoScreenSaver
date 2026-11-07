@@ -38,6 +38,7 @@ class OffscreenRenderTarget:
             fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
             fmt.setVersion(*QUICK_OPENGL_VERSION)
             fmt.setDepthBufferSize(24)
+            fmt.setStencilBufferSize(8)   # as Quick's contexts: the Visualizer clip host refuses one without
             self.context = QOpenGLContext()
             self.context.setFormat(fmt)
             if not self.context.create():

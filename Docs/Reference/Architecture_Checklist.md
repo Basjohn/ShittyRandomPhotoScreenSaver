@@ -99,25 +99,6 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
   - **Why it matters for SMP:** live Settings (SMP plan §9) and the SMP tab will re-save whole groups; publication
     must mean change.
 
-- [ ] **AC-08 One GL state-query helper; the bench sees the production node path** (A-05 + unrelated defect 2 +
-  A-23). Severity low, reward medium (about 0.2 ms of GIL-held render-thread Python per Visualizer frame back, no
-  pixel change), effort S. **Confirmed** code sites; cost measured offscreen by the audit (PyOpenGL
-  `glGetIntegerv` 14.4 µs vs `gl_query.get_int` 3.6 µs): `rendering/quick/visualizer/clip_host.py:57` `_int_state`
-  with 14 getters plus the scissor box on every clip begin (`:211-231`, `:518-519`, `:603-605`);
-  `rendering/quick/render/background_node.py:145` on every background draw; `rendering/quick/visualizer/render_host.py:30`;
-  `rendering/quick/scene3d/waveform.py:536-537` (`GL_DRAW_FRAMEBUFFER_BINDING`, `GL_VIEWPORT` per frame in the floor
-  pass) and `scene3d/ribbon.py:356,474` (`GL_VIEWPORT`). `rendering/quick/gl_query.py` already exists for exactly this
-  and `rendering/quick/visualizer/gl_state.py:30-43` is a second private copy. `tools/overhead_baseline.py` drives the
-  render host only, so none of these fences are in its call counts.
-  - **Fix:** replace every `_int_state` / `glGetIntegerv` on a per-frame path with `gl_query.get_int/get_ints`,
-    keeping the **exact query order** (`clip_host.py:199-201` requires it; CHK25/CHK26 lineage is
-    operator-protected); fold `visualizer/gl_state.py` into `gl_query`; add a `node_path` bench case that drives
-    `VisualizerClipHost.begin/end` and `BackgroundNode._draw_base` around one mode.
-  - **Must stay true:** no steady-frame driver queries beyond those already made; pixel output identical on the
-    clip-smoke fixtures; production never re-tuned to satisfy a pixel oracle.
-  - **Regression bar:** a test records the sequence of `glGet*` names in `capture()` before and after (identical);
-    the bench's node-path GL and Python call counts appear in the baseline JSON and do not rise.
-
 - [ ] **AC-09 Card border width resolved once** (A-09). Severity low, reward low, effort S. **Confirmed:** the clamp
   lives in `rendering/quick/widgets/family_binder.py:84-96` and is re-implemented in `engine/display_manager.py:3363-3370`,
   `rendering/quick/widgets/games_you_follow.py:202-203`, `rendering/quick/widgets/system_audio_osd.py:98-111`, while
