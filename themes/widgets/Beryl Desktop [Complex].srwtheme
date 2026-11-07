@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Beryl Desktop [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:Beryl Desktop [Complex] [Mica].srtheme",
   "name": "Beryl Desktop [Complex]",
-  "linked_settings_theme_id": "file:Beryl Desktop [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Beryl Desktop [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       38,

@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Black Forest Raspberry [Complex] [Acrylic].srtheme",
+  "theme_id": "mirror:file:Black Forest Raspberry [Complex] [Smoked].srtheme",
   "name": "Black Forest Raspberry [Complex]",
-  "linked_settings_theme_id": "file:Black Forest Raspberry [Complex] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:Black Forest Raspberry [Complex] [Smoked].srtheme",
+  "surface_material": "smoked",
   "colors": {
     "card.background": [
       45,

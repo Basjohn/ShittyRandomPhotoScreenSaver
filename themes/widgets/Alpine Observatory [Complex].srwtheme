@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Alpine Observatory [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:Alpine Observatory [Complex] [Mica].srtheme",
   "name": "Alpine Observatory [Complex]",
-  "linked_settings_theme_id": "file:Alpine Observatory [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Alpine Observatory [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       23,

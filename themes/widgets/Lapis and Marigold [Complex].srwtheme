@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Lapis and Marigold [Complex] [Acrylic].srtheme",
+  "theme_id": "mirror:file:Lapis and Marigold [Complex] [Mica].srtheme",
   "name": "Lapis and Marigold [Complex]",
-  "linked_settings_theme_id": "file:Lapis and Marigold [Complex] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:Lapis and Marigold [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       28,

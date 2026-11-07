@@ -28,8 +28,10 @@ THEMES = ROOT / "themes"
 WIDGETS = THEMES / "widgets"
 BUILTIN = "builtin:default-dark"
 
-# The operator's rule (7 Nov 2026), not authored theme content.
-_PAIR_MATERIAL = {"glass": "glass", "acrylic": "acrylic", "off": None}
+# The operator's rule (7 Nov 2026; 8 Nov: Frosted, Mica and Smoked windows too, one material per pair), not
+# authored theme content.
+_PAIR_MATERIAL = {"glass": "glass", "acrylic": "acrylic", "frosted": "frosted", "mica": "mica", "smoked": "smoked",
+                  "off": None}
 
 
 def _settings_themes() -> dict[str, object]:
@@ -74,7 +76,7 @@ def test_every_linked_pair_carries_its_settings_themes_material_in_authority_and
         assert counterpart.surface_material == expected, (settings_id, "authority")
         assert mirror.surface_material == expected, (path.name, "shipped mirror")
         seen.add(spec.backdrop.mode)
-    # Non-vacuous: both card materials are exercised by the shipped pack.
+    # Non-vacuous: the original pair materials are exercised by the shipped pack.
     assert {"glass", "acrylic"} <= seen
 
 

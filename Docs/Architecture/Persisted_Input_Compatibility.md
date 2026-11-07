@@ -67,6 +67,14 @@ without the safe path below.
   The feature had not shipped, but page saves write the whole `global` section, so a stored `normal` cannot be told
   apart from a choice: it stays an explicit Normal override; `theme` and an absent value follow the theme. A profile
   saved with the old default needs one switch to Theme (Card_Surface_Materials.md section 4).
+- **Settings theme material tag (bridge, 8 Nov 2026).** A curated Settings theme's file name ends with its
+  material tag, and the pack moved 41 pairs to Frosted, Mica or Smoked, renaming their files
+  (`... [Glass].srtheme` -> `... [Mica].srtheme`) through the Theme Sorter's pair rename (mirror links follow).
+  A stored `ui.settings_theme_selection` of the old name resolves to the one catalogue theme with the same untagged
+  stem (`ui/settings_theme_catalog.py:_retagged_entry`): only a tagged name, only to exactly one match; anything else
+  falls back as before. Widget selections are unaffected (Widget files carry no tag). The stored id is not
+  rewritten; the next explicit selection stores the new one. *Retire when:* never for shipped profiles (it costs one
+  catalogue scan on a missing selection only).
 - **Theme pair material (no bridge, recorded; AC-17, 7 Nov 2026).** A linked Widget mirror now carries its Settings
   theme's backdrop material as `surface_material`; the shipped mirrors got it by a one-key fill. Profiles store only
   the selection (`widget_theme.selected_id`, `keep_synced`), never a material, so a profile on a linked

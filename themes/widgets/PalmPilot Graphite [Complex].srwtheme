@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:PalmPilot Graphite [Complex] [Acrylic].srtheme",
+  "theme_id": "mirror:file:PalmPilot Graphite [Complex] [Mica].srtheme",
   "name": "PalmPilot Graphite [Complex]",
-  "linked_settings_theme_id": "file:PalmPilot Graphite [Complex] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:PalmPilot Graphite [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       211,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      138,
-      91,
-      57,
-      215
+      124,
+      82,
+      51,
+      255
     ],
     "widget.gradient.start": [
       183,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      138,
-      91,
-      57,
-      215
+      124,
+      82,
+      51,
+      255
     ],
     "media.volume.outline": [
       67,
@@ -253,16 +253,16 @@
       242
     ],
     "media.progress.fill": [
-      138,
-      91,
-      57,
-      215
+      124,
+      82,
+      51,
+      255
     ],
     "media.progress.glow": [
-      138,
-      91,
-      57,
-      155
+      124,
+      82,
+      51,
+      184
     ],
     "media.progress.shadow": [
       52,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      138,
-      91,
-      57,
-      215
+      124,
+      82,
+      51,
+      255
     ],
     "gmail.sender": [
       52,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      138,
-      91,
-      57,
-      215
+      124,
+      82,
+      51,
+      255
     ],
     "context.menu.arrow": [
       23,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      138,
-      91,
-      57,
-      215
+      124,
+      82,
+      51,
+      255
     ]
   }
 }

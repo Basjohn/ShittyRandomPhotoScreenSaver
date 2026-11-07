@@ -76,9 +76,9 @@ def _payload(path: Path) -> dict:
 def _widget_filename_for_settings(path: Path) -> str:
     if path.name == CANONICAL_SETTINGS_DEFAULT:
         return CANONICAL_WIDGET_DEFAULT
-    stem = path.stem
-    stem = stem.removesuffix(" [Glass]").removesuffix(" [Acrylic]")
-    return f"{stem}.srwtheme"
+    from ui.settings_theme_spec import strip_material_tag
+
+    return f"{strip_material_tag(path.stem)}.srwtheme"
 
 
 def test_existing_widget_theme_links_resolve_to_settings_themes() -> None:

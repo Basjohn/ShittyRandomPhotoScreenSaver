@@ -108,7 +108,9 @@ after the operator's yes on a question card; agents never run load (invisible ch
 **Next (admitted, in this order):**
 
 4. Settings round-trip native residual (about 2.5-6 MB per open/close) and the Studio's about 1-2 MB per session.
-5. Card legibility: 18/98 linked material mirrors below 4.5:1, and light-theme shadows.
+5. Card legibility: 40 untouched linked mirrors below 4.5:1 (`widget.accent` on the card surfaces), and light-theme
+   shadows. Theme legibility: 59 untouched dark Glass/Acrylic Settings themes fall under 4.5:1 over a bright
+   wallpaper (`python tools/theme_legibility.py` lists both; details at §4 Widget card surfaces).
 6. Hygiene: the hidden cross-test `tmp_path` dependency (§3), the AC-13 remainder and AC-14..AC-16.
 7. One measurement session of at most 10 minutes under game60, only after the operator's yes. Owed: a second
    Waveform round, a clean Waveform P4 GC run, a Settings round-trip run, the alternated Glass/Normal pair, and the
@@ -165,6 +167,8 @@ answers.
 - **§4 Spline Curve (`devcurve`) "more alive":** eyes after the lead's review.
 - **§4 Frozen builds:** open a Studio from a fresh build.
 - **§4 Widget card surfaces:** eyes on the rows, the inner rim, the mute position and the 15 material themes.
+- **§4 Theme materials (8 Nov):** eyes on the Settings window under the new Frosted / Mica / Smoked themes (41
+  pairs, all 7 light themes reworked) and on the light themes' forged corners over a dark desktop.
 - **§4 Extruded Bubble Deep Red Ocean (Preset 9):** eyes on the second pass.
 - **§7.1 Waveform:** Preset 4 trade-offs of the fixed-scale v7 (sign off or ask for the tag's exact dynamics);
   Preset 7 and the Reaction Modes; Breathing; four-ribbon Preset 3; Particles; Strands; Colour/floor/mist; Fixed
@@ -762,6 +766,17 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
        4.5:1 authoring bar the 15 material themes meet, mostly `widget.accent` on `widget.panel` (3 are the header
        label on its fill). Their colours are unchanged; only their material is new. Judge them on the live
        renders, and re-author the ones that read badly on Glass/Acrylic.
+     - **Theme materials and light themes (8 Nov, agent branch, awaiting the lead's merge and the operator's
+       eyes).** The Settings forged edge now paints over the content (light themes' shell covered it: square pale
+       corners, no border). Settings takes Frosted, Mica and Smoked (AccentPolicy Acrylic with a derived tint; the
+       DWM system backdrop stays rejected); a pair keeps one material. 41 pairs moved: all 7 light themes to
+       Frosted (4) or Mica (3) with a translucent shell, 26 dark to Mica, 8 dark to Smoked; every text role of
+       those holds 4.5:1 / 3:1 on its material over any wallpaper (`tests/test_theme_material_legibility_contract.py`).
+       Left: a native look at Frosted/Mica/Smoked on the real HWND (offscreen renders model the blur and tint
+       only), and the light themes' corner caps: they take the opaque pale title-bar colour, which shows as a
+       small pale corner speck over a dark desktop (the documented camouflage rule; dark themes show the mirror
+       case over a bright one). Side defects recorded at item 5 of §1: 59 untouched dark Glass/Acrylic themes
+       under 4.5:1 over a bright wallpaper, 40 untouched mirrors' `widget.accent` under 4.5:1 on the card.
      - **Light themes:** the widget shadows still make widgets largely unreadable. The 4.5:1 legibility check
        measured text against its panel but not the shadow's effect. Fix the shadows, then judge the result on
        live renders.

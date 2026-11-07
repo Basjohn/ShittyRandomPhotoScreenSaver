@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Nebula Pharmacy [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:Nebula Pharmacy [Complex] [Smoked].srtheme",
   "name": "Nebula Pharmacy [Complex]",
-  "linked_settings_theme_id": "file:Nebula Pharmacy [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Nebula Pharmacy [Complex] [Smoked].srtheme",
+  "surface_material": "smoked",
   "colors": {
     "card.background": [
       38,

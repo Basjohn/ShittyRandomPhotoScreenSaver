@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Neon Mall [Three-Tone] [Acrylic].srtheme",
+  "theme_id": "mirror:file:Neon Mall [Three-Tone] [Mica].srtheme",
   "name": "Neon Mall [Three-Tone]",
-  "linked_settings_theme_id": "file:Neon Mall [Three-Tone] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:Neon Mall [Three-Tone] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       27,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      219,
-      86,
-      153,
-      215
+      223,
+      103,
+      163,
+      255
     ],
     "widget.gradient.start": [
       20,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      219,
-      86,
-      153,
-      215
+      223,
+      103,
+      163,
+      255
     ],
     "media.volume.outline": [
       92,
@@ -253,16 +253,16 @@
       100
     ],
     "media.progress.fill": [
-      219,
-      86,
-      153,
-      215
+      223,
+      103,
+      163,
+      255
     ],
     "media.progress.glow": [
-      219,
-      86,
-      153,
-      155
+      223,
+      103,
+      163,
+      184
     ],
     "media.progress.shadow": [
       214,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      219,
-      86,
-      153,
-      215
+      223,
+      103,
+      163,
+      255
     ],
     "gmail.sender": [
       214,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      219,
-      86,
-      153,
-      215
+      223,
+      103,
+      163,
+      255
     ],
     "context.menu.arrow": [
       162,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      219,
-      86,
-      153,
-      215
+      223,
+      103,
+      163,
+      255
     ]
   }
 }

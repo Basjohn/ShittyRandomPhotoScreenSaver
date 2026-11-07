@@ -96,9 +96,10 @@ SettingsThemeSpec / strict .srtheme
 -> core/windows/dwm_blur.py AccentPolicy adapter
 ```
 
-On the current frameless translucent Settings HWND, Acrylic and Glass deliberately share the AccentPolicy composition
-family. Acrylic = state 4 with theme native tint. Glass = untinted state 3; semantic Qt RGBA surfaces own its visible
-colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the documented `DwmEnableBlurBehindWindow` API.
+On the current frameless translucent Settings HWND, every material deliberately shares the AccentPolicy composition
+family. Acrylic = state 4 with theme native tint. Frosted, Mica and Smoked = state 4 with the material's own tint,
+derived from the authored one (`NativeBackdropStyle.native_tint`; not the DWM system backdrop). Glass = untinted
+state 3; semantic Qt RGBA surfaces own its visible colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the documented `DwmEnableBlurBehindWindow` API.
 
 `themes/dark.qss` is physically deleted and is not a supported asset. Production Settings/tray code has no loader or
 reference for it: permanent narrow renderers own the surviving structure and `SettingsThemeSpec` remains the visual
@@ -158,7 +159,7 @@ Keep Synced may reselect the linked named Widget Theme but must not destroy the 
 `Keep Synced` defaults ON and links each Settings theme to an explicit mirrored Widget Theme; sync OFF permits
 independent GUI/runtime theme combinations. Matching names may help author theme packs, but runtime links use stable
 metadata/IDs rather than display-name heuristics. Widget catalogue display labels remove trailing Settings-only
-`[Glass]` / `[Acrylic]` tags from Widget display names and Widget filenames while stable IDs and explicit Settings link IDs remain unchanged.
+material tags (`[Glass]`, `[Acrylic]`, `[Frosted]`, `[Mica]`, `[Smoked]`) from Widget display names and Widget filenames while stable IDs and explicit Settings link IDs remain unchanged.
 
 Theme storage uses one resolved root with a Widget child:
 

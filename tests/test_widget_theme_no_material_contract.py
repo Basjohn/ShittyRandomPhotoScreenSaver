@@ -104,10 +104,9 @@ def test_widget_mirrors_are_strict_colour_only_v3_with_clean_names_and_filenames
         payload = json.loads(path.read_text(encoding="utf-8"))
         assert payload["schema_version"] == 3, path.name
         assert "default_card_material_mode" not in payload, path.name
-        assert not payload["name"].endswith(" [Glass]"), path.name
-        assert not payload["name"].endswith(" [Acrylic]"), path.name
-        assert not path.stem.endswith(" [Glass]"), path.name
-        assert not path.stem.endswith(" [Acrylic]"), path.name
+        from ui.settings_theme_spec import strip_material_tag
+        assert strip_material_tag(payload["name"]) == payload["name"].strip(), path.name
+        assert strip_material_tag(path.stem) == path.stem, path.name
 
 
 def test_only_preexisting_local_image_multieffects_remain() -> None:
@@ -145,6 +144,8 @@ def test_only_preexisting_local_image_multieffects_remain() -> None:
 def test_settings_native_backdrops_remain_separate_and_supported() -> None:
     settings_spec = _text(ROOT / "ui" / "settings_theme_spec.py")
     settings_dialog = _text(ROOT / "ui" / "settings_dialog.py")
-    assert 'NATIVE_BACKDROP_MODES = frozenset({"off", "acrylic", "glass"})' in settings_spec
+    from ui.settings_theme_spec import NATIVE_BACKDROP_MODES
+    assert "NATIVE_BACKDROP_MODES = frozenset(" in settings_spec
+    assert {"off", "acrylic", "glass"} <= NATIVE_BACKDROP_MODES
     assert "Acrylic" in settings_dialog
     assert "Glass" in settings_dialog

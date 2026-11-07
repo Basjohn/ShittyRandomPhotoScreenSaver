@@ -62,6 +62,9 @@ BACKDROP_MODE_LABELS: dict[str, str] = {
     "off": "Off",
     "acrylic": "Acrylic",
     "glass": "Glass",
+    "frosted": "Frosted",
+    "mica": "Mica",
+    "smoked": "Smoked",
 }
 
 BACKDROP_MODE_DESCRIPTIONS: dict[str, str] = {
@@ -74,6 +77,18 @@ BACKDROP_MODE_DESCRIPTIONS: dict[str, str] = {
         "AccentPolicy state 3 with no native tint. Visible Glass colour and opacity "
         "come from the semantic Qt RGBA surface roles; backdrop.tint is retained in "
         "the file schema but ignored by the native Glass adapter."
+    ),
+    "frosted": (
+        "Acrylic with a milky haze: the tint below mixed halfway to white, at a heavier "
+        "strength. Suits pale (light) palettes. Needs non-zero tint alpha."
+    ),
+    "mica": (
+        "Acrylic as a near-solid theme surface, the wallpaper only faintly through: the "
+        "tint below at a high strength. Needs non-zero tint alpha."
+    ),
+    "smoked": (
+        "Acrylic as dark smoked glass: the tint below desaturated and darkened. Suits "
+        "dark palettes. Needs non-zero tint alpha."
     ),
 }
 

@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:GeoCities Stargazer [Complex] [Acrylic].srtheme",
+  "theme_id": "mirror:file:GeoCities Stargazer [Complex] [Mica].srtheme",
   "name": "GeoCities Stargazer [Complex]",
-  "linked_settings_theme_id": "file:GeoCities Stargazer [Complex] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:GeoCities Stargazer [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       42,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      243,
-      93,
-      158,
-      215
+      244,
+      109,
+      168,
+      255
     ],
     "widget.gradient.start": [
       23,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      243,
-      93,
-      158,
-      215
+      244,
+      109,
+      168,
+      255
     ],
     "media.volume.outline": [
       241,
@@ -253,16 +253,16 @@
       242
     ],
     "media.progress.fill": [
-      243,
-      93,
-      158,
-      215
+      244,
+      109,
+      168,
+      255
     ],
     "media.progress.glow": [
-      243,
-      93,
-      158,
-      155
+      244,
+      109,
+      168,
+      184
     ],
     "media.progress.shadow": [
       208,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      243,
-      93,
-      158,
-      215
+      244,
+      109,
+      168,
+      255
     ],
     "gmail.sender": [
       208,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      243,
-      93,
-      158,
-      215
+      244,
+      109,
+      168,
+      255
     ],
     "context.menu.arrow": [
       246,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      243,
-      93,
-      158,
-      215
+      244,
+      109,
+      168,
+      255
     ]
   }
 }

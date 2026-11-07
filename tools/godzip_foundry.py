@@ -5175,25 +5175,9 @@ class GodzipFoundryWindow(QMainWindow):
             theme = self.theme_resolution.theme
             backdrop = theme.backdrop
             hwnd = int(self.winId())
-            if backdrop.mode == "acrylic":
-                from core.windows.dwm_blur import enable_acrylic_blur
+            from core.windows.dwm_blur import apply_backdrop
 
-                enabled = enable_acrylic_blur(
-                    hwnd,
-                    tint_r=backdrop.tint.r,
-                    tint_g=backdrop.tint.g,
-                    tint_b=backdrop.tint.b,
-                    tint_alpha=backdrop.tint.a,
-                )
-            elif backdrop.mode == "glass":
-                from core.windows.dwm_blur import enable_glass_blur
-
-                enabled = enable_glass_blur(hwnd)
-            else:
-                from core.windows.dwm_blur import disable_blur
-
-                disable_blur(hwnd)
-                enabled = False
+            enabled = apply_backdrop(hwnd, backdrop.mode, backdrop.native_tint())
             self._native_backdrop_mode = backdrop.mode
             self._backdrop_applied = backdrop.mode == "off" or bool(enabled)
             return bool(enabled)

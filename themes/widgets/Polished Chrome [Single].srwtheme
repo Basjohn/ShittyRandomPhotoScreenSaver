@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Polished Chrome [Single] [Glass].srtheme",
+  "theme_id": "mirror:file:Polished Chrome [Single] [Frosted].srtheme",
   "name": "Polished Chrome [Single]",
-  "linked_settings_theme_id": "file:Polished Chrome [Single] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Polished Chrome [Single] [Frosted].srtheme",
+  "surface_material": "frosted",
   "colors": {
     "card.background": [
       216,
@@ -124,7 +124,7 @@
       216,
       222,
       226,
-      100
+      130
     ],
     "widget.outline": [
       111,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      81,
-      96,
-      106,
-      215
+      73,
+      86,
+      95,
+      255
     ],
     "widget.gradient.start": [
       236,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      81,
-      96,
-      106,
-      215
+      73,
+      86,
+      95,
+      255
     ],
     "media.volume.outline": [
       111,
@@ -250,19 +250,19 @@
       216,
       222,
       226,
-      100
+      130
     ],
     "media.progress.fill": [
-      81,
-      96,
-      106,
-      215
+      73,
+      86,
+      95,
+      255
     ],
     "media.progress.glow": [
-      81,
-      96,
-      106,
-      155
+      73,
+      86,
+      95,
+      184
     ],
     "media.progress.shadow": [
       61,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      81,
-      96,
-      106,
-      215
+      73,
+      86,
+      95,
+      255
     ],
     "gmail.sender": [
       61,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      81,
-      96,
-      106,
-      215
+      73,
+      86,
+      95,
+      255
     ],
     "context.menu.arrow": [
       111,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      81,
-      96,
-      106,
-      215
+      73,
+      86,
+      95,
+      255
     ]
   }
 }

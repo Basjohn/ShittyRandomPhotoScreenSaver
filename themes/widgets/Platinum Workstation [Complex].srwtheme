@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Platinum Workstation [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:Platinum Workstation [Complex] [Mica].srtheme",
   "name": "Platinum Workstation [Complex]",
-  "linked_settings_theme_id": "file:Platinum Workstation [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Platinum Workstation [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       225,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      122,
-      86,
-      142,
-      215
+      110,
+      77,
+      128,
+      255
     ],
     "widget.gradient.start": [
       210,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      122,
-      86,
-      142,
-      215
+      110,
+      77,
+      128,
+      255
     ],
     "media.volume.outline": [
       56,
@@ -253,16 +253,16 @@
       242
     ],
     "media.progress.fill": [
-      122,
-      86,
-      142,
-      215
+      110,
+      77,
+      128,
+      255
     ],
     "media.progress.glow": [
-      122,
-      86,
-      142,
-      155
+      110,
+      77,
+      128,
+      184
     ],
     "media.progress.shadow": [
       53,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      122,
-      86,
-      142,
-      215
+      110,
+      77,
+      128,
+      255
     ],
     "gmail.sender": [
       53,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      122,
-      86,
-      142,
-      215
+      110,
+      77,
+      128,
+      255
     ],
     "context.menu.arrow": [
       23,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      122,
-      86,
-      142,
-      215
+      110,
+      77,
+      128,
+      255
     ]
   }
 }

@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Arcade Dreamwave [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:Arcade Dreamwave [Complex] [Mica].srtheme",
   "name": "Arcade Dreamwave [Complex]",
-  "linked_settings_theme_id": "file:Arcade Dreamwave [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Arcade Dreamwave [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       48,

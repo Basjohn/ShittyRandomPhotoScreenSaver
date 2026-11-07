@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Pearl Blush [Three-Tone] [Glass].srtheme",
+  "theme_id": "mirror:file:Pearl Blush [Three-Tone] [Frosted].srtheme",
   "name": "Pearl Blush [Three-Tone]",
-  "linked_settings_theme_id": "file:Pearl Blush [Three-Tone] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Pearl Blush [Three-Tone] [Frosted].srtheme",
+  "surface_material": "frosted",
   "colors": {
     "card.background": [
       241,
@@ -124,7 +124,7 @@
       241,
       232,
       238,
-      100
+      130
     ],
     "widget.outline": [
       153,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      74,
-      126,
-      118,
-      215
+      67,
+      113,
+      106,
+      255
     ],
     "widget.gradient.start": [
       251,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      74,
-      126,
-      118,
-      215
+      67,
+      113,
+      106,
+      255
     ],
     "media.volume.outline": [
       153,
@@ -250,19 +250,19 @@
       241,
       232,
       238,
-      100
+      130
     ],
     "media.progress.fill": [
-      74,
-      126,
-      118,
-      215
+      67,
+      113,
+      106,
+      255
     ],
     "media.progress.glow": [
-      74,
-      126,
-      118,
-      155
+      67,
+      113,
+      106,
+      184
     ],
     "media.progress.shadow": [
       87,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      74,
-      126,
-      118,
-      215
+      67,
+      113,
+      106,
+      255
     ],
     "gmail.sender": [
       87,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      74,
-      126,
-      118,
-      215
+      67,
+      113,
+      106,
+      255
     ],
     "context.menu.arrow": [
       153,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      74,
-      126,
-      118,
-      215
+      67,
+      113,
+      106,
+      255
     ]
   }
 }

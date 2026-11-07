@@ -117,9 +117,10 @@ class _StudioQuickWindow(QQuickWindow):
 
 
 def material_mode(theme) -> str:
-    """The Settings theme's native backdrop mode the Studio window carries: ``off`` (Normal), ``acrylic``, ``glass``."""
+    """The Settings theme's native backdrop mode the Studio window carries: ``off`` (Normal) or its material."""
+    from ui.settings_theme_spec import NATIVE_BACKDROP_MODES
     mode = str(getattr(getattr(theme, "backdrop", None), "mode", "off"))
-    return mode if mode in ("acrylic", "glass") else "off"
+    return mode if mode in NATIVE_BACKDROP_MODES else "off"
 
 
 def initial_geometry(anchor: QRect | None) -> QRect:
@@ -208,7 +209,7 @@ class StudioWindowSurface(QObject):
         try:
             from core.windows.dwm_blur import apply_backdrop
             self.backdrop_applied = bool(apply_backdrop(int(self.window.winId()), self.material,
-                                                        self.theme.backdrop.tint))
+                                                        self.theme.backdrop.native_tint()))
         except Exception:
             logger.debug("[STUDIO] Native backdrop not available", exc_info=True)
         return self.backdrop_applied

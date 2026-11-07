@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Velvet Circuit [Three-Tone] [Acrylic].srtheme",
+  "theme_id": "mirror:file:Velvet Circuit [Three-Tone] [Mica].srtheme",
   "name": "Velvet Circuit [Three-Tone]",
-  "linked_settings_theme_id": "file:Velvet Circuit [Three-Tone] [Acrylic].srtheme",
-  "surface_material": "acrylic",
+  "linked_settings_theme_id": "file:Velvet Circuit [Three-Tone] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       37,
@@ -151,10 +151,10 @@
       255
     ],
     "widget.accent": [
-      192,
-      86,
-      124,
-      215
+      204,
+      118,
+      149,
+      255
     ],
     "widget.gradient.start": [
       28,
@@ -235,10 +235,10 @@
       255
     ],
     "media.volume.fill": [
-      192,
-      86,
-      124,
-      215
+      204,
+      118,
+      149,
+      255
     ],
     "media.volume.outline": [
       84,
@@ -253,16 +253,16 @@
       100
     ],
     "media.progress.fill": [
-      192,
-      86,
-      124,
-      215
+      204,
+      118,
+      149,
+      255
     ],
     "media.progress.glow": [
-      192,
-      86,
-      124,
-      155
+      204,
+      118,
+      149,
+      184
     ],
     "media.progress.shadow": [
       216,
@@ -271,10 +271,10 @@
       143
     ],
     "abandonment_issues.accent": [
-      192,
-      86,
-      124,
-      215
+      204,
+      118,
+      149,
+      255
     ],
     "gmail.sender": [
       216,
@@ -319,10 +319,10 @@
       255
     ],
     "context.menu.indicator.fill": [
-      192,
-      86,
-      124,
-      215
+      204,
+      118,
+      149,
+      255
     ],
     "context.menu.arrow": [
       148,
@@ -337,10 +337,10 @@
       255
     ],
     "context.submenu.indicator.fill": [
-      192,
-      86,
-      124,
-      215
+      204,
+      118,
+      149,
+      255
     ]
   }
 }

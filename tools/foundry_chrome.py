@@ -354,26 +354,9 @@ def apply_native_backdrop(window: QWidget, resolution: FoundryThemeResolution) -
     try:
         backdrop = resolution.theme.backdrop
         hwnd = int(window.winId())
-        if backdrop.mode == "acrylic":
-            from core.windows.dwm_blur import enable_acrylic_blur
+        from core.windows.dwm_blur import apply_backdrop
 
-            return bool(
-                enable_acrylic_blur(
-                    hwnd,
-                    tint_r=backdrop.tint.r,
-                    tint_g=backdrop.tint.g,
-                    tint_b=backdrop.tint.b,
-                    tint_alpha=backdrop.tint.a,
-                )
-            )
-        if backdrop.mode == "glass":
-            from core.windows.dwm_blur import enable_glass_blur
-
-            return bool(enable_glass_blur(hwnd))
-        from core.windows.dwm_blur import disable_blur
-
-        disable_blur(hwnd)
-        return False
+        return bool(apply_backdrop(hwnd, backdrop.mode, backdrop.native_tint()))
     except Exception:
         return False
 

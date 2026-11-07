@@ -1,10 +1,10 @@
 {
   "format": "srpss.widget-theme",
   "schema_version": 3,
-  "theme_id": "mirror:file:Prismatic Violet [Complex] [Glass].srtheme",
+  "theme_id": "mirror:file:Prismatic Violet [Complex] [Mica].srtheme",
   "name": "Prismatic Violet [Complex]",
-  "linked_settings_theme_id": "file:Prismatic Violet [Complex] [Glass].srtheme",
-  "surface_material": "glass",
+  "linked_settings_theme_id": "file:Prismatic Violet [Complex] [Mica].srtheme",
+  "surface_material": "mica",
   "colors": {
     "card.background": [
       43,

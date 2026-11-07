@@ -1,7 +1,7 @@
 """The Studio window wears Settings' chrome through Settings' own owners (every registered Studio: one shell).
 
 * Frameless, with the shell's custom title bar and the forged rounded edge painted by the same painter
-  SettingsDialog.paintEvent calls (``ui.settings_window_edge``).
+  Settings' edge overlay calls (``ui.settings_window_edge``).
 * The native material follows the active Settings theme through the shared mode -> AccentPolicy mapping
   (``core.windows.dwm_blur.apply_backdrop``): Normal is an opaque window with no backdrop call.
 * Card and section frames stroke their border as ONE path (no seams on a translucent border; the negative control
@@ -120,8 +120,8 @@ def test_the_studio_window_is_frameless_with_the_settings_title_bar_and_edge(stu
     from ui.studio.chrome import StudioWindowEdge
     from ui.studio.surface import StudioWindowSurface
 
-    # Same edge painter as Settings: SettingsDialog.paintEvent calls this very function.
-    assert settings_dialog.paint_forged_window_edge is edge.paint_forged_window_edge
+    # Same edge painter as Settings: Settings' edge overlay (ForgedWindowEdgeOverlay.paintEvent) calls this very function.
+    assert settings_dialog.ForgedWindowEdgeOverlay is edge.ForgedWindowEdgeOverlay
     calls = []
     original = edge.paint_forged_window_edge
     monkeypatch.setattr(edge, "paint_forged_window_edge", lambda *a, **k: (calls.append(k), original(*a, **k)))
@@ -154,15 +154,23 @@ def test_the_studio_window_is_frameless_with_the_settings_title_bar_and_edge(stu
 
 
 # ----------------------------------------------------------------- material follows the theme
-@pytest.mark.parametrize("theme_glob, mode", [("Matte Graphite*.srtheme", "off"),
-                                              ("Default Dark.srtheme", "acrylic"),
-                                              ("Pearl Blush*.srtheme", "glass")])
-def test_normal_and_materials_follow_the_active_theme(studio, monkeypatch, theme_glob, mode):
+def _theme_with_mode(mode):
+    """The first shipped Settings theme on ``mode`` (themes are authored content: picked by property, never name)."""
+    from pathlib import Path
+    from ui.settings_theme_io import load_settings_theme_file
+    for path in sorted(Path("themes").glob("*.srtheme")):
+        theme = load_settings_theme_file(path)
+        if theme.backdrop.mode == mode:
+            return theme
+    pytest.skip(f"no shipped Settings theme uses {mode}")
+
+
+@pytest.mark.parametrize("mode", ["off", "acrylic", "glass", "frosted", "mica", "smoked"])
+def test_normal_and_materials_follow_the_active_theme(studio, monkeypatch, mode):
     from core import platform_paths
     from ui.studio.surface import StudioWindowSurface
     from ui.studio.theme import studio_theme
-    theme = _theme(theme_glob)
-    assert theme.backdrop.mode == mode
+    theme = _theme_with_mode(mode)
     tokens = studio_theme(theme)
     assert tokens["backdrop"] == mode
     window_alpha = QColor(tokens["windowSurface"]).alphaF()
@@ -183,7 +191,7 @@ def test_normal_and_materials_follow_the_active_theme(studio, monkeypatch, theme
         assert (window_surface.window.format().alphaBufferSize() == 8) == (mode != "off")
         window_surface.apply_backdrop()
         window_surface.apply_backdrop()                      # once, like Settings' first show
-        assert calls == ([] if mode == "off" else [(mode, theme.backdrop.tint)])
+        assert calls == ([] if mode == "off" else [(mode, theme.backdrop.native_tint())])
     finally:
         window_surface.host.retire()
         window_surface.window.deleteLater()
