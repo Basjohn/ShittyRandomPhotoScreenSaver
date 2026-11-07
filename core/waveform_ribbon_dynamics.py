@@ -204,11 +204,12 @@ TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # TROUGH_VIEW: the f
 # TOP_GIVE_BACK of what the floor asks for: the crest keeps TOP_CLEARANCE below the top whenever the floor allows it, and
 # otherwise both edges share the shortfall. 7 Nov sweep on recorded continuous play (chain7, 640x560 card; floor contact /
 # crest above the top, visible ribbon): give-back .3 cleared the floor (P1/3/4/7 0-1.3%) but put crests above the top on
-# 4-11% of ticks; 1.0 keeps both at 0-3.2% (main, top edge first: floor 2-21%, top 0-.1%); 1.5 floor .2-5%, top .2-1.1%.
-# At a 1282x1005 card every preset clears both with any give-back. Presets 5 and 6 are taller than a 640x560 card holds
-# (any setting: floor or top on a quarter or more of their ticks); that is authoring, not placement.
+# 4-11% of ticks; 1.0 kept both at 0-3.2% logically (main, top edge first: floor 2-21%, top 0-.1%) but rendered crests
+# clipped by the top on up to 6.7% of frames (main .4%); 1.5: floor .2-5%, top .2-1.1%. At a 1282x1005 card every
+# preset clears both with any give-back. Presets 5 and 6 are taller than a 640x560 card holds (any setting: floor or top
+# on a quarter or more of their ticks); that is authoring, not placement.
 TOP_CLEARANCE = .3
-TOP_GIVE_BACK = 1.
+TOP_GIVE_BACK = 1.5
 # With the card's visible span the floor lift reads only what the camera shows, plus TROUGH_LOOKAHEAD geometric-envelope
 # sigmas beyond each edge (see _trough_view), never wider than +-TROUGH_VIEW: a trough entering the view (or a swell
 # deepening one on its way in) is already lifted for. 6 Nov sweep on recorded continuous play: at 2.5 sigmas the lift
