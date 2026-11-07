@@ -131,6 +131,27 @@ def test_burn_requires_normalized_user_glow_color_and_full_effect_controls():
         _burn_parameters(_params(char_width=0.05))
 
 
+def test_burn_per_frame_resolve_reads_the_spec_once(monkeypatch):
+    """``resolve`` runs every frame; the range check must not look the Burn spec up each time (overhead baseline
+    2026-11-07: AC-20's per-frame lookup added 14 Python calls to every Burn frame)."""
+    import rendering.quick.transitions.implementations.burn as burn
+
+    lookups = []
+    real = burn.require_transition_settings
+
+    def counting(transition_id):
+        lookups.append(transition_id)
+        return real(transition_id)
+
+    monkeypatch.setattr(burn, "require_transition_settings", counting)
+    monkeypatch.setattr(burn, "_BURN_RANGES", None, raising=False)
+    for _ in range(5):
+        _burn_parameters(_params())
+    assert len(lookups) <= 1
+    with pytest.raises(ValueError, match="char_width must be between"):
+        _burn_parameters(_params(char_width=0.05))
+
+
 def test_burn_effect_time_is_derived_from_the_authored_run_clock():
     frame = SimpleNamespace(
         sample=SimpleNamespace(linear_progress=0.25),

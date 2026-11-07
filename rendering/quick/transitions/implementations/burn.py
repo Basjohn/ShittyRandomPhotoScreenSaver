@@ -68,6 +68,21 @@ def _burn_color(
     return tuple(channels)  # type: ignore[return-value]
 
 
+_RANGED_CONTROLS = ("jaggedness", "glow_intensity", "char_width", "smoke_density", "ash_density")
+_BURN_RANGES: dict[str, tuple[float, float]] | None = None
+
+
+def _burn_ranges() -> dict[str, tuple[float, float]]:
+    """The Burn spec's ranges, read once: ``resolve`` runs every frame and the spec is code-owned and immutable."""
+    global _BURN_RANGES
+    if _BURN_RANGES is None:
+        spec = require_transition_settings("burn")
+        _BURN_RANGES = {
+            name: (float(spec.control(name).low), float(spec.control(name).high)) for name in _RANGED_CONTROLS
+        }
+    return _BURN_RANGES
+
+
 def _burn_parameters(parameters: Mapping[str, object]) -> _BurnParameters:
     direction_raw = parameters.get("direction")
     if isinstance(direction_raw, bool) or not isinstance(direction_raw, int):
@@ -83,12 +98,12 @@ def _burn_parameters(parameters: Mapping[str, object]) -> _BurnParameters:
     seed = _number(parameters, "seed")
 
     # The trusted runtime contract: the resolver admitted these through the Burn spec, whose ranges this checks.
-    spec = require_transition_settings("burn")
+    ranges = _burn_ranges()
     for name, value in (("jaggedness", jaggedness), ("glow_intensity", glow_intensity), ("char_width", char_width),
                         ("smoke_density", smoke_density), ("ash_density", ash_density)):
-        control = spec.control(name)
-        if not float(control.low) <= value <= float(control.high):
-            raise ValueError(f"Burn {name} must be between {control.low:g} and {control.high:g}")
+        low, high = ranges[name]
+        if not low <= value <= high:
+            raise ValueError(f"Burn {name} must be between {low:g} and {high:g}")
 
     return _BurnParameters(
         direction=direction_raw,
