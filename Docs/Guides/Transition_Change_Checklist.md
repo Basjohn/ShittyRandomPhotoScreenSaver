@@ -41,7 +41,12 @@ Adding a transition's Settings therefore touches the registry descriptor, the ca
 `_spec_inputs`, `page_values`, any colour or code mapping). Values never go in the spec. A page whose
 controls no spec type describes (sliders with value labels, colours with alpha, controls that show or
 hide each other: Blinds, Particle, Burn) sets `custom` and provides `_build_<section>_group`,
-`_hydrate_<section>_page` and `_save_<section>_page`, listing its own fields in `custom_fields`.
+`_hydrate_<section>_page` and `_save_<section>_page`. Its numbers are still declared in the spec, in
+`custom_controls`: the page takes every widget range from them (spin boxes their range, percent sliders their
+range in hundredths), hydrates through `spec.admit`, and the resolver (and any renderer validation) admits
+through the same controls; only visibility and the remaining fields (`custom_fields`) stay the page's own. A field
+the page never shows is saved as stored (canonical when absent), never as a literal.
+`tests/test_transition_custom_pages_through_spec.py` probes the resolver's admitted range against every widget.
 
 ## Retired transition presentation
 
