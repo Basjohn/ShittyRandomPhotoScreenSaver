@@ -53,7 +53,8 @@ class CompiledWaveformSettings:
                                 float(read('pulse_particles')),float(read('pulse_strands')),
                                 mode=str(read('reaction_mode'))),
             height_mode=str(read('height_mode')),tilt_shift=bool(read('tilt_shift')),breathing=float(read('breathing')),
-            adaptive_response=bool(read('adaptive_response')),kick_accent=float(read('kick_accent')))
+            adaptive_response=bool(read('adaptive_response')),kick_accent=float(read('kick_accent')),
+            floor_give=float(read('floor_give')))
 
     def _scene_plan(self):
         """What scene() reads from the immutable settings, resolved once per compiled configuration: each driven

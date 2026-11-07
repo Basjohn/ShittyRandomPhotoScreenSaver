@@ -1,18 +1,21 @@
-"""Top edge first, floor second (lead review 6 Nov): the floor lift never raises a crest through the card's top edge.
+"""Floor first (operator 7 Nov: "We'd rather it goes a bit higher when it has to than clips"; supersedes 6 Nov's top
+edge first): the floor lift clears the floor, and the card's top edge may only take back the clearance.
 
 * ``card_span`` supplies, after the scene-axis span, the world y of the card's top edge above the scene axis; a larger
   card shows more world above it.
-* With that top supplied, a ribbon whose trough wants a lift keeps its crest (plus the sheet's hang) TOP_CLEARANCE below
-  the top: the lift gives way and the floor may be grazed. With room under the top the floor lift is untouched.
+* With that top supplied, a ribbon whose crest leaves less room than its trough asks for keeps most of its lift: the
+  top takes back at most TOP_GIVE_BACK of it. With room under the top the floor lift is untouched.
 * A lift the top lowers eases down at TROUGH_ATTACK, as fast as it rose, not over the slow TROUGH_RELEASE.
+* Floor Give (a floor that yields to the ribbon) keeps its own, lower limit.
 
-Test-owned inputs; structure only, never authored values. Negative controls: the same ribbon without a supplied top
-(what main lifted), and the same lowering driven by the floor alone (the slow release)."""
+Test-owned inputs; structure only, never authored values. Negative controls: the same ribbon without a supplied top,
+the former top-edge-first lift (the top's room alone), and the same lowering driven by the floor alone."""
 import numpy as np
 import core.waveform_ribbon_dynamics as dyn
 from core.waveform_ribbon_scene import SPEC
 from core.waveform_ribbon_view import card_span, physical_view, visible_top
 from tests.test_waveform_ribbon_camera import camera
+from dataclasses import replace
 from tests.test_waveform_view_sized_rim_and_floor import model_for
 
 DT = 1/90
@@ -47,14 +50,16 @@ def test_card_span_supplies_the_cards_top_edge_and_a_larger_card_shows_more_abov
     assert abs(clip[1]/clip[3]-1.) < 1e-9
 
 
-def test_the_floor_lift_never_raises_a_crest_through_the_top():
+def test_the_top_takes_back_at_most_its_give_back_of_the_floor_lift():
     capped = model_for('Centre Out', span=SPAN+(TOP,))
     free = model_for('Centre Out', span=SPAN)
-    high, headroom = shift(capped, crest=6.)
-    assert headroom-6.-.1 < .9                         # the crest leaves less room than the trough asks for
-    assert abs(high-max(0., headroom-6.-.1)) < 1e-9    # ... so the lift stops at the top (hang .1 at the crest)
-    unbounded, _ = shift(free, crest=6.)
-    assert unbounded > high+.5                         # negative control: without the top it lifted through it
+    deep = 2.2+dyn.TOP_GIVE_BACK+1.5                    # a trough asking well beyond what the top may take back
+    high, headroom = shift(capped, crest=6., trough=deep)
+    needed, _ = shift(free, crest=6., trough=deep)      # what the floor asks for, without a top
+    top_room = max(0., headroom-6.-.1)                  # the crest's room under the top (hang .1 at the crest)
+    assert top_room < needed-dyn.TOP_GIVE_BACK          # the crest leaves less room than the floor needs
+    assert abs(high-(needed-dyn.TOP_GIVE_BACK)) < 1e-9  # ... so the top takes back its give-back and no more
+    assert high > top_room+.5                           # negative control: top edge first stopped at the top's room
 
 
 def test_with_room_under_the_top_the_floor_lift_is_unchanged():
@@ -79,3 +84,14 @@ def test_a_lift_the_top_lowers_eases_down_as_fast_as_it_rose():
     floor = model_for('Centre Out', span=SPAN)
     start_f, by_floor = lowered(floor, crest_after=1., trough_after=3.-(start-goal))
     assert start_f-by_floor < .4*(start-goal)
+
+
+def test_a_deep_trough_lifts_past_the_floor_give_limit_unless_the_floor_gives():
+    rigid = model_for('Centre Out', span=SPAN)
+    giving = model_for('Centre Out', span=SPAN)
+    giving.controls = replace(giving.controls, floor_give=.5)
+    deep = 2.2+dyn.FLOOR_GIVE_LIFT_MAX+1.            # a trough asking a full unit more than the Floor Give limit
+    lifted, _ = shift(rigid, crest=1., trough=deep)
+    given, _ = shift(giving, crest=1., trough=deep)
+    assert abs(given-dyn.FLOOR_GIVE_LIFT_MAX) < 1e-9   # the yielding floor keeps its limit (its dent takes the rest)
+    assert lifted > given+.9                           # the rigid floor is cleared instead of clipped
