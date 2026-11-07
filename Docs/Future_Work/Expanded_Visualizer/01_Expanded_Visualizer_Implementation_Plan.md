@@ -199,7 +199,7 @@ Repository `Basjohn/ShittyRandomPhotoScreenSaver`, default `main`, examined 2026
 3. **Exiting:** reverse glyph (diagonal lower-left), explicit collapse, Edit entry, loss of capability, or relocation. Return exact authored pre-expansion presentation rather than saving the temporary screen-sized rect. Collapse/restore is independent of preset and CUSTOM values.
 4. **Mode selection:** ordinary double-click and context-menu mode switches retain current meaning, except that a double-click while expanded cycles only through capable modes (§0.6). Capable -> capable stays expanded through the canonical activation. Capable -> incapable collapses in a strictly ordered handoff, then changes mode. A rejected mode request leaves the current mode/expansion intact. Middle-click still cycles preset only.
 5. **Other display:** no fades, audio change, transition suppression, image queue mutation or OSD change, except legitimate shared-source work already occurring. A shared provider survives while any real consumer still needs it.
-6. **HUD:** tiny, tasteful bottom-right media information (artist/title/cover and volume rail, optional playback state). Event-revealed by track, play/pause, eligible volume or pointer activity; fade away after a short bounded visibility period. No permanent timer/poller, no duplicate transport controller, and no overlap/hitbox conflict with OSD, camera, presets or collapse glyph.
+6. **Overlays (operator, 8 Nov; supersedes the bottom-right HUD with a volume rail):** two gentle event-revealed overlays on the expanded display, nothing else. (a) **Preset name, top left**, in Title Case, fading in and out gently when the preset changes. (b) **Now playing, bottom left**: Artist, Song and Artwork fading in and out very gently when the track changes. The artwork carries the themed card border; the text has none. Text is white with a customizable font; long term, a cheap detection of bright areas under the text switches it to black where needed. No volume rail (the OSD owns volume), no pointer-hover reveal, no permanent timer/poller, no duplicate transport controller, and no overlap/hitbox conflict with OSD, camera, presets or the collapse glyph.
 7. **Persistence:** expansion is a user intent, per existing settings profile. It is effective only if the currently resolved mode supports it, owner is live, monitor participates, and Edit/Settings/retirement aren't active. Losing eligibility must not rewrite user intent as a false 'off' unless the user explicitly toggles it off; a deliberately selected incapable mode can normalize effective state off without destroying the original authored layout. (Operator, 7 Nov: selecting an incapable mode also clears the intent, so a later capable mode starts ordinary; §D3.)
 8. **Restore:** startup/Settings restart/topology replacement re-evaluates persisted intent **once at an already-defined readiness edge**; no unguarded early fade, first-wallpaper duplication or reentry loop. Missing explicit target remains unadmitted (no theft of another display), and later reconnection restores safely.
 9. **DPR/size:** recompute physical frame/viewport from target display and its existing display identity, not from screen-1 cached values. Treat camera, frustum, stream volume, near field, lighting reach, translucency and particles as authored mode semantics, not as a stretched old texture.
@@ -352,6 +352,24 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 
 ## G. Now-playing HUD: single data source and deterministic event windows
 
+**Operator spec, 8 Nov (binding; supersedes the bottom-right placement, the volume rail and pointer reveal below):**
+- **Preset toast, top left:** the preset's name in Title Case (the preset owner's own display name, title-cased by the
+  shared typography rule), fading in and out gently on a preset change (Settings, middle-click cycling, the preset
+  slider, the Studio's preset switch); latest change wins.
+- **Now playing, bottom left:** Artist, Song and Artwork, fading in and out very gently on a track change (the Media
+  model's track identity, never a second GSMTC read). The artwork is drawn with the themed card border (the one card
+  chrome owner: border colour, width, radius); the text has no card, border or plate.
+- **Text:** white by default with a customizable font (a new canonical setting in the spec system, offered in Settings
+  and the Studio, authored into every preset/default per the completeness guard). Readable on bright visualizer
+  frames: a soft text shadow now; long term (separate item), a cheap luminance detection of the visualizer area under
+  the text that switches the text to black where it is bright. Cheap means no per-frame CPU readback: e.g. a
+  `ShaderEffect` on the text sampling the already-rendered visualizer texture, or a tiny downsampled luminance probe
+  taken only while an overlay is visible.
+- **Fades:** gentle, both ways (fade, never vanish); one-shot from the event, bounded visible window, latest event wins,
+  no repeating timer or per-frame driver. Both overlays sit inside the expanded card's safe area, clear of the collapse
+  glyph, camera/preset controls and the OSD (which keeps priority).
+- Owner: its own slice (M3b) after M3's widget suspension merges, since both touch the expanded scene hierarchy.
+
 - [ ] HUD is presentation-only. Authoritative fields derive from **existing Media model** (`MediaPresentationModel`/`MediaRuntimeSnapshot`) and the canonical volume/OSD model as applicable. Reuse semantic theme colours, font/stroke/shadow rules and artwork image provider; no second GSMTC query, network request, decoder or artwork cache.
 - [ ] Construct HUD lazily only for an expanded owning display (not all scenes, not imported backends); use one small retained QML item in the scene's current visualizer/foreground presentation hierarchy. No extra top-level window, render node or QObject model with duplicate business data.
 - [ ] Trigger events: track identity changed, playback state changed, optional volume changed, and pointer moved/hovered within the expanded visualizer. Pointer movement is *event*-driven with bounded coalescing; no permanent hover poll or frame-request loop.
@@ -498,6 +516,16 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 - [ ] Add exception/preservation for Media truth and OSD; implement consumer-accurate targeted retirement/re-admission (if safe), not global disable flags.
 - [ ] Add theme-aligned event-driven HUD with no tooltips/hit overlap; test track/play/pause/volume/hover and unavailable app-volume provider.
 - [ ] **Gate 3:** no service/backend orphaning, no duplicate worker/endpoint source, UI equal on untouched display, no opacity/binding warnings.
+
+**Milestone 3b | Full-display overlays (operator spec, §G, 8 Nov)**
+
+- [ ] Preset-name toast top left (Title Case), gentle fade in/out on preset change; latest wins.
+- [ ] Now-playing bottom left: Artist, Song, Artwork (themed border on the artwork only), very gentle fade in/out on
+  track change; identity-fenced (no stale art flash), missing art falls back to theme geometry.
+- [ ] White text, customizable font (canonical setting in Settings and the Studio, authored into every preset), soft
+  shadow for legibility; the bright-area black-text switch recorded as its own follow-up.
+- [ ] Tests: event-only visibility, fade retirement, latest-wins, no hit/z conflict with OSD/glyph/controls, consumer
+  counts unchanged (no second Media query), dormant when not expanded.
 
 **Milestone 4 | Wallpaper transition policy and GPU savings**
 

@@ -87,6 +87,9 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - Double-click cycling while expanded skips incapable enabled modes and stays expanded; an explicit selection of
      an incapable mode collapses.
    - Spectrum gains bars in proportion to the extra width (its own milestone after M2, with a fade at the edges).
+   - Overlays (operator, 8 Nov; plan 01 §G/M3b, after M3): a top-left preset-name toast in Title Case and a bottom-left
+     Artist/Song/Artwork now-playing, both fading very gently on change; artwork with the themed border, white text
+     with a customizable font; later, cheap bright-area detection to switch the text to black. No volume rail.
 
 **Next (admitted, in this order):**
 
