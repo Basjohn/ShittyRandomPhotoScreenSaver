@@ -128,7 +128,11 @@ SETTINGS_TAB_DESCRIPTORS: tuple[SettingsTabDescriptor, ...] = (
         lambda d: AccessibilityTab(d._settings, parent=d.content_stack),
         reloads_with_settings=True,
     ),
-    SettingsTabDescriptor("themes", "Themes", lambda d: ThemesTab(d._settings, parent=d.content_stack)),
+    SettingsTabDescriptor(
+        "themes", "Themes",
+        lambda d: ThemesTab(d._settings, parent=d.content_stack),
+        reloads_with_settings=True,
+    ),
     SettingsTabDescriptor("about", "About", lambda d: d._create_about_tab()),
     # Title Case like its siblings; all-caps did not fit the 200 px sidebar.
     SettingsTabDescriptor("quick_start", "Quick Start", lambda d: d._create_quick_start_tab(), pinned_bottom=True),

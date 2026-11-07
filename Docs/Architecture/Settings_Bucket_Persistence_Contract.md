@@ -40,6 +40,11 @@ its pill vocabulary there; nothing else in the dialog names it.
   3D Detail row where it has one, and one sentence; `_<prefix>_lazy_values` owns its body and technical (audio
   analysis) values (`ui/tabs/media/spec_mode_builder.py`). The page's shared Bar Appearance and Rainbow rows remain
   page-level value owners in one never-shown holder and never enter a mode body.
+- **Reset and Import:** `_reload_all_tab_settings` is the one reset/import edge. It first re-derives the
+  process-local active Settings and Widget themes from persistence (`rederive_active_themes`,
+  `ui/settings_theme_selection.py`: startup's resolution against the built catalogs, persisting nothing), then
+  reloads every `reloads_with_settings` tab, Themes included. Theme activation never subscribes to store writes,
+  so an unchanged write cannot reach it (AC-07). Bar: `tests/test_settings_theme_rederive_real_dialog.py`.
 - **Helper threads:** helper sites (cache clearing, feeds, Gmail, Steam, geocoding, Guided Setup) never build
   private ThreadManagers; they look up the app-shared one (`ThreadManager.require_app_shared`). Under a runtime that
   is the engine's; a Settings-only (CONFIG) session's dialog registers one helper manager for its lifetime and

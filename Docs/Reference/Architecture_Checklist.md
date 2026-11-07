@@ -311,11 +311,6 @@ into them.
   - The settings model does not clamp them (a bar count of 500 stays 500).
   - The preset completeness check and repair fill cannot see them.
   - The registry keeps membership; the spec gains range and presentation, and a single mode filter folds in.
-- [ ] **AC-19 (SS-03) Reset and Import re-derive the active Settings and Widget themes.** P1, effort S.
-  - Today the Settings window and the rebuilt cards keep the old theme until restart or the next Settings open.
-  - An imported Independent Widget theme is not applied until restart.
-  - **Fix:** hang the re-derivation off the existing reset/import edge; this must not trigger on every unchanged
-    write (AC-07). The Themes tab also reloads with Settings.
 - [ ] **AC-20 (SS-04) The Particle, Blinds and Burn pages go through the transition spec.** P2, effort M.
   - Particle's default radius of 7 always runs as 8. Its gloss offers 10–200 where 16–128 is admitted.
   - The Particle save overwrites four fields it doesn't show with literals.
@@ -336,7 +331,7 @@ into them.
 
 Addenda from the same audit:
 - **AC-09:** the Studio's `card_style` and the General page's integer spin also restate the border clamp.
-- **AC-07:** AC-19 must reuse its edge.
+- **AC-07:** AC-19 (landed) reuses the dialog's reset/import reload edge, never a store subscription.
 
 ---
 
