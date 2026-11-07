@@ -22,10 +22,10 @@ replacement, after the retiring generation's destruction barrier has completed a
 before the replacement is constructed (``_construct_and_start_replacement_runtime``).
 Under the RUN thresholds a deep collection practically never runs on its own, so
 without it every retired generation's cyclic garbage stayed for the session, and
-was re-frozen at each later reveal (Settings round trips, 7 Nov 2026: ~14.5k objects
-and ~20 MB a round trip, 15 Python-owned ``QQmlComponent`` and an ~11 MB buffer among
-them). It never runs at frame time, during a teardown, or before the barrier has
-judged the retiring owners by reference counting.
+was re-frozen at each later reveal (Settings round trips, 7 Nov 2026, R-175: ~5,200
+unreachable objects a round trip, 15 Python-owned ``QQmlComponent`` and an ~11 MB heap
+block among them; ~20 MB a round trip grew to ~6). It never runs at frame time, during
+a teardown, or before the barrier has judged the retiring owners by reference counting.
 """
 from __future__ import annotations
 
@@ -247,7 +247,7 @@ class RuntimeGCPolicy:
         dicts and closures, and the Python-owned native objects and buffers they keep (Python-owned
         ``QQmlComponent``s, arrays, images). Under the RUN thresholds a deep collection practically never runs on
         its own (none in a 10-minute Settings round-trip run), and each later reveal re-froze that garbage, so
-        every round trip added ~20 MB for the session.
+        every Settings round trip kept ~11 MB of it for the session (R-175).
 
         Never at frame time and never inside a teardown: no display generation exists at this point (the
         retiring one is gone, the replacement not yet built). A no-op (``None``) while the policy is inactive or
