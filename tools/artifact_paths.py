@@ -14,8 +14,9 @@ Prevention: a tool takes its default destination from here, and passes any expli
 command line through ``checked_output``, which refuses everything outside this layout: elsewhere in the
 repository, ``%TEMP%``, a Claude session scratchpad, another drive (14.7 GB of agent output piled up in
 ``%TEMP%`` by 7 Nov 2026). Programmatic APIs that tests call may still take ``tmp_path``; tests redirect the
-whole layout with ``use_root``. PNG frames exist only inside ``scratch()``, which deletes them on success and
-on exceptions. ``tests/test_artifact_paths_contract.py`` keeps tools honest.
+whole layout with ``use_root``. PNG frames exist only in owner scratch (``scratch()``, ``run_scratch``): deleted
+when the tool succeeds, KEPT when it fails (its path is printed for debugging) until ``prune-scratch`` clears it.
+``tests/test_artifact_paths_contract.py`` keeps tools honest.
 
 One layout per clone: in a linked git worktree (an agent's checkout) the layout resolves to the MAIN checkout's
 ``.artifacts``, so evidence survives the worktree and every agent's output lands in one place.
