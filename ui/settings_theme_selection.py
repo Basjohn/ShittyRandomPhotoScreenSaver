@@ -1,7 +1,10 @@
 """One transactional Settings-theme selection owner shared by Settings surfaces."""
 from __future__ import annotations
 
-from ui.settings_theme_catalog import activate_catalog_theme, persist_settings_theme_selection, read_persisted_theme_id
+from ui.settings_theme_catalog import (
+    activate_catalog_theme, get_current_settings_theme_catalog, persist_settings_theme_selection,
+    read_persisted_theme_id, resolve_persisted_settings_theme,
+)
 from ui.settings_theme_runtime import get_active_settings_theme, set_active_settings_theme
 from ui.widget_theme_catalog import get_current_widget_theme_catalog
 from ui.widget_theme_runtime import WidgetThemeState
@@ -32,3 +35,18 @@ def apply_settings_theme_selection(settings, catalog, theme_id: str):
             activate_widget_theme_state(settings, state, settings_theme_id=old_id, persist=True)
         raise
     return entry
+
+
+def rederive_active_themes(settings) -> None:
+    """Re-derive both process-local active themes from what is persisted now.
+
+    Reset to Defaults and Import rewrite ``ui.settings_theme_selection`` and ``widget_theme`` wholesale; this is
+    the one step that makes the active Settings and Widget themes follow, on the dialog's existing reset/import
+    reload edge (never a store subscription, so an unchanged write never reaches it). It resolves exactly as
+    startup does, against the catalogs already built (no rescan), and persists nothing. Both activations are no-ops
+    when the resolved theme is already active.
+    """
+    resolution = resolve_persisted_settings_theme(settings, get_current_settings_theme_catalog())
+    activate_catalog_theme(resolution.entry)
+    activate_widget_theme_state(
+        settings, read_widget_theme_state(settings), settings_theme_id=resolution.entry.theme_id, persist=False)
