@@ -150,12 +150,14 @@ class RuntimeGCPolicy:
           is still collected on the normal cadence and stays visible;
         - ordinary refcount-zero destruction still frees frozen objects
           immediately; only *cyclic* collection of the frozen set is deferred to
-          ``gc.unfreeze()`` at the first runtime retirement or RUN stop;
-        - consequence: the generation live *at freeze time* has a cyclic Python
-          graph, so every teardown thaws first (``thaw_for_runtime_retirement``,
-          from ``teardown_display_runtime``) and its barrier sweeps the retired
-          cycles once; the next generation is frozen at its own reveal. At most
-          one generation's garbage is ever pinned, and only until its teardown.
+          ``gc.unfreeze()`` at that generation's teardown or RUN stop;
+        - consequence: every teardown thaws first (``thaw_for_runtime_retirement``,
+          from ``teardown_display_runtime``). No sweep follows: the destruction
+          barrier judges the retiring owners by reference counting alone, exactly
+          as for a generation that was never frozen (R-53/R-154), and thawed cycles
+          return to the collector's normal cadence. The next generation is frozen
+          at its own reveal. At most one generation's garbage is ever pinned, and
+          only until its teardown.
           (Until 7 Nov the freeze was a one-shot 45 s timer and the first Settings
           visit thawed the RUN for good: every later gen2 scanned the whole heap.)
         Idempotent; a no-op once frozen or when the policy is inactive.
