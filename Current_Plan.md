@@ -156,9 +156,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   wall-clock timestamp reaches the clock path. The rule is in the visualizer change checklist §2.
   **Now on queue item 1 (the gen2 GC stalls),** which it found itself.
 **Queued, next free medium slot, in this order (small, bounded):**
-0. **Checklist AC-06** (left by the Studio agent): the four Studio adapters' unbounded class-level clip caches and
-   the GUI-thread clip parse. Repeated offscreen Extruded Bubble sessions still grow about 2-3 MB each after the
-   controller-leak fix; these caches are the first suspect.
 1. **GC freeze per generation: merged 7 Nov; the live check is owed (lead, quiet machine).** The minute-ly 86–161 ms
    gen2 stalls came from the replay driver: it kept every frame under the interpreter's thresholds.
    - **The live defect:** a one-shot 45 s timer froze the startup heap once, and the first Settings visit thawed it
@@ -909,13 +906,16 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     is destroyed. The watch now stays armed until Settings' first Paint after the first input and logs `qt_exposed`.
     **Open until a field log** shows a paint right after the reveal and `first Paint after the first input` within a
     frame or two.
-- [ ] **Per-session memory growth in the Studio (side defect, 6 Nov).** Process memory grows about 2-3 MB per
-  offscreen Extruded Bubble session (private bytes and USS, 16 sessions). The growth is the same with and without the
-  controller-leak fix, which `test_closed_studio_sessions_are_released_and_live_counts_stay_flat` guards: closed
-  sessions are now collected and live Studio object counts stay flat. So something other than the controller grows.
-  Find it with tracemalloc plus a native heap comparison. Same owner: checklist AC-06
-  (`Docs/Reference/Architecture_Checklist.md`), the four adapters' unbounded class-level `_clip_cache` dicts and the
-  GUI-thread clip parse in `waveform_recorded_inputs.py:262-273`. These are the first suspects for the growth.
+- [ ] **Per-session memory growth in the Studio (side defect, 6 Nov; the clip caches ruled out 7 Nov).** Process
+  memory grows about 2-3 MB per offscreen Extruded Bubble session (private bytes and USS, 16 sessions), the same with
+  and without the controller-leak fix (`test_closed_studio_sessions_are_released_and_live_counts_stay_flat`). The
+  sessions measured load no recorded clip, so the clip caches cannot be the cause; they are bounded now anyway
+  (AC-06 landed: 60 Audio Analysis re-analyses grew 39.3 MB before, 15.5 MB after, flat at 120). Re-measured with
+  `_sessions` (24 sessions, private bytes after `gc.collect()` per session): the first 4 sessions add ~85 MB (warm-up),
+  then ~1 MB per session that flattens, but the series swings by ±70 MB run to run (main and branch alike), and
+  tracemalloc sees only ~55 kB of Python growth per session (QML chrome objects, settings normalisation copies). What
+  grows is native (Qt Quick / GL driver heaps), not Python. Next: a native heap comparison (UMDH or VMMap) across 30
+  sessions; bar: a trend, not run-to-run noise, before any fix.
 - [ ] **Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the operator's feel check.** The cause
   was the inspector's ScrollView: a vertical wobble past the drag threshold stole the press, on every mode at the
   first wobble. Every drag instrument in a scrolling panel now sets `preventStealing: true`
