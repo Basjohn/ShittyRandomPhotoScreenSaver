@@ -63,13 +63,12 @@ after the operator's yes on a question card; agents never run load (invisible ch
    Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/memoryless_reactivity/` (`20261107_lead/`,
    `20261107_bands/`) and `.artifacts/webp/visualizers/waveform_ribbon/memoryless_reactivity/`. Operator check:
    Frozen Past (Preset 5) live, and Pulse Count / Pulse Falloff / Freeze Deflate in the Studio. Next, in order:
-   - **Vocals first** (operator: "Vocals ARE more important than bass, secondary to vocals are changes (like kicks or
-     vocals) during sustained bass"): score a PCM vocal band beside the music trace, then route the core reaction so
-     vocals lead and bass cannot drown them. Every preset routes Pulse Strength from bass only, so a dense vocal
-     section with little bass (Don't You See, 0-28 s) draws weak swells; the routing is authored, so the fix needs
-     the operator's yes. Measured and rejected: a 2048-sample 30-150 Hz bass lane (Rag Doll's sub-bass entry is
-     invisible to the 256-sample lane) drowned the vocals (Human +.55 -> +.15); rebalancing phrase-energy weights
-     toward mids moved tracking by only +.03.
+   - **Vocals first, remainder.** Pulse Strength is routed mid-led in every preset (operator yes, 7 Nov night; set
+     through the Studio's response tuner and Save To Preset: Bass gain .5, Mids gain .8, both curve 1.3). On the
+     eight recordings: Pulse Strength vs the PCM vocal band +.50 -> +.66 (Don't You See -.58 -> +.18, Rag Doll
+     +.71 -> +.57), loudness tracking P1 +.45 -> +.48, P5 born swell +.50 -> +.56. Open: a kick inside sustained bass
+     raises the swell 21% less (median .058 -> .046; those kicks also reach Kick Accent now); check it on the
+     operator's look before tuning further.
    - **Breathing as a swell and release with proper motion** (operator: 2D Bubble's breathing is the reference;
      guide §13A). Breathing is now only a faster release in soft passages.
    - The onset reward is still sized by the bus's adaptive flux threshold (about 1 s of context: the same kick right
