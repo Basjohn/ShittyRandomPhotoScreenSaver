@@ -90,6 +90,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - Overlays (operator, 8 Nov; plan 01 §G/M3b, after M3): a top-left preset-name toast in Title Case and a bottom-left
      Artist/Song/Artwork now-playing, both fading very gently on change; artwork with the themed border, white text
      with a customizable font; later, cheap bright-area detection to switch the text to black. No volume rail.
+     Options: any corner per overlay, Always Show, Media Controls with the now-playing (default off), an optional card
+     border + theme surface (default off); all in a new Visualizers pill "Fullscreen Mode", first after Setup.
 
 **Next (admitted, in this order):**
 

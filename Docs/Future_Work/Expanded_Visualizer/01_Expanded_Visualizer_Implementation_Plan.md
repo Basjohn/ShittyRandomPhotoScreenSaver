@@ -368,6 +368,21 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 - **Fades:** gentle, both ways (fade, never vanish); one-shot from the event, bounded visible window, latest event wins,
   no repeating timer or per-frame driver. Both overlays sit inside the expanded card's safe area, clear of the collapse
   glyph, camera/preset controls and the OSD (which keeps priority).
+- **Options (operator, 8 Nov, later the same night; maximum customizability):**
+  - **Corner:** each overlay picks any of the four corners. The defaults are the placements above: preset top left,
+    now playing bottom left. Two overlays in one corner stack without overlapping, the newer one nearer the edge.
+  - **Always Show:** an overlay can stay up permanently instead of fading out. A change still crossfades its content
+    gently; it never pops. Off by default.
+  - **Media Controls:** previous / play-pause / next shown with the now-playing overlay, off by default. They drive
+    the existing Media controller (the Media card's own transport path); no second controller, no second GSMTC read.
+    Their hit area joins the overlay's, outside the OSD, collapse glyph and camera/preset controls.
+  - **Card:** an optional border and theme surface like the widget cards (the card chrome owner: border colour, width
+    and radius, plus the active Widget Theme's surface material), wrapping the whole overlay; off by default, so the
+    artwork alone keeps its themed border.
+- **Settings home:** a new Visualizers pill, **Fullscreen Mode**, placed first after Setup (before the mode pills),
+  holding every overlay option above plus the overlay font. Its values are canonical Settings keys in the spec system
+  (one owner, persisted, reset to defaults); the Studio exposes the font too. Steam-style buckets, closed by default;
+  one-sentence intros, the rest in tooltips; Title Case labels.
 - Owner: its own slice (M3b) after M3's widget suspension merges, since both touch the expanded scene hierarchy.
 
 - [ ] HUD is presentation-only. Authoritative fields derive from **existing Media model** (`MediaPresentationModel`/`MediaRuntimeSnapshot`) and the canonical volume/OSD model as applicable. Reuse semantic theme colours, font/stroke/shadow rules and artwork image provider; no second GSMTC query, network request, decoder or artwork cache.
@@ -524,8 +539,15 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   track change; identity-fenced (no stale art flash), missing art falls back to theme geometry.
 - [ ] White text, customizable font (canonical setting in Settings and the Studio, authored into every preset), soft
   shadow for legibility; the bright-area black-text switch recorded as its own follow-up.
-- [ ] Tests: event-only visibility, fade retirement, latest-wins, no hit/z conflict with OSD/glyph/controls, consumer
-  counts unchanged (no second Media query), dormant when not expanded.
+- [ ] Options: per-overlay corner (any of four; same-corner stacking), Always Show (crossfade on change), Media
+  Controls with the now-playing overlay (default off; the existing Media transport path), optional card border +
+  theme surface material (default off).
+- [ ] Settings: a **Fullscreen Mode** pill in Visualizers, first after Setup, holding the overlay options and font as
+  canonical spec-system keys (defaults, persistence, reset); the Studio offers the font.
+- [ ] Tests: event-only visibility, fade retirement, latest-wins, Always Show keeps the overlay up and crossfades,
+  every corner placed inside the safe area with stacking, media controls reach the one Media controller, no hit/z
+  conflict with OSD/glyph/controls, consumer counts unchanged (no second Media query), dormant when not expanded,
+  the pill's position (structure only, never its wording).
 
 **Milestone 4 | Wallpaper transition policy and GPU savings**
 
