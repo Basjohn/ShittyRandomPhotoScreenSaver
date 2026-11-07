@@ -1204,10 +1204,6 @@ class WaveformStudioAdapter(StudioModeAdapter):
         from ui.studio.waveform_recorded_inputs import studio_clips
         return studio_clips(recordings_directory())
 
-    # Analysed clips for this process, keyed by clip and the analysis (non-authored) settings: the inputs do
-    # not depend on authored Waveform controls, so reopening the Studio does not re-run a 30 s analysis.
-    _clip_cache: dict = {}
-
     @staticmethod
     def _clip_key(clip: StudioFixture, values: Mapping[str, Any]) -> str:
         import json
@@ -1218,16 +1214,17 @@ class WaveformStudioAdapter(StudioModeAdapter):
     def start_clip_load(self, clip: StudioFixture, values: Mapping[str, Any], finished):
         """Analyse ``clip`` out of process; ``finished(RecordedInputs | None, error)`` on the GUI thread.
         Returns the cancellable job, or None when the result was cached (``finished`` already ran)."""
+        from ui.studio import engine_answers
         from ui.studio.waveform_recorded_inputs import ClipLoadJob
         key = self._clip_key(clip, values)
-        cached = WaveformStudioAdapter._clip_cache.get(key)
+        cached = engine_answers.analysed(MODE, key)
         if cached is not None:
             finished(cached, "")
             return None
 
         def remember(result, error=""):
             if result is not None and not error:
-                WaveformStudioAdapter._clip_cache[key] = result
+                engine_answers.remember(MODE, result, key)   # the bounded per-mode store
             finished(result, error)
         return ClipLoadJob(clip, values, remember)
 

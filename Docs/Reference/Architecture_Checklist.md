@@ -120,28 +120,6 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
     disabled; `set_engine(x)` then terminal stop force-stops `x`; a tick on a controller with `engine_factory=stub`
     and `engine=None` uses the stub, a tick with neither raises, and neither touches `BeatEngineRegistry`.
 
-- [ ] **AC-06 Studio memory and GUI-thread work: bounded clip caches, off-thread clip parsing** (A-04 + A-10).
-  Severity medium, reward medium, effort S. **Confirmed:** class-level `_clip_cache: dict = {}` in
-  `ui/studio/waveform_adapter.py:1209`, `extruded_bubble_adapter.py:760`, `bubble_adapter.py:653`,
-  `sphere_adapter.py:591`, written on every analysed clip and never evicted (keys include analysis values, so each
-  Audio Analysis change is a new entry), while `ui/studio/engine_answers.py:586-597` caps its store at
-  `ANALYSED_LIMIT = 24`. `ui/studio/waveform_recorded_inputs.py:262-273` parses the worker's JSON and converts it on
-  the GUI thread inside `QProcess.finished`. Entry size and parse cost are **Needs measurement**: `tracemalloc`
-  around `to_inputs` for one Waveform entry, and `tools/studio_drag_profile.py`-style timing of a clip switch with
-  the preview rendering.
-  - **Fix (owner: `ui/studio`):** route the four adapters through `engine_answers.remember/analysed` (or one shared
-    `analysed_cache(mode_id)` with the same limit and the same eviction) and delete the class dicts. Do the parse and
-    `_convert` on a ThreadManager IO task and publish the finished `RecordedInputs` through the existing
-    `run_on_ui_thread`, fenced on the job's cancelled flag; or have the worker write the binary sidecar the
-    Oscilloscope capture history already uses (`Docs/Reference/Visualizer_Studio.md` §3).
-  - **Must stay true:** the Studio owns no settings, clock, engine or desktop-visualizer resources; the worker runs
-    in its kill-on-close Job Object; the newest analysis wins.
-  - **Regression bar:** `ANALYSED_LIMIT + 5` distinct keys through each adapter's `start_clip_load` with a stub loader
-    never exceed the limit and keep the newest entries; `_on_finished` returns without calling `json.loads` on the
-    GUI thread (stub worker output).
-  - **Depends on:** the Studio controller leak item in `Current_Plan.md` (same owner; the leak keeps these caches
-    reachable). Route both to the Studio agent.
-
 - [ ] **AC-07 Unchanged settings writes still publish** (A-13). Severity low, reward medium, effort S. **Confirmed
   (code):** `core/settings/json_store.py:332-333` drops an unchanged write, but `SettingsManager.set`
   (`core/settings/settings_manager.py:1099-1172`) always calls `sync()` and `_publish_store_change`, which fans out to

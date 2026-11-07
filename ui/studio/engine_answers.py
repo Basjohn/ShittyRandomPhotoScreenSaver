@@ -582,7 +582,9 @@ class RestInputs:
         return []
 
 
-# Analysed answers for this process, per mode, keyed by (source, engine-owned values), newest last.
+# Analysed clips for this process, per mode, keyed by the clip and the analysis values it was analysed under,
+# newest last: every Studio mode's one bounded store (reopening a Studio does not re-run an analysis, and an Audio
+# Analysis edit, a new key, evicts the oldest entry past the limit).
 _ANALYSED: dict[str, dict] = {}
 ANALYSED_LIMIT = 24
 
@@ -591,10 +593,13 @@ def analysed_cache(mode_id: str) -> dict:
     return _ANALYSED.setdefault(mode_id, {})
 
 
-def remember(mode_id: str, inputs: RecordedInputs) -> None:
+def remember(mode_id: str, inputs, key=None) -> None:
+    """Keep ``inputs`` as ``mode_id``'s newest analysed clip under ``key`` (default: the engine-answer inputs' own
+    ``key``); the oldest entries go past ``ANALYSED_LIMIT``."""
+    key = inputs.key if key is None else key
     store = analysed_cache(mode_id)
-    store.pop(inputs.key, None)
-    store[inputs.key] = inputs
+    store.pop(key, None)
+    store[key] = inputs
     while len(store) > ANALYSED_LIMIT:
         store.pop(next(iter(store)))
 
