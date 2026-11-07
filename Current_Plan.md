@@ -105,8 +105,9 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - P1: GO with conditions (7 Nov, `Docs/Future_Work/Native_Core_P1_Spike.md`, sources `native/spike_p1/`): a
      native abi3 module built against Qt 6.11.2 draws through QRhi on D3D11/D3D12/Vulkan/OpenGL standalone and
      inside Qt Quick's frame, bound to PySide6's Qt DLLs; a native render thread is unaffected by a GIL-holding Python
-     thread. Open: the operator's approval of the qtdeclarative 6.11.2 SDK (172.5 MB, X:) to build and run part B
-     (C++ `QSGRenderNode` + QML type, sources written), and the operator's Nuitka probe run (spike README).
+     thread. Part B (a C++ `QSGRenderNode` + QML type on a separate render thread) verified 8 Nov on all four
+     backends. Open: the operator's Nuitka probe run (spike README, "Nuitka probe"; module in
+     `D:\Temp\Scratch\SRPSS\native_spike\build`).
    - P2: an out-of-process visualizer engine for every mode (byte-identical packets; the logical tick leaves the main
      process's GIL). Designed 7 Nov (`Docs/Future_Work/Native_Core_P2_Engine_Design.md`): P2a moves the tick and mode
      runtimes into one `WorkerType.VISUALIZER` per generation (capture and DSP stay until measured), frames cross a

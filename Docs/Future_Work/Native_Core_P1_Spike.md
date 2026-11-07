@@ -7,14 +7,14 @@ build? Spike sources and exact commands: `native/spike_p1/` (README). Evidence:
 
 ## Verdict: GO, with conditions
 
-The toolchain works on this machine with what is installed plus one small SDK download (qtbase, 39.6 MB, on X:).
+The toolchain works on this machine with what is installed plus one small SDK download (qtbase, 39.6 MB, now under `D:\Temp\Scratch\SRPSS\native_spike`).
 A native module built against Qt 6.11.2 loads into the PySide6 process, binds to PySide6's own Qt DLLs, and draws
 through QRhi on D3D11, D3D12, Vulkan and OpenGL, both standalone and inside Qt Quick's own frame. A native render
 thread is unaffected by a Python thread that holds the GIL throughout.
 
 Conditions, before P3 starts:
-1. The operator approves the Qt Quick/Qml SDK download (qtdeclarative, 172.5 MB, below) so part B (C++
-   `QSGRenderNode` + QML registration, sources written) can be compiled and run. This is the one unbuilt piece.
+1. ~~The operator approves the Qt Quick/Qml SDK download~~ Done 8 Nov: part B (C++ `QSGRenderNode` + QML type) is
+   built and verified on all four backends (below).
 2. The operator runs the Nuitka probe (`native/spike_p1/README.md`, "Nuitka probe"). Agents do not build frozen.
 3. The production core keeps a build guard on the MSVC runtime (below).
 
@@ -31,14 +31,12 @@ Conditions, before P3 starts:
 | Part A, standalone QRhi | 4096 instanced dots, 960x540, read back to PNG on **D3D11, D3D12, Vulkan, OpenGL**; cross-backend max pixel difference 0-2/255 |
 | Hybrid, inside Qt Quick | `QQuickRenderControl` (never shown) hosts a PySide6 `QSGRenderNode` whose prepare/render pass Quick's own `QRhi`, command buffer and render target to the module, which records the draw: correct PNGs on **D3D11, D3D12, Vulkan, OpenGL**, cross-backend max difference 0-3/255, clean process exit |
 | GIL | Native render thread, 240 frames: median 0.025 ms with Python idle, 0.018 ms while a pure-Python loop held the GIL (2.5 M iterations meanwhile); the thread never had a Python thread state. Negative control, the same thread taking the GIL once per frame (what a Python `render()` does): 0.023 ms idle, **5.06 ms** median (p90 5.55) with Python busy, i.e. one 5 ms switch interval per frame. Timings are CPU-side times of a tiny offscreen frame, a functional contrast only, not a GPU measurement |
+| Part B, C++ node in Qt Quick (8 Nov) | A C++ `QQuickItem` + `QSGRenderNode` (`NoExternalRendering`, QRhi only), registered at import as `SrpssNativeSpike 1.0 / QuadField`, rendered by `QQuickRenderControl` with sync/render on a separate render `QThread` (the GUI thread blocks during sync): correct PNGs on **D3D11, D3D12, Vulkan, OpenGL**, cross-backend max difference 0-3/255, clean exit on all four. While a pure-Python thread spun throughout, 240/240 node calls ran with no Python thread state and the frame median did not move (D3D11 .080 vs .081 ms, D3D12 .146/.139, Vulkan .113/.118, OpenGL .026/.046). Evidence `.artifacts/evidence/architecture/native_core_p1/20261108_p1b/` |
+| OpenGL with a separate render thread | The QRhi's GL context is created on, and affine to, the render thread; the render control (and its QRhi) is destroyed on the GUI thread, which cannot make it current there: a silent fail-fast (0xC0000409) at exit. Release it (`doneCurrent`) and `moveToThread` the GUI thread before the render thread quits (`QuickOffscreenSession::end`), as Qt's threaded render-control pattern does. D3D/Vulkan devices have no thread affinity. The production core's GL fallback needs the same teardown |
 | Backend selection today | `rendering/quick/bootstrap.py` `configure_quick_graphics()`: `QQuickWindow.setGraphicsApi(OpenGL)`, `QSG_RENDER_LOOP=threaded` set in-process, `AA_UseDesktopOpenGL`, GL 4.6 core surface format; `rendering/quick/render/native_texture_bridge.py` rejects non-GL APIs |
 
 ## Analysed, not verified
 
-- **Part B** (`src/quick_item.*`, `src/quick_offscreen.*`): a C++ `QQuickItem` + `QSGRenderNode` (`NoExternalRendering`,
-  QRhi only) registered at import as `SrpssNativeSpike 1.0 / QuadField`, rendered by `QQuickRenderControl` with
-  sync/render on a separate render `QThread` while the GUI thread blocks during sync, plus the same GIL contention
-  check. Written, not compiled: needs the qtdeclarative SDK.
 - **Qt's real threaded render loop** with an exposed window: by design it calls `prepare()`/`render()` on its render
   thread; an on-screen run is the operator's (agents never show windows).
 - **Nuitka standalone** (Nuitka 4.2 source read): the module is followed as an ordinary extension import. Nuitka's DLL
@@ -71,7 +69,7 @@ Conditions, before P3 starts:
 
 | Item | Version | Source | Size | Location |
 | --- | --- | --- | --- | --- |
-| **Qt Quick/Qml SDK (qtdeclarative, MSVC 2022 x64)** | 6.11.2 (`6.11.2-0-202608131017`) | `https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64/qt.qt6.6112.win64_msvc2022_64/6.11.2-0-202608131017qtdeclarative-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z` (+ `.sha256`) | 172.5 MB download | extracted into `X:\Scratch\SRPSS\native_spike\qt` (no system install) |
+| **Qt Quick/Qml SDK (qtdeclarative, MSVC 2022 x64)** | 6.11.2 (`6.11.2-0-202608131017`) | `https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64/qt.qt6.6112.win64_msvc2022_64/6.11.2-0-202608131017qtdeclarative-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z` (+ `.sha256`) | 172.5 MB download | extracted into `D:\Temp\Scratch\SRPSS\native_spike\qt` (no system install; downloads and SDKs never go on X:) |
 | Optional: MSVC v143 14.44 toolset (VS Build Tools component) | 14.44 | Visual Studio Installer | about 1-2 GB | system-wide; only if the core must use STL DLL features (see runtime guard) |
 
 Already fetched without approval (under the 50 MB limit, scratch drive only): qtbase 6.11.2 (39.6 MB, sha256
@@ -115,5 +113,5 @@ cannot read the 6.11.2 repository layout; archives are fetched directly).
 > - P1: GO with conditions (7 Nov, `Docs/Future_Work/Native_Core_P1_Spike.md`): a native abi3 module built against
 >   Qt 6.11.2 draws through QRhi on D3D11/D3D12/Vulkan/OpenGL standalone and inside Qt Quick's frame, bound to
 >   PySide6's Qt DLLs; a native render thread is unaffected by a GIL-holding Python thread. Open: operator approval of
->   the qtdeclarative 6.11.2 SDK (172.5 MB, X:) to build part B (C++ `QSGRenderNode` + QML type), and the operator's
+>   the qtdeclarative 6.11.2 SDK (172.5 MB, D:) to build part B (C++ `QSGRenderNode` + QML type), and the operator's
 >   Nuitka probe run.

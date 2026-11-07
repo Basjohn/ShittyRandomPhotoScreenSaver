@@ -5,13 +5,13 @@ rem The scratch root holds the Qt SDK prefix (qt\), Vulkan-Headers and the tool 
 setlocal
 set "SRC=%~dp0"
 set "BUILD=%~1"
-if "%BUILD%"=="" set "BUILD=X:\Scratch\SRPSS\native_spike\build"
+if "%BUILD%"=="" set "BUILD=D:\Temp\Scratch\SRPSS\native_spike\build"
 set "QUICK=%~2"
 if "%QUICK%"=="" set "QUICK=ON"
 set "VENV=%~3"
 if "%VENV%"=="" set "VENV=%~dp0..\..\.venv"
 set "SPIKE=%~4"
-if "%SPIKE%"=="" set "SPIKE=X:\Scratch\SRPSS\native_spike"
+if "%SPIKE%"=="" set "SPIKE=D:\Temp\Scratch\SRPSS\native_spike"
 
 call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1
 cmake -S "%SRC%." -B "%BUILD%" -G Ninja ^

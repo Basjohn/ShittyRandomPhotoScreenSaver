@@ -4,10 +4,12 @@
 
 #include <rhi/qrhi.h>
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QMetaObject>
 #include <QtCore/QObject>
 #include <QtCore/QThread>
+#include <QtGui/QOpenGLContext>
 #include <QtQuick/QQuickRenderControl>
 #include <QtQuick/QQuickRenderTarget>
 #include <QtQuick/QQuickWindow>
@@ -147,11 +149,24 @@ void QuickOffscreenSession::end()
 {
     if (!m_host)
         return;
-    m_host->runBlocking([this]() {
+    QThread *guiThread = QCoreApplication::instance() ? QCoreApplication::instance()->thread() : nullptr;
+    m_host->runBlocking([this, guiThread]() {
         if (m_begun)
             m_window->setRenderTarget(QQuickRenderTarget());
         destroyOffscreenTarget(&m_target);
         m_control->invalidate();
+        // OpenGL only: the QRhi's context was created on, and is affine to, this render thread, which quits next. The
+        // render control (and its QRhi) is destroyed later on the GUI thread, which could not make the context
+        // current there (a fail-fast at exit, 8 Nov). Release it and hand it back to the GUI thread first, as Qt's
+        // threaded render-control pattern does. D3D and Vulkan devices have no thread affinity.
+        QRhi *rhi = m_control->rhi();
+        if (rhi && guiThread && rhi->backend() == QRhi::OpenGLES2) {
+            const auto *handles = static_cast<const QRhiGles2NativeHandles *>(rhi->nativeHandles());
+            if (handles && handles->context) {
+                handles->context->doneCurrent();
+                handles->context->moveToThread(guiThread);
+            }
+        }
     });
     m_begun = false;
     m_host.reset();

@@ -24,15 +24,15 @@ All parts draw the same 4096 instanced, animated dots (`src/quadfield.*`) and re
 - PySide6 / shiboken6 6.11.2, Qt 6.11.2 (`MSVC 2022`, built with cl 19.44.35227), CPython 3.14.8 x64.
 - Visual Studio Build Tools 2026 (18.9), MSVC 14.51.36231, Windows SDK 10.0.26100.0, CMake 4.1.2.
 - No Vulkan SDK (not needed): Vulkan loader 1.4.341 from the NVIDIA driver; Vulkan-Headers v1.4.341 for `vulkan.h`.
-- Ninja 1.13.2 and aqtinstall 3.3.0 in a tool venv `X:\Scratch\SRPSS\native_spike\venv` (never the repo `.venv`).
+- Ninja 1.13.2 and py7zr 1.1.4 in a tool venv `D:\Temp\Scratch\SRPSS\native_spike\venv` (never the repo `.venv`).
   aqtinstall 3.3.0 cannot read the Qt 6.11.2 repository layout (`Updates.xml` moved under
   `qt6_6112/qt6_6112_msvc2022_64/`), so the archives are fetched directly and checked against Qt's `.sha256`.
 
-## SDK layout (scratch drive, not F:)
+## SDK layout (D:\Temp\Scratch: downloads and SDKs never go on X: or F:)
 
 ```
-X:\Scratch\SRPSS\native_spike\
-  venv\                     tool venv: ninja, aqtinstall, py7zr
+D:\Temp\Scratch\SRPSS\native_spike\
+  venv\                     tool venv: ninja, py7zr
   qt\                       Qt 6.11.2 msvc2022_64 prefix (qtbase; qtdeclarative extracts into the same prefix)
   vulkan_headers\Vulkan-Headers-1.4.341\include
   build\                    CMake/Ninja build tree; _srpss_native_spike.pyd
@@ -47,24 +47,24 @@ $tail = "-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
 # qtbase: 39,618,573 bytes, sha256 fd984b7264361b4dd3fd2a417702ca1258e4086268f2ee6a69b9a393d9c3f6bb
 # qtdeclarative: 172,484,222 bytes (part B only; needs the operator's approval)
 foreach ($m in "qtbase", "qtdeclarative") {
-  curl.exe -L -o "X:\Scratch\SRPSS\native_spike\dl\$m.7z" "$B/$stamp$m$tail"
-  curl.exe -L -o "X:\Scratch\SRPSS\native_spike\dl\$m.7z.sha256" "$B/$stamp$m$tail.sha256"
-  (Get-FileHash "X:\Scratch\SRPSS\native_spike\dl\$m.7z" -Algorithm SHA256).Hash   # compare with the .sha256
-  X:\Scratch\SRPSS\native_spike\venv\Scripts\python.exe -I -c "import py7zr,sys; py7zr.SevenZipFile(sys.argv[1]).extractall(sys.argv[2])" "X:\Scratch\SRPSS\native_spike\dl\$m.7z" X:\Scratch\SRPSS\native_spike\qt
+  curl.exe -L -o "D:\Temp\Scratch\SRPSS\native_spike\downloads\$m.7z" "$B/$stamp$m$tail"
+  curl.exe -L -o "D:\Temp\Scratch\SRPSS\native_spike\downloads\$m.7z.sha256" "$B/$stamp$m$tail.sha256"
+  (Get-FileHash "D:\Temp\Scratch\SRPSS\native_spike\downloads\$m.7z" -Algorithm SHA256).Hash   # compare with the .sha256
+  D:\Temp\Scratch\SRPSS\native_spike\venv\Scripts\python.exe -I -c "import py7zr,sys; py7zr.SevenZipFile(sys.argv[1]).extractall(sys.argv[2])" "D:\Temp\Scratch\SRPSS\native_spike\downloads\$m.7z" D:\Temp\Scratch\SRPSS\native_spike\qt
 }
 # Vulkan-Headers v1.4.341 (3,092,442 bytes zip, sha256 c3b074a30b5bce4cf32a41d234fa559ff458513b7314d69cd0b336a01b53bb78)
-curl.exe -L -o X:\Scratch\SRPSS\native_spike\dl\vkh.zip https://codeload.github.com/KhronosGroup/Vulkan-Headers/zip/refs/tags/v1.4.341
-X:\Scratch\SRPSS\native_spike\venv\Scripts\python.exe -I -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); z.extractall(sys.argv[2], [n for n in z.namelist() if '/include/' in n])" X:\Scratch\SRPSS\native_spike\dl\vkh.zip X:\Scratch\SRPSS\native_spike\vulkan_headers
-# the dl\ folder can be deleted after extraction
+curl.exe -L -o D:\Temp\Scratch\SRPSS\native_spike\downloads\vkh.zip https://codeload.github.com/KhronosGroup/Vulkan-Headers/zip/refs/tags/v1.4.341
+D:\Temp\Scratch\SRPSS\native_spike\venv\Scripts\python.exe -I -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); z.extractall(sys.argv[2], [n for n in z.namelist() if '/include/' in n])" D:\Temp\Scratch\SRPSS\native_spike\downloads\vkh.zip D:\Temp\Scratch\SRPSS\native_spike\vulkan_headers
+# the downloads\ folder can be deleted after extraction
 ```
 
 ## Build
 
 ```bat
 :: part A + hybrid only (qtbase SDK)
-native\spike_p1\build.cmd X:\Scratch\SRPSS\native_spike\build OFF F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv
+native\spike_p1\build.cmd D:\Temp\Scratch\SRPSS\native_spike\build OFF F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv
 :: everything, once qtdeclarative is in the prefix
-native\spike_p1\build.cmd X:\Scratch\SRPSS\native_spike\build ON F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv
+native\spike_p1\build.cmd D:\Temp\Scratch\SRPSS\native_spike\build ON F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv
 ```
 
 `build.cmd` calls `vcvars64.bat`, then CMake (Ninja, Release) with `CMAKE_PREFIX_PATH` = the Qt prefix,
@@ -74,7 +74,7 @@ SDK's Qt version differs from 6.11.2. The `GuiPrivate` warning is expected: QRhi
 ## Run (offscreen, repository venv)
 
 ```bat
-.venv\Scripts\python.exe native\spike_p1\python\run_spike.py --module-dir X:\Scratch\SRPSS\native_spike\build --part all --label p1
+.venv\Scripts\python.exe native\spike_p1\python\run_spike.py --module-dir D:\Temp\Scratch\SRPSS\native_spike\build --part all --label p1
 ```
 
 The backend is chosen inside each process (`QQuickWindow.setGraphicsApi` before `QGuiApplication`; Qt Quick parts run
@@ -86,17 +86,17 @@ one child process per backend). Evidence (PNGs + `summary.json`) goes to
 Stage the module next to the two scripts and compile a standalone probe on the scratch drive:
 
 ```bat
-set STAGE=X:\Scratch\SRPSS\native_spike\frozen_stage
+set STAGE=D:\Temp\Scratch\SRPSS\native_spike\frozen_stage
 mkdir %STAGE%
 copy native\spike_p1\python\frozen_probe.py %STAGE%\
 copy native\spike_p1\python\run_spike.py %STAGE%\
-copy X:\Scratch\SRPSS\native_spike\build\_srpss_native_spike.pyd %STAGE%\
+copy D:\Temp\Scratch\SRPSS\native_spike\build\_srpss_native_spike.pyd %STAGE%\
 cd /d %STAGE%
 F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv\Scripts\python.exe -m nuitka --standalone --msvc=latest ^
   --enable-plugin=pyside6 --include-qt-plugins=qml --include-module=PySide6.QtQuick --include-module=PySide6.QtQml ^
-  --include-module=_srpss_native_spike --output-dir=X:\Scratch\SRPSS\native_spike\frozen_out frozen_probe.py
-X:\Scratch\SRPSS\native_spike\frozen_out\frozen_probe.dist\frozen_probe.exe --out <evidence dir> --part hybrid --backend vulkan
-X:\Scratch\SRPSS\native_spike\frozen_out\frozen_probe.dist\frozen_probe.exe --out <evidence dir> --part rhi
+  --include-module=_srpss_native_spike --output-dir=D:\Temp\Scratch\SRPSS\native_spike\frozen_out frozen_probe.py
+D:\Temp\Scratch\SRPSS\native_spike\frozen_out\frozen_probe.dist\frozen_probe.exe --out <evidence dir> --part hybrid --backend vulkan
+D:\Temp\Scratch\SRPSS\native_spike\frozen_out\frozen_probe.dist\frozen_probe.exe --out <evidence dir> --part rhi
 ```
 
 Pass: the JSON reports `"frozen": true`, `ok` on each backend, and `loaded_modules` shows `Qt6Gui.dll` from the
