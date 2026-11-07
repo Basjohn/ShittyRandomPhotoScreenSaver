@@ -120,7 +120,7 @@ class BubbleGradientMapperLab(QWidget):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--capture", type=artifact_paths.evidence_arg,
-                        help="PNG path under the evidence layout; published as WebP on success")
+                        help="PNG path under the evidence layout; published unchanged on success")
     args = parser.parse_args()
     if args.capture:
         evidence_media.redirect_output(args, "capture", "bubble_gradient_mapper_lab")

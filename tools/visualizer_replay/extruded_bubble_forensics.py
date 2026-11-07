@@ -16,6 +16,10 @@ from unittest.mock import patch
 
 import numpy as np
 
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
 from core.settings.models import SpotifyVisualizerSettings
 from rendering.gl_programs import extruded_bubble_scene as scene
@@ -26,10 +30,6 @@ from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBub
 from tools.visualizer_replay.extruded_bubble_world_probe import projected_sphere
 from widgets.spotify_visualizer.feature_frame import FeatureClip, FeatureFrame
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
-import sys as _sys  # noqa: E402
-from pathlib import Path as _Path  # noqa: E402
-if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from tools import artifact_paths  # noqa: E402
 from tools import evidence_media  # noqa: E402
 

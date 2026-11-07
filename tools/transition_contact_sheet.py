@@ -20,11 +20,11 @@ from pathlib import Path
 import random
 import sys
 from time import perf_counter
-from tools import artifact_paths  # noqa: E402
-from tools import evidence_media  # noqa: E402
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def fixture_images(width: int, height: int):

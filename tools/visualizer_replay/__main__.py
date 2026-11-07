@@ -7,12 +7,12 @@ from pathlib import Path
 from PySide6.QtCore import QCoreApplication, QEvent
 
 from .driver import MODES, load_clips, replay_clip
-from tools.freeze_visualizer_settings import load_frozen
-from .floors import calibrate, check_floors
 import sys as _sys  # noqa: E402
 from pathlib import Path as _Path  # noqa: E402
 if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools.freeze_visualizer_settings import load_frozen
+from .floors import calibrate, check_floors
 from tools import artifact_paths  # noqa: E402
 
 

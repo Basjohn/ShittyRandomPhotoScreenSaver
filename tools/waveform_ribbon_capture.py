@@ -5,10 +5,10 @@ from bisect import bisect_left
 from dataclasses import replace
 import hashlib,json,math,subprocess,sys,wave
 from pathlib import Path
-from tools import artifact_paths  # noqa: E402
-from tools import evidence_media  # noqa: E402
 ROOT=Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def dimensions(value):

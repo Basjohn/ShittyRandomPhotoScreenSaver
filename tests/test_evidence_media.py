@@ -1,8 +1,9 @@
-"""Durable visual evidence is small WebP: a sequence is one animated 24 fps WebP under 10 MB; PNGs are scratch.
+"""Evidence media: a KEPT frame sequence becomes one animated 24 fps WebP under 10 MB (a deliberate step);
+tool output is published unchanged (PNG stills and frames alike: compare tools read them).
 
-Operator, 7 Nov 2026: "agents have littered". Raw PNG frame folders filled ``.artifacts/evidence``; the rule
-(Docs/Guardrails.md "Evidence and scratch hygiene") keeps PNGs only while frames are examined. A tool's
-scratch is deleted when it succeeds and kept (for debugging) when it fails.
+Operator, 7 Nov 2026: raw PNG frame folders filled ``.artifacts/evidence``, but "PNGs are not barred from the
+project, only single frames when used to show full motion instead of a webp". A tool's scratch is deleted when it
+succeeds and kept (for debugging) when it fails.
 """
 from __future__ import annotations
 
@@ -52,38 +53,31 @@ def test_a_frame_sequence_becomes_one_animated_24fps_webp_under_the_cap(tmp_path
     assert receipt["fps"] == 24 and receipt["bytes"] <= cap
 
 
-def test_a_tool_run_publishes_webp_relinks_its_summary_and_deletes_its_pngs(tmp_path, scratch_root):
+def test_a_tool_run_publishes_every_output_unchanged_and_deletes_its_scratch(tmp_path, scratch_root):
+    """Operator, 7 Nov: PNGs are not barred (compare tools read them); publishing never converts anything."""
     out = tmp_path / "evidence"
     args = SimpleNamespace(output=out)
     work = evidence_media.redirect_output(args, "output", "unit")
     assert args.output == work and artifact_paths.in_scratch(work)
     work.mkdir(parents=True)
-    for index in range(3):
-        _noisy_frame(index, (96, 64)).save(work / f"spin_{index:03d}.png")
-    _noisy_frame(9, (96, 64)).save(work / "card.png")
+    frames = []
+    for index in range(14):
+        frame = work / f"spin_{index:03d}.png"
+        _noisy_frame(index, (48, 32)).save(frame)
+        frames.append(frame.read_bytes())
+    _noisy_frame(99, (96, 64)).save(work / "card.png")
+    card = (work / "card.png").read_bytes()
     (work / "manifest.json").write_text(json.dumps({"still": str(work / "card.png"), "first": "spin_000.png"}))
 
     assert evidence_media.finish(0) == 0
-    assert not any(scratch_root.rglob("*.png")), "PNGs outlived a successful run"
-    assert sorted(path.name for path in out.iterdir()) == ["card.webp", "manifest.json", "spin.webp"]
-    durations, _size = _durations(out / "spin.webp")
-    assert len(durations) == 3
-    assert json.loads((out / "manifest.json").read_text()) == {"still": str(out / "card.webp"),
-                                                               "first": "spin.webp"}
-
-
-def test_inside_the_layout_webps_go_to_the_webp_root_and_the_summary_links_them(tmp_path, scratch_root):
-    out = artifact_paths.evidence_dir("widgets", "clock_smoke", "run", date="20261107")
-    args = SimpleNamespace(output=out)
-    work = evidence_media.redirect_output(args, "output", "unit")
-    work.mkdir(parents=True)
-    _noisy_frame(1, (64, 48)).save(work / "card.png")
-    (work / "manifest.json").write_text(json.dumps({"card": str(work / "card.png")}))
-    evidence_media.finish(0)
-    webp = artifact_paths.WEBP_ROOT / "widgets" / "clock_smoke" / "20261107_run_card.webp"
-    assert webp.is_file()
-    assert sorted(path.name for path in out.iterdir()) == ["manifest.json"]
-    assert json.loads((out / "manifest.json").read_text()) == {"card": str(webp)}
+    assert not any(scratch_root.rglob("*")), "scratch outlived a successful run"
+    names = sorted(path.name for path in out.iterdir())
+    assert names == sorted(["card.png", "manifest.json", *(f"spin_{index:03d}.png" for index in range(14))])
+    assert (out / "card.png").read_bytes() == card, "a still was re-encoded"
+    assert [(out / f"spin_{index:03d}.png").read_bytes() for index in range(14)] == frames
+    assert json.loads((out / "manifest.json").read_text()) == {"still": str(out / "card.png"),
+                                                               "first": "spin_000.png"}
+    assert not list(out.rglob("*.webp")), "publishing converted output to WebP"
 
 
 def test_a_failed_tool_run_keeps_its_scratch_for_debugging(tmp_path, scratch_root, capsys):
@@ -97,19 +91,6 @@ def test_a_failed_tool_run_keeps_its_scratch_for_debugging(tmp_path, scratch_roo
     assert not (tmp_path / "evidence").exists()
 
 
-def test_a_still_becomes_a_reduced_still_webp_and_its_png_is_deleted(tmp_path):
-    png = tmp_path / "still.png"
-    _noisy_frame(0, (3000, 1000)).save(png)
-    out = tmp_path / "still.webp"
-    receipt = evidence_media.still_from_png(png, out)
-    assert not png.exists()
-    with Image.open(out) as encoded:
-        assert encoded.format == "WEBP"
-        assert not getattr(encoded, "is_animated", False)
-        assert max(encoded.size) == evidence_media.STILL_MAX_SIDE
-    assert receipt["bytes"] == out.stat().st_size
-
-
-def test_evidence_media_refuses_png_destinations(tmp_path):
+def test_animated_webp_refuses_a_non_webp_destination(tmp_path):
     with pytest.raises(ValueError):
-        evidence_media.still_webp(_noisy_frame(0, (32, 32)), tmp_path / "out.png")
+        evidence_media.animated_webp([_noisy_frame(0, (32, 32)), _noisy_frame(1, (32, 32))], tmp_path / "out.png")

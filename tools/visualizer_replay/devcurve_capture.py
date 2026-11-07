@@ -19,12 +19,12 @@ from bisect import bisect_left
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
-from tools import artifact_paths  # noqa: E402
-from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def capture(args):

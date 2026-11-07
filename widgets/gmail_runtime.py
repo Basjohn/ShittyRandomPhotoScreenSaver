@@ -1396,7 +1396,8 @@ class GmailRuntimeService:
         try:
             consumer.on_gmail_runtime_snapshot(snapshot)
         except Exception:
-            logger.debug("[GMAIL_RUNTIME] Snapshot delivery failed", exc_info=True)
+            # A failed projection leaves the widget on its previous state (e.g. stuck on busy): never quiet.
+            logger.error("[GMAIL_RUNTIME] Snapshot delivery failed", exc_info=True)
 
     def start(self) -> bool:
         if self._retired or self._owner is None:

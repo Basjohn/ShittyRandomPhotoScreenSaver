@@ -409,14 +409,14 @@ def main() -> None:
             reference = load_png(path) if path.exists() else np.zeros_like(pixels)
             print(f"{name:24s} {visual_difference(reference, pixels)}")
             if reference.shape == pixels.shape:
-                # Review sheets are evidence (tools/artifact_paths.py): a WebP each, via a scratch PNG.
-                from tools import artifact_paths, evidence_media
+                # Review sheets are evidence stills (tools/artifact_paths.py): PNG, lossless.
+                from tools import artifact_paths
 
-                review = artifact_paths.run_scratch("sphere_golden", "review")
+                review = artifact_paths.evidence_dir("visualizers/sphere", "golden_review",
+                                                     artifact_paths.run_label(name))
                 review.mkdir(parents=True, exist_ok=True)
-                _save_png(review / f"{name}.png", np.concatenate([reference, pixels], axis=1))
-                sheet = artifact_paths.webp_path("visualizers/sphere", "golden_review", artifact_paths.run_label(name))
-                evidence_media.still_from_png(review / f"{name}.png", sheet)
+                sheet = review / f"{name}.png"
+                _save_png(sheet, np.concatenate([reference, pixels], axis=1))
                 print(f"before | after sheet: {sheet}")
         from tools import artifact_paths
 

@@ -402,7 +402,7 @@ def run(output_dir: Path) -> dict[str, object]:
 
 
 def _run_published(output_dir: Path) -> dict[str, object]:
-    """``run`` in an owner scratch folder; its PNGs are published to ``output_dir`` as WebP evidence."""
+    """``run`` in an owner scratch folder; its output is published to ``output_dir`` unchanged."""
     with evidence_media.evidence_workspace('qtquick_abandonment_issues_smoke', output_dir) as work:
         return run(work)
 

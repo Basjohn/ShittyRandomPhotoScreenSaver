@@ -36,12 +36,12 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from tools import artifact_paths  # noqa: E402
-from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 MUSIC_COLUMNS = ("song", "t", "rms_db", "bass_db", "flux", "loudness", "presence")
 RESPONSE_COLUMNS = ("t", "song", "song_time", "level", "view", "live", "height", "bend", "lift_drive", "roll",

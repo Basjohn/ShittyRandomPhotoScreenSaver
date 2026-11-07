@@ -2,7 +2,7 @@
 (Docs/Reference/Extruded_Bubble/Targets/Originals: bright, mid, dark water, teal), rendered offscreen at the mocks' resolution and laid side by
 side with them. A development harness for judging primitives against the target; not the Extruded Bubble renderer.
 usage: python tools/labs/extruded_bubble_lab.py out_sheet.png [--backdrop]
-out_sheet.png lies under the evidence layout (tools/artifact_paths.py); every PNG is published as WebP on success."""
+out_sheet.png lies under the evidence layout (tools/artifact_paths.py); outputs are published unchanged on success."""
 import ctypes
 from contextlib import ExitStack
 import math

@@ -10,16 +10,16 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from rendering.gl_error_policy import disable_per_call_gl_error_checking
 assert disable_per_call_gl_error_checking()
 from tools import extruded_bubble_capture as capture
 from rendering.gl_programs.extruded_bubble_scene import scene_knobs, ray_strength
 from PIL import Image, ImageDraw
 import numpy as np
-import sys as _sys  # noqa: E402
-from pathlib import Path as _Path  # noqa: E402
-if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from tools import artifact_paths  # noqa: E402
 from tools import evidence_media  # noqa: E402
 

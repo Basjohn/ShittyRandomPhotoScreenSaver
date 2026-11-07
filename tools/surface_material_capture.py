@@ -26,12 +26,12 @@ from pathlib import Path
 import statistics
 import sys
 import time
-from tools import artifact_paths  # noqa: E402
-from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 MATERIALS = ("normal", "acrylic", "glass", "frosted", "mica", "smoked")
 SCENE = (1600, 900)

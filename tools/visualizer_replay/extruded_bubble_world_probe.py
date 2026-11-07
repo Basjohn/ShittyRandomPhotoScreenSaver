@@ -13,11 +13,11 @@ import math
 from pathlib import Path
 import subprocess
 import sys
-from tools import artifact_paths  # noqa: E402
-from tools import evidence_media  # noqa: E402
 
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def camera_space(points, parameters, size):
