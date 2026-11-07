@@ -539,3 +539,26 @@ def test_gh_calls_run_inside_the_cancellable_process_owner():
     owner.cancel()
     with pytest.raises(remote.RemoteCancelled):
         build_runner._owner_gh_runner(owner)(["gh", "--version"], 5.0)
+
+
+def test_the_headless_run_drives_the_tabs_own_pipeline(monkeypatch):
+    commit = remote.PushedCommit("main", "c" * 40, "x", "c" * 40)
+    monkeypatch.setattr(build_runner, "run_preflight", lambda mode: build_runner.PreflightResult(
+        remote_commit=commit, notes=[f"GitHub builds {commit.describe()}"]))
+    monkeypatch.setattr(build_runner, "helper_build_status", lambda *_a, **_k: SimpleNamespace(
+        needs_rebuild=True, reason="stale", fingerprint="f"))
+    seen = {}
+
+    def pipeline(host, jobs, selected, preflight, owner):
+        seen["selected"] = set(selected)
+        host._events.put(("job_status", "standard", "Building"))
+        host._events.put(("job_done", "standard", _ok("standard")))
+        host._events.put(("pipeline_done", True, "All selected jobs completed successfully.", False))
+
+    monkeypatch.setattr(build_runner.BuildRunnerApp, "_github_pipeline_worker", pipeline)
+    lines = []
+    assert build_runner.run_headless(None, out=lines.append) == 0
+    assert seen["selected"] == {"standard", "media_center", "reddit_helper"}       # what the tab pre-selects
+    assert lines[0] == f"[FOUNDRY] GitHub builds {commit.describe()}" and lines[-1].endswith("successfully.")
+    assert build_runner.run_headless(["standard", "bogus"], out=lines.append) == 2
+    assert build_runner.main(["--mode", "venv", "--run"]) == 2                     # local modes stay in the window

@@ -4,6 +4,7 @@ Usage:
     python tools/build_runner.py
     python tools/build_runner.py --mode venv
     python tools/build_runner.py --mode github
+    python tools/build_runner.py --mode github --run [--select standard media_center ...]
     python tools/build_runner.py --smoke-test --mode normal
 
 The GUI intentionally uses only the Python standard library. Build workers keep
@@ -25,6 +26,7 @@ import os
 import queue
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -33,6 +35,7 @@ import webbrowser
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, Iterable, Literal, Sequence
 
 import tkinter as tk
@@ -3090,6 +3093,74 @@ def smoke_payload(mode: ModeName) -> dict:
     }
 
 
+def run_headless(selected_keys: Sequence[str] | None = None, *, out: Callable[[str], None] = print) -> int:
+    """GitHub Remote without the window: the tab's own pre-flight and pipeline, its events printed.
+
+    ``selected_keys`` None selects what the tab pre-selects (both GitHub builds, the Reddit Helper when stale).
+    Ctrl+C is the Emergency Stop: it ends the local step and cancels the runs on GitHub.
+    """
+    mode: ModeName = "github"
+    jobs = jobs_for_mode(mode)
+    names = {job.key: job.name for job in jobs}
+    preflight = run_preflight(mode)
+    for line in (*preflight.notes, *(f"ERROR: {e}" for e in preflight.errors),
+                 *(f"warning: {w}" for w in preflight.warnings)):
+        out(f"[FOUNDRY] {line}")
+    if preflight.errors:
+        return 1
+    if selected_keys is None:
+        helper = helper_build_status(mode)
+        selected = {
+            job.key for job in jobs
+            if job.default_selected and (job.key != "reddit_helper" or helper.needs_rebuild)
+        }
+    else:
+        selected = set(selected_keys)
+    unknown = sorted(selected - set(names))
+    blocked = sorted(selected & preflight.unavailable_jobs)
+    if unknown or blocked or not selected:
+        out(f"[FOUNDRY] Cannot run: unknown {unknown}, unavailable {blocked}" if unknown or blocked
+            else "[FOUNDRY] Nothing selected")
+        return 2
+    out("[FOUNDRY] Selected: " + ", ".join(names[job.key] for job in jobs if job.key in selected))
+    owner = BuildProcessOwner()
+    host = SimpleNamespace(_events=queue.Queue())
+    previous_handler = signal.signal(signal.SIGINT, lambda *_args: owner.cancel())
+    worker = threading.Thread(
+        target=BuildRunnerApp._github_pipeline_worker, args=(host, jobs, selected, preflight, owner), daemon=True,
+    )
+    worker.start()
+    last_status: dict[str, str] = {}
+    try:
+        while True:
+            try:
+                event = host._events.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            kind = event[0]
+            if kind == "pipeline_done":
+                _, success, message, _aborted = event
+                out(f"[FOUNDRY] {message}")
+                return 0 if success else 1
+            key = event[1]
+            name = names.get(key, key)
+            if kind == "job_status":
+                if last_status.get(key) != event[2]:
+                    last_status[key] = event[2]
+                    out(f"[FOUNDRY] {name}: {event[2]}")
+            elif kind == "job_link":
+                out(f"[FOUNDRY] {name}: {event[2]}")
+            elif kind == "job_done":
+                result = event[2]
+                state = "Complete" if result.returncode == 0 else ("Aborted" if result.aborted else "FAILED")
+                out(f"[FOUNDRY] {name}: {state} - {result.detail} (log {result.log_path})")
+            else:
+                out(f"[FOUNDRY] {name}: {kind.removeprefix('job_')}")
+    finally:
+        signal.signal(signal.SIGINT, previous_handler)
+        worker.join(timeout=30)
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unified SRPSS Build Foundry")
     parser.add_argument("--mode", choices=("normal", "venv", "github"))
@@ -3097,6 +3168,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--smoke-test",
         action="store_true",
         help="Validate mode/job/fingerprint routing without opening the GUI or running builds",
+    )
+    parser.add_argument(
+        "--run",
+        action="store_true",
+        help="GitHub Remote only: run the pipeline without the window (Ctrl+C cancels the GitHub runs)",
+    )
+    parser.add_argument(
+        "--select",
+        nargs="+",
+        metavar="JOB",
+        help="with --run: job keys (standard media_center reddit_helper standard_installer media_center_installer)",
     )
     return parser.parse_args(argv)
 
@@ -3109,6 +3191,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         payload = smoke_payload(mode)
         print(json.dumps(payload, indent=2))
         return 0 if payload["success"] else 1
+    if args.run:
+        if args.mode != "github":
+            print("--run is for --mode github; local builds run from the Build Foundry window")
+            return 2
+        return run_headless(args.select)
 
     if sys.platform != "win32":
         print("Warning: the SRPSS Build Foundry is intended for Windows")
