@@ -22,7 +22,7 @@
         "waveform_ribbon_auto_rotate_speed": 6.0,
         "waveform_ribbon_bar_count": 32,
         "waveform_ribbon_bend": [
-          0.4,
+          0.4495798319327712,
           2.4
         ],
         "waveform_ribbon_bloom": [
@@ -45,19 +45,19 @@
         "waveform_ribbon_dynamic_zoom": false,
         "waveform_ribbon_pulse_colour": 0.6,
         "waveform_ribbon_pulse_direction": "Head To Tail",
-        "waveform_ribbon_travel_direction": "Right To Left",
+        "waveform_ribbon_travel_direction": "Left To Right",
         "waveform_ribbon_reaction_mode": "Travelling Pulse",
         "waveform_ribbon_height_mode": "Dynamic Height Shift",
-        "waveform_ribbon_tilt_shift": false,
-        "waveform_ribbon_pulse_fade": 2.5,
-        "waveform_ribbon_pulse_particles": 0.8,
+        "waveform_ribbon_tilt_shift": true,
+        "waveform_ribbon_pulse_fade": 2.051219512195122,
+        "waveform_ribbon_pulse_particles": 1.0,
         "waveform_ribbon_pulse_rim": 2.0,
         "waveform_ribbon_pulse_saturation": 0.5,
-        "waveform_ribbon_pulse_speed": 12.0,
-        "waveform_ribbon_pulse_strands": 0.4,
-        "waveform_ribbon_pulse_width": 2.5,
+        "waveform_ribbon_pulse_speed": 10.528455284552836,
+        "waveform_ribbon_pulse_strands": 0.4322493224932246,
+        "waveform_ribbon_pulse_width": 7.855691056910569,
         "waveform_ribbon_pulse_count": 2,
-        "waveform_ribbon_pulse_falloff": 1.0,
+        "waveform_ribbon_pulse_falloff": 3.227303523035227,
         "waveform_ribbon_frozen_deflate": 0.0,
         "waveform_ribbon_depth": [
           0.2,
@@ -99,7 +99,7 @@
           1.0
         ],
         "waveform_ribbon_impulse": 2.0,
-        "waveform_ribbon_input_gain": 1.0,
+        "waveform_ribbon_input_gain": 1.0778455284552833,
         "waveform_ribbon_lift": [
           0.5,
           1.0
