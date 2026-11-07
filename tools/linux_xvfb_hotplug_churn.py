@@ -17,11 +17,11 @@ Environment, profile isolation and the Mesa OpenGL 4.6 override come from
 
 Example::
 
-    python tools/linux_xvfb_hotplug_churn.py --cycles 3 --work-dir /tmp/srpss_churn
+    python tools/linux_xvfb_hotplug_churn.py --cycles 3
 
-The work directory holds generated images, an isolated settings profile and
-the run's logs (``<work-dir>/logs``). Only the child process gets the profile
-and log locations; nothing outside the work directory is touched.
+The run's logs are published to ``--out`` (``tools/artifact_paths.py``); generated images and the isolated
+settings profile live in the run's owner scratch (or ``--work-dir``), deleted on success and kept on failure.
+Only the child process gets the profile and log locations.
 """
 from __future__ import annotations
 
@@ -33,12 +33,13 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import linux_headless as lh  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools import artifact_paths, evidence_media  # noqa: E402
 
 REPO = lh.REPO
 FIRST = ("MSI", "2560/677x1440/381+0+0", "none")
@@ -104,7 +105,11 @@ def _dump_stacks(pid: int, target: Path) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--work-dir", type=Path, default=None, help="images, profile and logs (default: a new temp dir)")
+    parser.add_argument("--work-dir", type=artifact_paths.evidence_arg, default=None,
+                        help="images and profile (default: this run's owner scratch, deleted on success)")
+    parser.add_argument("--out", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("display", "linux_hotplug_churn"),
+                        help="the run's logs")
     parser.add_argument("--display", default=":98")
     parser.add_argument("--cycles", type=int, default=1, help="remove/re-add cycles after the first add")
     parser.add_argument("--hold", type=float, default=15.0, help="seconds with both monitors before removal")
@@ -124,8 +129,9 @@ def main() -> int:
         print("Linux/Xvfb only")
         return 2
 
-    work = args.work_dir or Path(tempfile.mkdtemp(prefix="srpss_churn_"))
-    images, profile, logs = work / "images", work / "profile", work / "logs"
+    out = evidence_media.redirect_output(args, "out", "linux_xvfb_hotplug_churn")
+    work = args.work_dir or out.parent / "work"
+    images, profile, logs = work / "images", work / "profile", out / "logs"
     shutil.rmtree(logs, ignore_errors=True)
     logs.mkdir(parents=True)
     lh.generate_images(images, args.images)
@@ -179,4 +185,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

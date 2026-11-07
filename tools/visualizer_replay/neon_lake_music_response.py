@@ -30,6 +30,8 @@ import json
 import math
 import sys
 from pathlib import Path
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -276,7 +278,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("music")
     p.add_argument("--clips", required=True)
-    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     p = sub.add_parser("response")
     p.add_argument("--clips", required=True)
     p.add_argument("--preset", type=int, default=1)
@@ -285,12 +287,13 @@ def main() -> None:
     p.add_argument("--start", type=float, default=0.0)
     p.add_argument("--duration", type=float)
     p.add_argument("--set", action="append", default=[], metavar="KEY=JSON")
-    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     p = sub.add_parser("report")
     p.add_argument("--music", type=Path, required=True)
     p.add_argument("--response", action="append", required=True, help="name=path.npy")
-    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "out", "neon_lake_music_response")
     if args.command == "music":
         from tools.visualizer_replay.waveform_music_response import music
         music([Path(c) for c in args.clips.split(",")], args.out)
@@ -307,3 +310,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    evidence_media.finish(0)

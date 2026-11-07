@@ -487,6 +487,21 @@ python tools/test_oracle_review.py
 
 `test_durability_audit.py` is blocking and intentionally high-confidence. The other two commands are review queues and always remain advisory. A review queue never changes suite selection, creates a skip/xfail, stops execution or becomes a request for operator action.
 
+### 3.7 Temporary files and tool output
+
+- **pytest temp folders** stay pytest's default (per-run numbered folders under `%TEMP%\pytest-of-<user>`, the
+  last 3 runs kept). `tmp_path_retention_policy = failed` was tried and reverted (7 Nov): some tests still read a
+  folder an earlier test created (Current_Plan.md §3).
+  Never put `--basetemp` in `addopts`: pytest wipes the basetemp at session start, so concurrent runs (agents,
+  chunked isolation) would delete each other's folders. An explicit `--basetemp` for one manual run is fine.
+- A test never creates a folder it does not remove: use `tmp_path`, `TemporaryDirectory` or an in-place atomic
+  `mkstemp(dir=...)`; never `tempfile.mkdtemp()`, `delete=False` or `gettempdir()` without guaranteed removal
+  (a subprocess probe takes the test's `tmp_path` as an argument). Tool CLIs write only into the evidence layout
+  (`tools/artifact_paths.py`, `Docs/Reference/Harness_Index.md` §0); tests that drive a CLI redirect the layout
+  with `artifact_paths.use_root(tmp_path / ".artifacts")`.
+- Guard: `tests/test_artifact_paths_contract.py` (hard-coded write roots, unrouted output arguments, PNG
+  evidence, temp-folder leaks in `tools/` and `tests/`, this pytest setting).
+
 ## 4. Evidence levels
 
 Use the minimum relevant combination, but never claim a higher level from a lower one:

@@ -30,6 +30,12 @@ import statistics
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 RECORD = 6                       # ambient record stride: x, y, diameter, alpha, glow, kind
 TV_EXTENT = (3874.7, 1449.5)
@@ -711,7 +717,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     def common(p):
-        p.add_argument("--out-dir", type=Path, required=True)
+        p.add_argument("--out-dir", type=artifact_paths.evidence_arg, required=True)
         p.add_argument("--prefix", default="glow")
         p.add_argument("--clip", default="balanced")
         p.add_argument("--recordings", type=Path, default=_default_recordings())
@@ -755,6 +761,7 @@ def main() -> None:
     p.add_argument("--seconds", type=float, default=20.0)
     p.add_argument("--extent-list", nargs="+", default=["canonical", "tv"])
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "out_dir", "bubble_particle_glow")
     QGuiApplication.instance() or QGuiApplication([])
     install_variant(args.variant)
     {"profile": cmd_profile, "flicker": cmd_flicker, "shimmer": cmd_shimmer, "perf": cmd_perf,
@@ -763,3 +770,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    evidence_media.finish(0)

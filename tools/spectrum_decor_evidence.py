@@ -24,6 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from tools import artifact_paths, evidence_media  # noqa: E402
 
 MODE = "spectrum"
 SCALES = (1.0, 2.0)                  # the canonical 420x280 card, and the same card at 2x
@@ -540,6 +541,15 @@ def main(argv=None) -> int:
     sub.choices["presets"].add_argument("--scale", type=float, default=1.0)
     sub.add_parser("cost").add_argument("path", type=Path, nargs="?")
     args = parser.parse_args(argv)
+    if args.command != "compare" and args.path is not None:
+        # Outputs go through the owner (tools/artifact_paths.py); PNGs are published as WebP on success. A
+        # baseline's pixels.npz (what compare reads) is data and is kept as is.
+        try:
+            args.path = artifact_paths.checked_output(args.path)
+        except artifact_paths.ArtifactPathError as exc:
+            parser.error(str(exc))
+        if args.command != "cost":
+            evidence_media.redirect_output(args, "path", "spectrum_decor_evidence")
     if args.command == "baseline":
         return cmd_baseline(args.path)
     if args.command == "compare":
@@ -552,4 +562,4 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

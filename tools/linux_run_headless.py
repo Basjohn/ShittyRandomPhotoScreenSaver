@@ -8,11 +8,13 @@ evidence limits: ``tools/linux_headless.py``.
 
 Examples::
 
-    python tools/linux_run_headless.py --work-dir /tmp/srpss_run --seconds 25 --shots 6,14,24
+    python tools/linux_run_headless.py --seconds 25 --shots 6,14,24
     python tools/linux_run_headless.py --mode /c --seconds 15 --shots 10
     python tools/linux_run_headless.py --keep-widgets -- --debug
 
-Arguments after ``--`` are passed to ``main.py`` unchanged.
+Arguments after ``--`` are passed to ``main.py`` unchanged. Logs and shots (as WebP) are published to
+``--out`` (``tools/artifact_paths.py``); images and the profile live in the run's owner scratch, deleted
+on success and kept on failure.
 """
 from __future__ import annotations
 
@@ -20,7 +22,6 @@ import argparse
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from collections import Counter
 from pathlib import Path
@@ -28,6 +29,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import linux_headless as lh  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools import artifact_paths, evidence_media  # noqa: E402
 
 _HEADLINE = re.compile(r"(WARNING|ERROR|CRITICAL)")
 
@@ -57,7 +60,11 @@ def _log_findings(log: Path) -> list[tuple[int, str]]:
 def main() -> int:
     lh.require_linux()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--work-dir", type=Path, default=None, help="images, profile, logs, shots (default: new temp dir)")
+    parser.add_argument("--work-dir", type=artifact_paths.evidence_arg, default=None,
+                        help="images and profile, to reuse with --no-seed (default: this run's owner scratch, deleted on success)")
+    parser.add_argument("--out", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("display", "linux_headless"),
+                        help="logs and shots (shots published as WebP)")
     parser.add_argument("--display", default=":97")
     parser.add_argument("--geometry", default="1920x1080x24")
     parser.add_argument("--mode", default="/s", help="main.py mode argument: /s or /c")
@@ -72,8 +79,10 @@ def main() -> int:
     parser.add_argument("main_args", nargs="*", help="extra main.py arguments (after --)")
     args = parser.parse_args()
 
-    work = (args.work_dir or Path(tempfile.mkdtemp(prefix="srpss_linux_"))).resolve()
-    images, profile, logs, shots = work / "images", work / "profile", work / "logs", work / "shots"
+    out = evidence_media.redirect_output(args, "out", "linux_run_headless")
+    # Inputs live beside the published output in the same scratch run: deleted on success, kept on failure.
+    work = (args.work_dir or out.parent / "work").resolve()
+    images, profile, logs, shots = work / "images", work / "profile", out / "logs", out / "shots"
     for folder in (logs, shots):
         folder.mkdir(parents=True, exist_ok=True)
         for stale in folder.iterdir():
@@ -122,4 +131,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

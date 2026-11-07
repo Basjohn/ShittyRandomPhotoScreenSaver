@@ -24,6 +24,11 @@ from __future__ import annotations
 import statistics
 
 from .driver import mode_output, replay_clip
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
 
 MODES = ("spectrum", "oscilloscope", "devcurve", "shockwave_grid", "bubble")
 BANDS = (("quiet", 0.0, 0.35), ("usual", 0.35, 0.75), ("loud", 0.75, 9.0))
@@ -165,7 +170,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--modes", nargs="*", default=list(MODES), choices=MODES)
-    parser.add_argument("--save", type=Path, help="write the readings as JSON")
+    parser.add_argument("--save", type=artifact_paths.evidence_arg, help="write the readings as JSON")
     parser.add_argument("--compare", type=Path, help="print each reading's ratio to a saved run")
     args = parser.parse_args()
     QCoreApplication.instance() or QCoreApplication([])

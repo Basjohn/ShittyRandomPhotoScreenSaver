@@ -36,6 +36,8 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -261,20 +263,21 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("music")
     p.add_argument("--clips", required=True)
-    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     p = sub.add_parser("response")
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--inputs", type=Path, required=True)
     p.add_argument("--presets", default="1,4,7")
-    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     p.add_argument("--mode", help="override the presets' Reaction Mode")
     p.add_argument("--direction", help="override the presets' Pulse Direction")
     p.add_argument("--breathing", type=float, help="override the presets' Breathing")
     p = sub.add_parser("report")
     p.add_argument("--music", type=Path, required=True)
     p.add_argument("--response", action="append", required=True, help="name=path.npy")
-    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "out", "waveform_music_response")
     if args.command == "music":
         music([Path(c) for c in args.clips.split(",")], args.out)
     elif args.command == "response":
@@ -286,3 +289,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    evidence_media.finish(0)

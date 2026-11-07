@@ -21,6 +21,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -239,7 +244,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clip", type=Path, action="append", required=True)
     parser.add_argument("--preset", type=int, default=1)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--label", default="run")
     args = parser.parse_args()
     parameters, nodes = preset_parameters(args.preset)

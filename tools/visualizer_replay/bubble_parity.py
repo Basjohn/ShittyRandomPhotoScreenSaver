@@ -20,6 +20,12 @@ from pathlib import Path
 import subprocess
 
 from .bubble_fidelity import replay_bubbles
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 CLIPS = ('nightsolong_acousticsoft1', 'ragdoll_quiet_intro_loud_end1',
@@ -214,11 +220,12 @@ def capture(output, *, recordings=ROOT/'logs/visualizer_recordings', compare=Non
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
     parser.add_argument('--recordings',type=Path,default=ROOT/'logs/visualizer_recordings')
     parser.add_argument('--compare',type=Path)
     parser.add_argument('--gpu',action='store_true')
     args=parser.parse_args()
+    evidence_media.redirect_output(args, "output", "bubble_parity")
     result=capture(args.output,recordings=args.recordings,compare=args.compare,gpu=args.gpu)
     if args.compare and not all(item['comparison']['equal'] and
             item['comparison']['resolved_settings_equal'] and
@@ -228,3 +235,4 @@ def main():
 
 if __name__=='__main__':
     main()
+    evidence_media.finish(0)

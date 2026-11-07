@@ -26,6 +26,17 @@ This is the **short preflight**, not a second documentation authority. Use the f
   - **Durable visual evidence is small WebP:** a frame sequence becomes one animated WebP at 24 fps, under 10 MB and
     reduced in size; a still becomes a still WebP. Keep summaries, tables and contact sheets. Never keep raw frame
     folders, per-run profile copies or duplicated source trees in `.artifacts/evidence`.
+  - **One layout, one owner (`tools/artifact_paths.py`):** visual evidence in
+    `.artifacts/webp/<area>/<topic>/<YYYYMMDD>_<label>.webp`, data in
+    `.artifacts/evidence/<area>/<topic>/<YYYYMMDD>_<label>/`, temporary files in `.artifacts/scratch/<owner>/`.
+    Tool output arguments are refused outside it (never `logs/`, `%TEMP%` or your session scratchpad), PNGs
+    exist only in owner scratch and are published as WebP when the tool succeeds; a failed tool keeps its
+    scratch for debugging and `python tools/artifact_paths.py prune-scratch --apply` clears it later. Nothing
+    deletes `logs/`. Guard: `tests/test_artifact_paths_contract.py`; details: `Docs/Reference/Harness_Index.md` §0.
+  - **Never leave anything in `%TEMP%`:** tests use `tmp_path` (pytest keeps only failed tests' folders), tools
+    use owner scratch, never `tempfile.mkdtemp()`/`delete=False`/`gettempdir()` without guaranteed removal. Your
+    ad-hoc scripts and stdout captures live in your own scratchpad subfolder; heavy output (renders, live checks,
+    worktrees, profiles) goes to `.artifacts/scratch/<owner>/`, never `%TEMP%` or the scratchpad.
   - Delete your own scratch, temporary worktrees and `tmp/` items before reporting.
   - Never touch the operator's recordings (`logs/visualizer_recordings`), `release/` or `.venv`.
   - Listing of the 7 Nov conversion: `.artifacts/evidence/frame_webps_20261107.md`.

@@ -34,6 +34,7 @@ from core.gmail.gmail_preparation import (
     write_gmail_email_cache,
 )
 from core.logging.logger import get_logger
+from core.network.interruptible_socket import SocketInterrupt
 from core.performance import record_widget_timer_result
 from core.runtime_flags import automatic_service_updates_enabled
 from core.settings.storage_paths import resolve_app_data_dir
@@ -232,6 +233,10 @@ class _SharedGmailRuntimeOwner:
 
         self._fetch_lock = threading.Lock()
         self._fetch_in_progress = False
+        # Interrupt handles of this owner's network sessions in flight (fetch
+        # and actions), guarded by ``_fetch_lock``. ``stop()`` interrupts them
+        # so a blocked IMAP step never holds the destruction barrier.
+        self._session_interrupts: set[SocketInterrupt] = set()
         self._fetch_request_id = 0
         self._refresh_gate_claim = None
         self._startup_cache_request_id = 0
@@ -697,6 +702,29 @@ class _SharedGmailRuntimeOwner:
                 None,
             )
 
+    def _open_session_interrupt(self, client: Any) -> SocketInterrupt | None:
+        """An interrupt for one network session, when the client accepts one."""
+        if not bool(getattr(client, "supports_session_interrupt", False)):
+            return None
+        interrupt = SocketInterrupt()
+        with self._fetch_lock:
+            self._session_interrupts.add(interrupt)
+        return interrupt
+
+    def _close_session_interrupt(self, interrupt: SocketInterrupt | None) -> None:
+        if interrupt is None:
+            return
+        with self._fetch_lock:
+            self._session_interrupts.discard(interrupt)
+        interrupt.release()
+
+    def _interrupt_sessions(self) -> None:
+        with self._fetch_lock:
+            live = tuple(self._session_interrupts)
+            self._session_interrupts.clear()
+        for interrupt in live:
+            interrupt.interrupt()
+
     def _fetch_is_retired(self, owner_generation: int, request_id: int) -> bool:
         return bool(
             self._retired
@@ -710,9 +738,14 @@ class _SharedGmailRuntimeOwner:
         *, _gate_claim=None,
     ) -> None:
         publication_queued = False
+        # Registered before the first cancellation check: ``stop()`` advances
+        # the request identity before it interrupts, so a stop on either side
+        # of this registration ends the session promptly.
+        interrupt = self._open_session_interrupt(client)
         try:
             if self._fetch_is_retired(owner_generation, request_id):
                 return
+            session_kwargs = {"interrupt": interrupt} if interrupt is not None else {}
             try:
                 emails = client.list_messages(
                     max_results=self._config.fetch_window_capacity,
@@ -720,6 +753,7 @@ class _SharedGmailRuntimeOwner:
                     should_cancel=lambda: self._fetch_is_retired(
                         owner_generation, request_id
                     ),
+                    **session_kwargs,
                 )
             except TypeError as exc:
                 if "should_cancel" not in str(exc):
@@ -786,6 +820,7 @@ class _SharedGmailRuntimeOwner:
                     "[GMAIL_RUNTIME] run_on_ui_thread failed, dropping fetch error"
                 )
         finally:
+            self._close_session_interrupt(interrupt)
             self._end_fetch(request_id)
             if _gate_claim is not None and not publication_queued:
                 # A cancellation/dispatch failure cannot leave a transition
@@ -1017,10 +1052,27 @@ class _SharedGmailRuntimeOwner:
         def _execute() -> None:
             success = False
             error: str | None = None
+            owner = owner_ref()
+            interrupt = owner._open_session_interrupt(client) if owner is not None else None
+            if owner is not None and interrupt is not None and (
+                request_id != owner._action_request_id or owner._retired
+            ):
+                # Stopped before this session registered: never start it.
+                interrupt.interrupt()
+            owner = None
             try:
-                success = bool(method(message_id))
+                if interrupt is not None:
+                    success = bool(method(message_id, interrupt=interrupt))
+                else:
+                    success = bool(method(message_id))
             except Exception as exc:
                 error = str(exc)
+            finally:
+                live_owner = owner_ref()
+                if live_owner is not None:
+                    live_owner._close_session_interrupt(interrupt)
+                elif interrupt is not None:
+                    interrupt.release()
 
             def _deliver() -> None:
                 owner = owner_ref()
@@ -1158,6 +1210,9 @@ class _SharedGmailRuntimeOwner:
         self._action_in_progress = False
         self._refreshing = False
         self._stop_poll_timer()
+        # After the identities advanced: end every network session in flight
+        # so the retiring generation's IO work settles at once.
+        self._interrupt_sessions()
 
     def retire(self) -> None:
         if self._retired:

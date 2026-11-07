@@ -28,10 +28,14 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 import time
 from ctypes import wintypes
 from pathlib import Path
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -250,7 +254,7 @@ def run_launch(args) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--profile-settings", default=None,
                         help="settings_v2.json to copy (default: the real SRPSS profile)")
     parser.add_argument("--opens", type=int, default=2)
@@ -313,7 +317,9 @@ def main() -> int:
     source = Path(args.profile_settings) if args.profile_settings else (
         Path(os.environ["APPDATA"]) / "SRPSS" / "settings_v2.json"
     )
-    base = Path(tempfile.mkdtemp(prefix="srpss_settings_probe_"))
+    # Owner scratch (tools/artifact_paths.py), never %TEMP%: deleted on success, kept on failure.
+    from tools import artifact_paths
+    base = artifact_paths.run_scratch("settings_window_probe", "profile")
     (base / "SRPSS").mkdir(parents=True)
     if source.exists():
         shutil.copy2(source, base / "SRPSS" / "settings_v2.json")
@@ -361,7 +367,7 @@ def main() -> int:
             opens.append({"dialog_hwnd": dialog_hwnd, "other_toplevel_shows": shown})
     finally:
         recorder.stop()
-        shutil.rmtree(base, ignore_errors=True)
+    artifact_paths.discard_run_scratch("settings_window_probe")
 
     report = {"pid": recorder.pid, "self_test": self_test, "source_settings": str(source), "opens": opens,
               "events": recorder.events}

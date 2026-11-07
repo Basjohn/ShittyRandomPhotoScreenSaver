@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -75,7 +76,7 @@ def report_before(rev: str, name: str) -> dict | None:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", type=Path)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg)
     parser.add_argument("--before-rev")
     args = parser.parse_args(argv)
     manifest = json.loads((CLIPS / "clips.json").read_text(encoding="utf-8"))["clips"]

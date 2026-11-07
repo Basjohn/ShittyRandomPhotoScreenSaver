@@ -13,6 +13,8 @@ import math
 from pathlib import Path
 import subprocess
 import sys
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
@@ -71,13 +73,14 @@ def projected_sphere(view, radius, span, size):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clip',type=Path,required=True)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
     from core.settings.visualizer_presets import get_custom_preset_index
     parser.add_argument('--preset',type=int,default=1,
                         choices=range(1,get_custom_preset_index('extruded_bubble')+1))
     parser.add_argument('--at',type=float,default=4.)
     parser.add_argument('--size',default='1672x941')
     args=parser.parse_args()
+    evidence_media.redirect_output(args, "output", "extruded_bubble_world_probe")
     if args.at<=0:parser.error('--at must be positive')
     size=tuple(map(int,args.size.split('x')))
     if len(size)!=2 or min(size)<=0:parser.error('positive WIDTHxHEIGHT required')
@@ -143,4 +146,7 @@ def main():
         host.release_resources();target.close()
 
 
-if __name__=='__main__':main()
+if __name__ == '__main__':
+    main()
+    evidence_media.finish(0)
+

@@ -15,8 +15,8 @@ The floor uses saved generated concrete colour, roughness and smooth wet-surface
 (S3D-5): ribbon light drawn through the mirrored camera, sampled at the floor's own screen position,
 streaked and blurred by wet roughness and perturbed by the micro-surface.
 
-    .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_lab.py --output .artifacts/evidence/waveform_ribbon/<new-run>
-        [--cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection] [--recipe complete|alternate|range]
+    .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_lab.py --output .artifacts/evidence/visualizers/waveform_ribbon/lab/<YYYYMMDD>_<label>
+        [--cards <lossless preflight cards in .artifacts/scratch/<owner>/>] [--recipe complete|alternate|range]
 
 Named looks (``RECIPES``) share every program and function; they differ in values only.
 """
@@ -50,6 +50,8 @@ from rendering.quick.scene3d.waveform import (WaveformScene, gradient_at, colour
     capped, floor_vertices, load_floor_textures)
 from tools.labs.render_target import OffscreenRenderTarget
 from tools.labs.waveform_ribbon_targets import ENVELOPE
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 # Lab poses author inputs only. The production grounded Perspective camera is shared;
 # the older WR-00 camera is historical evidence.
@@ -334,11 +336,13 @@ def run(output: Path, cards: Path | None, *, board: str = 'primary', recipe_name
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=artifact_paths.evidence_arg, required=True)
     parser.add_argument('--cards', type=Path)
     parser.add_argument('--board', choices=('primary','fog'), default='primary')
     parser.add_argument('--recipe', choices=tuple(RECIPES), default='complete',
                         help='named look: the complete-scene board, the alternate board, or the preset-range board')
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "waveform_ribbon_lab")
     result = run(args.output, args.cards, board=args.board, recipe_name=args.recipe)
     print(json.dumps({state: {k: v for k, v in r.items() if k != 'rows'} for state, r in result['landmarks'].items()}, indent=2))
+    evidence_media.finish(0)

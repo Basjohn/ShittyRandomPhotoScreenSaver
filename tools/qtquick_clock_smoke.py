@@ -37,6 +37,12 @@ from rendering.quick.widgets.host import (  # noqa: E402
     OrdinaryWidgetPresentationHost,
     OverlayWidgetGeometry,
 )
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def _shadow_values(direction: str) -> dict[str, object]:
@@ -273,11 +279,19 @@ def run(output_dir: Path) -> dict[str, object]:
     return payload
 
 
+
+def _run_published(output_dir: Path) -> dict[str, object]:
+    """``run`` in an owner scratch folder; its PNGs are published to ``output_dir`` as WebP evidence."""
+    with evidence_media.evidence_workspace('qtquick_clock_smoke', output_dir) as work:
+        return run(work)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-dir", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("widgets", "clock_smoke"))
     args = parser.parse_args()
-    payload = run(args.output_dir.resolve())
+    payload = _run_published(args.output_dir)
     print(json.dumps(payload, indent=2))
     return 0
 

@@ -33,6 +33,7 @@ import subprocess
 import sys
 import time
 from unittest.mock import patch
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -339,7 +340,7 @@ def main() -> int:
     parser.add_argument("--duration", type=float, default=30.0)
     parser.add_argument("--alloc", action="store_true", help="trace allocation peaks per tick instead of timing")
     parser.add_argument("--profile", type=int, default=0, metavar="N", help="cProfile: top N by cumulative time")
-    parser.add_argument("--json", type=Path, help="also write the full result here")
+    parser.add_argument("--json", type=artifact_paths.evidence_arg, help="also write the full result here")
     args = parser.parse_args()
     overrides = {}
     for item in args.set:

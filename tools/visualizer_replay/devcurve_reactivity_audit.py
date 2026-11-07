@@ -26,6 +26,12 @@ import sys
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -252,7 +258,7 @@ def space_time_map(rows, path: Path, *, layer: str | None = None, fps: float = 4
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clip", type=Path, action="append", required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--preset", type=int, default=1)
     parser.add_argument("--seconds", type=float)
     parser.add_argument("--recorded-bands", action="store_true", help="serve the recorder's pre-AGC lanes")
@@ -260,6 +266,7 @@ def main():
     parser.add_argument("--map-seconds", type=float, default=20.0)
     parser.add_argument("--label", default="run")
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "devcurve_reactivity_audit")
     args.output.mkdir(parents=True, exist_ok=True)
     report = {}
     for clip in args.clip:
@@ -276,3 +283,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    evidence_media.finish(0)

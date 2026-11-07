@@ -19,6 +19,11 @@ if str(REPO_ROOT) not in sys.path:
 from core.feeds.news import NEWS_CATEGORIES, NEWS_PROVIDERS
 from core.feeds.normalization import redacted_url_for_log
 from core.feeds.probe import probe_feed_url
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 def probe(label: str, url: str, *, max_items: int = 50) -> dict:
@@ -59,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--url", action="append", default=[], help="custom feed URL; may be supplied more than once")
     parser.add_argument("--catalog", action="store_true", help="probe every shipped NEWS publisher feed")
     parser.add_argument("--category", choices=tuple(category.category for category in NEWS_CATEGORIES))
-    parser.add_argument("--json", dest="json_path", help="optional output JSON path")
+    parser.add_argument("--json", type=artifact_paths.evidence_arg, dest="json_path", help="optional output JSON path")
     args = parser.parse_args(argv)
 
     targets: list[tuple[str, str]] = []
