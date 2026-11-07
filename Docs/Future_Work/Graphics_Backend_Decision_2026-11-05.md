@@ -123,6 +123,47 @@ could be going fullscreen."
 A makes B cheaper (the packet layout is fixed and already off-thread). C slots into B's frame graph. Together they
 cover all three measured costs: the logical tick's GIL, the render thread's Python, and GPU fill.
 
+**One core for everything we draw ourselves, never GL and Vulkan mixed** (operator, 7 Nov: "would transitions have
+their own native core as well? I cannot imagine combining Vulkan and GL is very efficient").
+- **One backend per window:** Qt Quick runs one RHI backend per window, and every render node in that window's scene
+  graph must speak it. A Vulkan window cannot host our Python OpenGL nodes, and nothing mixes the two in one frame.
+- **One core, written against QRhi (not raw Vulkan):** B is a single native core for every custom-rendered surface:
+  Visualizer modes, transitions (the fullscreen-pass family, Crumble, Particle, 3D Block Spins…), the image presenter
+  and background nodes, and the Scene3D substrate. Transitions do not get a second core; they share the core's pass
+  and resource substrate, and they are among the cheapest ports.
+- **QRhi runs on GL too:** the window stays on Qt's OpenGL RHI backend while pieces move one at a time. Both Python
+  GL nodes and QRhi-native nodes run on GL during the migration.
+- **The flip:** when nothing raw-GL is left, the window flips to Vulkan (or D3D12) by Qt setting, with no second
+  port. Qt's own items and our `.qsb` material shaders are already RHI-native.
+- **Order inside P3:**
+  1. the core substrate;
+  2. Spectrum (parity proof);
+  3. the transitions' shared fullscreen pass (most transitions at once);
+  4. Waveform Ribbon and Extruded Bubble;
+  5. the rest;
+  6. the backend flip, behind a setting with the GL backend kept as the fallback until physical acceptance.
+
+**Temporal upscaling and frame generation (DLSS 4+, FSR 3+): kept open, scoped to where they can help** (operator, 7
+Nov: "We also should not close the door on whatever small benefits FSR3+ or DLSS 4+ could give us and *where*").
+- **Prerequisite:** both need the native core on Vulkan or D3D12. Neither has an OpenGL path, and both integrate
+  through the RHI's native handles (Streamline/NGX for DLSS, the FidelityFX SDK for FSR).
+- **Where super-resolution can help:**
+  - **Candidates:** the 3D scene pass of upscaler-friendly modes at full display or 4K: soft-shaded, few hairlines
+    (Extruded Bubble's bubbles and water; future Melt Pool and Usu Moonscape surfaces).
+  - **Scope:** only that pass is upscaled. Lines, dots, particles, rims, HUD and cards composite afterwards at
+    native resolution.
+  - **Each candidate mode supplies** motion vectors, depth, a jittered projection, and reactive/transparency masks.
+  - **Opt-in per mode, off by default,** accepted only on an A/B of renders and the music-response traces.
+- **Where it cannot help:** line, dot and particle-dominated modes (Spectrum, Oscilloscope, Spline Curve, Neon Lake's
+  wire terrain, Waveform Ribbon's strands and sparks), and every transition: temporal reconstruction smears exactly
+  what they are made of.
+- **Frame generation:**
+  - **At most** an opt-in for full display at high refresh on slow ambient scenes, with its added latency measured.
+  - **Never on by default:** interpolated frames blur music-driven hits, which are the point.
+- **DLSS ray reconstruction:** only if a mode ever ray traces; none does.
+- **What changes in the Decision:** whole-frame upscaling stays rejected. Per-pass upscaling on a scene layer
+  becomes a permitted, measured option after B.
+
 **Secondary options:**
 - **D. Per-mode GPU simulation** (a ribbon's per-vertex motion, strands, particle populations): only where a profile
   after A shows the simulation itself dominates. Identity becomes tolerance-based, judged on renders.
