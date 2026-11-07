@@ -5421,6 +5421,34 @@ class DisplayManager(QObject):
         elif not destination_screens:
             self._transition_work_pending = bool(pending)
 
+    def covered_image_destination_screens(self) -> frozenset[int]:
+        """Screens left out of the next image batch: covered by the Expanded Visualizer and already showing an image.
+
+        Plan 01 E0 (``02_E0_Covered_Display_Admission.md``), M4: a covered display keeps its pre-cover wallpaper, still
+        under the translucent display-wide card, and takes no queue advance, decode, upload, transition or material
+        refresh. A display with no authoritative image yet is never left out (its first image is a direct publish, and
+        nothing would sit under the card). Read once per batch, synchronously with its admission, by the image paths;
+        prefetch and monitor replay still see every display.
+        """
+
+        coordinator = self._expanded_display_coordinator
+        unit = getattr(coordinator, "covered_unit", None) if coordinator is not None else None
+        if unit is None:
+            return frozenset()
+        screen_index = int(getattr(unit, "screen_index", -1))
+        if (
+            screen_index in self.current_images
+            and screen_index in self._selected_destination_screen_indices()
+        ):
+            return frozenset({screen_index})
+        return frozenset()
+
+    def has_admitted_image_destination(self) -> bool:
+        """Whether an image batch would have any destination (False only when every selected display is covered)."""
+
+        selected = self._selected_destination_screen_indices()
+        return not selected or bool(selected - self.covered_image_destination_screens())
+
     def has_transition_work_pending(self) -> bool:
         """Return True if image-change work is pending or any transition is running."""
         if self._transition_work_pending:

@@ -1186,6 +1186,56 @@ def _snapshot_display_processing_targets(
     return targets
 
 
+def _leave_out_covered_destinations(
+    display_manager: object,
+    targets: tuple[DisplayProcessingDescriptor, ...],
+) -> tuple[tuple[DisplayProcessingDescriptor, ...], frozenset[int]]:
+    """The batch's admitted targets and the covered screens left out (plan 01 E0, M4).
+
+    A covered screen that already shows an image is omitted from the open batch through the existing per-screen
+    omission receipt, before any work for it, so the batch's expected set and its processing targets agree. Read
+    synchronously with the batch admission (the caller runs inside it).
+    """
+
+    query = getattr(display_manager, "covered_image_destination_screens", None)
+    covered = frozenset(query()) if callable(query) else frozenset()
+    if not covered:
+        return targets, covered
+    omit = getattr(display_manager, "set_transition_work_pending", None)
+    admitted = tuple(target for target in targets if int(target.screen_index) not in covered)
+    for screen_index in sorted(covered):
+        if callable(omit):
+            omit(False, screen_index=screen_index)
+    logger.info(
+        "[EXPANDED_VIS][BATCH] covered screen(s) %s keep their image; batch targets %s",
+        sorted(covered),
+        [int(target.screen_index) for target in admitted],
+    )
+    return admitted, covered
+
+
+def _history_with_covered(
+    engine: "ScreensaverEngine",
+    all_targets: tuple[DisplayProcessingDescriptor, ...],
+    covered: frozenset[int],
+    admitted_metas: list,
+) -> list:
+    """One history entry per display in display order: a covered display keeps the meta it last showed."""
+
+    if not covered:
+        return list(admitted_metas)
+    history = getattr(engine, "_display_image_history", None) or []
+    prior = list(history[-1]) if history else []
+    admitted = iter(admitted_metas)
+    entry = []
+    for position, target in enumerate(all_targets):
+        if int(target.screen_index) in covered:
+            entry.append(prior[position] if position < len(prior) else None)
+        else:
+            entry.append(next(admitted, None))
+    return entry
+
+
 def _image_meta_path(meta: Optional[ImageMetadata]) -> str:
     if meta is None:
         return ""
@@ -1569,7 +1619,8 @@ def load_and_display_image_async(
         return False
 
     runtime_generation, display_manager = _capture_runtime_identity(engine)
-    processing_targets = _snapshot_display_processing_targets(display_manager)
+    all_targets = _snapshot_display_processing_targets(display_manager)
+    processing_targets, covered = _leave_out_covered_destinations(display_manager, all_targets)
     if not processing_targets:
         logger.error("[ASYNC] Quick image publication has no processing targets")
         return False
@@ -1856,8 +1907,8 @@ def load_and_display_image_async(
                 else:
                     logger.info(f"[ASYNC] Different images displayed on {len(displayed_paths)} displays")
 
-            # Record per-display history for previous-image support
-            _record_display_history(engine, image_metas)
+            # Record per-display history for previous-image support (a covered display keeps its entry)
+            _record_display_history(engine, _history_with_covered(engine, all_targets, covered, image_metas))
 
             schedule_prefetch(engine)
             engine._loading_in_progress = False
@@ -1951,6 +2002,17 @@ def load_and_display_image_async_with_metas(
     # Pad metas to match display count
     while len(image_metas) < len(processing_targets):
         image_metas.append(image_metas[-1] if image_metas else None)
+    # History is per display in display order; a covered display keeps its image (plan 01 E0, M4).
+    admitted_targets, covered = _leave_out_covered_destinations(display_manager, processing_targets)
+    if covered:
+        image_metas = [
+            meta for target, meta in zip(processing_targets, image_metas)
+            if int(target.screen_index) not in covered
+        ]
+        processing_targets = admitted_targets
+        if not processing_targets:
+            logger.error("[ASYNC-PREV] Every display is covered; previous image not admitted")
+            return False
 
     def _do_load() -> Optional[Dict]:
         try:

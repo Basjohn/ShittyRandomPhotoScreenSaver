@@ -156,6 +156,14 @@ class ExpandedDisplayCoordinator:
         return self._state.phase
 
     @property
+    def covered_unit(self) -> Any:
+        """The unit whose display the Expanded Visualizer covers (None: none): covered as the enter starts, uncovered
+        as a collapse, a failed or cancelled enter, or a retirement starts (the M3 widget cover's own edges). The
+        display manager leaves it out of image batches while it already shows an image (plan 01 E0, M4)."""
+
+        return self._cover_unit
+
+    @property
     def blocks_ordinary_layout(self) -> bool:
         """True while the view is, or is becoming, display-wide: ordinary layout gestures wait."""
 

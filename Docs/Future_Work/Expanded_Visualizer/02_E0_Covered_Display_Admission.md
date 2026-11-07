@@ -100,6 +100,21 @@ Rules:
 (c) The last uncovered screen becomes covered mid-batch: its running transition completes, the batch closes, later
 edges are no-ops until a collapse commits.
 
+## Built (8 Nov)
+
+- `ExpandedDisplayCoordinator.covered_unit` (M3's cover edges) -> `DisplayManager.covered_image_destination_screens()`
+  and `has_admitted_image_destination()`.
+- `engine/image_pipeline.py` `_leave_out_covered_destinations`: both image paths (next and previous) drop the covered
+  screens through the existing per-screen omission receipt (`set_transition_work_pending(False, screen_index=...)`)
+  before any work; `_history_with_covered` keeps one history entry per display, the covered one carrying its last
+  meta. Prefetch and monitor replay still see every display.
+- `engine/screensaver_engine.py` `image_destination_admitted`: `_show_next_image` and `_on_previous_requested` return
+  before the claim, the queue and the history when every display is covered.
+- Tests: `tests/test_expanded_visualizer_covered_batch.py` (real batch accounting + real pipeline; disabling the
+  exclusion turns 5 of 8 red, the other 3 are the uncovered controls).
+- Known limit: a Previous while covered rewinds the covered display's history entry although its image stays (it
+  shows the pre-cover image either way, and the next edge after a collapse rewrites it).
+
 ## Gate (M4 "Gate 4", restated as tests)
 
 - Pure state tests on `DisplayManager` with fake units: admitted set frozen at open; expected == processing targets;

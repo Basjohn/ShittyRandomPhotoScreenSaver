@@ -648,7 +648,8 @@ can most geometry normally."
 
 **Milestone 4 | Wallpaper transition policy and GPU savings**
 
-- [x] Complete E0 diagram ([02_E0](02_E0_Covered_Display_Admission.md)). - [ ] Implement batch-safe covered-display receipt/omission policy; test both screens with staggered, asynchronous transitions and image queue/history.
+- [x] Complete E0 diagram ([02_E0](02_E0_Covered_Display_Admission.md)). - [x] Exclusion at admission built 8 Nov
+  (02_E0 "Built"); measurement below still open. - [ ] Implement batch-safe covered-display receipt/omission policy; test both screens with staggered, asynchronous transitions and image queue/history.
 - [ ] Only after baseline receipt, suppress admitted GPU effect work on covered display; deeper source/decode/prefetch suppression optional and separately proven.
 - [ ] **Gate 4:** another display still uses authored transition; covered display has no backlog or stalled batch; collapse re-enters safely. Record true GPU/CPU improvement vs original; no unmeasured 'dormant' claim.
 

@@ -210,6 +210,24 @@ class EngineState(Enum):
     SHUTTING_DOWN = auto()    # During stop() with exit_app=True (terminal)
 
 
+def image_destination_admitted(engine, origin: str) -> bool:
+    """False when every selected display is covered by the Expanded Visualizer (plan 01 E0, M4).
+
+    Checked before the image-change claim and before the queue or history moves, so a fully covered setup consumes no
+    image, opens no batch and starts no worker: the edge is a no-op and the first edge after a collapse proceeds
+    normally. Logged once per covered run.
+    """
+
+    query = getattr(getattr(engine, "display_manager", None), "has_admitted_image_destination", None)
+    if not callable(query) or bool(query()):
+        engine._covered_edge_logged = False
+        return True
+    if not getattr(engine, "_covered_edge_logged", False):
+        engine._covered_edge_logged = True
+        logger.info("[EXPANDED_VIS][BATCH] every display is covered; image edges are no-ops (origin=%s)", origin)
+    return False
+
+
 class ScreensaverEngine(QObject):
     """
     Main screensaver engine orchestrating all components.
@@ -1738,6 +1756,8 @@ class ScreensaverEngine(QObject):
             return False
         if self._rss_startup_image_pending():
             return False
+        if not image_destination_admitted(self, origin):
+            return False
         perf_trace = ImageChangePerfTrace(origin=origin)
         if self.image_queue is None or self.display_manager is None:
             perf_trace.finish("unavailable", reason="queue_or_display_missing")
@@ -2235,6 +2255,8 @@ class ScreensaverEngine(QObject):
         logger.info("Previous image requested")
         if not self.image_queue:
             return
+        if not image_destination_admitted(self, "manual_previous"):
+            return  # every display covered: history and queue stay as they are
 
         generation, manager = self._capture_runtime_identity()
         def _resume_previous() -> None:

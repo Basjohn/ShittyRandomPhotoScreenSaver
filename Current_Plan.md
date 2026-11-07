@@ -100,8 +100,10 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - Fullscreen Edit (operator, 8 Nov; plan 01 M3c, after M3b): Edit entered while expanded stays expanded and edits
      the overlays' size/position (toast, now-playing text, artwork, media controls) like ordinary widget geometry,
      through the existing Edit session; supersedes "entering Edit collapses".
-   - M4's design proof is written (plan 01 `02_E0_Covered_Display_Admission.md`): a covered display that already
-     shows an image is left out of image batches at admission; implementation after M3 merges.
+   - M4 (plan 01 `02_E0_Covered_Display_Admission.md`): built 8 Nov, a covered display that already shows an image
+     is left out of image batches at admission (no queue advance, decode, upload, transition or material refresh; the
+     batch still closes; every display covered = edges are no-ops). Open: the GPU/render-thread measurement with
+     photo changes on the other display, and the operator's two-monitor look.
 
 **Next (admitted, in this order):**
 
