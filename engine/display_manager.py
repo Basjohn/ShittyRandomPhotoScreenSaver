@@ -928,9 +928,11 @@ class DisplayManager(QObject):
         runtime = unit.runtime
         runtime.input_controller.set_view_orbit_enabled(admitted)
         from core.settings.framed_camera import spec_for_mode
+        from core.settings.visualizer_mode_registry import visualizer_camera_reset_offered
         physical = bool(admitted and mode and spec_for_mode(mode) is not None)
         runtime.input_controller.set_framed_flight_enabled(physical)
-        runtime.scene_controller.set_visualizer_camera_reset_available(physical)
+        runtime.scene_controller.set_visualizer_camera_reset_available(
+            bool(admitted and mode and visualizer_camera_reset_offered(mode)))
         runtime.scene_controller.set_visualizer_control_hints_available(framed)
         runtime.input_controller.set_scene_transform_enabled(framed, mode_id=mode)
 
@@ -1161,8 +1163,8 @@ class DisplayManager(QObject):
         if owner is None or owner.is_retired or settings is None:
             return
         mode = str(owner.controller.mode_id)
-        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-        if not get_visualizer_mode_descriptor(mode).scene_transform_settings:
+        from core.settings.visualizer_mode_registry import visualizer_camera_reset_offered
+        if not visualizer_camera_reset_offered(mode):
             return
         section = settings.get("widgets.spotify_visualizer")
         if not isinstance(section, Mapping):

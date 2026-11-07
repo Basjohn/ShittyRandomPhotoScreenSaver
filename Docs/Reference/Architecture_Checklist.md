@@ -85,23 +85,7 @@ CUSTOM", "Runtime Widget Themes") and the Visualizer change checklist §9A.
 
 ## Tier 3: product decision first (operator)
 
-- [ ] **AC-11 One 3D camera control contract across every orbiting mode** (A-06). Severity medium (2D/3D consistency),
-  reward medium, effort M after the decision. **Confirmed:** `engine/display_manager.py:838-841` enables Reset Camera
-  and framed flight only when `spec_for_mode(mode)` exists; in `core/settings/visualizer_mode_registry.py` only Neon
-  Lake (`:368`), Extruded Bubble (`:407`) and Waveform (`:436`) declare `framed_camera`; Sphere (`:298-300`) and
-  Extruded Spectrum (`:332-333`) orbit with no Reset Camera and no framed flight; inertia is on for Sphere and
-  Waveform only (`:300`, `:434`); turn wrap is off for Neon Lake and Waveform (`:366`, `:434`).
-  - **Decision for the operator:** (a) give Sphere and Extruded Spectrum a framed-camera spec (Reset Camera to the
-    preset home; they join the shared standard, `core/settings/framed_camera.py`), or (b) a camera-reset contract
-    that does not need a physical camera (reset turn/tilt to the preset's authored values). Then inertia and wrap
-    become declared per-mode choices with a reason in `Docs/Reference/Visualizer_Reference.md` → Live view pose.
-  - **Must stay true:** the framed-camera standard is the one shared camera (memory: never per-mode cameras); a
-    landscape keeps wrap off on purpose; an in-card control consumes its own double-click
-    (`Docs/Guardrails/Visualizer_Presentation.md` §14A).
-  - **Regression bar:** a registry test lists every mode with `view_orbit_settings`: each declares a reset path
-    (framed spec or explicit `camera_reset: none` with a reason) and its inertia/wrap matches the reference table.
-  - **Must land before** a second mode opts into the Expanded Visualizer (where the card is large and orbiting
-    likely).
+None open (AC-11 landed 7 Nov: `Docs/Reference/Visualizer_Reference.md` → Live view pose).
 
 ## Tier 4: hygiene (batch when a nearby owner is open)
 

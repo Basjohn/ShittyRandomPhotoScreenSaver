@@ -232,13 +232,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
      `[GC_POLICY]` lines. Commands in the agent's report; evidence `.artifacts/evidence/gc_gen2/`.
    - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
      they are collections.
-2. **Checklist AC-11, decided (operator 7 Nov): "don't ruin the bordered 3D cameras so adjust the freeform Sphere
-   but ideally in a way that does not ruin its look/capabilities".** The framed (bordered) 3D cameras of Extruded
-   Bubble, Neon Lake and Waveform stay exactly as they are. Sphere (freeform) gains a Reset Camera to its preset home
-   and declared inertia/wrap, without changing its look, framing or orbit freedom; Extruded Spectrum gets the same
-   treatment where it applies. Prove it pixel-identical at the preset home and identical under orbit before and after.
-   The in-card Reset Camera button already consumes its own presses (landed 7 Nov:
-   `Docs/Guardrails/Visualizer_Presentation.md` §14A); a new Sphere / Extruded Spectrum control follows the same rule.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 - **Dead after A-12: removed by the Settings SSOT fold (AC-18, AC-23).** Still open from that note:
