@@ -112,19 +112,33 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - values duplicated between 2D and 3D or between runtime and Settings.
   It produces a ranked, actionable checklist (priority, reward, the fix) that the lead challenges and promotes into
   `Docs/Reference/Architecture_Checklist.md`. Defects it finds go to this plan.
-- **Spectrum presets 2 onward: the first agent round FAILED the fidelity gate and is not merged** (branch
-  `worktree-agent-a7d325cb268f513f7`, evidence `.artifacts/evidence/spectrum_presets_20261107/`). Operator, 7 Nov:
-  "those contact sheets for spectrum are awful". Lead verdict:
-  - every look is an opaque, flat, clip-art block, unlike Preset 1's luminous outline;
-  - per-bar patterns at 37 bars turn into checkerboard and tartan noise;
-  - every translucent ghost trail reads as grey or brown soot on the dark card: a white ghost tip at low alpha is
-    grey;
-  - Union Jack reads as tartan and Rising Sun as plain red bars, because the pattern system has no flag-scale
-    shapes. Shared Dots and Grid tile at most a 24 px cell.
+  **Binding (operator, 7 Nov):** the spec systems are the canonical owners and stay:
+  - each visualizer mode's Settings are declared once in `core/settings/visualizer_mode_settings.py`;
+  - each transition's Settings are declared once in `rendering/transition_settings.py`.
 
-  The lead now owns the art direction (queue item 7). The agent's measured findings stay valid and are recorded
-  there as shader defects: rim glow fills bars above about 0.3, Rainbow Fill re-hues the pattern, and the fill
-  gradient blends in RGB.
+  The audit finds what bypasses or duplicates them and proposes folding it into them; it never proposes replacing
+  them. One known straggler to judge: the audio-analysis Technical controls are still declared separately in
+  `ui/tabs/media/technical_controls.py`.
+- [~] **Spectrum presets 2-15: re-authored by the lead (7 Nov), awaiting the operator's eyes.** The first agent
+  round failed the fidelity gate (operator: "awful"). Its looks were opaque clip-art blocks, its per-bar patterns
+  turned to checkerboard and tartan, its ghost trails read as soot, and Union Jack read as tartan. That round is not
+  merged; its evidence tool fix is.
+  New in Spectrum:
+  - **Flag sheets** in the Pattern choice: USA, Japan, UK, Jamaica, Brazil. Each is one flag over the whole field,
+    revealed by the bars, with gentle cloth folds.
+  - **Hue-preserving gradients:** green to red passes through yellow.
+  - **Rim glow** capped at 30% of a bar's width.
+  - Each has a behavioural test in `tests/test_spectrum_decor.py` with a negative control against the old rule.
+
+  Presets:
+  - **Flags:** Old Glory, Rising Sun, Union Jack, Yard (Jamaica), Ordem (Brazil).
+  - **2000s apps:** Llama Whipper (the classic MP3 player's LED analyser), Bliss (XP), Lickable (Aqua),
+    Glass Player (WMP11), Butterfly Buddies (MSN), Silhouette (iPod posters), Away Message (AIM).
+  - **Novel:** Holo Foil, Afterburner.
+
+  All carry Preset 1's reactivity unchanged (only look keys authored), with ghosts off and caps carrying the peak.
+  Evidence: `.artifacts/evidence/spectrum_presets_lead_20261107/` (contact sheets, motion strips, metrics, the
+  authoring script). Open: the operator's eyes. Silhouette is the plainest by concept.
 - **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`).
   **The tick cut is merged (7 Nov).** Lead audit: three realistic mutations are each caught by
   `tests/test_waveform_logical_tick_exactness.py` (a Gaussian cache key ignoring the width, one shifted grid shared
@@ -175,12 +189,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
    and declared inertia/wrap, without changing its look, framing or orbit freedom; Extruded Spectrum gets the same
    treatment where it applies. Prove it pixel-identical at the preset home and identical under orbit before and after.
    The in-card Reset Camera button must consume its own presses (item 2).
-7. **Spectrum presets 2 onward re-authored (operator 7 Nov):** they "have no vibrancy, unique patterns, shapes and so
-   on. Like, even do a flags of a few countries thing would be easy and neat compared to what we have now". Give each
-   preset a distinct, vibrant identity from what the mode supports (bar colour bands and gradients, shapes,
-   mirroring, glow): a few national-flag palettes across the bars, plus other strong pattern and shape ideas. Judge
-   them on showcase WebP renders with recorded music. Presets are authored content: no value-pinning tests; author
-   every control into every preset. Preset 1 stays unless the operator says otherwise.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 - **Any ThreadManager shutdown cancels every pending single-shot in the process.** `ThreadManager.shutdown`
@@ -210,6 +218,14 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **SMP import scan vs the registry:** `ui/settings_tabs.py` imports the existing tabs' modules at import time (as
   the dialog did). The SMP plan's §14 bar ("no saver module is imported by opening Settings in the SMP profile")
   needs those imports moved into the builders when the SMP descriptor lands.
+- **`tests/test_s_hotkey_workflow.py` never exits (pre-existing on main 69a34c7c):** all its tests pass in about
+  10 s, then the pytest process stays alive until killed (900 s timeout in the isolated gate; reproduced alone on
+  main in a clean checkout). Likely a non-daemon thread left by `test_s_hotkey_opens_settings_without_crash`'s real
+  engine (initialize, start, `stop(exit_app=False)`, restart, never `cleanup()`). Find the owner (a dump of live
+  threads at session end) and fix it; bar: the file's process exits within seconds of its last test.
+- **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
+  worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
+  the main checkout; environmental, not a product defect.
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.

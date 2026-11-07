@@ -1,8 +1,8 @@
 {
-  "description": "Terracotta clay bars outlined in cream, stacked as a stepped pyramid of three terraces.",
+  "description": "The classic MP3 player's analyser: borderless LED segments running green to yellow to red, with grey peak markers that hang and fall. Bass on the left.",
   "mode": "spectrum",
-  "name": "Preset 5 (Ziggurat)",
-  "preset_index": 4,
+  "name": "Preset 7 (Llama Whipper)",
+  "preset_index": 6,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -11,56 +11,56 @@
         "spectrum_agc_strength": 0.15,
         "spectrum_audio_block_size": 128,
         "spectrum_bar_border_color": [
-          240,
-          226,
-          200,
+          255,
+          255,
+          255,
           255
         ],
-        "spectrum_bar_border_opacity": 1.0,
-        "spectrum_bar_count": 33,
+        "spectrum_bar_border_opacity": 0.0,
+        "spectrum_bar_count": 37,
         "spectrum_bar_fill_color": [
-          164,
-          98,
-          76,
-          240
+          24,
+          214,
+          24,
+          255
         ],
-        "spectrum_border_radius": 1.0,
+        "spectrum_border_radius": 0.0,
         "spectrum_drop_speed": 0.72,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": true,
-        "spectrum_fill_gradient": false,
+        "spectrum_fill_gradient": true,
         "spectrum_fill_tip_color": [
-          90,
-          200,
-          255,
-          230
-        ],
-        "spectrum_ghost_alpha": 0.35,
-        "spectrum_ghost_color": [
-          255,
-          190,
-          90,
+          240,
+          28,
+          10,
           255
         ],
-        "spectrum_ghost_color_source": "Bar Colour",
+        "spectrum_ghost_alpha": 0.8,
+        "spectrum_ghost_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "spectrum_ghost_color_source": "Custom",
         "spectrum_ghost_decay": 0.18,
         "spectrum_ghost_gradient": false,
         "spectrum_ghost_tip_color": [
           255,
-          80,
-          200,
+          255,
+          255,
           255
         ],
-        "spectrum_ghosting_enabled": true,
+        "spectrum_ghosting_enabled": false,
         "spectrum_gloss": 0.0,
         "spectrum_glow_color": [
           255,
           255,
           255,
-          235
+          220
         ],
         "spectrum_glow_enabled": false,
-        "spectrum_glow_intensity": 0.08,
+        "spectrum_glow_intensity": 0.3,
         "spectrum_input_gain": 1.1,
         "spectrum_kick_lane_gain": 1.75,
         "spectrum_lane_strengths_linear": {
@@ -78,7 +78,7 @@
         },
         "spectrum_lane_transient_mix": 0.94,
         "spectrum_manual_floor": 0.42,
-        "spectrum_mirrored": true,
+        "spectrum_mirrored": false,
         "spectrum_notch_positions_linear": [
           [
             0.0,
@@ -130,41 +130,41 @@
         "spectrum_pattern_scale": 1.0,
         "spectrum_pattern_strength": 0.6,
         "spectrum_peak_cap_color": [
-          255,
-          255,
-          255,
+          205,
+          205,
+          205,
           255
         ],
         "spectrum_peak_cap_thickness": 2,
-        "spectrum_peak_caps": false,
+        "spectrum_peak_caps": true,
         "spectrum_profile_floor": 0.2,
         "spectrum_rainbow_border": false,
         "spectrum_rainbow_enabled": false,
         "spectrum_rainbow_fill": false,
         "spectrum_rainbow_ghost": false,
         "spectrum_rainbow_speed": 0.6,
-        "spectrum_render_mode": "bars",
+        "spectrum_render_mode": "segment",
         "spectrum_sensitivity": 1.15,
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.85
+            1.0
           ],
           [
-            0.16,
-            0.85
+            0.25,
+            1.0
           ],
           [
-            0.24,
-            0.5
+            0.5,
+            1.0
           ],
           [
-            0.48,
-            0.5
+            0.75,
+            1.0
           ],
           [
-            0.56,
-            0.24
+            1.0,
+            1.0
           ]
         ],
         "spectrum_transient_clamp": 1.85,

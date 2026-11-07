@@ -57,11 +57,17 @@ uniform int u_pattern_shared;       // 1 = one sheet over the whole bar field (S
 uniform float u_pattern_mix;        // strength x fade
 uniform vec4 u_pattern_color;
 uniform float u_pattern_scale;
+uniform float u_time;               // Spectrum's animation clock (seconds); only the flag sheets' wave reads it
 
 // One framebuffer pixel in item coordinates, taken where control flow is still uniform (before any discard), so
 // the decoration's filters never see the derivative jumps at bar and segment boundaries.
 float g_px_x = 1.0;
 float g_px_y = 1.0;
+// Height of the bar field a bar can fill (0.95 of the inner height): the flag sheets' vertical extent.
+float g_field_h = 1.0;
+
+// SPECTRUM_PATTERNS from this index are flag sheets: one flag laid over the whole bar field in its own colours.
+const int FLAG_FIRST = 7;
 
 // Apply rainbow hue shift to a colour. Returns the shifted colour.
 // Called from both single-piece and segmented code paths.
@@ -115,13 +121,38 @@ vec4 spectrum_ghost_colour(int bidx, float alpha) {
     return vec4(rgb, alpha);
 }
 
+vec3 spectrum_rgb2hsv(vec3 c) {
+    vec4 k = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, k.wz), vec4(c.gb, k.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)), d / (q.x + 1e-10), q.x);
+}
+
+vec3 spectrum_hsv2rgb(vec3 c) {
+    vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+
+// A colour blend that keeps its saturation: hue turns along the shorter arc while saturation and value ramp, so green
+// to red passes through yellow (an RGB mix passes through olive). A grey, white or black end takes the other end's hue.
+vec3 spectrum_hue_mix(vec3 a, vec3 b, float t) {
+    vec3 ha = spectrum_rgb2hsv(a);
+    vec3 hb = spectrum_rgb2hsv(b);
+    if (ha.y < 0.02) ha.x = hb.x;
+    if (hb.y < 0.02) hb.x = ha.x;
+    float dh = hb.x - ha.x;
+    dh -= floor(dh + 0.5);
+    return spectrum_hsv2rgb(vec3(fract(ha.x + dh * t), mix(ha.y, hb.y, t), mix(ha.z, hb.z, t)));
+}
+
 // Ghost Gradient: ``t`` runs 0 at the bar top to 1 at the peak; the tip colour's alpha sets how far it turns.
 vec4 spectrum_ghost_tip(vec4 ghost, float t) {
     if (u_ghost_gradient_mix <= 0.0) return ghost;
     // sqrt: the trail fades toward its top, so the tip colour takes over early enough to read.
     float k = sqrt(clamp(t, 0.0, 1.0)) * clamp(u_ghost_gradient_mix, 0.0, 1.0)
               * clamp(u_ghost_tip_color.a, 0.0, 1.0);
-    return vec4(mix(ghost.rgb, u_ghost_tip_color.rgb, k), ghost.a);
+    return vec4(spectrum_hue_mix(ghost.rgb, u_ghost_tip_color.rgb, k), ghost.a);
 }
 
 // Fill Gradient: ``h`` is the height in the bar field (0 base, 1 the tallest a bar reaches).
@@ -129,7 +160,122 @@ vec4 spectrum_fill_gradient(vec4 fill, float h) {
     if (u_fill_gradient_mix <= 0.0) return fill;
     vec4 tip = u_fill_tip_color;
     tip.a *= u_fade;
-    return mix(fill, tip, clamp(h, 0.0, 1.0) * clamp(u_fill_gradient_mix, 0.0, 1.0));
+    float k = clamp(h, 0.0, 1.0) * clamp(u_fill_gradient_mix, 0.0, 1.0);
+    return vec4(spectrum_hue_mix(fill.rgb, tip.rgb, k), mix(fill.a, tip.a, k));
+}
+
+// ---- Flag sheets ------------------------------------------------------------------------------------------------
+// One flag over the whole bar field (``uv``: 0..1 across the field, 0 at the baseline to 1 at the field top), seen
+// through the bars as they rise. ``px`` is one framebuffer pixel in uv units: every edge is box-filtered over it.
+
+float spectrum_box_stripe(float t, float w, float d);           // defined with the patterns below
+
+float flag_cover(float signed_distance, float pixel) {          // signed distance < 0 inside
+    return clamp(0.5 - signed_distance / max(pixel, 1e-5), 0.0, 1.0);
+}
+
+// Inigo Quilez's five-point star (point up), ``r`` outer radius, ``rf`` inner/outer ratio.
+float flag_star(vec2 p, float r, float rf) {
+    const vec2 k1 = vec2(0.809016994375, -0.587785252292);
+    const vec2 k2 = vec2(-k1.x, k1.y);
+    p.x = abs(p.x);
+    p -= 2.0 * max(dot(k1, p), 0.0) * k1;
+    p -= 2.0 * max(dot(k2, p), 0.0) * k2;
+    p.x = abs(p.x);
+    p.y -= r;
+    vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);
+    float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+    return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+
+// Distance from ``p`` to the nearer diagonal of a ``w`` x ``h`` flag (a saltire's centre lines), in flag units.
+float flag_saltire_distance(vec2 p, float w, float h) {
+    float n = inversesqrt(w * w + h * h);
+    return min(abs(p.x * h - p.y * w), abs(p.x * h + p.y * w - w * h)) * n;
+}
+
+vec3 flag_usa(vec2 uv, vec2 px) {
+    vec3 red = vec3(0.698, 0.133, 0.204);
+    vec3 blue = vec3(0.235, 0.231, 0.431);
+    // Thirteen stripes, red at the top and the bottom.
+    float s = (1.0 - uv.y) * 13.0;
+    vec3 col = mix(vec3(1.0), red, spectrum_box_stripe(0.5 * s, 0.5 * 13.0 * px.y, 0.5));
+    // The canton: the top seven stripes, 0.4 of the fly, with 50 stars in rows of six and five.
+    float cw = 0.4;
+    float ch = 7.0 / 13.0;
+    float canton = clamp((cw - uv.x) / px.x + 0.5, 0.0, 1.0) * clamp((uv.y - (1.0 - ch)) / px.y + 0.5, 0.0, 1.0);
+    if (canton <= 0.0) return col;
+    vec2 lattice = vec2(uv.x / cw * 12.0, (uv.y - (1.0 - ch)) / ch * 10.0);
+    vec2 centre = clamp(floor(lattice + 0.5), vec2(1.0), vec2(11.0, 9.0));
+    vec3 field = blue;
+    if (mod(centre.x + centre.y, 2.0) < 0.5) {
+        vec2 cell_px = vec2(cw / 12.0 / px.x, ch / 10.0 / px.y);           // one lattice step in pixels
+        vec2 p = (lattice - centre) * cell_px;
+        float star = flag_star(p, 0.62 * min(cell_px.x, cell_px.y), 0.42);
+        field = mix(blue, vec3(1.0), flag_cover(star, 1.0));
+    }
+    return mix(col, field, canton);
+}
+
+vec3 flag_japan(vec2 uv, vec2 px) {
+    // A crimson disc three fifths of the height across, at the centre (round in pixels whatever the field's shape).
+    vec2 p = (uv - 0.5) / px;
+    float radius = 0.3 / px.y;
+    return mix(vec3(1.0), vec3(0.737, 0.0, 0.176), flag_cover(length(p) - radius, 1.0));
+}
+
+vec3 flag_uk(vec2 uv, vec2 px) {
+    vec3 blue = vec3(0.004, 0.129, 0.412);
+    vec3 red = vec3(0.784, 0.063, 0.180);
+    vec2 p = uv * vec2(2.0, 1.0);                     // the 1:2 flag, height 1
+    float pix = max(px.x * 2.0, px.y);
+    float diag = flag_saltire_distance(p, 2.0, 1.0);
+    vec3 col = mix(blue, vec3(1.0), flag_cover(diag - 3.0 / 30.0, pix));
+    col = mix(col, red, flag_cover(diag - 1.0 / 30.0, pix));
+    float cross = min(abs(p.x - 1.0), abs(p.y - 0.5));
+    col = mix(col, vec3(1.0), flag_cover(cross - 5.0 / 30.0, pix));
+    return mix(col, red, flag_cover(cross - 3.0 / 30.0, pix));
+}
+
+vec3 flag_jamaica(vec2 uv, vec2 px) {
+    vec2 p = uv * vec2(2.0, 1.0);
+    float pix = max(px.x * 2.0, px.y);
+    vec2 d = abs(p - vec2(1.0, 0.5));
+    // Green triangles at the top and bottom, black at the hoist and the fly, split by the diagonals.
+    vec3 col = mix(vec3(0.0), vec3(0.0, 0.608, 0.227), flag_cover((d.x * 1.0 - d.y * 2.0) * 0.4472, pix));
+    return mix(col, vec3(0.996, 0.82, 0.0), flag_cover(flag_saltire_distance(p, 2.0, 1.0) - 0.085, pix));
+}
+
+vec3 flag_brazil(vec2 uv, vec2 px) {
+    vec2 p = uv * vec2(20.0, 14.0);                   // the 10:7 flag in its own 20 x 14 units
+    float pix = max(px.x * 20.0, px.y * 14.0);
+    vec2 d = abs(p - vec2(10.0, 7.0));
+    vec3 col = vec3(0.0, 0.612, 0.231);
+    // The yellow rhombus, 1.7 units in from each edge; its distance scaled to flag units along its edge normal.
+    float rhombus = (d.x / 8.3 + d.y / 5.3 - 1.0) * 4.49;
+    col = mix(col, vec3(1.0, 0.875, 0.0), flag_cover(rhombus, pix));
+    // The blue globe with its white band.
+    float globe = length(p - vec2(10.0, 7.0)) - 3.5;
+    vec3 sky = vec3(0.0, 0.153, 0.463);
+    // The band: an arc between radii 8 and 8.5 centred 2 units left of the globe's vertical diameter, on the base.
+    float band = abs(length(p - vec2(8.0, 0.0)) - 8.25) - 0.25;
+    sky = mix(sky, vec3(1.0), flag_cover(band, pix));
+    return mix(col, sky, flag_cover(globe, pix));
+}
+
+// The cloth: the hoist (left edge) stays put while folds travel toward the fly, shifting the flag's design a little
+// and shading it light and dark across each fold.
+vec3 spectrum_flag(vec2 uv, vec2 px) {
+    float fly = clamp(uv.x, 0.0, 1.0);
+    float phase = 6.2831853 * (1.15 * uv.x - 0.22 * u_time) + 2.0 * uv.y;
+    vec2 waved = uv + vec2(0.0, 0.016 * fly * sin(phase));
+    vec3 col;
+    if (u_pattern == FLAG_FIRST) col = flag_usa(waved, px);
+    else if (u_pattern == FLAG_FIRST + 1) col = flag_japan(waved, px);
+    else if (u_pattern == FLAG_FIRST + 2) col = flag_uk(waved, px);
+    else if (u_pattern == FLAG_FIRST + 3) col = flag_jamaica(waved, px);
+    else col = flag_brazil(waved, px);
+    return col * (1.0 + 0.11 * (0.3 + 0.7 * fly) * cos(phase));
 }
 
 // Box-filtered periodic stripes: the share of the pixel footprint [t - w/2, t + w/2] (in periods) lying on the
@@ -210,7 +356,12 @@ vec3 spectrum_gloss(vec3 rgb, float lx, float bw) {
 
 // The bar body's surface (fill pixels only): the pattern composited over it, then gloss.
 vec4 spectrum_bar_surface(vec4 c, float lx, float bw, float y, float fx, float scale) {
-    if (u_pattern_mix > 0.0 && u_pattern > 0) {
+    if (u_pattern_mix > 0.0 && u_pattern >= FLAG_FIRST) {
+        // A flag sheet replaces the fill colour (Strength and the fade blend it in); the fill's alpha stays.
+        vec2 uv = vec2(fx / max(u_bar_span_px, 1e-4), y / max(g_field_h, 1e-4));
+        vec2 px = vec2(g_px_x / max(u_bar_span_px, 1e-4), g_px_y / max(g_field_h, 1e-4));
+        c.rgb = mix(c.rgb, clamp(spectrum_flag(uv, px), 0.0, 1.0), clamp(u_pattern_mix * u_fade, 0.0, 1.0));
+    } else if (u_pattern_mix > 0.0 && u_pattern > 0) {
         float a = clamp(u_pattern_color.a * u_pattern_mix * u_fade
                         * spectrum_pattern_coverage(lx, bw, y, fx, scale), 0.0, 1.0);
         float out_a = a + c.a * (1.0 - a);
@@ -242,7 +393,9 @@ float spectrum_rim_alpha(float side_dist_px, float top_dist_px) {
     // visible tinted band (roughly the outer 40-60% of the bar).
     float authored_scale = (u_quick_item_coords == 1)
         ? max(u_visual_scale, 0.01) : 1.0;
-    float spread = (3.0 + glow_strength * 4.0) * authored_scale;
+    // A rim, never a recolour: at most 30% of the bar's width in from each side (37 bars at card size are ~11 px
+    // wide, so any intensity above ~0.3 used to tint the whole bar).
+    float spread = min((3.0 + glow_strength * 4.0) * authored_scale, max(0.3 * u_bar_width_px, authored_scale));
     // ``u_visual_scale`` controls authored styling, but it can make the
     // styled rim narrower than one framebuffer pixel.  Keep the authored
     // spread and derive only the coverage feather from actual fragment
@@ -311,6 +464,7 @@ void main() {
     float inner_top = content_rect.y + margin_y;
     float inner_height = content_rect.w - margin_y * 2.0;
     float inner_bottom = inner_top + inner_height;
+    g_field_h = 0.95 * inner_height;
 
     if (inner_height <= 0.0) {
         discard;
