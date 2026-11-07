@@ -12,6 +12,8 @@ from PySide6.QtGui import QOpenGLContext
 from core.logging.logger import get_logger
 from core.performance.frame_trace import FrameTraceEvent, logical_timestamp_ns
 
+from rendering.quick import gl_query
+
 from .gl_state import InheritedGlState
 from .implementation_registry import resolve_quick_visualizer_renderer
 from .render_contract import (
@@ -29,21 +31,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-
-def _int_state(name: int) -> int:
-    """Read one integer GL state value for lazy shared-quad setup.
-
-    This helper deliberately remains local to the render host.  CHK26 moved the
-    reusable per-frame inherited-state fence into ``gl_state.py``; the lazy quad
-    allocator still needs two one-time binding reads of its own and must not
-    depend on that per-frame snapshot being present.
-    """
-
-    value = gl.glGetIntegerv(name)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return int(value[0])
 
 
 def create_lifecycle_telemetry_if_admitted() -> (
@@ -388,8 +375,8 @@ class QuickVisualizerRenderHost:
             return
         if QOpenGLContext.currentContext() is None:
             raise RuntimeError("visualizer render host has no current GL context")
-        prior_vao = _int_state(gl.GL_VERTEX_ARRAY_BINDING)
-        prior_buffer = _int_state(gl.GL_ARRAY_BUFFER_BINDING)
+        prior_vao = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
+        prior_buffer = gl_query.get_int(gl.GL_ARRAY_BUFFER_BINDING)
         vertices = (ctypes.c_float * 8)(
             0.0,
             0.0,
