@@ -177,12 +177,25 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `tests/test_visualizer_authored_clock.py` fails on main; the lead re-ran it there for three modes. No external
   wall-clock timestamp reaches the clock path. The rule is in the visualizer change checklist §2.
   **Now on queue item 1 (the gen2 GC stalls),** which it found itself.
-- **AC-09, then AC-02 (Opus high, started 7 Nov): both landed on the agent branch, awaiting the lead's audit.**
-  AC-09: one card border width resolver (`core/settings/default_contract.py`) for every card and the General page.
-  AC-02: `VisualizerHostBinding` owns construct/bind/transfer/retire, input admissions and authored placement;
-  Media docking is the descriptor's `docked_to` policy, resolved by one function for the saver and Arrange. Main
-  (Reset Camera, AC-04, AC-05) is merged into the branch; the in-card double-click rule lives in QuickDisplayWindow,
-  before any admission the binding installs. Queue item 5 is AC-08 only.
+- **AC-09 and AC-02: merged 7 Nov (332aea12).**
+  - **AC-09:** one card border width resolver (`core/settings/default_contract.py`) that every card and the General
+    page read.
+  - **AC-02:** `VisualizerHostBinding` owns construct, bind, transfer and retire, the click admissions and authored
+    placement. `DisplayManager` keeps only the "which unit" decision and no longer imports the owner. Media docking
+    is the descriptor's `docked_to` policy, resolved by one function for the saver and Arrange.
+
+  **Lead audit:**
+  - The new tests, copied onto main, fail there (AC-09's on behaviour; AC-02's structurally). The one-owner
+    preservation test passes on both, by design.
+  - 324 Arrange cases are byte-identical.
+  - No file from the protected QSG/clip lineage is touched.
+  - 52/52 routing, layout, parity and lifecycle files pass on the merge.
+
+  **Left in `DisplayManager`, until a second host needs them:** the request and gesture routing that acts on the
+  owner.
+- **AC-03, the application-service tier (Opus high, started 7 Nov):** the second SMP prerequisite. It adds one
+  `ApplicationServices` registry on the engine: it lives across Settings, retires once in terminal cleanup, uses
+  generation-fenced leases, and creates nothing in Standard SRPSS.
 - **Small-defects agent (Opus medium): its first four items were merged 7 Nov (c9b4e8ac):**
   - **AC-06:** the Studio's clip caches are bounded, and the clip parse runs off the GUI thread.
   - **Reset Camera:** in-card controls own their double-click, so it never cycles the mode.
