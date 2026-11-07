@@ -236,20 +236,6 @@ OverlayWidget {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2.0
 
-                    // On a surface material: one rounded box behind the location and
-                    // condition lines (both opt out of their own plates). Not a Column
-                    // child (it would be positioned): parented to the primary row and
-                    // placed over this column. Inactive on Normal.
-                    LegibilityRow {
-                        objectName: "weatherPrimaryLegibilityRow"
-                        parent: primaryRow
-                        x: primaryText.x - 6.0
-                        y: primaryText.y - 3.0
-                        width: primaryText.width + 12.0
-                        height: primaryText.height + 6.0
-                        primaryColor: weatherRoot.weatherModel.textColor
-                    }
-
                     // Align visible glyph edges, not differing font side bearings.
                     // Right-aligned text retains the existing icon-left layout.
                     TextMetrics {
@@ -268,7 +254,6 @@ OverlayWidget {
                     ShadowedText {
                         id: locationText
                         objectName: "weatherLocationText"
-                        surfacePlateEnabled: false   // weatherPrimaryLegibilityRow
                         transform: [
                             Scale { id: paintScale1; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("location_text"); yScale: weatherRoot.childHeightScale("location_text") },
                             Translate { id: paintTranslate1; x: weatherRoot.childOffsetX("location_text"); y: weatherRoot.childOffsetY("location_text") }
@@ -299,7 +284,6 @@ OverlayWidget {
                     ShadowedText {
                         id: conditionText
                         objectName: "weatherConditionText"
-                        surfacePlateEnabled: false   // weatherPrimaryLegibilityRow
                         transform: [
                             Scale { id: paintScale2; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_text"); yScale: weatherRoot.childHeightScale("condition_text") },
                             Translate { id: paintTranslate2; x: weatherRoot.childOffsetX("condition_text"); y: weatherRoot.childOffsetY("condition_text") }
@@ -367,24 +351,6 @@ OverlayWidget {
                 width: readyColumn.width
                 height: visible ? detailsColumn.implicitHeight : 0.0
                 visible: weatherRoot.detailsVisible
-
-                // On a surface material: one rounded row across the whole detail row
-                // (icons and values alike; the values opt out of their own plates).
-                // It follows the details' CUSTOM offset/scale. Inactive on Normal.
-                LegibilityRow {
-                    objectName: "weatherDetailsLegibilityRow"
-                    readonly property real contentHeight: Math.max(
-                        weatherRoot.weatherModel.detailIconSize,
-                        weatherRoot.weatherModel.detailFontSize * 96.0 / 72.0 * 1.3) + 12.0
-                    readonly property real xScale: weatherRoot.childWidthScale("details_metrics")
-                    readonly property real yScale: weatherRoot.childHeightScale("details_metrics")
-                    x: detailsColumn.x + detailsRow.x + weatherRoot.childOffsetX("details_metrics") - 4.0
-                    y: detailsColumn.y + detailsRow.y + weatherRoot.childOffsetY("details_metrics")
-                        + (detailsRow.height - contentHeight) / 2.0 * yScale
-                    width: detailsRow.width * xScale + 8.0
-                    height: contentHeight * yScale
-                    primaryColor: weatherRoot.weatherModel.textColor
-                }
 
                 Column {
                     id: detailsColumn
@@ -475,7 +441,6 @@ OverlayWidget {
 
                                     ShadowedText {
                                         id: metricText
-                                        surfacePlateEnabled: false   // weatherDetailsLegibilityRow
                                         width: implicitWidth
                                         height: implicitHeight
                                         anchors.left: metricIcon.right
@@ -566,18 +531,6 @@ OverlayWidget {
                 width: readyColumn.width
                 height: visible ? extendedForecastColumn.implicitHeight : 0.0
                 visible: weatherRoot.extendedForecastVisible
-
-                // On a surface material: one rounded box behind the five days (icons,
-                // day labels and temperatures; the runs opt out of their own plates).
-                // Inactive on Normal.
-                LegibilityRow {
-                    objectName: "weatherExtendedForecastLegibilityRow"
-                    x: -4.0
-                    y: extendedForecastColumn.y + extendedIconRow.y
-                    width: extendedForecastBand.width + 8.0
-                    height: extendedForecastText.y + extendedForecastText.height - extendedIconRow.y
-                    primaryColor: weatherRoot.weatherModel.textColor
-                }
 
                 Column {
                     id: extendedForecastColumn
@@ -695,7 +648,6 @@ OverlayWidget {
                                 spacing: 3.0
                                 ShadowedText {
                                     objectName: "weatherForecastDayLabel"
-                                    surfacePlateEnabled: false   // weatherExtendedForecastLegibilityRow
                                     width: parent.width
                                     height: implicitHeight
                                     text: modelData.day
@@ -712,7 +664,6 @@ OverlayWidget {
                                 }
                                 ShadowedText {
                                     objectName: "weatherForecastDayTemperature"
-                                    surfacePlateEnabled: false   // weatherExtendedForecastLegibilityRow
                                     width: parent.width
                                     height: implicitHeight
                                     text: modelData.temperature

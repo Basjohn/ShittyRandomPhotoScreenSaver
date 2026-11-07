@@ -318,7 +318,10 @@ def test_material_follows_a_running_transition(material_scene) -> None:
     scene.render(2)
     early = numpy.asarray(scene.frame_at("crossfade", red, green, 0.1), numpy.int16)[180, 320]
     late = numpy.asarray(scene.frame_at("crossfade", red, green, 0.9), numpy.int16)[180, 320]
-    assert late[1] - early[1] > 60 and early[0] - late[0] > 60
+    # The legibility panel holds the card text's floor, so a saturated wallpaper is dimmed;
+    # what follows the transition is the hue under the card (red early, green late).
+    assert early[0] > early[1] + 10 and late[1] > late[0] + 10
+    assert late[1] - early[1] > 15 and early[0] - late[0] > 15
 
 
 # --------------------------------------------------------------------------- legibility
@@ -343,13 +346,11 @@ def test_text_plate_evaluates_the_identical_surface_function() -> None:
 
 def test_text_runs_change_only_on_an_active_material() -> None:
     text = (QML / "ShadowedText.qml").read_text(encoding="utf-8")
-    header = (QML / "BrandedHeader.qml").read_text(encoding="utf-8")
-    # The plate loads only on an active material; the soft halo drops only there.
-    assert "active: shadowedText.onSurfaceMaterial && shadowedText.surfacePlateEnabled" in text
+    # The card's legibility panel holds the floor: a run loads no plate of its own (no chips);
+    # the soft halo drops only on an active material.
+    assert "TextLegibilityPlate" not in text and "Loader" not in text
     assert "&& !(shadowedText.shadowSoft && shadowedText.onSurfaceMaterial)" in text
     assert "&& !shadowedText.onSurfaceMaterial" in text
-    # Header labels sit on the header's own fill and opt out.
-    assert header.count("surfacePlateEnabled: false") == 2
 
 
 def _text_run(scene, card, *, text: str, color: str, pixel_size: int, soft: bool):
@@ -380,8 +381,8 @@ def test_small_text_meets_4_5_on_a_busy_backdrop_and_normal_is_untouched(materia
     from tools.surface_material_capture import measure_text_legibility
 
     scene = material_scene
-    # Busy, bright stripes under a dim grey 12 px run on a dark-theme Glass card: the card's
-    # own 3:1 floor is not enough for it, only the run's plate brings it to 4.5:1.
+    # Busy, bright stripes under a 12 px run in the card's text colour on a dark-theme Glass
+    # card: the card's own legibility panel brings it to 4.5:1, with no plate of the run's own.
     width, height = 640, 360
     stripes = bytearray()
     for _y in range(height):
@@ -396,27 +397,26 @@ def test_small_text_meets_4_5_on_a_busy_backdrop_and_normal_is_untouched(materia
                                     card_style=OverlayCardStyle(background_color=QColor(20, 20, 20, 77),
                                                                 shadow_enabled=False))
     scene.presentations = []
-    run = _text_run(scene, card, text="03D AGO 25M", color="#9a9a9a", pixel_size=12, soft=True)
+    run = _text_run(scene, card, text="03D AGO 25M", color="#e6e6e6", pixel_size=12, soft=True)
     scene.render(4)
     out = Path(__file__).resolve().parent / "_surface_material_run.png"
     try:
         normal_rows = measure_text_legibility(scene, out)
-        plate = run.findChild(QQuickItem, "shadowedTextLegibilityPlate")
         shadow = run.findChild(QQuickItem, "shadowedTextShadow")
-        assert plate.property("active") is False and shadow.isVisible()
+        assert shadow.isVisible()
         normal = numpy.asarray(scene.read(), numpy.int16)
 
         scene.set_material("glass")
         scene.render(4)
         rows = measure_text_legibility(scene, out)
-        assert plate.property("active") is True
+        assert run.findChild(QQuickItem, "textLegibilityPlate") is None
         assert shadow.isVisible() is False            # no soft halo on a material
         mine = [row for row in rows if row["text"].startswith("03D")]
         assert mine and mine[0]["p5"] >= 4.5, (mine, normal_rows)
 
         scene.set_material("normal")
         scene.render(3)
-        assert plate.property("active") is False and shadow.isVisible()
+        assert shadow.isVisible()
         assert numpy.array_equal(numpy.asarray(scene.read(), numpy.int16), normal)
     finally:
         out.unlink(missing_ok=True)

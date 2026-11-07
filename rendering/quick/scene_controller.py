@@ -515,6 +515,9 @@ class QuickSceneController(QObject):
         # backdrop owner exists only while a card or the Context Menu is not Normal.
         self._surface_backdrop_owner: SurfaceBackdropOwner | None = None
         self._context_menu_surface_material = "normal"
+        # The Visualizer card follows the Widget Theme baseline too (3.4); it adds demand
+        # only while its presentation root exists on this display.
+        self._visualizer_surface_material = "normal"
         self._readiness = QuickSceneReadiness(
             screen_index=window.screen_index,
             runtime_generation=window.runtime_generation,
@@ -982,6 +985,34 @@ class QuickSceneController(QObject):
             self._on_surface_demand_changed()
         return True
 
+    def apply_visualizer_surface_material(self, material: str) -> bool:
+        """Project the Visualizer card's surface material (the Widget Theme baseline)."""
+
+        from .widgets.surface_material import normalize_surface_material
+
+        if self._scene_root is None or not self._readiness.admission_open:
+            return False
+        resolved = normalize_surface_material(material) or "normal"
+        if resolved == self._visualizer_surface_material:
+            return True
+        self._visualizer_surface_material = resolved
+        self._project_visualizer_surface_material()
+        self._on_surface_demand_changed()
+        return True
+
+    def _project_visualizer_surface_material(self) -> None:
+        from .widgets.surface_material import surface_text_color
+
+        root = self._visualizer_root
+        if root is None or not _qobject_is_alive(root):
+            return
+        material = self._visualizer_surface_material
+        if material != "normal":
+            root.setProperty("cardSurfaceTextColor", surface_text_color())
+        if root.property("cardSurfaceMaterial") != material:
+            if not root.setProperty("cardSurfaceMaterial", material):
+                raise RuntimeError("VisualizerPresentation.qml rejected its surface material")
+
     @property
     def surface_backdrop_owner(self) -> SurfaceBackdropOwner | None:
         return self._surface_backdrop_owner
@@ -991,6 +1022,8 @@ class QuickSceneController(QObject):
         materials = set(host.surface_materials) if host is not None and not host.is_retired else set()
         if self._context_menu_surface_material != "normal":
             materials.add(self._context_menu_surface_material)
+        if self._visualizer_surface_material != "normal" and self._visualizer_root is not None:
+            materials.add(self._visualizer_surface_material)
         return frozenset(materials)
 
     def _on_surface_demand_changed(self) -> None:
@@ -1032,6 +1065,9 @@ class QuickSceneController(QObject):
         root = self._scene_root
         if root is not None and _qobject_is_alive(root):
             root.setProperty("contextMenuSurfaceBackdrop", item)
+        visualizer = self._visualizer_root
+        if visualizer is not None and _qobject_is_alive(visualizer):
+            visualizer.setProperty("cardSurfaceBackdrop", item)
 
     def _retire_surface_backdrop(self) -> None:
         """Scene retirement: GL went with the scene graph; the item goes with the root."""
@@ -2498,6 +2534,13 @@ class QuickSceneController(QObject):
         self._visualizer_content_host = content_host
         self._visualizer_item = item
         root.setProperty("perfHudEnabled", self._perf_hud_enabled)
+        # Its card material: projected here, then demand (a woken or created backdrop binds
+        # it; an existing one is bound directly).
+        self._project_visualizer_surface_material()
+        owner = self._surface_backdrop_owner
+        if owner is not None and not owner.parked:
+            root.setProperty("cardSurfaceBackdrop", owner.item)
+        self._on_surface_demand_changed()
         self._sync_custom_layout_visualizer()
         return item
 

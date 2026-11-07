@@ -522,11 +522,11 @@ OverlayWidget {
             HoverHandler { id: activityRowHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
             // On a surface material: one rounded box filling the friend row over its
-            // fill (name and presence opt out of their own plates), concentric with
+            // fill (its own fill is the underlay), concentric with
             // its corners. Inactive on Normal.
             LegibilityRow {
                 objectName: "friendPulseRowLegibilityRow_" + index
-                readonly property real inset: activityRow.border.width + 1.0
+                readonly property real inset: activityRow.border.width + 2.0
                 x: inset
                 y: inset
                 z: 0
@@ -676,7 +676,6 @@ OverlayWidget {
                 ShadowedText {
                     id: rowNameText
                     objectName: "friendPulseRowName_" + index
-                    surfacePlateEnabled: false   // the row's LegibilityRow
                     x: friendRoot.friendPulseModel.customUsernameXOffset
                         * friendRoot.baseAuthoredWidth
                     y: friendRoot.friendPulseModel.customUsernameYOffset
@@ -709,7 +708,6 @@ OverlayWidget {
                 }
                 ShadowedText {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 18.0
-                    surfacePlateEnabled: false   // the row's LegibilityRow
                     text: (secondaryText.length > 0
                         ? secondaryText + "  " + presenceText
                         : presenceText).toUpperCase()
@@ -865,11 +863,11 @@ OverlayWidget {
                 HoverHandler { id: gridTileHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
                 // On a surface material: one rounded box filling the friend tile over its
-                // fill (name and presence opt out of their own plates), concentric with
+                // fill (its own fill is the underlay), concentric with
                 // its corners. Inactive on Normal.
                 LegibilityRow {
                     objectName: "friendPulseTileLegibilityRow_" + index
-                    readonly property real inset: gridTile.border.width + 1.0
+                    readonly property real inset: gridTile.border.width + 2.0
                     x: inset
                     y: inset
                     z: 0
@@ -1009,7 +1007,6 @@ OverlayWidget {
                 ShadowedText {
                     id: gridNameText
                     objectName: "friendPulseGridName_" + index
-                    surfacePlateEnabled: false   // the tile's LegibilityRow
                     readonly property real canonicalWidth: Math.max(20.0,
                         parent.width - 14.0
                     )
@@ -1042,7 +1039,6 @@ OverlayWidget {
                 }
                 ShadowedText {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 7.0; anchors.rightMargin: 7.0
-                    surfacePlateEnabled: false   // the tile's LegibilityRow
                     y: friendRoot.friendPulseModel.showNames
                         ? gridNameText.y + gridNameText.height + 2.0
                         : 12.0 + Math.min(58.0, Math.max(38.0,

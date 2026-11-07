@@ -1003,23 +1003,6 @@ OverlayWidget {
                             width: ledgerGroupFrame.shelfWidth
                             height: ledgerGroupFrame.shelfHeight
 
-                            // On a surface material: one rounded row behind the shelf's
-                            // label and value (both opt out of their own plates).
-                            // Inactive on Normal.
-                            LegibilityRow {
-                                x: 0.0
-                                y: 1.0
-                                width: parent.width
-                                height: Math.max(0.0, parent.height - 3.0)
-                                primaryColor: abandonmentRoot.abandonmentModel.textColor
-                                secondaryColor: Qt.rgba(
-                                    abandonmentRoot.abandonmentModel.textColor.r,
-                                    abandonmentRoot.abandonmentModel.textColor.g,
-                                    abandonmentRoot.abandonmentModel.textColor.b,
-                                    Math.max(0.47, abandonmentRoot.abandonmentModel.textColor.a * 0.72)
-                                )
-                            }
-
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
@@ -1052,7 +1035,6 @@ OverlayWidget {
                                 width: (parent.width - 13.0) * 0.53
                                 height: parent.height
                                 text: fieldLabel.toUpperCase()
-                                surfacePlateEnabled: false   // the shelf's LegibilityRow
                                 color: Qt.rgba(
                                     abandonmentRoot.abandonmentModel.textColor.r,
                                     abandonmentRoot.abandonmentModel.textColor.g,
@@ -1083,7 +1065,6 @@ OverlayWidget {
                                 width: (parent.width - 13.0) * 0.45
                                 height: parent.height
                                 text: fieldValue.toUpperCase()
-                                surfacePlateEnabled: false   // the shelf's LegibilityRow
                                 opacity: abandonmentRoot.dynamicContentOpacity
                                 color: abandonmentRoot.abandonmentModel.textColor
                                 font.family: abandonmentRoot.abandonmentModel.fontFamily

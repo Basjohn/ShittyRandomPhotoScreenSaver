@@ -40,14 +40,10 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 1. **Operator-reported defects first:**
    - Extruded Spectrum does not orbit on a left-drag (Sphere does): agent in flight.
-   - Card surfaces (operator screenshot, 7 Nov): the Visualizer card ignores the theme's material, so Spectrum,
-     Spline Curve and maybe Oscilloscope (the modes whose card background is visible) show an opaque fill instead of
-     Glass (`VisualizerPresentation.qml` draws a plain rectangle; Card_Surface_Materials §3.4 excluded it pending
-     its own acceptance pass).
-   - On every widget the darker legibility panel must run from slightly above the header to slightly below the
-     last element (Media's covers only the track text). Panels are rounded, concentric with the widget's configured
-     corner radius, and sit 2-3 px inside the border (erring larger, never smaller). Volume and Mute Button children
-     take the material. Agent in flight.
+   - Card surfaces (operator screenshot, 7 Nov): the Visualizer card takes the theme's material (Spectrum, Spline
+     Curve, Oscilloscope); one rounded legibility panel per card (2.5 px inset, radius-following, 7:1 floor so
+     faint runs keep 4.5:1); Media's transport bar, volume and mute on the material; vector transport glyphs.
+     Lead-audited; merged after its gate.
    - **Studio (queued for the next free slot):** any reactivity edit stalls the preview until the clip loops
      (operator: if it needs a restart, restart the loop at once). Choosing a clip ("human") can fail on the first
      try (it stayed on ragdoll; the second try showed "analyzing" and worked).
@@ -186,6 +182,25 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - Manual Floor's low is 0.0 everywhere.
   - Technical tooltips use the registry names.
 
+- **Card surface acceptance pass: built 7 Nov on its agent branch, awaiting the lead's audit and merge.**
+  Rule: `Docs/Architecture/Card_Surface_Materials.md` 3.3 and 3.4. Each card's one legibility panel is the
+  material's inner panel (2.5 px inside the border, the card's own radius less the inset, never under 2 px, floor
+  7:1, which holds faint runs at 4.5:1); card-level rows and per-run plates are gone; rows stay only inside
+  tiles/capsules/stats panels (2 px inside, concentric). The Visualizer card takes the baseline material with its
+  Fill as tint; Media's transport bar, mute button (no inner rim) and a more transparent volume track take the card's
+  material; the transport glyphs are vectors. Achievement Pulse's canvas reserves a rail for every capsule shown.
+  Evidence: `.artifacts/evidence/widgets/card_surfaces/20261107_sheets/` and `20261107_controls_sheets/`.
+  Side defects found (not fixed here):
+  - The shared Steam mock (`build_mock_steam_view_model("achievement_pulse")`) uses field ids the card does not
+    define (rarity, session); the real ids are total, latest, playtime, previous, source, selected. Fixtures built
+    on it exercise capsules the runtime never emits.
+  - Order pollution: run together, the 33 scene/display test files fail 4 tests (Achievement Pulse config, Gmail
+    semantic actions, Media config projection, `test_baseline_follows_the_theme...`: an active theme leaks to
+    'glass'); each passes alone, and main fails the same 4 in the same run.
+  - The Visualizer's and the Context Menu's material are projected once per display generation
+    (`_configure_quick_auxiliary`); check whether a live Style Overrides or theme change reaches them before the
+    next generation as it reaches the ordinary cards.
+  - The faint-run measurement covered the dark theme only; light themes (dark text, the floor lightens) are unmeasured.
 - **AC-17 (theme material): built 7 Nov on its agent branch, awaiting the lead's audit and merge.** Operator's
   choice: cards follow the theme. A linked Widget mirror now carries its Settings theme's backdrop material
   (`widget_counterpart_for_settings_theme` projects it; 98 shipped mirrors got the one key by a fill, nothing else

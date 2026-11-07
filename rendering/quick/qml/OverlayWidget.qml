@@ -207,6 +207,8 @@ Item {
     property alias cardSurfaceMaterial: card.surfaceMaterial
     property alias cardSurfaceBackdrop: card.surfaceBackdrop
     property alias cardSurfaceTextColor: card.surfaceTextColor
+    // Child controls with their own surface (Media's volume track and mute button) follow it.
+    readonly property alias cardSurfaceMaterialActive: card.surfaceMaterialActive
     property alias cardBorderColor: card.borderColor
     // Global Card Border Width is specified in finished logical pixels. Uniform
     // CUSTOM families scale their authored root, so feed the card the inverse
