@@ -45,6 +45,25 @@ Item {
     property bool perfHudEnabled: false
     property string perfHudText: ""
 
+    // Expanded Visualizer (plan 01 M3, §F): one display-local transient visual policy over the ordinary widget
+    // lanes (their cards and their card shadows) while this display's Visualizer is display-wide. Python sets it at
+    // the takeover's event edges only (the coordinator, through the scene controller); QML owns only the fade. It
+    // multiplies (as an ancestor's opacity) with every family fade and the startup gate and never writes them, so a
+    // root created while covered joins already covered. The Visualizer card, its shadow and the OSD foreground lane
+    // are outside it. Fully covered, the lanes are invisible (no paint, no hit, no hover); input stops at the cover
+    // edge (enabled), not at the end of the fade. Nothing here runs at rest: the Behavior animates only on a change.
+    property bool ordinaryWidgetsCovered: false
+    // 0 snaps (a restore before reveal, Edit's immediate collapse); otherwise the Visualizer's own fade half.
+    property int ordinaryWidgetsCoverFadeMs: 0
+    property real ordinaryWidgetsCoverOpacity: ordinaryWidgetsCovered ? 0.0 : 1.0
+    Behavior on ordinaryWidgetsCoverOpacity {
+        enabled: displayScene.ordinaryWidgetsCoverFadeMs > 0
+        NumberAnimation {
+            duration: displayScene.ordinaryWidgetsCoverFadeMs
+            easing.type: Easing.InOutSine
+        }
+    }
+
     // Wall-time wallpaper transitions are rendered by BackgroundRenderItem,
     // not by an animating QML property. FrameAnimation supplies Qt Quick's
     // native animation-driver tick; this per-display gate requests the custom
@@ -239,6 +258,19 @@ Item {
                 offset: Qt.vector2d(0.0, 0.0)
                 cached: true
             }
+
+            // Every ordinary card shadow is parented here (after the Visualizer's, so the paint order is
+            // unchanged), so the Expanded Visualizer cover fades the ordinary shadows with their cards while the
+            // Visualizer card keeps its own shadow.
+            Item {
+                id: ordinaryWidgetShadowLane
+                objectName: "ordinaryWidgetShadowLane"
+                anchors.fill: parent
+                clip: false
+                enabled: false
+                opacity: displayScene.ordinaryWidgetsCoverOpacity
+                visible: opacity > 0.0
+            }
         }
 
         Item {
@@ -247,6 +279,9 @@ Item {
             anchors.fill: parent
             clip: false
             z: 10
+            opacity: displayScene.ordinaryWidgetsCoverOpacity
+            visible: opacity > 0.0
+            enabled: !displayScene.ordinaryWidgetsCovered
         }
 
         Loader {

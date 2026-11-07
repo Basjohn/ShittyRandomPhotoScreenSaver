@@ -87,6 +87,11 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - Double-click cycling while expanded skips incapable enabled modes and stays expanded; an explicit selection of
      an incapable mode collapses.
    - Spectrum gains bars in proportion to the extra width (its own milestone after M2, with a fade at the edges).
+   - Operator, 7 Nov night: "Don't reach nearly close enough to the screen borders" and "Don't really hide/disable
+     the widgets underneath". Landed 8 Nov (agent branch, lead-audited): the expanded card is inset only by its own
+     chrome plus 2 px (14 logical px at 2560 x 1440 with canonical chrome, was 30) and draws the card's own shadow;
+     the display's ordinary widgets and their shadows fade out with the card and stay hidden (one display-local cover,
+     nothing retired). The operator's physical look at both is owed. Complex transitions under the takeover are M4.
    - Overlays (operator, 8 Nov; plan 01 §G/M3b, after M3): a top-left preset-name toast in Title Case and a bottom-left
      Artist/Song/Artwork now-playing, both fading very gently on change; artwork with the themed border, white text
      with a customizable font; later, cheap bright-area detection to switch the text to black. No volume rail.
@@ -233,7 +238,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - Manual Floor's low is 0.0 everywhere.
   - Technical tooltips use the registry names.
 
-- **Card surface acceptance pass: built 7 Nov on its agent branch, awaiting the lead's audit and merge.**
+- **Card surface acceptance pass: merged 7 Nov (e80dfa41).**
   Rule: `Docs/Architecture/Card_Surface_Materials.md` 3.3 and 3.4. Each card's one legibility panel is the
   material's inner panel (2.5 px inside the border, the card's own radius less the inset, never under 2 px, floor
   7:1, which holds faint runs at 4.5:1); card-level rows and per-run plates are gone; rows stay only inside
@@ -252,7 +257,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
     (`_configure_quick_auxiliary`); check whether a live Style Overrides or theme change reaches them before the
     next generation as it reaches the ordinary cards.
   - The faint-run measurement covered the dark theme only; light themes (dark text, the floor lightens) are unmeasured.
-- **AC-17 (theme material): built 7 Nov on its agent branch, awaiting the lead's audit and merge.** Operator's
+- **AC-17 (theme material): landed 7 Nov (25ff6a93).** Operator's
   choice: cards follow the theme. A linked Widget mirror now carries its Settings theme's backdrop material
   (`widget_counterpart_for_settings_theme` projects it; 98 shipped mirrors got the one key by a fill, nothing else
   changed). Visible change: every profile on a linked "[Glass]"/"[Acrylic]" pair with Style Overrides on Theme,
@@ -349,6 +354,17 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - Each wrapper call replaces a PyOpenGL checked getter (~2.7 µs against ~13 µs a query).
   - Control-relative render CPU fell: Spectrum 2.04 → 1.26 cf, Extruded Spectrum 3.29 → 2.12 cf.
   - The baseline is re-recorded at M0.
+- **Expanded Visualizer inset amendment + M3 widget cover: merged 8 Nov after the lead's audit; the
+  operator's physical look is owed** (plan 01 §0.6 and M2/M3 notes).
+  - **Inset:** the expanded card sits only its own chrome inside the display (AC-09 border width + the shadow's
+    displaced body + 2 px): 14 logical px at 2560 x 1440 (21 device px at 150 %), was the 30 px edge margin; its
+    shadow is drawn as the card draws it (it had been magnified about five times).
+  - **M3 widgets:** the expanded display's ordinary cards and their shadows fade out with the card's first half and
+    are hidden (no paint, input or hover); they return exactly on collapse. Visual policy only: no family, provider
+    or lease is retired, so Media's Visualizer truth and every shared backend keep their consumers; the OSD lane and
+    other displays are untouched. 20 cycles: 0 lifecycle calls, QObject tree flat, no Qt warnings.
+  - **Open:** the operator's look on the real display (both corrections). The now-playing HUD is its own slice after
+    M3 merges (operator's respecified plan 01 §G, lead).
 - **Settings round-trip memory growth (R-175): main cause merged 7 Nov (1d1540a9).** The lead audited the timing:
   the collection runs in the replacement's construction, the barrier's continuation, and with real Qt roots that
   continuation is queued on the barrier's completion timer. So it never runs inside a `destroyed` emission. 15/15 GC,
@@ -595,6 +611,18 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   rectangle). Once the card gets the theme's material, the expanded card shows it with no M2 change.
 - **Display-wide renders reach 4K device pixels per scene target** (3840 x 2160 at 150 %); M0 already measured EB's
   render-mode median over 8 ms at display size under game60. Per-mode full-display budgets stay with M6 (§0.7).
+
+**Found while building Expanded Visualizer M3 (7 Nov night; recorded, not yet admitted):**
+- **An ordinary root's initial fade runs its family's own fade from QML's default.** The host writes `fadeOpacity`
+  before parenting (`OrdinaryWidgetPresentationHost._adopt_item`), but a family `Behavior on fadeOpacity` (the OSD's,
+  1150 ms) is already live, so the root animates 1 -> 0 instead of starting at 0, and a `set_fade_opacity(1.0)` in
+  the same turn reads the not-yet-ticked 1.0 and is skipped (`RetainedOverlayWidget.set_fade_opacity` compares
+  first), so that reveal is lost. Harmless today (the startup gate is closed while generations build, and a real
+  OSD reveal arrives later), but a mid-generation root with an authored fade would show a brief fade-out. The M3
+  test waits it out. Fix at the host (project the initial fade with the Behavior bypassed) when admitted.
+- **The overhead baseline cannot see the QML scene:** `tools/overhead_baseline.py` renders render nodes on a bare
+  host, never `DisplayScene.qml`, so scene-level dormancy (M3's cover) is proven by the QObject census and the
+  no-per-frame-work structure instead.
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.

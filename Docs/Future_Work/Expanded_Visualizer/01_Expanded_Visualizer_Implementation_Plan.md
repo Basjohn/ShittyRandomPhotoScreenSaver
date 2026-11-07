@@ -40,7 +40,7 @@ owner that signs it. The original milestones (§H) keep their checklists; this t
 | **P-A** AC-02 host binding | Waveform accepted; `Current_Plan.md` admits P-A | AC-02's regression bar green; Edit/Arrange parity maps byte-identical; `DisplayManager` no longer constructs the owner | lead |
 | **M0** baseline | P-A merged; operator admits plan 01 | EB baseline receipts at canonical, wide/tall and display-sized views, one and two monitors, idle and game60: fps, tick median/p90, GIL share, frame age, lease counts; written to `.artifacts/evidence/expanded_visualizer/baseline/`; no Visualizer code changed | lead |
 | **M1** capability + persistence + reducer | M0 receipts exist | all pure reducer tests green incl. stale generation, duplicate glyph, Edit cancel, topology loss; `replace_visualizer_runtime_preset_state` round-trips the intent; no dormant-mode import (import scan) | agent |
-| **M2** full-display viewport | M1 green; AC-02, AC-09 merged | production-host renders at 16:9, 16:10, 21:9, portrait, mixed DPR show the Visualizer card near the display's visible extents (inset by the card's edge margin, never the R-63 overscanned window) with its chrome; reactivity packet digests identical to M0 on recorded clips for every capable mode; ordinary rect round-trips to the byte | lead + operator look |
+| **M2** full-display viewport | M1 green; AC-02, AC-09 merged | production-host renders at 16:9, 16:10, 21:9, portrait, mixed DPR show the Visualizer card near the display's visible extents (inset by only what the card's own chrome needs plus a 2 px gap, amended 7 Nov; never the R-63 overscanned window) with its chrome; reactivity packet digests identical to M0 on recorded clips for every capable mode; ordinary rect round-trips to the byte | lead + operator look |
 | **M2b** Spectrum bar count at full display | M2 accepted | expanded bar count = card bar count x the width ratio (clamped to the DSP maximum), so bar width stays as authored; the DSP band layout is recomputed at the expand and collapse edges behind a fade (never a jump); Spectrum's digests differ at full display by design (per-band history re-mapped), every other mode's stay identical | lead + operator look |
 | **M3** fades, HUD, widget suspension | M2 accepted | consumer counts equal before/after N cycles (Media, OSD, Gmail, Feeds, Steam leases); no QObject/subscription growth over 20 cycles; HUD visible only on events, fades within its bounded window | agent |
 | **M3b** full-display overlays | M3 merged | §G spec incl. options and the Fullscreen Mode pill; event-only visibility, Always Show crossfade, every corner, media controls on the one Media controller; consumer counts unchanged | agent |
@@ -56,7 +56,7 @@ owner that signs it. The original milestones (§H) keep their checklists; this t
 | mode capability `supports_expanded_display` | `core/settings/visualizer_mode_registry.py` descriptor (default False; every mode but Sphere and Extruded Spectrum declares True) | a Settings flag, a preset field |
 | persisted intent `widgets.spotify_visualizer.expanded_display_requested` | canonical defaults + `SettingsManager` normaliser; excluded from mode/Custom payload | a sidecar file, a per-preset copy |
 | effective state (DORMANT..RETIRING) | the takeover coordinator next to the Visualizer host binding (AC-02), one per process | QML state, `DisplayManager` ad hoc flags |
-| expanded viewport geometry | `resolve_expanded_visualizer_presentation` (`widgets/spotify_visualizer/presentation_geometry.py`), a variant of the ordinary `ResolvedVisualizerPresentation`; its edge margin is the card's ordinary one (`resolve_overlay_geometry_policy("media")`, the slot the Visualizer sits on) | a stretched texture, authored CUSTOM geometry, the overscanned window rect |
+| expanded viewport geometry | `resolve_expanded_visualizer_presentation` (`widgets/spotify_visualizer/presentation_geometry.py`), a variant of the ordinary `ResolvedVisualizerPresentation`; its inset is `expanded_card_inset`: the card's own chrome (the AC-09 border width, the shadow's displaced body) plus `EXPANDED_CARD_EDGE_GAP` (amended 7 Nov) | a stretched texture, authored CUSTOM geometry, the overscanned window rect, the ordinary slot's edge margin |
 | widget visibility while covered | one display-local transient visual policy on the retained host (§F) | `widgets.<id>.enabled`, family activation, layout slots |
 | per-display wallpaper admission | one policy at the engine/manager batch seam (§E) | a second queue, dropped callbacks |
 | HUD data | existing Media model / volume model (§G) | a second GSMTC query, decoder or art cache |
@@ -101,10 +101,17 @@ not a different renderer.
 
 - **Full display is not edge to edge (operator, 7 Nov):** "we have the overscan rule to stop opengl artifacting for a
   good reason. In my opinion a full screen visualizer would place the widget card of the visualizer near the display
-  extents. You'd still see it's border colour and surface type if relevant." The expanded card is the display's
-  logical rect (the monitor, never the R-63 window) inset on every side by the card's ordinary edge margin, and keeps
-  its chrome: border colour and width, corner radius, shadow and surface material (the Visualizer card's material is
-  its own open item in `Current_Plan.md`; the expanded card inherits whatever the card draws).
+  extents. You'd still see it's border colour and surface type if relevant." **Amended (operator, 7 Nov night, on
+  Waveform Ribbon expanded at 2560 x 1440):** "for fullscreen visualizer we currently: 1. Don't reach nearly close
+  enough to the screen borders." The expanded card is the display's logical rect (the monitor, never the R-63
+  window) inset on every side by only what the card's own chrome needs, plus a 2 px gap (`expanded_card_inset`): its
+  border width (the one AC-09 resolver) and, when it casts a shadow, the shadow's displaced body (base offset plus
+  Extra Offset) on its furthest side; the blur falloff and the transient hover glow may meet the display edge
+  (keeping them whole would put the card about 30 px in again). It keeps its chrome as the card draws it: border
+  colour and width, corner radius, shadow (not magnified with the display-wide world) and surface material (the
+  Visualizer card's material is its own open item in `Current_Plan.md`; the expanded card inherits whatever the card
+  draws). Canonical chrome on 2560 x 1440 at 150 %: 4 + 8 + 2 = 14 logical px (21 device px), was 30 (45) with a
+  shadow magnified about five times.
 - **The world is contained, never cropped or stretched (M2):** the ordinary viewport extent grows on the inset card's
   long axis only (a wider card keeps the height and widens; a portrait one keeps the width and grows taller), and one
   uniform scale maps it onto the card. The logical runtime keeps the ordinary extent (the controller is never handed
@@ -164,7 +171,7 @@ whose geometry is its own, never the ordinary layout's.
 | --- | --- | --- | --- |
 | per-display wallpaper suppression wedges a global batch (§E) | medium | critical | pure state tests of the batch accounting first (E1.1); the fallback keeps the transaction contract and records one unresolved perf item |
 | 4K GPU cost of EB/Waveform exceeds budget | medium | high (decides the backend) | mixed resolution for soft layers; otherwise trigger 1 recorded, not hidden by a knob |
-| widget re-admission after fade creates duplicate owners or orphans shared backends | medium | high | symmetric, idempotent, exact-generation `admit_widget` on the binder (§F); consumer counts in the regression bar |
+| widget re-admission after fade creates duplicate owners or orphans shared backends | medium → closed at M3 | high | nothing is retired: the M3 cover is a visual policy only (no `admit_widget` built); the regression bar spies every lifecycle entry point over 20 cycles |
 | expansion persisted on a now-incapable mode flashes or loops at startup | low | medium | one evaluation at the readiness edge; deterministic incapable rule (§D3) |
 | HUD/OSD/control hit overlap | medium | low | one visibility lease with priority (§G); native QML hit tests |
 | plan drift from the source by the time it starts | high | medium | M0 re-audits every seam in §A and records amendments |
@@ -199,7 +206,7 @@ Repository `Basjohn/ShittyRandomPhotoScreenSaver`, default `main`, examined 2026
 
 ## B. Product behaviour / scoped definitions
 
-1. **Expanded** means the *existing selected Quick display scene's logical display rectangle* inset by the card's edge margin (operator, 7 Nov: the card sits near the display's visible extents with its chrome; §0.6), not exclusive OS fullscreen, a new window or altered screen/desktop shell. It covers all compositor space intended by the product, respecting actual selected display geometry and viewport/DPR, not an arbitrary 16:9 crop. Preserve current screen-window policy and monitor identity.
+1. **Expanded** means the *existing selected Quick display scene's logical display rectangle* inset by only what the card's own chrome needs (operator, 7 Nov: the card sits near the display's visible extents with its chrome, and much closer than the ordinary edge margin; §0.6), not exclusive OS fullscreen, a new window or altered screen/desktop shell. It covers all compositor space intended by the product, respecting actual selected display geometry and viewport/DPR, not an arbitrary 16:9 crop. Preserve current screen-window policy and monitor identity.
 2. **Entering:** operator presses a contextual diagonal upper-right expansion glyph on a capable visualizer. Normal hover/interaction eligibility applies. User sees a short, gentle coordinated transition from ordinary visualizer rect to display-wide viewport; ordinary widgets on **that** display fade out. Other displays behave normally. OSD remains available. There is no extra mode activation.
 3. **Exiting:** reverse glyph (diagonal lower-left), explicit collapse, Edit entry, loss of capability, or relocation. Return exact authored pre-expansion presentation rather than saving the temporary screen-sized rect. Collapse/restore is independent of preset and CUSTOM values.
 4. **Mode selection:** ordinary double-click and context-menu mode switches retain current meaning, except that a double-click while expanded cycles only through capable modes (§0.6). Capable -> capable stays expanded through the canonical activation. Capable -> incapable collapses in a strictly ordered handoff, then changes mode. A rejected mode request leaves the current mode/expansion intact. Middle-click still cycles preset only.
@@ -480,17 +487,20 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 - [x] Implement single resolved display-space presentation variant through scene controller/retained node. No new render path, no preset changes, no whole-widget final-pixel stretching.
 - [x] Add contextually admitted vector ↗/↙ glyph with safe hitboxes and event-bound hover fade; preserve existing reset/preset and semantic double/middle clicks.
 - [x] Prove viewport clips and camera on 16:9, 16:10, 21:9, portrait and mixed DPR, with screen/window-bound geometry and safe GL target resize/retirement.
-- [ ] **Gate 2:** production-host geometry is the card near the display's visible extents (edge margin, chrome kept), and reactivity/payload numerical identities remain untouched for every capable mode; ordinary view round-trips its geometry to the byte. Lead signs; operator looks.
+- [ ] **Gate 2:** production-host geometry is the card near the display's visible extents (chrome inset, chrome kept), and reactivity/payload numerical identities remain untouched for every capable mode; ordinary view round-trips its geometry to the byte. Lead signs; operator looks.
 
 **M2 as built (7 Nov, implementing agent; the source is the authority where this plan was silent):**
 
-- *Geometry.* `resolve_expanded_visualizer_presentation(ordinary, display_size, edge_margin, dpr)`: outer rect =
-  the display's logical rect inset by `edge_margin` on every side, exactly (the inset rect is the stage authority,
-  never re-derived from extent x scale); extent contained (§0.6); shell, clip, border, radius, colours, shadow and
-  orientation from the ordinary record; DPR the target display's. The display manager passes the card's ordinary
-  edge margin (`resolve_overlay_geometry_policy("media")`, Media's anchored slot, which the Visualizer sits on; 30 px
-  canonical); the owner caps it at a quarter of the shorter side.
-- *Owner route.* `QuickDisplayVisualizerOwner.set_expanded_display(expanded, animate, on_complete, edge_margin)`
+- *Geometry.* `resolve_expanded_visualizer_presentation(ordinary, display_size, dpr)`: outer rect = the display's
+  logical rect inset on every side by `expanded_card_inset(ordinary)`, exactly (the inset rect is the stage
+  authority, never re-derived from extent x scale), capped at a quarter of the shorter side; extent contained (§0.6);
+  shell, clip, border, radius, colours, shadow and orientation from the ordinary record; DPR the target display's.
+  **Amended 7 Nov (operator: "Don't reach nearly close enough to the screen borders"):** the inset was the card's
+  ordinary edge margin (`resolve_overlay_geometry_policy("media")`, 30 px canonical) passed by the display manager;
+  it is now derived inside the resolver from the card's own chrome (§0.6), so no caller passes a margin. The shadow
+  is drawn as the card draws it (it had been magnified with the display-wide world: blur about 88 px on a 2560 x
+  1440 display). The ordinary card is untouched.
+- *Owner route.* `QuickDisplayVisualizerOwner.set_expanded_display(expanded, animate, on_complete)`
   swaps the publication sync's resolve/commit pair (`QuickVisualizerPresentationSync.set_presentation_route`) at the
   event edge, so the steady path carries no per-frame branch and a collapse restores the ordinary methods
   themselves. The display-wide commit hands the controller the ordinary record's metrics, never its own, so the
@@ -537,10 +547,62 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 
 **Milestone 3 | Display-local fading, HUD + safe widget suspension**
 
-- [ ] Add composed takeover opacity outside authored fade; no flashing at startup or immediate toggles.
-- [ ] Add exception/preservation for Media truth and OSD; implement consumer-accurate targeted retirement/re-admission (if safe), not global disable flags.
-- [ ] Add theme-aligned event-driven HUD with no tooltips/hit overlap; test track/play/pause/volume/hover and unavailable app-volume provider.
-- [ ] **Gate 3:** no service/backend orphaning, no duplicate worker/endpoint source, UI equal on untouched display, no opacity/binding warnings.
+- [x] Add composed takeover opacity outside authored fade; no flashing at startup or immediate toggles.
+- [x] Add exception/preservation for Media truth and OSD; implement consumer-accurate targeted retirement/re-admission (if safe), not global disable flags. (Retirement/re-admission decided against, below: the cover is visual only.)
+- [ ] HUD: **not M3 any more.** The operator respecified it (7 Nov night); it is its own slice after M3 merges, per the amended §G (lead).
+- [ ] **Gate 3:** no service/backend orphaning, no duplicate worker/endpoint source, UI equal on untouched display, no opacity/binding warnings. Widget part evidenced (below); lead signs; the operator's look on the real display is owed.
+
+**M3 as built (7 Nov night, implementing agent; widget fade and suspension only):**
+
+> Operator, on Waveform Ribbon expanded at 2560 x 1440: "Don't really hide/disable the widgets underneath as you can
+> see a double border on the topleft from another widget."
+
+- *Policy (§0.3, §F).* One display-local transient visual policy on the retained scene: `DisplayScene.qml`
+  `ordinaryWidgetsCovered` drives `ordinaryWidgetsCoverOpacity`, applied as the opacity of the two ordinary lanes,
+  the paint lane (`ordinaryWidgetHost`) and a new shadow lane (`ordinaryWidgetShadowLane`, inside the shadow host
+  after the Visualizer card's shadow, so paint order is unchanged and every ordinary card shadow fades with its
+  card). Fully covered, both lanes are invisible (no paint, hit or hover); input stops at the cover edge
+  (`enabled`), not at the end of the fade. It composes as an ancestor's opacity with every family `fadeOpacity` and
+  the startup gate and never writes them; a root created while covered joins covered. The Visualizer card, its
+  shadow and the OSD foreground lane are outside it. `QuickSceneController.set_ordinary_widgets_covered(covered,
+  fade_s)` is the one setter; QML owns only the fade (a `Behavior`, `Easing.InOutSine`, its `NumberAnimation`
+  instantiated on first use; nothing runs at rest).
+- *Driver.* The takeover coordinator, at its action edges only (no timer, no poll, no per-frame branch): `RunEnter`
+  covers (D1.6, before the owner's route), `BeginExit` uncovers (D2.2), as do `CancelEnter` and `RetireTakeover`.
+  The fade is the owner's own fade half (`expanded_display_fade_half_s`, 0.25 s): the widgets leave while the card
+  fades out at its ordinary rect and return while the display-wide card fades out. The readiness restore and Edit's
+  collapse snap (a restore happens before reveal, so nothing is ever seen fading; Edit edits the ordinary layout at
+  once). Only the owning display is covered; covering another first uncovers the previous one. The display manager
+  wires `_cover_ordinary_widgets` into the coordinator's services.
+- *Suspension (decided).* Covered widgets are suspended as presentation: invisible items draw nothing and take no
+  input. Family services are **not** retired and re-admitted: Media must keep feeding the Visualizer's playback
+  truth and its volume wheel; Gmail, Feeds, Steam, System Stats and Friend Pulse backends are generation-shared and
+  serve other displays; a per-collapse rebuild would re-run QML construction on the GUI thread and re-arm provider
+  refreshes (the Reddit/Steam burst risk §F names), and could not return each widget "exactly as it was" (rotation,
+  scroll and fade state). So the binder's targeted `admit_widget` is not built. Visibility-driven presentation work
+  already pauses on its own (Friend Pulse reports an empty visible range, so avatar hydration for this display
+  stops; Achievement Pulse's pulse stops). What still runs while covered: each family's provider cadence and model
+  updates, exactly as before expansion. Reopen only on measured evidence that a covered display's exclusive provider
+  work matters.
+- *§F open points, decided.* A widget enabled or disabled by Settings while covered: Settings replaces the
+  generation, and the readiness restore covers the new one before reveal. Edit collapses first (uncovered, snapped),
+  so its live enable/disable commits happen on the ordinary layout. Nothing is frozen, so collapse reconciles
+  nothing: the lanes reopen over whatever is live.
+- *Gate 3 evidence (widget part).* `tests/test_visualizer_expansion_widget_cover.py` on the production
+  `DisplayScene.qml` and `QuickSceneController` (hidden `QQuickRenderControl` scene, never shown): covered (snap and
+  fade) the frame equals the same display with no ordinary widgets, the expanded Visualizer card with its shadow and
+  a revealed OSD included; uncovering restores every pixel; mid-fade every card shadow fades with its card; family
+  fades, startup gate and roots untouched; input stops at the edge; a late root joins covered. Twenty user
+  expand/collapse cycles through the real coordinator and the display manager's cover service: 0 calls into any
+  family, binder, runtime-manager, presenter or host lifecycle entry point (spied), so no Media, OSD, Gmail, Feeds or
+  Steam consumer or lease can change; the same retained roots; QObject tree 206 before and after the 20 cycles (one
+  warm-up cycle first adds the deferred `NumberAnimation` and two Canvas contexts painting late); no Qt warning.
+  `tests/test_visualizer_expansion_coordinator.py` covers the edge order, snaps and retirements. Negative controls:
+  no cover on the paint lane, the cover on the whole shadow host (fades the Visualizer's shadow), an unfaded shadow
+  lane, ordinary shadows outside the lane, no uncover at `BeginExit`: each turns its bar red. No real Media / Gmail /
+  Feeds / Steam lease was counted in a test (that needs a live generation); the bar instead proves the cover cannot
+  reach their lifecycle. (§I proposed `test_visualizer_expansion_widget_leases.py` for a retire/re-admit design that
+  was not built.)
 
 **Milestone 3b | Full-display overlays (operator spec, §G, 8 Nov)**
 
