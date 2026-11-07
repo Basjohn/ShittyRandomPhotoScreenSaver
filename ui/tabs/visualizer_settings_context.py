@@ -843,7 +843,6 @@ class VisualizerSettingsContextMixin:
                 self._save_settings_now()
             else:
                 self._save_settings()
-            self._update_rainbow_visibility()
             return
 
         if move_to_custom_pending:
@@ -889,7 +888,6 @@ class VisualizerSettingsContextMixin:
                 self._loading = False
 
         self._save_settings()
-        self._update_rainbow_visibility()
 
     def _active_visualizer_preset_is_custom(self) -> bool:
         mode = self._get_active_visualizer_mode()
@@ -937,40 +935,3 @@ class VisualizerSettingsContextMixin:
         # Restore scroll position for the new mode
         if prev_mode != mode:
             self.restore_scroll_position(mode)
-
-        # Rainbow controls are stable presentation-owned widgets. V7 reloads
-        # their active-mode state from the same resolved config used to hydrate
-        # the selected lazy body; ordinary section visibility must never invent
-        # or restore a second cache authority here.
-        self._update_rainbow_visibility()
-
-    def _update_rainbow_visibility(self) -> None:
-        """Show/hide rainbow speed slider and apply rainbow text easter egg."""
-        try:
-            from core.settings.visualizer_mode_registry import mode_has_rainbow_controls
-
-            enabled = self.rainbow_enabled.isChecked()
-            current_mode = self._get_active_visualizer_mode()
-            supports_rainbow = mode_has_rainbow_controls(current_mode)
-            custom_visible = self._active_visualizer_preset_is_custom() and supports_rainbow
-            bucket = getattr(self, '_rainbow_controls_container', None)
-            if bucket is not None:
-                bucket.setVisible(custom_visible)
-            container = getattr(self, '_rainbow_speed_container', None)
-            if container is not None:
-                container.setVisible(custom_visible and enabled)
-
-            glow_effect = getattr(self, '_rainbow_glow_effect', None)
-            if glow_effect is not None:
-                glow_effect.setEnabled(custom_visible and enabled)
-
-            plain_label = getattr(self, '_rainbow_plain_label', None)
-            if plain_label is not None:
-                palette = plain_label.palette()
-                color = QColor("#ffffff")
-                if custom_visible and enabled:
-                    color = QColor("#f7f7f7")
-                palette.setColor(plain_label.foregroundRole(), color)
-                plain_label.setPalette(palette)
-        except Exception as e:
-            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)

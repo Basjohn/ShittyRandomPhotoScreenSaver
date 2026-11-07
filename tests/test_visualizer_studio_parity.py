@@ -468,12 +468,8 @@ def test_the_settings_body_is_only_the_preset_row_and_the_launcher(studio_on, mo
         assert body.findChild(QWidget, f"{mode}_bucket_{bucket.key}") is None, bucket.key
     # No hidden value owners: the body's values live in its value cache (A-12).
     assert body.findChild(QWidget, f"{mode}_studio_owned_values") is None
-    # The page's shared Bar Appearance and Rainbow rows are value owners only, in the page's never-shown family
-    # holder, never in a mode body and never on the page.
-    tab._update_rainbow_visibility()
-    for accessory in (tab._base_appearance_group, tab._rainbow_controls_container):
-        assert not body.isAncestorOf(accessory)
-        assert not accessory.isVisibleTo(tab)
+    # The page's shared Bar Appearance and Rainbow families have no widget anywhere (the page's value cache).
+    assert tab.findChild(QWidget, "visualizer_studio_family_values") is None
     quality = getattr(tab, f"_{mode}_quality_controls", None)          # the 3D Detail row (Settings' 3D page owner)
     for widget in body.findChildren(QAbstractButton) + body.findChildren(QAbstractSlider) \
             + body.findChildren(QComboBox):

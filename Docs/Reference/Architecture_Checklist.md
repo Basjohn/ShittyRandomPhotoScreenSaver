@@ -310,11 +310,6 @@ into them.
   - Particle's default radius of 7 always runs as 8. Its gloss offers 10–200 where 16–128 is admitted.
   - The Particle save overwrites four fields it doesn't show with literals.
   - **Radius decision (lead):** keep what users already see, so admit a minimum of 8 and make the default 8.
-- [ ] **AC-21 (SS-05) The shared Bar Appearance and Rainbow families join the spec.** P2, effort M.
-  - This finishes A-12: the page builds no hidden value-owner widget.
-  - One range per value: the rainbow speed range is restated in four places today.
-  - The preset completeness check covers them.
-  - Uses AC-18's shared-entries pattern (landed: `audio_analysis_entries`, the `technical` bucket).
 - [ ] **AC-23 (SS-07) AC-01 residue.** P3, effort S. Folds into AC-14 and follows AC-18.
   - Delete about 600 dead lines of Technical widget code and the dead Advanced plumbing
     (`_auto_switch_preset_to_custom` never fires).

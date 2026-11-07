@@ -14,17 +14,13 @@ from copy import deepcopy
 from typing import Any, Dict, Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
-    QGraphicsDropShadowEffect,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -42,7 +38,6 @@ from core.settings.visualizer_mode_registry import (
     is_mode_active,
     resolve_effective_enabled_modes,
     resolve_effective_mode,
-    mode_has_rainbow_controls,
 )
 from core.settings.visualizer_presets import (
     apply_preset_to_config,
@@ -54,11 +49,7 @@ from rendering.widget_descriptors import (
 )
 from ui.flow_layout import FlowContainer
 from ui.tabs import shared_styles
-from ui.tabs.media.builder_scaffold import build_dynamic_collapsible_bucket
-from ui.tabs.media.shared_appearance_controls import (
-    build_shared_visualizer_appearance_controls,
-)
-from ui.tabs.media.visualizer_mode_binding import load_visualizer_rainbow_state
+from ui.tabs.media.visualizer_mode_binding import load_visualizer_family_values
 from ui.tabs.visualizer_settings_context import (
     DEFAULT_VISUALIZER_MODE,
     VisualizerSettingsContextMixin,
@@ -67,11 +58,10 @@ from ui.tabs.widgets_tab_media import (
     _install_visualizer_body_host,
     _update_spotify_vis_enabled_visibility,
     _update_visualizers_enabled_visibility,
-    load_shared_visualizer_appearance_settings,
     load_visualizer_settings,
     save_visualizer_settings,
 )
-from ui.tabs.shared_styles import NoWheelSlider, add_section_label, style_group_box
+from ui.tabs.shared_styles import style_group_box
 from ui.widget_display_routes import DisplayRouteLeaveGuard
 
 logger = get_logger(__name__)
@@ -302,37 +292,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._mode_body_layout.setSpacing(4)
         controls_layout.addWidget(self._mode_body_host_widget)
 
-        # These controls originated in Spectrum Custom but now serve every mode
-        # that explicitly owns the shared-bar appearance contract. They are created
-        # once by the tab, then physically placed inside the selected mode's Custom
-        # normal-layout. Before body retirement they are evacuated back to the
-        # stable mode page so Qt destruction cannot take them with a retired body.
-        (
-            self._base_appearance_group,
-            base_appearance_layout,
-            self._base_appearance_toggle,
-        ) = build_dynamic_collapsible_bucket(
-            self,
-            controls_layout,
-            mode_provider=self._get_active_visualizer_mode,
-            host_mode_key="shared_bar_stable",
-            bucket_key="bar_appearance",
-            title="Bar Appearance",
-            helper_text="Fill colour/alpha, border colour/alpha, and border opacity are stored per supported mode.",
-        )
-        build_shared_visualizer_appearance_controls(self, base_appearance_layout)
-        self._base_appearance_group.setVisible(False)
-
-        # Rainbow is likewise a per-mode Custom family, not a mode-global strip.
-        self._build_rainbow_controls(controls_layout)
-        # Every mode is edited in its Studio, which edits both families too:
-        # the two rows are the page's value owners only, kept in one
-        # never-shown holder for the page's lifetime and never placed in a
-        # mode body.
-        self._studio_family_values = QWidget(page)
-        self._studio_family_values.setObjectName("visualizer_studio_family_values")
-        self._studio_family_values.hide()
-        self._park_custom_accessories()
+        # The shared Bar Appearance and Rainbow families (stored per owning mode, declared in each mode's spec) are
+        # edited in the Studios; the page holds their values in a value cache and builds no widget for them.
+        load_visualizer_family_values(self, {})
 
         layout.addWidget(self._vis_controls_container)
         layout.addStretch()
@@ -345,150 +307,6 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         )
         _update_spotify_vis_enabled_visibility(self)
         return page
-
-    def _build_rainbow_controls(self, parent_layout: QVBoxLayout) -> None:
-        (
-            self._rainbow_controls_container,
-            bucket_layout,
-            self._rainbow_bucket_toggle,
-        ) = build_dynamic_collapsible_bucket(
-            self,
-            parent_layout,
-            mode_provider=self._get_active_visualizer_mode,
-            host_mode_key="shared_stable",
-            bucket_key="rainbow",
-            title="Rainbow",
-            helper_text="Per-mode rainbow enablement and speed still apply when hidden.",
-        )
-        self._rainbow_per_mode: dict[str, tuple[bool, int]] = {}
-
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
-        row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-
-        self.rainbow_enabled = QCheckBox("Taste the Rainbow")
-        self.rainbow_enabled.setProperty("circleIndicator", True)
-        self.rainbow_enabled.setAccessibleName("Taste the Rainbow")
-        self.rainbow_enabled.setToolTip(
-            "Slowly shift the hue of visualiser colours through the spectrum. "
-            "Saved independently per visualizer mode."
-        )
-        self.rainbow_enabled.setChecked(
-            self._default_bool('spotify_visualizer', 'rainbow_enabled')
-        )
-        self.rainbow_enabled.setCursor(Qt.CursorShape.PointingHandCursor)
-        # This is a discrete Custom toggle, not slider chatter. Persist it
-        # immediately so closing Settings straight after clicking cannot lose the
-        # newly acknowledged runtime state.
-        self.rainbow_enabled.stateChanged.connect(
-            lambda _state: self._save_settings_now()
-        )
-        self.rainbow_enabled.stateChanged.connect(
-            lambda _state: self._update_rainbow_visibility()
-        )
-        self.rainbow_enabled.setSizePolicy(
-            QSizePolicy.Policy.Fixed,
-            QSizePolicy.Policy.Fixed,
-        )
-        row.addWidget(self.rainbow_enabled)
-
-        glow_effect = QGraphicsDropShadowEffect(self.rainbow_enabled)
-        glow_effect.setColor(QColor(255, 255, 255, 160))
-        glow_effect.setBlurRadius(26.0)
-        glow_effect.setOffset(0, 0)
-        glow_effect.setEnabled(False)
-        self.rainbow_enabled.setGraphicsEffect(glow_effect)
-
-        self._rainbow_plain_label = self.rainbow_enabled
-        self._rainbow_glow_effect = glow_effect
-        self._rainbow_label_stack = None
-        self._rainbow_glow_label = None
-
-        row.addStretch()
-        bucket_layout.addLayout(row)
-
-        self._rainbow_speed_container = QWidget()
-        speed_row = QHBoxLayout(self._rainbow_speed_container)
-        speed_row.setContentsMargins(0, 0, 0, 0)
-        speed_row.setSpacing(6)
-        add_section_label(speed_row, "Speed:", 150)
-        self.rainbow_speed_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.rainbow_speed_slider.setRange(1, 100)
-        self.rainbow_speed_slider.setValue(
-            int(round(self._default_float('spotify_visualizer', 'rainbow_speed') * 100.0))
-        )
-        self.rainbow_speed_slider.setTickPosition(NoWheelSlider.TickPosition.TicksBelow)
-        self.rainbow_speed_slider.setTickInterval(10)
-        self.rainbow_speed_slider.setToolTip("How fast the hue cycles through the spectrum.")
-        self.rainbow_speed_slider.valueChanged.connect(self._save_settings)
-        self.rainbow_speed_label = QLabel("0.50")
-        self.rainbow_speed_slider.valueChanged.connect(
-            lambda value: self.rainbow_speed_label.setText(f"{value / 100.0:.2f}")
-        )
-        speed_row.addWidget(self.rainbow_speed_slider, 1)
-        speed_row.addWidget(self.rainbow_speed_label)
-        bucket_layout.addWidget(self._rainbow_speed_container)
-        self._rainbow_speed_container.setVisible(False)
-
-        self._rainbow_controls_container.setVisible(False)
-
-    def _update_rainbow_visibility(self) -> None:
-        """Apply shared Rainbow visibility plus shared-bar Custom accessory gates."""
-        super()._update_rainbow_visibility()
-        appearance = getattr(self, "_base_appearance_group", None)
-        if appearance is not None:
-            from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_visualizer_mode_descriptor
-            mode = self._get_active_visualizer_mode()
-            appearance.setVisible(
-                mode in VISUALIZER_MODE_IDS and get_visualizer_mode_descriptor(mode).draws_bars
-                and self._active_visualizer_preset_is_custom()
-            )
-
-    def _park_custom_accessories(self) -> None:
-        """Keep the shared family rows in the page's never-shown holder, outside any retireable mode body."""
-        holder = getattr(self, "_studio_family_values", None)
-        if holder is None:
-            return
-        for widget in (
-            getattr(self, "_base_appearance_group", None),
-            getattr(self, "_rainbow_controls_container", None),
-        ):
-            if widget is None:
-                continue
-            widget.hide()
-            parent = widget.parentWidget()
-            parent_layout = parent.layout() if parent is not None else None
-            if parent_layout is not None:
-                parent_layout.removeWidget(widget)
-            widget.setParent(holder)
-
-    def _place_custom_accessories(self, mode_id: str) -> None:
-        """Point the shared-family rows (Bar Appearance, Rainbow) at the selected mode.
-
-        Every mode is edited in its Studio, which edits these families too, so the rows stay in the page's
-        never-shown holder as value owners only; their bucket state follows the selected mode."""
-        self._park_custom_accessories()
-
-        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-        if get_visualizer_mode_descriptor(mode_id).draws_bars:
-            shared_styles.set_bucket_toggle_checked(
-                self._base_appearance_toggle,
-                self.get_visualizer_bucket_state(mode_id, "bar_appearance"),
-            )
-
-        if mode_has_rainbow_controls(mode_id):
-            shared_styles.set_bucket_toggle_checked(
-                self._rainbow_bucket_toggle,
-                self.get_visualizer_bucket_state(mode_id, "rainbow"),
-            )
-        else:
-            shared_styles.set_bucket_toggle_checked(
-                self._rainbow_bucket_toggle,
-                False,
-                coordinate=False,
-            )
-        self._update_rainbow_visibility()
 
     def _reset_view_scroll(self) -> None:
         scroll = self._scroll_area
@@ -550,7 +368,6 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         if (not getattr(self, "_loading", False)
                 and self._page_stack.currentWidget() is self._mode_page):
             self.retire_bucket_context()
-        self._park_custom_accessories()
         self._setup_pill.setChecked(True)
         self._page_stack.setCurrentWidget(self._setup_page)
         self._reset_view_scroll()
@@ -564,7 +381,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         previous = self._get_active_visualizer_mode()
         # A lazy builder can raise before the body host commits its new mode.
         # Retain the last *visible* selection to restore coherent Settings
-        # presentation (including its reparented accessory buckets) on failure.
+        # presentation on failure.
         previous_page_is_mode = self._page_stack.currentWidget() is self._mode_page
         previous_host_mode = host.selected_mode
         previous_config = self._vis_loaded_config
@@ -580,26 +397,17 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         previous_loading = self._loading
         self._loading = True
         try:
-            load_shared_visualizer_appearance_settings(self, resolved, target)
-
             # Pills are the actual selection authority. The host records selection;
-            # the shared context then handles visibility/scroll/rainbow on the same
-            # cached body without a second selector. Park stable Custom accessories
-            # before construction so even a fail-loud builder error cannot strand
-            # them under the previously selected retireable body.
-            self._park_custom_accessories()
+            # the shared context then handles visibility/scroll on the same cached
+            # body without a second selector. The shared families follow the same
+            # resolved preset.
             host.select(target)
-            self._place_custom_accessories(target)
-            # The target body's preset slider now exists and has been hydrated from
-            # ``resolved``. Load that same resolved preset's per-mode Rainbow state
-            # before Custom-only accessory visibility is evaluated.
-            load_visualizer_rainbow_state(self, resolved)
+            load_visualizer_family_values(self, resolved)
             self._update_vis_mode_sections()
         except Exception:
             # If construction failed mid-scaffold, remove its uncommitted
             # QWidget now rather than leaving it to overlap the old page.
             # The error still propagates; this only restores the last valid UI.
-            self._park_custom_accessories()
             if not host.is_constructed(target):
                 for index in reversed(range(self._mode_body_layout.count())):
                     item = self._mode_body_layout.itemAt(index)
@@ -614,11 +422,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
                 self._active_visualizer_mode_id = previous_host_mode
                 restored = self._prepare_mode_hydration_config(previous_host_mode)
                 self._vis_loaded_config = restored
-                load_shared_visualizer_appearance_settings(
-                    self, restored, previous_host_mode,
-                )
-                self._place_custom_accessories(previous_host_mode)
-                load_visualizer_rainbow_state(self, restored)
+                load_visualizer_family_values(self, restored)
                 self._update_vis_mode_sections()
                 self._mode_pills[previous_host_mode].setChecked(True)
             else:
@@ -627,7 +431,6 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         finally:
             self._loading = previous_loading
 
-        self._update_rainbow_visibility()
         self._page_stack.setCurrentWidget(self._mode_page)
         self._mode_pills[target].setChecked(True)
         self._reset_view_scroll()
@@ -680,7 +483,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             previous_loading = self._loading
             self._loading = True
             try:
-                load_shared_visualizer_appearance_settings(self, resolved, effective)
+                load_visualizer_family_values(self, resolved)
             finally:
                 self._loading = previous_loading
 
@@ -727,18 +530,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     def _retire_visualizer_mode_body(self, mode_id: str, body: QWidget) -> None:
         """Destroy one disabled mode body and clear stale QWidget wrappers.
 
-        Persisted state is untouched. Stable Custom accessories are evacuated
-        first if this is the body currently presenting them.
+        Persisted state is untouched.
         """
-        for stable_widget in (
-            getattr(self, "_base_appearance_group", None),
-            getattr(self, "_rainbow_controls_container", None),
-        ):
-            if stable_widget is not None and (
-                stable_widget is body or body.isAncestorOf(stable_widget)
-            ):
-                self._park_custom_accessories()
-                break
         body.hide()
         self._mode_body_layout.removeWidget(body)
 

@@ -41,8 +41,10 @@ its pill vocabulary there; nothing else in the dialog names it.
 - **No hidden value owners:** a tab or mode body whose values another surface edits (the Visualizer Studios) keeps
   them in a value cache, never in hidden QWidgets. Each Visualizer mode body is the preset row with OPEN STUDIO, its
   3D Detail row where it has one, and one sentence; `_<prefix>_lazy_values` owns its body and technical (audio
-  analysis) values (`ui/tabs/media/spec_mode_builder.py`). The page's shared Bar Appearance and Rainbow rows remain
-  page-level value owners in one never-shown holder and never enter a mode body.
+  analysis) values (`ui/tabs/media/spec_mode_builder.py`). The page's shared Bar Appearance and Rainbow families are
+  spec entries of each owning mode (non-body `bar_appearance` / `rainbow` buckets) held in the page's value cache
+  `_visualizer_family_lazy_values` (`ui/tabs/media/visualizer_mode_binding.py`); the page builds no widget for them,
+  and the Studio's family load writes that cache. Bar: `tests/test_visualizer_shared_families_spec.py`.
 - **Reset and Import:** `_reload_all_tab_settings` is the one reset/import edge. It first re-derives the
   process-local active Settings and Widget themes from persistence (`rederive_active_themes`,
   `ui/settings_theme_selection.py`: startup's resolution against the built catalogs, persisting nothing), then

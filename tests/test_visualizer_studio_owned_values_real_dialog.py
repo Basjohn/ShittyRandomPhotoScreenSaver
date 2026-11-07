@@ -96,10 +96,8 @@ def test_studio_owned_body_builds_no_hidden_value_owners(manager, mode):
     assert not hasattr(tab, "_per_mode_technical_controls")
     for suffix in ("normal", "advanced_host", "advanced"):
         assert not hasattr(tab, f"_{spec.prefix}_{suffix}"), suffix
-    # The shared Bar Appearance / Rainbow rows are never placed into a mode body.
-    for accessory in (tab._base_appearance_group, tab._rainbow_controls_container):
-        assert not body.isAncestorOf(accessory)
-        assert not accessory.isVisibleTo(tab)
+    # The shared Bar Appearance / Rainbow families have no widget at all (the page's value cache holds them).
+    assert tab.findChild(QWidget, "visualizer_studio_family_values") is None
     _destroy(dialog)
 
 

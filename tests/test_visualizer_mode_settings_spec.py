@@ -11,7 +11,7 @@ from core.settings.default_contract import require_canonical_default
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 from core.settings.visualizer_mode_settings import (
-    TECHNICAL_BUCKET,
+    NON_BODY_BUCKETS,
     VISUAL_CONTROLS,
     Choice,
     Colour,
@@ -176,9 +176,10 @@ def test_the_appliers_store_each_control_on_its_owner_and_the_renderer_gets_the_
     _apply_spec_controls(logical, dict(DEFAULTS), logical=True)
     _apply_spec_controls(presentation, dict(DEFAULTS), logical=False)
     for control in spec.controls:
-        if control.bucket == TECHNICAL_BUCKET:
-            # Audio analysis: consumed through the technical profile routing (the shared engine), never stored on
-            # either owner nor handed to the renderer.
+        if control.bucket in NON_BODY_BUCKETS:
+            # Audio analysis and the page's shared families: consumed through their registry routing (the shared
+            # engine, the shared bar profile, the active-mode rainbow), never stored on either owner nor handed to
+            # the renderer under their own key.
             assert not hasattr(logical, f"_{control.key}") and not hasattr(presentation, f"_{control.key}")
             continue
         if control.source:

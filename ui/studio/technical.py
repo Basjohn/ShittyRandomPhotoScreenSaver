@@ -68,38 +68,30 @@ RAINBOW_GROUP = "Rainbow"
 
 def rainbow_properties(mode_id: str, *, workspace: str, group: str = RAINBOW_GROUP,
                        subject: str = "the visualiser's colours") -> dict[str, StudioProperty]:
-    """The mode's shared rainbow family (Settings' Rainbow bucket: Taste the Rainbow and its Speed), stored per mode;
-    empty for a mode without the family. storage key -> Studio property."""
-    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
-    keys = get_owned_mode_setting_keys(mode_id, "rainbow")
-    if not keys:
+    """The mode's shared rainbow family (Taste the Rainbow and its Speed), stored per mode, from the mode spec's
+    ``rainbow`` entries; empty for a mode without the family. storage key -> Studio property."""
+    from core.settings.visualizer_mode_settings import RAINBOW_BUCKET, Toggle, mode_settings
+    spec = mode_settings(mode_id)
+    controls = spec.family_controls(RAINBOW_BUCKET) if spec is not None else ()
+    if not controls:
         return {}
-    enabled, speed = keys["rainbow_enabled"], keys["rainbow_speed"]
+    enabled = next(control for control in controls if isinstance(control, Toggle))
+    speed = next(control for control in controls if not isinstance(control, Toggle))
     return {
-        enabled: StudioProperty(id=enabled, path=(enabled,), label="Taste the Rainbow", workspace=workspace,
-                                group=group, instrument=SWITCH, icon="gradient",
-                                tooltip=f"Slowly shift the hue of {subject} through the spectrum. Saved per "
-                                        "visualizer mode."),
-        # Settings' Speed slider: 1..100 (hundredths).
-        speed: StudioProperty(id=speed, path=(speed,), label="Rainbow Speed", workspace=workspace, group=group,
-                              instrument=SCALAR, minimum=0.01, maximum=1.0, decimals=2, when=((enabled, (True,)),),
-                              tooltip="How fast the hue cycles through the spectrum."),
+        enabled.key: StudioProperty(id=enabled.key, path=(enabled.key,), label="Taste the Rainbow",
+                                    workspace=workspace, group=group, instrument=SWITCH, icon="gradient",
+                                    tooltip=f"Slowly shift the hue of {subject} through the spectrum. Saved per "
+                                            "visualizer mode."),
+        speed.key: StudioProperty(id=speed.key, path=(speed.key,), label="Rainbow Speed", workspace=workspace,
+                                  group=group, instrument=SCALAR, minimum=float(speed.low), maximum=float(speed.high),
+                                  decimals=speed.decimals, when=((enabled.key, (True,)),), tooltip=speed.tooltip),
     }
 
 
 def admit_rainbow(props: dict[str, StudioProperty], key: str, candidate: Any, previous: Any) -> Any:
-    """Settings' own admission of the rainbow family: the toggle is a bool, the speed its 1..100 slider in
-    hundredths."""
-    prop = props[key]
-    if prop.instrument == SWITCH:
-        return bool(candidate)
-    try:
-        value = float(candidate)
-    except (TypeError, ValueError):
-        return previous
-    if value != value:
-        return previous
-    return round(max(0.01, min(1.0, value)), 2)
+    """The rainbow family's spec control admission (Settings' and the model's)."""
+    from core.settings.visualizer_mode_settings import spec_control
+    return spec_control(key).admit(candidate, previous)
 
 
 __all__ = ["RAINBOW_GROUP", "TECHNICAL_GROUP", "admit_rainbow", "admit_technical", "rainbow_properties",

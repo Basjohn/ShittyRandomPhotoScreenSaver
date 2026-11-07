@@ -128,9 +128,10 @@ def test_opening_visualizers_lands_on_setup_and_builds_zero_modes(
         assert tab._page_stack.currentWidget() is tab._setup_page
         assert counts == {mode: 0 for mode in _BUILDERS}
         assert tab._vis_body_host.constructed_modes() == frozenset()
-        assert hasattr(tab, "vis_fill_color_btn")
-        assert hasattr(tab, "vis_border_color_btn")
-        assert hasattr(tab, "vis_border_opacity")
+        # The shared families are held without a widget, for every owning mode, before any body exists.
+        from ui.tabs.media.visualizer_mode_binding import FAMILY_CACHE_ATTR, family_controls
+        held = getattr(tab, FAMILY_CACHE_ATTR)
+        assert {c.key for m in _BUILDERS for c in family_controls(m)} <= set(held)
     finally:
         tab.deleteLater()
 
@@ -158,7 +159,6 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
             assert tab._vis_body_host.is_constructed(mode)
             assert tab._vis_body_host.selected_mode == mode
             assert not mode_has_rainbow_controls(mode)
-            assert tab._rainbow_controls_container.isHidden()
 
             bar_count = require_mode_settings(mode).control(f"{mode}_bar_count")
             current_bar_count = _cache(tab, mode)[f"{mode}_bar_count"]
@@ -304,98 +304,30 @@ def test_selecting_mode_pill_constructs_only_that_mode_once(
         tab.deleteLater()
 
 
-def test_custom_accessories_live_inside_custom_and_evacuate_before_retirement(
+def test_shared_families_are_held_per_owning_mode_without_any_widget(
     qt_app, settings_manager, monkeypatch
 ):
+    """Bar Appearance and Rainbow are edited in the Studios: the page holds them in its value cache, follows the
+    selected mode's resolved preset, and never builds a widget for them in a body, on the page or in a holder."""
+    from PySide6.QtWidgets import QWidget
+    from ui.tabs.media.visualizer_mode_binding import FAMILY_CACHE_ATTR, family_controls
     _install_counters(monkeypatch)
     settings_manager.set("widgets", _vis_settings("spectrum"))
-    settings_manager.set("widgets.spotify_visualizer.preset_spectrum", 0)
     tab = VisualizersTab(settings_manager)
     try:
-        # Stable controls start parked on the mode page: they are not SETUP UI and
-        # opening Settings still constructs no mode merely to own them.
-        assert tab._base_appearance_group.isAncestorOf(tab._shared_vis_fill_row)
-        assert not tab._setup_page.isAncestorOf(tab._shared_vis_fill_row)
-
-        tab._select_mode_page("spectrum")
-        body = tab._vis_body_host.body("spectrum")
-        assert body is not None
-        # Every mode is edited in its Studio: the shared rows are value owners in the
-        # page's never-shown family holder and never enter a mode body (A-12).
-        holder = tab._studio_family_values
-        for accessory in (tab._base_appearance_group, tab._rainbow_controls_container):
-            assert holder.isAncestorOf(accessory)
-            assert not body.isAncestorOf(accessory)
-
-        # The stored fixture is curated. The Custom-only gates still follow the preset,
-        # and no gate ever presents a row on the page.
-        assert tab._spectrum_preset_slider.preset_index() != tab._spectrum_preset_slider.custom_index()
-        assert tab._base_appearance_group.isHidden()
-        assert tab._rainbow_controls_container.isHidden()
-
-        old_loading = tab._loading
-        tab._loading = True
-        try:
-            tab._spectrum_preset_slider.set_preset_index(
-                tab._spectrum_preset_slider.custom_index()
-            )
-        finally:
-            tab._loading = old_loading
-        tab._update_rainbow_visibility()
-        assert not tab._base_appearance_group.isHidden()
-        assert not tab._rainbow_controls_container.isHidden()
-        assert not tab._base_appearance_group.isVisibleTo(tab)
-        assert not tab._rainbow_controls_container.isVisibleTo(tab)
-
-        # Switching modes keeps both rows in the holder, outside the cached Spectrum body.
-        tab._select_mode_page("bubble")
-        assert holder.isAncestorOf(tab._rainbow_controls_container)
-        assert not body.isAncestorOf(tab._base_appearance_group)
-        assert not body.isAncestorOf(tab._shared_vis_fill_row)
-        assert not hasattr(tab, "_shared_vis_appearance_holder")
-
+        for target in ("spectrum", "bubble"):
+            tab._select_mode_page(target)
+            body = tab._vis_body_host.body(target)
+            assert body is not None
+            held = getattr(tab, FAMILY_CACHE_ATTR)
+            resolved = tab._vis_loaded_config
+            for control in family_controls(target):
+                default = tab._widget_default("spotify_visualizer", control.key)
+                assert held[control.key] == control.admit(resolved.get(control.key, default), default)
         tab._select_setup_page()
-        assert not body.isAncestorOf(tab._rainbow_controls_container)
-        assert not body.isAncestorOf(tab._base_appearance_group)
-    finally:
-        tab.deleteLater()
-
-
-def test_rainbow_custom_toggle_persists_immediately_and_speed_is_custom_only(
-    qt_app, settings_manager, monkeypatch
-):
-    _install_counters(monkeypatch)
-    tab = _make_tab(settings_manager, "bubble")
-    try:
-        tab._select_mode_page("bubble")
-        slider = tab._bubble_preset_slider
-        old_loading = tab._loading
-        tab._loading = True
-        try:
-            slider.set_preset_index(slider.custom_index())
-        finally:
-            tab._loading = old_loading
-        tab._update_rainbow_visibility()
-
-        assert tab._studio_family_values.isAncestorOf(tab._rainbow_controls_container)
-        assert not tab._rainbow_controls_container.isHidden()
-        assert not tab._rainbow_controls_container.isVisibleTo(tab)
-        assert tab._rainbow_speed_container.isHidden()
-
-        tab.rainbow_enabled.setChecked(True)
-        persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
-        assert persisted["bubble_rainbow_enabled"] is True
-        assert not tab._rainbow_speed_container.isHidden()
-
-        old_loading = tab._loading
-        tab._loading = True
-        try:
-            slider.set_preset_index(0)
-        finally:
-            tab._loading = old_loading
-        tab._update_rainbow_visibility()
-        assert tab._rainbow_controls_container.isHidden()
-        assert tab._rainbow_speed_container.isHidden()
+        assert tab.findChild(QWidget, "visualizer_studio_family_values") is None
+        for attr in ("_base_appearance_group", "_rainbow_controls_container", "rainbow_enabled", "vis_border_opacity"):
+            assert not hasattr(tab, attr), attr
     finally:
         tab.deleteLater()
 

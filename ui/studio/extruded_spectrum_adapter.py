@@ -194,8 +194,9 @@ def build_schema() -> StudioSchema:
         add(f"{key}.3", (key, 3), f"{label} Opacity", "look", BAR_COLOUR_GROUP, SCALAR, minimum=0.0,
             maximum=255.0, decimals=0, integer=True, icon="", priority=_PRIORITY.get(key, 100) + 1)
     border = shared["bar_border_opacity"]
-    add(border, (border,), "Border Opacity", "look", BAR_COLOUR_GROUP, SCALAR, minimum=0.0, maximum=1.0, decimals=2,
-        tooltip="Opacity of the bar edge lines.")
+    opacity = spec.control(border)                      # ranges from the spec's shared-family entries
+    add(border, (border,), "Border Opacity", "look", BAR_COLOUR_GROUP, SCALAR, minimum=opacity.low,
+        maximum=opacity.high, decimals=2, tooltip="Opacity of the bar edge lines.")
 
     # The shape editor (Custom): layout, curve nodes, frequency boundaries and lane strengths.
     shape = titles["shape"]
@@ -226,8 +227,7 @@ def build_schema() -> StudioSchema:
         workspaces.append(Workspace(workspace_id, title, tuple(groups), open_groups=tuple(groups), icon=icon,
                                     help=help_text, columns=tuple(columns)))
 
-    controls = {control.key: control for control in spec.controls}
-    colours = {shared["bar_fill_color"], shared["bar_border_color"]}
+    controls = {control.key: control for control in spec.controls}     # the shared bar family included
     switches = {PREFIX + suffix for suffix, _l, instrument, _t in _SMOOTHING if instrument == SWITCH}
 
     def admit(key: str, candidate: Any, previous: Any) -> Any:
@@ -238,9 +238,7 @@ def build_schema() -> StudioSchema:
         shaped = spectrum_shape.admit_shape(SHAPE, key, candidate, previous)
         if shaped is not NotImplemented:
             return shaped
-        if key in colours:
-            return spectrum_shape.admit_colour(candidate, previous)
-        if key in (border, PREFIX + "visual_smoothing"):
+        if key == PREFIX + "visual_smoothing":
             return spectrum_shape.percent(candidate, previous)
         if key in switches:
             return bool(candidate)
