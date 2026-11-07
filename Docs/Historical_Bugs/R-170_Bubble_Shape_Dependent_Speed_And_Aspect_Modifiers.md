@@ -62,7 +62,7 @@ Uniform visual scale stays the presentation zoom (presentation_geometry owns it)
 
 `python -m tools.visualizer_replay.bubble_shape_invariance` (recording `balanced`, 30 s, curated presets 1/3/4/7,
 production replay at uniform scale 1, speeds in canonical-card px/s = motion relative to the bubbles' drawn size). Full
-tables: `.artifacts/evidence/bubble/shape_invariance/before_head.txt`, `after.txt`, `summary.txt`.
+tables: `.artifacts/evidence/visualizers/bubble/shape_invariance/20261107_shape_invariance/before_head.txt`, `after.txt`, `summary.txt`.
 
 Stream speed along each preset's stream axis, relative to the canonical card (presets 1 up / 3 left / 4 right):
 

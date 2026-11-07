@@ -62,5 +62,5 @@ judged, never before.
 
 ## Evidence
 
-`.artifacts/evidence/settings_roundtrip_memory/` (`wf_p4_census_map_main`, `wf_p4_collect_main`,
+`.artifacts/evidence/memory/settings_roundtrip/20261107_settings_roundtrip/` (`wf_p4_census_map_main`, `wf_p4_collect_main`,
 `wf_p4_plain_{main,fix}`, `wf_p4_tracemalloc_fix`, `sp_p1_census_{main,fix}`, ...).

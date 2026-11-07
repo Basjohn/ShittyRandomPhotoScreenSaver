@@ -3111,7 +3111,7 @@ Methods are in [Visualizer_Visual_Tuning.md](../../Guides/Visualizer_Visual_Tuni
 ## 72. Deep red ocean: Preset 9 toward `Preset7Goal.png` (6 November)
 
 Operator: make a truly deep red ocean preset like the mock; Preset 7 is good but "its own thing". Preset 9 (Deep Red
-Ocean) is new and Preset 7 is untouched. Evidence: `.artifacts/evidence/extruded_bubble/deep_red_ocean_20261106/`
+Ocean) is new and Preset 7 is untouched. Evidence: `.artifacts/evidence/visualizers/extruded_bubble/deep_red_ocean/20261106_deep_red_ocean/`
 (full-resolution mock | P7 | P9 sheets and mock | P9 crops of stream, shell, shafts, bokeh and embers at five moments
 of two recordings; regional metrics; showcase WebP; motion captures; cost).
 
@@ -3153,7 +3153,7 @@ of two recordings; regional metrics; showcase WebP; motion captures; cost).
 Lead review of §72: keep the mood, water, shafts and ember hue; close, in order, the subject (large, clearly lit glass
 shells over dense chains of lit micro-bubbles in lanes), the embers (granular, in a band along the streams, top-middle
 dark), the foreground bokeh shell, then the faint surface and the cyan/violet wake strands. Evidence:
-`.artifacts/evidence/extruded_bubble/deep_red_ocean_pass2_20261106/` (`sheets/`: mock | before | after at full
+`.artifacts/evidence/visualizers/extruded_bubble/deep_red_ocean_pass2/20261106_deep_red_ocean_pass2/` (`sheets/`: mock | before | after at full
 resolution and per-region crops for five moments of ragdoll and anything_mixed2; `regional_metrics.txt`;
 `motion_*`: 10 s at 12 fps through the production host with WebP and contact sheet; `webp/`: the release-media
 showcase; `reactivity_summary.txt`; `gpu_*` and `logical_*` cost).

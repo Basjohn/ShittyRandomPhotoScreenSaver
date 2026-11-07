@@ -74,8 +74,8 @@ LEGACY = {
     "frame_webps_20261107.md": ("architecture", "frame_webps", "conversion"),
 }
 CHEST = ("lifecycle", "log_archives", "evidence_chest")
-# Still being written by the lead's measurement session: never moved until released.
-HELD = {"quiet_session_20261107"}
+# Folders a running session is still writing: never moved until released. (The 7 Nov measurement session ended.)
+HELD: set[str] = set()
 
 _DATED = re.compile(r"^(?P<stem>.*?)_?(?P<date>20\d{6})$")
 

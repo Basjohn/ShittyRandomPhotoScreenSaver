@@ -4,7 +4,7 @@
 
 Date: 2026-11-05
 Status: Source repair (`utils/lockfree/triple_buffer.py`); operator eyes-on pending
-Evidence: worktree `.artifacts/evidence/spectrum/jerkiness_20261105/` (log archive `logsa4c1141ee62.zip`,
+Evidence: worktree `.artifacts/evidence/visualizers/spectrum/jerkiness/20261105_jerkiness/` (log archive `logsa4c1141ee62.zip`,
 scripts, `PROGRESS.md`)
 
 ## Observed failure
