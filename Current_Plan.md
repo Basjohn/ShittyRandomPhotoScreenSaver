@@ -783,6 +783,15 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     and Paint after the reveal, and the first-input line reports them ("repaint since reveal: none" is the
     takes-input-but-never-repaints signature). Acceptance needs the operator's field log plus a fix proven on the
     real SettingsDialog path, never a stand-in only.
+  - Field log 7 Nov (operator's source run): the 02:00:08 close (Neon Lake) shows Settings revealed, active,
+    enabled and exposed, the first click delivered to Settings at +853 ms, and **no Expose, UpdateRequest or Paint
+    since the reveal**. The 01:56:26 close painted at +80 ms. Cause: Settings is a layered window, so the 6 Nov
+    `RedrawWindow` re-expose produces no WM_PAINT, and when nothing else dirtied Settings Qt scheduled no repaint;
+    the screen kept the pre-Studio picture while clicks changed state underneath. Remedy (7 Nov, lead):
+    `WindowPresence.repaint_revealed` asks Qt itself to repaint Settings at the reveal and again when the Studio window
+    is destroyed. The watch now stays armed until Settings' first Paint after the first input and logs `qt_exposed`.
+    **Open until a field log** shows a paint right after the reveal and `first Paint after the first input` within a
+    frame or two.
 - [ ] **Per-session memory growth in the Studio (side defect, 6 Nov).** Process memory grows about 2-3 MB per
   offscreen Extruded Bubble session (private bytes and USS, 16 sessions). The growth is the same with and without the
   controller-leak fix, which `test_closed_studio_sessions_are_released_and_live_counts_stay_flat` guards: closed
