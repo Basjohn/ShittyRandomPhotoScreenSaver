@@ -171,9 +171,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
      `[GC_POLICY]` lines. Commands in the agent's report; evidence `.artifacts/evidence/gc_gen2/`.
    - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
      they are collections.
-3. **Checklist AC-04:** a failing inactive-renderer release blacks out the active mode on every frame
-   (`rendering/quick/visualizer/render_host.py:182-183, 304-329`); render the active mode first, record the failure
-   once, retry at the next boundary.
 4. **Checklist AC-05:** one beat-engine authority (delete `_global_beat_engine`; the tick uses
    `controller.ensure_engine()` or raises). Lands before any SMP PCM source.
 5. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame

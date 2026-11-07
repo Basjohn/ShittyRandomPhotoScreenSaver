@@ -84,23 +84,6 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
 
 ## Tier 2: defects to fix soon (small, real)
 
-- [ ] **AC-04 A failing inactive-renderer release blacks out the active mode** (A-11). Severity medium, reward medium,
-  effort S. **Confirmed by reading** `rendering/quick/visualizer/render_host.py`: `:182-183` calls
-  `release_inactive_implementations` when `mode_changed or len(self._implementations) > 1`, **before** the active
-  implementation renders (`:258`); `:304-329` keeps a renderer whose `release_resources` raised and then raises
-  `RuntimeError`, so every following frame re-enters (the cache still holds two), raises again, and
-  `rendering/quick/visualizer/node.py:394-397` records it through `RenderFailureLog` without drawing. The docstring
-  promise "a later legal render can retry it" is false in effect: the card stays black until teardown. No release
-  failure has been seen in logs (trigger unobserved).
-  - **Fix (owning boundary: `render_host.py`):** render the active implementation first; attempt inactive release
-    after it, catch its error, record it once through the lifecycle note and the failure log, and retry only at the
-    next mode boundary or at `release_resources`, never per frame. Keep the current-context check and the "a failed
-    release stays accounted" rule.
-  - **Must stay true:** release happens on the render thread with a current context; a retired mode's resources are
-    never silently dropped from the ownership snapshot; mode-boundary telemetry still advances once per switch.
-  - **Regression bar:** a renderer whose `release_resources` raises, then a switch to mode B: B's `render` runs on
-    every frame, the failure is recorded once (not once per frame), and the next boundary retries the release.
-
 - [ ] **AC-05 One beat-engine authority: delete the module global and the in-tick fallback** (A-07 + A-08). Severity
   medium, reward medium, effort S. **Confirmed:** `widgets/spotify_visualizer/beat_engine.py:1973-1988`
   `get_shared_spotify_beat_engine` writes `_global_beat_engine`, which `BeatEngineRegistry.clear()` (`:1952-1969`)
@@ -308,7 +291,7 @@ Addenda from the same audit:
 ## Where the rest of the audit went
 
 - **Healthy** (checked, no item): one Visualizer owner and one beat engine (apart from AC-05's handle); render
-  resources released at the mode boundary behind a context check (apart from AC-04); card materials dormant when
+  resources released at the mode boundary behind a context check, after the active mode draws; card materials dormant when
   Normal; timers weak-ref + token fenced; Settings destruction barrier; supervisor per-role locks; Studio workers in
   Job Objects; GC policy-owned; steady publications early-return; no environment-variable flags; bounded image,
   exact-replay, engine-answer and DevCurve caches; every QML file and every `tools/*.py` referenced.
