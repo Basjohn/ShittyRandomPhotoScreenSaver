@@ -233,6 +233,16 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
   - **Regression bar:** a tick test patches `time.time` to jump −5 s and +60 s between ticks: every mode's published
     frame stays finite and its simulation dt stays bounded; recorded-clip digests unchanged.
   - **Depends on:** the Waveform logical tick cut (same files; land after it to avoid a merge fight).
+  - **Built 7 Nov (awaiting lead review):** `core/authored_clock.py` (`authored_now`, `pinned_authored_clock`;
+    re-exported by `logical_runtime`), `perf_counter`. Converted every visualizer-path `time.time()` (tick, beat
+    engine, onset bus, audio capture stamp, bar computation, Bubble diagnostics throttles, Quick owner and presentation
+    sync, view orbit, the display manager's view-motion stamps, the renderer's logical-age reads) and
+    `produced_ts`'s fallback. `deterministic_clock` pins it; recordings already store recorder-relative
+    `perf_counter` time, so nothing converts at their boundary. Wall time stays only in log epoch stamps
+    (`core/performance/visualizer_switch_abc_driver.py`, read by the offline scorer across files). Gates: 88 recorded
+    and fixture replays over all nine modes byte-identical to main; `tests/test_visualizer_authored_clock.py` (every
+    mode, a −5 s / +60 s wall jump, frames identical to the steady replay; fails on main for all nine; negative
+    control: a tick on the jumping clock sees a negative step).
 
 - [ ] **AC-13 ThreadManager and worker hygiene** (A-20 + A-22 + A-21 + unrelated defects 5 and 6). Severity low,
   reward low, effort S-M. **Confirmed:** `core/threading/manager.py:638-639` sizes COMPUTE at `cpu_count - 1` (23 on
