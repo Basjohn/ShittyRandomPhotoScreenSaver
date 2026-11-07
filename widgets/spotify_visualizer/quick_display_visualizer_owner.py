@@ -1006,51 +1006,59 @@ class QuickDisplayVisualizerOwner:
             except Exception:
                 logger.exception("[SPOTIFY_VIS] Activation reconstruction request failed")
 
+    @property
+    def _runtime_generation(self) -> Any:
+        """The display generation that owns this owner's delayed work.
+
+        ``ThreadManager.single_shot`` reads it from a bound method's owner, so the
+        generation's ``cancel_scheduled_single_shots`` edge cancels the transition
+        deadline with the rest of its callbacks.
+        """
+        return getattr(getattr(self, "_runtime", None), "runtime_generation", None)
+
     def _arm_transition_deadline(self) -> None:
-        """One bounded Qt single-shot per activation; successful ones expire inert.
+        """One bounded single-shot per activation; successful ones expire inert.
 
         Without this, a target which never publishes a fresh logical frame
         leaves waiting_target permanently hidden, and Edit Save/Cancel permanently
         refused. No frame-driven or periodic timeout service can solve silence.
+        The deadline is a ``ThreadManager.single_shot`` on a bound method (held
+        weakly, tagged with this owner's display generation), so retiring the
+        generation cancels it (AC-10); the request serial fences a superseded one.
         """
         if self._transition_failure_callback is None:
             return
-        import weakref
-        scheduler = getattr(self, "_transition_deadline_scheduler", None)
-        if scheduler is None:
-            from PySide6.QtCore import QTimer
-            scheduler = QTimer.singleShot
+        from core.threading.manager import ThreadManager
 
-        owner_ref = weakref.ref(self)
-        serial = self._transition_request_serial
+        ThreadManager.single_shot(
+            _ACTIVATION_TRANSACTION_DEADLINE_MS,
+            self._on_transition_deadline,
+            self._transition_request_serial,
+        )
 
-        def deadline() -> None:
-            owner = owner_ref()
-            if (owner is None or owner._retired or
-                    owner._transition_request_serial != serial):
-                return
-            phase = owner._mode_transition_phase
-            if phase == "idle":
-                return
-            if phase == "fading_out":
-                # The outgoing logical owner was never stopped. Abandon the
-                # uncommitted request and restore its opacity, without a reload.
-                owner._pending_mode_activation = None
-                owner._mode_transition_phase = "idle"
-                owner._mode_transition_started_at = 0.0
-                owner._mode_transition_fade = 1.0
-                try:
-                    owner._apply_resolved_presentation(owner._resolve_current_presentation())
-                    owner._request_retained_present()
-                except Exception:
-                    logger.exception("[SPOTIFY_VIS] Could not restore stalled outgoing scene")
-                    owner._signal_transition_failure("fade_out_restore_failed")
-                else:
-                    logger.error("[SPOTIFY_VIS] Cancelled stalled fade-out while outgoing mode remained live")
-                return
-            owner._signal_transition_failure("deadline:" + phase)
-
-        scheduler(_ACTIVATION_TRANSACTION_DEADLINE_MS, deadline)
+    def _on_transition_deadline(self, serial: int) -> None:
+        if self._retired or self._transition_request_serial != serial:
+            return
+        phase = self._mode_transition_phase
+        if phase == "idle":
+            return
+        if phase == "fading_out":
+            # The outgoing logical owner was never stopped. Abandon the
+            # uncommitted request and restore its opacity, without a reload.
+            self._pending_mode_activation = None
+            self._mode_transition_phase = "idle"
+            self._mode_transition_started_at = 0.0
+            self._mode_transition_fade = 1.0
+            try:
+                self._apply_resolved_presentation(self._resolve_current_presentation())
+                self._request_retained_present()
+            except Exception:
+                logger.exception("[SPOTIFY_VIS] Could not restore stalled outgoing scene")
+                self._signal_transition_failure("fade_out_restore_failed")
+            else:
+                logger.error("[SPOTIFY_VIS] Cancelled stalled fade-out while outgoing mode remained live")
+            return
+        self._signal_transition_failure("deadline:" + phase)
 
     def sync_present(self) -> bool:
         try:
