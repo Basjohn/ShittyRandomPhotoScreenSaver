@@ -7,13 +7,50 @@ stored Settings values remain independent of disclosure state.
 
 Visualizer Technical is a child of Advanced. An open Technical leaf therefore retains both ancestors; an advanced
 Custom leaf retains Advanced; a normal Custom leaf retires both. Legacy Technical-only state acquires its required
-Advanced ancestor through the existing projection, without a new schema or persistence owner.
+Advanced ancestor through the existing projection, without a new schema or persistence owner. No Visualizer mode body
+builds these disclosures today (every mode is edited in its Studio); the projection keeps the stored states
+normalized.
 
 `core/settings/ui_bucket_state.py` owns canonical normalization and `project_settings_bucket_context` /
 `retire_settings_bucket_context`. The Settings dialog and tab navigation apply that projection; shared bucket helpers
 close unrelated live branches silently. Existing per-control maps remain the persistence schemas. Navigation does not
 create a second context store, scheduler or polling owner. Connector rails derive from the visible hierarchy and do
 not own persistence.
+
+## Tabs and pills: one registry
+
+`ui/settings_tabs.py` holds one `SettingsTabDescriptor` per top-level tab, in sidebar order: key, Title Case label,
+lazy builder, `pill_of(view_state)`, `available(profile)`, `warm_in_background`, `reloads_with_settings` and
+`pinned_bottom`. `SettingsDialog` derives everything tab-shaped from it: the tab keys and content-stack positions, the
+builders, the sidebar, the background-warm list, the tabs a reload refreshes, and the editing-path pill. Construction
+and `_reload_all_tab_settings` take the pill from the same `pill_of`, so both hand
+`project_settings_bucket_context` the same (tab, pill) for the same view state. A new tab adds one descriptor and owns
+its pill vocabulary there; nothing else in the dialog names it.
+
+- **Profile gating:** `available(profile)` reads `SettingsProfile.current()`, which asks the one product-identity
+  predicate (`core/mc.py`); a new product profile extends that predicate, never a second resolver. An unavailable
+  tab is absent from the sidebar, the content stack and the tab-key mapping.
+- **Remembered tab:** `ui.last_tab_key` is the memory; positions are never persisted. Hiding a tab cannot shift a
+  remembered one, and a remembered tab the profile hides keeps its memory while Settings opens on its first tab.
+  `ui.last_tab_index` keeps its pre-Themes meaning and is written from the key through that legacy table.
+- **Lazy bodies:** only the initial tab builds synchronously; `warm_in_background` tabs build after first paint,
+  staggered and cancellable; every other tab builds when visited.
+- **No hidden value owners:** a tab or mode body whose values another surface edits (the Visualizer Studios) keeps
+  them in a value cache, never in hidden QWidgets. Each Visualizer mode body is the preset row with OPEN STUDIO, its
+  3D Detail row where it has one, and one sentence; `_<prefix>_lazy_values` owns its body and technical (audio
+  analysis) values (`ui/tabs/media/spec_mode_builder.py`). The page's shared Bar Appearance and Rainbow rows remain
+  page-level value owners in one never-shown holder and never enter a mode body.
+- **Helper threads:** helper sites (cache clearing, feeds, Gmail, Steam, geocoding, Guided Setup) never build
+  private ThreadManagers; they look up the app-shared one (`ThreadManager.require_app_shared`). Under a runtime that
+  is the engine's; a Settings-only (CONFIG) session's dialog registers one helper manager for its lifetime and
+  releases it when destroyed.
+
+Regression coverage: `tests/test_settings_tab_registry_real_dialog.py` (registry derivation, pill agreement and
+projection round trip per tab, profile gating, remembered tab, CONFIG helper manager) and
+`tests/test_visualizer_studio_owned_values_real_dialog.py` (no hidden value owners; every body and technical value
+round-trips through the cache), both on the real dialog.
+
+## Coverage
 
 Focused regression coverage lives in `tests/test_settings_active_bucket_path.py`,
 `tests/test_settings_bucket_single_open_contract.py` and `tests/test_settings_bucket_reopen_real_dialog.py`: selected
