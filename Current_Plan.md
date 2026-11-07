@@ -97,28 +97,13 @@ lead as reviewer/orchestrator. Agents that already hold unfinished work may exce
 context is valuable). Slots need not always be full: when the right agent is not free, queue the item here. The
 one-time audit and review agents (6-7 Nov) are done; the cap applies again once no existing agent holds loaded work.
 
-**Data-corruption bug (found 7 Nov in the merge gate; the Studio agent's top priority):** during the operator's source
-run on 6 Nov, `presets/visualizer_modes/shockwave_grid/preset_1_synthwave.json` (Neon Lake Preset 1) was rewritten
-at 21:45:04 as a Bubble preset (`"mode": "bubble"`, 78 Bubble keys, name kept), with no log line, while Settings was
-open after a Bubble preset save (21:44:41 `VIS_PRESETS_SAVE ... bubble`). Neon Lake was the last live mode. Values
-came from Bubble, the target from another mode. The original is restored from git; the bad file is kept in
-`.artifacts/evidence/preset_cross_mode_write_20261106/`. **Fixed on the Studio branch (R-174), awaiting merge.**
-- The writer was the preset row's Save Preset As on Bubble's Custom: the file matches its payload and description
-  exactly. It wrote wherever the file dialog answered, unchecked and unlogged.
-- Every preset-file write now goes through `core/settings/visualizer_preset_file.py`, which fails closed on another
-  mode's payload, folder or file, and logs mode, index and path.
-- Installed builds had the same exposure; the same check covers them.
-- `tests/test_visualizer_preset_cross_mode_write.py` fails on the old code.
+**Merged 7 Nov (lead fix audit: every regression bar fails on its pre-fix code for the reported reason):** R-174
+cross-mode preset write (fails closed and logs every preset-file write), the Studio controller leak, drag controls
+holding their press, the Unsaved Preset Changes prompt, R-172/R-173 teardown order, the engine-answer Studios'
+"uncopyable WindowsPath" start failure (fab141f0), and the post-close repaint remedy (4e423fe6; open until a field
+log confirms, §9). Card surfaces, the style pass and the 15 material themes are merged; their open items are in §4.
 
 **Active or paused (resume each with a message to the same agent, which keeps its context and worktree):**
-- **Studio agent** (Opus high, worktree `agent-ae914e4586e23615a`): the data-corruption bug above first; then the UI
-  freeze after closing a Studio (idle process, 18 s with no GUI-thread log after the window was destroyed, 21:56:34),
-  sliders snapping out of a drag, no automatic switch to Custom (a close prompt: Overwrite Preset / Save As New Preset
-  / Custom Slot / Discard); then the controller leak (closed `StudioController`s live for the process: the
-  `finished`/`report` closures in `open_mode_studio` hold the controller; the foundry context-ownership fix is done,
-  R-173), Spectrum rendering black when all Studio test files run in one process (record if deep), and checklist
-  **AC-06** (the four adapters' unbounded class-level clip caches and the GUI-thread clip parse; same owner, same
-  leak). The R-172 exit crash itself is merged.
 - **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`):
   the logical tick cut (it had computed main's identity digests and was running its branch digests and tests; the
   gate is byte-identical output, Preset 4 required; then the lead schedules the game60 live check). After the cut: a
@@ -126,10 +111,10 @@ came from Bubble, the target from another mode. The original is restored from gi
   limit; the operator now prefers a little more height to floor clipping, which partly supersedes "top edge first"),
   live tick spikes of 64-152 ms around Quick preset switches, and checklist **AC-12** (monotonic authored clock; same
   files, so it lands after the cut).
-- **Card surfaces agent** (Opus medium, 6 Nov evening): done on its branch, awaiting the lead's merge and the
-  operator's eyes; details under "Widget card surfaces" in §4.
-
 **Queued, next free medium slot, in this order (small, bounded):**
+0. **Checklist AC-06** (left by the Studio agent): the four Studio adapters' unbounded class-level clip caches and
+   the GUI-thread clip parse. Repeated offscreen Extruded Bubble sessions still grow about 2-3 MB each after the
+   controller-leak fix; these caches are the first suspect.
 1. **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode** (operator 6 Nov
    ~22:00; `logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset
    home" x2). The pair also reached the visualizer region's double-click admission
@@ -147,6 +132,12 @@ came from Bubble, the target from another mode. The original is restored from gi
    `controller.ensure_engine()` or raises). Lands before any SMP PCM source.
 4. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame
    fences with the query order preserved, plus the bench node-path case). Mechanical, pixel-identical.
+5. **Spectrum presets 2 onward re-authored (operator 7 Nov):** they "have no vibrancy, unique patterns, shapes and so
+   on. Like, even do a flags of a few countries thing would be easy and neat compared to what we have now". Give each
+   preset a distinct, vibrant identity from what the mode supports (bar colour bands and gradients, shapes,
+   mirroring, glow): a few national-flag palettes across the bars, plus other strong pattern and shape ideas. Judge
+   them on showcase WebP renders with recorded music. Presets are authored content: no value-pinning tests; author
+   every control into every preset. Preset 1 stays unless the operator says otherwise.
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
