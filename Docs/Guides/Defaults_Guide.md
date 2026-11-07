@@ -54,15 +54,16 @@ cadence; if it could be mistaken for a product default, label it `TEST INPUT, NO
 expectations from the fixture value.
 
 Collapsible Settings bucket identity is canonical under `ui.gmail_bucket_states`,
-`ui.widget_bucket_states`, `ui.visualizer_bucket_states` and `ui.visualizer_tech_bucket_states`, and every canonical
-bucket starts closed. Those four maps are deliberately **sparse persisted state**: canonical defaults enumerate valid identities, while
+`ui.widget_bucket_states` and `ui.visualizer_bucket_states`, and every canonical
+bucket starts closed. Those three maps are deliberately **sparse persisted state**: canonical defaults enumerate valid identities, while
 storage contains only the currently open identity for each local accordion scope. Missing entries mean closed.
 `SettingsManager` must not deep-fill these sparse subtrees on startup. Fresh runtime-store projection, Reset and
 SST replace-import likewise omit the all-closed maps rather than re-emitting a full false representation. Legacy full
 boolean maps are accepted and normalized to one winner per local scope; the next bucket interaction writes the sparse form. Nested card buckets
 (for example Steam Layout/Appearance/Content) coordinate inside their parent card rather than closing that parent.
-Visualizer Technical AGC/Transient are per-mode leaf buckets; the outer `Advanced` and `Technical` disclosures are
-independent parent state and must remain open while their child buckets are used.
+The Visualizer Technical AGC/Transient leaves and the outer Advanced / Technical disclosures are retired
+(`ui.visualizer_tech_bucket_states`, `ui.visualizer_tech_states`, `ui.visualizer_adv_states`; AC-23): no builder
+constructs them, and `project_settings_bucket_context` drops their stored members once.
 
 ### Schema admission is not runtime initialization
 

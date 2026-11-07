@@ -29,6 +29,10 @@ class MemorySettings:
         self.entries[key] = value
         self.writes.append((key, value, emit_change))
 
+    def remove(self, key):
+        self.entries.pop(key, None)
+        self.writes.append((key, None, False))
+
 
 class SettingsActiveBucketPathTests(unittest.TestCase):
     def test_nested_steam_path_replaces_old_cohort(self):
@@ -59,13 +63,12 @@ class SettingsActiveBucketPathTests(unittest.TestCase):
         self.assertFalse(any(normalize_active_widget_bucket_path(keys, raw, None).values()))
 
     def test_visualizer_only_selected_mode_leaf_remains(self):
-        ui = DEFAULT_SETTINGS["ui"]
-        custom, technical = normalize_active_visualizer_leaf_path(
-            ui["visualizer_bucket_states"], ui["visualizer_tech_bucket_states"],
-            {"bubble:appearance": True, "extruded_bubble:bubbles": True},
-            {"extruded_bubble:agc": True}, "extruded_bubble")
-        self.assertEqual(sparse_open_bucket_states(custom), {})
-        self.assertEqual(sparse_open_bucket_states(technical), {"extruded_bubble:agc": True})
+        keys = DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"]
+        bubble = next(key for key in keys if key.startswith("bubble:"))
+        extruded = next(key for key in keys if key.startswith("extruded_bubble:"))
+        custom = normalize_active_visualizer_leaf_path(
+            keys, {bubble: True, extruded: True, "extruded_bubble:agc": True}, "extruded_bubble")
+        self.assertEqual(sparse_open_bucket_states(custom), {extruded: True})
 
     def test_dialog_projection_preserves_one_current_path_and_retires_old(self):
         settings = MemorySettings(**{
@@ -103,14 +106,15 @@ class SettingsActiveBucketPathTests(unittest.TestCase):
         project_settings_bucket_context(settings, "transitions", "glass_shatter")
         self.assertEqual(settings.get("ui.basic_bucket_path"), "")
 
-    def test_legacy_technical_leaf_gains_required_advanced_ancestor(self):
+    def test_retired_technical_and_advanced_disclosures_are_dropped_once(self):
         settings = MemorySettings(**{
             "ui.visualizer_tech_bucket_states": {"extruded_bubble:agc": True},
             "ui.visualizer_tech_states": {"extruded_bubble": True},
+            "ui.visualizer_adv_states": {"extruded_bubble": True},
         })
         project_settings_bucket_context(settings, "visualizers", "extruded_bubble")
-        self.assertEqual(settings.get("ui.visualizer_adv_states"), {"extruded_bubble": True})
-        self.assertEqual(settings.get("ui.visualizer_tech_states"), {"extruded_bubble": True})
+        for key in ("ui.visualizer_tech_bucket_states", "ui.visualizer_tech_states", "ui.visualizer_adv_states"):
+            self.assertIsNone(settings.get(key), key)
         settings.writes.clear()
         project_settings_bucket_context(settings, "visualizers", "extruded_bubble")
         self.assertEqual(settings.writes, [])

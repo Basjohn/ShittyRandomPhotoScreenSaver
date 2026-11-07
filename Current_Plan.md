@@ -200,13 +200,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   once, when the dialog is destroyed (before Finish & Run starts the runtime). Fold into checklist AC-13: only the
   terminal owner cancels globally; any other manager cancels only its own work. Bar: shutting down a helper manager
   leaves another owner's pending `ThreadManager.single_shot` alive.
-- **Dead after A-12 (fold into checklist AC-14):** the technical-control widget machinery in
-  `ui/tabs/media/technical_controls.py` (`build_per_mode_technical_group`, `register_per_mode_technical_controls`,
-  `load/collect_per_mode_technical_controls` and their widget helpers) has no production caller; only
-  `tests/test_visualizer_settings_plumbing.py` reaches it. `_VISUALIZER_ADVANCED_ROOT_ATTRS`
-  (`ui/tabs/visualizer_settings_context.py`) names Advanced/normal roots no mode builds, so
-  `_auto_switch_preset_to_custom` never matches; the `ui.visualizer_adv_states` / `ui.visualizer_tech_states` /
-  `ui.visualizer_tech_bucket_states` schemas have no live disclosure (the projection keeps them normalized).
+- **Dead after A-12: removed by the Settings SSOT fold (AC-18, AC-23).** Still open from that note:
   Pre-existing: `tools/flicker_test.py`'s Widgets-tab `setup_ui_only_*` modes patch
   `widgets_tab_media.build_visualizers_ui`, which no longer exists anywhere (the Visualizer left the Widgets tab at
   V7), so those modes fail at `getattr` before measuring (its mode-body stub now targets

@@ -35,7 +35,6 @@ SPARSE_STRUCTURED_MAPPING_PATHS = frozenset(
     {
         ("ui", "gmail_bucket_states"),
         ("ui", "visualizer_bucket_states"),
-        ("ui", "visualizer_tech_bucket_states"),
         ("ui", "widget_bucket_states"),
     }
 )

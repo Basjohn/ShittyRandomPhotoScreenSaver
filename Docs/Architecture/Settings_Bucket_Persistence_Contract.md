@@ -5,11 +5,9 @@ reopening Settings. Inactive pills and unrelated tabs present as closed, includi
 ancestors remain open only to expose the selected leaf. Fresh profiles start closed. Preset choice, current mode and
 stored Settings values remain independent of disclosure state.
 
-Visualizer Technical is a child of Advanced. An open Technical leaf therefore retains both ancestors; an advanced
-Custom leaf retains Advanced; a normal Custom leaf retires both. Legacy Technical-only state acquires its required
-Advanced ancestor through the existing projection, without a new schema or persistence owner. No Visualizer mode body
-builds these disclosures today (every mode is edited in its Studio); the projection keeps the stored states
-normalized.
+The Visualizer Advanced / Technical disclosures and their Technical leaves are retired (AC-23): no mode body builds
+them (every mode is edited in its Studio), canonical defaults no longer declare their three maps, and the projection
+drops a stored profile's old members once (`Persisted_Input_Compatibility.md`).
 
 `core/settings/ui_bucket_state.py` owns canonical normalization and `project_settings_bucket_context` /
 `retire_settings_bucket_context`. The Settings dialog and tab navigation apply that projection; shared bucket helpers
