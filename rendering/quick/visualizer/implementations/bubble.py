@@ -26,7 +26,7 @@ from widgets.spotify_visualizer.render_state import (
 )
 from widgets.spotify_visualizer.shaders import load_fragment_shader
 
-from ..gl_state import _int_state
+from rendering.quick import gl_query
 from ..implementation_values import parameter, rgba, safe_hue
 from ..render_contract import (
     QUICK_VISUALIZER_VERTEX_SOURCE,
@@ -431,16 +431,16 @@ class QuickBubbleRenderer:
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_VAO_READY)
         if ambient_texture:
-            prior_active = _int_state(gl.GL_ACTIVE_TEXTURE)
+            prior_active = gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
             gl.glActiveTexture(gl.GL_TEXTURE0)
-            prior_bound = _int_state(gl.GL_TEXTURE_BINDING_2D)
+            prior_bound = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
             prior_light = 0
             try:
                 gl.glBindTexture(gl.GL_TEXTURE_2D, ambient_texture)
                 if ambient_light:
                     # Glowing particles' linear light on unit 1, for this draw only.
                     gl.glActiveTexture(gl.GL_TEXTURE1)
-                    prior_light = _int_state(gl.GL_TEXTURE_BINDING_2D)
+                    prior_light = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
                     gl.glBindTexture(gl.GL_TEXTURE_2D, ambient_light)
                 gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
             finally:

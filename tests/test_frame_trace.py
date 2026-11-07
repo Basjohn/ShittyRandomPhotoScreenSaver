@@ -870,8 +870,8 @@ def test_chk26_clipped_gl_state_is_captured_once_and_carried_through_mode() -> N
         if "glColorMask" not in source:
             continue
         assert path.name == "bubble_ambient_gl.py", path.name
-        # Captured through the shared direct GL reader (gl_state.py), as the Quick fence does.
-        assert "color_mask = _bool_states(gl.GL_COLOR_WRITEMASK, 4)" in source
+        # Captured through the one direct GL reader (rendering/quick/gl_query.py), as the Quick fence does.
+        assert "color_mask = gl_query.get_bools(gl.GL_COLOR_WRITEMASK, 4)" in source
         restore_tail = source.split("finally:", 1)[1]
         assert "gl.glColorMask(*color_mask)" in restore_tail
         assert source.count("glColorMask(") == 2
@@ -1032,15 +1032,14 @@ def test_frame_trace_report_reads_rolling_segments_oldest_to_newest(
     assert "logical_publish: 30" in completed.stdout
 
 
-def test_render_host_retains_lazy_quad_integer_state_helper() -> None:
+def test_render_host_lazy_quad_reads_its_bindings_through_gl_query() -> None:
     root = Path(__file__).resolve().parents[1]
     source = (
         root / "rendering" / "quick" / "visualizer" / "render_host.py"
     ).read_text(encoding="utf-8")
-    assert "def _int_state(name: int) -> int:" in source
     ensure_quad = source.split("def _ensure_quad(self)", 1)[1]
-    assert "_int_state(gl.GL_VERTEX_ARRAY_BINDING)" in ensure_quad
-    assert "_int_state(gl.GL_ARRAY_BUFFER_BINDING)" in ensure_quad
+    assert "gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)" in ensure_quad
+    assert "gl_query.get_int(gl.GL_ARRAY_BUFFER_BINDING)" in ensure_quad
 
 
 def test_chk27_sync_attribution_is_explicit_trace_only_and_preserves_legacy_markers() -> None:

@@ -42,6 +42,10 @@ hint, not proof. Takes about two minutes on a quiet machine, longer on a busy on
 Visualizer modes go through the same round-robin, control-relative passes (one production
 Visualizer host on the shared context, each mode's Guided Setup preview snapshot) and record GL
 calls through the probe's counter (its renderer modules) and Python calls like transitions.
+The ``node_path`` case adds the per-frame fences the render-host cases never reach: the background
+node's base draw, then the Visualizer clip host's begin, one mode render (Spectrum) and end, as the
+retained render nodes run them. Its GL count includes every GL state read (``gl_query`` and any
+private reader), so moving a read between helpers never hides or adds a call.
 """
 from __future__ import annotations
 
@@ -211,6 +215,137 @@ def measure_visualizers(bench: PairedBench, frames: int, passes: int, max_rounds
     return {**results, **failed}
 
 
+class _RenderState:
+    """The Quick render state a retained node receives: no incoming scissor or stencil clip."""
+
+    def scissorEnabled(self):
+        return False
+
+    def stencilEnabled(self):
+        return False
+
+    def stencilValue(self):
+        return 0
+
+
+class _StateReadCounter:
+    """Counts the GL state reads that bypass ``OpenGL.GL`` (``gl_query``'s raw entry points and any module-private
+    reader), so the node-path GL count is the same whichever helper a fence reads through."""
+
+    _READERS = (("rendering.quick.gl_query", ("get_int", "get_ints", "get_bool", "get_bools", "get_float",
+                                              "get_floats", "is_enabled")),
+                ("rendering.quick.visualizer.gl_state", ("_glGetIntegerv", "_glGetBooleanv", "_glIsEnabled")))
+
+    def __init__(self, counter) -> None:
+        self.counter, self._saved = counter, []
+
+    def __enter__(self):
+        import importlib
+        for module_name, names in self._READERS:
+            module = importlib.import_module(module_name)
+            for name in names:
+                function = getattr(module, name, None)
+                if callable(function):
+                    self._saved.append((module, name, function))
+                    setattr(module, name, self._wrap(function))
+        return self
+
+    def _wrap(self, function):
+        def call(*args, **kwargs):
+            self.counter.count += 1
+            return function(*args, **kwargs)
+        return call
+
+    def __exit__(self, *_exc):
+        for module, name, function in self._saved:
+            setattr(module, name, function)
+        self._saved.clear()
+
+
+def measure_node_path(bench: PairedBench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
+    """The production per-frame node path around one Visualizer draw (Spectrum's Guided Setup preview): the
+    background node's base draw, the clip host's begin, the mode render with the carried state, the clip host's
+    end. Measures the GL state fences that ``measure_visualizers`` (render host only) never reaches."""
+    from rendering.quick.render.background_node import BackgroundRenderNode
+    from rendering.quick.visualizer.clip_host import VisualizerClipFrame, VisualizerClipHost
+    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+    from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
+
+    gl, capture = bench.gl, bench.capture
+    width, height = capture.width, capture.height
+    viewport = (0, 0, width, height)
+    matrix = (2 / width, 0, 0, 0, 0, -2 / height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
+    snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode="spectrum")
+    background, clip, host = BackgroundRenderNode(), VisualizerClipHost(), QuickVisualizerRenderHost()
+    background._initialize_gl()
+    background._logical_size = (float(width), float(height))
+    clip_frame = VisualizerClipFrame(logical_size=(float(width), float(height)),
+                                     local_content_rect=(width * .1, height * .1, width * .8, height * .8),
+                                     inner_corner_radius=24.0, matrix_values=matrix, viewport=viewport)
+    state = _RenderState()
+    # The node path draws into a target with a depth-stencil attachment, as Quick's render targets have (the clip
+    # writes and tests the stencil); the shared capture target has depth only, so this case owns its own.
+    color = int(gl.glGenTextures(1))
+    gl.glBindTexture(gl.GL_TEXTURE_2D, color)
+    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
+    depth_stencil = int(gl.glGenRenderbuffers(1))
+    gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, depth_stencil)
+    gl.glRenderbufferStorage(gl.GL_RENDERBUFFER, gl.GL_DEPTH24_STENCIL8, width, height)
+    fbo = int(gl.glGenFramebuffers(1))
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+    gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, color, 0)
+    gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_DEPTH_STENCIL_ATTACHMENT, gl.GL_RENDERBUFFER, depth_stencil)
+    if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+        raise RuntimeError("node-path framebuffer incomplete")
+
+    def render():
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT | gl.GL_STENCIL_BUFFER_BIT)
+        background._draw_base(texture_id=capture.textures[0], viewport=viewport, matrix_values=matrix)
+        run = clip.begin(clip_frame, state)
+        try:
+            host.render(snapshot=snapshot, viewport=viewport, logical_size=(float(width), float(height)),
+                        matrix_values=matrix, inherited_gl_state=run.inherited_gl_state)
+        finally:
+            clip.end(run)
+
+    def warm():
+        for _ in range(10):
+            render()
+
+    def counts():
+        gl_counts, py_counts = [], []
+        for _ in range(COUNT_FRAMES):
+            calls = [0]
+
+            def profile(_frame, event, _arg, calls=calls):
+                if event in ("call", "c_call"):
+                    calls[0] += 1
+
+            with _GLCounter(gl) as counter, _StateReadCounter(counter):
+                sys.setprofile(profile)
+                try:
+                    render()
+                finally:
+                    sys.setprofile(None)
+            gl_counts.append(counter.count)
+            py_counts.append(calls[0])
+        gl.glFinish()
+        return {"gl_calls": statistics.median(gl_counts), "py_calls": statistics.median(py_counts)}
+
+    try:
+        return bench.measure("node_path", {"background+clip+spectrum": BenchCase(lambda _index: render, warm, counts)},
+                             frames, passes, max_rounds)
+    finally:
+        host.release_resources()
+        clip.release_resources()
+        background.releaseResources()
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+        gl.glDeleteFramebuffers(1, [fbo])
+        gl.glDeleteRenderbuffers(1, [depth_stencil])
+        gl.glDeleteTextures([color])
+
+
 def _commit() -> str:
     try:
         return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True,
@@ -242,7 +377,7 @@ def compare(old: dict, new: dict) -> int:
     if differs:
         print(f"  WARNING: the runs were measured under different conditions ({', '.join(differs)}); "
               f"treat GPU and wall-time deltas with care (thread CPU and call counts are unaffected)")
-    for section in ("transitions", "visualizers", "surfaces"):
+    for section in ("transitions", "visualizers", "surfaces", "node_path"):
         rows_old, rows_new = old.get(section, {}), new.get(section, {})
         if new.get("match"):        # a partial run: only the cases it measured
             rows_old = {key: row for key, row in rows_old.items() if key in rows_new}
@@ -287,7 +422,7 @@ def main() -> int:
     parser.add_argument("--passes", type=int, default=3, help="admitted passes each transition needs")
     parser.add_argument("--max-rounds", type=int, default=12,
                         help="round-robin rounds before giving up on a quiet pass (busy machine)")
-    parser.add_argument("--only", choices=("transitions", "visualizers", "surfaces"))
+    parser.add_argument("--only", choices=("transitions", "visualizers", "surfaces", "node_path"))
     parser.add_argument("--match", help="measure only cases whose key contains this text (e.g. liquid_lens); "
                                         "the file is named after it and comparisons cover only those cases")
     parser.add_argument("--compare", type=Path, help="older baseline to compare the new one against")
@@ -319,6 +454,9 @@ def main() -> int:
         if args.only in (None, "surfaces"):
             print("Surfaces")
             data["surfaces"] = measure_surfaces(bench, args.frames, args.passes, args.max_rounds)
+        if args.only in (None, "node_path"):
+            print("Node path")
+            data["node_path"] = measure_node_path(bench, args.frames, args.passes, args.max_rounds)
         data["load"] = load = bench.load()
         data["renderer"] = gl.glGetString(gl.GL_RENDERER).decode()
     finally:

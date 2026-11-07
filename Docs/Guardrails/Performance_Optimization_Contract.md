@@ -396,6 +396,13 @@ save/restore fences); at the operator's TV card that alone held its render threa
 uniform locations up once per program, and let a mode that owns its frame's state use the shared primitives'
 `restore=False` contracts (`Docs/Reference/Scene3D_Resources.md`, "Owned frames") instead of reading state back per
 pass. The visualizer host's own fence is the one place that reads Quick's state.
+Every state read that remains goes through `rendering/quick/gl_query.py` (the raw entry point into a ctypes buffer,
+3.6 us against 14 us for PyOpenGL's checked getter): no module keeps a private reader, and a fence's query order is
+its contract (`tests/test_gl_fence_queries_one_helper.py` records it for the clip, shared, render-host and
+background fences). `tools/overhead_baseline.py --only node_path` measures those fences as the retained nodes run
+them (background base draw, clip begin, Spectrum, clip end); its GL count includes every state read, so moving a
+read between helpers neither hides nor adds a call (7 Nov, checklist AC-08: 187 GL calls before and after, Python
+calls 1609 -> 1216, render-thread CPU 0.68 -> 0.51 ms; baselines `tools/baselines/overhead/2026-11-07_*_node-path.json`).
 
 Work prepared off the render thread for a renderer (for example `run_geometry` keys) must key on the renderer's own inputs: transition renderers draw at the background item's logical size, which is not `display_bounds`: it is the monitor's device-exact rectangle inside the R-63 window (1706.67 logical px where Qt's rounded screen geometry says 1707), or the whole overscanned window before the native rectangle is known. Prove a hit, not just a build — a key that never matches fails silently into a render-thread rebuild (R-95).
 
