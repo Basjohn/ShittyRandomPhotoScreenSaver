@@ -105,6 +105,13 @@ is optional and defaults to "not offered":
   elsewhere a cancel still ends it but a parent crash does not. Every worker exits non-zero at once on a missing or
   unreadable clip. The worker's temporary folder (`worker_tag`) names the starting process, so a leak is traceable. Every
   Studio lists the shipped clips (`assets/production/studio_clips`) first, then a checkout's own recordings.
+  **The GUI thread never parses a worker's output:** `ClipLoadJob._on_finished` hands the JSON read and the mode's
+  `convert` to an IO task on the app-shared ThreadManager and the inputs come back through `run_on_ui_thread`, dropped
+  if the job was cancelled meanwhile (an Extruded Bubble clip is about 12 ms of parse; a tool with no app-shared
+  manager parses in place). **Analysed clips live in one bounded store per mode** (`engine_answers.remember/analysed`,
+  newest `ANALYSED_LIMIT` kept, keyed by the clip and its analysis values); no adapter keeps its own cache. Each Audio
+  Analysis edit is a new key (about 0.66 MB per Extruded Bubble entry), so an unbounded cache grew for the process.
+  `tests/test_studio_clip_cache_and_parse.py`.
 - **Studio clips are seamless loops (6 Nov).** The three shipped clips are not 12 s windows that restart: each is a
   loop (12.6-13.2 s, 0.86-1.01 MB, 2.74 MB in all) whose first frame follows its last as the recording's own next
   moment, and the Studio plays on through the wrap instead of restarting. There is no audio playback in the Studio: a

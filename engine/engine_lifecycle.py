@@ -294,10 +294,8 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
     # Force-stop shared beat engine audio worker to release audio threads
     if exit_app:
         try:
-            from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry, _global_beat_engine
-            if _global_beat_engine is not None:
-                _global_beat_engine.force_stop()
-            BeatEngineRegistry.get_instance().clear()
+            from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry
+            BeatEngineRegistry.get_instance().clear()     # the one authority: force-stops its engine
             logger.info("Shared beat engine audio worker force-stopped")
         except Exception as e:
             logger.debug("Beat engine force-stop failed: %s", e)
