@@ -1829,7 +1829,16 @@ class SettingsDialog(QDialog):
             self._on_exit_without_sources()
     
     def _reload_all_tab_settings(self) -> None:
-        """Reload settings in already-built tabs after preset change/reset/import."""
+        """Reload settings in already-built tabs after preset change/reset/import.
+
+        This is the reset/import edge: the active Settings and Widget themes are re-derived from persistence first
+        (AC-19), so the window, the reloaded tabs and the runtime rebuilt after close all see the stored choice.
+        """
+        try:
+            from ui.settings_theme_selection import rederive_active_themes
+            rederive_active_themes(self._settings)
+        except Exception:
+            logger.warning("[SETTINGS] Could not re-derive the active themes after a reload", exc_info=True)
         current = self.content_stack.currentWidget()
         tab_key = self._tab_key_for_index(self.content_stack.currentIndex())
         view_getter = getattr(current, "get_view_state", None)

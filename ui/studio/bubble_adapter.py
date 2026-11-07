@@ -134,7 +134,7 @@ def build_schema() -> StudioSchema:
     placed: dict[str, list[str]] = {w[0]: [] for w in _WORKSPACES}
     customs = _custom_controls(spec)
     conditions_of = _extra_conditions(spec)
-    for control in spec.controls:
+    for control in spec.body_controls:
         bucket = control.bucket or customs.get(control.key, "")
         if not bucket:
             continue
@@ -373,10 +373,8 @@ def _mode_kwargs(values: Mapping[str, Any]) -> dict:
 
 def simulation_keys() -> frozenset[str]:
     """Settings the logical step reads (the spec's logical controls and the technical lane config)."""
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
     spec = require_mode_settings(MODE)
-    return frozenset({c.key for c in spec.logical_controls()}
-                     | {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)})
+    return frozenset({c.key for c in spec.logical_controls()} | {c.key for c in spec.technical_controls()})
 
 
 def presentation_keys() -> tuple[str, ...]:

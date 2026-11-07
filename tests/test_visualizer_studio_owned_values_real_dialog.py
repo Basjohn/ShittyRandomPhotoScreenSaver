@@ -69,27 +69,23 @@ def _destroy(dialog):
 
 
 def _technical_defs(mode):
-    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    if not get_visualizer_mode_descriptor(mode).technical_controls:
-        return {}
-    return {_storage_key(mode, defn): defn for defn in _control_defs_for_mode(mode)}
+    return {control.key: control for control in require_mode_settings(mode).technical_controls()}
 
 
-def _other_value(defn, value):
+def _other_value(control, value):
     """A legal value of the technical control other than ``value``."""
-    if defn.default_type == "bool":
+    from core.settings.visualizer_mode_settings import Choice, Toggle
+    if isinstance(control, Toggle):
         return not bool(value)
-    if defn.widget_kind == "combo":
-        return next(option for _label, option in defn.options if option != value)
-    if defn.default_type == "int":
-        return int(defn.minimum) if int(value) != int(defn.minimum) else int(defn.maximum)
-    return float(defn.minimum) if float(value) != float(defn.minimum) else float(defn.maximum)
+    if isinstance(control, Choice):
+        return next(option for option in control.choices if option != value)
+    if control.integer:
+        return int(control.low) if int(value) != int(control.low) else int(control.high)
+    return float(control.low) if float(value) != float(control.low) else float(control.high)
 
 
 @pytest.mark.parametrize("mode", MODES)
 def test_studio_owned_body_builds_no_hidden_value_owners(manager, mode):
-    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
     from ui.widgets.continuous_border import BucketToggle
     _use_mode(manager, mode)
     dialog, tab = _open_mode(manager, mode)
@@ -97,13 +93,11 @@ def test_studio_owned_body_builds_no_hidden_value_owners(manager, mode):
     body = getattr(tab, f"_{spec.prefix}_settings_container")
     assert body.findChild(QWidget, f"{mode}_studio_owned_values") is None
     assert body.findChildren(BucketToggle) == []
-    assert get_per_mode_controls_for_mode(tab, mode) is None
+    assert not hasattr(tab, "_per_mode_technical_controls")
     for suffix in ("normal", "advanced_host", "advanced"):
         assert not hasattr(tab, f"_{spec.prefix}_{suffix}"), suffix
-    # The shared Bar Appearance / Rainbow rows are never placed into a mode body.
-    for accessory in (tab._base_appearance_group, tab._rainbow_controls_container):
-        assert not body.isAncestorOf(accessory)
-        assert not accessory.isVisibleTo(tab)
+    # The shared Bar Appearance / Rainbow families have no widget at all (the page's value cache holds them).
+    assert tab.findChild(QWidget, "visualizer_studio_family_values") is None
     _destroy(dialog)
 
 

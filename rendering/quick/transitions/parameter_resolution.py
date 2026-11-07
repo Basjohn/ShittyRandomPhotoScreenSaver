@@ -108,10 +108,10 @@ def _resolve_blinds(
         "Diagonal": "diagonal",
     }.get(raw_direction, "horizontal")
 
-    default_feather = float(defaults["feather"])
-    ui_feather = _number(_value(cfg, defaults, "feather"), default_feather)
-    # Preserve TransitionFactory's UI-scale -> shader-scale conversion.
-    feather = max(0.001, min(0.5, (ui_feather / 25.0) * 0.5))
+    edge = require_transition_settings("blinds").control("feather")
+    ui_feather = edge.admit(_value(cfg, defaults, "feather"), defaults["feather"])
+    # Preserve TransitionFactory's UI-scale -> shader-scale conversion: the slider's full range is half a stripe.
+    feather = max(0.001, min(0.5, (ui_feather / float(edge.high)) * 0.5))
     if style == "flat":
         return _finish(direction, {"feather": feather, "style": style})
     spec = require_transition_settings("blinds")
@@ -198,17 +198,8 @@ def _resolve_particle(
         "Random": 0,
     }.get(direction_text, 0)
 
-    default_swirl_order = int(defaults["swirl_order"])
-    swirl_order = max(
-        0,
-        min(
-            2,
-            _integer(
-                _value(cfg, defaults, "swirl_order"),
-                default_swirl_order,
-            ),
-        ),
-    )
+    spec = require_transition_settings("particle")
+    swirl_order = spec.admit("swirl_order", cfg, defaults)
     if mode == 3:
         mode = int(rng.choice((0, 1, 2)))
         if mode == 0:
@@ -216,14 +207,7 @@ def _resolve_particle(
         else:
             swirl_order = int(rng.randint(0, 2))
 
-    default_radius = float(defaults["particle_radius"])
-    radius = max(
-        8.0,
-        _number(
-            _value(cfg, defaults, "particle_radius"),
-            default_radius,
-        ),
-    )
+    radius = float(spec.admit("particle_radius", cfg, defaults))
     default_overlap = float(defaults["overlap"])
     overlap = max(
         0.0,
@@ -232,32 +216,14 @@ def _resolve_particle(
     if overlap >= radius * 2.0:
         raise ValueError("resolved Particle overlap must be smaller than particle diameter")
 
-    # Preserve the runtime's numerical index contract. Settings labels mirror
-    # the shader meanings exactly; the persisted values remain integer indices.
-    default_light = int(defaults["light_direction"])
-    light_direction = max(
-        0,
-        min(
-            4,
-            _integer(
-                _value(cfg, defaults, "light_direction"),
-                default_light,
-            ),
-        ),
-    )
-    default_gloss = float(defaults["gloss_size"])
-    gloss_size = max(
-        16.0,
-        min(
-            128.0,
-            _number(_value(cfg, defaults, "gloss_size"), default_gloss),
-        ),
-    )
+    # The runtime's numerical index contract: Settings labels mirror the shader meanings exactly; the persisted values
+    # remain integer indices, admitted by the spec's ranges.
+    light_direction = spec.admit("light_direction", cfg, defaults)
+    gloss_size = float(spec.admit("gloss_size", cfg, defaults))
 
     default_trail_length = float(defaults["trail_length"])
     default_trail_strength = float(defaults["trail_strength"])
     default_swirl_strength = float(defaults["swirl_strength"])
-    default_swirl_turns = float(defaults["swirl_turns"])
     default_3d = bool(defaults["use_3d_shading"])
     default_texture = bool(defaults["texture_mapping"])
     default_wobble = bool(defaults["wobble"])
@@ -297,13 +263,7 @@ def _resolve_particle(
                     default_swirl_strength,
                 ),
             ),
-            "swirl_turns": max(
-                0.5,
-                _number(
-                    _value(cfg, defaults, "swirl_turns"),
-                    default_swirl_turns,
-                ),
-            ),
+            "swirl_turns": float(spec.admit("swirl_turns", cfg, defaults)),
             "use_3d_shading": _bool(
                 _value(cfg, defaults, "use_3d_shading"),
                 default_3d,
@@ -368,13 +328,9 @@ def _resolve_burn(
         else direction_map.get(direction_text, 0)
     )
 
-    default_jagged = float(defaults["jaggedness"])
-    default_glow = float(defaults["glow_intensity"])
-    default_char = float(defaults["char_width"])
+    burn = require_transition_settings("burn")
     default_smoke_enabled = bool(defaults["smoke_enabled"])
-    default_smoke_density = float(defaults["smoke_density"])
     default_ash_enabled = bool(defaults["ash_enabled"])
-    default_ash_density = float(defaults["ash_density"])
     default_glow_color = defaults["glow_color"]
     default_ember_color = defaults["ember_color"]
 
@@ -382,26 +338,8 @@ def _resolve_burn(
         None,
         {
             "direction": direction,
-            "jaggedness": max(
-                0.0,
-                min(
-                    1.0,
-                    _number(
-                        _value(cfg, defaults, "jaggedness"),
-                        default_jagged,
-                    ),
-                ),
-            ),
-            "glow_intensity": max(
-                0.0,
-                min(
-                    1.0,
-                    _number(
-                        _value(cfg, defaults, "glow_intensity"),
-                        default_glow,
-                    ),
-                ),
-            ),
+            "jaggedness": float(burn.admit("jaggedness", cfg, defaults)),
+            "glow_intensity": float(burn.admit("glow_intensity", cfg, defaults)),
             "glow_color": _normalized_glow_color(
                 _value(cfg, defaults, "glow_color"),
                 default_glow_color,
@@ -411,44 +349,17 @@ def _resolve_burn(
                 default_ember_color,
                 field_name="ember_color",
             ),
-            "char_width": max(
-                0.1,
-                min(
-                    1.0,
-                    _number(
-                        _value(cfg, defaults, "char_width"),
-                        default_char,
-                    ),
-                ),
-            ),
+            "char_width": float(burn.admit("char_width", cfg, defaults)),
             "smoke_enabled": _bool(
                 _value(cfg, defaults, "smoke_enabled"),
                 default_smoke_enabled,
             ),
-            "smoke_density": max(
-                0.0,
-                min(
-                    1.0,
-                    _number(
-                        _value(cfg, defaults, "smoke_density"),
-                        default_smoke_density,
-                    ),
-                ),
-            ),
+            "smoke_density": float(burn.admit("smoke_density", cfg, defaults)),
             "ash_enabled": _bool(
                 _value(cfg, defaults, "ash_enabled"),
                 default_ash_enabled,
             ),
-            "ash_density": max(
-                0.0,
-                min(
-                    1.0,
-                    _number(
-                        _value(cfg, defaults, "ash_density"),
-                        default_ash_density,
-                    ),
-                ),
-            ),
+            "ash_density": float(burn.admit("ash_density", cfg, defaults)),
             "flames": _bool(_value(cfg, defaults, "flames"), bool(defaults["flames"])),
             "ember_veins": _bool(_value(cfg, defaults, "ember_veins"), bool(defaults["ember_veins"])),
             "seed": float(rng.random()) * 1000.0,

@@ -148,8 +148,9 @@ def test_curated_action_shared_and_both_followups(qapp, settings, monkeypatch, c
     page.deleteLater()
 
 
-def test_media_center_keeps_interaction_on_and_greys_the_other_choice(qapp, settings):
-    settings.get_application_name = lambda: "Screensaver_MC"
+def test_media_center_keeps_interaction_on_and_greys_the_other_choice(qapp, settings, monkeypatch):
+    import core.mc
+    monkeypatch.setattr(core.mc, "is_mc_build", lambda: True)
     page = InteractionPage(settings)
     try:
         assert page.group.button(1).isChecked()

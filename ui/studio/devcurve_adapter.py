@@ -316,7 +316,7 @@ def build_schema() -> StudioSchema:
         props.append(StudioProperty(id=prop_id, path=path, label=label, workspace=workspace, group=group,
                                     instrument=instrument, **extra))
 
-    for control in spec.controls:
+    for control in spec.body_controls:
         if not control.bucket:
             continue                              # (none today: the coverage test names any that appear)
         workspace = _BUCKET_WORKSPACE.get(control.bucket, "finish")   # an unplaced new bucket still appears
@@ -355,8 +355,9 @@ def build_schema() -> StudioSchema:
     if rainbow:
         add(rainbow["rainbow_enabled"], (rainbow["rainbow_enabled"],), "Taste the Rainbow", "finish", RAINBOW_GROUP,
             SWITCH, tooltip="Slowly shift the hue of the curves through the spectrum. Saved per visualizer mode.")
+        speed = spec.control(rainbow["rainbow_speed"])     # range from the spec's shared-family entries
         add(rainbow["rainbow_speed"], (rainbow["rainbow_speed"],), "Rainbow Speed", "finish", RAINBOW_GROUP, SCALAR,
-            minimum=0.01, maximum=1.0, decimals=2, when=((rainbow["rainbow_enabled"], (True,)),),
+            minimum=speed.low, maximum=speed.high, decimals=2, when=((rainbow["rainbow_enabled"], (True,)),),
             tooltip="How fast the hue cycles through the spectrum.")
 
     technical = technical_properties(MODE, workspace="core")
@@ -401,10 +402,6 @@ def build_schema() -> StudioSchema:
         if key == ACTIVE_LAYER:
             text = str(candidate).strip().lower()
             return text if text in names else str(previous)
-        if rainbow and key == rainbow["rainbow_speed"]:
-            return spectrum_shape.percent(candidate, previous, low=0.01)
-        if rainbow and key == rainbow["rainbow_enabled"]:
-            return bool(candidate)
         raise KeyError(f"{key} is not a DevCurve Studio value")
 
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _GROUP_PANEL.items() if key in titles}

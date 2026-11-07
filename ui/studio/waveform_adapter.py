@@ -195,7 +195,7 @@ def build_schema() -> StudioSchema:
     # canonical controls are never silently missing from the Studio.
     titles = {bucket.key: bucket.title for bucket in spec.buckets}
     extra_groups: list[str] = []
-    for control in spec.controls:
+    for control in spec.body_controls:
         bucket = control.bucket
         if not bucket or isinstance(control, VisualEditor):
             continue  # routing / palette / ribbon cards get dedicated instruments below or in Stage C/D
@@ -579,7 +579,7 @@ def camera_parameters(values: Mapping[str, Any]) -> dict[str, Any]:
 def _logical_values(values: Mapping[str, Any]) -> dict[str, Any]:
     from widgets.spotify_visualizer.waveform_ribbon_capture import _CAMERA_KEYS
     spec = require_mode_settings(MODE)
-    return {control.key: values[control.key] for control in spec.controls
+    return {control.key: values[control.key] for control in spec.body_controls
             if control.key in values and control.key not in _CAMERA_KEYS}
 
 
@@ -1207,7 +1207,7 @@ class WaveformStudioAdapter(StudioModeAdapter):
     @staticmethod
     def _clip_key(clip: StudioFixture, values: Mapping[str, Any]) -> str:
         import json
-        authored = {control.key for control in require_mode_settings(MODE).controls}
+        authored = {control.key for control in require_mode_settings(MODE).body_controls}
         analysis = {key: value for key, value in values.items() if key not in authored}
         return clip.description + "|" + json.dumps(analysis, sort_keys=True, default=str)
 

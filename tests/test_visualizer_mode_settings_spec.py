@@ -11,6 +11,7 @@ from core.settings.default_contract import require_canonical_default
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 from core.settings.visualizer_mode_settings import (
+    NON_BODY_BUCKETS,
     VISUAL_CONTROLS,
     Choice,
     Colour,
@@ -126,7 +127,7 @@ def test_a_spec_is_a_registered_mode_and_owns_canonical_keys(spec):
         if isinstance(control, Slider):
             assert control.low < control.high
     buckets = {bucket.key for bucket in spec.buckets}
-    assert {entry.bucket for entry in spec.entries if entry.bucket} <= buckets
+    assert {entry.bucket for entry in spec.body_entries if entry.bucket} <= buckets
     for bucket in buckets:
         assert f"{spec.mode_id}:{bucket}" in BUCKET_STATES
 
@@ -175,6 +176,12 @@ def test_the_appliers_store_each_control_on_its_owner_and_the_renderer_gets_the_
     _apply_spec_controls(logical, dict(DEFAULTS), logical=True)
     _apply_spec_controls(presentation, dict(DEFAULTS), logical=False)
     for control in spec.controls:
+        if control.bucket in NON_BODY_BUCKETS:
+            # Audio analysis and the page's shared families: consumed through their registry routing (the shared
+            # engine, the shared bar profile, the active-mode rainbow), never stored on either owner nor handed to
+            # the renderer under their own key.
+            assert not hasattr(logical, f"_{control.key}") and not hasattr(presentation, f"_{control.key}")
+            continue
         if control.source:
             from widgets.spotify_visualizer.source_config_applier import resolve_mode_source_config
 
@@ -215,7 +222,7 @@ def test_devcurve_production_applier_writes_each_logical_control_once():
             object.__setattr__(self, name, value)
 
     spec = require_mode_settings("devcurve")
-    values = {control.key: _different(control, DEFAULTS[control.key]) for control in spec.controls}
+    values = {control.key: _different(control, DEFAULTS[control.key]) for control in spec.body_controls}
     logical, presentation = Owner(), Owner()
     apply_logical_vis_mode_kwargs(logical, values)
     apply_presentation_vis_mode_kwargs(presentation, values)

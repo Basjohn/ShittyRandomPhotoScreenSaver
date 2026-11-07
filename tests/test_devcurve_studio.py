@@ -47,7 +47,7 @@ def spec():
 def canonical_section():
     """Test-owned inputs: the code-owned canonical defaults (never an authored preset)."""
     out = dict(require_canonical_default("widgets.spotify_visualizer"))
-    for control in spec().controls:
+    for control in spec().body_controls:
         out[control.key] = control.admit(out[control.key], out[control.key])
     return out
 
@@ -74,8 +74,8 @@ def variant_section(variant: str) -> dict:
 
 
 def technical_keys():
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    return {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)}
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    return {control.key for control in require_mode_settings(MODE).technical_controls()}
 
 
 def rainbow_keys():
@@ -176,7 +176,7 @@ def _uncovered(properties) -> set:
     only.)"""
     roots = {p.path[0] for p in properties}
     paths = {tuple(p.path) for p in properties}
-    every = {c.key for c in spec().controls} | custom_keys() | technical_keys() | rainbow_keys()
+    every = {c.key for c in spec().body_controls} | custom_keys() | technical_keys() | rainbow_keys()
     return (every - roots) | {element for element in _vector_elements() if element not in paths}
 
 
@@ -198,7 +198,7 @@ def test_coverage_check_detects_a_missing_control_negative_control():
 def test_instruments_bounds_choices_and_conditions_come_from_the_registry():
     schema = build_schema()
     from ui.studio.adapter import control_condition
-    for control in spec().controls:
+    for control in spec().body_controls:
         prop = schema.find(control.key)
         if isinstance(control, Slider):
             assert (prop.minimum, prop.maximum) == (control.low, control.high), control.key
@@ -212,7 +212,7 @@ def test_instruments_bounds_choices_and_conditions_come_from_the_registry():
         assert prop.when == control_condition(control), control.key
     # Workspaces follow Settings' buckets: every bucket's controls share one workspace and group.
     titles = {bucket.key: bucket.title for bucket in spec().buckets}
-    for control in spec().controls:
+    for control in spec().body_controls:
         assert schema.find(control.key).group == titles[control.bucket]
     # One group per layer (the shaper's own layer names), each with its live reactivity trace.
     traces = dict(schema.group_traces)
@@ -313,7 +313,7 @@ def _flipped(key: str, value):
         return [[x, 1.0 - y] for x, y in value]
     if isinstance(value, list):
         return [255 - int(v) for v in value[:3]] + [int(value[3])]
-    control = next((c for c in spec().controls if c.key == key), None)
+    control = next((c for c in spec().body_controls if c.key == key), None)
     if control is not None:
         low, high = control.low, control.high
     else:
@@ -925,7 +925,7 @@ def test_save_to_preset_writes_a_devcurve_edit_into_the_curated_files_own_shape(
     schema = build_schema()
     prop = next(p for p in schema.properties
                 if p.instrument == SCALAR and not p.integer and len(p.path) == 1 and p.id in authored
-                and p.id in {c.key for c in spec().controls} and text.count(f'"{p.id}"') == 1)
+                and p.id in {c.key for c in spec().body_controls} and text.count(f'"{p.id}"') == 1)
     span = prop.maximum - prop.minimum
     shown = float(bridge.values[prop.id])
     target = round(prop.minimum + span * (0.25 if shown > prop.minimum + span / 2 else 0.75), 2)
