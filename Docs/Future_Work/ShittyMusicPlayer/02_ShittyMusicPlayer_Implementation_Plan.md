@@ -661,4 +661,70 @@ every widget anywhere on any display with saved slots. SMP gets both, with one l
   and re-docks it, switches layouts and monitors, and asserts rects restore to the byte, no identity is lost, audio
   state is untouched and the one Visualizer renderer stays single; MC's parity harness covers the two panes.
 
+### 16A. SMP fullscreen arrangement (operator, 7 Nov 2026; lead's design proposal)
+
+Operator: "Freedom but no dead/empty sections and sections must connect, so smp would largely be choosing sections,
+swapping them, resizing them and of course remembering all of this." Also: "SMP being in Fullscreen should be
+remembered", and the Visualizer's own Expanded state is never decided by a preset or a mode switch (plan 01 §D3).
+
+**Model: one tiling tree per fullscreen layout.**
+- **Structure:** each layout is a guillotine split tree.
+  - An internal node is a horizontal or vertical split with one normalised ratio.
+  - A leaf is a section holding exactly one content identity from the §16 inventory: Library, Playlist/Queue, Track
+    Information, Artwork, Visualizer, Transport (play/seek/volume), Search/Filter, Status/Audio path.
+- **No holes or overlaps by construction:**
+  - Leaves always tile the screen and share edges, so there are no gaps or overlaps.
+  - Every leaf has content, so there are no empty sections.
+  - Each content appears at most once; the Visualizer stays one owner.
+- **Never pixel rects:** the layout is persisted as the small tree with ratios. It restores on any monitor, DPI or
+  aspect ratio without reauthoring. Fullscreen has no floating panels; the §16 floating/detach behaviour belongs to
+  the windowed host, and Pop Out (§8.3) is a separate window.
+
+**The whole edit vocabulary (four operations; everything else is rejected):**
+1. **Choose:** a section's picker sets its content. Choosing a content already shown elsewhere swaps the two, so no
+   duplicates appear and nothing is lost.
+2. **Swap:** drag one section onto another; the two contents exchange, with a live preview. Splits don't change.
+3. **Resize:** drag a shared edge to change that one split's ratio.
+   - Snap stops at 1/4, 1/3, 1/2, 2/3 and 3/4 of the split.
+   - Snap to neighbouring parallel edges, so rows and columns line up across the screen; Shift drags freely.
+   - Per-content minimums clamp the drag (e.g. Transport height, Library and Queue width, Artwork near its aspect);
+     a split never yields a section below its minimum.
+4. **Split / remove:** split a section to add a content (only contents not yet shown are offered). Removing a
+   section gives its whole space to its sibling, so space never becomes dead.
+
+**Fitting and alignment:**
+- **Small screens:** when a screen is too small for the minimums, sections fold in a declared priority order
+  (Status → Search → Artwork → Queue …; Transport and the current focus content last). They return when space allows.
+  They never overlap or go off screen.
+- **Styling:** one theme gutter between all sections, and every section uses the same card surface (Glass/Acrylic
+  from the theme, one legibility panel inset uniformly). This avoids today's mixed opaque and glass cards and
+  partial inner panels.
+- **Reflow:** each content reflows to its rect instead of scaling. Library switches between grid and list by width,
+  Transport compresses to icons, Artwork fits its aspect, and the Visualizer fills its section through plan 01's
+  viewport owner.
+
+**Editing and persistence:**
+- **Arrange:** SMP fullscreen gets its own Arrange: section outlines and labels, edge handles, drag-to-swap, and a
+  per-section menu (change content, split horizontally/vertically, remove). Like MC Edit, it edits a draft; Save
+  commits and Esc/Cancel restores the saved tree.
+- **Built-in starts:** 3–4 layouts, e.g. Visualizer Stage (Visualizer large, Transport bottom, Queue right),
+  Library, Now Playing (Artwork + Track Information + Visualizer), Minimal (Visualizer + Transport).
+- **Slots:** three user slots plus the default, like the saver's Layout Slots, with import/export.
+- **Persisted in the SMP profile:** whether SMP is fullscreen (restored at start), the active layout tree, and the
+  slots. Per-aspect-class variants (16:9, 21:9, portrait) are optional later; normalised ratios cover most cases.
+
+**Settings → Layout gets two pills: Widgets and SMP.**
+- MC builds show both and auto-select the one that matters now: SMP when SMP is fullscreen or was last edited, else
+  Widgets.
+- SMP builds show only SMP's Arrange for its fullscreen elements.
+- The pills follow the existing Settings bucket/pill patterns (one open at a time, short names).
+
+**Regression bar (planned):** `test_smp_fullscreen_layout.py`.
+- Random sequences of choose, swap, resize, split and remove never leave a hole, an overlap, an empty leaf or a
+  duplicate content.
+- Minimums hold.
+- The tree round-trips to the byte through save and restore across resolutions and DPR.
+- Folding at small sizes is deterministic and reversible.
+- Swaps never restart audio, the queue or the visualizer clock.
+
 **Final acceptance statement:**If MC offers two independently movable/resizable Library and Playlist panes under one widget entry, playback survives those views and Settings, Media/visualizer remain independently source-selectable, MC Expanded Media works before profile separation, and a later SMP native window reuses the shared library/player/visualizer state with intact dormancy and strict SRPSS contracts, the roadmap has achieved its goal without throwing away the existing architecture.
