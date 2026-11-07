@@ -92,6 +92,11 @@ after the operator's yes on a question card; agents never run load (invisible ch
      with a customizable font; later, cheap bright-area detection to switch the text to black. No volume rail.
      Options: any corner per overlay, Always Show, Media Controls with the now-playing (default off), an optional card
      border + theme surface (default off); all in a new Visualizers pill "Fullscreen Mode", first after Setup.
+   - Fullscreen Edit (operator, 8 Nov; plan 01 M3c, after M3b): Edit entered while expanded stays expanded and edits
+     the overlays' size/position (toast, now-playing text, artwork, media controls) like ordinary widget geometry,
+     through the existing Edit session; supersedes "entering Edit collapses".
+   - M4's design proof is written (plan 01 `02_E0_Covered_Display_Admission.md`): a covered display that already
+     shows an image is left out of image batches at admission; implementation after M3 merges.
 
 **Next (admitted, in this order):**
 

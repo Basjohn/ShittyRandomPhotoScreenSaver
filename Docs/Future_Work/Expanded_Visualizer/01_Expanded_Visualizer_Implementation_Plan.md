@@ -43,6 +43,8 @@ owner that signs it. The original milestones (§H) keep their checklists; this t
 | **M2** full-display viewport | M1 green; AC-02, AC-09 merged | production-host renders at 16:9, 16:10, 21:9, portrait, mixed DPR show the Visualizer card near the display's visible extents (inset by the card's edge margin, never the R-63 overscanned window) with its chrome; reactivity packet digests identical to M0 on recorded clips for every capable mode; ordinary rect round-trips to the byte | lead + operator look |
 | **M2b** Spectrum bar count at full display | M2 accepted | expanded bar count = card bar count x the width ratio (clamped to the DSP maximum), so bar width stays as authored; the DSP band layout is recomputed at the expand and collapse edges behind a fade (never a jump); Spectrum's digests differ at full display by design (per-band history re-mapped), every other mode's stay identical | lead + operator look |
 | **M3** fades, HUD, widget suspension | M2 accepted | consumer counts equal before/after N cycles (Media, OSD, Gmail, Feeds, Steam leases); no QObject/subscription growth over 20 cycles; HUD visible only on events, fades within its bounded window | agent |
+| **M3b** full-display overlays | M3 merged | §G spec incl. options and the Fullscreen Mode pill; event-only visibility, Always Show crossfade, every corner, media controls on the one Media controller; consumer counts unchanged | agent |
+| **M3c** Fullscreen Edit | M3b merged | Edit entered while expanded stays expanded and edits only the overlays' geometry through the existing Edit session (draft, Save/Cancel); Edit/Arrange-style parity map for the overlays; ordinary layout untouched byte for byte | agent |
 | **M4** wallpaper policy and GPU savings | E0 state diagram written and reviewed | batch traces: expected/published/covered identities, zero stalled batch, zero backlog on collapse; measured GPU and render-thread CPU delta on the covered display vs M0 (relative, load recorded) | lead |
 | **M5** transactional lifecycle | M3, M4 green | deterministic event traces for capable->capable, capable->incapable, failed activation, transfer at mixed DPI, Settings open/close x10, Edit Save/Cancel, hotplug; resource counts flat | agent |
 | **M6** performance, fidelity, admission | M5 green | §0.7 budgets met at 4K under game60 (or a trigger recorded); EB BTF/reattack/settle/stream/drift unchanged vs M0; docs updated for proven semantics only | operator physical acceptance |
@@ -85,8 +87,10 @@ Prove, not assert, each of these at M1 and again at M6:
 - Topology: loss of the owning display retires the generation under the existing barriers; the intent survives;
   a return re-evaluates. Transfer is one transaction on the existing `_transfer_quick_visualizer_unit` seam with
   rollback fences for both takeover scopes (§D4).
-- Edit: entering Edit collapses through the same transaction; an active draft is resolved by the session's own
-  Save/Cancel path (§D5); the CUSTOM working override and committed geometry are untouched by expansion.
+- Edit: entering Edit from the ordinary scene edits the ordinary layout as today. **Entering Edit while expanded
+  (operator, 8 Nov; supersedes "entering Edit collapses") stays expanded and edits the full-display overlays' geometry**
+  (M3c); an active draft is resolved by the session's own Save/Cancel path (§D5); the CUSTOM working override and the
+  ordinary committed geometry are untouched by expansion.
 - Terminal exit: HUD animations, leases and GL resources retire under the existing render-thread owner; no new
   release path.
 
@@ -150,8 +154,9 @@ alternated against the card size, system conditions recorded (`Docs/Reference/Be
 
 Expansion is not a layout. It writes no geometry, moves no widget, and collapses to the exact committed layout. The
 Visualizer's resting place is decided by its placement policy (AC-02: `docked_to: media | none`), so a user who has
-arranged the Visualizer away from Media gets it back there. Arrange and Edit never show an expanded state; they edit
-the ordinary layout, and entering Edit collapses first.
+arranged the Visualizer away from Media gets it back there. Arrange never shows an expanded state. Edit entered from
+the ordinary scene edits the ordinary layout; Edit entered while expanded edits only the full-display overlays (M3c),
+whose geometry is its own, never the ordinary layout's.
 
 ### 0.9 Risks
 
@@ -310,7 +315,8 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 
 - [ ] Initial scene admission resolves mode and monitor **first**, then expanded intent; reveal coordinator gates all new retained roots before exposure. A persisted expanded intent must never cause a cold ordinary-card flash.
 - [ ] Settings opens using current `on_settings_requested`, complete teardown and destruction barrier. The *intent* persists in profile settings. On return, only the new generation may re-admit expanded state; no callbacks from prior QML objects.
-- [ ] Edit entry from expanded collapses through the same transaction. **If Edit has an active unsaved draft when expansion is requested, prompt/resolve with the current session policy; no implicit discard.** Returning from Edit restores expanded intent only after editor exit and correct readiness, not during drag.
+- [ ] Edit entry from expanded stays expanded and opens Fullscreen Edit (M3c; operator 8 Nov, superseding the
+  collapse-on-Edit rule M1 implemented). **If Edit has an active unsaved draft when expansion is requested, prompt/resolve with the current session policy; no implicit discard.** Returning from Edit restores expanded intent only after editor exit and correct readiness, not during drag.
 - [ ] Terminal exit releases HUD animations, every local lease, visualizer and GL resources with existing exact retirement; preserve settings but not runtime references.
 - [ ] Restoration on startup/Settings and topology change is idempotent, bounded and has a documented safe state if eligible mode is no longer available.
 
@@ -319,6 +325,10 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 **Problem proven by inspection:** `engine/screensaver_engine.py::_show_next_image` reserves the full image-change transaction before queue/history mutation; `DisplayManager` tracks an expected set of screens and completes only when every admitted destination is authoritative. `QuickDisplayRuntime.set_presentation_image` rejects replacing the image during an active transition. Therefore one display cannot simply ignore `start_transition`, drop completion, or unhook image events. Nor can a 'deferred' per-display FIFO grow behind a fullscreen view.
 
 ### E0. Required design proof **before** a suppression implementation
+
+Written 8 Nov: [02_E0_Covered_Display_Admission.md](02_E0_Covered_Display_Admission.md) (decision: exclude a covered
+display that already shows an image at batch admission; zero targets return before the queue moves; resume at the
+next admitted edge). The checklist below stays as its review list.
 
 - [ ] Trace `_show_next_image`, `_prepare_next_transition`, `_load_and_display_image_async`, `DisplayManager` expected/published screen sets, `_present_quick_captured_image`, `transition_batch_idle`, `current_images`, the image queue/peek/history, source-speculative workers, monitor wake/replay, startup reveal and image-cache ownership. Draw an explicit source/destination/accounting state diagram for (a) one covered screen of two, (b) ALL covered if possible, (c) last uncovered screen removed mid-batch.
 - [ ] Define **one authoritative per-display presentation admission policy** at the existing engine/manager seam: `normal`, `covered_committed_without_effect`, `covered_excluded_from_processing` (labels illustrative). This is NOT a second transition engine or separate image queue.
@@ -549,9 +559,34 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   conflict with OSD/glyph/controls, consumer counts unchanged (no second Media query), dormant when not expanded,
   the pill's position (structure only, never its wording).
 
+**Milestone 3c | Fullscreen Edit (operator, 8 Nov)**
+
+Operator: "when we choose edit mode during a fullscreen visualizer we should be able to adjust the size/position/
+placement of the toast and preset text elements and artwork instead of it going back to the full quick scene. Like we
+can most geometry normally."
+
+- [ ] Entering Edit while expanded keeps the expanded view (no collapse) and makes the overlays the editable items:
+  the preset toast, the now-playing text block, the artwork and (when shown) the media controls. The Visualizer itself
+  stays full-display; ordinary widgets stay suspended.
+- [ ] Same gestures, chrome and snapping as ordinary widget geometry (the existing Edit owner, glyphs and guides); no
+  second editor, no second commit path. Drag moves, handles resize (text scales its font, artwork its size), snapping
+  to the display's safe area, corners and the other overlays.
+- [ ] Geometry is the overlays' own canonical setting (spec system, defaults, reset), stored relative to the expanded
+  display's safe area so it reflows across displays of different size/DPR. The Fullscreen Mode corner choice is the
+  anchor the Edit position is relative to; changing the corner in Settings keeps the offset sensible (or resets it,
+  decided in the slice and documented).
+- [ ] Draft semantics: Edit edits a draft; Save commits, Cancel restores the pre-Edit overlay geometry exactly; an
+  unsaved draft is never silently saved or discarded (the session's existing prompt).
+- [ ] While Fullscreen Edit is open the overlays are shown (as if Always Show) so they can be grabbed; on exit they
+  return to their authored visibility with a fade.
+- [ ] Tests: a parity map in the spirit of the Edit/Arrange parity harness (the same gesture through the Edit owner
+  on a copy, then cancel, compared with the committed result); the ordinary layout and CUSTOM slots byte-identical
+  after a Fullscreen Edit Save and Cancel; entering Edit while expanded does not emit the collapse transaction; no
+  hit/z conflict with the collapse glyph, OSD and camera/preset controls.
+
 **Milestone 4 | Wallpaper transition policy and GPU savings**
 
-- [ ] Complete E0 diagram. Implement batch-safe covered-display receipt/omission policy; test both screens with staggered, asynchronous transitions and image queue/history.
+- [x] Complete E0 diagram ([02_E0](02_E0_Covered_Display_Admission.md)). - [ ] Implement batch-safe covered-display receipt/omission policy; test both screens with staggered, asynchronous transitions and image queue/history.
 - [ ] Only after baseline receipt, suppress admitted GPU effect work on covered display; deeper source/decode/prefetch suppression optional and separately proven.
 - [ ] **Gate 4:** another display still uses authored transition; covered display has no backlog or stalled batch; collapse re-enters safely. Record true GPU/CPU improvement vs original; no unmeasured 'dormant' claim.
 
