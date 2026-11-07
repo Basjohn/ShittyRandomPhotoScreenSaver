@@ -194,9 +194,26 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 
   **Left in `DisplayManager`, until a second host needs them:** the request and gesture routing that acts on the
   owner.
-- **AC-03, the application-service tier (Opus high, started 7 Nov):** the second SMP prerequisite. It adds one
-  `ApplicationServices` registry on the engine: it lives across Settings, retires once in terminal cleanup, uses
-  generation-fenced leases, and creates nothing in Standard SRPSS.
+- **AC-03, the application-service tier: merged 7 Nov (f85a3027).** `core/application_services.py`:
+  - a registry that lives across Settings and retires exactly once at terminal finalization;
+  - generation leases revoked at every teardown and at the dialog's cancellation edge;
+  - nothing created in Standard SRPSS;
+  - a failed Settings teardown retires the services before the process exits.
+
+  It broke each guarantee on purpose and showed each check catches it. 17/17 lifecycle, destruction, Settings and
+  thread files pass on the merge. **All three SMP and Expanded Visualizer prerequisites (AC-01, AC-02, AC-03) have
+  landed.**
+- **Expanded Visualizer M1 (Opus high, started 7 Nov):**
+  - the capability (Extruded Bubble only);
+  - the persisted intent, excluded from preset payloads;
+  - a pure takeover reducer, not yet wired.
+
+  It stays on its branch until the lead's M0 baseline exists (plan 01 §0.2).
+- **Lead, the next quiet machine (no agents running):**
+  - the M0 baseline receipts (plan 01 §0.2);
+  - the GC freeze live check with Settings round trips (once the harness lands);
+  - the Waveform tick cut under game60;
+  - the card-materials live check.
 - **Small-defects agent (Opus medium): its first four items were merged 7 Nov (c9b4e8ac):**
   - **AC-06:** the Studio's clip caches are bounded, and the clip parse runs off the GUI thread.
   - **Reset Camera:** in-card controls own their double-click, so it never cycles the mode.
@@ -216,7 +233,21 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
     tests pass, and the protected lineage is untouched.
 
   **Lead audit:** 10/10 guard, GL, thread and lifecycle files and 4/4 pixel files pass on the merge.
-  **Next for it:** queue item 2 (AC-11), then the two flaky or environment tests recorded below.
+  **Third round merged 7 Nov (e0a103ad):**
+  - **AC-11:** Sphere and Extruded Spectrum reset to their preset home through the in-card glyph and the R key.
+    Every orbiting mode now declares its reset path, inertia and wrap in `Docs/Reference/Visualizer_Reference.md`.
+    The framed cameras are untouched. Home and orbit renders are byte-identical before and after (single-sample).
+  - The worktree-only `test_run_matrix_harness.py` check is fixed.
+  - The one-pixel `test_waveform_floor_give.py` flake is fixed: it was MSAA rasterisation noise, so the test now
+    renders single-sample, and 20/20 runs pass.
+
+  **Lead:** 35/35 camera and orbit files pass on the merge. Open for the operator: should Extruded Spectrum coast
+  like Sphere? It wraps but has no inertia today.
+- **Settings round-trip live harness + lifecycle hygiene (Opus medium, started 7 Nov):**
+  1. `tools/visualizer_live_check.py --settings-roundtrip`, which drives the real Settings path invisibly;
+  2. the fatal-exit terminal backstop (an AC-03 side defect);
+  3. AC-10;
+  4. AC-07.
 **Queued, next free medium slot, in this order (small, bounded):**
 1. **GC freeze per generation: merged 7 Nov; the live check is owed (lead, quiet machine).** The minute-ly 86–161 ms
    gen2 stalls came from the replay driver: it kept every frame under the interpreter's thresholds.
