@@ -80,6 +80,44 @@ def pytest_addoption(parser):
                      help="1-indexed chunk number to run (requires --total-chunks)")
     parser.addoption("--total-chunks", type=int, default=None,
                      help="Total number of chunks the suite is split into")
+    parser.addoption("--display-disruptive", action="store_true", default=False,
+                     help="Also run tests that put real display windows on the operator's monitors "
+                          "(QuickDisplayWindow.show_on_screen). Only when directly relevant.")
+
+
+# ---------------------------------------------------------------------------
+# Real display windows on the operator's monitors (operator, 7 Nov: "a test that causes a blue screen and a black
+# screen ... it disrupts my entire display ecosystem"). A test reaching QuickDisplayWindow.show_on_screen - directly or
+# through production code - is skipped unless the run asks for --display-disruptive. The window never shows.
+# ---------------------------------------------------------------------------
+_DISPLAY_GUARD = {"patched": False, "allowed": False, "nodeid": ""}
+
+
+def _install_display_window_guard() -> None:
+    if _DISPLAY_GUARD["patched"]:
+        return
+    module = sys.modules.get("rendering.quick.window")
+    if module is None:
+        return
+    original = module.QuickDisplayWindow.show_on_screen
+
+    def guarded_show_on_screen(self, *args, **kwargs):
+        if not _DISPLAY_GUARD["allowed"]:
+            pytest.skip(f"{_DISPLAY_GUARD['nodeid']} would show a real display window on the operator's monitors; "
+                        "run it only when directly relevant, with --display-disruptive")
+        return original(self, *args, **kwargs)
+
+    module.QuickDisplayWindow.show_on_screen = guarded_show_on_screen
+    _DISPLAY_GUARD["patched"] = True
+
+
+@pytest.fixture(autouse=True)
+def _no_real_display_window_unless_asked(request):
+    _install_display_window_guard()
+    _DISPLAY_GUARD["allowed"] = bool(request.config.getoption("--display-disruptive"))
+    _DISPLAY_GUARD["nodeid"] = request.node.nodeid
+    yield
+    _install_display_window_guard()        # a module imported during the test is guarded from the next test on
 def pytest_collection_modifyitems(config, items):
     """Skip Linux-only tests off Linux; select a deterministic requested chunk."""
 

@@ -390,6 +390,14 @@ A green static/source test is never a substitute for a required Qt/QML, real-GL 
 
 ## 3. Standard commands
 
+**Real display windows are opt-in (operator, 7 Nov 2026).** A test that reaches `QuickDisplayWindow.show_on_screen`
+(directly, or through production code) would put a real display window on the operator's monitors; the operator saw
+blue and black screens that "disrupt my entire display ecosystem". `tests/conftest.py` skips such a test, before the
+window shows, unless the run passes `--display-disruptive`. Pass it only when the change is directly about on-screen
+display presentation, and never in routine or milestone runs. Known on-screen tests:
+`tests/test_qtquick_runtime_reality.py` (two). Any other test that must show a window keeps it off screen
+(`tests/_invisible_windows.keep_off_screen`).
+
 ### 3.1 Maintained product gate
 
 ```powershell
