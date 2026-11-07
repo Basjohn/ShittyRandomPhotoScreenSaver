@@ -460,6 +460,19 @@ lose this"). Every later dynamics change shows, on the recorded clips, that Pres
     P7 0-15 s) and 6-11% over it in sustained loud bins; quieter-after-loud kicks 8-27% under main by design (a quieter
     passage is no longer re-normalised up); top-row spark density up to about 2x main.
   - Still open from the Range audit (item below): Rotation's drive never passes .36.
+  - **Music-vs-response on main, every preset and Reaction Mode (7 Nov, after the tick cut).** chain7 (7 recordings
+    back to back, continuous play), `waveform_music_response.py`, born swell for travelling/frozen modes; 16 runs (P1-7
+    as authored; P1/P4/P7 forced to Frozen Past, Whole Swell, Group Wave/Travelling Pulse). Means over songs: correlation
+    with loudness/RMS/bass +.34..+.49, saturated 2.2-8.2%, dead 3.7-10.6%, spurious 2.0-4.4%, re-scale gap .11-.25
+    (P1 = the v7 numbers exactly). Mid-song kicks are not muted: the median born-swell rise per kick in every later
+    15 s bin is 0.95-2.5x the first bin's (the first bin holds the intros). Findings worth the operator's eye:
+    (1) Group Wave registers single kicks least: P7 as authored born rise .03-.06 per kick, P7 forced to Travelling
+    Pulse .16-.30, and 46% of P7's kicks raise its born swell by under 1% of its range (Travelling Pulse 25%);
+    (2) Whole Swell plateaus in flat loud songs (P6 song 2 saturated 20%, ws_P1 15%): the music's RMS is flat there and
+    beats ripple the plateau, so it reads as sustained, not pinned; (3) song 1's sparse intro (big isolated kicks in
+    the PCM) barely moves any preset while the carry-over from song 0 decays (re-scale gap .37-.50 on most presets);
+    (4) the floor lift sits at its 1.5 cap for whole loud songs (P2 song 0, P6 song 2): the floor clipping item.
+    Evidence `.artifacts/evidence/waveform_followups/music/` (summary.txt, kicks.txt, report_*/ traces).
 - [~] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov) - awaiting
   operator eyes:** no decay/breathing in soft passages, sustained passages with changes read almost flat, and a swell to
   full power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song
