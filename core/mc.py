@@ -21,3 +21,18 @@ def is_mc_build() -> bool:
         if "main_mc" in main_file.lower():
             return True
     return "mc" in detect_current_profile(default="Screensaver").lower()
+
+
+def interaction_mode_forced() -> bool:
+    """The one owner of "the MC build keeps Interaction Mode on".
+
+    Settings (Display tab), Guided Setup and the runtime (context menu lock, toggle persistence) all ask this; none
+    compares the store's application name with a literal. A new product profile extends ``is_mc_build``'s
+    predicate here, never a second resolver.
+    """
+    return is_mc_build()
+
+
+def effective_interaction_mode(stored: object) -> bool:
+    """Interaction Mode as it runs: forced on in the MC build, otherwise the stored choice."""
+    return True if interaction_mode_forced() else bool(stored)
