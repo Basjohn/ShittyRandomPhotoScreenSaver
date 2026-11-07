@@ -104,6 +104,9 @@ these traps from the first slice, not after:
 - [ ] **Source freshness before smoothing:** `[AUDIO_LANE]` published/s should track the logical tick rate (~86–90 at
       90 Hz). A regular 11/22 ms analysis gap means ticks without new audio (R-171: the capture TripleBuffer lost
       every third callback at block 128); measure it before blaming or retuning any temporal filter.
+- [ ] **Smoothing that does nothing (repeat bug, R-55):** if smoothing strengths draw identical bars, the reset edge
+      (`first_frame`) is stuck. Restore its writer; never retune the filter. When retiring code, check every reader of
+      the state it wrote.
 - [ ] **Measurement hygiene:** a tool that runs the saver must apply `main.py`'s preamble before importing OpenGL
       (`tools/eb_live_phases.production_startup`), or PyOpenGL's per-call error checking inflates every render timing.
       Record conditions with every result and change one variable per A/B.
