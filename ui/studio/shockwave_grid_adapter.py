@@ -37,6 +37,7 @@ from core.settings.visualizer_mode_settings import (
     Choice, Colour, Custom, SceneCameraPosition, Slider, Toggle, require_mode_settings,
 )
 from ui.studio import engine_answers, framed, spectrum_shape
+from ui.studio.registry import studio_title
 from ui.studio.adapter import StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition
 from ui.studio.engine_answers import EngineAnswerEvaluator
 from ui.studio.shockwave_grid_recorded_inputs import NEON_LAKE
@@ -398,7 +399,7 @@ def build_schema() -> StudioSchema:
                                     "are kept exactly and the new ones follow the land's continuation."),
                        StudioAction(TERRAIN_RESET, "Reset Terrain", "reset",
                                     "Replace the painted terrain with the canonical basin (one undoable edit)."))
-    return StudioSchema(MODE, "Neon Lake Studio", tuple(workspaces), tuple(props), admit,
+    return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), admit,
                         group_traces=((titles["waves"], ("Waves",)), (reaction, ("Land", "Level")),
                                       (response, ("Level", "Peak"))),
                         group_icons=tuple(group_icons.items()), object_noun="Layer",
@@ -554,7 +555,7 @@ class NeonLakeStudioEvaluator(EngineAnswerEvaluator):
 # --------------------------------------------------------------------------------- adapter
 class NeonLakeStudioAdapter(StudioModeAdapter):
     mode_id = MODE
-    title = "Neon Lake Studio"
+    title = studio_title(MODE)
 
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None

@@ -28,6 +28,7 @@ from core.settings.visualizer_mode_settings import (
     Choice, Colour, Custom, Gradient, Slider, Toggle, require_mode_settings,
 )
 from ui.studio import clip_loop, framed
+from ui.studio.registry import studio_title
 from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition,
 )
@@ -216,7 +217,7 @@ def build_schema() -> StudioSchema:
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _BUCKET_PANEL.items() if key in titles}
     group_icons[TECHNICAL_GROUP] = "bars"
     group_icons[RAINBOW_GROUP] = "gradient"
-    return StudioSchema(MODE, "Bubble Studio", tuple(workspaces), tuple(props), admit,
+    return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), admit,
                         group_traces=((titles.get("reactivity", ""), ("Bass", "Mid / High", "Hero Pulse")),
                                       (titles.get("population", ""), ("Bubbles", "Hero Size")),
                                       (titles.get("motion", ""), ("Stream", "Drift"))),
@@ -608,7 +609,7 @@ class BubbleStudioRenderer(framed.ContractModeRenderer):
 # --------------------------------------------------------------------------- adapter
 class BubbleStudioAdapter(StudioModeAdapter):
     mode_id = MODE
-    title = "Bubble Studio"
+    title = studio_title(MODE)
 
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None

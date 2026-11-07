@@ -8,6 +8,7 @@ import pytest
 from PySide6.QtCore import Qt
 
 from core.settings.capability_activation import is_widget_family_effective
+from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 from ui.onboarding import state
 from ui.onboarding.selection_pages import (
     ReadyPage,
@@ -126,7 +127,7 @@ def test_visualizer_selection_offers_standard_sphere_and_can_enable_it(qapp, set
             for index in range(page.rows.count())
         }
         assert "sphere" in offered
-        assert offered["sphere"].text() == "Voxel Sphere"
+        assert offered["sphere"].text() == get_visualizer_mode_descriptor("sphere").display_name
         assert offered["sphere"].checkState() == Qt.CheckState.Unchecked
         assert settings.writes == []
 

@@ -277,7 +277,7 @@ def test_the_registry_and_mode_switch_rebuild_the_session_without_revealing_sett
     from ui.studio.controller import StudioController
     from ui.studio.surface import OffscreenStudioSurface
     monkeypatch.setattr(registry, "_ENTRIES", dict(registry._ENTRIES))
-    registry.register_studio_adapter("toy_mode", "Toy", __name__ + ":ToyAdapter")
+    registry.register_studio_adapter("toy_mode", __name__ + ":ToyAdapter")
     assert {e.mode_id for e in registry.studio_modes()} >= {"waveform_ribbon", "toy_mode"}
     assert isinstance(registry.create_adapter("toy_mode"), ToyAdapter)
 

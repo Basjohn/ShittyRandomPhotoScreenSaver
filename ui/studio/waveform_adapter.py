@@ -19,6 +19,7 @@ from typing import Any, Callable, Iterable, Mapping
 from core.settings.visualizer_mode_settings import (
     Choice, Colour, Range, Slider, Toggle, VisualEditor, require_mode_settings,
 )
+from ui.studio.registry import studio_title
 from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, RenderCard, StudioCapabilities, StudioFixture, StudioModeAdapter,
 )
@@ -296,7 +297,7 @@ def build_schema() -> StudioSchema:
     response = _response_model(spec, props)
     workspaces = tuple(dataclasses.replace(w, groups=w.groups + tuple(extra_groups)) if w.id == "world" else w
                        for w in _WORKSPACES)
-    return StudioSchema(MODE, "Waveform Studio", workspaces, tuple(props), admit, response=response,
+    return StudioSchema(MODE, studio_title(MODE), workspaces, tuple(props), admit, response=response,
                         group_traces=(("Energy Pulse", ("Input Energy", "Travelling Pulse")),
                                       ("Shape Response", ("Passage", "Height", "Pulse Strength"))),
                         group_icons=(("Ribbons", "ribbons"), ("{object}", "wave"), ("Flow", "flow"),
@@ -1015,7 +1016,7 @@ def recordings_directory():
 
 class WaveformStudioAdapter(StudioModeAdapter):
     mode_id = MODE
-    title = "Waveform Studio"
+    title = studio_title(MODE)
 
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None

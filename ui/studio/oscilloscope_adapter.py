@@ -26,6 +26,7 @@ from typing import Any, Callable, Mapping
 
 from core.settings.visualizer_mode_settings import Choice, Colour, Slider, Toggle, require_mode_settings
 from ui.studio import engine_answers, framed
+from ui.studio.registry import studio_title
 from ui.studio.adapter import StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition
 from ui.studio.engine_answers import EngineAnswerEvaluator
 from ui.studio.oscilloscope_recorded_inputs import OSCILLOSCOPE
@@ -153,7 +154,7 @@ def build_schema() -> StudioSchema:
 
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _BUCKET_PANEL.items() if key in titles}
     group_icons[TECHNICAL_GROUP] = "bars"
-    return StudioSchema(MODE, "Oscilloscope Studio", tuple(workspaces), tuple(props), admit,
+    return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), admit,
                         group_traces=((titles["display"], ("Level",)), (titles["beam"], ("Afterglow", "Ghosts")),
                                       (titles["reaction"], ("Flare", "Drive", "Tone"))),
                         group_icons=tuple(group_icons.items()), object_noun="Trace")
@@ -221,7 +222,7 @@ class OscilloscopeStudioEvaluator(EngineAnswerEvaluator):
 # --------------------------------------------------------------------------------- adapter
 class OscilloscopeStudioAdapter(StudioModeAdapter):
     mode_id = MODE
-    title = "Oscilloscope Studio"
+    title = studio_title(MODE)
 
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None
