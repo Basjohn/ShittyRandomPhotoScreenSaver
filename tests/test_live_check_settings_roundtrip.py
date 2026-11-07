@@ -243,6 +243,18 @@ def test_verdict_fails_on_a_barrier_timeout_a_missing_refreeze_or_an_early_exit(
     assert logged["failures"] == ["the log shows 1 GC freezes for 2 reveals"]
 
 
+def test_gc_policy_lines_include_the_rotated_main_log_oldest_first(tmp_path):
+    """A long or heavily logged run rotates screensaver.log; its freezes must still count (7 Nov: a false
+    "0 GC freezes for 10 reveals")."""
+    (tmp_path / "screensaver.log.2").write_text("a [GC_POLICY] Froze 1 stable objects\n", encoding="utf-8")
+    (tmp_path / "screensaver.log.1").write_text("b [GC_POLICY] Froze 2 stable objects\n", encoding="utf-8")
+    (tmp_path / "screensaver.log").write_text("c [GC_POLICY] Thawed the revealed generation\n", encoding="utf-8")
+    (tmp_path / "screensaver_frame_trace.bin").write_bytes(b"[GC_POLICY] Froze 9")
+    assert roundtrip.gc_policy_lines(tmp_path) == [
+        "a [GC_POLICY] Froze 1 stable objects", "b [GC_POLICY] Froze 2 stable objects",
+        "c [GC_POLICY] Thawed the revealed generation"]
+
+
 def test_memory_classification_is_opt_in_and_forwarded_only_with_round_trips(tmp_path):
     assert roundtrip.parse_roundtrip_memory("collect") == ("census", "collect")
     assert roundtrip.parse_roundtrip_memory("map,census,tracemalloc") == ("census", "tracemalloc", "map")

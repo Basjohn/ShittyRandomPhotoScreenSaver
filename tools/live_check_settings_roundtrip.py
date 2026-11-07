@@ -341,17 +341,26 @@ class RoundTripMemoryProbe:
         kinds = Counter(_type_name(obj) for obj in garbage)
         qobjects = Counter(type(obj).__name__ for obj in garbage if _is_qobject(obj))
         buffers = Counter()      # the bulk a cycle can pin: arrays and images it reaches one hop away
+        holders = Counter()
         for obj in garbage:
-            for value in (obj.values() if isinstance(obj, dict) else (obj,)):
+            if isinstance(obj, dict):
+                values = list(obj.items())
+            elif isinstance(obj, (list, tuple)):
+                values = [(f"[{type(obj).__name__}]", value) for value in obj]
+            else:
+                values = [("", obj)]
+            for key, value in values:
                 size = _buffer_bytes(value)
                 if size:
                     buffers[_type_name(value)] += size
+                    holders[f"{key}"] += size
         del garbage
         freed = gc.collect()
         after = memory()
         return {"unreachable": found, "freed_second_pass": freed, "ms": round((time.perf_counter() - started) * 1e3, 1),
                 "garbage_types": kinds.most_common(self.TOP), "garbage_qobjects": dict(qobjects),
                 "garbage_buffers_mb": {key: round(value / 2**20, 2) for key, value in buffers.most_common(10)},
+                "garbage_buffer_holders_mb": {key: round(value / 2**20, 2) for key, value in holders.most_common(10)},
                 "rss_drop_mb": round(before["rss_mb"] - after["rss_mb"], 1),
                 "private_drop_mb": round(before["private_mb"] - after["private_mb"], 1),
                 "memory_before": before, "memory_after": after}
@@ -410,7 +419,7 @@ class RoundTripMemoryProbe:
 
 
 def _buffer_bytes(value) -> int:
-    """Bytes of a numpy array, ``bytes``/``bytearray`` or QImage (0 for anything else); attribute probes only."""
+    """Bytes of a numpy array, ``bytes``/``bytearray``, QImage or QPixmap (0 for anything else); attribute probes only."""
     if isinstance(value, (bytes, bytearray)):
         return len(value) if len(value) >= 65536 else 0
     nbytes = getattr(type(value), "nbytes", None)
@@ -419,11 +428,14 @@ def _buffer_bytes(value) -> int:
             return int(value.nbytes) if value.base is None else 0     # views do not own their buffer
         except Exception:
             return 0
-    if type(value).__name__ == "QImage":
-        try:
+    name = type(value).__name__
+    try:
+        if name == "QImage":
             return int(value.sizeInBytes())
-        except Exception:
-            return 0
+        if name == "QPixmap":
+            return int(value.width() * value.height() * max(1, value.depth()) // 8)
+    except Exception:
+        return 0
     return 0
 
 
@@ -702,9 +714,16 @@ class SettingsRoundTripDriver:
 # -- parent side ---------------------------------------------------------------------------------------------------
 
 def gc_policy_lines(log_dir: Path) -> list[str]:
-    """Every ``[GC_POLICY]`` line the run logged (main log and sidecars), in file order."""
+    """Every ``[GC_POLICY]`` line the run logged (main log, its rotated parts and sidecars), oldest part first."""
+    import re
+
+    def age(path: Path):            # screensaver.log.2 is older than screensaver.log.1, which is older than .log
+        match = re.fullmatch(r"(.*\.log)(?:\.(\d+))?", path.name)
+        return (match.group(1), -int(match.group(2) or 0))
+
     lines: list[str] = []
-    for path in sorted(Path(log_dir).glob("*.log")):
+    parts = [path for path in Path(log_dir).iterdir() if re.fullmatch(r".*\.log(?:\.\d+)?", path.name)]
+    for path in sorted(parts, key=age):
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
             if "[GC_POLICY]" in line and line.strip() not in lines:
                 lines.append(line.strip())
