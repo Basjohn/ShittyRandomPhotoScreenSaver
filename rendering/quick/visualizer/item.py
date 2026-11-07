@@ -29,6 +29,7 @@ from .telemetry import (
     VisualizerRenderHostLifecycleSnapshot,
     VisualizerRenderNodeTelemetry,
 )
+from core.authored_clock import authored_now
 
 logger = get_logger(__name__)
 
@@ -411,7 +412,7 @@ class VisualizerRenderItem(QQuickItem):
                 if logical.source_timestamp is not None:
                     source_age_ms = max(
                         0.0,
-                        (time.time() - logical.source_timestamp) * 1000.0,
+                        (authored_now() - logical.source_timestamp) * 1000.0,
                     )
                 logger.debug(
                     "[VIS_PLAYBACK_EDGE] stage=T7 mode=%s playing=%s revision=%d "

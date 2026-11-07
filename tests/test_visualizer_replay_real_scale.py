@@ -100,7 +100,7 @@ def test_the_recorder_keeps_real_scales_and_takes_each_typed_event_once():
     from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEnergyBands, TransientEventScheduler
 
     scheduler = TransientEventScheduler()
-    scheduler.feed(OnsetEvent(timestamp=__import__("time").time(), event_type="kick", strength=0.9))
+    scheduler.feed(OnsetEvent(timestamp=__import__("core.authored_clock").authored_clock.authored_now(), event_type="kick", strength=0.9))
     hot = EnergyBands(bass=1.0, mid=1.0, high=0.6, overall=1.0)
     engine = SimpleNamespace(
         get_transient_energy_bands=lambda: TransientEnergyBands(bass_transient=2.2, onset_detected=True,
