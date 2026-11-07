@@ -160,6 +160,8 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     propagateComposedEvents: false
                     onPressed: function(mouse) { mouse.accepted = true }
+                    readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+                    onDoubleClicked: function(mouse) { mouse.accepted = true }
                     onClicked: function(mouse) {
                         mouse.accepted = true
                         chrome.actionRequested(String(actionKind))
@@ -225,6 +227,8 @@ Item {
                     chrome.hideTip(tipText)
                 }
                 onPressed: function(mouse) { mouse.accepted = true }
+                readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+                onDoubleClicked: function(mouse) { mouse.accepted = true }
                 onClicked: function(mouse) {
                     mouse.accepted = true
                     chrome.actionRequested(actionKind)

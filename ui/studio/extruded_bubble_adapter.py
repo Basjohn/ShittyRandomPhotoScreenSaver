@@ -755,10 +755,6 @@ class ExtrudedBubbleStudioAdapter(StudioModeAdapter):
         from ui.studio.waveform_recorded_inputs import studio_clips
         return studio_clips(recordings_directory())
 
-    # Analysed clips for this process, keyed by clip and the non-authored (analysis) settings: the advance inputs
-    # do not depend on EB's authored controls, so reopening the Studio does not re-run the analysis.
-    _clip_cache: dict = {}
-
     def clip_analysis_keys(self) -> frozenset[str]:
         """The values a recorded clip is re-analysed for (the controller re-runs the worker when they change)."""
         from ui.studio.technical import technical_keys
@@ -775,16 +771,17 @@ class ExtrudedBubbleStudioAdapter(StudioModeAdapter):
         """Analyse ``clip`` out of process; ``finished(RecordedInputs | None, error)`` on the GUI thread.
         Returns the cancellable job, or None when the result was cached (``finished`` already ran)."""
         from ui.studio.extruded_bubble_recorded_inputs import to_inputs
+        from ui.studio import engine_answers
         from ui.studio.waveform_recorded_inputs import ClipLoadJob
         key = self._clip_key(clip, values)
-        cached = ExtrudedBubbleStudioAdapter._clip_cache.get(key)
+        cached = engine_answers.analysed(MODE, key)
         if cached is not None:
             finished(cached, "")
             return None
 
         def remember(result, error=""):
             if result is not None and not error:
-                ExtrudedBubbleStudioAdapter._clip_cache[key] = result
+                engine_answers.remember(MODE, result, key)   # the bounded per-mode store
             finished(result, error)
         return ClipLoadJob(clip, values, remember, module="ui.studio.extruded_bubble_recorded_inputs",
                            convert=to_inputs)

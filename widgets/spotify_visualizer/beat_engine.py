@@ -1911,12 +1911,10 @@ class _SpotifyBeatEngine(QObject):
 
 
 class BeatEngineRegistry:
-    """Registry for beat engine instances - supports dependency injection.
-    
-    This replaces the module-level singleton with a registry pattern that:
-    1. Allows DI by passing engine instances to widgets
-    2. Maintains backward compatibility via get_shared_spotify_beat_engine()
-    3. Supports testing by allowing engine replacement
+    """The process's one beat-engine authority (``Docs/Contracts.md``: exactly one production engine).
+
+    ``get_shared_spotify_beat_engine`` reads it; nothing else holds the engine for the process (no module global),
+    so ``clear()`` really releases it. Visualizer controllers receive it only through their ``engine_factory``.
     """
     _instance: Optional["BeatEngineRegistry"] = None
     _lock = __import__("threading").Lock()
@@ -1970,20 +1968,6 @@ class BeatEngineRegistry:
         return True
 
 
-# Backward compatibility: module-level singleton via registry
-_global_beat_engine: Optional[_SpotifyBeatEngine] = None
-
-
 def get_shared_spotify_beat_engine(bar_count: int) -> _SpotifyBeatEngine:
-    """Get or create the shared Spotify beat engine.
-    
-    This function maintains backward compatibility while using the registry
-    internally. For new code, prefer using BeatEngineRegistry directly.
-    """
-    global _global_beat_engine
-    registry = BeatEngineRegistry.get_instance()
-    engine = registry.get_engine(bar_count)
-    
-    # Update module-level reference for backward compatibility
-    _global_beat_engine = engine
-    return engine
+    """The registry's shared Spotify beat engine (created on first use, reconfigured to ``bar_count``)."""
+    return BeatEngineRegistry.get_instance().get_engine(bar_count)

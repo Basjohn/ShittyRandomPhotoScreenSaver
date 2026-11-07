@@ -290,6 +290,10 @@ Item {
                 visualizerPresentationRoot.cameraResetTipProgress = 0.0
             }
             onPressed: function(mouse) { mouse.accepted = true }
+            // An in-card control consumes every press of its own, the second press of a double-click
+            // included: it never reaches the card's double-click mode cycle.
+            readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+            onDoubleClicked: function(mouse) { mouse.accepted = true }
             onClicked: function(mouse) {
                 mouse.accepted = true
                 visualizerPresentationRoot.cameraResetRequested()
@@ -362,6 +366,8 @@ Item {
                         visualizerPresentationRoot.cameraResetTipProgress = 0.0
                     }
                     onPressed: function(mouse) { mouse.accepted = true }
+                    readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+                    onDoubleClicked: function(mouse) { mouse.accepted = true }
                     onClicked: function(mouse) {
                         mouse.accepted = true
                         visualizerPresentationRoot.presetStepRequested(modelData)

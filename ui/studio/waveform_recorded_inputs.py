@@ -187,6 +187,8 @@ def run_frozen_worker(argv: list[str]) -> int | None:
 
 
 _CANCELLED: set = set()
+# Jobs whose worker finished and whose output is being parsed off the GUI thread.
+_HELD: set = set()
 # Workers this process started (a count only: tests check nothing outlives them when it moved).
 STARTED = [0]
 
@@ -267,12 +269,45 @@ class ClipLoadJob:
             tail = bytes(self._process.readAll()).decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
             self._complete(None, f"exit {code}: {tail[0]}")
             return
+        # The worker's JSON (megabytes for a 30 s clip) is parsed and converted on a ThreadManager IO task, never in
+        # this GUI-thread slot; the finished inputs come back through ``run_on_ui_thread``, fenced on ``cancel``.
+        # Held until then (``_HELD``): dropping the job would delete its QProcess before the result lands.
+        from core.threading.manager import ThreadManager
+        threads = ThreadManager.get_app_shared()
+        if threads is None:                       # a standalone tool with no app-shared manager: parse here
+            self._deliver(*self._parse())
+            return
+        _HELD.add(self)
+        try:
+            threads.submit_io_task(self._parse, category="studio_clip_parse",
+                                   callback=lambda task: ThreadManager.run_on_ui_thread(self._delivered, task))
+        except RuntimeError:                      # the manager shut down between the lookup and the submit
+            _HELD.discard(self)
+            self._deliver(*self._parse())
+
+    def _parse(self) -> tuple:
+        """(inputs, "") or (None, error): the worker's output read and converted (any thread)."""
         try:
             data = json.loads(self._output_path.read_text(encoding="utf-8"))
             fixture = self._replace(self._clip, duration=float(data["duration"]))   # ``to_inputs`` marks a loop
-            self._complete(self._convert(data, fixture))
+            return self._convert(data, fixture), ""
         except Exception as exc:
-            self._complete(None, f"{type(exc).__name__}: {exc}")
+            return None, f"{type(exc).__name__}: {exc}"
+
+    def _delivered(self, task) -> None:
+        _HELD.discard(self)
+        if task.success:
+            self._deliver(*task.result)
+        else:
+            self._deliver(None, f"{type(task.error).__name__}: {task.error}")
+
+    def _deliver(self, result, error: str) -> None:
+        if self._cancelled:                       # cancelled while the parse ran: the result is dropped
+            self._complete()
+        elif error:
+            self._complete(None, error)
+        else:
+            self._complete(result)
 
     def cancel(self) -> None:
         """Kill without waiting: the GUI thread never blocks on the worker (QProcess.finished cleans up)."""
