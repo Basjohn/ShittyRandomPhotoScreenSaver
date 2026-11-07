@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:ICQ Signal Garden [Complex] [Acrylic].srtheme",
   "name": "ICQ Signal Garden [Complex]",
   "linked_settings_theme_id": "file:ICQ Signal Garden [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       33,

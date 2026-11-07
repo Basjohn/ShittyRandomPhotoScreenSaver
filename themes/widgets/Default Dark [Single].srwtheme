@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Default Dark [Single] [Glass].srtheme",
   "name": "Default Dark [Single]",
   "linked_settings_theme_id": "file:Default Dark [Single] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       60,

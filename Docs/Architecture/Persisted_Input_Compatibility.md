@@ -67,6 +67,15 @@ without the safe path below.
   The feature had not shipped, but page saves write the whole `global` section, so a stored `normal` cannot be told
   apart from a choice: it stays an explicit Normal override; `theme` and an absent value follow the theme. A profile
   saved with the old default needs one switch to Theme (Card_Surface_Materials.md section 4).
+- **Theme pair material (no bridge, recorded; AC-17, 7 Nov 2026).** A linked Widget mirror now carries its Settings
+  theme's backdrop material as `surface_material`; the shipped mirrors got it by a one-key fill. Profiles store only
+  the selection (`widget_theme.selected_id`, `keep_synced`), never a material, so a profile on a linked
+  "[Glass]"/"[Acrylic]" pair draws that material once the updated theme tree is installed, with no migration. Not
+  rewritten, by design: a stored Custom snapshot (`widget_theme.custom`) taken from a mirror before the fill names
+  no material and stays Normal (it is user-owned; picking the pair again, or Style Overrides, gives the material);
+  a mirror a user exported from the Theme Foundry before the fill stays Normal until re-exported. *Blocked:* a
+  runtime fallback that reads the Settings theme's `backdrop.mode` to "repair" either case: that is a second
+  resolver; the mirror stays the one owner.
 - **QSettings → JSON profile** (`core/settings/settings_manager.py`:
   `_run_initial_migration` / `_migrate_from_qsettings`). Fires whenever
   `settings_v2.json` is absent, including after Reset.

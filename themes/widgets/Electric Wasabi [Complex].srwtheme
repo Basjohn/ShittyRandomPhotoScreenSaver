@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Electric Wasabi [Complex] [Glass].srtheme",
   "name": "Electric Wasabi [Complex]",
   "linked_settings_theme_id": "file:Electric Wasabi [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       41,

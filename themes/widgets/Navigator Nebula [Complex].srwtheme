@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Navigator Nebula [Complex] [Glass].srtheme",
   "name": "Navigator Nebula [Complex]",
   "linked_settings_theme_id": "file:Navigator Nebula [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       26,

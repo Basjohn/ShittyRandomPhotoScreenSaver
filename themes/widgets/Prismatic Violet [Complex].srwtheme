@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Prismatic Violet [Complex] [Glass].srtheme",
   "name": "Prismatic Violet [Complex]",
   "linked_settings_theme_id": "file:Prismatic Violet [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       43,

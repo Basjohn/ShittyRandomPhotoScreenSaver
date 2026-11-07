@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Tidepool Copper [Complex] [Glass].srtheme",
   "name": "Tidepool Copper [Complex]",
   "linked_settings_theme_id": "file:Tidepool Copper [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       17,

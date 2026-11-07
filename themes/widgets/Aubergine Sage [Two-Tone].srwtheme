@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Aubergine Sage [Two-Tone] [Glass].srtheme",
   "name": "Aubergine Sage [Two-Tone]",
   "linked_settings_theme_id": "file:Aubergine Sage [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       38,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Copper Moonlight [Complex] [Glass].srtheme",
   "name": "Copper Moonlight [Complex]",
   "linked_settings_theme_id": "file:Copper Moonlight [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       34,

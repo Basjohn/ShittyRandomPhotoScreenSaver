@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Pixel Chat Tangerine [Complex] [Acrylic].srtheme",
   "name": "Pixel Chat Tangerine [Complex]",
   "linked_settings_theme_id": "file:Pixel Chat Tangerine [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       247,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Aurora Terminal [Complex] [Glass].srtheme",
   "name": "Aurora Terminal [Complex]",
   "linked_settings_theme_id": "file:Aurora Terminal [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       24,
