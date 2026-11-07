@@ -77,6 +77,17 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 **Then (decided 5 Nov, `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
 
+8b. **Universal visualizer performance architecture** (operator, 7 Nov; the Decision's addendum), started once the
+   current set of fixes and optimisations lands:
+   - P1: a toolchain spike for a native `QSGRenderNode` on Qt's RHI/Vulkan, packaged by Nuitka (go/no-go).
+   - P2: an out-of-process visualizer engine for every mode (byte-identical packets; the logical tick leaves the main
+     process's GIL).
+   - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
+   - P4: mixed-resolution soft layers in the core.
+
+   Triggers 2 (render-thread starvation) and nearly 1 (EB at display size over 8 ms) are met. Expanded Visualizer
+   M2-M5 continue meanwhile; M6 (4K acceptance) waits for P2 and the first P3 ports.
+
 9. **SMP & Full Display:** Expanded Visualizer first
    (`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`, EB only; its §0 holds the
    phase ladder and the 4K budgets), then ShittyMusicPlayer
