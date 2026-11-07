@@ -359,7 +359,7 @@ def on_settings_requested(
             "[LIFECYCLE] Settings admission aborted because runtime teardown failed",
             exc_info=True,
         )
-        QCoreApplication.exit(1)
+        _exit_after_lifecycle_failure(engine, "settings_teardown_failed")
         return
     log_lifecycle_resource_snapshot(
         engine,
@@ -392,6 +392,33 @@ def on_settings_requested(
     )
 
 
+def _exit_after_lifecycle_failure(engine: ScreensaverEngine, reason: str) -> None:
+    """A failed Settings teardown is fatal for the process (Spec.md → Lifecycle).
+
+    No half-retired generation can be proven gone, so there is no safe host for a
+    replacement. Live application services are retired first, exactly once and
+    in reverse creation order, so devices and database handles close
+    deterministically instead of at interpreter exit.
+    """
+
+    from engine.engine_lifecycle import retire_application_services
+
+    retire_application_services(engine, reason=reason)
+    QCoreApplication.exit(1)
+
+
+def _retire_settings_service_leases(engine: ScreensaverEngine, dialog_generation: object) -> None:
+    """The closed dialog's service leases retire with its callbacks (idempotent)."""
+
+    retire_generation = getattr(
+        getattr(engine, "application_services", None),
+        "retire_generation",
+        None,
+    )
+    if dialog_generation is not None and callable(retire_generation):
+        retire_generation(dialog_generation)
+
+
 def _open_settings_after_runtime_destroyed(
     engine: ScreensaverEngine,
     request_start: float,
@@ -412,6 +439,7 @@ def _open_settings_after_runtime_destroyed(
     )
 
     dialog_barrier = None
+    dialog_generation = None
     try:
         # Settings remains QWidget-based by design, but it is not part of the
         # steady-state screensaver runtime import graph. Resolve it only after the
@@ -422,6 +450,15 @@ def _open_settings_after_runtime_destroyed(
             f"settings-dialog:{getattr(engine, '_runtime_generation', 'unknown')}:"
             f"{time.monotonic_ns()}"
         )
+        # The dialog generation may lease application services until its
+        # callbacks are cancelled below.
+        admit_generation = getattr(
+            getattr(engine, "application_services", None),
+            "admit_generation",
+            None,
+        )
+        if callable(admit_generation):
+            admit_generation(dialog_generation)
         try:
             animations = AnimationManager(
                 resource_manager=engine.resource_manager,
@@ -568,6 +605,7 @@ def _open_settings_after_runtime_destroyed(
             if callable(delete_dialog):
                 delete_dialog()
 
+        _retire_settings_service_leases(engine, dialog_generation)
         try:
             ThreadManager.cancel_scheduled_single_shots(dialog_generation)
         except RuntimeError:
@@ -579,6 +617,7 @@ def _open_settings_after_runtime_destroyed(
                 dialog_barrier.cancel_for_terminal_shutdown()
             engine._active_settings_dialog = None
             engine._settings_dialog_active = False
+            # Off the UI thread: services are not retired from here.
             QCoreApplication.exit(1)
             return
 
@@ -600,6 +639,7 @@ def _open_settings_after_runtime_destroyed(
             dialog_barrier.seal()
             dialog_barrier.then(continuation)
     except Exception as e:
+        _retire_settings_service_leases(engine, dialog_generation)
         if dialog_barrier is not None:
             dialog_barrier.cancel_for_terminal_shutdown()
         engine._active_settings_dialog = None

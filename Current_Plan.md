@@ -46,7 +46,8 @@ registry"). The items promoted to run soon are in §3. Nothing else in it is adm
 
 5. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted.
 6. **Architecture prerequisites: AC-03** (`Docs/Reference/Architecture_Checklist.md` Tier 1; AC-01 and AC-02
-   landed 7 Nov). AC-03 lands before SMP M2.
+   landed 7 Nov). AC-03 lands before SMP M2. [~] Built on its agent branch (7 Nov), awaiting the lead's audit; its
+   contract is in `Spec.md` → Lifecycle ("Application services") and `Docs/Contracts.md`.
 
 **Then (decided 5 Nov, `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
 
@@ -271,6 +272,19 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `tools/visualizer_replay/analysis_controls_audit.py` shows it moves the published frame (onset waves). Folding the
   filter into `technical_hidden_suffixes` made the audit test fail, so Neon Lake now offers it; the stored values and
   presets were always authored, so no value changes.
+
+**Found while landing AC-03 (7 Nov; record, not yet admitted):**
+- **Fatal exits other than a failed Settings teardown skip the service tier (no live service today; close before
+  SMP M3).** The replacement barrier's timeout (`engine/runtime_destruction.py::_on_timeout`), the Settings
+  single-shot cancellation failure (off the UI thread, so it must not retire services there) and any other bare
+  `QCoreApplication.exit(1)` end the loop without the terminal stop finalization, so application services, the
+  ProcessSupervisor and the ThreadManager are not retired (`main.run_screensaver` never calls `engine.cleanup()`).
+  Only the Settings-teardown failure retires the tier first (`engine_handlers._exit_after_lifecycle_failure`). Fix
+  candidate: one backstop `retire_application_services` on the UI thread after `app.exec()` returns in
+  `run_screensaver` (idempotent), with a barrier-timeout test.
+- **Production never calls `engine_lifecycle.cleanup`.** The terminal path is `stop(exit_app=True)` and its barrier
+  finalization; `cleanup()` is reached only by tests. AC-03 retires the tier on both paths (idempotent); a change to
+  one terminal path must check the other.
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
