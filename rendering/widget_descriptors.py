@@ -1387,6 +1387,12 @@ class WidgetRuntimeDescriptor:
     # resize independently. Persistence remains in the parent's existing CUSTOM
     # size payload; QML only publishes retained target geometry for edit chrome.
     custom_child_roles: tuple[CustomChildRoleDescriptor, ...] = ()
+    # Authored (non-CUSTOM) placement policy: "media" docks the card beside the
+    # Media card, so it follows Media when Media moves; "none" places it on its
+    # own anchor. Global CUSTOM always resolves to "none" (committed geometry
+    # wins). Resolved by rendering/visualizer_placement.py for the saver and
+    # Settings Arrange alike.
+    docked_to: str = "none"
     writes_custom_position_key: bool = True
     writes_custom_monitor_key: bool = True
     dev_feature_gate: str | None = None
@@ -2411,6 +2417,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="visualizer_rect",
+        docked_to="media",
     ),
 )
 
