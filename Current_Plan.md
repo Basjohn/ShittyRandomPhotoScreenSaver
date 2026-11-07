@@ -159,29 +159,21 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 0. **Checklist AC-06** (left by the Studio agent): the four Studio adapters' unbounded class-level clip caches and
    the GUI-thread clip parse. Repeated offscreen Extruded Bubble sessions still grow about 2-3 MB each after the
    controller-leak fix; these caches are the first suspect.
-1. **Gen2 garbage collection stalls the logical thread for 86–161 ms about once a minute, in every mode (found by
-   the Waveform cut, 7 Nov).** Offline, every tick over ~16 ms in both builds was exactly one gen2 collection: about
-   one per 5,500 ticks, roughly every 60 s at 90 Hz. Allocation bursts (preset switches, Studio sessions) bring
-   collections forward. That fits the live 64–152 ms spikes around Waveform preset switches. A pause that long is a
-   visible hitch.
-   - **Measure first:** record gen2 collections live with `gc.callbacks` timestamps on the existing opt-in frame
-     trace (no recurring work at rest), on two modes in the live check.
-   - **Then fix at the process owner:** `gc.freeze()` once the startup warm-up ends (the long-lived startup heap
-     leaves the scanned generations), plus tuned thresholds if still needed. Name the work that disappears.
-   - **Prove:** gen2 pauses are rare and short live, there is no memory growth over a long run (overhead baseline),
-     and lifecycle and teardown are unchanged.
-   - **Built 7 Nov, awaiting the lead's review and live check.** Measured first: the "once a minute" stalls were the
-     replay driver's (it retains every published frame and runs the interpreter's (2000, 10, 10) thresholds: 6 gen2
-     per hour at 82 ms). A production-shaped replay (frames dropped, the RUN policy's (2000, 20, 50)) ran 20 logical
-     minutes of Bubble and Waveform with no gen2, frozen or not; a forced gen2 there costs 37-44 ms unfrozen and
-     0.01-0.09 ms frozen. The operator's 7 Nov session log: frozen 186,147 objects at 45 s, thawed for good at the first
-     Settings visit (03:28), then 13 min with no gen2 but gen1 up to 31.8 ms. The defect fixed: the one-shot timer
-     freeze, never renewed after a retirement. Now every generation is frozen at its coordinated reveal and thawed at
-     every teardown, with no sweep (the barrier stays strict; the removed first-retirement-only sweep was the
-     inconsistency the 25 Oct assessment recorded). `--frame-trace` records every collection and logs a heap census at
-     the reveal. Gates: `tests/test_gc_freeze_per_generation.py` (3 of 4 fail on main), `tests/test_frame_trace_gc.py`.
-     Open: the live check (gen2/gen1 pauses per hour and the heap census with `--frame-trace`, a long run with
-     Settings round trips); evidence `.artifacts/evidence/gc_gen2/`.
+1. **GC freeze per generation: merged 7 Nov; the live check is owed (lead, quiet machine).** The minute-ly 86–161 ms
+   gen2 stalls came from the replay driver: it kept every frame under the interpreter's thresholds.
+   - **The live defect:** a one-shot 45 s timer froze the startup heap once, and the first Settings visit thawed it
+     for the rest of the RUN. Every later gen2 then scanned about 186k objects (37-44 ms).
+   - **The fix:** every display generation is frozen at its coordinated reveal and thawed at every teardown, with
+     no sweep. The barrier stays strict, judging by reference counting as for an unfrozen generation, and the timer
+     is gone.
+   - **Lead audit:** `tests/test_gc_freeze_per_generation.py` fails on main 3 of 4, as claimed. 16/16 GC, lifecycle,
+     destruction and Settings files pass on the merge. A stale docstring that still promised a sweep is fixed.
+   - **Live check:** Waveform P4 and Bubble, 600 s, game60, with `--frame-trace`, alternating main and branch. Then
+     `tools/frame_trace_report.py` for gen1/gen2 pauses per hour and the heap census at the reveal. Plus one long
+     run with a few Settings round trips: a re-freeze after each reveal, no barrier timeouts, flat memory, and the
+     `[GC_POLICY]` lines. Commands in the agent's report; evidence `.artifacts/evidence/gc_gen2/`.
+   - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
+     they are collections.
 2. **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode** (operator 6 Nov
    ~22:00; `logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset
    home" x2). The pair also reached the visualizer region's double-click admission
