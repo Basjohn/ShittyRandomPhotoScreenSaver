@@ -181,9 +181,20 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   Visualizer binding with Media docking as a placement policy. AC-02 is the first SMP and Expanded Visualizer
   prerequisite. It picks up the Reset Camera fix from main before moving the click admissions, and leaves
   queue item 5 as AC-08 only.
-- **Small-defects agent (Opus medium, started 7 Nov):** queue items 0, 2, 3 and 4 below, in that order (AC-06,
-  Reset Camera's double-click cycling the mode, AC-04, AC-05). Each is its own commit and must fail on the old
-  code first. The Waveform agent's work is complete and merged.
+- **Small-defects agent (Opus medium): its first four items were merged 7 Nov (c9b4e8ac):**
+  - **AC-06:** the Studio's clip caches are bounded, and the clip parse runs off the GUI thread.
+  - **Reset Camera:** in-card controls own their double-click, so it never cycles the mode.
+  - **AC-04:** the active mode draws first, and a failed release is recorded once and retried at the next boundary.
+  - **AC-05:** one beat-engine authority; 94 replays are byte-identical.
+
+  **Lead audit:** the new tests, copied onto main, fail there for the stated reasons. 13/13 cross-merge files pass.
+  The Studio's remaining 2–3 MB per session is native, not these caches (side defect below).
+  **Next for it:**
+  1. the `test_s_hotkey_workflow.py` hang at exit, which costs every gate 900 s;
+  2. a helper ThreadManager's shutdown cancelling every single-shot in the process (part of AC-13);
+  3. AC-08.
+
+  Then queue item 3, AC-11.
 **Queued, next free medium slot, in this order (small, bounded):**
 1. **GC freeze per generation: merged 7 Nov; the live check is owed (lead, quiet machine).** The minute-ly 86–161 ms
    gen2 stalls came from the replay driver: it kept every frame under the interpreter's thresholds.
@@ -200,8 +211,8 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
      `[GC_POLICY]` lines. Commands in the agent's report; evidence `.artifacts/evidence/gc_gen2/`.
    - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
      they are collections.
-2. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame
-   fences with the query order preserved, plus the bench node-path case). Mechanical, pixel-identical.
+2. **Checklist AC-08** (one GL state-query helper on the per-frame fences, with the query order preserved, plus the
+   bench node-path case). Mechanical and pixel-identical. AC-09 moved to the AC-02 agent as its first step.
 3. **Checklist AC-11, decided (operator 7 Nov): "don't ruin the bordered 3D cameras so adjust the freeform Sphere
    but ideally in a way that does not ruin its look/capabilities".** The framed (bordered) 3D cameras of Extruded
    Bubble, Neon Lake and Waveform stay exactly as they are. Sphere (freeform) gains a Reset Camera to its preset home
