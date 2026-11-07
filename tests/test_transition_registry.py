@@ -6,8 +6,6 @@ from rendering.transition_registry import (
     get_cycle_transition_names,
     get_transition_descriptor_for_runtime_identity,
     get_hw_accel_transition_names,
-    get_transition_program_map,
-    get_transition_program_specs,
     get_transition_setting_names,
     is_transition_available_for_hw,
     iter_transition_descriptors,
@@ -40,30 +38,21 @@ def test_transition_registry_hw_gating_metadata_is_queryable() -> None:
     assert is_transition_available_for_hw("Burn", False) is False
 
 
-def test_transition_registry_program_specs_keep_crossfade_startup_only() -> None:
-    startup_specs = get_transition_program_specs(startup_only=True)
-    deferred_specs = get_transition_program_specs(startup_only=False)
-
-    assert startup_specs == [("crossfade", "crossfade_program", "crossfade_uniforms")]
-    assert ("burn", "burn_program", "burn_uniforms") in deferred_specs
-    assert ("warp", "warp_program", "warp_uniforms") in deferred_specs
-
-
-def test_transition_registry_program_map_covers_runtime_classes() -> None:
-    program_map = get_transition_program_map()
-
-    assert program_map["GLCompositorCrossfadeTransition"] == "crossfade"
-    assert program_map["GLCompositorBurnTransition"] == "burn"
-    assert program_map["GLCompositorRainDropsTransition"] == "raindrops"
-
-
-def test_transition_registry_runtime_identity_resolves_internal_labels_and_classes() -> None:
-    assert get_transition_descriptor_for_runtime_identity("warp").stable_id == "warp_dissolve"
-    assert get_transition_descriptor_for_runtime_identity("raindrops").stable_id == "ripple"
-    assert (
-        get_transition_descriptor_for_runtime_identity("GLCompositorBurnTransition").stable_id
-        == "burn"
-    )
+def test_runtime_identity_accepts_only_labels_stable_ids_and_legacy_labels() -> None:
+    # The GL-compositor era's internal spellings (program keys, runtime labels and
+    # GLCompositor*Transition class names) had no production producer and were removed;
+    # they must not resolve, or agents keep chasing them as live identities.
+    for retired in ("raindrops", "warp", "blockspin", "block_spin", "GLCompositorBurnTransition",
+                    "GLCompositorRainDropsTransition", "GLCompositorBlockSpinTransition"):
+        assert get_transition_descriptor_for_runtime_identity(retired) is None, retired
+    for descriptor in iter_transition_descriptors():
+        assert get_transition_descriptor_for_runtime_identity(descriptor.setting_name) is descriptor
+        assert get_transition_descriptor_for_runtime_identity(descriptor.stable_id) is descriptor
+        for legacy in descriptor.legacy_names:
+            assert get_transition_descriptor_for_runtime_identity(legacy) is descriptor
+    for field in ("gl_program_key", "program_attr", "uniforms_attr", "compositor_transition_class",
+                  "startup_compile"):
+        assert not hasattr(iter_transition_descriptors()[0], field), field
 
 
 def test_transition_registry_owns_each_authored_progress_curve() -> None:
