@@ -147,13 +147,20 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `tests/test_waveform_logical_tick_exactness.py` (a Gaussian cache key ignoring the width, one shifted grid shared
   by both directions, and a 1e-6 spring-term change). 43/43 Waveform files pass isolated on main. The game60 live
   check is owed on a quiet machine.
-  Now on the follow-ups:
-  - a music-vs-response check of every preset and Reaction Mode;
-  - the floor clipping the operator sees: raise the lift limit (the operator prefers a little more height to floor
-    clipping, which partly supersedes "top edge first");
-  - checklist **AC-12** (the monotonic authored clock).
+  **Follow-ups merged 7 Nov:**
+  - **Music-vs-response check:** no mid-song kicks are muted. Group Wave shows single kicks least, and Whole Swell
+    plateaus on flat loud songs, which reads as sustained.
+  - **Floor first:** the lift limit is now 3 (from 1.5), and the top takes back at most 1.5. Floor contact at
+    1282x1005 falls from 7–49% to 0–2.2%, with no crest above the top.
 
-  Its live tick spikes around preset switches are gen2 GC, now queue item 1 below.
+  **For the operator:**
+  - Preset 4 rides about .7 higher at p90 and stops dipping into the floor.
+  - On a small 640x560 card, P5 and P6 cannot fit either way: crests now graze the top on 14–47% of frames,
+    against floor contact before. That is an authoring choice; no reaction was shrunk.
+
+  Evidence: `.artifacts/evidence/waveform_followups/` (tables, clip sheets, music traces; raw captures not kept).
+  **Next for this agent:** checklist **AC-12** (the monotonic authored clock) as its own pass, gated on byte-identical
+  replays for every mode. Its live tick spikes around preset switches are gen2 GC, now queue item 1 below.
 **Queued, next free medium slot, in this order (small, bounded):**
 0. **Checklist AC-06** (left by the Studio agent): the four Studio adapters' unbounded class-level clip caches and
    the GUI-thread clip parse. Repeated offscreen Extruded Bubble sessions still grow about 2-3 MB each after the
