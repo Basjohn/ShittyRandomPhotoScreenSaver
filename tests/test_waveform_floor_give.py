@@ -252,10 +252,21 @@ def _stripped_sources(monkeypatch):
     assert replaced >= 12
 
 
+def _single_sample(monkeypatch):
+    """Draw the scene target single-sample: repeat 4x MSAA renders of one frame differ by a level on a pixel or two
+    (the driver's multisampled rasterization, ``tests/_msaa_render_noise.py``), single-sample renders are exact, so
+    exact-pixel oracles stay exact (one pixel of 153,600 off by one level failed this file 1 run in 5, on main too)."""
+    from rendering.quick.scene3d import target as scene_target
+    scope = scene_target.SceneTarget.scope
+    monkeypatch.setattr(scene_target.SceneTarget, 'scope',
+                        lambda self, frame, samples, *args, **kwargs: scope(self, frame, 1, *args, **kwargs))
+
+
 def test_floor_give_off_is_pixel_identical_to_the_rigid_floor(qt_app, monkeypatch):
     gl = _gl()
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
+    _single_sample(monkeypatch)
     target = OffscreenRenderTarget(240, 160)
     try:
         state, = lowered_states(target)
@@ -345,11 +356,8 @@ def test_floor_give_repeat_renders_are_renderer_deterministic(qt_app, monkeypatc
     reduction, fog, reflection, packet stream) leaks from one frame into the next. A different frame is not."""
     gl = _gl()
     from rendering.quick.offscreen_target import OffscreenRenderTarget
-    from rendering.quick.scene3d import target as scene_target
     from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
-    scope = scene_target.SceneTarget.scope
-    monkeypatch.setattr(scene_target.SceneTarget, 'scope',
-                        lambda self, frame, samples, *args, **kwargs: scope(self, frame, 1, *args, **kwargs))
+    _single_sample(monkeypatch)
     target = OffscreenRenderTarget(240, 160); renderer = QuickWaveformRibbonRenderer()
     try:
         first, later = lowered_states(target, ticks=(64, 70), lower=2.5)
