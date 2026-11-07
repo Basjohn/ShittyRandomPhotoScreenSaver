@@ -92,13 +92,16 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
     }
 
     // Legibility layer: the card interior 2.5 px inside the border, its corners concentric
-    // with the card's (radius minus the inset) and a 2 px soft edge, so it reads as one
+    // with the card's (its configured radius minus the inset, never under 2 px) and a 2 px
+    // soft edge, so it reads as one
     // deliberate inner panel. Shift away from the text colour, then hold a
     // luminance-contrast floor against it where the backdrop is busy.
-    float plateInset = max(0.0, borderWidth) + 2.5;
+    // A negative border width (a child control drawing its own outline) puts the panel edge
+    // just outside the shape: its whole face is the panel, with no inner rim.
+    float plateInset = borderWidth < 0.0 ? -1.0 : borderWidth + 2.5;
     vec2 plateHalf = max(halfSize - vec2(plateInset), vec2(1.0));
     vec2 plateNormal;
-    float pd = roundedBox(p, plateHalf, max(0.0, r - plateInset), plateNormal);
+    float pd = roundedBox(p, plateHalf, max(2.0, r - plateInset), plateNormal);
     float plate = 1.0 - smoothstep(-1.0, 1.0, pd);
     float textL = luma(text);
     float floorRatioCard = max(1.0, glassLegibility.w);

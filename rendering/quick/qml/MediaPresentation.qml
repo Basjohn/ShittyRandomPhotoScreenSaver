@@ -470,23 +470,6 @@ OverlayWidget {
                     ? Math.max(0.1, (mainBand.height - 2.0) / implicitHeight)
                     : 1.0
 
-                // On a surface material: one rounded box behind the whole track text
-                // (title, artist, album and playback state opt out of their own
-                // plates); it stays put through the metadata crossfade. Inactive on
-                // Normal.
-                LegibilityRow {
-                    objectName: "mediaMetadataLegibilityRow"
-                    x: -6.0
-                    y: -4.0
-                    width: metadata.width + 10.0
-                    height: metadata.height + 8.0
-                    primaryColor: mediaRoot.mediaModel.textColor
-                    secondaryColor: Qt.rgba(mediaRoot.mediaModel.textColor.r, mediaRoot.mediaModel.textColor.g,
-                                            mediaRoot.mediaModel.textColor.b, mediaRoot.mediaModel.textColor.a * 0.75)
-                    tertiaryColor: Qt.rgba(mediaRoot.mediaModel.textColor.r, mediaRoot.mediaModel.textColor.g,
-                                           mediaRoot.mediaModel.textColor.b, mediaRoot.mediaModel.textColor.a * 0.62)
-                }
-
                 // The Column positions only flow slots. Editable X/Y/scale
                 // belong to the content INSIDE each slot, so a child reset
                 // cannot fight the positioner's own Y assignment. Slot heights
@@ -530,7 +513,6 @@ OverlayWidget {
                     ShadowedText {
                         id: playbackState
                         objectName: "mediaPlaybackState"
-                        surfacePlateEnabled: false   // mediaMetadataLegibilityRow
                         x: mediaRoot.childOffsetX("playback_state")
                         y: mediaRoot.childOffsetY("playback_state")
                         scale: mediaRoot.childWidthScale("playback_state")
@@ -866,7 +848,8 @@ OverlayWidget {
                 height: mediaRoot.canonicalControlsHeight
                     * mediaRoot.mediaModel.customTransportHeightScale
                 radius: 12.0
-                color: mediaRoot.mediaModel.controlsSurfaceColor
+                // On a surface material the bar is material too, tinted by its fill.
+                color: controlsRowMaterial.active ? "transparent" : mediaRoot.mediaModel.controlsSurfaceColor
                 border.width: mediaRoot.scaleAwareChildStrokeWidth(1.5, Math.min(
                     mediaRoot.mediaModel.customTransportWidthScale,
                     mediaRoot.mediaModel.customTransportHeightScale))
@@ -888,6 +871,14 @@ OverlayWidget {
                     )
                     cached: true
                     z: -1
+                }
+
+                ChildMaterialSurface {
+                    id: controlsRowMaterial
+                    objectName: "mediaControlsRowMaterial"
+                    card: mediaRoot
+                    fillColor: mediaRoot.mediaModel.controlsSurfaceColor
+                    cornerRadius: controlsRow.radius
                 }
 
                 Row {
@@ -916,14 +907,12 @@ OverlayWidget {
                         scale: previousTap.pressed ? 1.10
                             : (previousHover.hovered && previousTap.enabled ? 1.055 : 1.0)
 
-                        ThemedText {
+                        MediaTransportGlyph {
                             anchors.centerIn: parent
-                            text: "←"
-                            color: mediaRoot.mediaModel.controlsIconColor
-                            sourceFont.family: mediaRoot.mediaModel.fontFamily
-                            sourceFont.pointSize: mediaRoot.mediaModel.fontSize
-                                * mediaRoot.mediaModel.customTransportHeightScale
-                            sourceFont.bold: true
+                            // One box for the whole set, from the bar's height.
+                            width: Math.max(10.0, Math.min(parent.height * 0.5, parent.width * 0.4))
+                            kind: "previous"
+                            glyphColor: mediaRoot.mediaModel.controlsIconColor
                         }
 
                         HoverHandler {
@@ -960,14 +949,12 @@ OverlayWidget {
                         scale: playPauseTap.pressed ? 1.10
                             : (playPauseHover.hovered && playPauseTap.enabled ? 1.055 : 1.0)
 
-                        ThemedText {
+                        MediaTransportGlyph {
                             anchors.centerIn: parent
-                            text: mediaRoot.mediaModel.playbackState === "playing" ? "||" : "▶"
-                            color: mediaRoot.mediaModel.controlsIconColor
-                            sourceFont.family: mediaRoot.mediaModel.fontFamily
-                            sourceFont.pointSize: mediaRoot.mediaModel.fontSize * 0.9
-                                * mediaRoot.mediaModel.customTransportHeightScale
-                            sourceFont.bold: true
+                            // One box for the whole set, from the bar's height.
+                            width: Math.max(10.0, Math.min(parent.height * 0.5, parent.width * 0.4))
+                            kind: mediaRoot.mediaModel.playbackState === "playing" ? "pause" : "play"
+                            glyphColor: mediaRoot.mediaModel.controlsIconColor
                         }
 
                         HoverHandler {
@@ -1004,14 +991,12 @@ OverlayWidget {
                         scale: nextTap.pressed ? 1.10
                             : (nextHover.hovered && nextTap.enabled ? 1.055 : 1.0)
 
-                        ThemedText {
+                        MediaTransportGlyph {
                             anchors.centerIn: parent
-                            text: "→"
-                            color: mediaRoot.mediaModel.controlsIconColor
-                            sourceFont.family: mediaRoot.mediaModel.fontFamily
-                            sourceFont.pointSize: mediaRoot.mediaModel.fontSize
-                                * mediaRoot.mediaModel.customTransportHeightScale
-                            sourceFont.bold: true
+                            // One box for the whole set, from the bar's height.
+                            width: Math.max(10.0, Math.min(parent.height * 0.5, parent.width * 0.4))
+                            kind: "next"
+                            glyphColor: mediaRoot.mediaModel.controlsIconColor
                         }
 
                         HoverHandler {
@@ -1079,7 +1064,21 @@ OverlayWidget {
                     border.color: mediaRoot.mediaModel.controlsBorderColor
                     scale: systemMuteTap.pressed ? 1.06 : 1.0
                     property real feedbackOpacity: 0.0
-                    gradient: Gradient {
+                    // On a surface material the button is material too, tinted by its
+                    // background colour; its gradient fill returns on Normal.
+                    color: "transparent"
+                    gradient: systemMuteMaterial.active ? null : systemMuteGradient
+
+                    ChildMaterialSurface {
+                        id: systemMuteMaterial
+                        objectName: "mediaSystemMuteMaterial"
+                        card: mediaRoot
+                        fillColor: mediaRoot.mediaModel.systemMuteBackgroundColor
+                        cornerRadius: systemMuteButton.radius
+                    }
+
+                    Gradient {
+                        id: systemMuteGradient
                         GradientStop {
                             position: 0.0
                             color: Qt.rgba(
@@ -1235,10 +1234,23 @@ OverlayWidget {
                 width: mediaRoot.customVolumeTrackWidth
                 height: mediaRoot.customVolumeTrackHeight
                 radius: width / 2.0
-                color: mediaRoot.mediaModel.appVolumeTrackColor
+                // On a surface material the track is material too (its fill tints it).
+                color: appVolumeTrackMaterial.active ? "transparent" : mediaRoot.mediaModel.appVolumeTrackColor
                 border.width: mediaRoot.scaleAwareStrokeWidth(2.5)
                 border.color: mediaRoot.mediaModel.appVolumeBorderColor
                 clip: false
+
+                ChildMaterialSurface {
+                    id: appVolumeTrackMaterial
+                    objectName: "mediaAppVolumeTrackMaterial"
+                    card: mediaRoot
+                    fillColor: mediaRoot.mediaModel.appVolumeTrackColor
+                    cornerRadius: appVolumeTrack.radius
+                    // Operator 7 Nov: "deserves more transparency". The track carries no
+                    // text; its fill and outline sit on top unchanged.
+                    tintAlphaScale: 0.4
+                    legibilityPanel: false
+                }
     
                 // Volume track keeps the same global direction with a subtle 5%
                 // extra displacement and the same small cached blur.

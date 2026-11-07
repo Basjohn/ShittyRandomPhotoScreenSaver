@@ -369,6 +369,11 @@ class AchievementPulsePresentationConfig:
 
     @property
     def authored_size(self) -> tuple[float, float]:
+        return self.authored_size_for()
+
+    def authored_size_for(self, capsule_rows: int = 0) -> tuple[float, float]:
+        """The authored canvas; ``capsule_rows`` (the capsules actually shown) raises the
+        field rails when a card carries more capsules than this config's enabled fields."""
         total_enabled = any(
             field_id == "total" and enabled
             for field_id, enabled in self.field_visibility
@@ -390,7 +395,7 @@ class AchievementPulsePresentationConfig:
             artwork_shape=self.artwork_shape,
             artwork_size=self.square_artwork_size,
             field_rail_count=achievement_field_rail_count(
-                field_count,
+                max(field_count, int(capsule_rows)),
                 double_capsules=self.double_capsules,
                 columns=2 if progress_pulse_visible else 3,
                 shelf_style=self.shelf_style,
@@ -549,6 +554,7 @@ class AchievementPulsePresentationModel(QObject):
             card=card,
         )
         self._field_model = SteamCardFieldListModel(self)
+        self._capsule_rows = 0
         self._unlock_model = AchievementPulseUnlockListModel(self)
         self._achievement_runtime_service = runtime_service
         self._runtime_attached = False
@@ -694,6 +700,10 @@ class AchievementPulsePresentationModel(QObject):
             else card.fields
         )
         rows_changed = self._field_model.replace_rows(rows)
+        # The canvas reserves a rail for every capsule shown: the field group is
+        # anchored to the bottom, so a capsule the canvas did not make room for
+        # would push the group up into the artwork and metric column.
+        self._capsule_rows = len(rows)
         unlocks_changed = self._unlock_model.replace_rows(card.latest_unlocks)
         snapshot = replace(
             self._snapshot,
@@ -770,7 +780,7 @@ class AchievementPulsePresentationModel(QObject):
             resolved_height = int(round(float(height)))
         except (TypeError, ValueError):
             return False
-        base_width, base_height = self.config.authored_size
+        base_width, base_height = self.config.authored_size_for(self._capsule_rows)
         # A below-authored content box is meaningful only while the card is
         # semantically reversed. The retained QML exposes measured *left* paint
         # clearance for that orientation; unflipped geometry must not silently
@@ -1282,11 +1292,11 @@ class AchievementPulsePresentationModel(QObject):
 
     @Property(float, notify=stateChanged)
     def baseAuthoredWidth(self) -> float:
-        return self.config.authored_size[0]
+        return self.config.authored_size_for(self._capsule_rows)[0]
 
     @Property(float, notify=stateChanged)
     def baseAuthoredHeight(self) -> float:
-        return self.config.authored_size[1]
+        return self.config.authored_size_for(self._capsule_rows)[1]
 
     @Property(bool, notify=stateChanged)
     def contentExtentActive(self) -> bool:

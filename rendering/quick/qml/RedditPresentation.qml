@@ -415,18 +415,6 @@ OverlayWidget {
                     cursorShape: Qt.PointingHandCursor
                 }
 
-                // On a surface material: one rounded row behind age, AGO and title
-                // (the runs below opt out of their own plates). Inactive on Normal.
-                LegibilityRow {
-                    objectName: "redditPostLegibilityRow_" + postRow.index
-                    x: -4.0
-                    y: 1.0
-                    width: postRow.width + 8.0
-                    height: Math.max(0.0, postRow.height - 2.0)
-                    primaryColor: redditRoot.redditModel.textColor
-                    secondaryColor: redditRoot.redditModel.ageColor
-                }
-
                 Item {
                     id: ageText
                     objectName: "redditPostAge_" + postRow.index
@@ -454,7 +442,6 @@ OverlayWidget {
                     ShadowedText {
                         id: ageValueText
                         objectName: "redditPostAgeValue_" + postRow.index
-                        surfacePlateEnabled: false   // the post's LegibilityRow
                         x: postRow.columnX("age") - ageText.x
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(44.0, redditRoot.redditModel.ageFontSize * 4.4)
@@ -480,7 +467,6 @@ OverlayWidget {
                     ShadowedText {
                         id: ageAgoText
                         objectName: "redditPostAgeAgo_" + postRow.index
-                        surfacePlateEnabled: false   // the post's LegibilityRow
                         // Flipped reading order is POST TITLE | 01HR | AGO.
                         // Never mirror the actual text/glyphs.
                         x: postRow.columnX("ago") - ageText.x
@@ -506,7 +492,6 @@ OverlayWidget {
                 ShadowedText {
                     id: titleText
                     objectName: "redditPostTitle_" + postRow.index
-                    surfacePlateEnabled: false   // the post's LegibilityRow
                     x: postRow.columnX("title")
                     // One variable-width title rail follows the same discrete
                     // semantic permutation on EVERY row, including after reflow.

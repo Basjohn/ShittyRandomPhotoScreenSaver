@@ -185,11 +185,43 @@ Item {
         z: 0
     }
 
+    // Card surface material (Docs/Architecture/Card_Surface_Materials.md 3.4): the Widget
+    // Theme baseline, like every ordinary card. The Visualizer-authored Fill is its tint (its
+    // alpha moves the tint within the material's own range), so the glass reads under the
+    // mode's pixels. One static quad below the content host: it samples the shared backdrop
+    // (captured below z 20, never the Visualizer's pixels) and nothing runs per Visualizer
+    // frame. Normal keeps this Loader inactive: no item, no node, the authored fill as before.
+    property string cardSurfaceMaterial: "normal"
+    property var cardSurfaceBackdrop: null
+    property color cardSurfaceTextColor: "#ffffffff"
+    readonly property bool cardSurfaceMaterialActive: cardShellEnabled
+        && cardSurfaceMaterial !== "normal" && cardSurfaceBackdrop !== null
+
+    Loader {
+        id: cardSurfaceMaterialLoader
+        objectName: "visualizerCardSurfaceMaterial"
+        anchors.fill: parent
+        active: visualizerPresentationRoot.cardSurfaceMaterialActive
+        visible: active
+        z: 1
+        sourceComponent: MaterialSurface {
+            backdrop: visualizerPresentationRoot.cardSurfaceBackdrop
+            material: visualizerPresentationRoot.cardSurfaceMaterial
+            cornerRadius: visualizerPresentationRoot.cardCornerRadius
+            contentInset: 0.0
+            borderWidth: visualizerPresentationRoot.cardBorderWidth
+            normalColor: visualizerPresentationRoot.cardBackgroundColor
+            tintColor: visualizerPresentationRoot.cardBackgroundColor
+            textColor: visualizerPresentationRoot.cardSurfaceTextColor
+        }
+    }
+
     Rectangle {
         id: cardBackground
         objectName: "visualizerCardBackground"
         anchors.fill: parent
         visible: visualizerPresentationRoot.cardShellEnabled
+            && !visualizerPresentationRoot.cardSurfaceMaterialActive
         color: visualizerPresentationRoot.cardBackgroundColor
         radius: visualizerPresentationRoot.cardCornerRadius
         z: 1
