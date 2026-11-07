@@ -281,6 +281,11 @@ class ScreensaverEngine(QObject):
         # created in initialize(), retired in cleanup(), outliving every display
         # runtime generation and Settings round trip.
         self._display_power = None
+        # The application-service tier (core.application_services): created in
+        # initialize(), excluded from every non-terminal stop (Settings, CUSTOM,
+        # monitor topology), retired only by terminal shutdown. Generations
+        # lease its services; they never own them.
+        self.application_services = None
         self._current_image: Optional[ImageMetadata] = None
         # A sources.* key this engine is writing itself (see _register_collection_folder).
         self._own_sources_write: Optional[str] = None
@@ -544,7 +549,8 @@ class ScreensaverEngine(QObject):
                 return False
 
             self._initialize_display_power()
-            
+            self._initialize_application_services()
+
             # Load settings
             if not self._load_settings():
                 logger.error("Failed to load settings")
@@ -1019,6 +1025,20 @@ class ScreensaverEngine(QObject):
         authority.start(thread_manager=self.thread_manager)
         self._display_power = authority
 
+    def _initialize_application_services(self) -> None:
+        """Create the one application-service registry for this process (idempotent).
+
+        Registers only the declared services whose product gate is open; creates none of them (the first lease
+        does). Standard SRPSS declares none.
+        """
+        if self.application_services is not None:
+            return
+        from core import application_services
+
+        registry = application_services.ApplicationServices()
+        registry.register_catalog(application_services.APPLICATION_SERVICE_CATALOG)
+        self.application_services = registry
+
     def _display_power_on(self) -> bool:
         authority = self._display_power
         return True if authority is None else bool(authority.is_on)
@@ -1089,6 +1109,12 @@ class ScreensaverEngine(QObject):
                 previous_gate.close()
             self._refresh_transition_gate = RefreshTransitionGate(self._runtime_generation)
             install_gate(self._refresh_transition_gate)
+
+            # This generation may lease application services until
+            # teardown_display_runtime retires it.
+            services = self.application_services
+            if services is not None:
+                services.admit_generation(self._runtime_generation)
 
             # Create display manager (inject core managers)
             self.display_manager = DisplayManager(

@@ -947,6 +947,31 @@ re-acquired behind the fresh-frame fence, every logical last-step clock is rebas
 runtime resumes on a fresh deadline sequence and rotation restarts from a full interval. Detail:
 `Docs/Architecture/Compositor_Architecture.md` → Display power.
 
+**Application services.** Anything that must outlive display generations (SMP's library repository, playback
+service and queue) is an application service in the engine's one `core.application_services.ApplicationServices`
+registry, modelled on the display-power authority; it is no module global and no second lifecycle tier.
+- **Lifetime:** the registry is created in `initialize`. No non-terminal stop touches it (Settings, CUSTOM, monitor
+  topology). Terminal shutdown retires it once, in reverse creation order, after the display teardown and before the
+  ThreadManager shutdown; on the terminal stop path the network admission fence closes first.
+- **Leases, not ownership:** a display generation is admitted in `_initialize_display` and a Settings dialog
+  generation before the dialog is built. Each leases services by name. `teardown_display_runtime` (beside the
+  generation's single-shot and queued-callback cancellation) and the dialog's `cancel_scheduled_single_shots` edge
+  revoke that generation's leases; the service itself stays. A revoked lease resolves to nothing, and a retired
+  generation cannot lease again, so a late callback that escaped single-shot cancellation still cannot reach a
+  service. Consumers resolve `lease.service` per command and never cache the instance. The registry holds no strong
+  reference to a lease, so the destruction barrier's strict refcount judgement of the retiring generation is
+  unchanged.
+- **Dormancy:** registration stores a factory only, filtered at `initialize` by each descriptor's launch-time
+  product gate. The first lease creates the instance, and only while its capability is active; factories import their
+  implementation inside the call. Standard SRPSS declares no service and creates nothing.
+- **Service rules:** every service exposes `retire()`. A service never tags its own delayed work with a display or
+  Settings generation; it uses `service_owner_key(name)` and cancels that key itself.
+- **Settings-teardown failure stays fatal.** When `stop(reason="settings")` raises, no half-retired generation can be
+  proven gone, so there is no safe host for a replacement. Live services are retired first (exactly once, on the UI
+  thread) so devices and database handles close deterministically, then the process exits with code 1. MC Settings therefore keeps playback alive across an ordinary Settings visit but not
+  across a failed teardown. SMP's live Settings (SMP plan §9) is a separate application policy that never enters
+  this teardown path.
+
 ## Production authority
 
 The accepted Quick destination is the sole production owner:
