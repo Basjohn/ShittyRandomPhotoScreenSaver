@@ -9,6 +9,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 try:
     from tools import qtquick_render_node_smoke as smoke
@@ -178,7 +183,7 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--direction", choices=_DIRECTIONS, required=True)
     parser.add_argument("--windows", type=int, choices=(1, 2), default=1)
-    parser.add_argument("--output")
+    parser.add_argument("--output", type=artifact_paths.evidence_arg)
     return parser.parse_args(argv)
 
 

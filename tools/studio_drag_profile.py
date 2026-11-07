@@ -19,6 +19,11 @@ import statistics
 import sys
 import time
 from pathlib import Path
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -83,7 +88,7 @@ def main() -> int:
     parser.add_argument("--key", default="", help="Property id of the slider to drag (default: the first one)")
     parser.add_argument("--frames", type=int, default=30)
     parser.add_argument("--moves-per-frame", type=int, default=4)
-    parser.add_argument("--json", type=Path, default=None, help="Also write the record here")
+    parser.add_argument("--json", type=artifact_paths.evidence_arg, default=None, help="Also write the record here")
     args = parser.parse_args()
 
     from rendering.quick.bootstrap import configure_quick_graphics

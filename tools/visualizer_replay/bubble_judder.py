@@ -25,6 +25,11 @@ import subprocess
 
 from .bubble_fidelity import compare_observations, replay_bubbles, settings_digest, tracks
 from .record import recorded_clips
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
 
 
 def judder_spans(series, min_step: float, min_run: int = 3):
@@ -131,7 +136,7 @@ def main() -> None:
         action="store_true",
         help="replay each clip with instant render release then with the accepted product envelope",
     )
-    parser.add_argument("--report", type=Path, help="write reproducible per-clip OFF/ON fidelity evidence as JSON")
+    parser.add_argument("--report", type=artifact_paths.evidence_arg, help="write reproducible per-clip OFF/ON fidelity evidence as JSON")
     args = parser.parse_args()
     if not all(math.isfinite(value) and value > 0 for value in (args.px_per_unit, args.min_px, args.tiny_max_px)):
         parser.error("pixel scales and thresholds must be positive")

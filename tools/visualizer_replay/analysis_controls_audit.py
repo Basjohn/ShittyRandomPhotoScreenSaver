@@ -30,6 +30,7 @@ import sys
 import time
 from dataclasses import replace
 from pathlib import Path
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 CLIPS = ROOT / "assets" / "production" / "studio_clips"
@@ -320,7 +321,7 @@ def main(argv=None) -> int:
     parser.add_argument("--clips", nargs="*", default=["growing_pains", "human"], help="shipped Studio clip ids")
     parser.add_argument("--seconds", type=float, default=DEFAULT_SECONDS)
     parser.add_argument("--only", nargs="*", help="limit to these control suffixes (bar_count, input_gain, ...)")
-    parser.add_argument("--out", type=Path)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg)
     parser.add_argument("--list", action="store_true", help="print each mode's variations without replaying")
     args = parser.parse_args(argv)
     sys.path.insert(0, str(ROOT))

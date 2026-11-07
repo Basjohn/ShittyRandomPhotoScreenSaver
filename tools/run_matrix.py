@@ -18,6 +18,11 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Callable, Sequence
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -403,7 +408,7 @@ def _safe_name(value: str) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matrix", type=Path, required=True, help="JSON matrix file")
-    parser.add_argument("--output-dir", type=Path, required=True, help="new dedicated evidence directory")
+    parser.add_argument("--output-dir", type=artifact_paths.evidence_arg, required=True, help="new dedicated evidence directory")
     args = parser.parse_args(argv)
     try:
         cases = load_matrix(args.matrix)

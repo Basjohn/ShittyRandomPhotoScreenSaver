@@ -20,6 +20,8 @@ import numpy as np
 from PIL import Image,ImageDraw
 from tools.labs.waveform_ribbon_reactivity import CANDIDATES,HeadHistory,PRE_ROLL,clamp
 from tools.labs.waveform_ribbon_recorded_input import RecordedRibbonInput
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 FPS=24
 SIZE=(410,359)
@@ -206,7 +208,7 @@ def main():
     parser.add_argument('--recording',type=Path,required=True)
     parser.add_argument('--start',type=float,default=20.)
     parser.add_argument('--seconds',type=float,default=20.)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--output',type=artifact_paths.evidence_arg,default=artifact_paths.default_evidence('visualizers/waveform_ribbon','music_bakeoff'))
     parser.add_argument('--ffmpeg',type=Path,required=True)
     parser.add_argument('--proof-only',action='store_true')
     parser.add_argument('--worker',action='store_true',help=argparse.SUPPRESS)
@@ -214,16 +216,17 @@ def main():
     if not (math.isfinite(args.start) and args.start>=0 and math.isfinite(args.seconds) and 9<=args.seconds<=60):
         parser.error('Use a finite non-negative start and 9..60 seconds for the synchronized checkpoint package')
     if args.worker:return capture(args)
+    work=evidence_media.redirect_output(args,'output','waveform_ribbon_music_bakeoff')
     from tools.build_runner import BuildProcessOwner
     owner=BuildProcessOwner()
-    process=owner.start([sys.executable,str(Path(__file__).resolve()),*sys.argv[1:],'--worker'],cwd=ROOT)
+    process=owner.start([sys.executable,str(Path(__file__).resolve()),*sys.argv[1:],'--output',str(work),'--worker'],cwd=ROOT)
     try:
         try:result=process.wait(timeout=900)
         except subprocess.TimeoutExpired:
             owner.cancel();process.wait(timeout=10);raise
     finally:
         owner.retire(process);owner.shutdown()
-    raise SystemExit(result)
+    raise SystemExit(evidence_media.finish(result))
 
 
 if __name__=='__main__':main()

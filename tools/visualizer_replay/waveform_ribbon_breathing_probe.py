@@ -18,6 +18,7 @@ Inputs are identical across presets and code variants, so A/B comparisons isolat
 from __future__ import annotations
 import argparse,json,sys
 from pathlib import Path
+from tools import artifact_paths  # noqa: E402
 ROOT=Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 
@@ -283,11 +284,11 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='command',required=True)
     rec=sub.add_parser('record');rec.add_argument('--clip',type=Path,action='append',required=True)
-    rec.add_argument('--output',type=Path,required=True)
-    ana=sub.add_parser('analyse');ana.add_argument('inputs',type=Path,nargs='+');ana.add_argument('--output',type=Path,required=True)
+    rec.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
+    ana=sub.add_parser('analyse');ana.add_argument('inputs',type=Path,nargs='+');ana.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
     ana.add_argument('--presets',default='1,2,3,4,5,6,7');ana.add_argument('--traces',action='store_true')
     ana.add_argument('--view',action='store_true',help='also measure the published body amplitude in view (slower)')
-    tab=sub.add_parser('recorded');tab.add_argument('inputs',type=Path,nargs='+');tab.add_argument('--output',type=Path,required=True)
+    tab=sub.add_parser('recorded');tab.add_argument('inputs',type=Path,nargs='+');tab.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
     args=parser.parse_args()
     if args.command=='record':record(args.clip,args.output)
     elif args.command=='recorded':recorded_table(args)

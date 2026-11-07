@@ -26,9 +26,12 @@ operator's recordings (``logs/visualizer_recordings``).
 """
 from __future__ import annotations
 
+import argparse
 import contextlib
+import os
 import re
 import shutil
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -177,19 +180,47 @@ def scratch_root(owner: str) -> Path:
 
 @contextlib.contextmanager
 def scratch(owner: str) -> Iterator[Path]:
-    """A fresh folder under ``.artifacts/scratch/<owner>/``, deleted on exit (success or exception)."""
-    folder = scratch_root(owner) / uuid.uuid4().hex[:12]
+    """A fresh folder under ``.artifacts/scratch/<owner>/``: deleted when the block succeeds, KEPT when it
+    fails (its path is printed, for debugging; ``prune-scratch`` clears it later)."""
+    folder = scratch_root(owner) / f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
     folder.mkdir(parents=True, exist_ok=False)
     try:
         yield folder
-    finally:
-        shutil.rmtree(folder, ignore_errors=True)
-        with contextlib.suppress(OSError):
-            folder.parent.rmdir()          # only when no other scratch of this owner is live
+    except BaseException:
+        print(f"failed; scratch kept for debugging: {folder}", file=sys.stderr)
+        raise
+    shutil.rmtree(folder)
+    with contextlib.suppress(OSError):
+        folder.parent.rmdir()              # only when no other scratch of this owner is left
 
 
-def _inside(path: Path, root: Path) -> bool:
-    return path == root or root in path.parents
+def run_scratch(owner: str, name: str) -> Path:
+    """``.artifacts/scratch/<owner>/<pid>_<name>`` (not created) for a tool that cannot use ``scratch()``
+    as a block; the tool calls ``discard_run_scratch(owner)`` when it succeeds."""
+    return scratch_root(owner) / f"{os.getpid()}_{_require_slug('name', slug(name))}"
+
+
+def discard_run_scratch(owner: str) -> None:
+    """Delete this process's ``run_scratch`` folders of ``owner`` (call on success only)."""
+    root = scratch_root(owner)
+    if not root.is_dir():
+        return
+    for folder in root.glob(f"{os.getpid()}_*"):
+        shutil.rmtree(folder)
+    with contextlib.suppress(OSError):
+        root.rmdir()
+
+
+def _key(path: Path) -> tuple[str, ...]:
+    return tuple(os.path.normcase(part) for part in path.parts)
+
+
+def _relative_to_root(path: Path, root: Path) -> tuple[str, ...] | None:
+    """``path``'s parts below ``root`` (both already resolved), case-insensitive where the OS is; else None."""
+    path_key, root_key = _key(path), _key(root)
+    if len(path_key) > len(root_key) and path_key[: len(root_key)] == root_key:
+        return path.parts[len(root_key):]
+    return None
 
 
 def checked_output(path: str | Path, *, kind: str = "evidence") -> Path:
@@ -199,23 +230,31 @@ def checked_output(path: str | Path, *, kind: str = "evidence") -> Path:
     ``.artifacts/webp``) or ``"any"``; each also accepts ``.artifacts/scratch/<owner>/...``. Anything else is
     refused: the rest of the repository, ``%TEMP%``, a session scratchpad, another drive.
     """
+    # Both sides are resolved, so a layout root that is a directory junction or symlink to another drive
+    # (the archive on a large HDD, scratch on a fast NVMe) still contains the paths written through it.
     resolved = Path(path).expanduser().resolve()
     roots = {"evidence": (EVIDENCE_ROOT, SCRATCH_ROOT), "webp": (WEBP_ROOT, SCRATCH_ROOT),
              "any": LAYOUT_ROOTS}.get(kind)
     if roots is None:
         raise ArtifactPathError(f"unknown output kind {kind!r}")
     for root in roots:
-        if _inside(resolved, root) and resolved != root:
-            relative = resolved.relative_to(root).parts
-            if root is SCRATCH_ROOT or _layout_shaped(relative):
-                return resolved
-            break
+        relative = _relative_to_root(resolved, root.resolve())
+        if relative is None:
+            continue
+        if root is SCRATCH_ROOT or _layout_shaped(relative):
+            return resolved
+        break
     raise ArtifactPathError(
         f"refusing to write {resolved}: tool output goes only to the evidence layout under {ARTIFACTS_ROOT} "
         f"(tools/artifact_paths.py): evidence/<area>/<topic>/<YYYYMMDD>_<label>/, "
         f"webp/<area>/<topic>/<YYYYMMDD>_<label>.webp or scratch/<owner>/ -- never elsewhere in the "
         f"repository, %TEMP% or a session scratchpad"
     )
+
+
+def in_scratch(path: str | Path) -> bool:
+    """True when ``path`` lies under ``.artifacts/scratch/<owner>/`` (junction-safe)."""
+    return _relative_to_root(Path(path).expanduser().resolve(), SCRATCH_ROOT.resolve()) is not None
 
 
 def _layout_shaped(relative: tuple[str, ...]) -> bool:
@@ -259,9 +298,149 @@ def output_webp(
     return path
 
 
+def evidence_arg(value: str) -> Path:
+    """argparse ``type=`` for an evidence output (folder or file): ``checked_output`` with a usage error."""
+    import argparse
+
+    try:
+        return checked_output(value, kind="evidence")
+    except ArtifactPathError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+def webp_arg(value: str) -> Path:
+    """argparse ``type=`` for a WebP output path."""
+    import argparse
+
+    try:
+        path = checked_output(value, kind="webp")
+    except ArtifactPathError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+    if path.suffix.lower() != ".webp":
+        raise argparse.ArgumentTypeError(f"visual evidence is WebP: {path}")
+    return path
+
+
+def default_evidence(area: str, topic: str, label: str = "run") -> str:
+    """A parser default: today's evidence folder for ``area``/``topic``, labelled ``label`` plus the time."""
+    return str(evidence_dir(area, topic, run_label(label)))
+
+
+def default_webp(area: str, topic: str, label: str = "run") -> str:
+    return str(webp_path(area, topic, run_label(label)))
+
+
 def run_label(*parts: object) -> str:
     """A label from parts plus the time of day, e.g. ``bubble_p1_143005``."""
     return slug("_".join(str(part) for part in (*parts, time.strftime("%H%M%S")) if part not in (None, "")))
+
+
+# -- prune-scratch: the lead runs it at milestones (no timer, no scheduled task) ---------------------------
+
+DEFAULT_PRUNE_AGE_H = 24.0
+OVERSIZED_WEBP_BYTES = 10 * 1024 * 1024
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            ok = ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            return bool(ok) and code.value == 259                           # STILL_ACTIVE
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _tree_size_and_newest(folder: Path) -> tuple[int, float]:
+    size, newest = 0, folder.stat().st_mtime
+    for path in folder.rglob("*"):
+        with contextlib.suppress(OSError):
+            stat = path.stat()
+            newest = max(newest, stat.st_mtime)
+            if path.is_file():
+                size += stat.st_size
+    return size, newest
+
+
+def scan(*, max_age_h: float = DEFAULT_PRUNE_AGE_H, now: float | None = None) -> dict:
+    """What ``prune-scratch`` would do: scratch runs to delete or keep, and oversized evidence to report.
+
+    A scratch run is ``scratch/<owner>/<pid>_<id>/``; it is deletable when its newest file is older than
+    ``max_age_h`` and its process is no longer running. Anything else in ``scratch/<owner>/`` (a tool's own
+    folder) ages the same way, without the process check.
+    """
+    now = time.time() if now is None else now
+    runs = []
+    if SCRATCH_ROOT.exists():
+        for owner in sorted(path for path in SCRATCH_ROOT.iterdir() if path.is_dir()):
+            for run in sorted(path for path in owner.iterdir() if path.is_dir()):
+                size, newest = _tree_size_and_newest(run)
+                age_h = (now - newest) / 3600.0
+                pid_text = run.name.split("_", 1)[0]
+                running = pid_text.isdigit() and _pid_alive(int(pid_text))
+                runs.append({"path": str(run), "owner": owner.name, "bytes": size, "age_h": round(age_h, 1),
+                             "running": running, "delete": age_h >= max_age_h and not running})
+    oversized = []
+    for root in (EVIDENCE_ROOT, WEBP_ROOT):
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            with contextlib.suppress(OSError):
+                if path.is_dir() and path.name == "profile":
+                    oversized.append({"path": str(path), "why": "profile copy in evidence"})
+                elif path.suffix.lower() == ".png":
+                    oversized.append({"path": str(path), "why": "PNG evidence (use WebP)"})
+                elif path.suffix.lower() == ".webp" and path.stat().st_size > OVERSIZED_WEBP_BYTES:
+                    oversized.append({"path": str(path), "why": f"WebP over {OVERSIZED_WEBP_BYTES} bytes"})
+    return {"scratch": runs, "oversized": oversized}
+
+
+def prune_scratch(*, apply: bool = False, max_age_h: float = DEFAULT_PRUNE_AGE_H, now: float | None = None) -> dict:
+    """Dry run unless ``apply``: delete stale scratch runs (never anything outside ``scratch/``)."""
+    report = scan(max_age_h=max_age_h, now=now)
+    scratch_root_resolved = SCRATCH_ROOT.resolve()
+    for run in report["scratch"]:
+        if apply and run["delete"]:
+            path = Path(run["path"])
+            if _relative_to_root(path.resolve(), scratch_root_resolved) is None:
+                raise ArtifactPathError(f"refusing to delete outside scratch: {path}")
+            shutil.rmtree(path)
+            run["deleted"] = True
+    return report
+
+
+def _cli(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="The evidence layout owner.")
+    sub = parser.add_subparsers(dest="command", required=True)
+    prune = sub.add_parser("prune-scratch", help="list scratch runs; with --apply delete stale ones")
+    prune.add_argument("--apply", action="store_true", help="delete (default: dry run)")
+    prune.add_argument("--max-age-h", type=float, default=DEFAULT_PRUNE_AGE_H)
+    args = parser.parse_args(argv)
+    report = prune_scratch(apply=args.apply, max_age_h=args.max_age_h)
+    total = 0
+    for run in report["scratch"]:
+        total += run["bytes"]
+        action = ("DELETED" if run.get("deleted") else "delete") if run["delete"] else (
+            "running" if run["running"] else "keep")
+        print(f"{action:8s} {run['bytes'] / 1e6:10.1f} MB {run['age_h']:8.1f} h  {run['path']}")
+    print(f"scratch total {total / 1e6:.1f} MB under {SCRATCH_ROOT}" + ("" if args.apply else " (dry run)"))
+    for item in report["oversized"]:
+        print(f"REPORT   {item['why']}: {item['path']}")
+    return 0
 
 
 __all__ = [
@@ -275,15 +454,25 @@ __all__ = [
     "WEBP_ROOT",
     "area_parts",
     "checked_output",
+    "default_evidence",
+    "default_webp",
+    "evidence_arg",
     "evidence_dir",
     "main_checkout",
     "output_dir",
     "output_webp",
+    "prune_scratch",
+    "scan",
     "run_label",
     "scratch",
     "scratch_root",
     "slug",
     "today",
     "use_root",
+    "webp_arg",
     "webp_path",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())

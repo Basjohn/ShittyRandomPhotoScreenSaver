@@ -76,8 +76,14 @@ def main():
             per.append((fillf, lf))
         out.append({"t": t, "passage": passage, "level": level, "activity": act, "fill": fill, "travel": travel,
                     "fill_f": [p[0] for p in per], "life_f": [p[1] for p in per]})
-    dest = Path(sys.argv[4]) if len(sys.argv) > 4 else Path("chain_trace.json")
+    from tools import artifact_paths   # evidence layout; never the working directory (it was the repo root)
+
+    dest = (artifact_paths.checked_output(sys.argv[4]) if len(sys.argv) > 4 else
+            artifact_paths.evidence_dir("visualizers/extruded_bubble", "chain_population",
+                                        artifact_paths.run_label(clip_name)) / "chain_trace.json")
+    dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(out))
+    print("written", dest)
     # summary
     fills = [r[4] for r in rows]
     trav = [r[5] for r in rows]

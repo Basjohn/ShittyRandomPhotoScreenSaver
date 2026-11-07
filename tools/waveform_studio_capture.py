@@ -15,6 +15,12 @@ import json
 import sys
 import time
 from pathlib import Path
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -169,7 +175,8 @@ def _paint_stroke(controller, surface, args) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("studio", "waveform_capture"))
     parser.add_argument("--mode", default="waveform_ribbon", help="A registered Studio mode id")
     parser.add_argument("--preset", type=int, default=3)
     parser.add_argument("--size", default="1600x900")
@@ -209,6 +216,7 @@ def main() -> int:
     parser.add_argument("--brush-strength", type=float, default=None, help="With --brush: 0..1")
     parser.add_argument("--brush-radius", type=float, default=None, help="With --brush: grid uv share")
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "waveform_studio_capture")
     width, height = (int(v) for v in args.size.split("x"))
 
     from rendering.quick.bootstrap import configure_quick_graphics
@@ -416,4 +424,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

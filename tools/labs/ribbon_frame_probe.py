@@ -15,6 +15,8 @@ from PIL import Image, ImageDraw
 from core.ribbon_frames import FrameDiscontinuity, strip_path, width_frame
 from core.ribbon_geometry import PathSample
 from tools.labs.waveform_ribbon_preflight import projection_fixture
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def capture(output):
@@ -70,5 +72,9 @@ def capture(output):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, required=True)
-    capture(parser.parse_args().output)
+    parser.add_argument('--output', type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence('visualizers/waveform_ribbon', 'frame_probe'))
+    args = parser.parse_args()
+    evidence_media.redirect_output(args, 'output', 'ribbon_frame_probe')
+    capture(args.output)
+    evidence_media.finish(0)

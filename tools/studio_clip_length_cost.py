@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -24,7 +25,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--recordings", type=Path, default=ROOT / "logs" / "visualizer_recordings")
     parser.add_argument("--seconds", type=float, default=30.0)
-    parser.add_argument("--out", type=Path)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg)
     args = parser.parse_args(argv)
     from PySide6.QtGui import QGuiApplication
     app = QGuiApplication.instance() or QGuiApplication([])          # noqa: F841  (the workers need one)

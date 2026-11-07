@@ -20,6 +20,8 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -129,7 +131,8 @@ def main() -> int:
     cap = sub.add_parser("capture")
     cap.add_argument("--clip", type=Path, required=True)
     cap.add_argument("--preset", type=int, required=True)
-    cap.add_argument("--out", type=Path, required=True)
+    cap.add_argument("--out", type=artifact_paths.evidence_arg, required=True,
+                     help="lossless frames for compare: .artifacts/scratch/<owner>/...; elsewhere published as WebP")
     cap.add_argument("--size", default="3875x1450")
     cap.add_argument("--start", type=float, default=20.)
     cap.add_argument("--frames", type=int, default=12)
@@ -137,10 +140,11 @@ def main() -> int:
     cmp_ = sub.add_parser("compare")
     cmp_.add_argument("before", type=Path)
     cmp_.add_argument("after", type=Path)
-    cmp_.add_argument("--out", type=Path, required=True)
+    cmp_.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "out", "waveform_fidelity_frames")
     return capture(args) if args.command == "capture" else compare(args)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

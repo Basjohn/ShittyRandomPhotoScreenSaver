@@ -12,6 +12,11 @@ import json
 from pathlib import Path
 
 from PIL import Image, ImageDraw
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
 
 _PANEL = (760, 250)
 _MARGIN = 40
@@ -73,7 +78,7 @@ def main() -> int:
     parser.add_argument("directory", type=Path)
     parser.add_argument("--window", required=True, help="start,stop seconds")
     parser.add_argument("--ids", type=int, default=4)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=artifact_paths.evidence_arg, required=True)
     args = parser.parse_args()
     start, stop = map(float, args.window.split(","))
     image = Image.new("RGB", (2 * _PANEL[0] + 3 * _MARGIN, 3 * _PANEL[1] + 4 * _MARGIN), (18, 18, 22))
