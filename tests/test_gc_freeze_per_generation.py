@@ -120,3 +120,29 @@ def test_generation_swaps_refreeze_each_generation_and_never_pin_a_retired_one(p
         assert retired[-1]() is None                     # released at its teardown by refcount: nothing pinned
         assert gc.get_freeze_count() == 0 and frozen_live > 0
     assert all(ref() is None for ref in retired)
+
+
+class _Cycle:
+    def __init__(self):
+        self.me = self
+
+
+def test_a_judged_retirement_is_collected_once_and_never_while_a_generation_is_frozen(policy):
+    """``collect_retired_generations`` reclaims a thawed generation's cycles; it never runs while a generation is
+    frozen (a live one) or outside the RUN policy."""
+    engine = _Engine(policy)
+    engine.display_manager.cycle = _Cycle()
+    cycle = weakref.ref(engine.display_manager.cycle)
+    engine.reveal()
+    assert policy.collect_retired_generations() is None          # a live, frozen generation is never swept
+    engine.display_manager.cycle = None
+    engine.teardown()                                            # thawed; the cycle survives refcounting
+    gc.disable()
+    try:
+        assert cycle() is not None
+        assert policy.collect_retired_generations(event="test") >= 1
+        assert cycle() is None
+    finally:
+        gc.enable()
+    policy.stop()
+    assert policy.collect_retired_generations() is None          # inactive policy: no collection

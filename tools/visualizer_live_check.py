@@ -55,7 +55,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.live_check_settings_roundtrip import (  # noqa: E402  (stdlib-only at import)
-    analyse_settings_roundtrips, gc_policy_lines, parse_settings_roundtrip, print_settings_roundtrips,
+    analyse_settings_roundtrips, gc_policy_lines, parse_roundtrip_memory, parse_settings_roundtrip,
+    print_settings_roundtrips,
 )
 DEFAULT_CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"    # mixed real music, ~2 min
 STEADY_AFTER_STARTUP_NS = 2_000_000_000
@@ -336,10 +337,14 @@ def analyse_display_power(trace: Path, edges: list[dict], samples: list[dict]) -
 
 def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float, mode: str,
             display_off: list[tuple[float, float]] | None = None,
-            settings_roundtrip: list[float] | None = None) -> None:
+            settings_roundtrip: list[float] | None = None, roundtrip_memory: tuple[str, ...] = ()) -> None:
     began = time.monotonic()
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
+    if roundtrip_memory:
+        from tools.live_check_settings_roundtrip import RoundTripMemoryProbe
+
+        RoundTripMemoryProbe.start_tracing(roundtrip_memory)     # before the application's imports
     from tools import eb_live_phases as phases
 
     # Isolate the copied profile through explicit runner-side path injection, without process environment edits.
@@ -397,9 +402,11 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
         _inject_display_power(out, display_off)
     if settings_roundtrip:
         # The engine's real Settings path at each time; the dialog never shows (tools/live_check_settings_roundtrip.py).
-        from tools.live_check_settings_roundtrip import SettingsRoundTripDriver
+        from tools.live_check_settings_roundtrip import RoundTripMemoryProbe, SettingsRoundTripDriver
 
-        driver = SettingsRoundTripDriver(settings_roundtrip, began=began, state_path=out / "settings_roundtrip.json")
+        probe = RoundTripMemoryProbe(roundtrip_memory, out_dir=out) if roundtrip_memory else None
+        driver = SettingsRoundTripDriver(settings_roundtrip, began=began, state_path=out / "settings_roundtrip.json",
+                                         memory_probe=probe)
         driver.install()
         atexit.register(driver.finish)
     atexit.register(lambda: (out / "phases.json").write_text(json.dumps(phases._summary(), indent=1), encoding="utf-8"))
@@ -558,6 +565,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="drive the engine's real Settings path (stop, teardown, barriers, dialog, replacement) "
                              "AT s after the runner starts; the dialog never shows. Fails the run on a barrier "
                              "timeout, a reveal without a GC re-freeze or a process exit")
+    parser.add_argument("--roundtrip-memory", metavar="census[,collect][,tracemalloc][,map]", type=parse_roundtrip_memory,
+                        default=(), help="with --settings-roundtrip: classify what each round trip leaves behind "
+                                         "at every reveal (runner only; settings_roundtrip_memory.json)")
     parser.add_argument("--runner", action="store_true", help=argparse.SUPPRESS)
     return parser
 
@@ -569,7 +579,9 @@ def runner_command(args, out: Path, clip: Path | None) -> list[str]:
              str(args.clip_start)] + (["--visible"] if args.visible else [])
             + (["--display-off", args.display_off] if args.display_off else [])
             + (["--settings-roundtrip", ",".join(f"{at:g}" for at in args.settings_roundtrip)]
-               if args.settings_roundtrip else []))
+               if args.settings_roundtrip else [])
+            + (["--roundtrip-memory", ",".join(args.roundtrip_memory)]
+               if args.settings_roundtrip and args.roundtrip_memory else []))
 
 
 def main() -> int:
@@ -578,7 +590,8 @@ def main() -> int:
     clip = None if args.clip == "none" else Path(args.clip).resolve()
     if args.runner:
         _runner(out, args.seconds, args.visible, clip, args.clip_start, args.mode,
-                parse_display_off(args.display_off) if args.display_off else None, args.settings_roundtrip)
+                parse_display_off(args.display_off) if args.display_off else None, args.settings_roundtrip,
+                args.roundtrip_memory if args.settings_roundtrip else ())
         return 0
     if clip is not None and not clip.exists():
         raise SystemExit(f"recording not found: {clip}")
