@@ -116,6 +116,7 @@
         "shockwave_grid_water_reflection": 1.0,
         "shockwave_grid_water_shine": 0.7,
         "shockwave_grid_water_glint": 0.8,
+        "shockwave_grid_water_reaction": 1.0,
         "shockwave_grid_terrain_reaction_enabled": true,
         "shockwave_grid_terrain_reaction_strength": 0.65,
         "shockwave_grid_terrain_pulses": 1.0,

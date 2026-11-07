@@ -374,3 +374,64 @@ def test_an_exact_evaluation_per_frame_starts_the_worker_mid_drag_negative_contr
     controller, surface, _store = studio("spectrum")
     _prop, during, _after = _engine_owned_drag(controller, surface, exact_during_drag=True)
     assert during >= 1
+
+
+# --------------------------------------------- a drag holds until release, however the pointer wobbles (operator, 6 Nov)
+def _studio_modes():
+    from ui.studio.registry import studio_modes
+    return sorted(entry.mode_id for entry in studio_modes())
+
+
+def _drag_area(slider):
+    """The slider's own MouseArea (the item that takes the press)."""
+    for child in slider.childItems():
+        if child.property("preventStealing") is not None and child.property("pressed") is not None:
+            return child
+    raise AssertionError("the slider has no MouseArea")
+
+
+def _wobbling_drag(controller, surface, steps=30, wobble=14.0):
+    """Press, then a drag along the slider with a vertical wobble past the drag threshold on every move (a hand on a
+    mouse), one frame per move: the move at which the slider let go, or None if it held to the release."""
+    slider = _slider(controller, surface)
+    window = surface.window
+    origin = slider.mapToScene(QPointF(0, slider.height() / 2.0))
+    clock = [1000]
+
+    def send(kind, x, y):
+        button = Qt.MouseButton.NoButton if kind == QEvent.Type.MouseMove else Qt.MouseButton.LeftButton
+        buttons = Qt.MouseButton.NoButton if kind == QEvent.Type.MouseButtonRelease else Qt.MouseButton.LeftButton
+        pos = QPointF(x, y)
+        event = QMouseEvent(kind, pos, pos, pos, button, buttons, Qt.KeyboardModifier.NoModifier)
+        clock[0] += 16
+        event.setTimestamp(clock[0])
+        QCoreApplication.sendEvent(window, event)
+    x = origin.x() + slider.width() * 0.2
+    send(QEvent.Type.MouseButtonPress, x, origin.y())
+    for step in range(steps):
+        x = origin.x() + slider.width() * (0.2 + 0.6 * (step + 1) / steps)
+        send(QEvent.Type.MouseMove, x, origin.y() + (wobble if step % 2 else -wobble))
+        surface.pump()
+        if not slider.property("dragging"):
+            return step, slider
+    send(QEvent.Type.MouseButtonRelease, x, origin.y())
+    return None, slider
+
+
+@pytest.mark.parametrize("mode", _studio_modes())
+def test_a_slider_drag_holds_until_release_through_a_vertical_wobble(studio, mode):
+    """The inspector scrolls; a drag is never handed to the scroll view when the pointer strays vertically."""
+    controller, surface, store = studio(mode)
+    commits = store.commits
+    lost, slider = _wobbling_drag(controller, surface)
+    assert lost is None, f"{mode}: the slider let go of the drag at move {lost}"
+    surface.pump()
+    assert not slider.property("dragging") and store.commits == commits + 1       # one commit, on release
+
+
+def test_a_slider_that_lets_the_scroll_view_steal_drops_the_drag_negative_control(studio):
+    """The former slider (stealing allowed) lets go at the first wobble: the operator's "snaps out mid-motion"."""
+    controller, surface, _store = studio("spectrum")
+    _drag_area(_slider(controller, surface)).setProperty("preventStealing", False)
+    lost, _slider_item = _wobbling_drag(controller, surface)
+    assert lost is not None and lost <= 2

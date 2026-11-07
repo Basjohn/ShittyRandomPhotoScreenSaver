@@ -19,7 +19,7 @@ The Themes tab has two current catalogues:
 
 The two catalogues use explicit stable IDs and a bidirectional **Linked / Independent** control. While Linked, selecting either side transactionally selects and persists the exact counterpart on the other side. Selection does not silently unlink. A theme with no valid counterpart requires Independent mode before it can be selected independently.
 
-Widget themes are **colour-only schema-v3 bundles**. They do not own a backdrop/material recommendation and there is no runtime Surface Style preference. Settings theme names may legitimately retain `[Glass]`/`[Acrylic]` because those tags describe the Settings HWND; Widget counterpart names/files intentionally omit those material suffixes while `linked_settings_theme_id` still points to the exact Settings-theme identity.
+Widget themes are **schema-v3 colour bundles that may name one card surface material** (optional `surface_material`, 6 Nov 2026; this supersedes the earlier colour-only rule, see `Docs/Architecture/Card_Surface_Materials.md` section 4). Style Overrides' Surface Material defaults to Theme (the theme's material, Normal when it names none); an explicit material there or per widget beats it. The Sep 2026 material keys (`default_card_material_mode`, `card_material_override`) stay retired. Settings theme names may legitimately retain `[Glass]`/`[Acrylic]` because those tags describe the Settings HWND; Widget counterpart names/files intentionally omit those material suffixes while `linked_settings_theme_id` still points to the exact Settings-theme identity.
 
 ## Widget Theme precedence and semantic inheritance
 
@@ -66,9 +66,10 @@ Do not implement hidden per-property named-theme override inheritance on top of 
 - **Card Border** — theme-owned colour edit; editing a named Widget Theme forks to `Custom`;
 - **Header Fill** — theme-owned shared branded-header fill; editing a named Widget Theme forks to `Custom`;
 - **Reset All Colours to Theme** — explicit operator action that normalizes ordinary family colour/card-alpha compatibility overrides to canonical Inherit values; never runs at startup and never touches Visualizer-authored colours;
-- **Card Border Width** — global card geometry style, outside Widget Theme schema.
+- **Card Border Width** — global card geometry style, outside Widget Theme schema;
+- **Surface Material** — global card and Context Menu surface (Normal default, Acrylic, Glass, Frosted, Mica, Smoked), outside Widget Theme schema; an explicit `widgets.<id>.surface_material` wins.
 
-There is **no Surface Style / Theme Default / Normal / Glass / Acrylic runtime control**. Runtime card backdrop materials were physically rejected and removed; the durable failed-method record is `Docs/Contracts.md`.
+Superseded decision (6 Nov 2026): this guide used to say there is no runtime surface material control because the Sep 2026 card-backdrop experiments were physically rejected. Those mechanisms stay rejected; materials returned through `Docs/Architecture/Card_Surface_Materials.md`.
 
 ## Theme-file layout
 
@@ -112,7 +113,7 @@ Card/frame **Extra Offset is directional growth**, not whole-shadow translation:
 
 The retained Context Menu is a Quick overlay. It consumes the global Card shadow direction/opacity/blur/Extra Offset contract and Widget Theme semantic palette once per runtime generation. Its shadow is composed in the menu overlay plane so it may cast over runtime widgets/Visualizer/edit chrome while remaining behind the menu itself.
 
-No menu-open/per-frame Settings read is allowed. The menu uses the same ordinary RGBA semantic-surface architecture as runtime cards; Settings HWND Glass/Acrylic does not authorize a runtime menu/card material path.
+No menu-open/per-frame Settings read is allowed. The menu uses the same semantic-surface architecture as runtime cards, including the Surface Material baseline (`Docs/Architecture/Card_Surface_Materials.md`); Settings HWND Glass/Acrylic is never reused for it.
 
 ## Header styling
 
@@ -120,7 +121,7 @@ No menu-open/per-frame Settings read is allowed. The menu uses the same ordinary
 
 Branded Header Fill/Border/Text are shared Widget Theme semantics, not Media/Gmail/Reddit/Steam swatches. `Header Fill` is the one ordinary GUI authoring control in Style Overrides; Header Border/Text normally resolve from `header.border` / `header.text` (and their semantic parents) and may be authored in Widget Theme files/Foundry when a theme genuinely needs them. Old persisted family header fields remain compatibility-read plumbing only until the explicit deletion horizon and must never become invisible permanent precedence.
 
-The small retained `MultiEffect` use in branded headers/artwork is local image treatment/masking only. It is not permission to restore full-card or full-display backdrop capture.
+The small retained `MultiEffect` use in branded headers/artwork is local image treatment/masking only. It is not permission to restore full-card or full-display backdrop capture; surface materials use only the shared backdrop of `Docs/Architecture/Card_Surface_Materials.md`.
 
 ## Specialized local fallback guard
 
@@ -145,4 +146,4 @@ identify current product/style contract
 -> reconcile docs/test ownership
 ```
 
-No fidelity downgrade is admitted as a performance shortcut. Settings native materials and runtime Widget semantic colours are separate architectures and must remain separate unless a future independently justified renderer redesign explicitly proves otherwise.
+No fidelity downgrade is admitted as a performance shortcut. Settings native materials and runtime Widget semantic colours are separate architectures and remain separate; runtime card materials are scene-local (`Docs/Architecture/Card_Surface_Materials.md`) and never touch the Settings native stack.

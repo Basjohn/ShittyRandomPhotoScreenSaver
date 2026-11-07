@@ -37,7 +37,7 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-52 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit](Historical_Bugs/R-52_ImageWorker_Shared_Memory_Retention.md) | Archived investigation | **STRONG** |
 | [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](Historical_Bugs/R-53_Runtime_Recreation_Ownership_And_Memory.md) | Archived investigation | **STRONG** |
 | [R-54 — Phase 5 Bubble Cadence Gate Delayed And Flattened Visible Reactions](Historical_Bugs/R-54_Bubble_Cadence_Gate.md) | Archived investigation | **STRONG** |
-| [R-55 — Spectrum Paint-Local Smoothing Created A Second Cadence](Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md) | Archived investigation | **STRONG** |
+| [R-55 — Spectrum visual smoothing (repeat bug): paint-local second cadence (Aug); dead smoothing, `first_frame` never cleared after a cleanup (Nov, fixed and accepted)](Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md) | Fixed / accepted 7 Nov 2026 | **STRONG** |
 | [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](Historical_Bugs/R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md) | Archived investigation | Standard |
 | [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Order.md) | Archived investigation | **STRONG** |
 | [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](Historical_Bugs/R-58_Visualizer_Move_To_Custom_Preset_Authority.md) | Archived investigation | Standard |
@@ -98,6 +98,9 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-169 / GUI stall sampler frame cycle pinned a retiring display](Historical_Bugs/R-169_Stall_Sampler_Frame_Cycle_Pinned_Retiring_Display.md) | Source repair | **STRONG** |
 | [R-170 / Bubble speed changed with card shape; aspect modifiers faked a fix](Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md) | Source repair / operator eyes-on open | **STRONG** |
 | [R-171 / Capture TripleBuffer lost fresh audio every third callback; Spectrum stutter](Historical_Bugs/R-171_Capture_TripleBuffer_Slot_Index_Freshness_Spectrum_Stutter.md) | Source repair / operator eyes-on open | **STRONG** |
+| [R-172 / Offscreen Studio GL context freed before its render control at interpreter exit](Historical_Bugs/R-172_Offscreen_Studio_Context_Freed_Before_Render_Control_At_Exit.md) | Source repair (tests/tools only) | Standard |
+| [R-173 / Hidden display scene GL context freed before its render control; heap corrupted for the next test](Historical_Bugs/R-173_Hidden_Scene_Context_Freed_Before_Render_Control_Heap_Corruption.md) | Source repair (tests/tools only) | Standard |
+| [R-174 / Save Preset As wrote Bubble's values over Neon Lake's Preset 1](Historical_Bugs/R-174_Save_Preset_As_Wrote_Bubble_Values_Over_Neon_Lake_Preset.md) | Source repair (data loss) | **STRONG** |
 | [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](Historical_Bugs/A-01_Settings_Dialog_Placeholder_Investigation.md) | Archived investigation | Standard |
 | [U-02 — 2026-04-10 / 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](Historical_Bugs/U-02_Bubble_Blob_Signal_Contract.md) | Archived investigation | Standard |
 | [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md) | Archived investigation | **STRONG** |

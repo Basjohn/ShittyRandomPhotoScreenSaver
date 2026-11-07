@@ -445,62 +445,24 @@ These sit beside the Shape Tuner, which says *what* each source moves; these say
 - Camera Position (Existing: `SceneCameraPosition`), FOV, Auto Rotate with After and Speed. (The Projection
   control was removed with Orthographic on 5 Nov 2026; Perspective is the only projection.)
 
-#### Orthographic raster depth and continuous world coverage (historical; removed 5 Nov 2026)
-
-> Superseded: Orthographic and `orthographic_raster_projection`/`orthographic_depth_interval` were deleted on
-> 5 Nov 2026 (operator). The infinite-floor Perspective ray intersection below still applies; the Orthographic slab
-> analysis is kept only as history.
+#### Infinite floor and continuous world coverage
 
 The physical eye, grounded admission, focus, editor inverse and persistence remain owned by
 `core/settings/framed_camera.py` and the Waveform policy in `core/settings/waveform_ribbon_camera.py`.
-The infinite opaque ground uses `FLOOR_WORLD_GLSL`: intersect the same camera's pixel line with world y=0,
-then write its projected depth. Orthographic ground intersections may precede or exceed the fitted actor slab;
-ground-only depth clamping does not itself expand actor admission. Perspective requires a forward hit.
-The world material/reflection coordinates do not move with coverage. `tests/test_waveform_infinite_floor.py`
-protects complete coverage, actual world XZ, occlusion and the unchanged positive Perspective actor interval.
+The infinite opaque ground uses `FLOOR_WORLD_GLSL`: intersect the same camera's pixel line with world y=0 (a forward
+hit is required), then write its projected depth. The world material/reflection coordinates do not move with
+coverage. `tests/test_waveform_infinite_floor.py` protects complete coverage, actual world XZ, occlusion and the
+positive Perspective actor interval.
 
-**Depth-slab failure mechanism:** a continuous axial field and a fixed positive Orthographic actor slab cannot
-both cover every admitted yaw/aspect. At nonzero yaw, view depth varies with world x. An axial point can therefore
-remain inside the card's XY aperture while crossing the near plane; the sheets' differing z/twist makes those cuts
-stagger. A wider aperture exposes cuts that lie off-screen in the canonical view. More history or smoother endpoint
-continuation cannot repair this clip boundary.
-
-A bounded CPU transform diagnosis used the contiguous idle production packet, radius 12, yaw +35 degrees,
-near-level 0.5-degree downward pitch and aspect 4. The eye was `(6.882917, 2.6, 9.829825)` and Orthographic
-half-extents `(19.882251, 4.970563)`. Every history head was world x=16, but the continued centrelines produced:
-
-| Diagnostic sheet | Last world x inside aperture XY | Last world x admitted by positive near clip |
-| --- | ---: | ---: |
-| 0 | 24.0625 | 20.8250 |
-| 1 | 24.3875 | 20.1900 |
-| 2 | 24.6325 | 19.6825 |
-
-This is a frozen diagnostic example, not a curated-preset golden or a three-ribbon product limit. The missing
-2-5 world units are camera clipping, after the finite history's endpoint. Native acceptance remains open.
-
-**Camera-owned raster contract:** fit Waveform's Orthographic **raster depth slab** to the
-bounded world support admitted through its XY aperture. Preserve the true eye, world-to-view axes, projection XY,
-fixed geometry/phase/IDs and Perspective arithmetic. Derive signed near/far from that support instead of adding an
-arbitrary global negative near constant. Main/reflection, body/OIT/light, accents, ground depth and integrated fog
-must consume one coherent fitted depth convention. A projection-depth fit is distinct from moving the physical eye
-or installing a second camera.
-
-`scene_raster_support` derives conservative body/continuation bounds, living sparks' complete bounded flight, held
-strand reach/width and reflected-target pixel halos from the immutable packet/recipe/accent records.
-`orthographic_raster_projection` fits the XY-only axial span before considering depth, includes main and mirrored
-support, and adds a bounded numerical guard. Fitting from an already depth-clipped frustum would preserve the defect
-circularly. Render callers in Quick, Settings preview and the lab supply actual scene support through `physical_view`;
-camera-only transform queries use the declared body support. Captures consume the ordinary Quick path.
-`core/settings/framed_camera.py:orthographic_depth_interval` publishes the final interval for downstream fog admission.
-
-`tests/test_waveform_orthographic_raster.py` instruments the real strip vertex shader: the old positive slab cuts
-in-aperture vertices, while the fitted main/mirrored projections retain them without changing projection XY.
-Waveform Orthographic no longer promises to reject every point behind its finite reference plane; Perspective and
-non-opted modes keep their existing clip contract. Grounded eye/focus/editor/persistence, world coordinates, floor
-occlusion and retained vertex IDs remain independent regression bars.
+> History (removed with Orthographic, 5 Nov 2026, operator): at nonzero yaw a fixed positive Orthographic actor slab
+> clipped a continuous axial field inside the card's aperture, because view depth varies with world x (a diagnosis
+> at yaw +35 degrees lost 2-5 world units per sheet). It was repaired with a camera-owned fitted raster depth slab
+> (`orthographic_raster_projection`, `orthographic_depth_interval`, `tests/test_waveform_orthographic_raster.py`).
+> None of that code exists now. Lesson kept: a clip boundary cannot be repaired by more history or smoother endpoint
+> continuation; fit the projection to the admitted support instead.
 
 - [ ] **Awaiting Validation:** replay recorded wide/yawed views with living particles and held strands; inspect complete
-  body/accent coverage, both projections, resize stability and reflections without exposing endpoints or phase jumps.
+  body/accent coverage, resize stability and reflections without exposing endpoints or phase jumps.
 - [ ] **Awaiting Validation:** measure actual fitting/cohort-support and whole-frame cost under game60, then obtain
   operator judgement on attractive framing. A fitted slab does not establish musical response or artistic acceptance.
 

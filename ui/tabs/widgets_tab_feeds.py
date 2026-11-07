@@ -63,6 +63,7 @@ from ui.tabs.shared_styles import (
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.widgets.outlined_button import OutlinedButton
+from ui.tabs.widget_surface_material_row import add_surface_material_row
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -548,6 +549,8 @@ def _build_card(tab: "WidgetsTab", host: QVBoxLayout, widget_id: str, title: str
     show_background.setChecked(tab._default_bool(widget_id, "show_background"))
     show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(show_background)
+    material_row, _ = add_aligned_row(appearance_layout, "Surface Material:", label_width=_LABEL_WIDTH)
+    add_surface_material_row(tab, material_row, widget_id)
 
     row, _ = add_aligned_row(appearance_layout, "Background Opacity:", label_width=_LABEL_WIDTH)
     bg_opacity = put("bg_opacity", QSpinBox())

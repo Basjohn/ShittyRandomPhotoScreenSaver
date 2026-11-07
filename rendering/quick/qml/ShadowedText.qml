@@ -41,6 +41,33 @@ Item {
     // still sizes from the authored offset. Dark/hard shadows keep the full offset.
     readonly property real shadowOffsetScale: shadowSoft ? 0.5 : 1.0
 
+    // Card surface materials (Docs/Architecture/Card_Surface_Materials.md, 3.3). On a card
+    // whose material is active this run gets a local legibility plate (only the overlay its
+    // own colour needs, nothing where the surface already meets it) and drops the light-theme
+    // soft halo, which goes muddy over a colourful blur. Normal cards: nothing changes.
+    // A run drawn on its own fill (a header pill, a stats panel) opts out.
+    property bool surfacePlateEnabled: true
+    function _findSurfaceCard(item) {
+        for (var candidate = item; candidate; candidate = candidate.parent) {
+            if (candidate.surfaceMaterialActive !== undefined)
+                return candidate
+        }
+        return null
+    }
+    readonly property Item surfaceCard: _findSurfaceCard(shadowedText.parent)
+    readonly property bool onSurfaceMaterial: surfaceCard !== null && surfaceCard.surfaceMaterialActive
+    // This run's position in its card (the walk reads each ancestor's x/y, so a reflow that
+    // moves the run re-evaluates it; nothing runs per frame).
+    function _offsetInCard(card) {
+        var x = 0.0
+        var y = 0.0
+        for (var item = shadowedText; item && item !== card; item = item.parent) {
+            x += item.x
+            y += item.y
+        }
+        return Qt.point(x, y)
+    }
+
     clip: false
     implicitWidth: mainText.implicitWidth
     implicitHeight: mainText.implicitHeight
@@ -62,7 +89,9 @@ Item {
         x: shadowedText.shadowOffsetX * shadowedText.shadowOffsetScale
         y: shadowedText.shadowOffsetY * shadowedText.shadowOffsetScale
         visible: shadowedText.shadowEnabled
+            && !(shadowedText.shadowSoft && shadowedText.onSurfaceMaterial)
         layer.enabled: shadowedText.shadowEnabled && shadowedText.shadowSoft
+            && !shadowedText.onSurfaceMaterial
         layer.effect: shadowedText.shadowSoft ? softShadowEffect : null
         // Only the diffuse shadow capture is downsampled. Main glyphs retain
         // their native full-resolution text renderer and all logical geometry.
@@ -84,6 +113,49 @@ Item {
         minimumPointSize: shadowedText.minimumPointSize
         maximumLineCount: shadowedText.maximumLineCount
         z: 0
+    }
+
+    // A run on its own: one rounded box with one even tone (not a feathered pill per
+    // glyph). A run (nearly) as wide as its card's content is a line and its row spans
+    // the run's whole box; a shorter one gets a box around its glyphs. Runs that share
+    // a line or a panel with others opt out and that LegibilityRow holds the floor.
+    Loader {
+        id: legibilityPlate
+        objectName: "shadowedTextLegibilityPlate"
+        readonly property real padX: 4.0
+        readonly property real padY: 3.0
+        readonly property real glyphWidth: Math.min(shadowedText.width, mainText.contentWidth)
+        readonly property real glyphHeight: Math.min(shadowedText.height, mainText.contentHeight)
+        readonly property bool fullLine: shadowedText.surfaceCard !== null
+            && shadowedText.width >= 0.85 * (shadowedText.surfaceCard.width
+                - 2.0 * shadowedText.surfaceCard.padding)
+        active: shadowedText.onSurfaceMaterial && shadowedText.surfacePlateEnabled
+            && shadowedText.text.length > 0
+        visible: active
+        x: (fullLine ? 0.0
+                : shadowedText.horizontalAlignment === Text.AlignRight
+                    ? shadowedText.width - glyphWidth
+                    : shadowedText.horizontalAlignment === Text.AlignHCenter
+                        ? (shadowedText.width - glyphWidth) / 2.0 : 0.0) - padX
+        y: (shadowedText.verticalAlignment === Text.AlignBottom
+                ? shadowedText.height - glyphHeight
+                : shadowedText.verticalAlignment === Text.AlignVCenter
+                    ? (shadowedText.height - glyphHeight) / 2.0 : 0.0) - padY
+        width: (fullLine ? shadowedText.width : glyphWidth) + padX * 2.0
+        height: glyphHeight + padY * 2.0
+        z: -1
+        sourceComponent: TextLegibilityPlate {
+            card: shadowedText.surfaceCard
+            cardOrigin: {
+                const origin = shadowedText._offsetInCard(shadowedText.surfaceCard)
+                return Qt.point(origin.x + legibilityPlate.x, origin.y + legibilityPlate.y)
+            }
+            // A run faded by its own opacity (a muted state label) is that much
+            // closer to the surface; the row holds the floor for what is drawn.
+            runColor: Qt.rgba(shadowedText.color.r, shadowedText.color.g, shadowedText.color.b,
+                              shadowedText.color.a * shadowedText.opacity)
+            runPixelSize: mainText.fontInfo.pixelSize
+        }
     }
 
     Text {

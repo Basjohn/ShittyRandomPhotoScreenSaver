@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from ui.studio.adapter import RECORDED, REFERENCE, SYNTHETIC as SYNTHETIC_KIND, StudioFixture
+from ui.studio import clip_loop
 from ui.studio.exact_replay import ExactReplay
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -422,8 +423,12 @@ def extract(mode: EngineAnswerMode, source: str | Path, settings: Mapping[str, A
     if features is None:
         features, origin = load_source(source)
     first_us = features[0].timestamp_us
+    whole = features
     if seconds is not None and origin is None:
         features = [f for f in features if (f.timestamp_us - first_us) / 1e6 <= seconds]
+    loop_start = None
+    if origin is None:
+        features, loop_start = clip_loop.primed(whole, features, source)     # a loop: its end replayed first
     records: list[dict] = []
     with deterministic_clock() as clock:
         engine = mode.replay_engine_for(features, 32, synthetic=origin is not None)
@@ -454,12 +459,14 @@ def extract(mode: EngineAnswerMode, source: str | Path, settings: Mapping[str, A
             engine.force_stop()
     if not any(r["frame_sha256"] for r in records):
         raise RuntimeError(f"The source never published a {mode.mode_id} frame")
-    start = float(records[0]["now_ts"]) if origin is None else float(origin)
+    # A loop's lead-in ticks stay in the record, before the origin: the Studio's own history replays them first, so
+    # its state at the clip's start is the production replay's (and a running loop's), not a cold start.
+    start = float(records[0]["now_ts"] if loop_start is None else loop_start) if origin is None else float(origin)
     data = {"source": str(source), "origin": start, "duration": float(records[-1]["now_ts"] - start),
             "engine_values": mode.engine_values(settings), "steps": records}
     if len(recorder.arrays):
         data["arrays"] = recorder.arrays.payload()        # arrays the engine answered (by identity), as bytes
-    return data
+    return clip_loop.mark_loop(data, source, loop_start)
 
 
 def array_blob(data: Mapping[str, Any]) -> bytes | None:
@@ -476,9 +483,10 @@ def to_inputs(data: Mapping[str, Any], fixture) -> "RecordedInputs":
     from ui.studio.replay_engine import served_arrays
     steps = tuple(ServedTick(now=float(s["now_ts"]), playing=bool(s["playing"]), answers=s["answers"])
                   for s in data["steps"])
-    return RecordedInputs(fixture, steps, float(data["origin"]), source=str(data["source"]),
-                          engine_values=dict(data["engine_values"]),
-                          arrays=served_arrays(data.get("arrays"), array_blob(data)))
+    return RecordedInputs(clip_loop.looped_fixture(fixture, data), steps, float(data["origin"]),
+                          source=str(data["source"]), engine_values=dict(data["engine_values"]),
+                          arrays=served_arrays(data.get("arrays"), array_blob(data)),
+                          period=float(data.get("loop_period", 0.0)))
 
 
 def worker_main(mode: EngineAnswerMode, argv: list[str]) -> int:
@@ -515,8 +523,10 @@ class RecordedInputs:
     """Engine answers for one source under one set of engine-owned values (the mode's worker)."""
 
     def __init__(self, fixture: StudioFixture, steps: tuple[ServedTick, ...], origin: float, *, source: str,
-                 engine_values: Mapping[str, Any], arrays: tuple = ()) -> None:
+                 engine_values: Mapping[str, Any], arrays: tuple = (), period: float = 0.0) -> None:
         self.fixture = fixture
+        self.period = float(period)        # > 0: a seamless loop (``ui/studio/clip_loop.py``)
+        self._span = clip_loop.served_span(steps, origin) if self.period > 0.0 else 0
         self.arrays = tuple(arrays)        # the recorded arrays, one object per number (``served_arrays``)
         self._steps = steps
         self._origin = origin
@@ -531,6 +541,11 @@ class RecordedInputs:
             if step.now > limit:
                 return
             yield step
+
+    def shifted(self, tick: ServedTick, cycle: int) -> ServedTick:
+        """``tick`` ``cycle`` whole passes on (times moved, onset serials and the onset query's argument kept
+        increasing; the arrays are the pass's own, by identity)."""
+        return clip_loop.shift_served(tick, cycle * self.period, cycle * self._span)
 
     def levels(self, measure: Callable[[Mapping[str, Any]], float] | None = None) -> list[tuple[float, float]]:
         """(fixture time, mean engine bar) per tick, for the transport's overview; ``measure(answers)`` reads another
@@ -794,15 +809,22 @@ class EngineAnswerEvaluator(ExactReplay):
         if self._engine is None:
             self._engine = ReplayBeatEngine(32)
         controller = self.mode.configure(self._engine, self._effective(values, inputs), environment=self._environment)
+        # An offline replay is not a presentation: it never records into the live --frame-trace sink.
+        controller.logical_mailbox.detach_frame_trace()
         if self._extent is not None:
             controller.hydrate_committed_layout_metrics(self._extent, 0)
-        self._view = RecordedEngineAnswers(self._engine, inputs.arrays)
-        controller.engine = self._view
+        view = RecordedEngineAnswers(self._engine, inputs.arrays)
+        controller.engine = view
+        # Capture the pristine step state BEFORE committing the controller: if the capture fails, nothing is left
+        # half-started (7 Nov: a failed capture left ``_pristine`` None and every later frame raised "'NoneType'
+        # object has no attribute 'restore'"); the next evaluation starts again and reports the real error.
+        pristine = StepState(controller, keep=(self._engine, view, *inputs.arrays))
+        self._view = view
         self._controller = controller
         self._inputs = inputs
-        self._ticks = tuple(inputs.steps(self.fixture.duration))
+        self._ticks = clip_loop.unrolled_ticks(inputs, self.fixture.duration)
         self._signature = self._pristine_signature = self.mode.own_signature(values)
-        self._pristine = StepState(controller, keep=self._shared())
+        self._pristine = pristine
         self.replays += 1
 
     def _shared(self) -> tuple:
@@ -934,7 +956,7 @@ class EngineAnswerEvaluator(ExactReplay):
         evaluations (``converging``), showing the live-applied frame meanwhile."""
         del revision
         deadline = self._deadline()
-        time = max(0.0, min(float(time), self.fixture.duration))
+        time = self._history_time(time)
         inputs = self._choose_inputs(values, exact)
         signature = self.mode.own_signature(values)
         if self._controller is None or inputs is not self._inputs:

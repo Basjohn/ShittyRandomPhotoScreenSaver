@@ -390,6 +390,14 @@ A green static/source test is never a substitute for a required Qt/QML, real-GL 
 
 ## 3. Standard commands
 
+**Real display windows are opt-in (operator, 7 Nov 2026).** A test that reaches `QuickDisplayWindow.show_on_screen`
+(directly, or through production code) would put a real display window on the operator's monitors; the operator saw
+blue and black screens that "disrupt my entire display ecosystem". `tests/conftest.py` skips such a test, before the
+window shows, unless the run passes `--display-disruptive`. Pass it only when the change is directly about on-screen
+display presentation, and never in routine or milestone runs. Known on-screen tests:
+`tests/test_qtquick_runtime_reality.py` (two). Any other test that must show a window keeps it off screen
+(`tests/_invisible_windows.keep_off_screen`).
+
 ### 3.1 Maintained product gate
 
 ```powershell
@@ -602,12 +610,12 @@ Protect:
 - the current 3D modes cross the full Settings-to-runtime ownership seam: resolved Custom/preset state configures the retained Quick owner, source/BeatEngine projection and Technical destination from each mode's own namespace, and Visualizer Reset returns those namespaces to canonical defaults without erasing the separate user-authored Custom preset cache;
 - current 3D lazy Settings pages round-trip mode-owned/Technical values across reopen and through the real curated-preset ↔ Custom transaction without cross-mode leakage;
 - `themes/dark.qss` stays physically absent; narrow structural renderers plus `SettingsThemeSpec` own Settings styling and no fallback monolithic QSS may return;
-- Widget Theme semantics stay separate from Settings HWND material/backdrop ownership; while old material-bearing Widget Theme profile/SST/QSettings state remains supported, only `core.settings.widget_theme_input_compat` may name that retired runtime-card material schema, and current Widget Theme selection/runtime/file I/O remain colour-only v3.
+- Widget Theme semantics stay separate from Settings HWND material/backdrop ownership; while old material-bearing Widget Theme profile/SST/QSettings state remains supported, only `core.settings.widget_theme_input_compat` may name that retired runtime-card material schema, and current Widget Theme selection/runtime/file I/O stay schema v3 with only the optional `surface_material` (`tests/test_widget_theme_surface_material.py`).
 - Settings Theme authoring/runtime remains schema v6; supported schema-v5 `.srtheme` files may be named only by the explicit file-input compatibility owner, and tests must keep Foundry/current export assertions separate from historical v5 migration assertions. A v5 fixture must remain distinguishing and incomplete old themes must still fail whole rather than default-merge.
 - Canonical storage-path tests target current `core.settings.storage_paths` and engine startup only. The retired `%TEMP%` storage importer and Weather home-cache bridge have no surviving compatibility-test owners: tests must not reintroduce their historical filenames, startup probes, generic migration helpers or compatibility-only facades. Current cache/runtime tests own only canonical behavior.
 - Reddit helper runtime/install tests own only the current session-scoped helper plus canonical root `SRPSS_RedditHelper` scheduled task. Retired HKCU Run startup, historical task-name fallback and runtime `persistent=True` bootstrap have no surviving test owners and must not be reintroduced to satisfy stale tests.
 
-Primary coverage includes `test_defaults_schema_authority.py`, `test_storage_paths.py`, `test_settings_theme_input_compat.py`, `test_widget_theme_input_compat.py`, `test_widget_theme_no_material_contract.py`, Settings manager/persistence/binding/default parity, descriptor suites, Theme Foundry, default-settings-editor, bucket-state and Settings-theme lifetime tests.
+Primary coverage includes `test_defaults_schema_authority.py`, `test_storage_paths.py`, `test_settings_theme_input_compat.py`, `test_widget_theme_input_compat.py`, `test_widget_theme_no_material_contract.py` (the rejected Sep 2026 card-material mechanisms stay gone), `test_surface_materials.py` (card surface materials: resolution, compositor contract, dormancy and parking, GL state restore, Normal pixel identity, a material following a running transition, the shared surface shader block, a small text run that only its legibility plate brings to 4.5:1, the per-family Surface Material row round trip), Settings manager/persistence/binding/default parity, descriptor suites, Theme Foundry, default-settings-editor, bucket-state and Settings-theme lifetime tests.
 
 ### 6.4 Visualizers
 
@@ -629,7 +637,7 @@ Permanent shared-mode work must preserve source freshness, authored logical cade
 
 **Preserve the operator's real-music reactivity corpus and its test route.** The canonical operator-authored schema-2 recordings live **only on the local Windows checkout** at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings` (repository-relative `logs/visualizer_recordings/`): `balanced.jsonl`, `heavy1.jsonl`, `quiet_intro.jsonl`, and `quiet_intro2.jsonl`. This local path and these recordings are a standing part of reactivity evaluation; do **not** delete their mention when updating this guide, silently replace them with synthetic clips, or expect normal Godzips to contain them. `tools.visualizer_replay.record.recorded_clips()` selects the active takes and deliberately ignores archived/derived `*_vN` and `*_noevents` takes. Do not alter, re-record, delete or reseed operator recordings as a byproduct of tests.
 
-**The Visualizer Studios ship three short clips of that corpus.** `assets/production/studio_clips` (Rag Doll, Human, Growing Pains: 12 s windows of three native-PCM recordings, compact `.srclip` form owned by `widgets/spotify_visualizer/compact_clip.py`) are what every Studio lists first and defaults to, in a checkout and a frozen build alike; a checkout's own recordings follow them. Rebuild or verify them with `.venv\Scripts\python.exe tools\build_studio_clips.py [--check]` (provenance in `clips.json`). `tests/test_studio_shipped_clips.py` proves the size budget, that each clip replays through the production Waveform analysis to its source window's drive sequence (skipped where the recording is absent), the lookup with no recordings folder, the frozen clip worker (`main.py --studio-clip-worker`) and that Settings never reads the clips.
+**The Visualizer Studios ship three short clips of that corpus.** `assets/production/studio_clips` (Rag Doll, Human, Growing Pains: seamless 12.6-13.2 s loops of three native-PCM recordings, `tests/test_studio_clip_loop.py`, compact `.srclip` form owned by `widgets/spotify_visualizer/compact_clip.py`) are what every Studio lists first and defaults to, in a checkout and a frozen build alike; a checkout's own recordings follow them. Rebuild or verify them with `.venv\Scripts\python.exe tools\build_studio_clips.py [--check]` (provenance in `clips.json`). `tests/test_studio_shipped_clips.py` proves the size budget, that each clip replays through the production Waveform analysis to its source window's drive sequence (skipped where the recording is absent), the lookup with no recordings folder, the frozen clip worker (`main.py --studio-clip-worker`) and that Settings never reads the clips.
 
 **Local-agent replay route (run from the operator's Windows checkout, not this archive):**
 

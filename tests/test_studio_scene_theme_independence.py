@@ -83,8 +83,25 @@ def _named(root, name):
     return found
 
 
-def _scene_pixels(qt_app, mode, theme):
-    """The viewport slot's pixels with every chrome item drawn over the scene hidden."""
+def _settle(controller, surface, *, analysis: bool) -> None:
+    """Pump until the evaluator shows the exact frame: no background analysis (when ``analysis``) and no budgeted
+    replay still converging. An engine-answer mode reuses the process's analysed answers (``analysed_cache``), so a
+    session after another one starts straight on an exact replay that a frame budget spreads over frames, the frame
+    shown before staying meanwhile: a capture taken a few frames after a seek showed the pre-seek (silent) frame."""
+    import time
+    evaluator = controller.evaluator
+    for _ in range(3000):
+        surface.pump()
+        if (controller.bridge.viewportStatus != "preparing"
+                and not (analysis and getattr(evaluator, "analysing", False))
+                and not getattr(evaluator, "converging", False)):
+            return
+        time.sleep(0.005)
+
+
+def _scene_pixels(qt_app, mode, theme, *, settle: bool = True):
+    """The viewport slot's pixels with every chrome item drawn over the scene hidden. ``settle=False`` is the former
+    capture (waiting only for the viewport to stop preparing)."""
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     from ui.settings_theme_runtime import get_active_settings_theme, set_active_settings_theme
     from ui.studio.controller import StudioController
@@ -106,13 +123,18 @@ def _scene_pixels(qt_app, mode, theme):
     try:
         assert controller.open()
         surface = surfaces[0]
-        for _ in range(400):
-            surface.pump()
-            if controller.bridge.viewportStatus != "preparing":
-                break
+        if settle:
+            _settle(controller, surface, analysis=True)
+        else:
+            for _ in range(400):
+                surface.pump()
+                if controller.bridge.viewportStatus != "preparing":
+                    break
         assert controller.bridge.viewportStatus == "live", controller.bridge.viewportError
         controller.seek(2.0)
         surface.pump(2)
+        if settle:
+            _settle(controller, surface, analysis=False)
         (frame,) = _named(surface.host.root, "viewportFrame")
         slot, viewport = surface.host.slot, surface.viewport
         for child in frame.childItems():                 # toolbars and the border drawn over the scene
@@ -150,3 +172,26 @@ def test_without_the_scene_backing_the_theme_leaks_into_the_scene_negative_contr
     for mode in ("bubble", "spectrum"):
         largest, share = msaa_render_difference(_scene_pixels(qt_app, mode, dark), _scene_pixels(qt_app, mode, light))
         assert not (largest <= MSAA_NOISE_LEVELS and share <= MSAA_NOISE_SHARE), (mode, largest, share)
+
+
+# ----------------------------- the capture is the same whatever an earlier session left in the analysed-answer cache
+def _warm_engine_answers(qt_app, mode, theme):
+    """A session that waited for its analysis leaves the answers in the process cache (as any earlier test may)."""
+    from ui.studio.engine_answers import analysed_cache
+    _scene_pixels(qt_app, mode, theme)
+    assert analysed_cache(mode), "the warming session left no analysed answers"
+
+
+def test_a_warm_analysed_answer_cache_still_captures_the_scene(qt_app, dark_and_light):
+    """The 6 Nov combined-run failure: any earlier Spectrum session that waited for its analysis made this capture
+    black. The capture now waits for the exact frame."""
+    dark, _light = dark_and_light
+    _warm_engine_answers(qt_app, "spectrum", dark)
+    assert _scene_pixels(qt_app, "spectrum", dark)[..., :3].std() > 2.0
+
+
+def test_the_former_capture_on_a_warm_cache_shows_the_pre_seek_frame_negative_control(qt_app, dark_and_light):
+    dark, _light = dark_and_light
+    _warm_engine_answers(qt_app, "spectrum", dark)
+    with pytest.raises(AssertionError, match="the scene drew nothing"):
+        _scene_pixels(qt_app, "spectrum", dark, settle=False)

@@ -90,12 +90,19 @@ def test_shipped_clip_replays_the_drive_sequence_of_its_source_window(entry, qt_
     source = RECORDINGS / entry["source"]
     if not source.is_file():
         pytest.skip(f"source recording {entry['source']} is not on this machine (logs never ship)")
-    from tools.build_studio_clips import window_frames
+    from tools.build_studio_clips import rebuild_frames, sha256_file
     from ui.studio.waveform_recorded_inputs import extract
+    from widgets.spotify_visualizer.compact_clip import encode, read_header
     from widgets.spotify_visualizer.feature_frame import FeatureClip
-    frames = window_frames(source, *entry["window_s"])
-    original = FeatureClip(name=entry["id"], frames=frames)
-    assert original.sha256() == entry["window_sha256"]                     # the window the clip was built from
+    # A shipped clip is a seamless loop of its recording (loop window, lead-in, baked crossfade): the manifest names
+    # all of it, and rebuilding from the recording reproduces the shipped clip exactly.
+    assert sha256_file(source) == entry["source_sha256"]
+    frames = rebuild_frames(source, entry["loop"])
+    original = FeatureClip(name=entry["id"], frames=tuple(frames))
+    assert original.sha256() == entry["window_sha256"]                     # the loop the clip was built from
+    header = read_header(CLIPS / entry["file"])
+    assert header["provenance"]["window_sha256"] == entry["window_sha256"]
+    assert encode(frames, name=entry["id"], provenance=header["provenance"]) == (CLIPS / entry["file"]).read_bytes()
     reference = tmp_path / f"{entry['id']}.jsonl"
     reference.write_bytes(original.to_jsonl_bytes())                      # float32 PCM, every frame as recorded
     values = _values()

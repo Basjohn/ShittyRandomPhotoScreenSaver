@@ -1383,6 +1383,13 @@ class DisplayManager(QObject):
         unit.runtime.scene_controller.apply_context_menu_palette_style(
             project_quick_context_menu_palette()
         )
+        # The Context Menu's surface material is the Widget Theme baseline (it has no
+        # per-family layer); Normal creates nothing (Card_Surface_Materials.md).
+        from rendering.quick.widgets.surface_material import resolve_global_surface_material
+
+        unit.runtime.scene_controller.apply_context_menu_surface_material(
+            resolve_global_surface_material(self._widgets_config_snapshot)
+        )
 
     def _quick_context_transition_state(
         self,

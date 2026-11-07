@@ -60,6 +60,7 @@ from ui.tabs.shared_styles import (
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.widgets.outlined_button import OutlinedButton
+from ui.tabs.widget_surface_material_row import add_surface_material_row
 from rendering.quick.widgets.achievement_pulse_layout import (
     ACHIEVEMENT_CAPSULE_BORDER_RGBA,
     ACHIEVEMENT_CAPSULE_FILL_RGBA,
@@ -1024,6 +1025,7 @@ def _build_card_group(
         "appearance",
         "Appearance",
     )
+    add_surface_material_row(tab, _aligned_row(appearance_layout, "Surface Material:"), key)
     if key in {"achievement_pulse", "abandonment_issues"}:
         content_toggle, content_body, content_layout = _build_card_subbucket(
             tab,

@@ -35,6 +35,7 @@ and must not be copied per mode.
 | `ui/studio/presence.py` | `WindowPresence`: conceal/reveal the *same* Settings dialog without ending its `QDialog.exec()` loop (native `SW_HIDE` on Windows; zero opacity plus off-screen move elsewhere). |
 | `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
 | `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve, Oscilloscope), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process on `ExactReplay`). |
+| `ui/studio/clip_loop.py` | Seamless Studio clips: the loop period a compact clip names, `Anchor` (the transport's unrolled time -> the history an evaluator replays; a rewind re-anchors to the pass the instant is in), `Cycles` (the endless tick sequence of a looped input: later passes shifted whole periods, onset serials kept increasing), the per-family tick shifts and `primed` (an analysis worker replays the loop's last 2 s before the clip). See §3 "Studio clips". |
 | `ui/studio/exact_replay.py` | `ExactReplay`, the shared exact-history mechanism of the replaying evaluators (the engine-answer modes and Waveform): checkpoints per values signature, rewinds, the frame budget (`converging`) and the live-gesture path. An evaluator supplies only its step, its state capture and its restyle. The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
 | `ui/studio/brush.py` | The shared heightfield brush instrument: `BrushTarget` (the record's key, `pick` and `footprint` through the mode's production camera, from `adapter.brush_target()` when `capabilities().brush`) and `StudioBrush` (tool settings, held pointer points, the stroke; flushed at frame start). Strokes are painted by `rendering/gl_programs/heightfield_brush.py`. |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
@@ -104,6 +105,55 @@ is optional and defaults to "not offered":
   elsewhere a cancel still ends it but a parent crash does not. Every worker exits non-zero at once on a missing or
   unreadable clip. The worker's temporary folder (`worker_tag`) names the starting process, so a leak is traceable. Every
   Studio lists the shipped clips (`assets/production/studio_clips`) first, then a checkout's own recordings.
+- **Studio clips are seamless loops (6 Nov).** The three shipped clips are not 12 s windows that restart: each is a
+  loop (12.6-13.2 s, 0.86-1.01 MB, 2.74 MB in all) whose first frame follows its last as the recording's own next
+  moment, and the Studio plays on through the wrap instead of restarting. There is no audio playback in the Studio: a
+  clip is the capture stream and lanes the analysis and every mode's logic are fed, so "the sound jumps" was the
+  analysis input and the preview's simulation state jumping at `t = 0`. Three parts, each owned once.
+  *Loop points* (`tools/studio_clip_loop.py`, run by `tools/build_studio_clips.py`): the start and the period are
+  searched inside a span the clip is for (period 12-16 s) for the pair whose lead-ins match best (onset-envelope
+  correlation, level, log-spectrum, and, where the recording has a reliable groove, the beat grid's phase, 15 ms at most); a
+  steady groove gives a whole number of beats (Human 12.80 s = 32 beats of 0.400 s, Growing Pains 12.63 s = 20 of
+  0.631 s). *Baked seam*: the last second is an equal-power crossfade (`cos`/`sin`, level-matched to the equal-power
+  target so alike sources do not bump 3 dB) of the source just before the end into the source just before the start,
+  so the loop's next sample is the source's own next sample; the capture stream is periodic and every frame's history
+  (the first frames' too) is read from it; the lanes are mixed with the same weights and the discrete onsets follow the
+  louder source. The loop (frames, period, crossfade, source times, what the bake measured) is in the clip's header
+  and `clips.json` (`loop`). *Played on through the wrap* (`ui/studio/clip_loop.py`): the transport counts passes
+  (`cycles`, `unrolled`); the controller hands a loop fixture (`StudioFixture.loop`) the unrolled time
+  (`StudioTransport.evaluation_time`); every evaluator (Bubble, Sphere, Extruded Bubble, Waveform, the engine-answer
+  modes) steps its production logic on over the clip's ticks again, shifted whole periods (`shifted` on each
+  `RecordedInputs`: times, onset serials and, for recorded engine answers, the onset query's `after_serial`
+  argument), so no state resets. A rewind to the start (an edit, a seek, new answers) re-anchors to the start of
+  the pass the instant is in, so it replays what it always replayed, never every pass played; `ExactReplay` drops
+  checkpoints older than two passes and returns the re-anchored time, so a budgeted replay converges across a wrap
+  exactly as before. *Primed workers*: a worker replays the loop's last 2 s (`PREROLL_S`) before the clip and the
+  record keeps those ticks before the clip's origin (`Cycles` plays them once, as the first pass's head), so the Studio's
+  history at the clip's start is the production replay's and a running loop's, and the engine's lanes at the start are
+  a running loop's, not a cold start (measured: without it the first second
+  of Bubble's overall lane sat at 0.008-0.014 against 0.33-0.45 steady; with 1 s of lead-in the lanes equal the
+  converged third pass of an unbroken run, 2 s is the margin, +0.4 s of worker time on ~3.3 s, about +12%). A native
+  recording, or a clip cut short by `seconds`, is not a loop and behaves as before. Why not 30 s clips: the best
+  seam a 22-30 s loop offers gains at most 0.05 of onset correlation over a 12-16 s one on the same recordings (Human
+  .87 -> .92, Growing Pains .66 -> .68; Rag Doll gets worse, .47 -> .34), while size and a re-analysis grow with the
+  length. Measured (`tools/studio_clip_length_cost.py`, 6 Nov, other agents' load on the machine, one run each): a 30 s
+  window is 1.99-2.42 MB against the loops' 0.86-1.01 MB, and a worker takes 1.9-2.2x as long (the loops' time includes
+  the 2 s lead-in): Bubble 6.5-9.1 s -> 12.9-13.8 s, Extruded Bubble 3.7-4.2 -> 8.0-8.8 s, Waveform 6.0-6.4 -> 11.8-12.7 s,
+  Sphere 2.6-2.8 -> 5.3-5.7 s, Spectrum 2.9-3.1 -> 5.9-6.1 s.
+  Seam, measured (`.artifacts/evidence/studio_clip_loop_20261106/`): the loop's last 5 ms are the source's own to -37 / -46 /
+  -57 dB (Human / Growing Pains / Rag Doll), the sample step across the join equals the source's own step, the crossfade
+  holds the equal-power level within 0.23 dB, the 20 ms RMS changes 0.1-0.23 dB across the seam (the music's own 95th
+  percentile is 4-8 dB), no spectral-flux burst follows it, and the beat grid steps -25 / -47 / -85 ms against the
+  loops' own 95th percentile of 65 / 302 / 94 ms (Rag Doll has no steady beat; Growing Pains' triple hit wanders). The
+  two sources the crossfade blends sit 0.6 ms (Growing Pains), 12 ms (Rag Doll) and 33 ms (Human, a weak groove) apart on
+  the beat grid. The picture: at the wrap the frame-to-frame step of each mode's state (Growing Pains) is 0.06-1.8 against
+  ordinary 95th percentiles of 0.09-71, and the old restart at zero is 21-299 times larger for eight of the nine
+  recorded-input modes (Bubble 29x, Sphere 73x, Extruded Bubble 299x, Waveform 48x, Spectrum 225x, Extruded Spectrum
+  229x, DevCurve 21x, Neon Lake 167x). Oscilloscope's carried beam state (afterglow, ghosts, flare, drive, tone) settles
+  inside the lead-in, so a restart no longer moves it (its jump was the trace, which the baked audio now keeps
+  continuous); DevCurve's travelling highlights respawn when their own travel ends and are left out of the step.
+  Evidence: `tools/studio_clip_loop_report.py` (audio seam), `tools/studio_clip_loop_wrap.py` (the picture at the
+  wrap for all nine Studios with recorded inputs), `tests/test_studio_clip_loop.py`.
 - **Recorded engine answers (engine-processed modes).** A mode whose step consumes the engine's *own processing*
   (the Spectrum family, Spectrum, Extruded Spectrum and Neon Lake: `consume_engine_bars` ticks the engine and reads its
   smoothed, shape-processed bars, all on the process clock; Neon Lake's capture also reads the transient bus's onsets,
@@ -284,6 +334,13 @@ no longer build the settings model (evaluation per frame 29.7 -> 7.3 ms median o
 release replay spreads over frames within the budget (one 222 ms evaluation -> about 8.4 ms per frame); evidence
 `.artifacts/evidence/studio_followups/drag_profile/`.
 
+A drag holds until release. Drag instruments that sit in a scrolling panel set `preventStealing: true`: the value
+slider, the colour picker's field and hue bar, gradient nodes, and the response curve in the sideways-scrolling
+dock. Without it, a vertical wobble past the drag threshold handed the press to the panel's scroll view, and the
+slider let go mid-drag (operator, 6 Nov: "sliders snap out of being dragged in mid motion"; it reproduced on every
+mode at the first wobble). `tests/test_studio_drag_coalescing.py` drags every mode with a wobble, with a negative
+control.
+
 ## 4. Settings link and the restore guarantee
 
 - **Entry.** Every visualizer mode's Settings body is `build_studio_owned_mode_ui` (`ui/tabs/media/spec_mode_builder.py`,
@@ -305,8 +362,27 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
   live; negative controls drop a property per category; every authored heightfield is the brush's target, and a brush
   stroke saves once, reloads and undoes exactly. Before the flip it also proved each Studio against the body
   users had (every row the body collected and every row its spec and hand-written conditions hid; commit `db7468ab`).
-- **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked, then
-  runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. The mode's shared families that
+- **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked. On
+  Custom it then runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. On a curated
+  preset there is **no automatic switch to Custom** (operator, 6 Nov). The edit is held as a *draft*:
+  - It lives in Settings' widgets only, with nothing saved and the preset still selected.
+  - The session reads it back as the canonical save would store it (`_draft_config`: the tab's own collect and
+    merge, read as Custom, never written).
+  - It is settled when the user saves explicitly (Save To <Preset>) or when the session would leave that preset.
+    The user's own closes (Close button, Esc, title-bar close, window X / Alt+F4), a preset switch and a mode
+    switch show Settings' prompt **Unsaved Preset Changes**, with four choices:
+    - **Overwrite <Preset>** writes the changed keys into its file, the same patch as Save To. It is left out when
+      the file is read-only.
+    - **Save As New Preset** runs Settings' own Save Preset As file dialog into the presets folder; the new preset
+      is then selected.
+    - **Place In Custom** does what every edit used to do.
+    - **Discard** reloads the preset and writes nothing.
+  - Closing the prompt without a choice keeps the Studio open.
+  - Edits returned to the preset's own values are dropped without asking.
+  - Exits nobody can answer (application quit, Settings destroyed, a lost window, a failure, a programmatic
+    `close()`) place the draft in Custom, so nothing is lost.
+
+  The mode's shared families that
   Settings keeps outside the mode body (bar Fill / Border / Border Opacity, the per-mode rainbow toggle and speed)
   are loaded into their owning Settings widgets first, so the tab's own save collects them. The Studio never writes
   the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority.
@@ -314,10 +390,10 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
   preset), Save Preset As… (on Custom, Settings' own file dialog) and, for authoring the curated presets themselves,
   **Save To <Preset>**. This replaced Settings' Edit Preset (the preset file opened in the OS editor), deleted on
   6 Nov 2026 once every visualizer mode had a Studio.
-- **Save To <Preset>.** The store remembers the curated preset this session's Custom values came from (the preset the
-  Studio opened on, a Studio edit made on a curated preset, which moves it into Custom, or Move To Custom from it;
-  choosing another curated preset starts afresh, returning to Custom keeps it) and the keys edited since. On Custom
-  with such an origin the menu offers Save To <that preset>: it writes only the edited keys whose value differs from
+- **Save To <Preset>.** The store remembers the curated preset this session's edits came from: the preset the Studio
+  opened on, the preset a held draft edits, or the preset Move To Custom was used from. Choosing another curated
+  preset starts afresh; returning to Custom keeps it. The store also remembers the keys edited since. While a draft is
+  held, or on Custom with such an origin, the menu offers Save To <that preset>. It writes only the edited keys whose value differs from
   what selecting that preset resolves (its own settings over the canonical defaults), plus the starting view when the
   view was edited and Include Camera View is on. It always asks first (Settings' `StyledPopup`; Cancel writes
   nothing), then patches the preset's own file through `core.settings.visualizer_preset_file.save_changes_to_preset`:
@@ -325,7 +401,8 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
   order and value, a new key goes in by the repair's ordering rule, inert keys and metadata stay), the file keeps its
   indentation, escaping, line endings and final newline, the result must load the written values, and
   `reload_presets` follows. A read-only location (an installed build) gives a clear message pointing to Save Preset
-  As… and writes nothing. Custom stays selected with its values; the release mirror is not refreshed (an explicit
+  As… and writes nothing. The slot that was selected stays selected (Custom with its values, or the preset, which
+  now holds the edits and asks nothing more at close); the release mirror is not refreshed (an explicit
   release step). Opened on Custom, the origin is unknown and only Save Preset As… is offered.
 - **Mode switcher.** Switching modes selects that mode's Settings page (as its pill would) and hands the Studio a new
   canonical store; only enabled modes with an adapter are offered.
@@ -344,6 +421,20 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
   unclickable" stall: saves logged for 25 s after a clean reveal). `reveal` therefore follows the native show with
   `RedrawWindow(RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW)`, which makes Windows send the missing `WM_PAINT` so Qt
   exposes and repaints; the reveal log line carries `exposed=`. `tests/test_studio_exit_repaint.py` guards it.
+- **Post-close input record (one-shot).** The 6 Nov 21:56 report was a UI frozen after closing a Studio that
+  recovered by itself after ~18 s, with the process idle and Settings revealed `exposed=True`. Qt's own state
+  cannot reproduce it: an offscreen-QPA probe with a real application-modal `StudioWindowSurface`, closed by a click
+  on its Close button, leaves Settings active, unblocked and taking clicks. So each reveal arms
+  `presence.RevealWatch`, which logs `[STUDIO] after reveal +N ms ...` lines:
+  - Qt's and Windows' window state (modal, focus, active, mouse grab, foreground, capture, `WS_DISABLED`) at the
+    reveal and when the Studio window is destroyed;
+  - up to 12 native activation, button and key messages, with the window Windows sent each one to;
+  - the first input Qt delivers to Settings, and how long after the reveal it arrived.
+
+  It removes its filters at that first input, when Settings is destroyed, or 60 s after the reveal, so nothing runs
+  at rest. Its Qt filter sits on Settings' own window, never the application. An application-wide Python filter is
+  handed every Qt Quick item an event visits, and wrapping items PySide had not wrapped yet deleted a live Studio
+  item in a later test (7 Nov).
 - **Never hide the window from Python.** PySide holds the GIL through `QWindow.hide()`, and Qt's threaded render
   loop waits inside it for the render thread, which runs the viewport's Python (render-node release,
   `sceneGraphInvalidated`) when the non-persistent scene graph is invalidated: calling it from Python deadlocked the
@@ -360,6 +451,13 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
 `tools/spectrum_studio_replay_budget.py` measures the Spectrum Studio's GUI-thread evaluation cost frame by frame
 after mode-owned commits, undo, seeks and an engine-owned landing at the end of the longest shipped clip, checking
 every landed frame against the production replay (`--budget 0` measures the former one-evaluation replay).
+`tools/studio_clip_loop.py` searches, bakes and measures a clip's loop (`tools/build_studio_clips.py` builds the shipped
+clips with it; `--check` verifies them); `tools/studio_clip_loop_report.py` measures the seam of the shipped clips (sample
+step, RMS, spectral flux, beat grid, against a hard cut of the same loop and the former clips);
+`tools/studio_clip_loop_wrap.py` drives every Studio's evaluator through a clip's wrap on a fake transport clock and
+measures the frame-to-frame step of the mode's state across it against the steps around it and against the former
+restart at zero (no window, no renderer); `tools/studio_clip_length_cost.py` measures what a longer clip costs (size and
+each worker's time).
 `tools/waveform_studio_capture.py` renders any registered Studio (`--mode`, Waveform by default) through the hidden
 `OffscreenStudioSurface` against an in-memory store (nothing is saved), writing one PNG per workspace plus frame and
 evaluation timings. It never shows a window. Command examples live in `Docs/Reference/Harness_Index.md`.

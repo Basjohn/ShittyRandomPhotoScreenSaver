@@ -317,3 +317,143 @@ def test_the_reveal_log_names_the_exposure(probe, caplog):
         _conceal_reveal(window)
     revealed = [r.getMessage() for r in caplog.records if "Settings revealed" in r.getMessage()]
     assert revealed and "exposed=True" in revealed[-1]
+
+
+# ------------------------------------------- the one-shot record of input after a reveal (6 Nov 21:56 post-close freeze)
+def test_a_studio_exit_arms_a_one_shot_input_record_that_ends_with_the_first_input_to_settings(probe, caplog):
+    """The field log after a close names the Qt/native window state at the reveal and when the Studio window is
+    destroyed, then the first input Qt delivers to Settings and its delay; after that nothing is installed."""
+    import logging
+    from PySide6.QtTest import QTest
+    window = probe(acrylic=True)
+    with caplog.at_level(logging.INFO):
+        controller, surface = _studio_session(window)
+        _leave(controller, surface, "close button")
+        watch = controller.presence.watch
+        assert watch is not None and watch.active
+        centre = window.body.mapTo(window.dialog, window.body.rect().center())
+        QTest.mouseClick(window.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
+        assert watch.active                                   # armed until Settings paints after that input
+        window.dialog.update()
+        _pump()
+        assert not watch.active
+        settled = len(watch.records)
+        QTest.mouseClick(window.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
+        window.dialog.update()
+        _pump()
+        assert len(watch.records) == settled                              # disarmed: nothing runs at rest
+    lines = [r.getMessage() for r in caplog.records if "after reveal" in r.getMessage()]
+    assert lines[0].split(" ms ", 1)[1].startswith("armed qt_exposed=")
+    assert any("studio window destroyed" in line for line in lines)
+    assert any("first input delivered to Settings: MouseButtonPress" in line for line in lines)
+    assert "first Paint after the first input" in lines[-1]
+    assert "native_disabled=False" in lines[0] and "native_visible=True" in lines[0]
+
+
+def test_the_first_input_line_reports_whether_settings_repainted_since_the_reveal(probe, caplog):
+    """The 6 Nov re-expose fix was proven only on a bare window, and the freeze came back that night: the record must
+    say whether Settings repainted between the reveal and the first input, so the field log tells "input reached a
+    Settings that never repainted" apart from "input never reached Settings"."""
+    import logging
+    from PySide6.QtTest import QTest
+    window = probe(acrylic=True)
+    with caplog.at_level(logging.INFO):
+        controller, surface = _studio_session(window)
+        _leave(controller, surface, "close button")
+        watch = controller.presence.watch
+        window.dialog.update()
+        _pump()
+        centre = window.body.mapTo(window.dialog, window.body.rect().center())
+        QTest.mouseClick(window.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
+        watch.disarm()
+    lines = [r.getMessage() for r in caplog.records if "after reveal" in r.getMessage()]
+    final = next(line for line in lines if "first input delivered to Settings" in line)
+    assert "first input delivered to Settings: MouseButtonPress (repaint since reveal: " in final
+    assert "repaint since reveal: none" not in final, final
+    assert any("first UpdateRequest on Settings since the reveal" in line or "first Paint on Settings since the reveal"
+               in line for line in lines)
+
+
+def test_a_watch_that_saw_no_repaint_reports_none_negative_control(probe, caplog):
+    """Input with no repaint since the arm is reported as such (the freeze signature), not silently."""
+    import logging
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QMouseEvent
+    from ui.studio.presence import RevealWatch
+    window = probe()
+    with caplog.at_level(logging.INFO):
+        watch = RevealWatch(window.dialog)
+        press = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(5, 5), QPointF(5, 5), Qt.MouseButton.LeftButton,
+                            Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        watch._qt_input(window.dialog, press)
+    assert watch.active                                       # still waiting for Settings to paint after the input
+    assert "repaint since reveal: none" in watch.records[-1]
+    watch.disarm()
+
+
+def _reveal_without_pumping(window):
+    """Conceal natively, then reveal; the Paint count is read before any event processing after the reveal."""
+    from ui.studio.presence import WindowPresence
+    presence = WindowPresence(window.dialog)
+    presence.conceal()
+    _pump()
+    presence.reveal()
+    painted = presence.watch._surface_counts.get("Paint", 0)
+    presence.watch.disarm()
+    return painted
+
+
+def test_a_reveal_paints_settings_before_it_returns(probe):
+    """7 Nov field logs: after a native show Settings kept its pre-Studio picture until a click (no Expose,
+    UpdateRequest or Paint for 853 ms and 1577 ms, even with an asynchronous ``update()`` requested), and a late repaint
+    swapped the stale picture for the current one. The reveal now repaints synchronously: Settings has painted the
+    current state by the time ``reveal()`` returns, with no event loop in between."""
+    window = probe(acrylic=True)
+    assert _reveal_without_pumping(window) >= 1
+
+
+def test_a_reveal_without_the_synchronous_repaint_paints_nothing_by_return_negative_control(probe, monkeypatch):
+    """Without the repaint (or with only an asynchronous ``update()``) nothing has painted when the reveal returns."""
+    from ui.studio import presence as presence_module
+    window = probe(acrylic=True)
+    monkeypatch.setattr(presence_module.WindowPresence, "repaint_revealed",
+                        lambda self: self._widget.update())
+    assert _reveal_without_pumping(window) == 0
+
+
+def test_input_elsewhere_does_not_end_the_record_negative_control(probe):
+    """Only input that reaches Settings ends the record: a click on another window leaves it armed."""
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QWidget
+    window = probe()
+    controller, surface = _studio_session(window)
+    _leave(controller, surface, "close()")
+    watch = controller.presence.watch
+    other = QWidget()                                                  # never shown
+    QTest.mouseClick(other, Qt.MouseButton.LeftButton)
+    assert watch.active
+    watch.disarm()
+    assert not watch.active
+    other.deleteLater()
+
+
+def test_the_record_never_filters_another_windows_events(probe, monkeypatch):
+    """The Qt filter sits on Settings' own window, never the application: an application-wide Python filter is handed
+    every Qt Quick item an event visits, and wrapping items PySide had not wrapped yet deleted a live Studio item in a
+    later test (7 Nov: test_waveform_studio_framing after test_waveform_studio_editors)."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QWindow
+    from PySide6.QtTest import QTest
+    window = probe()
+    controller, surface = _studio_session(window)
+    _leave(controller, surface, "close()")
+    watch = controller.presence.watch
+    seen = []
+    original = watch._guarded
+    monkeypatch.setattr(watch, "_guarded", lambda action, *args: (seen.append(action.__name__),
+                                                                   original(action, *args)))
+    other = QWindow()                                                  # never shown
+    QTest.mouseClick(other, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(5, 5))
+    assert [name for name in seen if name == "_qt_input"] == [] and watch.active
+    watch.disarm()
+    other.deleteLater()

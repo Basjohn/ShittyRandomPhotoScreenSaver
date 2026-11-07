@@ -18,18 +18,33 @@ class StudioTransport:
         self.playing = False
         self.loop = True
         self.stopped = False
+        self.cycles = 0                    # passes completed since the last seek / restart (a looping run)
         self._last_wall: float | None = None
         self.frames_advanced = 0
 
     def set_duration(self, duration: float) -> None:
         self.duration = max(0.0, float(duration))
         self.time = min(self.time, self.duration)
+        self.cycles = 0
+
+    @property
+    def unrolled(self) -> float:
+        """Time on the unbroken timeline: the passes played since the last seek plus the time into this one. An
+        evaluator of a seamless loop carries its state across the wrap by playing on in this time instead of
+        restarting at zero (``ui/studio/clip_loop.py``)."""
+        return self.cycles * self.duration + self.time
+
+    def evaluation_time(self, loop: bool) -> float:
+        """The time an evaluator is asked for: the time into the clip, or, for a seamless loop (``loop``), the unrolled
+        time so the evaluator plays on through the wrap (``ui/studio/clip_loop.py``)."""
+        return self.unrolled if loop else self.time
 
     def play(self) -> None:
         if self.stopped:
             return
         if self.duration > 0.0 and self.time >= self.duration:
             self.time = 0.0
+            self.cycles = 0
         self.playing = True
         self._last_wall = None
 
@@ -39,6 +54,7 @@ class StudioTransport:
 
     def seek(self, seconds: float) -> None:
         self.time = min(self.duration, max(0.0, float(seconds)))
+        self.cycles = 0
         self._last_wall = None
 
     def stop(self) -> None:
@@ -61,6 +77,7 @@ class StudioTransport:
         moved = self.time + step
         if self.duration > 0.0 and moved >= self.duration:
             if self.loop:
+                self.cycles += int(moved // self.duration)
                 moved = moved % self.duration
             else:
                 moved = self.duration
