@@ -25,34 +25,10 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
 `Docs/Architecture/Settings_Bucket_Persistence_Contract.md` ("Tabs and pills: one registry"). AC-02 (the host-neutral
 Visualizer binding with Media docking as the declared `docked_to` placement policy, A-02) and AC-09 (one card border
 width resolver, A-09) landed on 7 Nov; their contracts are in `Spec.md` ("Visualizer display routing", "Geometry /
-CUSTOM", "Runtime Widget Themes") and the Visualizer change checklist §9A.
-
-- [ ] **AC-03 An application-service tier above display generations** (A-01). Severity high (for SMP), reward high,
-  effort L. **Confirmed:** `engine/engine_handlers.py:355` `engine.stop(exit_app=False, reason="settings")` owns the
-  complete teardown, `:509` `dialog.exec()` is a nested modal loop, `:600` `dialog_barrier.seal()` precedes
-  replacement, and `:362` exits the whole application (`QCoreApplication.exit(1)`) when teardown fails. Lands before
-  SMP M2 (`LibraryRepository`) and M3 (`PlaybackService`); the Expanded Visualizer does not need it (its intent is a
-  settings value re-evaluated by the next generation).
-  - **Boundary:** `engine/screensaver_engine.py` (owner of `initialize` / `stop` / `cleanup`), with
-    `engine/engine_handlers.py::on_settings_requested` as the consumer.
-  - **Fix:** one `ApplicationServices` registry on the engine (`core/application_services.py`, name illustrative):
-    `register(name, factory)`, `get(name)`, `retire(name)`, created in `initialize`, excluded from
-    `stop(reason="settings")`, retired in terminal `cleanup` after the display teardown and before the ThreadManager
-    shutdown (the network admission fence closes first, as today). Consumers are generation-fenced: a display
-    generation leases a service and the lease is what retires with the generation, never the service. Members are
-    created lazily by the first lease and only when their capability is active, so Standard SRPSS without SMP creates
-    nothing. `DisplayPowerAuthority` (already process-scoped, engine-owned) is the model, not a second tier. Decide
-    explicitly what a Settings-teardown failure does to live services (today: process exit; with playback live the
-    answer must be recorded in `Spec.md` → Lifecycle).
-  - **Must stay true:** the display teardown, destruction barrier and modal Settings stay exactly as they are for
-    SRPSS and MC; "SMP live Settings" is a separate application policy (SMP plan §9); no process-global singleton
-    that survives `cleanup`; the Settings dialog's generation cancellation (`cancel_scheduled_single_shots`) still
-    covers everything the dialog scheduled.
-  - **Regression bar:** a test opens and closes Settings through `on_settings_requested` with a stub service
-    registered: the service instance is identical before and after, the destruction-barrier watch list is empty
-    (no display-generation object survives), a stale generation's lease cannot reach the service, and terminal
-    `cleanup` retires it exactly once. A Standard-profile start with no capability registers no service.
-  - **Depends on:** nothing. **Unblocks:** SMP M2, M3, M5.
+CUSTOM", "Runtime Widget Themes") and the Visualizer change checklist §9A. AC-03 (the application-service tier
+above display generations, A-01) landed on 7 Nov; its contract, including the Settings-teardown failure rule, is in
+`Spec.md` → Lifecycle ("Application services") and `Docs/Contracts.md`, with `tests/test_application_services.py` as
+its bar. Tier 1 is complete.
 
 ## Tier 2: defects to fix soon (small, real)
 
@@ -133,7 +109,9 @@ CUSTOM", "Runtime Widget Themes") and the Visualizer change checklist §9A.
   Reddit flush). Cancellation note: `_prune_cancelled_single_shot_generation` (`manager.py:125-133`) forgets a
   cancelled generation once its timers drain, and Settings cancels only single-shots (`engine_handlers.py:572`); a
   late single-shot from a closed Settings generation is admitted unless it is parented to the dialog (today they are,
-  through `_schedule_runtime_single_shot`). AC-03's service tier must state its cancellation rule against this.
+  through `_schedule_runtime_single_shot`). The AC-03 service tier's rule (`Spec.md` → Lifecycle): a retired
+  generation's leases are revoked at the same edge and it can never lease again, so such a late callback still cannot
+  reach a service.
   - **Fix:** size COMPUTE from the real need (`min(4, displays * 2)`, documented in `Spec.md`); prune
     `delivered_by_generation` with the queued/scheduled counters once a cancelled generation is idle; workers wait on
     `multiprocessing.connection.wait([queue._reader, parent.sentinel])` with no timeout; tag the Reddit flush lambda.
