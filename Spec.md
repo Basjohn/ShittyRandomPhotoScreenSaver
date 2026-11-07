@@ -67,7 +67,7 @@ one-way migration and quality/cost measurements live in `Docs/Reference/Image_Qu
 
 ## Build control and products
 
-**Build execution owner:** Agents may edit/review build source and inspect reports, but **must not run any Nuitka, Build Runner, helper, installer or other frozen product build**. These are time-consuming **operator-executed gates**; the operator supplies logs, reports and physical acceptance. Do not auto-request a full four-chunk test suite alongside source corrections. `Docs/Guides/Python314_Cutover.md` owns current interpreter/toolchain details.
+**Build execution owner:** Agents may edit/review build source and inspect reports, but **must not run any Nuitka, Build Runner, helper, installer or other frozen product build**. These are time-consuming **operator-executed gates**; the operator supplies logs, reports and physical acceptance. **Exception (operator, 8 Nov 2026):** the lead may run the **GitHub Remote** Standard/Media Center builds (`python tools/github_remote_build.py run ...`, or Build Runner's GitHub Remote tab), which compile on GitHub-hosted runners and put no build load on the operator's machine; local Nuitka, helper and installer builds stay operator-executed, and subagents never start builds of either kind. Do not auto-request a full four-chunk test suite alongside source corrections. `Docs/Guides/Python314_Cutover.md` owns current interpreter/toolchain details.
 
 
 `tools/build_runner.py` owns sequential build execution. One active process owner places the Windows build root
@@ -82,7 +82,11 @@ Explorer or running a soak never pops one. Only Standard and Media Center have i
 The optional **Linux (GitHub runner)** job (not selected by default; unavailable without the GitHub CLI) runs
 `scripts/linux/build_from_windows.ps1`, which builds on a GitHub Ubuntu runner and downloads
 `release/linux/SRPSS-<version>-linux-x86_64.tar.gz`; nothing Linux is built or virtualised locally
-(`Docs/Guides/Linux_Guide.md` §7). Operator builds and installed acceptance do not block source work.
+(`Docs/Guides/Linux_Guide.md` §7). The **GitHub Remote** tab builds Standard and Media Center on GitHub-hosted Windows
+runners through the same venv workers, downloads them to staging, validates them against a manifest and the requested
+pushed commit, and only then publishes them into `release\`; its opt-in local installers package only builds validated
+in the same run whose repository installer inputs equal the built commit (`Docs/Guides/GitHub_Remote_Build.md`).
+Operator builds and installed acceptance do not block source work.
 The canonical runtime dependency probe reads the four exact Qt pins from `requirements.txt` and checks both
 distribution metadata and loaded PySide/Qt/shiboken versions before compilation, in Normal and Venv modes.
 Build Runner owns the QRC prerequisite before any selected runtime-product jobs. It delegates deterministic

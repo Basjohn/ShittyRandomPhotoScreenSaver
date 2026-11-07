@@ -1,0 +1,121 @@
+# SRPSS Windows product build on a GitHub-hosted Windows runner (Build Runner's GitHub Remote tab).
+#
+# Offloads the two expensive Nuitka builds from the operator's machine. tools/github_remote_build.py dispatches one
+# run per product (so Standard and Media Center build in parallel), follows it, cancels it on request, downloads the
+# artifact, validates it against remote_build_manifest.json and the requested commit, and only then publishes it into
+# the local release tree. Operator guide: Docs/Guides/GitHub_Remote_Build.md.
+#
+# Each run builds exactly inputs.commit (a full SHA, verified after checkout) with the canonical worker and its own
+# audits, QRC regeneration, frozen-source audit and publication contract. No installer is compiled here: installers
+# are compiled locally by Build Runner from the validated download.
+#
+# Trigger: manual dispatch only (Build Runner, or `gh workflow run windows-build.yml -f target=... -f commit=...
+# -f token=...`). Ordinary pushes never start a run.
+name: Windows build
+run-name: SRPSS ${{ inputs.target }} (${{ inputs.target }}-${{ inputs.token }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Product to build
+        type: choice
+        options:
+          - standard
+          - media_center
+        required: true
+      commit:
+        description: Full 40-character SHA of the pushed commit to build (never substituted)
+        type: string
+        required: true
+      token:
+        description: Build Runner run token (yyyyMMdd_HHmmss_ffffff); names the worker's reports
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ inputs.target }}-${{ inputs.token }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      TARGET: ${{ inputs.target }}
+      COMMIT: ${{ inputs.commit }}
+      SRPSS_BUILD_RUN_ID: ${{ inputs.token }}
+    steps:
+      - name: Validate inputs
+        run: |
+          if ($env:COMMIT -notmatch '^[0-9a-f]{40}$') { throw "commit must be a full 40-character SHA: $env:COMMIT" }
+          if ($env:SRPSS_BUILD_RUN_ID -notmatch '^\d{8}_\d{6}_\d{6}$') { throw "token must be yyyyMMdd_HHmmss_ffffff" }
+          if ($env:TARGET -notin @('standard', 'media_center')) { throw "unknown target: $env:TARGET" }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+
+      - name: Verify the checked-out commit
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:COMMIT) { throw "Checked out $head, but $env:COMMIT was requested" }
+          Write-Host "Building $head"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          architecture: x64
+
+      # The worker's Ensure-ProjectVenv reuses a repo-root 3.14 .venv and installs requirements.txt into it, so the
+      # runner's Python stays clean and the worker's own environment checks still run.
+      - name: Create the repo-root venv
+        run: python -m venv .venv
+
+      - name: Nuitka cache
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: nuitka-windows-${{ inputs.target }}-${{ hashFiles('requirements.txt') }}-${{ inputs.commit }}
+          restore-keys: |
+            nuitka-windows-${{ inputs.target }}-${{ hashFiles('requirements.txt') }}-
+            nuitka-windows-${{ inputs.target }}-
+
+      - name: Build with the canonical worker
+        run: |
+          $worker = if ($env:TARGET -eq 'standard') { 'scripts/venv/build_nuitka.ps1' } else { 'scripts/venv/build_nuitka_mc_onedir.ps1' }
+          pwsh -NoProfile -ExecutionPolicy Bypass -File $worker
+          if ($LASTEXITCODE -ne 0) { throw "$worker failed with exit code $LASTEXITCODE" }
+
+      - name: Record the build manifest
+        run: |
+          .venv\Scripts\python.exe tools\github_remote_build.py manifest --target $env:TARGET --commit $env:COMMIT `
+            --token $env:SRPSS_BUILD_RUN_ID --run-id $env:GITHUB_RUN_ID --run-attempt $env:GITHUB_RUN_ATTEMPT `
+            --out remote_build_manifest.json
+          if ($LASTEXITCODE -ne 0) { throw 'Build manifest failed' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpss-${{ inputs.target }}
+          path: |
+            remote_build_manifest.json
+            release/
+            logs/*_${{ inputs.token }}.*
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Keep the worker's logs of a failed build
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: srpss-${{ inputs.target }}-failure-logs
+          path: logs/
+          if-no-files-found: ignore
+          retention-days: 7

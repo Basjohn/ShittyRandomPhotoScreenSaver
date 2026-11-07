@@ -158,6 +158,10 @@ after the operator's yes on a question card; agents never run load (invisible ch
 One line each; the detail and evidence live in the section named. Nothing here needs an agent until the operator
 answers.
 
+- **GitHub Remote builds (8 Nov, built, never run):** Build Runner's third tab and
+  `tools/github_remote_build.py` compile Standard/Media Center on GitHub runners, validate and publish them, and
+  compile opted-in installers locally (`Docs/Guides/GitHub_Remote_Build.md`). Open: the first real run (the operator
+  from the tab, or the lead headless under the Spec's 8 Nov exception), then installing a remote-built product.
 - **Read:** Bubble / Extruded Bubble "terrible performance" (6 Nov log 10:32-10:35) was our load (97-100% system CPU
   from the agents' game60 checks), not the product: on the quiet machine Bubble P1 ran 65.9 fps, tick 1.47 ms, GIL
   0.13, 3.9% late; Extruded Bubble 45-69 fps (`.artifacts/evidence/performance/live_check/20261106_live/`). Heavy load-generator runs are

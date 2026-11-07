@@ -48,6 +48,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Need | Read |
 | --- | --- |
 | current work / next sequence | `Current_Plan.md` |
+| Windows builds on GitHub runners (Build Runner's GitHub Remote tab): setup, process, validation, installers | `Docs/Guides/GitHub_Remote_Build.md`; `tools/github_remote_build.py`, `.github/workflows/windows-build.yml` |
 | Linux: run/install/build/test how-to / live checklist and gaps / durable rules | `Docs/Guides/Linux_Guide.md` / `Linux_Plan.md` / `Docs/Guardrails/Linux_Compatibility.md`; `core/platform_paths.py` |
 | R151 Steam cache publication and Settings UTC: focused Windows gate accepted, full rerun not requested | `Docs/Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md` |
 | R149 Python 3.14 full-test failures, Steam cache WinError 32, NumPy BLAS introspection and 35-minute runtime review | `Docs/Contracts.md` |

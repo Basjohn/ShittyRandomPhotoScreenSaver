@@ -309,7 +309,10 @@ Immutable resource ownership is covered by `tests/test_qt_resource_assets.py` (Q
 registration), `tests/test_widget_theme_link_and_asset_contract.py` (immutable resources versus editable themes),
 and the retained widget/About tests. `tests/test_qrc_regeneration.py` protects selected-toolchain regeneration,
 staleness, failure and Foundry sequencing; `tests/test_build_runner_cancellation.py` protects the shared process-tree
-owner. These are source/resource proofs; fresh frozen size and installed rendering remain operator-build evidence.
+owner; `tests/test_github_remote_build.py` protects the GitHub Remote contract without contacting GitHub (the
+workflow builds only the requested commit with the canonical workers; a download is published only when it is that
+commit's whole, unaltered build; any failure keeps the previous payload; a stop cancels the real runs; installers
+package only validated builds whose inputs equal the built commit). These are source/resource proofs; fresh frozen size and installed rendering remain operator-build evidence.
 `tests/test_clock_timezone_resolution.py` exercises the actual Clock resolver for local/UTC/explicit offsets,
 named DST and non-DST zones, persisted aliases, and the Troll/Casablanca cases that require the retained database.
 

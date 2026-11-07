@@ -1,14 +1,18 @@
-"""Unified SRPSS build runner for normal and repo-root-venv build workers.
+"""Unified SRPSS build runner for normal, repo-root-venv and GitHub Remote builds.
 
 Usage:
     python tools/build_runner.py
     python tools/build_runner.py --mode venv
+    python tools/build_runner.py --mode github
     python tools/build_runner.py --smoke-test --mode normal
 
 The GUI intentionally uses only the Python standard library. Build workers keep
 their existing ownership: normal mode uses ``scripts/*.ps1`` and venv mode uses
 ``scripts/venv/*.ps1``. Both modes compile the canonical installers in
-``scripts/``.
+``scripts/``. GitHub Remote runs the venv workers of the Standard and Media
+Center builds on GitHub-hosted Windows runners (``tools/github_remote_build.py``,
+``.github/workflows/windows-build.yml``), downloads and validates their payloads,
+and compiles the installers locally (Docs/Guides/GitHub_Remote_Build.md).
 """
 
 from __future__ import annotations
@@ -25,7 +29,8 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass, field
+import webbrowser
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Iterable, Literal, Sequence
@@ -34,7 +39,7 @@ import tkinter as tk
 from tkinter import ttk
 
 
-ModeName = Literal["normal", "venv"]
+ModeName = Literal["normal", "venv", "github"]
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -255,7 +260,7 @@ def set_windows_app_user_model_id(app_id: str = WINDOWS_APP_ID) -> None:
 class Job:
     key: str
     name: str
-    kind: Literal["powershell", "inno"]
+    kind: Literal["powershell", "inno", "github"]
     script: Path
     output_dir: Path
     expected_artifact: Path
@@ -276,6 +281,9 @@ class PreflightResult:
     pwsh: Path | None = None
     iscc: Path | None = None
     iscc_version: tuple[int, int, int] | None = None
+    # GitHub Remote: what GitHub will build (shown first, never a warning) and the commit fixed at pre-flight.
+    notes: list[str] = field(default_factory=list)
+    remote_commit: Any = None
 
     @property
     def ok(self) -> bool:
@@ -611,7 +619,13 @@ class Preferences:
 
 
 def normalize_mode(value: str) -> ModeName:
-    return "venv" if str(value).strip().lower() == "venv" else "normal"
+    text = str(value).strip().lower()
+    return text if text in ("venv", "github") else "normal"
+
+
+def helper_mode(mode: ModeName) -> ModeName:
+    """The local worker family that builds the Reddit Helper: GitHub Remote builds it with the venv worker."""
+    return "venv" if mode == "github" else mode
 
 
 def qrc_python_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> Path:
@@ -620,7 +634,7 @@ def qrc_python_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> Path:
     R147 redirected the normal build workers to that environment. The old
     global-python fallback for QRC was a toolchain mismatch, not a feature.
     """
-    if mode not in ("normal", "venv"):
+    if mode not in ("normal", "venv", "github"):
         raise QrcRegenerationError(f"Unknown build mode: {mode}")
     return repo_root / ".venv" / "Scripts" / "python.exe"
 
@@ -702,6 +716,8 @@ def prepare_qrc_environment(
 
 
 def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...]:
+    if mode == "github":
+        return _github_jobs(repo_root)
     scripts_dir = repo_root / "scripts"
     worker_dir = scripts_dir / "venv" if mode == "venv" else scripts_dir
     release_dir = repo_root / "release"
@@ -762,6 +778,147 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
             default_selected=False,
         ),
     )
+
+
+def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
+    """GitHub Remote: the two Nuitka products build on GitHub (the venv workers, same outputs); the Reddit Helper
+    and the installers stay local and are the venv mode's own jobs. Installers are opt-in here and package only
+    builds downloaded and validated in the same run (``github_installer_refusal``)."""
+    by_key = {job.key: job for job in jobs_for_mode("venv", repo_root)}
+    workflow = repo_root / ".github" / "workflows" / "windows-build.yml"
+    return (
+        replace(by_key["standard"], name="Standard + Diagnostic (GitHub)", kind="github", script=workflow),
+        replace(by_key["media_center"], name="Media Center (GitHub)", kind="github", script=workflow),
+        replace(by_key["reddit_helper"], name="Reddit Helper (local)"),
+        replace(by_key["standard_installer"], name="Standard Installer (local, after download)",
+                default_selected=False),
+        replace(by_key["media_center_installer"], name="Media Center Installer (local, after download)",
+                default_selected=False),
+    )
+
+
+def _github_preflight(result: PreflightResult, jobs: Sequence[Job], repo_root: Path) -> None:
+    from tools import github_remote_build as remote
+
+    remote_jobs = {job.key for job in jobs if job.kind == "github"}
+    if shutil.which("gh") is None:
+        result.errors.append("GitHub Remote: GitHub CLI (gh) not found; winget install GitHub.cli, then gh auth login")
+        result.unavailable_jobs.update(remote_jobs)
+    else:
+        cli = remote.GitHubCli()
+        if not cli.signed_in():
+            result.errors.append("GitHub Remote: the GitHub CLI is not signed in; run gh auth login")
+            result.unavailable_jobs.update(remote_jobs)
+        elif not cli.workflow_registered():
+            result.errors.append(
+                f"GitHub Remote: GitHub does not list {remote.WORKFLOW_FILE} yet; it must be on the default branch"
+            )
+            result.unavailable_jobs.update(remote_jobs)
+    try:
+        commit = remote.resolve_pushed_commit(repo_root)
+    except remote.RemoteBuildError as exc:
+        result.errors.append(f"GitHub Remote: {exc}")
+        result.unavailable_jobs.update(remote_jobs)
+        return
+    result.remote_commit = commit
+    result.notes.append(f"GitHub builds {commit.describe()}")
+    if not commit.matches_local_head:
+        result.warnings.append(
+            f"Local HEAD {commit.local_head[:8]} is not origin/{commit.branch}: GitHub builds the pushed commit "
+            f"{commit.short}; push first to build local commits"
+        )
+    if commit.uncommitted:
+        result.warnings.append(
+            f"{len(commit.uncommitted)} uncommitted change(s) are not in the GitHub build "
+            f"(e.g. {commit.uncommitted[0]}); installers refuse mismatched inputs"
+        )
+
+
+def github_installer_refusal(
+    job_key: str,
+    remote_results: dict,
+    commit: Any,
+    repo_root: Path = REPO_ROOT,
+) -> str | None:
+    """Why a GitHub Remote installer must not be compiled now (None: compile it).
+
+    Only a build downloaded and validated in this run is packaged, and only when every repository input the
+    installer reads beside it (installer script, presets, themes, sounds, version, and for the Standard installer
+    the Reddit Helper sources) equals the built commit in the working tree: a remote payload is never combined
+    with another revision's assets. The Standard installer also needs a current Reddit Helper payload.
+    """
+    from tools import github_remote_build as remote
+
+    source = {"standard_installer": "standard", "media_center_installer": "media_center"}[job_key]
+    result = remote_results.get(source)
+    if result is None:
+        return "Its GitHub build was not part of this run; select it too"
+    if not result.ok:
+        return "Its GitHub build did not complete and validate; nothing to package"
+    inputs = list(
+        remote.STANDARD_INSTALLER_INPUTS if source == "standard" else remote.MEDIA_CENTER_INSTALLER_INPUTS
+    )
+    if source == "standard":
+        for path in helper_input_paths(helper_mode("github"), repo_root):
+            try:
+                inputs.append(path.relative_to(repo_root).as_posix())
+            except ValueError:
+                continue
+    try:
+        mismatches = remote.installer_input_mismatches(repo_root, commit.sha, inputs)
+    except remote.RemoteBuildError as exc:
+        return f"Could not compare installer inputs with {commit.short}: {exc}"
+    if mismatches:
+        listed = ", ".join(mismatches[:4]) + (f" and {len(mismatches) - 4} more" if len(mismatches) > 4 else "")
+        return f"Local installer inputs differ from the built commit {commit.short}: {listed}"
+    if source == "standard":
+        status = helper_build_status("github", repo_root)
+        if status.needs_rebuild:
+            return f"Reddit Helper payload is not current ({status.reason}); select Reddit Helper"
+    return None
+
+
+def _write_refusal_log(job: Job, detail: str, log_dir: Path = LOG_DIR) -> Path:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    path = log_dir / f"build_runner_{_safe_slug(job.key)}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.log"
+    try:
+        path.write_text(
+            f"SRPSS Build Runner {APP_VERSION}\nJob: {job.name}\nNot compiled: {detail}\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+    return path
+
+
+def _owner_gh_runner(process_owner: BuildProcessOwner):
+    """Run GitHub CLI calls inside the Foundry's cancellable process tree (Emergency Stop ends a hung call)."""
+    from tools import github_remote_build as remote
+
+    def run(args: Sequence[str], timeout: float | None = None) -> subprocess.CompletedProcess:
+        try:
+            process = process_owner.start(
+                list(args), cwd=str(REPO_ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                encoding="utf-8", errors="replace", env=remote.cli_environment(), **_windows_subprocess_kwargs(),
+            )
+        except BuildPipelineCancelled as exc:
+            raise remote.RemoteCancelled(str(exc)) from exc
+        timed_out = False
+        try:
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                process.kill()
+                stdout, stderr = process.communicate()
+        finally:
+            aborted = process_owner.retire(process)
+        if aborted:
+            raise remote.RemoteCancelled("Cancelled by operator")
+        if timed_out:
+            return subprocess.CompletedProcess(list(args), 124, stdout, f"{stderr or ''}\ntimed out after {timeout}s")
+        return subprocess.CompletedProcess(list(args), process.returncode, stdout, stderr)
+
+    return run
 
 
 def _find_iscc() -> Path | None:
@@ -858,6 +1015,9 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
             f"Inno Setup 6.7.2 or newer is required; found {found} at {result.iscc}"
         )
         result.unavailable_jobs.update(job.key for job in jobs if job.kind == "inno")
+
+    if mode == "github":
+        _github_preflight(result, jobs, repo_root)
 
     if any(job.key == "linux" for job in jobs) and shutil.which("gh") is None:
         result.unavailable_jobs.add("linux")
@@ -1035,6 +1195,7 @@ def helper_input_paths(
 
 
 def helper_fingerprint(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[str, int]:
+    mode = helper_mode(mode)
     digest = hashlib.sha256()
     digest.update(f"schema=1\nmode={mode}\n".encode("utf-8"))
     paths = helper_input_paths(mode, repo_root)
@@ -1092,6 +1253,7 @@ def helper_build_status(
     *,
     state_path: Path | None = None,
 ) -> HelperBuildStatus:
+    mode = helper_mode(mode)
     fingerprint, input_count = helper_fingerprint(mode, repo_root)
     artifact = repo_root / "release" / "reddit_helper" / "SRPSS_RedditHelper.exe"
     record_path = state_path or helper_state_path(repo_root)
@@ -1144,6 +1306,7 @@ def record_helper_build(
     artifact: Path = HELPER_ARTIFACT,
     state_path: Path = HELPER_STATE_PATH,
 ) -> bool:
+    mode = helper_mode(mode)
     if not artifact.is_file():
         return False
     bundle_record = helper_bundle_fingerprint(artifact.parent)
@@ -1630,6 +1793,7 @@ class JobWidgets:
     log_link: LinkLabel
     output_link: LinkLabel
     evidence_link: LinkLabel
+    run_link: LinkLabel
 
 
 class BuildRunnerApp:
@@ -1873,9 +2037,9 @@ class BuildRunnerApp:
         tk.Label(
             body,
             text=(
-                "Build Normal or repo-root-venv artifacts using one Python 3.14 toolchain. "
-                "Workers stay sequential so build products cannot collide. "
-                "Installer-only selections package the existing canonical release payload."
+                "Build Normal or repo-root-venv artifacts using one Python 3.14 toolchain, or build Standard and "
+                "Media Center on GitHub and download them (GitHub Remote). Local workers stay sequential so build "
+                "products cannot collide. Installer-only selections package the existing canonical release payload."
             ),
             bg=COLORS["root"],
             fg=COLORS["muted"],
@@ -1895,7 +2059,7 @@ class BuildRunnerApp:
             font=("Segoe UI", 8, "bold"),
         ).pack(side="left", padx=(0, 10))
         self._mode_buttons: list[tk.Radiobutton] = []
-        for label, mode in (("NORMAL", "normal"), ("REPO VENV", "venv")):
+        for label, mode in (("NORMAL", "normal"), ("REPO VENV", "venv"), ("GITHUB REMOTE", "github")):
             button = tk.Radiobutton(
                 controls,
                 text=label,
@@ -2456,6 +2620,9 @@ class BuildRunnerApp:
         evidence_link = LinkLabel(frame, "Evidence ZIP", lambda: None)
         evidence_link.pack(side="right", padx=(4, 2))
         evidence_link.pack_forget()
+        run_link = LinkLabel(frame, "GitHub run", lambda: None)
+        run_link.pack(side="right", padx=(4, 2))
+        run_link.pack_forget()
         self._job_widgets[job.key] = JobWidgets(
             frame,
             variable,
@@ -2464,6 +2631,7 @@ class BuildRunnerApp:
             log_link,
             output_link,
             evidence_link,
+            run_link,
         )
 
     def _preflight_worker(self, mode: ModeName) -> None:
@@ -2505,18 +2673,22 @@ class BuildRunnerApp:
             text=f"Preparing · 0 / {self._progress_total} jobs"
         )
         self._set_controls_enabled(False)
+        mode = normalize_mode(self._mode_var.get())
         self._footer_status.configure(
-            text="Running selected jobs sequentially. Build Foundry will stay open.",
+            text=(
+                "Building on GitHub; local steps run here. Build Foundry will stay open."
+                if mode == "github"
+                else "Running selected jobs sequentially. Build Foundry will stay open."
+            ),
             fg=COLORS["green"],
         )
-        mode = normalize_mode(self._mode_var.get())
         jobs = tuple(self._jobs)
         preflight = self._preflight
-        threading.Thread(
-            target=self._pipeline_worker,
-            args=(mode, jobs, selected, preflight, self._process_owner),
-            daemon=True,
-        ).start()
+        if mode == "github":
+            worker, args = self._github_pipeline_worker, (jobs, selected, preflight, self._process_owner)
+        else:
+            worker, args = self._pipeline_worker, (mode, jobs, selected, preflight, self._process_owner)
+        threading.Thread(target=worker, args=args, daemon=True).start()
 
     def _on_emergency_stop(self) -> None:
         owner = self._process_owner
@@ -2640,6 +2812,101 @@ class BuildRunnerApp:
         finally:
             process_owner.shutdown()
 
+    def _github_pipeline_worker(
+        self,
+        jobs: Sequence[Job],
+        selected: set[str],
+        preflight: PreflightResult,
+        process_owner: BuildProcessOwner,
+    ) -> None:
+        """GitHub Remote: dispatch the selected products together, build the Reddit Helper locally while GitHub
+        works, retrieve and validate each download, then compile the opted-in installers for validated builds."""
+        from tools import github_remote_build as remote
+
+        by_key = {job.key: job for job in jobs}
+        local_results: dict[str, JobResult] = {}
+        remote_results: dict = {}
+        try:
+            commit = preflight.remote_commit
+            if commit is None:
+                raise RuntimeError("GitHub Remote pre-flight found no commit to build")
+            for job in jobs:
+                if job.key not in selected:
+                    self._events.put(("job_skipped", job.key))
+            remote_keys = [job.key for job in jobs if job.kind == "github" and job.key in selected]
+            helper_status = helper_build_status("github")
+
+            def run_local(job: Job) -> None:
+                self._events.put(("job_running", job.key))
+                result = run_job(job, preflight, process_owner=process_owner)
+                if result.returncode == 0 and job.key == "reddit_helper":
+                    if not record_helper_build(
+                        "github", helper_status.fingerprint, artifact=job.expected_artifact, state_path=HELPER_STATE_PATH,
+                    ):
+                        result = JobResult(
+                            1, "Build succeeded, but helper fingerprint could not be recorded",
+                            result.log_path, result.output_path,
+                        )
+                local_results[job.key] = result
+                self._events.put(("job_done", job.key, result))
+
+            def local_helper() -> None:
+                if "reddit_helper" in selected and "reddit_helper" not in local_results:
+                    if not process_owner.cancellation_requested:
+                        run_local(by_key["reddit_helper"])
+
+            def emit(kind: str, key: str, payload: object) -> None:
+                event = {"status": "job_status", "link": "job_link", "done": "job_done"}[kind]
+                self._events.put((event, key, payload))
+
+            for key in remote_keys:
+                self._events.put(("job_running", key))
+            if remote_keys:
+                remote_results = remote.run_remote_builds(
+                    REPO_ROOT,
+                    remote.GitHubCli(run=_owner_gh_runner(process_owner)),
+                    remote_keys,
+                    commit,
+                    datetime.now().strftime("%Y%m%d_%H%M%S_%f"),
+                    log_dir=LOG_DIR,
+                    release_dir=RELEASE_DIR,
+                    cancelled=lambda: process_owner.cancellation_requested,
+                    emit=emit,
+                    between=local_helper,
+                )
+            local_helper()
+            for key in ("standard_installer", "media_center_installer"):
+                if key not in selected:
+                    continue
+                job = by_key[key]
+                if process_owner.cancellation_requested:
+                    self._events.put(("job_cancelled", key))
+                    continue
+                refusal = github_installer_refusal(key, remote_results, commit)
+                if refusal is not None:
+                    result = JobResult(1, refusal, _write_refusal_log(job, refusal), job.output_dir)
+                    local_results[key] = result
+                    self._events.put(("job_done", key, result))
+                    continue
+                run_local(job)
+            aborted = process_owner.cancellation_requested
+            all_ok = all(result.returncode == 0 for result in (*remote_results.values(), *local_results.values()))
+            if aborted:
+                message = "Pipeline aborted by operator. Active GitHub runs were cancelled."
+            else:
+                message = (
+                    "All selected jobs completed successfully."
+                    if all_ok
+                    else "Pipeline completed with one or more failures."
+                )
+            self._events.put(("pipeline_done", all_ok and not aborted, message, aborted))
+        except BuildPipelineCancelled:
+            self._events.put(("pipeline_done", False, "Pipeline aborted by operator.", True))
+        except Exception as exc:
+            self._events.put(("pipeline_done", False, f"Pipeline failed: {exc}", False))
+        finally:
+            process_owner.shutdown()
+
     def _poll_events(self) -> None:
         if self._destroyed:
             return
@@ -2668,7 +2935,7 @@ class BuildRunnerApp:
                 text=result.summary(),
                 fg=COLORS["red"] if result.errors else COLORS["green"],
             )
-            details = [*result.errors[:2], *result.warnings[:2]]
+            details = [*result.notes[:1], *result.errors[:2], *result.warnings[:2]]
             self._preflight_detail.configure(text="  ·  ".join(details))
             for job in self._jobs:
                 widgets = self._job_widgets[job.key]
@@ -2698,6 +2965,22 @@ class BuildRunnerApp:
                     f"{self._progress_total} jobs complete"
                 )
             )
+            return
+
+        if kind == "job_status":
+            # GitHub Remote progress: the short state on the row, the running step in the progress line.
+            _, key, text = event
+            widgets = self._job_widgets[key]
+            widgets.status.configure(text=str(text).split(" · ")[0], fg=COLORS["amber"])
+            job_name = next(job.name for job in self._jobs if job.key == key)
+            self._progress_detail.configure(text=f"{job_name} · {text}")
+            return
+
+        if kind == "job_link":
+            _, key, url = event
+            widgets = self._job_widgets[key]
+            widgets.run_link._command = lambda target=str(url): webbrowser.open(target)
+            widgets.run_link.pack(side="right", padx=(4, 2), before=widgets.status)
             return
 
         if kind == "job_skipped":
@@ -2806,7 +3089,7 @@ def smoke_payload(mode: ModeName) -> dict:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unified SRPSS Build Foundry")
-    parser.add_argument("--mode", choices=("normal", "venv"))
+    parser.add_argument("--mode", choices=("normal", "venv", "github"))
     parser.add_argument(
         "--smoke-test",
         action="store_true",
