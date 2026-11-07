@@ -86,20 +86,68 @@ def pytest_addoption(parser):
 
 
 # ---------------------------------------------------------------------------
+# Guards on production classes, installed the moment their module is imported (at collection, or lazily inside a
+# test or inside production code), so no test can reach the guarded call unguarded.
+# ---------------------------------------------------------------------------
+import importlib.abc
+
+_POST_IMPORT_GUARDS: dict = {}
+
+
+class _GuardLoader(importlib.abc.Loader):
+    """Delegates to the real loader, then installs the module's guard."""
+
+    def __init__(self, loader, install):
+        self._srpss_loader = loader
+        self._srpss_install = install
+
+    def create_module(self, spec):
+        return self._srpss_loader.create_module(spec)
+
+    def exec_module(self, module):
+        self._srpss_loader.exec_module(module)
+        self._srpss_install(module)
+
+    def __getattr__(self, name):           # get_source, get_resource_reader, ...
+        return getattr(self._srpss_loader, name)
+
+
+class _GuardFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, name, path, target=None):
+        install = _POST_IMPORT_GUARDS.get(name)
+        if install is None:
+            return None
+        for finder in sys.meta_path:
+            if finder is self or not hasattr(finder, "find_spec"):
+                continue
+            spec = finder.find_spec(name, path, target)
+            if spec is not None:
+                if spec.loader is not None:
+                    spec.loader = _GuardLoader(spec.loader, install)
+                return spec
+        return None
+
+
+def _guard_on_import(name: str, install) -> None:
+    _POST_IMPORT_GUARDS[name] = install
+    if not any(isinstance(finder, _GuardFinder) for finder in sys.meta_path):
+        sys.meta_path.insert(0, _GuardFinder())
+    module = sys.modules.get(name)
+    if module is not None:
+        install(module)
+
+
 # Real display windows on the operator's monitors (operator, 7 Nov: "a test that causes a blue screen and a black
 # screen ... it disrupts my entire display ecosystem"). A test reaching QuickDisplayWindow.show_on_screen - directly or
 # through production code - is skipped unless the run asks for --display-disruptive. The window never shows.
-# ---------------------------------------------------------------------------
-_DISPLAY_GUARD = {"patched": False, "allowed": False, "nodeid": ""}
+_DISPLAY_GUARD = {"allowed": False, "nodeid": ""}
 
 
-def _install_display_window_guard() -> None:
-    if _DISPLAY_GUARD["patched"]:
+def _install_display_window_guard(module) -> None:
+    window = module.QuickDisplayWindow
+    if getattr(window.show_on_screen, "_srpss_guard", False):
         return
-    module = sys.modules.get("rendering.quick.window")
-    if module is None:
-        return
-    original = module.QuickDisplayWindow.show_on_screen
+    original = window.show_on_screen
 
     def guarded_show_on_screen(self, *args, **kwargs):
         if not _DISPLAY_GUARD["allowed"]:
@@ -107,17 +155,51 @@ def _install_display_window_guard() -> None:
                         "run it only when directly relevant, with --display-disruptive")
         return original(self, *args, **kwargs)
 
-    module.QuickDisplayWindow.show_on_screen = guarded_show_on_screen
-    _DISPLAY_GUARD["patched"] = True
+    guarded_show_on_screen._srpss_guard = True
+    window.show_on_screen = guarded_show_on_screen
+
+
+# Modal popups (7 Nov): an unpatched StyledPopup.exec() shows a real modal dialog on the operator's screen and blocks
+# the test forever (a Studio that failed to open under the GL-less offscreen platform hung for minutes in its error
+# popup). A test that expects a popup patches StyledPopup.exec itself; any other popup is answered as dismissed, never
+# shown, and fails the test at teardown with its title and message.
+_POPUP_GUARD = {"shown": []}
+
+
+def _install_popup_guard(module) -> None:
+    popup = module.StyledPopup
+    if getattr(popup.exec, "_srpss_guard", False):
+        return
+
+    def guarded_exec(self, *args, **kwargs):
+        _POPUP_GUARD["shown"].append(f"{getattr(self, '_title', '')}: {getattr(self, '_message', '')}")
+        return 0
+
+    guarded_exec._srpss_guard = True
+    popup.exec = guarded_exec
+
+
+_guard_on_import("rendering.quick.window", _install_display_window_guard)
+_guard_on_import("ui.styled_popup", _install_popup_guard)
 
 
 @pytest.fixture(autouse=True)
 def _no_real_display_window_unless_asked(request):
-    _install_display_window_guard()
     _DISPLAY_GUARD["allowed"] = bool(request.config.getoption("--display-disruptive"))
     _DISPLAY_GUARD["nodeid"] = request.node.nodeid
     yield
-    _install_display_window_guard()        # a module imported during the test is guarded from the next test on
+
+
+@pytest.fixture(autouse=True)
+def _no_unpatched_modal_popup():
+    _POPUP_GUARD["shown"].clear()
+    yield
+    shown, _POPUP_GUARD["shown"] = list(_POPUP_GUARD["shown"]), []
+    if shown:
+        pytest.fail("the test reached a real modal StyledPopup without patching StyledPopup.exec (it would show "
+                    "on the operator's screen and block): " + " | ".join(shown), pytrace=False)
+
+
 def pytest_collection_modifyitems(config, items):
     """Skip Linux-only tests off Linux; select a deterministic requested chunk."""
 
