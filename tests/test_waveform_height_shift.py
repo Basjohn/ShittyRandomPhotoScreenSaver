@@ -26,7 +26,7 @@ def rest_heights(frames):
     return [[y for y, _ in frame] for frame in frames]
 
 
-def test_static_height_holds_one_constant_lift_at_the_top_of_the_shift():
+def test_static_height_holds_one_constant_lift():
     model = configured(height_mode='Static Height')
     run(model, 270)
     lifts = []
@@ -35,12 +35,10 @@ def test_static_height_holds_one_constant_lift_at_the_top_of_the_shift():
             model.advance(1/90, **(LOUD if loud else QUIET))
             lifts.append(model._trough_lift.copy())
     lifts = np.asarray(lifts)[:, :, 0]
-    # Constant through loud and quiet passages, the same for every ribbon, and at least what the dynamic shift reaches.
+    # Constant through loud and quiet passages, the same for every ribbon, at its own constant (the dynamic shift may
+    # now rise above it when a trough needs it: floor first, 7 Nov).
     assert np.ptp(lifts) < 1e-6
-    dynamic = configured()
-    run(dynamic, 540)
-    assert lifts[0, 0] > 0. and lifts[0, 0] >= dynamic._trough_lift.max()-1e-9
-    assert abs(lifts[0, 0]-dyn.TROUGH_LIFT_MAX) < 1e-6
+    assert lifts[0, 0] > 0. and abs(lifts[0, 0]-dyn.STATIC_HEIGHT_LIFT) < 1e-6
 
 
 def test_switching_floor_clearance_live_eases_instead_of_jumping():

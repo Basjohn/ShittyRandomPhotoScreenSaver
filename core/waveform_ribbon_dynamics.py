@@ -193,22 +193,31 @@ KICK_SENSE_HOLD, KICK_SENSE_ATTACK, KICK_SENSE_RELEASE = .05, .07, .25
 # Floor clearance (operator, 5 Nov; see WaveformDynamics._floor_room): the packet origin sits PACKET_FLOOR_HEIGHT above
 # the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
 # by up to TROUGH_LIFT_MAX, easing up over TROUGH_ATTACK and down over TROUGH_RELEASE per stage (two stages).
-PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3, .4, 1.5
-# The limit stays 1.5 (lead review 6 Nov): with swells at the adaptive gain's visible size a limit of 2 or 3 cleared the
-# floor (contact 7% -> .3% on Preset 4) but lifted crests toward the card's top (top edge p99 +.4 to +1.3 world units);
-# the operator ranks reactivity over floor avoidance, and a clipped crest over brief floor contact.
+PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3, .4, 3.
+# Floor first (operator 7 Nov: "I've noticed some of the presets clipping through the floor ... We'd rather it goes a
+# bit higher when it has to than clips"; supersedes 6 Nov's "top edge first"). At a limit of 1.5 the visible lower edge
+# went through the floor on 7-72% of music ticks (recorded continuous play, both card sizes); the lift is a pure offset,
+# so a higher limit changes nothing but height. Floor Give (a floor that yields to the ribbon) keeps the former limit.
+FLOOR_GIVE_LIFT_MAX = 1.5
 TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # TROUGH_VIEW: the fallback view without a card span
-# Top edge first, floor second (lead review 6 Nov: crests out of the card's top are worse than brief floor contact).
-# With the card's top edge supplied (core.waveform_ribbon_view.card_span) the floor lift stops TOP_CLEARANCE below it.
+# The card's top edge (core.waveform_ribbon_view.card_span) still bounds the lift, but may take back at most
+# TOP_GIVE_BACK of what the floor asks for: the crest keeps TOP_CLEARANCE below the top whenever the floor allows it, and
+# otherwise both edges share the shortfall. 7 Nov sweep on recorded continuous play (chain7, 640x560 card; floor contact /
+# crest above the top, visible ribbon): give-back .3 cleared the floor (P1/3/4/7 0-1.3%) but put crests above the top on
+# 4-11% of ticks; 1.0 keeps both at 0-3.2% (main, top edge first: floor 2-21%, top 0-.1%); 1.5 floor .2-5%, top .2-1.1%.
+# At a 1282x1005 card every preset clears both with any give-back. Presets 5 and 6 are taller than a 640x560 card holds
+# (any setting: floor or top on a quarter or more of their ticks); that is authoring, not placement.
 TOP_CLEARANCE = .3
+TOP_GIVE_BACK = 1.
 # With the card's visible span the floor lift reads only what the camera shows, plus TROUGH_LOOKAHEAD geometric-envelope
 # sigmas beyond each edge (see _trough_view), never wider than +-TROUGH_VIEW: a trough entering the view (or a swell
 # deepening one on its way in) is already lifted for. 6 Nov sweep on recorded continuous play: at 2.5 sigmas the lift
 # moved more and visible floor contact rose by up to .9 points (Preset 7); at 5 of the mode's own envelope sigmas (a
 # Group Wave set is 3.5 carrier wavelengths wide) it equals the fixed view's on every preset at a 1282x1005 card.
 TROUGH_LOOKAHEAD = 5.
-# Height Shift options (operator, 5 Nov). Static Height holds every ribbon at the highest safe point: the top of the shift
-# (TROUGH_LIFT_MAX), constant through every passage.
+# Height Shift options (operator, 5 Nov). Static Height holds every ribbon at a constant STATIC_HEIGHT_LIFT through every
+# passage (the former top of the shift; unchanged when the dynamic limit rose).
+STATIC_HEIGHT_LIFT = 1.5
 # Tilt Shift: while the lift moves, the side the history travels toward leads by TILT_LEAD seconds of lift velocity
 # (bounded softly to TILT_MAX world units each side), so it rises first and settles first. History travels toward -x.
 HEIGHT_MODES = ('Dynamic Height Shift', 'Static Height')
@@ -429,6 +438,7 @@ class HybridControls:
     breathing: float = 0.
     adaptive_response: bool = False   # True: the remembered-peak gain (pre-6 Nov); False: FIXED_RESPONSE
     kick_accent: float = 0.           # share of a sustained kick the geometry cannot show sent to roll and sparks
+    floor_give: float = 0.            # Floor Give (the floor yields): the lift keeps FLOOR_GIVE_LIFT_MAX
 
 
 @dataclass(frozen=True)
@@ -1098,18 +1108,20 @@ class WaveformDynamics:
         """Per ribbon: how far to lift the whole ribbon so its lower edge stays TROUGH_CLEARANCE above the floor (see
         snapshot). Two cascaded followers (TROUGH_ATTACK up, TROUGH_RELEASE down, on the logical clock), so the lift's
         velocity is continuous: a one-stage follower jumped on every new trough, which was itself a twitch.
-        Top edge first, floor second (lead review 6 Nov): with the card's top supplied (``headroom``: room above the
-        rest line for the published crest ``soft`` plus its sheet hang, TOP_CLEARANCE below the edge) the lift never
-        raises a crest the floor lift considers through it; the floor may then be grazed. A lift the top lowers eases
-        down at TROUGH_ATTACK, as fast as it rose, so a crest climbing toward the edge is not lifted past it."""
+        Floor first (operator 7 Nov): with the card's top supplied (``headroom``: room above the rest line for the
+        published crest ``soft`` plus its sheet hang, TOP_CLEARANCE below the edge) the top may lower the lift only by
+        the clearance, so the lower edge at most grazes the floor and a crest leaves the card only when the floor needs
+        it. A lift the top lowers eases down at TROUGH_ATTACK, as fast as it rose. Floor Give keeps FLOOR_GIVE_LIFT_MAX."""
         capped = None
         if static is None:
+            limit = FLOOR_GIVE_LIFT_MAX if self.controls.floor_give>0. else TROUGH_LIFT_MAX
             sinking = np.where(visible,hang-height,-np.inf)                 # depth of the lower edge below rest
-            target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,TROUGH_LIFT_MAX)
+            target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,limit)
             if headroom is not None:
                 top = np.maximum(headroom-np.where(visible,soft+hang,-np.inf).max(axis=1,keepdims=True),0.)
-                capped = top<target
-                target = np.minimum(target,top)
+                floor_first = np.maximum(top,target-TOP_GIVE_BACK)
+                capped = floor_first<target
+                target = np.minimum(target,floor_first)
         else:
             target = np.full((RIBBON_CAPACITY,1),static)                    # Static Height (a live switch eases)
         if self._trough_time is None:
@@ -1148,7 +1160,7 @@ class WaveformDynamics:
     def _height_shift(self,height,hang,room,x,soft=None,headroom=None):
         """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor, never
         lifting a crest through the card's top edge (``headroom``: see _floor_room)."""
-        static = TROUGH_LIFT_MAX if self.controls.height_mode=='Static Height' else None
+        static = STATIC_HEIGHT_LIFT if self.controls.height_mode=='Static Height' else None
         visible,centre,half = self._trough_view(x)
         lift = self._floor_room(height,hang,room,visible,static,soft,headroom)
         # Tilt Shift: the lift's velocity (its second stage follows the first, so it is continuous) sets a lead that
