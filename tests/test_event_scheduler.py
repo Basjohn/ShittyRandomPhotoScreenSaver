@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import time
 
-from widgets.spotify_visualizer.transient_bus import (
 from core.authored_clock import authored_now
+from widgets.spotify_visualizer.transient_bus import (
     OnsetEvent,
     TransientBus,
     TransientEventScheduler,
