@@ -65,8 +65,8 @@ Item {
             border.width: capsule.strokeWidth
         }
 
-        // On a surface material: one pill filling the capsule (its label opts out
-        // of its own plate), concentric with the capsule. Inactive on Normal.
+        // On a surface material: one pill filling the capsule (its fill is the underlay),
+        // concentric with the capsule. Inactive on Normal.
         LegibilityRow {
             readonly property real inset: capsule.strokeWidth + 2.0
             x: inset
@@ -128,8 +128,8 @@ Item {
             border.width: capsule.strokeWidth
         }
 
-        // On a surface material: one pill filling the capsule (its label opts out
-        // of its own plate), concentric with the capsule. Inactive on Normal.
+        // On a surface material: one pill filling the capsule (its fill is the underlay),
+        // concentric with the capsule. Inactive on Normal.
         LegibilityRow {
             readonly property real inset: capsule.strokeWidth + 2.0
             x: inset

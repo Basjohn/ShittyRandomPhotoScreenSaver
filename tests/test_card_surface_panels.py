@@ -201,23 +201,34 @@ def test_visualizer_material_is_backdrop_demand_only_while_its_root_exists() -> 
     assert QuickSceneController._surface_materials_in_use(controller) == frozenset()
 
 
-def test_mute_button_has_no_inner_border_on_a_material(material_scene, tmp_path) -> None:
+def test_mute_button_has_no_inner_border_on_a_material(qt_app, tmp_path) -> None:
     import numpy
+    from tools.surface_material_capture import MaterialScene
 
-    scene = material_scene
-    scene.set_wallpaper(_flat(900, 520, (205, 205, 205, 255), "grey"))
-    _media(scene, tmp_path)
-    scene.set_material("glass")
-    scene.render(6)
-    frame = numpy.asarray(scene.read(), numpy.float64)
-    button = _find(scene.scene.root, "mediaSystemMuteButton")
-    icon = _find(scene.scene.root, "mediaSystemMuteIcon")
-    rect, glyph = _rect(button), _rect(icon)
-    y = rect.center().y()
-    # Just inside the outline vs the face between the outline and the icon: one face, no rim.
-    rim = _tone(frame, rect.left() + 2.0 + 1.5, y)
-    face = _tone(frame, (rect.left() + glyph.left()) / 2.0 + 1.0, y)
-    assert abs(rim - face) <= 8, (rim, face)
+    if qt_app.platformName().lower() != "windows":
+        pytest.skip("hidden GL scene needs the Windows QPA")
+    k = 3.0                                     # device pixels per logical px: the rim is ~2.5 px
+    scene = MaterialScene(900, 520, dpr=k)
+    try:
+        scene.set_wallpaper(_flat(900, 520, (205, 205, 205, 255), "grey"))
+        _media(scene, tmp_path)
+        scene.set_material("glass")
+        scene.render(6)
+        frame = numpy.asarray(scene.read(), numpy.float64)
+        button = _find(scene.scene.root, "mediaSystemMuteButton")
+        icon = _find(scene.scene.root, "mediaSystemMuteIcon")
+        rect, glyph = _rect(button), _rect(icon)
+        material = _find(scene.scene.root, "mediaSystemMuteMaterial")
+        assert material is not None and material.property("item") is not None   # on the material
+        y = int(rect.center().y() * k)
+        # Brightness across the face from past the outline's antialiased edge (2.5 px) to the
+        # icon, averaged over 5 rows: one even face, no lighter inner rim.
+        profile = frame[y - 2:y + 3].sum(axis=2).mean(axis=0)
+        start, stop = int((rect.left() + 2.5) * k), int(glyph.left() * k) - 2
+        face = profile[start:stop]
+        assert stop - start >= 4 and face.max() - face.min() <= 24,             profile[int(rect.left() * k):stop].round()
+    finally:
+        scene.close()
 
 
 def _ink_box(frame, rect):
@@ -261,57 +272,86 @@ def test_transport_glyphs_are_centred_equal_and_stroked(material_scene, tmp_path
     assert max(heights) - min(heights) <= 1, heights
 
 
-def test_card_panel_holds_faint_small_runs_at_4_5(material_scene) -> None:
+def _busy(width, height):
+    """A busy, colourful backdrop: seeded 40 px blocks of random colour (what real wallpapers do
+    to the blurred backdrop under a card)."""
     import numpy
-    from PySide6.QtCore import QRectF, QUrl
-    from PySide6.QtGui import QColor
-    from PySide6.QtQml import QQmlComponent
-    from PySide6.QtQuick import QQuickItem
     from rendering.quick.image_state import PresentationImage
-    from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
-    from tools.surface_material_capture import _relative_luminance
 
-    scene = material_scene
-    width, height = 900, 520
-    stripes = bytearray()
-    for _y in range(height):
-        for x in range(width):
-            stripes += bytes((250, 240, 150, 255)) if (x // 6) % 2 else bytes((235, 200, 245, 255))
-    scene.set_wallpaper(PresentationImage("stripes", "stripes", (900.0, 520.0), 1.0, (width, height),
-                                          width * 4, bytes(stripes)))
-    card = scene.host.create_widget(object_name="card", model_identity="clock",
-                                    geometry=OverlayWidgetGeometry(170, 100, 300, 160),
-                                    card_style=OverlayCardStyle(background_color=QColor(20, 20, 20, 77),
-                                                                shadow_enabled=False))
-    scene.presentations = []
-    component = QQmlComponent(scene.scene.qml_context.engine())
-    # A faint run: the card text colour at 62 % (Media's playback state, Gmail's dates).
-    component.setData(b'import QtQuick\nShadowedText { x: 30; y: 40; width: 220; height: 20; text: "PLAYING 27/08";'
-                      b' color: "white"; opacity: 0.62; font.pixelSize: 12; font.bold: true; shadowEnabled: false }',
-                      QUrl.fromLocalFile(str(Path(__file__).resolve().parents[1] / "rendering" / "quick" / "qml"
-                                             / "_test_faint.qml")))
-    run = component.create(scene.scene.qml_context)
-    assert run is not None, component.errorString()
-    content = card.item.findChild(QQuickItem, "overlayCardContent")
-    run.setParentItem(content)
-    run.setParent(content)
-    scene.set_material("glass")
-    scene.render(6)
+    rng = numpy.random.default_rng(670483)
+    blocks = rng.integers(0, 256, size=(height // 40 + 1, width // 40 + 1, 3), dtype=numpy.uint8)
+    rgb = numpy.repeat(numpy.repeat(blocks, 40, axis=0), 40, axis=1)[:height, :width]
+    rgba = numpy.concatenate([rgb, numpy.full((height, width, 1), 255, numpy.uint8)], axis=2)
+    return PresentationImage("busy", "busy", (float(width), float(height)), 1.0, (width, height),
+                             width * 4, numpy.ascontiguousarray(rgba).tobytes())
+
+
+def _faint_small_runs(scene, card_item):
+    """WCAG contrast (p5 over the glyph pixels) of every small run drawn below 80 % of its colour's
+    opacity, as drawn: the run's colour composited at its effective opacity over the pixels the frame
+    has there with every glyph hidden."""
+    import numpy
+    from PySide6.QtCore import QRectF
+    from tools.surface_material_capture import _relative_luminance, _text_runs
+
+    scene.render(3)
     full = numpy.asarray(scene.read(), numpy.float64)
-    main = run.findChild(QQuickItem, "shadowedTextMain")
-    main.setOpacity(0.0)
+    runs = _text_runs(scene)
+    saved = []
+    for _item, main, shadow, _rect, _size in runs:
+        saved.append((main.opacity(), shadow.opacity() if shadow is not None else None))
+        main.setOpacity(0.0)
+        if shadow is not None:
+            shadow.setOpacity(0.0)
     scene.render(3)
     bare = numpy.asarray(scene.read(), numpy.float64)
-    rect = main.mapRectToScene(QRectF(0.0, 0.0, main.width(), main.height()))
-    l, t, r, b = int(rect.left()), int(rect.top()), int(rect.right()) + 1, int(rect.bottom()) + 1
-    mask = numpy.abs(full[t:b, l:r] - bare[t:b, l:r]).max(axis=2) > 24
-    assert mask.sum() > 20
-    background = bare[t:b, l:r][mask]
-    text = 0.62 * 255.0 + 0.38 * background          # what the faint run actually draws
-    lt, lb = _relative_luminance(text), _relative_luminance(background)
-    contrast = (numpy.maximum(lt, lb) + 0.05) / (numpy.minimum(lt, lb) + 0.05)
-    assert float(numpy.percentile(contrast, 5)) >= 4.5, float(numpy.percentile(contrast, 5))
-    run.deleteLater()
+    for (_item, main, shadow, _rect, _size), (main_opacity, shadow_opacity) in zip(runs, saved):
+        main.setOpacity(main_opacity)
+        if shadow is not None:
+            shadow.setOpacity(shadow_opacity)
+    rows = []
+    for item, _main, _shadow, rect, size in runs:
+        colour = item.property("color")
+        alpha = colour.alphaF()
+        node = item
+        while node is not None and node is not card_item:
+            alpha *= node.opacity()
+            node = node.parentItem()
+        if size >= 18.0 or not 0.2 <= alpha < 0.8:
+            continue
+        l, t = max(0, int(rect.left())), max(0, int(rect.top()))
+        r, b = int(rect.right()) + 1, int(rect.bottom()) + 1
+        mask = numpy.abs(full[t:b, l:r] - bare[t:b, l:r]).max(axis=2) > 24
+        if mask.sum() < 6:
+            continue
+        background = bare[t:b, l:r][mask]
+        text = numpy.array([colour.red(), colour.green(), colour.blue()], numpy.float64)
+        drawn = alpha * text + (1.0 - alpha) * background
+        lt, lb = _relative_luminance(drawn), _relative_luminance(background)
+        contrast = (numpy.maximum(lt, lb) + 0.05) / (numpy.minimum(lt, lb) + 0.05)
+        rows.append((str(item.property("text"))[:24], round(alpha, 2), float(numpy.percentile(contrast, 5))))
+    return rows
+
+
+@pytest.mark.parametrize("family", ["gmail", "media"])
+def test_card_panel_holds_faint_small_runs_at_4_5(material_scene, tmp_path, family) -> None:
+    from tools import onboarding_preview_foundry as foundry
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+    from tools.surface_material_capture import settle_animations
+
+    scene = material_scene
+    scene.set_wallpaper(_busy(900, 520))
+    art = foundry._gradient_art(tmp_path / "art.png", (240, 240), ("#27336e", "#e7678a"), 1)
+    presentation = (foundry._preview_gmail if family == "gmail" else foundry._preview_media)(scene.scene, art)
+    item = presentation.item
+    presentation.set_geometry(OverlayWidgetGeometry(60.0, 60.0, item.width(), item.height()))
+    scene.presentations = [presentation]
+    settle_animations(scene, 1.4)
+    scene.set_material("glass")
+    rows = _faint_small_runs(scene, item)
+    # Gmail's dates and menu glyph, Media's playback state: drawn at 55-76 % of their colour.
+    assert rows, "the fixture has faint runs"
+    assert all(p5 >= 4.5 for _text, _alpha, p5 in rows), rows
 
 
 def test_achievement_capsules_never_run_into_the_artwork_or_metric(material_scene, tmp_path) -> None:

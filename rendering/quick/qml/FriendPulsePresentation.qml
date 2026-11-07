@@ -522,7 +522,7 @@ OverlayWidget {
             HoverHandler { id: activityRowHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
             // On a surface material: one rounded box filling the friend row over its
-            // fill (name and presence opt out of their own plates), concentric with
+            // fill (its own fill is the underlay), concentric with
             // its corners. Inactive on Normal.
             LegibilityRow {
                 objectName: "friendPulseRowLegibilityRow_" + index
@@ -863,7 +863,7 @@ OverlayWidget {
                 HoverHandler { id: gridTileHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
                 // On a surface material: one rounded box filling the friend tile over its
-                // fill (name and presence opt out of their own plates), concentric with
+                // fill (its own fill is the underlay), concentric with
                 // its corners. Inactive on Normal.
                 LegibilityRow {
                     objectName: "friendPulseTileLegibilityRow_" + index

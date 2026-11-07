@@ -144,10 +144,10 @@ block):
   card uses) minus that inset, never under 2 px, so a square or small-radius card still gets a rounded panel;
 - it applies a slight constant shift away from the text colour (darker under light text, which is every dark theme;
   lighter under dark text on light themes), then a contrast floor that pushes further only where the blurred backdrop
-  would leave the theme's card text below **5:1** (`MaterialSurface.panelContrastFloor`: the small-text 4.5:1 with a
-  10 % margin for antialiased glyphs; it was 3:1 while rows and plates carried small text). The backdrop is heavily
-  blurred, so the adjustment is smooth; the direction follows the text so a dark-text light theme is never darkened
-  under its own text.
+  would leave the theme's card text below **7:1** (`MaterialSurface.panelContrastFloor`; it was 3:1 while rows and
+  plates carried small text). 7:1 for the full text colour is what keeps the faint runs at 4.5:1 (below). The
+  backdrop is heavily blurred, so the adjustment is smooth, and it acts only where the backdrop is bright; the
+  direction follows the text so a dark-text light theme is never darkened under its own text.
 
 Nothing else darkens the card itself: no `LegibilityRow` sits on a card (Media, Reddit, Gmail, Feed list lines,
 Weather, the Abandonment and Achievement shelves lost theirs), and `ShadowedText` loads no plate of its own (the
@@ -159,16 +159,40 @@ the same rounded, concentric rule. It evaluates the identical surface, so where 
 floor for its colours it draws nothing: no double darkening. Bars: `tests/test_surface_material_style.py`,
 `tests/test_card_surface_panels.py`.
 
-Muted runs (a run drawn at 60-75 % of the text colour's alpha: Media's playback state, age tags) are held only by the
-card's floor now. By the floor's arithmetic a 62 % white run over the darkest the panel allows reads about 3.5:1
-(a per-run plate held it at 4.5:1); not separately measured. The operator asked for one even panel instead of chips;
-if muted runs need more, raise `panelContrastFloor` (about 5.7 covers a 75 % run), never bring back per-line boxes.
+**Faint runs (lead review, 7 Nov).** Runs drawn at 55-76 % of their colour (Gmail's dates and menu glyph,
+Media's PLAYING, Feed sources and ages, System Stats' notes) have no plate of their own, so the panel's floor must
+carry them. Measured on Glass (Default Dark [Single], PERSONALSET 859804, 656207 and 670483; the run's colour
+composited at its effective opacity over the glyph-hidden frame, WCAG, 5th percentile over the glyph pixels; worst
+small faint run across Media, Gmail, Reddit, World News, Weather and System Stats):
 
-**Child controls.** Media's volume track (`spotify_volume`, the external rail) and mute button (`mute_button`) are
-material too (`ChildMaterialSurface.qml`, operator 7 Nov: "the volume child widgets inside layer should be material
-surfaced"): each loads a `MaterialSurface` through its own rounded shape, tinted by its own fill, while the card's
-material is active; the control drops its own fill (the mute button its gradient) meanwhile. On Normal it is an
-inactive `Loader` and the control is unchanged.
+| Design | Worst faint small run | Where |
+| --- | ---: | --- |
+| main (per-line rows and per-run plates) | 4.67 | World News source/age |
+| one panel, floor 5:1 | 3.88 | Gmail date |
+| one panel, floor 5.7:1 | 4.25 | Gmail date |
+| one panel, floor 6.5:1 | 4.57 | Gmail date |
+| **one panel, floor 7:1 (shipped)** | **4.70** | Gmail date |
+
+Full-colour small runs are 5.6:1 or better at 7:1. The one run below (a Feed's refresh glyph at 32 %, 2.8:1) is an
+idle icon, not text. Bar: `test_card_panel_holds_faint_small_runs_at_4_5` (Gmail and Media over a seeded busy
+backdrop; Gmail fails at 5:1).
+
+**Child controls.** Media's transport bar, mute button (`mute_button`) and volume track (`spotify_volume`, the external
+rail) are material too (`ChildMaterialSurface.qml`, operator 7 Nov: "the volume child widgets inside layer should be
+material surfaced", "the media controls would have the material on them"): each loads a `MaterialSurface` through its
+own rounded shape, tinted by its own fill, while the card's material is active; the control drops its own fill (the
+mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and the control is unchanged.
+
+- No inner rim ("the mute button shouldn't have an extra inside border"): a child passes a negative border width, so
+  the shaders' panel covers its whole face (`plateInset` is -1 there); its own outline is its only border.
+- The volume track carries no text: its tint takes 40 % of its fill's alpha and it has no darker panel
+  (`legibilityPanel: false`), so the backdrop reads through ("deserves more transparency"); the level fill and
+  outline sit on top unchanged.
+- The transport glyphs are vectors (`MediaTransportGlyph.qml`): previous, next, play and pause share one stroke
+  weight (at least 2 px) and one ink height and sit centred in their segments at every DPR. They were font characters
+  ("←", "||", "▶", "→") in the card's font since the Quick port (d8a643a4, Phase F4; the QWidget painter had set
+  pause in Segoe UI Bold), whose fallback arrows are hairline and sit on the text baseline; 116e1fc4 routed them
+  through `ThemedText`. This changes Media's Normal pixels on purpose.
 
 On a material the light-theme soft text halo (a blurred `MultiEffect` silhouette) is not drawn: over a colourful blur it
 reads as haze around the glyphs, and the plate now carries the contrast. Hard (dark-theme) shadows are unchanged.

@@ -295,8 +295,7 @@ OverlayWidget {
                     clip: true
 
                     // On a surface material: one rounded box filling the story tile
-                    // (game, headline, preview and source opt out of their own
-                    // plates), concentric with its corners. Inactive on Normal.
+                    // (its fill is the underlay), concentric with its corners. Inactive on Normal.
                     LegibilityRow {
                         objectName: "followedStoryLegibilityRow" + storySlot
                         readonly property real inset: tileFrame.border.width + 2.0

@@ -270,8 +270,8 @@ OverlayWidget {
             color: panel.accentColor
         }
 
-        // On a surface material: one rounded row filling the panel (label, detail and
-        // value opt out of their own plates), drawn over the panel fill and under the
+        // On a surface material: one rounded row filling the panel (its fill is the
+        // underlay), drawn over the panel fill and under the
         // text, concentric with the panel's corners. Inactive on Normal.
         LegibilityRow {
             objectName: panel.objectPrefix + "LegibilityRow"

@@ -889,7 +889,7 @@ OverlayWidget {
                     }
 
                     // On a surface material: one rounded box filling the story tile
-                    // (title, summary and source/age opt out of their own plates),
+                    // (its own fill is the underlay),
                     // concentric with the tile's corners. Inactive on Normal.
                     LegibilityRow {
                         objectName: "feedGridLegibilityRow" + index
