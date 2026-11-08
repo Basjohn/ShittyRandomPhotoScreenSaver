@@ -32,6 +32,23 @@ Item {
     property var expandedOverlayMediaModel: null
     property Item expandedOverlayOsdHost: null
     signal expandedOverlayTransportRequested(string key)
+    // Fullscreen Edit (M3c): the Edit session is open on the overlays; they show to be grabbed and report geometry.
+    property bool expandedOverlayEditing: false
+    signal expandedOverlayEditGeometryChanged()
+    // The left edge of the right-hand controls' column (stable: from the card's size and the tips' text, never from
+    // hover or admission), so an overlay moved into it keeps clear of the controls vertically.
+    TextMetrics {
+        id: presetTipMetrics
+        font.pixelSize: 11
+        font.weight: Font.Medium
+        text: "PREVIOUS PRESET"
+    }
+    readonly property real expandedOverlayControlsLeft: Math.min(
+        expandTooltip.x,
+        controlHintsAvailable && show3DControlHints
+            ? width - controlHintImage.inset - expandGlyph.width - 6 - controlHintImage.width : width,
+        cameraResetGlyph.x - 5 - presetControls.width + cameraResetGlyph.width - (presetTipMetrics.advanceWidth + 18)
+    ) - 10.0
     signal presetStepRequested(int direction)
     property real authoredSceneOpacity: 1.0
     property real startupRevealOpacity: 1.0
@@ -297,9 +314,12 @@ Item {
             topRightReserve: Math.max(expandTooltip.y + expandTooltip.height,
                                       controlHintImage.y + controlHintImage.height) + 10.0
             bottomRightReserve: visualizerPresentationRoot.height - cameraResetTooltip.y + 10.0
+            rightControlsLeft: visualizerPresentationRoot.expandedOverlayControlsLeft
+            editing: visualizerPresentationRoot.expandedOverlayEditing
             onTransportRequested: function(key) {
                 visualizerPresentationRoot.expandedOverlayTransportRequested(key)
             }
+            onEditGeometryChanged: visualizerPresentationRoot.expandedOverlayEditGeometryChanged()
         }
     }
 

@@ -9,6 +9,11 @@ import QtQuick
 // content by fading the content out, swapping while it is invisible and fading it back in (the overlay and its card
 // stay up: nothing pops). conceal() fades it out. No Timer, no polling, nothing per frame at rest: once the fade ends
 // the item is invisible and nothing runs.
+//
+// Fullscreen Edit (M3c): while the stage is editing, a revealed overlay holds (as if Always Show) so it can be grabbed,
+// its size and stacking follow at once (no easing that would lag the Edit frame), the OSD does not push it aside, and
+// every geometry change is reported to the stage (Python re-reads the Edit frames from it). endEdit() returns it to
+// its authored visibility with a fade.
 Item {
     id: slot
 
@@ -31,6 +36,9 @@ Item {
     readonly property string corner: corners.indexOf(String(options.corner)) >= 0 ? String(options.corner)
                                                                                  : defaultCorner
     readonly property bool alwaysShow: options.alwaysShow === true
+    readonly property bool editing: stage ? stage.editing === true : false
+    // Holds at full once revealed: Always Show, or Fullscreen Edit.
+    readonly property bool holding: alwaysShow || editing
     readonly property bool cardOn: options.card === true
     readonly property real unit: {
         const value = Number(options.scale)
@@ -53,9 +61,9 @@ Item {
     // The frame follows the content's size; on a visible card it eases to a new size behind a content swap.
     property real frameWidth: naturalWidth + 2.0 * padding
     property real frameHeight: naturalHeight + 2.0 * padding
-    Behavior on frameWidth { enabled: slot.cardOn && slot.presence > 0.0
+    Behavior on frameWidth { enabled: slot.cardOn && slot.presence > 0.0 && !slot.editing
         NumberAnimation { duration: slot.resizeMs; easing.type: Easing.InOutSine } }
-    Behavior on frameHeight { enabled: slot.cardOn && slot.presence > 0.0
+    Behavior on frameHeight { enabled: slot.cardOn && slot.presence > 0.0 && !slot.editing
         NumberAnimation { duration: slot.resizeMs; easing.type: Easing.InOutSine } }
     property int resizeMs: 380
     width: frameWidth
@@ -63,25 +71,37 @@ Item {
 
     // Distance from the corner's edge an older overlay in the same corner keeps for a newer one (the stage sets it).
     property real stackShift: 0.0
-    Behavior on stackShift { enabled: slot.presence > 0.0
+    Behavior on stackShift { enabled: slot.presence > 0.0 && !slot.editing
         NumberAnimation { duration: slot.stackGlideMs; easing.type: Easing.InOutSine } }
     property int stackGlideMs: 650
 
-    // Right-hand corners keep clear of the card's controls (the collapse glyph and 3D hints above, Reset Camera,
-    // the preset steps and their tips below).
-    readonly property real topBound: stage ? (rightSide ? Math.max(stage.safeInset, stage.topRightReserve)
-                                                        : stage.safeInset) : 0.0
-    readonly property real bottomBound: stage ? (rightSide ? Math.max(stage.safeInset, stage.bottomRightReserve)
-                                                           : stage.safeInset) : 0.0
+    // Right-hand corners anchor clear of the card's controls (the collapse glyph and 3D hints above, Reset Camera,
+    // the preset steps and their tips below). The anchor is the corner's; the offset (Fullscreen Edit) moves the
+    // overlay from it within the safe area.
+    readonly property real cornerTop: stage ? (rightSide ? Math.max(stage.safeInset, stage.topRightReserve)
+                                                         : stage.safeInset) : 0.0
+    readonly property real cornerBottom: stage ? (rightSide ? Math.max(stage.safeInset, stage.bottomRightReserve)
+                                                            : stage.safeInset) : 0.0
     readonly property real anchoredX: stage ? (rightSide ? stage.width - stage.safeInset - width : stage.safeInset)
                                             : 0.0
-    readonly property real anchoredY: stage ? (bottomSide ? stage.height - bottomBound - height - stackShift
-                                                          : topBound + stackShift) : 0.0
+    readonly property real anchoredY: stage ? (bottomSide ? stage.height - cornerBottom - height - stackShift
+                                                          : cornerTop + stackShift) : 0.0
     function clamp(value, low, high) { return Math.max(low, Math.min(Math.max(low, high), value)) }
     x: stage ? clamp(anchoredX + offsetX * stage.safeWidth, stage.safeInset,
                      stage.width - stage.safeInset - width) : 0.0
+    // Wherever an overlay reaches into the column of the card's right-hand controls (from any corner), it keeps
+    // clear of them vertically: no overlay ever sits under the collapse glyph, Reset Camera or the preset steps.
+    readonly property bool reachesControls: stage ? x + width > stage.rightControlsLeft : false
+    readonly property real topBound: stage ? (reachesControls ? Math.max(stage.safeInset, stage.topRightReserve)
+                                                              : stage.safeInset) : 0.0
+    readonly property real bottomBound: stage ? (reachesControls ? Math.max(stage.safeInset, stage.bottomRightReserve)
+                                                                 : stage.safeInset) : 0.0
     y: stage ? clamp(anchoredY + offsetY * stage.safeHeight, topBound,
                      stage.height - bottomBound - height) : 0.0
+    onXChanged: if (editing) stage.noteEditGeometry()
+    onYChanged: if (editing) stage.noteEditGeometry()
+    onWidthChanged: if (editing) stage.noteEditGeometry()
+    onHeightChanged: if (editing) stage.noteEditGeometry()
 
     // --------------------------------------------------------------------------------------------- visibility
     property real presence: 0.0
@@ -90,8 +110,9 @@ Item {
     property bool shown: false
     // Appearance order (a newer overlay sits nearer the corner's edge); set when it appears, not on a content swap.
     property int order: 0
-    // The OSD keeps priority: an overlay under a showing OSD steps aside (fades) until it hides.
-    readonly property bool osdBlocked: stage ? stage.osdCovers(slot) : false
+    // The OSD keeps priority: an overlay under a showing OSD steps aside (fades) until it hides (not in Fullscreen
+    // Edit, where it stays to be grabbed).
+    readonly property bool osdBlocked: stage && !editing ? stage.osdCovers(slot) : false
     property real osdYield: osdBlocked ? 0.0 : 1.0
     Behavior on osdYield { NumberAnimation { duration: 350; easing.type: Easing.InOutSine } }
     opacity: presence * osdYield
@@ -102,6 +123,9 @@ Item {
     function reveal() {
         cycle.stop()
         hideAnimation.stop()
+        // Read the stage, not the derived binding: an edit edge reveals from the stage's own handler, possibly before
+        // this slot's ``editing`` binding has re-evaluated.
+        const holding = alwaysShow || (!!stage && stage.editing === true)
         const showing = presence > 0.001
         if (!showing) {
             order = stage ? stage.nextRevealOrder() : order + 1
@@ -113,10 +137,17 @@ Item {
         settle.duration = showing && cardOn ? resizeMs : (makeRoom ? stackGlideMs : 0)
         fadeIn.duration = Math.round(fadeInMs * (1.0 - Math.min(1.0, presence)))
         contentIn.duration = showing ? swapInMs : 0
-        hold.duration = alwaysShow ? 0 : holdMs
-        fadeOut.to = alwaysShow ? 1.0 : 0.0
-        fadeOut.duration = alwaysShow ? 0 : fadeOutMs
+        hold.duration = holding ? 0 : holdMs
+        fadeOut.to = holding ? 1.0 : 0.0
+        fadeOut.duration = holding ? 0 : fadeOutMs
         cycle.start()
+    }
+
+    // Fullscreen Edit ended: back to the authored visibility. Always Show (with content) stays; anything else fades.
+    function endEdit(hasContent) {
+        if (alwaysShow && hasContent)
+            return
+        conceal()
     }
 
     function conceal() {

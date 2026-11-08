@@ -144,7 +144,9 @@ def _visualizer_host_binding(manager: Any) -> "VisualizerHostBinding":
 
     def _edit_layout_profile_activator(target: str) -> bool:
         layout = _live()._quick_custom_layout_owner
-        return not layout.is_editing or layout.activate_edit_visualizer_profile(target)
+        # Fullscreen Edit holds no Visualizer item: a capable -> capable switch has no profile to stage.
+        return (not layout.is_editing or getattr(layout, "is_fullscreen", False) is True
+                or layout.activate_edit_visualizer_profile(target))
 
     def _release_view_state() -> None:
         live = _live()
@@ -223,6 +225,16 @@ def _takeover_owner_retired(manager: Any) -> None:
     coordinator = _takeover_coordinator(manager)
     if coordinator is not None:
         coordinator.owner_retired()
+
+
+def _fullscreen_edit_open(manager: Any) -> bool:
+    """Fullscreen Edit (M3c) is open: the layout owner's session edits the expanded display's overlays only."""
+    return getattr(getattr(manager, "_quick_custom_layout_owner", None), "is_fullscreen", False) is True
+
+
+def _fullscreen_draft_pending(manager: Any) -> bool:
+    """Fullscreen Edit holds an unsaved draft (Save or Cancel first)."""
+    return getattr(getattr(manager, "_quick_custom_layout_owner", None), "fullscreen_draft_pending", False) is True
 
 
 def _takeover_edit_exited(manager: Any, *, saved: bool) -> None:
@@ -386,6 +398,8 @@ class DisplayManager(QObject):
             visualizer_unit_transfer=self._transfer_quick_visualizer_unit,
             live_config_commit=self._commit_quick_custom_layout_config_snapshot,
             visualizer_presence_commit=self._commit_quick_visualizer_presence,
+            # Fullscreen Edit (M3c): Settings waits while its draft is unsaved; the menus show it.
+            fullscreen_draft_listener=lambda _pending: self._refresh_all_quick_context_menus(),
         )
         self._retiring_quick_units: dict[int, QuickDisplayUnit] = {}
         self._retire_manager_when_quick_complete = False
@@ -1076,7 +1090,8 @@ class DisplayManager(QObject):
         from core.settings.visualizer_mode_registry import get_visualizer_geometry_kind
 
         custom_owner = self._quick_custom_layout_owner
-        session = custom_owner.session if custom_owner.is_editing else None
+        # Fullscreen Edit frames the overlays, never the Visualizer: no 3D framing record for it.
+        session = custom_owner.session if custom_owner.is_editing and not _fullscreen_edit_open(self) else None
         selected = None if session is None else session.selected_item()
         from_publication = logical is not None
         # A non-present audio packet is never a new visible scene. Keep the
@@ -1100,6 +1115,7 @@ class DisplayManager(QObject):
         )
         if (
             not self._quick_custom_layout_owner.is_editing
+            or _fullscreen_edit_open(self)
             or get_visualizer_geometry_kind(owner.controller.mode_id) != "freeform_3d"
         ):
             owner.set_edit_orbit_publication_callback(None)
@@ -1639,6 +1655,10 @@ class DisplayManager(QObject):
             interaction_mode_locked=interaction_mode_forced(),
             edit_mode_active=self._quick_custom_layout_owner.is_editing,
             layout_actions_available=self._quick_custom_layout_owner.can_start(),
+            # Fullscreen Edit (M3c): Settings waits for its unsaved draft (Save or Cancel first); the overlays have
+            # no authored layout to reset to.
+            settings_available=not _fullscreen_draft_pending(self),
+            layout_reset_available=not _fullscreen_edit_open(self),
         )
         unit.configure_context_menu(
             entries,
@@ -1737,6 +1757,8 @@ class DisplayManager(QObject):
             self.clear_image_bans_requested.emit()
             return True
         if action == "settings":
+            if self._fullscreen_edit_holds_draft("Settings"):
+                return False
             if self._quick_custom_layout_owner.is_active:
                 if not self.cancel_custom_layout_session():
                     return False
@@ -1770,10 +1792,9 @@ class DisplayManager(QObject):
             if action == "edit_layout":
                 return self._start_quick_custom_layout_session()
             if action == "save_layout":
-                saved = self._quick_custom_layout_owner.save()
-                if saved:
-                    self._refresh_all_quick_context_menus()
-                return saved
+                # The one Save route (Enter and the background double-click take it too): the takeover hears that
+                # Edit ended, so Fullscreen Edit and an ordinary Edit's held expansion resolve exactly as with Enter.
+                return self._save_quick_custom_layout()
             if action == "cancel_layout":
                 return self.cancel_custom_layout_session()
             if action == "reset_layout":
@@ -2614,10 +2635,14 @@ class DisplayManager(QObject):
             self._finish_quick_visualizer_gesture()
         if self._quick_custom_layout_owner.is_active:
             return True
-        # Edit never shows an expanded state: an expanded view collapses first, before capture.
+        # Fullscreen Edit (M3c; supersedes "Edit collapses an expanded view"): Edit on a resting expanded view stays
+        # expanded and edits only its full-display overlays. A view still entering or moving collapses at its
+        # commit edge for an ordinary Edit, as before.
         coordinator = _takeover_coordinator(self)
         if coordinator is not None:
             coordinator.edit_entered()
+            if coordinator.fullscreen_edit:
+                return self._start_fullscreen_overlay_edit()
         # Quiesce placement callbacks before capture, preserving the visible
         # stacked/Media-relative rectangles as the initial edit geometry.
         self._set_quick_authored_layout_enabled(False, restore_base=False)
@@ -2637,7 +2662,47 @@ class DisplayManager(QObject):
         self._refresh_all_quick_context_menus()
         return True
 
+    def _start_fullscreen_overlay_edit(self) -> bool:
+        """Open Fullscreen Edit on the expanded display's overlays (the owner's one session, overlays only).
+
+        Nothing on the ordinary layout is quiesced or captured: no ordinary widget, Visualizer item or other display
+        joins the session, so the ordinary layout and CUSTOM stay exactly as they are (other displays keep running
+        without Edit chrome; their layout is edited from an ordinary Edit, after collapsing).
+        """
+
+        from core.settings.fullscreen_overlays import normalize_fullscreen_overlays
+
+        unit = self._quick_visualizer_unit
+        committed = normalize_fullscreen_overlays(self._visualizer_section().get("fullscreen_overlays"))
+        try:
+            started = bool(unit is not None and not unit.is_retired
+                           and self._quick_custom_layout_owner.start_fullscreen(unit, committed))
+        except Exception:
+            _takeover_edit_exited(self, saved=False)
+            raise
+        if not started:
+            _takeover_edit_exited(self, saved=False)
+            return False
+        self._refresh_all_quick_context_menus()
+        return True
+
+    def _fullscreen_edit_holds_draft(self, what: str) -> bool:
+        """Fullscreen Edit's unsaved draft is never discarded or saved implicitly: ``what`` waits for Save/Cancel."""
+
+        if not _fullscreen_draft_pending(self):
+            return False
+        logger.info("[EXPANDED_VIS] %s refused: Fullscreen Edit has unsaved changes (Save or Cancel first)", what)
+        return True
+
+    def _end_fullscreen_overlay_edit(self) -> None:
+        """The takeover's forced end of Fullscreen Edit (its view cannot stay expanded): Cancel, nothing saved."""
+
+        if _fullscreen_edit_open(self):
+            logger.warning("[EXPANDED_VIS] Fullscreen Edit cancelled with its view (the mode is no longer capable)")
+            self.cancel_custom_layout_session()
+
     def _save_quick_custom_layout(self) -> bool:
+        fullscreen = _fullscreen_edit_open(self)
         saved = self._quick_custom_layout_owner.save()
         if saved:
             # A geometry-only Save stays in this generation. Keep authored
@@ -2645,18 +2710,26 @@ class DisplayManager(QObject):
             self._refresh_all_quick_context_menus()
             self._refresh_quick_visualizer_edit_content_envelope()
             _takeover_edit_exited(self, saved=True)
+            if fullscreen:
+                # The overlays show the committed value (the draft just saved).
+                self._publish_expanded_overlays()
         return saved
 
     def cancel_custom_layout_session(self) -> bool:
         """Cancel CUSTOM and restore authored layout only when globally eligible."""
 
+        fullscreen = _fullscreen_edit_open(self)
         cancelled = self._quick_custom_layout_owner.cancel()
         if cancelled:
-            if self._authored_layout_allowed_by_settings():
+            # Fullscreen Edit never quiesced the authored layout, so there is nothing to restore there.
+            if not fullscreen and self._authored_layout_allowed_by_settings():
                 self._set_quick_authored_layout_enabled(True, restore_base=False)
             self._refresh_all_quick_context_menus()
             self._refresh_quick_visualizer_edit_content_envelope()
             _takeover_edit_exited(self, saved=False)
+            if fullscreen:
+                # The overlays return to the committed value (the pre-Edit geometry, exactly).
+                self._publish_expanded_overlays()
         return cancelled
 
     def _save_layout_slot(self, slot_id: str) -> bool:
@@ -2664,6 +2737,11 @@ class DisplayManager(QObject):
 
         settings = self.settings_manager
         if settings is None:
+            return False
+        if _fullscreen_edit_open(self):
+            # A slot holds the ordinary layout, which Fullscreen Edit does not edit (and its Save would save the
+            # overlays' draft implicitly).
+            logger.info("[LAYOUT_SLOT] Slot save refused during Fullscreen Edit: %s", slot_id)
             return False
         custom_save_completed = False
         try:
@@ -2710,6 +2788,10 @@ class DisplayManager(QObject):
 
         settings = self.settings_manager
         if settings is None:
+            return False
+        if _fullscreen_edit_open(self):
+            # A slot load rebuilds the runtime and would discard Fullscreen Edit's draft implicitly.
+            logger.info("[LAYOUT_SLOT] Slot load refused during Fullscreen Edit: %s", slot_id)
             return False
         try:
             from core.settings.layout_slots import apply_layout_slot
@@ -3264,6 +3346,7 @@ class DisplayManager(QObject):
             edit_active=lambda: bool(_call("_quick_custom_layout_session_active", default=False)),
             publish_glyph=_publish_expand_glyph,
             cover_widgets=_cover_ordinary_widgets,
+            end_fullscreen_edit=lambda: _call("_end_fullscreen_overlay_edit"),
         ))
         self._expanded_display_coordinator = coordinator
         # The full-display overlays' inputs exist only where a takeover can draw them (M3b).
@@ -3677,6 +3760,8 @@ class DisplayManager(QObject):
                 return False
             target = str(target_id or "").strip()
             if not target:
+                return False
+            if manager._fullscreen_edit_holds_draft("Settings"):
                 return False
             if manager._quick_custom_layout_owner.is_active:
                 manager.cancel_custom_layout_session()

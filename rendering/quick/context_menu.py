@@ -224,6 +224,8 @@ def build_quick_context_menu_entries(
     interaction_mode_locked: bool,
     edit_mode_active: bool,
     layout_actions_available: bool = True,
+    settings_available: bool = True,
+    layout_reset_available: bool = True,
 ) -> tuple[QuickContextMenuEntry, ...]:
     """Build the retained equivalent of the admitted product menu structure."""
 
@@ -263,7 +265,8 @@ def build_quick_context_menu_entries(
             (
                 QuickContextMenuEntry("save_layout", "✓  Save Widget Layout"),
                 QuickContextMenuEntry("cancel_layout", "↺  Cancel Widget Layout"),
-                QuickContextMenuEntry("reset_layout", "⟲  Reset To Saved Layout"),
+                *((QuickContextMenuEntry("reset_layout", "⟲  Reset To Saved Layout"),)
+                  if layout_reset_available else ()),
             )
             if edit_mode_active
             else (QuickContextMenuEntry("edit_layout", "✥  Edit Widget Layout"),)
@@ -300,7 +303,7 @@ def build_quick_context_menu_entries(
     entries.extend(
         (
             QuickContextMenuEntry("", "", kind="separator"),
-            QuickContextMenuEntry("settings", "⚙  Settings"),
+            QuickContextMenuEntry("settings", "⚙  Settings", enabled=bool(settings_available)),
             *layout_entries,
             QuickContextMenuEntry("", "", kind="separator"),
             QuickContextMenuEntry(

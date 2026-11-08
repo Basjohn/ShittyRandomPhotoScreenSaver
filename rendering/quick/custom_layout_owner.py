@@ -5,6 +5,12 @@ presentation-neutral :class:`CustomLayoutSession` from the already-admitted
 retained Quick presentations, binds each display's existing overlay, and owns
 the exact Save/Cancel/reset persistence boundary.  It does not construct a
 second presentation, service, visualizer, input router, or cadence owner.
+
+Fullscreen Edit (Expanded Visualizer M3c): Edit entered while the Visualizer is
+expanded opens the same session on the expanded display's full-display overlays
+only (``start_fullscreen``); ``rendering.quick.fullscreen_overlay_edit`` supplies
+their geometry, and Save writes only their canonical value
+(``widgets.spotify_visualizer.fullscreen_overlays``), never CUSTOM.
 """
 
 from __future__ import annotations
@@ -69,6 +75,7 @@ from rendering.custom_layout_contract import (
     SnapResolution,
 )
 from rendering.custom_layout_commit import commit_custom_session
+from rendering.quick.fullscreen_overlay_edit import FullscreenOverlayEdit
 from rendering.custom_layout_session import (
     CustomLayoutKey,
     CustomLayoutSession,
@@ -219,6 +226,7 @@ class QuickCustomLayoutOwner:
         visualizer_unit_transfer: Callable[[Any], bool] | None = None,
         live_config_commit: Callable[[Mapping[str, object]], None] | None = None,
         visualizer_presence_commit: Callable[[bool], bool] | None = None,
+        fullscreen_draft_listener: Callable[[bool], None] | None = None,
     ) -> None:
         self._settings_manager = settings_manager
         self._participants_provider = participants_provider
@@ -262,6 +270,11 @@ class QuickCustomLayoutOwner:
         self._direct = False
         self._direct_origin: QRect | None = None
         self._direct_offset = QPoint()
+        # Fullscreen Edit (M3c): the overlays' part of the session while it is open (None otherwise), and who hears
+        # its unsaved-draft state flip (the display manager's menus).
+        self._fullscreen: FullscreenOverlayEdit | None = None
+        self._fullscreen_draft_listener = fullscreen_draft_listener
+        self._fullscreen_pending = False
         self._retired = False
         self._settings_change_signal = getattr(settings_manager, "settings_changed", None)
         if self._settings_change_signal is not None and hasattr(
@@ -282,6 +295,29 @@ class QuickCustomLayoutOwner:
     @property
     def is_active(self) -> bool:
         return self._active
+
+    @property
+    def is_fullscreen(self) -> bool:
+        """Fullscreen Edit is open: Edit edits the expanded display's full-display overlays, nothing else."""
+        return self._active and self._fullscreen is not None
+
+    @property
+    def fullscreen_draft_pending(self) -> bool:
+        """Fullscreen Edit holds an unsaved draft (Save or Cancel resolves it; nothing else may end it)."""
+        editor = self._fullscreen
+        return bool(self._active and editor is not None and editor.pending())
+
+    def _note_fullscreen_draft(self) -> None:
+        pending = self.fullscreen_draft_pending
+        if pending == self._fullscreen_pending:
+            return
+        self._fullscreen_pending = pending
+        listener = self._fullscreen_draft_listener
+        if listener is not None:
+            try:
+                listener(pending)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Fullscreen Edit draft listener failed", exc_info=True)
 
     @property
     def is_retired(self) -> bool:
@@ -379,12 +415,15 @@ class QuickCustomLayoutOwner:
             self._visualizer_pixels_per_world[item.source_key] = before.visualizer_pixels_per_world
         session.refresh_duplicate_state()
         session.notify_all_items_changed()
+        self._note_fullscreen_draft()
         logger.info("[CUSTOM_LAYOUT] Undo Edit action widget=%s remaining=%d",
                     item.model_identity, len(self._undo_history))
         return True
 
     def close_item(self, item: CustomLayoutSessionItem) -> None:
         """Keep edit-mode close inside the existing session mutation seam."""
+        if self._fullscreen is not None:
+            return      # the full-display overlays have no enabled state to close (their frames offer no X)
         before = self._capture_undo(item)
         item.apply_remove_action()
         self._commit_discrete_undo(before)
@@ -531,6 +570,84 @@ class QuickCustomLayoutOwner:
         )
         return True
 
+
+    def start_fullscreen(self, unit: Any, committed: Mapping[str, object]) -> bool:
+        """Open Fullscreen Edit (M3c) on ``unit``'s full-display overlays (the expanded Visualizer's display).
+
+        The same session, Edit layer and gestures as ``start``; its items are only the overlays' parts (the preset
+        toast, Now Playing's text and artwork) from ``committed`` (the overlays' normalised value at entry). No
+        ordinary widget, no Visualizer item and no other display joins, so Save and Cancel cannot reach the ordinary
+        layout or CUSTOM. Returns False (nothing bound) when the overlays are not drawn.
+        """
+
+        if self._retired or self._settings_manager is None:
+            return False
+        if self._direct:
+            self.finish_direct_visualizer_gesture()
+        if self._active:
+            return self.is_fullscreen
+        binding = next((entry for entry in self._live_display_bindings().values() if entry.unit is unit), None)
+        if binding is None:
+            return False
+        scene = unit.runtime.scene_controller
+        from widgets.spotify_visualizer.expanded_overlays import resolve_expanded_overlay_config
+        from rendering.quick.widgets.surface_material import surface_text_color
+
+        # The theme's card text colour is resolved once per session, not per drag sample.
+        card_text = surface_text_color()
+
+        def project(value: Mapping[str, object]) -> None:
+            scene.set_visualizer_expanded_overlay_config(resolve_expanded_overlay_config(
+                {"fullscreen_overlays": value}, card_text_color=card_text))
+
+        editor = FullscreenOverlayEdit(
+            display_identity=binding.identity,
+            display_origin=binding.geometry.topLeft(),
+            monitor_route=binding.monitor_route,
+            committed=committed,
+            geometry=scene.expanded_overlay_edit_geometry,
+            project=project,
+            guides=lambda vertical, horizontal: scene.set_custom_layout_guides(
+                vertical=vertical, horizontal=horizontal),
+        )
+        session = CustomLayoutSession()
+        if not editor.admit(session):
+            logger.info("[CUSTOM_LAYOUT] Fullscreen Edit refused: the overlays are not drawn")
+            return False
+        try:
+            scene.bind_fullscreen_overlay_edit_session(
+                session,
+                display_identity=binding.identity,
+                display_origin=binding.geometry.topLeft(),
+                geometry_resolver=self.resolve_move,
+                resize_begin_handler=self.begin_resize,
+                resize_update_handler=self.update_resize,
+                resize_wheel_handler=self.resize_wheel,
+                move_finished_handler=self.clear_move_guides,
+                size_reset_handler=self.restore_item_size,
+                close_item_handler=self.close_item,
+                item_change_publisher=editor.project,
+                geometry_listener=editor.geometry_changed,
+            )
+        except Exception:
+            try:
+                scene.clear_custom_layout_session()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Partial Fullscreen Edit bind cleanup failed", exc_info=True)
+            editor.retire()
+            raise
+        self._bindings = {binding.identity: binding}
+        self._descriptors = {}
+        self._session = session
+        self._coordinator = None
+        self._fullscreen = editor
+        self._fullscreen_pending = False
+        self._selected_child_edit_item = None
+        session.subscribe_selection(self._on_child_edit_selection_changed)
+        self._active = True
+        logger.info("[CUSTOM_LAYOUT] Started Fullscreen Edit display=%s items=%d",
+                    binding.identity, len(session.items()))
+        return True
 
     def _on_child_edit_selection_changed(
         self,
@@ -715,6 +832,8 @@ class QuickCustomLayoutOwner:
         if self._direct and not self._direct_changed():
             self._finish()
             return True
+        if self._fullscreen is not None:
+            return self._save_fullscreen()
         # Observe the SAME session item and retained QML target on either side
         # of the existing Save promotion; do not initiate a layout publication.
         selected_geo_item = self._session.selected_item() if is_geometry_logging_enabled() else None
@@ -806,6 +925,23 @@ class QuickCustomLayoutOwner:
             else:
                 self._reload_request("save_continue")
         logger.info("[CUSTOM_LAYOUT] Saved one Quick session")
+        return True
+
+    def _save_fullscreen(self) -> bool:
+        """Fullscreen Edit's Save: exactly the overlays' placement, written into their one canonical value."""
+
+        from core.settings.fullscreen_overlays import FULLSCREEN_OVERLAYS_KEY
+
+        editor = self._fullscreen
+        value = editor.draft_value()
+        self._settings_manager.set(FULLSCREEN_OVERLAYS_KEY, value)
+        self._settings_manager.save()
+        cleanup_corruption = self._finish()
+        if cleanup_corruption:
+            logger.error("[CUSTOM_LAYOUT] Fullscreen Edit Save closed over corrupt retained objects: %s",
+                         cleanup_corruption)
+            self._reload_request("save_corrupt_retained_runtime")
+        logger.info("[CUSTOM_LAYOUT] Saved Fullscreen Edit")
         return True
 
     # ---- Direct Visualizer gestures (outside Edit) ------------------------------------
@@ -929,6 +1065,9 @@ class QuickCustomLayoutOwner:
     def reset_to_authored(self) -> bool:
         if not self._active or self._session is None:
             return False
+        if self._fullscreen is not None:
+            # The overlays have no authored layout: Restore Size per frame, Cancel for the whole draft.
+            return False
         widgets = self._settings_manager.get_widgets_map()
         changed = False
         for widget_id in {item.model_identity for item in self._session.items()}:
@@ -977,6 +1116,12 @@ class QuickCustomLayoutOwner:
         proposed: QRect,
         cursor: QPoint,
     ) -> QRect:
+        if self._fullscreen is not None:
+            # A Fullscreen part moves its overlay (the artwork moves Now Playing): that item's undo step.
+            self._begin_undo_gesture(self._fullscreen.position_item(item), "parent_move")
+            resolved = self._fullscreen.resolve_move(item, proposed)
+            self._note_fullscreen_draft()
+            return resolved
         self._begin_undo_gesture(item, "parent_move")
         binding = self._bindings[item.current_display_identity]
         target = binding
@@ -1274,6 +1419,11 @@ class QuickCustomLayoutOwner:
         handle: str,
         cursor: QPoint,
     ) -> bool:
+        if self._fullscreen is not None:
+            if not self._fullscreen.begin_resize(item, handle, cursor):
+                return False
+            self._begin_undo_gesture(item, "parent_resize")
+            return True
         handle_id = str(handle or "")
         viewport_handles = {
             "left", "right", "top", "bottom",
@@ -1385,6 +1535,12 @@ class QuickCustomLayoutOwner:
         cursor: QPoint,
         finalize: bool,
     ) -> bool:
+        if self._fullscreen is not None:
+            changed = self._fullscreen.update_resize(item, handle, cursor, bool(finalize))
+            if finalize:
+                self._finish_undo_gesture("parent_resize")
+            self._note_fullscreen_draft()
+            return changed
         origin = self._resize_origins.get(item.source_key)
         if origin is None:
             return False
@@ -1808,6 +1964,12 @@ class QuickCustomLayoutOwner:
     ) -> bool:
         if not item.resize_capable:
             return False
+        if self._fullscreen is not None:
+            before_undo = self._capture_undo(item)
+            changed = self._fullscreen.resize_wheel(item, int(angle_delta_y))
+            self._commit_discrete_undo(before_undo)
+            self._note_fullscreen_draft()
+            return changed
         before_undo = self._capture_undo(item)
         changed = self._apply_uniform_scale(
             item,
@@ -2461,6 +2623,12 @@ class QuickCustomLayoutOwner:
         owning display is a uniform emergency reduction admitted.
         """
 
+        if self._fullscreen is not None and self._active:
+            before_undo = self._capture_undo(item)
+            restored = self._fullscreen.restore_size(item)
+            self._commit_discrete_undo(before_undo)
+            self._note_fullscreen_draft()
+            return restored
         if (
             not self._active
             or self._session is None
@@ -3350,6 +3518,11 @@ class QuickCustomLayoutOwner:
             self._direct = False
             self._direct_origin = None
             self._direct_offset = QPoint()
+            fullscreen = self._fullscreen
+            self._fullscreen = None
+            if fullscreen is not None:
+                fullscreen.retire()
+            self._note_fullscreen_draft()
         return tuple(dict.fromkeys(corruption))
 
     def _transfer_visualizer_display_transaction(

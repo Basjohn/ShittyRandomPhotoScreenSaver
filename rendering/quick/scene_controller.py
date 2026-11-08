@@ -9,7 +9,7 @@ import math
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QPoint, QUrl, Signal, Qt
+from PySide6.QtCore import QObject, QPoint, QRectF, QUrl, Signal, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
@@ -442,6 +442,11 @@ class QuickSceneController(QObject):
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_visualizer_baseline: ResolvedVisualizerPresentation | None = None
         self._custom_layout_edit_geometry_key: tuple[object, ...] | None = None
+        # Fullscreen Edit (Expanded Visualizer M3c): the bound session edits this display's full-display overlays,
+        # never the expanded Visualizer card (no CUSTOM authority over it; it is never hidden), and the overlays
+        # report their geometry to the listener while it is bound.
+        self._custom_layout_fullscreen = False
+        self._overlay_edit_geometry_listener: Callable[[], None] | None = None
         # Set only when the C++ DisplayScene root dies while this generation is
         # still admitting work. Normal terminal retirement closes admission first.
         self._unexpected_scene_root_loss = False
@@ -466,6 +471,7 @@ class QuickSceneController(QObject):
         self._visualizer_overlay_config: dict[str, object] = {}
         self._visualizer_overlay_preset: tuple[str, int] = ("", 0)
         self._visualizer_overlay_media_model: QObject | None = None
+        self._visualizer_overlay_editing = False
         self._visualizer_control_hints_available = False
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
@@ -1288,6 +1294,134 @@ class QuickSceneController(QObject):
         root = self._visualizer_root
         return root if _qobject_is_alive(root) else None
 
+    def bind_fullscreen_overlay_edit_session(
+        self,
+        session: CustomLayoutSession,
+        *,
+        display_identity: str,
+        display_origin: QPoint | None = None,
+        geometry_resolver: GeometryResolver | None = None,
+        resize_begin_handler: ResizeBeginHandler | None = None,
+        resize_update_handler: ResizeUpdateHandler | None = None,
+        resize_wheel_handler: ResizeWheelHandler | None = None,
+        move_finished_handler: MoveFinishedHandler | None = None,
+        size_reset_handler: SizeResetHandler | None = None,
+        close_item_handler: CloseItemHandler | None = None,
+        item_change_publisher: Callable[[CustomLayoutSessionItem], None] | None = None,
+        geometry_listener: Callable[[], None] | None = None,
+    ) -> CustomLayoutOverlayModel:
+        """Bind Fullscreen Edit (Expanded Visualizer M3c): the one Edit overlay over this display's full-display
+        overlays.
+
+        The same retained Edit layer, model, gestures and Save signal as ``bind_custom_layout_session``; what differs
+        is what the items are. They are the overlays' parts (the preset toast, Now Playing's text and its artwork), so
+        ``item_change_publisher`` projects their draft placement onto the overlays (never onto an ordinary root), and
+        the expanded Visualizer card keeps its own presentation: no CUSTOM authority over it, never hidden. Native
+        runtime input pauses as in every Edit; the overlays show to be grabbed and report their geometry to
+        ``geometry_listener`` (from the QML, at their geometry edges only) until ``clear_custom_layout_session``.
+        """
+
+        identity = str(display_identity or "").strip()
+        if not identity:
+            raise ValueError("display_identity must not be empty")
+        self._custom_layout_display_identity = identity
+        self._custom_layout_display_origin = QPoint(display_origin or QPoint())
+        self._custom_layout_session = session
+        self._custom_layout_fullscreen = True
+        self._window.set_custom_layout_input_blocked(True)
+        self.ordinary_widget_host.set_custom_layout_input_blocked(True)
+        if self._visualizer_root is not None:
+            # Edit's wheel resizes the frame under it; the card's app-volume wheel (and its controls) wait.
+            self._visualizer_root.setProperty("volumeWheelEnabled", False)
+        self._overlay_edit_geometry_listener = geometry_listener
+        self._set_visualizer_overlay_editing(True)
+        model = self.custom_layout_overlay.bind_session(
+            session,
+            display_identity=identity,
+            display_origin=self._custom_layout_display_origin,
+            geometry_resolver=geometry_resolver,
+            item_change_publisher=item_change_publisher,
+            resize_begin_handler=resize_begin_handler,
+            resize_update_handler=resize_update_handler,
+            resize_wheel_handler=resize_wheel_handler,
+            move_finished_handler=move_finished_handler,
+            size_reset_handler=size_reset_handler,
+            close_item_handler=close_item_handler,
+        )
+        model.save_requested.connect(self.custom_layout_save_requested.emit)
+        model.selection_changed.connect(self.custom_layout_selection_changed.emit)
+        return model
+
+    @property
+    def custom_layout_fullscreen(self) -> bool:
+        """The bound Edit session is Fullscreen Edit (the full-display overlays)."""
+
+        return self._custom_layout_fullscreen
+
+    def expanded_overlay_edit_geometry(self) -> dict[str, Any] | None:
+        """Fullscreen Edit: the full-display overlays' live geometry, in the Edit layer's local coordinates.
+
+        Read on demand at Edit edges (never cached, never per frame): the stage (the overlays' item over the expanded
+        card) and its safe area, each overlay's rectangle, its stage position and its corner anchor (``anchoredX`` /
+        ``anchoredY``: where it sits at a zero offset, its stacking included), and the Edit parts' rectangles: the
+        preset toast, Now Playing's text block (with its Media Controls when shown) and its artwork. None while the
+        overlays are not drawn.
+        """
+
+        root = self._visualizer_root
+        overlay = self._custom_layout_overlay
+        if root is None or overlay is None or not _qobject_is_alive(root):
+            return None
+        loader = root.findChild(QQuickItem, "visualizerExpandedOverlays")
+        stage = loader.property("item") if loader is not None else None
+        if not isinstance(stage, QQuickItem) or not _qobject_is_alive(stage):
+            return None
+        target = overlay.item
+
+        def rect(item: QQuickItem) -> tuple[float, float, float, float]:
+            mapped = item.mapRectToItem(target, QRectF(0.0, 0.0, item.width(), item.height()))
+            return (mapped.x(), mapped.y(), mapped.width(), mapped.height())
+
+        slots: dict[str, dict[str, tuple[float, ...]]] = {}
+        for name, object_name in (("preset", "expandedOverlayPreset"), ("now_playing", "expandedOverlayNowPlaying")):
+            slot = stage.findChild(QQuickItem, object_name)
+            if slot is None:
+                return None
+            slots[name] = {
+                "rect": rect(slot),
+                "pos": (float(slot.x()), float(slot.y())),
+                "anchored": (float(slot.property("anchoredX")), float(slot.property("anchoredY"))),
+            }
+        text = stage.findChild(QQuickItem, "expandedOverlayNowPlayingText")
+        artwork = stage.findChild(QQuickItem, "expandedOverlayArtwork")
+        if text is None or artwork is None:
+            return None
+        return {
+            "stage": rect(stage),
+            "safe_inset": float(stage.property("safeInset")),
+            "safe_width": float(stage.property("safeWidth")),
+            "safe_height": float(stage.property("safeHeight")),
+            "slots": slots,
+            "parts": {"preset": slots["preset"]["rect"], "now_playing": rect(text), "artwork": rect(artwork)},
+        }
+
+    def _set_visualizer_overlay_editing(self, editing: bool) -> None:
+        editing = bool(editing)
+        if editing == self._visualizer_overlay_editing:
+            return
+        self._visualizer_overlay_editing = editing
+        self._project_visualizer_root_property("expandedOverlayEditing", editing)
+
+    @property
+    def visualizer_overlay_editing(self) -> bool:
+        return self._visualizer_overlay_editing
+
+    def _on_expanded_overlay_edit_geometry_changed(self) -> None:
+        # A QML signal's handler: a plain method (never a result Slot), forwarding to the bound Edit only.
+        listener = self._overlay_edit_geometry_listener
+        if listener is not None:
+            listener()
+
     def refresh_custom_layout_session(self) -> None:
         """Reproject current session state onto the same retained items."""
 
@@ -1307,6 +1441,10 @@ class QuickSceneController(QObject):
         """Project one move sample's edge/centre guides onto the edit layers."""
 
         center_kinds = {"display_center", "peer_center"}
+        if self._custom_layout_fullscreen:
+            # Fullscreen Edit: the guide underlay lies under the expanded card, so every guide (the safe area's
+            # edges and centre, the other overlay's edges and centre) is drawn on the Edit layer.
+            center_kinds = set()
         vertical_edges = tuple(
             (int(position), str(kind))
             for position, kind in vertical
@@ -1369,6 +1507,10 @@ class QuickSceneController(QObject):
         if self._unexpected_scene_root_loss:
             corrupt.append("scene_root")
             self._unexpected_scene_root_loss = False
+        # Fullscreen Edit: the overlays stop reporting geometry first, then return to their authored visibility.
+        self._overlay_edit_geometry_listener = None
+        self._custom_layout_fullscreen = False
+        self._set_visualizer_overlay_editing(False)
         host = self.ordinary_widget_host
         invalid = host.prune_invalid_presentations()
         deaths = host.consume_unexpected_qt_deaths()
@@ -1561,7 +1703,8 @@ class QuickSceneController(QObject):
         loader = self._visualizer_loader
         if root is None or loader is None:
             return
-        if self._custom_layout_session is None:
+        if self._custom_layout_session is None or self._custom_layout_fullscreen:
+            # No Edit, or Fullscreen Edit: the Visualizer is not a session item (the expanded card stays as drawn).
             root.setProperty("customLayoutWorkingVisible", True)
             return
         active_item = self._active_custom_layout_item("spotify_visualizer")
@@ -2186,7 +2329,7 @@ class QuickSceneController(QObject):
             raise RuntimeError("Quick scene admission is closed")
         if not isinstance(presentation, ResolvedVisualizerPresentation):
             raise TypeError("visualizer presentation must already be resolved")
-        if self._custom_layout_session is not None:
+        if self._custom_layout_session is not None and not self._custom_layout_fullscreen:
             # Runtime publications remain truth for style/fade/content metrics;
             # CUSTOM contributes only its relative working size and position.
             self._custom_layout_visualizer_baseline = presentation
@@ -2611,6 +2754,7 @@ class QuickSceneController(QObject):
         root.setProperty("expandedOverlayPresetSerial", self._visualizer_overlay_preset[1])
         root.setProperty("expandedOverlayMediaModel", self._visualizer_overlay_media_model)
         root.setProperty("expandedOverlaysDrawn", self._visualizer_overlays_drawn)
+        root.setProperty("expandedOverlayEditing", self._visualizer_overlay_editing)
         if self._input_state is not None:
             self._apply_visualizer_input_state(self._input_state)
         hover_glyph = getattr(root, "hoverEditGlyphRequested", None)
@@ -2630,6 +2774,9 @@ class QuickSceneController(QObject):
         overlay_transport = getattr(root, "expandedOverlayTransportRequested", None)
         if overlay_transport is not None and hasattr(overlay_transport, "connect"):
             overlay_transport.connect(self.visualizer_overlay_transport_requested.emit)
+        overlay_geometry = getattr(root, "expandedOverlayEditGeometryChanged", None)
+        if overlay_geometry is not None and hasattr(overlay_geometry, "connect"):
+            overlay_geometry.connect(self._on_expanded_overlay_edit_geometry_changed)
         volume_step_signal = getattr(root, "appVolumeStepRequested", None)
         if volume_step_signal is not None and hasattr(volume_step_signal, "connect"):
             volume_step_signal.connect(self._handle_visualizer_app_volume_step)
