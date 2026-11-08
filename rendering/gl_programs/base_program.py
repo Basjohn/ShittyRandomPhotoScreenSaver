@@ -60,58 +60,17 @@ void main() {
 
     def create_program(self) -> int:
         """Compile and link shader program, return program ID.
-        
-        Raises RuntimeError on compilation/link failure.
+
+        Links through the one program link owner (``gl_resources.compile_program``: the program binary cache
+        included). Raises RuntimeError on compilation/link failure.
         """
         if gl is None:
             raise RuntimeError("PyOpenGL not available")
+        from rendering.quick.render.gl_resources import compile_program
 
-        vs = self._compile_shader(self.vertex_source, gl.GL_VERTEX_SHADER)
-        fs = self._compile_shader(self.fragment_source, gl.GL_FRAGMENT_SHADER)
-
-        program = gl.glCreateProgram()
-        gl.glAttachShader(program, vs)
-        gl.glAttachShader(program, fs)
-        gl.glLinkProgram(program)
-
-        # Check link status
-        link_status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-        if not link_status:
-            info_log = gl.glGetProgramInfoLog(program)
-            gl.glDeleteProgram(program)
-            gl.glDeleteShader(vs)
-            gl.glDeleteShader(fs)
-            raise RuntimeError(f"{self.name} program link failed: {info_log}")
-
-        # Shaders can be detached after linking
-        gl.glDetachShader(program, vs)
-        gl.glDetachShader(program, fs)
-        gl.glDeleteShader(vs)
-        gl.glDeleteShader(fs)
-
+        program = compile_program(self.vertex_source, self.fragment_source, label=self.name)
         logger.debug("[GL PROGRAM] %s shader program created: %d", self.name, program)
         return int(program)
-
-    def _compile_shader(self, source: str, shader_type: int) -> int:
-        """Compile a single shader, return shader ID.
-        
-        Raises RuntimeError on compilation failure.
-        """
-        if gl is None:
-            raise RuntimeError("PyOpenGL not available")
-
-        shader = gl.glCreateShader(shader_type)
-        gl.glShaderSource(shader, source)
-        gl.glCompileShader(shader)
-
-        compile_status = gl.glGetShaderiv(shader, gl.GL_COMPILE_STATUS)
-        if not compile_status:
-            info_log = gl.glGetShaderInfoLog(shader)
-            gl.glDeleteShader(shader)
-            type_name = "vertex" if shader_type == gl.GL_VERTEX_SHADER else "fragment"
-            raise RuntimeError(f"{self.name} {type_name} shader compile failed: {info_log}")
-
-        return int(shader)
 
     @abstractmethod
     def cache_uniforms(self, program: int) -> Dict[str, int]:
