@@ -173,9 +173,15 @@ after the operator's yes on a question card; agents never run load (invisible ch
      engine on recorded PCM through its own capture callback, identical in process and in the worker) and slice 2
      (pause/resume, warm re-entry and in-session mode switch in production read order, 126 pairs, 0 mismatching;
      `VIS_SET_MODE` / `VIS_SET_DISPLAY_POWER`; per-slot identity under the seqlock, ABI 2), each audited. The Vulkan
-     core's needs are in the design doc (4V); compute shaders are SPIR-V-gated by test. Next: 5 (production wiring:
-     the worker paces its own ticks and owns the live device, settings deltas, latest-wins, fail-closed with fades,
-     QtCore-only worker, Bubble's own RNG; then delete the snapshot layer), then 6 (gate 3).
+     core's needs are in the design doc (4V); compute shaders are SPIR-V-gated by test. Work order 5 (production
+     wiring): 5.1 (the worker paces its own ticks) and 5.2 with 5.3's core built 8 Nov: the production owner runs its
+     Visualizer on the worker behind the code-level admission `--viz-engine-worker` (default off; off is today's path),
+     the worker opens the loopback device itself, and the owner's frames on the worker equal its in-process frames for
+     every mode through configure, play/pause, park/unpark and a mode switch (first gate-3 data point: the main
+     process's CPU per step 0.7-1.2 ms on the worker vs 1.7-5.0 ms in process; the GUI's take+decode per presentation
+     rises .2-.6 ms). Next: 5.3's rest (device changes), 5.4 (settings deltas, QtCore-only worker), 5.5 (fail-closed
+     completion, asynchronous edges), 5.6 (delete the snapshot layer, Bubble's own RNG), 5.7 (dormancy, diagnostics,
+     frozen spawn), then 6 (gate 3).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 

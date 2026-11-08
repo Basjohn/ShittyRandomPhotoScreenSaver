@@ -1087,6 +1087,27 @@ High-value permanent guards include:
   its test (the start order, the backlog cap, the switch and stop handlers). Whole-clip gate (scenarios steady / pause_warm / pause_cold /
   reentry / switch, `--order`, `--stress`; `--paced` for 5.1) and cost: `tools/visualizer_replay/live_engine_gate.py`,
   `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
+  `tests/test_visualizer_owner_engine_worker.py` (work order 5 slice 5.2 and the core of 5.3: the production owner on
+  the engine worker, admitted by `--viz-engine-worker`): the REAL owner built by the host binding's `construct` on an
+  unshown runtime (`tools/visualizer_replay/owner_worker_gate.py`'s rig), the worker side a real
+  `WorkerType.VISUALIZER` process on the shipped clip's PCM (`engine_worker_link.recorded_capture_for_testing`, the
+  device refused; no test opens a device). Pinned: the admission (off by default, argv only); off, no link and no
+  supervisor call; on, the main process makes no beat engine and runs no tick; the identity gate per mode (the owner on
+  the worker publishes to its render bridge exactly the frames the same owner publishes in process on the live engine
+  in production read order, through configure/start, play, a warm pause, park/unpark and a mode switch through the
+  owner's crossfade; a one-tick drift fails it); real time for Spectrum and Extruded Bubble (the worker's cadence within
+  5% against a GUI stalling 40 ms per presentation, latest wins, never stranded, 0 torn, the audio in the engine); the
+  wake listener draining while the GUI thread is blocked; A6-L8 (the reader cleared after the park reply: clearing
+  before it or never fails); a preset change as a session re-activation with the owner's inputs; the binding's own
+  activation in the session (A6-L4); the framed view (layout metrics, `VIS_SET_VIEW`) following the owner's controller;
+  a fresh label namespace per configure; a worker that cannot configure or start leaving that activation in process; a
+  lost session's held frame fading out on the replacement's frames, reconfigured once, a second loss in process for the
+  run; the production session opening the device through the normal capture path on its capture lane, and a device
+  that does not open ending the session for its owner. The edge-order tests run the same `VisualizerEngineWorker` in
+  this process behind a supervisor stand-in. Mutations each failing their test: the admission ignored, an engine kept in
+  the main process, no recovery fade, no second-failure rule, a failed start kept, the device unchecked or refused, the
+  offline activation, no view forwarding. Whole-gate run (identity, real time and the main process's cost on vs off,
+  per mode): `tools/visualizer_replay/owner_worker_gate.py` (below-normal priority; never in the suite);
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 
 The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.

@@ -717,22 +717,129 @@ switch never remaps.
      receives the binding's own activation inputs and `presentation_kwargs` (with `scene3d_detail`), not an offline
      request (A6-L4); the owner's wake callback never blocks (a queued signal), and a stalled GUI leaves the listener
      draining (the wake-pipe backpressure note); a worker step failure is the runtime's retry, as in process (A6-M3).
+     **Built (8 Nov), with the core of 5.3:**
+     - *Admission:* `experiment_flags.visualizer_engine_worker_admitted` (argv `--viz-engine-worker`, default off, never
+       an environment variable), read once per owner construction (`QuickDisplayVisualizerOwner.__init__`). Off: no
+       link, no worker process, no worker-path import (`engine_worker_link` is imported only on the worker path); every
+       edge runs in process as before (owner, binding and sync suites and the production-path frame test green; the
+       one off-path additions are per-edge `self._worker is not None` checks, the binding reading
+       `owner.engine_identity()` (the same two engine reads in process), and the controller's layout-metrics observer
+       slot, one attribute read per metrics write).
+     - *The main-process side:* `widgets/spotify_visualizer/engine_worker_link.py`. One `EngineWorkerLink` per
+       session: the control edges (each waits for its reply, bounded) and the reader side of the session's mapping
+       (created, held and unlinked by the main process). The owner keeps no beat engine and runs no tick (test: no
+       engine factory call, no `logical_tick` in the main process, no logical runtime). Edges: configure
+       (`VIS_CONFIGURE` with the binding's own activation inputs and `presentation_kwargs`, A6-L4; the main side
+       configures only presentation: `configure_presentation_side`), start (`VIS_START` with Media's state), Media's
+       play edges (`VIS_SET_PLAYING`; Media stays the one owner of "playing"; before start the start carries it, as
+       the binding's play edge before `start`), display power (`VIS_SET_DISPLAY_POWER`; the reader is cleared after
+       the park reply, never before it: A6-L8), mode and preset activations (the owner's crossfade unchanged; its hidden
+       commit is `VIS_SET_MODE` applied at once in the session, replying with the committed identity, which the owner
+       binds), stop/retire (`VIS_STOP`, then the reader closes and the mapping is unlinked). A step failure stays the
+       worker runtime's retry (A6-M3). The engine identity the binding binds comes from the configure reply
+       (`owner.engine_identity()`). `waiting_target` on the worker reads the target's newest frame (a current-identity,
+       presentable frame) instead of the in-process tick state's flag.
+     - *Frames to presentation:* the worker's wake byte per publish -> `listen_for_wakes` (one daemon thread blocked on
+       the pipe) -> the owner's `QuickVisualizerPublicationWake.request` (a queued Qt signal: never blocks, coalesces)
+       -> `sync_present` on the GUI thread -> `QuickVisualizerPresentationSync.sync_latest` takes the newest whole
+       frame from the mapping (decoded on the GUI thread; at render-thread sync admission when a window renders). The
+       listener drains while the GUI is blocked (test: ~90 frames published during a 1 s GUI block, one wake pending).
+     - *The framed view (found here):* the tick reads the controller's layout metrics (committed extent and per-mode
+       rotations, the live CUSTOM override), which on the worker path live on the main controller. The controller has a
+       layout-metrics observer (None in process); on the worker the owner forwards changes as `VIS_SET_VIEW` (inside a
+       presentation once at its end, before the next step; at a hidden activation before `VIS_SET_MODE`). With the
+       default layout they never change (the identity gate cannot see them), so a test drives an override and a
+       rotation map. Edit orbit, Waveform's view and Expanded Visualizer's view inputs are still to inventory (5.4).
+     - *The label-namespace counter:* `engine_worker_link.next_label_namespace`, one process-wide counter owned by that
+       module for the app's life; every `VIS_CONFIGURE` takes a fresh value (test).
+     - *The device (5.3's core):* in production the session (worker-paced, no `pcm`) installs no capture factory and
+       refuses nothing, so its engine opens the loopback device through the audio worker's normal path
+       (`create_audio_capture`) on its own capture lane, where COM initialisation stays (test: the device constructor
+       runs on `affinity_io_lane:audio_capture`, no factory installed). The session never waits on the device (as in
+       process); a check queued behind every capture transaction on the lane reports an open that failed by closing
+       the session's wake pipe, which the owner's listener sees as the session's end: a worker failure (test). Tests
+       never open a device: `recorded_capture_for_testing` adds a recorded-PCM source (and its cadence) to the
+       configure, and the session refuses the device for its life.
+     - *Failure (interim, 5.5 completes it):* a worker that fails to configure (no supervisor, no process, a failed
+       reply) or to start leaves that activation in process, logged once. A session that ends later (a failed reply,
+       `session_closed`, its wake pipe ending: the worker died, or its device failed) holds the last presented frame,
+       fades it out from the fade it was drawn at, paced by the replacement's own publications (taken, not shown;
+       re-presented held frame with a falling content fade: never vanishes), then reveals the replacement as an
+       activation does (hidden until a presentable frame, then faded in); the first failure reconfigures the worker once
+       (a fresh session and namespace), a second keeps the owner in process for the rest of the run
+       (`worker_disabled_for_run`; later owners start in process). Left for 5.5: heartbeat loss without a pipe end (a
+       hung worker reaches the failure path only through an edge's timeout), a fade with no replacement frames to pace
+       it (the held frame stays, frozen, until one comes), a failure during an uncommitted crossfade drops the request.
+     - *Settings (interim, 5.4 replaces it):* a preset or settings change while on the worker is a whole re-activation
+       of the session (the owner's same-mode preset activation, `VIS_SET_MODE` with its own inputs), not a delta at a
+       tick boundary.
+     - *Found and fixed on the way:* the frame codec refused Waveform Ribbon's `RibbonStrays` (a strays style reached by
+       a switch into Waveform Ribbon): the worker's publish raised. Appended to the type table (test).
+     - *Gate:* `tests/test_visualizer_owner_engine_worker.py` and `tools/visualizer_replay/owner_worker_gate.py` (the
+       REAL owner through the binding's `construct` on an unshown runtime; a real `WorkerType.VISUALIZER` process on
+       the shipped clip's PCM). **Result (8 Nov, below-normal priority, 187 s;
+       `.artifacts/evidence/architecture/native_core_p2/20261108_owner_worker_gate/owner_worker_gate.json`):**
+       identity: all nine modes identical, 549 frames each, through configure/start, play, a warm pause, park/unpark and
+       a switch through the owner's crossfade (Spectrum -> Extruded Bubble, Oscilloscope -> Bubble, Bubble ->
+       Oscilloscope, Spline Curve -> Neon Lake, Sphere -> Waveform Ribbon, Extruded Spectrum -> Oscilloscope, Neon Lake
+       -> Spline Curve, Extruded Bubble -> Spectrum, Waveform Ribbon -> Sphere), never leaving the worker (the worker
+       side input-paced, production read order; the in-process side the owner on the live engine). Real time (3 s per
+       mode, worker-paced, the GUI stalling 40 ms per presentation): all nine OK, the cadence 90.01-90.26 Hz, one frame
+       per step, 62-66 of 280-283 presented, latest wins on every take (0 stale), the newest presented after the stop,
+       0 torn, the audio in the engine (Spectrum: 99.9% of the paced audio accepted, every frame with energy).
+     - *Main-process cost, the first gate-3 data point (3 s per mode, no stall; process CPU over cadence steps; psutil
+       times tick at 15.6 ms on Windows, so per-thread values are coarse):* in process (the owner's cadence thread, the
+       live engine on paced PCM: callbacks, DSP and tick here) vs on the worker (this process only takes and presents),
+       ms per step:
+
+       | Mode | in process | on the worker | GUI `sync_present` p50 / p90, in process | on the worker |
+       |---|---|---|---|---|
+       | Spectrum | 2.31 | .90 | .19 / .27 | .50 / .62 |
+       | Oscilloscope | 2.36 | .73 | .20 / .28 | .35 / .52 |
+       | Bubble | 4.25 | .84 | .24 / .32 | .65 / .82 |
+       | Spline Curve | 3.81 | .89 | .19 / .30 | .43 / .64 |
+       | Sphere | 1.67 | 1.06 | .21 / .30 | .47 / .63 |
+       | Extruded Spectrum | 2.30 | .67 | .20 / .27 | .48 / .63 |
+       | Neon Lake | 2.64 | 1.01 | .19 / .29 | .86 / 1.04 |
+       | Extruded Bubble | 4.55 | 1.18 | .19 / .28 | .85 / 1.19 |
+       | Waveform Ribbon | 4.95 | 1.23 | .21 / .30 | .75 / 1.07 |
+
+       So the main process saves .6-3.7 ms of CPU (GIL) per step, and the GUI thread pays the take's decode instead
+       (.15-.65 ms more per presentation: the GUI thread itself goes from .40-.69 to .61-1.29 ms per step). No render
+       thread runs here (no window): the render thread's sync-time take is unmeasured, and gate 3's game60 run remains
+       the operator's.
    - 5.3 The live device in the worker: capture opens there; Media's playback truth stays the one owner of
      "playing" (sent as an edge); audio device changes, COM initialisation on the worker's capture lane, capture
-     failure reported as a crash.
+     failure reported as a crash. **Core built with 5.2 (above):** capture opens in the worker through the normal
+     path on its capture lane (COM there), Media's state is an edge, a failed open ends the session for the owner.
+     **Left:** audio device changes (a default-device switch or an unplugged device mid-session: today the audio
+     worker's wake-driven restart on resume, nothing reported to the owner), a device that opens and then goes silent
+     or stale (not a failure today), and the physical check on a real device (operator).
    - 5.4 Settings: a resolved-settings delta applied to the existing session at a tick boundary (no rebuild per
      slider step); the presentation-config reads moved to logical config so the worker imports QtCore only, at call
      time too (checkpoint audit 5, A5-L2: today an activation loads QtGui through `config_applier.py`'s
      `_color_or_none` `QColor`s; the fresh-spawn probe asserts that and is flipped to "QtCore only after an
-     activation" by this slice).
+     activation" by this slice). From 5.2: replace the interim whole re-activation per preset/settings change with the
+     delta; inventory the remaining view inputs the tick reads from the main side (Edit orbit and framed flight on the
+     presentation state, Waveform's view span/top, Expanded Visualizer) and forward them as `VIS_SET_VIEW` does the
+     layout metrics; Fullscreen Edit's content envelope reads the tick state's Sphere parameters, which the main side
+     no longer has on the worker path.
    - 5.5 Fail-closed: `session_closed` and heartbeat loss fade the Visualizer (never vanish) and reconfigure once;
      the label-namespace counter owned by the main process for the app's life; the wake sender closed after
-     configure; a full wake pipe never blocks the tick.
+     configure; a full wake pipe never blocks the tick. **Done in 5.2:** the namespace counter's owner
+     (`engine_worker_link`), the main side's wake sender closed after configure (its end is the session's end),
+     `session_closed` / the pipe's end -> hold, fade, reconfigure once, then in process for the run. **Left:** heartbeat
+     loss of a hung worker (today only an edge's timeout reaches the failure path), a fade with no replacement frames to
+     pace it, the wake pipe's backpressure (`send_bytes` can still block a writer whose reader stopped draining), and
+     asynchronous control edges (each edge waits for its reply on the GUI thread, bounded; the first construct also
+     waits for the worker's spawn and ready signal, and a recovery for a reconfigure).
    - 5.6 Cleanup: delete `engine_snapshot.py` and the `snapshot` input; Bubble's spawn on its own generator so no
      gate needs a process-wide seed.
    - 5.7 Dormancy and diagnostics: the worker exists only while a Visualizer is active and parks with the display;
      the usage sampler and logs include it; the frozen (Nuitka) spawn reaches `visualizer_worker_main` (operator
-     check).
+     check). From 5.2: the worker process stays up after the owner retires (its session closed) until the supervisor
+     shuts down; the production supervisor reaches the display manager after the displays initialise, so an owner
+     built before it runs in process (logged once).
 
 6. Measurement (gate 3), then decide P2b. P3 note (audit H5): the tagged codec is P2's Python-to-Python transport,
    not a C layout; P3 gets per-mode fixed layouts under new `payload_schema` values, and the native reader validates
@@ -755,8 +862,9 @@ switch never remaps.
   from a process-wide counter that the renderer uses as a geometry cache identity. Every `EngineSession` takes a
   `label_namespace` from the main process (>= 1 in production, a monotonic counter never repeated across sessions or
   restarted workers) and numbers from `namespace << 32`; the main process's own counter stays far below, and
-  namespace 0 keeps the in-process numbering for the identity gates. Production wiring must pass a fresh namespace on
-  every `VIS_CONFIGURE` (`tests/test_visualizer_engine_worker.py`).
+  namespace 0 keeps the in-process numbering for the identity gates. Production wiring passes a fresh namespace on
+  every `VIS_CONFIGURE` (`tests/test_visualizer_engine_worker.py`; since 5.2 the counter is
+  `engine_worker_link.next_label_namespace`, owned by that module for the app's life).
 - **The GUI wake (8 Nov; audit C1 fixed the same day):** in process the mailbox wakes the GUI on its
   empty -> populated edge (one lock serialises publish and take). Across processes an edge cannot be derived from the
   reader's acknowledgement, which lands only after decoding (a publish in between was mistaken for unread and never
