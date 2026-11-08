@@ -1058,8 +1058,14 @@ High-value permanent guards include:
   `tests/test_visualizer_engine_worker.py` ticks one live input per mode and pins QtCore/QtGui only (it caught the
   Spectrum DSP importing the Settings shape editor); it also reports the worker's Qt modules at spawn (QtCore at most)
   and after its first activation (QtCore and QtGui today: the presentation config's `QColor`s, A5-L2; work order 5
-  slice 5.4 flips it). Whole-clip gate (scenarios steady / pause_warm / pause_cold /
-  reentry / switch, `--order`, `--stress`) and cost: `tools/visualizer_replay/live_engine_gate.py`,
+  slice 5.4 flips it). `tests/test_visualizer_engine_paced.py` (work order 5 slice 5.1): a worker-paced session
+  (`cadence="worker"`) ticks on the logical runtime's own cadence, fed the shipped clip's PCM on the audio clock at
+  the cadence's edges (`PacedPcmSource`: device blocks, the remainder carried, nothing while closed or paused, no burst
+  after a reopen), with a reader that stalls after every take: one frame per step at the cadence, coalescing observed,
+  never stranded, 0 torn, the audio on the clock, in process and in the worker for every mode; the cadence parks with
+  the display, a mode switch restarts it, a failing step publishes nothing more; negative controls: a writer held by
+  its reader and one block per edge each fail the gate. Whole-clip gate (scenarios steady / pause_warm / pause_cold /
+  reentry / switch, `--order`, `--stress`; `--paced` for 5.1) and cost: `tools/visualizer_replay/live_engine_gate.py`,
   `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 

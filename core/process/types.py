@@ -63,6 +63,10 @@ class MessageType(Enum):
     # ({"on": bool}).
     VIS_SET_MODE = "vis_set_mode"
     VIS_SET_DISPLAY_POWER = "vis_set_display_power"
+    # A worker-paced session (work order 5, slice 5.1): the owner's start ({"playing": bool}; the session then ticks on
+    # its own cadence) and Media's play edge ({"playing": bool}).
+    VIS_START = "vis_start"
+    VIS_SET_PLAYING = "vis_set_playing"
     
     # Error messages
     ERROR = "error"

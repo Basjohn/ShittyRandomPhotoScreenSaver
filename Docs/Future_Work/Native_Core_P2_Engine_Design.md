@@ -600,6 +600,53 @@ switch never remaps.
    - 5.1 Worker-paced ticks: the worker runs the logical runtime's cadence itself (the in-process cadence owner,
      moved, not copied); frames reach the owner through the existing mailbox reader and wake; a stalled owner never
      blocks the worker (latest wins in the ABI already).
+     **Built (8 Nov).** The cadence owner is `VisualizerLogicalRuntime` (`logical_runtime.py:316`: one non-Qt thread,
+     a monotonic `perf_counter` deadline sequence, missed deadlines skipped, parked with no wake cadence), started
+     through the controller (`runtime_controller.start_logical_runtime`, `:760`; a runtime started while parked starts
+     parked). The owner's start of it moved into `logical_edges.start_logical_cadence` (the import warm, the authored
+     interval `DEFAULT_LOGICAL_HZ`, the default step `logical_tick`); the owner's `_start_logical_runtime` and the
+     session both call it, and the cadence park / unpark are the shared `park_logical_side` / `unpark_logical_side`
+     (audit 5 follow-ups above). `EngineSession(inputs="live", order="free", cadence="worker", pcm=..., pcm_rate=...)`
+     is started explicitly (`start` / `VIS_START`: the host binding's play edge and the owner's `start`, which starts
+     the cadence with the session's step); Media's play edges are `set_playing` / `VIS_SET_PLAYING`; display power
+     parks and unparks the cadence; a mode or preset request applies at once as the owner's activation does (it stops
+     the runtime, which is the tick boundary, commits, binds and restarts it); `finish` (`VIS_STOP`) stops the cadence
+     and reports the frames published, the cadence's accounting and the paced audio. The authored clock is the
+     process's own (no pin). Every step: the audio due, then the tick (its own engine step consumes the newest block
+     and submits the analysis, which commits on the compute lane while the tick reads the previous commit: the
+     production engine's own order, `free`). A step that raised fails the session closed: nothing more is ticked or
+     published and the failure is in the report (reporting it to the owner unprompted, the fade and the reconfigure
+     are 5.5). The recorded-PCM identity gates keep `cadence="input"` (one tick per input, deterministic); a paced
+     session refuses `tick`.
+     - *Audio on the audio clock, without a poll:* `recorded_capture.PacedPcmSource` holds the recording's continuous
+       PCM (`pcm_from_capture_histories`: the capture histories' new samples in order; the stream loops) and at each
+       cadence edge hands over the whole device blocks the audio clock produced since the previous edge (elapsed
+       deadline time x rate, in the negotiated block size, the remainder carried; a late edge hands over several, as a
+       device's queued callbacks), through `RecordedCaptureBackend.offer` (the worker's own capture callback; a block
+       offered while capture is closed is not captured). Nothing is due while capture is closed or Media is paused
+       (the playhead holds), and a capture (re)open restarts the clock (the backend's `on_started`), so an unpark
+       delivers no burst for the parked gap. It is not a poll and not a timer: it has no thread, never waits and wakes
+       nothing; it runs only inside the cadence's own step, which the runtime wakes for anyway, and its clock is that
+       step's deadline timestamp. (A feeder thread sleeping to each block's due time would be a second timer; a
+       device's own clock is slice 5.3.)
+     - *Gate:* `tests/test_visualizer_engine_paced.py` and `tools/visualizer_replay/live_engine_gate.py --paced`: a
+       free-running session per mode, the reader taking the newest frame per wake on its own thread and then stalling
+       40 ms (a slow GUI; the wake listener only sets an event, the owner's emitter): no exception or step failure, one
+       frame per step at the cadence, coalescing observed (taken < published), the newest frame reached by a wake
+       after the stop, revisions only advance, 0 torn reads, the audio delivered >= 97% of the paced audio time and
+       the paced time >= 80% of the run. Also: the cadence parks with the display (no frame while parked, capture
+       reopened, no burst), a mode switch restarts it on the new activation, a failing step publishes nothing more.
+       Negative controls: a writer held by its reader (the cadence falls to the reader's rate), one block per edge (the
+       audio falls behind the clock), and mutations: no cadence start, no rebase at a reopen (the park test's burst),
+       the pre-C1 wake rule (the worker-process gate strands a frame). **Result (8 Nov, 3 s per mode in the
+       `WorkerType.VISUALIZER` process, below-normal priority):** all nine modes OK: 270-272 frames each at 89.5-90.1
+       Hz of 90, one frame per step, 0-1 skipped deadlines, the stalling reader took 65-66 (coalesced), the last frame
+       taken by a wake every time, 0 torn reads, audio delivered 2.997-3.008 s of 3.000-3.011 s paced, no failure;
+       32 s (`.artifacts/evidence/architecture/native_core_p2/20261108_paced_gate/paced_gate.json`).
+     - *Not in 5.1:* the production owner on the worker (5.2); the wake pipe's backpressure (a reader process whose
+       listener stops draining fills the pipe, and `send_bytes` would then block the cadence: 5.5's "a full wake pipe
+       never blocks the tick"; the gate's listener drains continuously); a failed session reporting itself unprompted
+       and parking its cadence (5.5: today its steps return at once until the owner stops it).
    - 5.2 The owner on the worker: one code path in `quick_display_visualizer_owner.py` that sends the
      `logical_edges` edges to the worker instead of running them, admitted by a code-level admission in
      `core/diagnostics/experiment_flags.py` (never an environment flag) until gate 3 accepts it; the in-process path

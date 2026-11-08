@@ -2,6 +2,7 @@
 
     python tools/visualizer_replay/live_engine_gate.py --out <dir> [--scenarios ...] [--order production|settled]
         [--seconds 60] [--modes ...] [--clips ...] [--stress]
+    python tools/visualizer_replay/live_engine_gate.py --out <dir> --paced [--paced-seconds 3] [--modes ...]
 
 Scenarios (every shipped Studio clip; ``steps`` below):
 
@@ -24,7 +25,15 @@ is slice 1's portability order). Reported, not gated: how often capture restarte
 wall clock, so whether a warm resume restarts depends on how long the rig took; a restart is frame-neutral).
 ``--stress``: per clip and mode, the worker in ``free`` order (commits race the tick) with the reader taking frames
 on its own wake thread: no exceptions, no stranded or torn frames, revisions advance (a non-identity check).
-Runs at below-normal priority; exit 1 on any mismatch or stress failure.
+``--paced`` (work order 5, slice 5.1; instead of the scenarios): per mode, a worker-paced session in the
+``WorkerType.VISUALIZER`` process (``EngineSession(cadence="worker")``: its own logical runtime cadence, the shipped
+clip's PCM paced on the audio clock at the cadence's edges) free-running for ``--paced-seconds``, the reader taking
+frames on its own wake thread and stalling after each take (a slow GUI). Gated (``paced_ok``): no exception or step
+failure; one frame per cadence step at the cadence (at least 60% of the authored rate under load); latest-wins
+coalescing observed (taken < published); the newest frame reached by a wake after the stop (never stranded); revisions
+only advance; 0 torn reads; the audio delivered is the audio clock's (>= 97% of the paced time, and the paced time at
+least 80% of the run). Not frame identity: the commits race the tick, as live.
+Runs at below-normal priority; exit 1 on any mismatch or stress/paced failure.
 """
 from __future__ import annotations
 
@@ -249,6 +258,167 @@ def stress_in_worker(supervisor, frames, mode: str) -> dict:
         reader.close()
 
 
+#: The reader's stall after each take in the paced gate (a GUI busy ~40 ms per frame: ~25 Hz against a 90 Hz cadence).
+PACED_STALL_S = 0.04
+
+
+class PacedReader:
+    """The main process's side of a worker-paced session: the reader mapping, its wake listener (the owner's wake
+    emitter: it only sets an event, so repeated wakes coalesce) and a consumer thread that takes the newest frame per
+    wake and then stalls ``stall_s`` (a slow GUI). Never a poll: the consumer blocks on the wake event."""
+
+    def __init__(self, stall_s: float = PACED_STALL_S) -> None:
+        import multiprocessing
+        import threading
+
+        from core.visualizer_engine.packet_mailbox import PacketMailbox
+
+        self.mailbox = PacketMailbox(role="reader")
+        self.receiver, self.sender = multiprocessing.Pipe(duplex=False)
+        self._woke, self._done, self._reached = threading.Event(), threading.Event(), threading.Event()
+        self._lock = threading.Lock()
+        self._target: int | None = None
+        self.taken: list[int] = []
+        self.errors: list[str] = []
+        self._stall = threading.Event()               # never set: a bounded stall, not a wait for anything
+        self._stall_s = float(stall_s)
+        self.mailbox.set_wake_callback(self._woke.set)
+        self.mailbox.listen_for_wakes(self.receiver)
+        self._thread = threading.Thread(target=self._consume, name="paced-gate-reader", daemon=True)
+        self._thread.start()
+
+    def _consume(self) -> None:
+        while True:
+            self._woke.wait()
+            if self._done.is_set():
+                return
+            self._woke.clear()
+            try:
+                publication = self.mailbox.take()
+            except Exception as exc:                      # noqa: BLE001 - reported, the run fails
+                self.errors.append(repr(exc))
+                continue
+            if publication is not None:
+                with self._lock:
+                    self.taken.append(publication.revision)
+                    if self._target is not None and publication.revision >= self._target:
+                        self._reached.set()
+            self._stall.wait(self._stall_s)
+
+    def wait_for(self, revision: int, timeout_s: float = 5.0) -> bool:
+        """Whether the consumer takes ``revision`` (the last published) through its wakes alone."""
+        with self._lock:
+            self._target = int(revision)
+            if self.taken and self.taken[-1] >= revision:
+                self._reached.set()
+        return self._reached.wait(timeout_s)
+
+    def close(self) -> None:
+        self._done.set()
+        self._woke.set()
+        self._thread.join(5.0)
+        self.mailbox.close()
+
+
+def paced_verdict(report: dict, reader: PacedReader, *, seconds: float, reached: bool) -> dict:
+    """The paced gate's checks on a finished session's report and its reader (module docstring)."""
+    cadence, audio = report["cadence"] or {}, report["audio"]
+    published, steps = report["revision"], cadence.get("steps", 0)
+    interval_s = cadence.get("interval_ms", 0.0) / 1000.0
+    taken = list(reader.taken)
+    rate_hz = published / seconds if seconds > 0 else 0.0
+    authored_hz = 1.0 / interval_s if interval_s else 0.0
+    delivered_ratio = audio["delivered_s"] / audio["paced_s"] if audio["paced_s"] else 0.0
+    verdict = {
+        "seconds": seconds, "published": published, "steps": steps,
+        "skipped_deadlines": cadence.get("skipped_deadlines"), "step_failures": cadence.get("step_failures"),
+        "published_hz": round(rate_hz, 2), "authored_hz": round(authored_hz, 2), "taken": len(taken),
+        "last_taken": taken[-1] if taken else None, "torn_reads": reader.mailbox._reader.torn_reads,
+        "advancing": all(b > a for a, b in zip(taken, taken[1:])), "stranded": not reached,
+        "audio": audio, "delivered_over_paced": round(delivered_ratio, 4), "capture": report.get("capture"),
+        "failure": report["failure"], "reader_errors": list(reader.errors),
+    }
+    verdict["paced_ok"] = bool(
+        report["failure"] is None and not reader.errors and cadence.get("step_failures") == 0
+        and published == steps and published > 0 and rate_hz >= 0.6 * authored_hz
+        and len(taken) < published and reached and verdict["advancing"] and verdict["torn_reads"] == 0
+        and delivered_ratio >= 0.97 and audio["delivered_s"] <= audio["paced_s"] + 0.05
+        and audio["paced_s"] >= 0.8 * seconds)
+    return verdict
+
+
+def paced_pcm(seconds: float = 3.0, clip: str | None = None):
+    """The shipped clip's continuous PCM (the paced source loops it)."""
+    import tools.expanded_visualizer_evidence as evidence
+    from core.visualizer_engine.recorded_capture import pcm_from_capture_histories
+
+    frames = evidence.shipped_clip(seconds, clip).frames if clip else evidence.shipped_clip(seconds).frames
+    return pcm_from_capture_histories(frames)
+
+
+def paced_in_process(pcm, rate: int, mode: str, *, seconds: float, stall_s: float = PACED_STALL_S,
+                     between=None) -> dict:
+    """A worker-paced session in this process (its cadence thread here): the gate's checks; ``between(session)``
+    runs mid-run (a park, a play edge) when given."""
+    import threading
+
+    from core.visualizer_engine.engine_worker import EngineSession
+
+    reader = PacedReader(stall_s)
+    session = None
+    try:
+        session = EngineSession(mapping=reader.mailbox.mapping_name, mode=mode, runtime_generation=GENERATION,
+                                inputs="live", order="free", cadence="worker", pcm=pcm, pcm_rate=rate,
+                                wake=reader.sender)
+        run = threading.Event()
+        started = time.perf_counter()
+        session.start(True)
+        if between is not None:
+            run.wait(seconds / 2)
+            between(session)
+            run.wait(max(0.0, seconds - (time.perf_counter() - started)))
+        else:
+            run.wait(seconds)
+        report = session.finish()
+        elapsed = time.perf_counter() - started
+        reached = reader.wait_for(report["revision"])
+        return paced_verdict(report, reader, seconds=elapsed, reached=reached)
+    finally:
+        if session is not None:
+            session.close()
+        reader.close()
+
+
+def paced_in_worker(supervisor, pcm, rate: int, mode: str, *, seconds: float,
+                    stall_s: float = PACED_STALL_S) -> dict:
+    """The same in the ``WorkerType.VISUALIZER`` process (VIS_CONFIGURE ``cadence="worker"``, VIS_START, VIS_STOP)."""
+    import threading
+
+    from core.process.types import MessageType, WorkerType
+
+    reader = PacedReader(stall_s)
+    try:
+        configure_worker(supervisor, reader.mailbox, mode, order="free", cadence="worker", pcm=pcm, pcm_rate=rate,
+                         wake=reader.sender, seed=None)
+        reader.sender.close()                         # the worker holds its own end now
+        started = time.perf_counter()
+        response = supervisor.send_request_and_await_response(WorkerType.VISUALIZER, MessageType.VIS_START,
+                                                              {"playing": True}, timeout_ms=30_000)
+        if response is None or not response.success:
+            raise RuntimeError(f"start: {response and response.error}")
+        threading.Event().wait(seconds)
+        stopped = supervisor.send_request_and_await_response(WorkerType.VISUALIZER, MessageType.VIS_STOP, {},
+                                                             timeout_ms=30_000)
+        if stopped is None or not stopped.success:
+            raise RuntimeError(f"stop: {stopped and stopped.error}")
+        elapsed = time.perf_counter() - started
+        report = stopped.payload["report"]
+        reached = reader.wait_for(report["revision"])
+        return paced_verdict(report, reader, seconds=elapsed, reached=reached)
+    finally:
+        reader.close()
+
+
 def _summary(frame) -> tuple:
     common = frame.common
     return tuple(float(v) for v in common.bars), float(common.energy.overall)
@@ -282,6 +452,8 @@ def main(argv=None) -> int:
     parser.add_argument("--scenarios", nargs="*", default=list(SCENARIOS))
     parser.add_argument("--order", default="production")
     parser.add_argument("--stress", action="store_true")
+    parser.add_argument("--paced", action="store_true")
+    parser.add_argument("--paced-seconds", type=float, default=3.0)
     args = parser.parse_args(argv)
     try:
         import psutil
@@ -313,6 +485,8 @@ def main(argv=None) -> int:
               "pairs": 0, "stress": {}, "stress_failures": 0}
     started = time.time()
     modes = args.modes or _modes()
+    if args.paced:
+        return _main_paced(args, supervisor, modes, report, started)
     try:
         for name in names:
             frames = evidence.shipped_clip(args.seconds, name).frames
@@ -360,6 +534,29 @@ def main(argv=None) -> int:
     print(f"[GATE] {report['pairs']} pairs, {report['frames']} frames, {report['mismatches']} mismatching, "
           f"{report['stress_failures']} stress failures, {report['elapsed_s']:.0f} s", flush=True)
     return 1 if report["mismatches"] or report["stress_failures"] else 0
+
+
+def _main_paced(args, supervisor, modes, report, started) -> int:
+    pcm, rate = paced_pcm(args.paced_seconds)
+    report.update(paced={}, paced_failures=0, paced_seconds=args.paced_seconds, paced_stall_s=PACED_STALL_S)
+    try:
+        for mode in modes:
+            verdict = paced_in_worker(supervisor, pcm, rate, mode, seconds=args.paced_seconds)
+            report["paced"][mode] = verdict
+            report["paced_failures"] += 0 if verdict["paced_ok"] else 1
+            print(f"[PACED] {mode:18s} {'OK' if verdict['paced_ok'] else 'FAILED'} published {verdict['published']} "
+                  f"({verdict['published_hz']} Hz of {verdict['authored_hz']}) steps {verdict['steps']} skipped "
+                  f"{verdict['skipped_deadlines']} taken {verdict['taken']} last {verdict['last_taken']} torn "
+                  f"{verdict['torn_reads']} audio {verdict['audio']['delivered_s']:.3f}/{verdict['audio']['paced_s']:.3f} s "
+                  f"failure {verdict['failure']}", flush=True)
+    finally:
+        supervisor.shutdown()
+    report["elapsed_s"] = time.time() - started
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "paced_gate.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+    print(f"[PACED] {len(modes)} modes, {report['paced_failures']} failing, {report['elapsed_s']:.0f} s", flush=True)
+    return 1 if report["paced_failures"] else 0
 
 
 if __name__ == "__main__":

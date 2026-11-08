@@ -10,6 +10,13 @@ stereo channels (the worker's channel mean gives back the recorded mono exactly)
 the newest <= 4096 mono samples at each source publication, consecutive histories overlapping) back into the samples
 each publication added, by exact alignment (the frames' time step breaks ties in silence), and cuts them into the
 blocks a device with the configured block size delivers: the newest block whole, older samples ahead of it.
+
+``PacedPcmSource`` (work order 5, slice 5.1) paces a continuous recorded PCM stream on the audio clock for a session
+that ticks on its own cadence: at each cadence edge it hands over the blocks a device would have delivered since the
+previous edge (the elapsed deadline time times the sample rate, in device-sized blocks, the remainder carried). It is
+not a poll and adds no timer: it has no thread and never waits; it runs only inside the cadence's own step, which the
+logical runtime already wakes for, and the audio clock is that step's deadline timestamp. ``pcm_from_capture_histories``
+rebuilds a recording's continuous PCM (``CaptureHistoryStream``'s samples, concatenated).
 """
 from __future__ import annotations
 
@@ -103,12 +110,20 @@ class RecordedCaptureBackend(AudioCaptureBackend):
 
     def push(self, block: np.ndarray) -> None:
         """Deliver one mono block through the worker's capture callback, as the device's callback would."""
+        if not self.offer(block):
+            raise RuntimeError("the recorded capture backend is not open")
+
+    def offer(self, block: np.ndarray) -> bool:
+        """``push`` for a source that runs on its own clock: a block offered while capture is closed is not captured
+        (a device delivers nothing once its stream stops; the capture lane may stop it at any time). Whether it was
+        delivered."""
         callback = self._callback
         if callback is None:
-            raise RuntimeError("the recorded capture backend is not open")
+            return False
         mono = np.ascontiguousarray(block, dtype=np.float32).reshape(-1)
         callback(np.column_stack((mono, mono)))
         self._note_capture_callback()
+        return True
 
     def stop(self) -> None:
         self._callback = None
@@ -130,6 +145,79 @@ class RecordedCaptureBackend(AudioCaptureBackend):
     @property
     def channels(self) -> int:
         return 2
+
+
+def pcm_from_capture_histories(frames: Any) -> tuple[np.ndarray, int]:
+    """A recording's continuous mono PCM and its rate: every new publication's samples (``CaptureHistoryStream``) in
+    order, the first history whole."""
+    stream, pieces, rate = CaptureHistoryStream(), [], None
+    for frame in frames:
+        history = frame.capture_history
+        if history is None:
+            continue
+        if rate is None:
+            rate = int(history.sample_rate)
+        elif int(history.sample_rate) != rate:
+            raise ValueError("the recording changes its capture rate")
+        pieces.extend(stream.blocks(history, frame.timestamp_us, 1 << 30))
+    if not pieces:
+        raise ValueError("the recording carries no native PCM")
+    return np.concatenate(pieces).astype(np.float32), rate
+
+
+class PacedPcmSource:
+    """Recorded PCM on the audio clock, handed over at the cadence's own edges (module docstring).
+
+    ``due(now, block, running=...)`` at each edge: the whole device blocks the audio clock has produced since the
+    previous edge (``now`` is the edge's deadline timestamp, seconds), the remainder carried to the next edge; the
+    stream loops at its end. Nothing is due, and the elapsed audio is dropped, while capture is closed or Media is not
+    playing (``running`` False: a closed stream captures nothing, and paused playback produces no audio, so the
+    playhead holds), and on the first edge after ``rebase`` (capture just (re)opened: audio before it was never
+    captured, so an unpark or reopen delivers no burst for the closed gap). ``rebase`` may be called from any thread
+    (the capture lane's open): it only raises a flag the next edge consumes.
+    """
+
+    def __init__(self, pcm: Any, sample_rate: int) -> None:
+        self._pcm = np.ascontiguousarray(pcm, dtype=np.float32).reshape(-1)
+        if not len(self._pcm):
+            raise ValueError("a paced PCM source needs samples")
+        self.sample_rate = int(sample_rate)
+        self._cursor = 0
+        self._owed = 0.0
+        self._last: float | None = None
+        self._rebase = True
+        self.delivered_samples = 0          # handed over to the capture (by ``due``)
+        self.paced_seconds = 0.0            # audio-clock time accounted while running
+        self.edges = 0
+        self.most_blocks = 0                # the most blocks one edge handed over (a late edge catches up)
+
+    def rebase(self) -> None:
+        self._rebase = True
+
+    def due(self, now: float, block: int, *, running: bool) -> list[np.ndarray]:
+        self.edges += 1
+        block = max(1, int(block))
+        if self._rebase or not running or self._last is None:
+            self._rebase = False
+            self._last, self._owed = float(now), 0.0
+            return []
+        elapsed = max(0.0, float(now) - self._last)
+        self._last = float(now)
+        self.paced_seconds += elapsed
+        self._owed += elapsed * self.sample_rate
+        count = int(self._owed // block)
+        self._owed -= count * block
+        self.most_blocks = max(self.most_blocks, count)
+        blocks = [np.take(self._pcm, np.arange(self._cursor + k * block, self._cursor + (k + 1) * block),
+                          mode="wrap") for k in range(count)]
+        self._cursor = (self._cursor + count * block) % len(self._pcm)
+        self.delivered_samples += count * block
+        return blocks
+
+    def describe(self) -> dict:
+        return {"sample_rate": self.sample_rate, "edges": self.edges, "delivered_samples": self.delivered_samples,
+                "delivered_s": self.delivered_samples / self.sample_rate, "paced_s": self.paced_seconds,
+                "most_blocks_per_edge": self.most_blocks}
 
 
 def synthesise_pause(frames: Any, *, at_s: float, pause_s: float, resume_frames: int = 2) -> tuple:
@@ -159,4 +247,5 @@ def synthesise_pause(frames: Any, *, at_s: float, pause_s: float, resume_frames:
     return (*head, *inserted, *tail)
 
 
-__all__ = ["CaptureHistoryStream", "RecordedCaptureBackend", "appended_sample_count", "synthesise_pause"]
+__all__ = ["CaptureHistoryStream", "PacedPcmSource", "RecordedCaptureBackend", "appended_sample_count",
+           "pcm_from_capture_histories", "synthesise_pause"]

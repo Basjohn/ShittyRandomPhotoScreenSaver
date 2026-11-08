@@ -15,7 +15,11 @@ compute pool, fed the recordings' PCM through the capture callback (``recorded_c
 ``tests/test_visualizer_engine_live.py``). Every session configures through the production owner's own
 configuration (``logical_edges.configure_logical_controller``, then the owner's bind: render admission for the
 configured identity; checkpoint audit 5, A5-M2), never a replay copy. Production wiring (latest-wins snapshots without
-acknowledgements, park, crash fail-closed) is work order 5. Imports load QtCore only; a configuration loads QtGui
+acknowledgements, park, crash fail-closed) is work order 5; its first slice (5.1) is built: a ``cadence="worker"``
+live session ticks on its own clock, the logical runtime's own cadence (``VisualizerLogicalRuntime``, started through
+``logical_edges.start_logical_cadence`` as the owner starts it), fed a recorded PCM stream paced on the audio clock at
+the cadence's edges (``recorded_capture.PacedPcmSource``), and its frames reach the reader through the same mailbox
+and wake (``tests/test_visualizer_engine_paced.py``). Imports load QtCore only; a configuration loads QtGui
 (``QColor`` in the presentation config the tick still reads: no QGuiApplication, no QtQuick; A5-L2); work order 5
 slice 5.4 moves those reads to the logical config.
 """
@@ -53,6 +57,15 @@ class EngineSession:
     #: commit races the tick, frames are not reproducible).
     ORDERS = ("production", "settled", "free")
 
+    #: Who paces the ticks. ``input`` (every gate so far): one tick per input (``tick``), deterministic. ``worker``
+    #: (work order 5, slice 5.1; live inputs in ``free`` order only): the session ticks on its own cadence, the logical
+    #: runtime the owner runs in process (``logical_edges.start_logical_cadence``: ``VisualizerLogicalRuntime``, one
+    #: non-Qt thread, missed deadlines skipped, parked with the display), started by ``start``; audio comes from
+    #: ``pcm`` (a recorded mono stream at ``pcm_rate``) handed to the capture callback on the audio clock at each
+    #: cadence edge (``recorded_capture.PacedPcmSource``); frames go out through the mailbox and wake as always, and a
+    #: reader that stalls only coalesces (latest wins in the ABI). The authored clock is the process's own.
+    CADENCES = ("input", "worker")
+
     #: How long a live session waits for its own capture to open or its analysis to settle before failing closed.
     LIVE_EDGE_TIMEOUT_S = 30.0
 
@@ -69,7 +82,9 @@ class EngineSession:
 
     def _construct(self, *, mapping: str, mode: str, runtime_generation: int, preset: int = 0, settings: Any = None,
                  bar_count: int = 32, label_namespace: int = 0, wake: Any = None, inputs: str = "feature",
-                 initial_snapshot: Any = None, seed: int | None = None, order: str = "production") -> None:
+                 initial_snapshot: Any = None, seed: int | None = None, order: str = "production",
+                 cadence: str = "input", pcm: Any = None, pcm_rate: int | None = None,
+                 interval_s: float | None = None) -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.engine_snapshot import SnapshotBeatEngine
         from core.visualizer_engine.packet_mailbox import PacketMailbox
@@ -85,8 +100,15 @@ class EngineSession:
             raise ValueError(f"inputs {inputs!r} with{'' if initial_snapshot is not None else 'out'} an initial snapshot")
         if order not in self.ORDERS:
             raise ValueError(f"unknown live commit order {order!r}")
+        if cadence not in self.CADENCES:
+            raise ValueError(f"unknown cadence {cadence!r}")
+        if (cadence == "worker") != (pcm is not None) or (
+                cadence == "worker" and (inputs != "live" or order != "free" or not pcm_rate)):
+            raise ValueError("a worker-paced session is a live session in free order fed a recorded PCM stream")
         self.inputs = inputs
         self.order = order
+        self.cadence = cadence
+        self._paced = cadence == "worker"
         self._stack = contextlib.ExitStack()
         # The session's authored clock follows its inputs' own timestamps (each input carries the time it was
         # produced), so the worker ticks the same frames whatever its scheduling. Live (snapshot) sessions pin only
@@ -97,7 +119,8 @@ class EngineSession:
             from core.authored_clock import pinned_authored_clock
 
             self._clock = [0.0]
-            self._stack.enter_context(pinned_authored_clock(lambda: self._clock[0]))
+            if not self._paced:                # a worker-paced session runs on the process's own clocks
+                self._stack.enter_context(pinned_authored_clock(lambda: self._clock[0]))
             # Bubble's spawn draws from the process RNG, by design random (as in process). ``seed`` (a control
             # input) lets the identity gates compare against a seeded replay; production passes none. With the seed
             # passed, the gates cannot tell a new global-RNG read in the tick from Bubble's (checkpoint audit 2,
@@ -139,6 +162,14 @@ class EngineSession:
             self._released_for_display_power = False
             self._display_on = True            # display power: a parked session does not tick
             self._pending_mode: tuple | None = None   # the newest mode request, applied at the next tick boundary
+            if self._paced:
+                from core.visualizer_engine.recorded_capture import PacedPcmSource
+
+                self._source = PacedPcmSource(pcm, int(pcm_rate))
+                self._interval_s = interval_s
+                self._paced_failure: str | None = None
+                self._paced_failed = threading.Event()
+                self._cadence_record: dict | None = None
         else:
             engine = (ProductionLaneEngine if inputs == "lanes" else ReplayBeatEngine)(bar_count)
         # The main process's runtime generation (a control input: every frame carries it).
@@ -151,6 +182,9 @@ class EngineSession:
         self._configure(preset, settings, self._prepare_live_engine() if self._live else None)
         if self._live:
             self._wire_live_engine(mode)
+        if self._paced:
+            # Closed first (LIFO): the cadence joins before capture, the compute lane and the mapping go.
+            self._stack.callback(self._stop_cadence)
         # The header's configure-time identity, before any frame (audit H5); every slot carries its own frame's
         # identity under its seqlock (A3-M4), so an in-place mode switch never relabels a slot.
         self.mailbox.write_identity(runtime_generation=int(runtime_generation),
@@ -236,10 +270,12 @@ class EngineSession:
             raise RuntimeError("an analysis waited too long at the admission gate")
 
     def _open_capture(self, config: Any) -> Any:
-        """The audio worker's capture source (its factory seam): a recorded backend, opened on the capture lane."""
+        """The audio worker's capture source (its factory seam): a recorded backend, opened on the capture lane. A
+        worker-paced session's source restarts its audio clock at every open (no burst for a closed gap)."""
         from core.visualizer_engine.recorded_capture import RecordedCaptureBackend
 
-        self._backend = RecordedCaptureBackend(config)
+        on_started = (lambda _backend: self._source.rebase()) if self._paced else None
+        self._backend = RecordedCaptureBackend(config, on_started=on_started)
         self._backends.append(self._backend)
         return self._backend
 
@@ -280,10 +316,80 @@ class EngineSession:
         engine = prepare_engine_start(controller)
         admit_engine_start(controller, engine, on_acquired=self._on_engine_acquired)
         self._live_started = True
+        if self._paced:
+            self._start_cadence()            # the owner's ``_start_logical_runtime`` (parked if the displays are off)
         if release_engine_started_parked(engine, display_on=self._display_on, engine_acquired=self._engine_acquired):
             self._engine_acquired = False
             self._released_for_display_power = True
         self._settle_capture()
+
+    # ------------------------------------------------------------------------------- worker-paced (slice 5.1)
+
+    def start(self, playing: bool) -> None:
+        """A worker-paced session's start (``VIS_START``): the host binding's play edge and the owner's ``start``,
+        which starts the session's own cadence. Input-paced sessions start at their first input."""
+        if not self._live or not self._paced:
+            raise ValueError("only a worker-paced session is started explicitly (input-paced ones start at an input)")
+        if self._live_started:
+            raise RuntimeError("the session has already started")
+        self._start_playback(playing)
+
+    def set_playing(self, playing: bool) -> None:
+        """Media's play edge on a worker-paced session (``VIS_SET_PLAYING``), applied at once as the owner applies it
+        on the GUI thread while its cadence runs (an input-paced session takes play edges from its inputs)."""
+        if not self._live or not self._paced:
+            raise ValueError("play edges reach an input-paced session through its inputs")
+        if bool(playing) != bool(self._controller.playing):
+            self._set_playing(playing)
+
+    def _start_cadence(self) -> None:
+        from widgets.spotify_visualizer.logical_edges import start_logical_cadence
+
+        start_logical_cadence(self._controller, interval_s=self._interval_s, step=self._paced_step)
+
+    def _paced_step(self, deadline_ts: float) -> None:
+        """One cadence edge (the cadence thread): the audio the clock produced since the previous edge goes through
+        the capture callback, then the tick (its own engine step consumes the newest block and submits the analysis,
+        which commits on the compute lane while the tick reads the previous commit, as live). A step that raised
+        fails the session closed: nothing more is ticked or published (the owner's fade and reconfigure are slice
+        5.5)."""
+        from widgets.spotify_visualizer.tick_pipeline import logical_tick
+
+        if self._paced_failure is not None:
+            return
+        try:
+            backend, controller = self._backend, self._controller
+            if backend is not None:
+                if backend.sample_rate != self._source.sample_rate:
+                    raise ValueError(f"recorded rate {self._source.sample_rate} != capture rate "
+                                     f"{backend.sample_rate}")
+                running = backend.is_running() and controller.playing
+                for block in self._source.due(deadline_ts, backend.block_size, running=running):
+                    backend.offer(block)
+            logical_tick(controller.logical_tick_state)
+        except (Exception, SnapshotContractError) as exc:
+            self._paced_failure = f"{type(exc).__name__}: {exc}"
+            self._paced_failed.set()
+
+    def _stop_cadence(self) -> None:
+        """Stop and join the session's cadence (idempotent), keeping its final accounting."""
+        runtime = self._controller.logical_runtime
+        if runtime is None:
+            return
+        if not self._controller.stop_logical_runtime():
+            raise RuntimeError("the session's cadence did not join")
+        self._cadence_record = runtime.describe()
+
+    def finish(self) -> dict:
+        """Stop the cadence, then report (``VIS_STOP``'s reply): the frames published, the cadence's accounting (steps,
+        skipped deadlines, step failures), the audio the source paced, a failure that closed the session."""
+        if self._paced:
+            self._stop_cadence()
+        report: dict = {"revision": self.mailbox.revision}
+        if self._paced:
+            report.update(cadence=self._cadence_record, audio=self._source.describe(), failure=self._paced_failure,
+                          capture=self.capture_counts)
+        return report
 
     def _on_engine_acquired(self) -> None:
         self._engine_acquired = True
@@ -335,6 +441,10 @@ class EngineSession:
         get_visualizer_mode_descriptor(mode)
         mode_code(mode)                                   # a mode the header cannot name fails here, not mid-tick
         self._pending_mode = (str(mode), int(preset), settings)
+        if self._paced:
+            # The owner's activation stops its runtime (the tick boundary), commits and restarts it: at once, as the
+            # owner does on the GUI thread.
+            self._apply_pending_mode()
 
     def _apply_pending_mode(self) -> None:
         from widgets.spotify_visualizer.feature_replay import offline_activation_request
@@ -352,6 +462,8 @@ class EngineSession:
         # Render admission for the committed identity (the owner binds it into its scene).
         controller.begin_render_activation(engine_generation=generation, activation_id=activation_id)
         self.mode = mode
+        if self._paced and self._live_started:
+            self._start_cadence()            # the owner restarts its runtime after the bind
         # The target's block size may differ: capture restarts on its lane before the next block.
         self._settle_capture()
 
@@ -434,6 +546,8 @@ class EngineSession:
 
         if self.inputs == "snapshot":
             raise ValueError("this session ticks engine snapshots")
+        if self._paced:
+            raise ValueError("a worker-paced session ticks on its own cadence")
         self._clock[0] = feature.timestamp_us / 1_000_000.0
         if self._live:
             self._tick_live(feature)      # playback edges are the owner's, applied at the boundary
@@ -492,9 +606,22 @@ class VisualizerEngineWorker(BaseWorker):
                     self._close_session()
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
                 return self._reply(msg, revision=revision)
-            if msg.msg_type in (MessageType.VIS_SET_MODE, MessageType.VIS_SET_DISPLAY_POWER):
+            if msg.msg_type in (MessageType.VIS_SET_MODE, MessageType.VIS_SET_DISPLAY_POWER, MessageType.VIS_START,
+                                MessageType.VIS_SET_PLAYING):
                 if self._session is None:
                     return self._reply(msg, success=False, error="no engine session is configured")
+                if msg.msg_type in (MessageType.VIS_START, MessageType.VIS_SET_PLAYING):
+                    session = self._session
+                    try:
+                        if msg.msg_type == MessageType.VIS_START:
+                            session.start(bool(msg.payload["playing"]))
+                        else:
+                            session.set_playing(bool(msg.payload["playing"]))
+                    except (Exception, SnapshotContractError) as exc:
+                        self._close_session()       # the edge may have half-applied: fail closed
+                        return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}",
+                                           session_closed=True)
+                    return self._reply(msg)
                 if msg.msg_type == MessageType.VIS_SET_MODE:
                     # Validated now, applied at the session's next tick boundary (the newest request wins).
                     payload = dict(msg.payload)
@@ -508,10 +635,11 @@ class VisualizerEngineWorker(BaseWorker):
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
                 return self._reply(msg, changed=changed)
             if msg.msg_type == MessageType.VIS_STOP:
+                report = self._session.finish() if self._session is not None else None
                 self._close_session()
                 # The Qt modules the process has loaded so far (the fresh-spawn probe reads them at spawn too).
-                return self._reply(msg, qt_modules=sorted(name for name in sys.modules
-                                                          if name.startswith("PySide6.Qt")))
+                return self._reply(msg, report=report, qt_modules=sorted(name for name in sys.modules
+                                                                         if name.startswith("PySide6.Qt")))
         except (Exception, SnapshotContractError) as exc:   # reported to the owner, never a silent worker death
             return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}")
         return self._reply(msg, success=False, error=f"unsupported message {msg.msg_type}")

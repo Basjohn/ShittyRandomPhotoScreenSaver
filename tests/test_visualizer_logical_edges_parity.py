@@ -213,7 +213,7 @@ class _SessionHost:
         session._live, session._controller, session._engine, session.mode = True, self.controller, \
             self.controller.engine, mode
         session._live_started, session._engine_acquired, session._released_for_display_power = False, False, False
-        session._display_on, session._pending_mode = True, None
+        session._display_on, session._pending_mode, session._paced = True, None, False
         session._settle_capture = lambda: None
         self.session = session
 
