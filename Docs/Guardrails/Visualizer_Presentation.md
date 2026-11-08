@@ -570,6 +570,11 @@ must receive changed spatial bounds without deforming circles or compromising BT
 remains truth outside CUSTOM; a working CUSTOM extent is a temporary override only. Leaving CUSTOM must not reset a saved
 non-baseline layout to canonical by confusing "no override" with "baseline".
 
+The card's content scale (pixels per world unit) has one absolute minimum (`VISUALIZER_MIN_PIXELS_PER_WORLD`, the shared
+40% floor of the canonical 1:1 card). Never floor a Visualizer on `resize_scale` alone: every session admits the card at
+1.0, so such a floor compounds across sessions, and a side drag at a compounded scale grows the world (and widens a
+framed lens, `extent / 280`) out of all proportion (R-181).
+
 **R-69 golden rule:** viewport adaptation must not globally compress Bubble head/radius response, already-normalized Ghost/history displacement, or another Visualizer mode's authored musical response/freshness. Never add a second `baseline/current` or `1 / viewport_extent` compensation to state that is already projected into renderer content coordinates. If an extreme visual tail is too large, fix only that proven tail.
 
 

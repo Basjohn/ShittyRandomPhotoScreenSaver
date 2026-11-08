@@ -548,6 +548,13 @@ uniform_visual_scale     # wheel/corners
 viewport_extent          # left/right width; top/bottom height
 ```
 
+A card's content scale (pixels per world unit: card pixels over `viewport_extent`; the canonical card draws its world
+1:1) has one **absolute** minimum, the shared 40% floor times that canonical 1.0 (`VISUALIZER_MIN_PIXELS_PER_WORLD`).
+Runtime Edit, Alt direct gestures and Settings Arrange apply it through the one uniform rule (`uniform_scale_geometry`);
+it never restarts from a session's starting card, since the Visualizer payload stores no scale scalar. Settings load
+(`validate_and_repair`) lifts any stored planar/legacy-`default` card entry below it, keeping the card and shrinking the
+world uniformly (R-181).
+
 Every registered Visualizer mode must support viewport extent through its declared presentation capability. Bubble is not an exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof, including equal
 renderer-content stream/drift head/trail travel for the same consume-once transient at canonical, wide and tall extents.
 Bubble presentation now uses `sqrt(content_width * content_height / 1.5)` as its response-height reference,
