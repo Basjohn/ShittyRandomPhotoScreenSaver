@@ -225,7 +225,6 @@ from godzip_foundry_core import (  # noqa: E402
     collect_log_files,
     collect_repo_files,
     create_godzip,
-    create_logzip,
     discover_repo_root,
     discover_run_flags,
     discover_zip_candidates,
@@ -255,6 +254,7 @@ from godzip_foundry_core import (  # noqa: E402
     validate_repo_relpath,
     write_debris_manifest,
 )
+from godzip_logzip_retention import create_chest_logzip, logzip_chest  # noqa: E402
 from godzip_foundry_theme import (  # noqa: E402
     FOUNDRY_DEFAULT_THEME_ID,
     FoundryThemeResolution,
@@ -2577,7 +2577,8 @@ class LogzipTab(QWidget):
         il.addWidget(title)
         desc = QLabel(
             "Bundles direct loose files inside /logs only. Subfolders and existing ZIPs are ignored. "
-            "The archive is named from current Git HEAD; repeated bundles receive 2/3/4… suffixes. Sources are left untouched."
+            "Archives go to logs/evidence_chest, named from Git HEAD with 2/3/4… suffixes. "
+            "Only the five newest archives per HEAD are kept. Source logs are untouched."
         )
         desc.setObjectName("muted")
         desc.setWordWrap(True)
@@ -2628,7 +2629,7 @@ class LogzipTab(QWidget):
         self.button.clicked.connect(self.create)
         self.button.setEnabled(False)
         open_saved = QPushButton("Open Saved Folder")
-        open_saved.setToolTip("Open the remembered GODZIP/LOGZIP output folder in the system file manager.")
+        open_saved.setToolTip("Open repository logs/evidence_chest, the LOGZIP destination.")
         open_saved.clicked.connect(self.open_saved_folder)
         fl.addLayout(summary_box, 1)
         fl.addWidget(open_saved)
@@ -2636,9 +2637,7 @@ class LogzipTab(QWidget):
         layout.addWidget(footer)
 
     def _output_dir(self) -> Path:
-        settings = _load_local_settings(self.repo_root)
-        remembered = str(settings.get("output_dir", "")).strip()
-        return Path(remembered).expanduser() if remembered else self.repo_root.parent
+        return logzip_chest(self.repo_root)
 
     def open_saved_folder(self) -> None:
         self.window.open_folder(self._output_dir(), label="LOGZIP output folder")
@@ -2704,8 +2703,6 @@ class LogzipTab(QWidget):
 
     def create(self) -> None:
         names = self._selected()
-        output_dir = self._output_dir()
-
         def completed(result: Any) -> None:
             self.window.set_status(f"Created {result.zip_path.name} from {len(result.files)} loose log file(s)")
             self.window.notify(
@@ -2716,7 +2713,7 @@ class LogzipTab(QWidget):
 
         self.window.run_task(
             "Creating verified LOGZIP…",
-            lambda: create_logzip(self.repo_root, names, output_dir=output_dir),
+            lambda: create_chest_logzip(self.repo_root, names),
             completed,
             error_title="LOGZIP creation failed",
         )
@@ -3387,7 +3384,8 @@ class RunTab(QWidget):
         self.auto_logzip = QCheckBox("LogZIP after run automatically")
         self.auto_logzip.setToolTip(
             "After the launched SRPSS Python process has fully exited, bundle all direct loose /logs files "
-            "to the remembered GODZIP output folder. Uses process.wait(); no polling or timer. "
+            "to repo/logs/evidence_chest, keeping at most five archives per Git HEAD. "
+            "Uses process.wait(); no polling or timer. "
             "Mutually exclusive with keeping the console open so session completion stays exact."
         )
         self.auto_logzip.toggled.connect(self._auto_logzip_toggled)
@@ -3628,7 +3626,6 @@ class RunTab(QWidget):
             self._update_preview()
             return
 
-        output_dir = self.window.logzip_tab._output_dir()
         self._update_preview()
 
         def completed(result: Any) -> None:
@@ -3642,7 +3639,7 @@ class RunTab(QWidget):
 
         self.window.run_task(
             "SRPSS exited — creating automatic LOGZIP…",
-            lambda: create_logzip(self.repo_root, output_dir=output_dir),
+            lambda: create_chest_logzip(self.repo_root),
             completed,
             error_title="Automatic LOGZIP creation failed",
         )
@@ -4396,6 +4393,7 @@ class FoundriesTab(QWidget):
         self._add_launchers(layout, (
             ("MUSIC CLIP RECORDER\n60-second clips · full waveforms + events", "music_recorder.py", False),
             ("VISUALIZER PRESET REPAIR\nReview and repair preset / SST files", "visualizer_preset_repair.py", False),
+            ("BORDER STUDIO\nWebP/PNG borders · lossless timing checks", "srpss_border_studio.py", False),
         ))
         layout.addStretch(1)
 
@@ -4788,7 +4786,7 @@ class GodzipFoundryWindow(QMainWindow):
 
     def zip_search_dirs(self) -> list[Path]:
         settings = _load_local_settings(self.repo_root)
-        dirs: list[Path] = [self.repo_root.parent]
+        dirs: list[Path] = [self.repo_root.parent, logzip_chest(self.repo_root)]
         remembered_output = str(settings.get("output_dir", "")).strip()
         if remembered_output:
             dirs.append(Path(remembered_output))
