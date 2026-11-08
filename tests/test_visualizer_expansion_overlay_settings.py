@@ -31,6 +31,7 @@ from core.settings.fullscreen_overlays import (
     OFFSET_MIN,
     OVERLAY_IDS,
     SCALE_MAX,
+    VOLUME_OSD_ID,
     SCALE_MIN,
     canonical_fullscreen_overlays,
     normalize_fullscreen_overlays,
@@ -90,7 +91,10 @@ def test_canonical_default_has_the_schema_every_consumer_reads(profile):
     value = require_canonical_default(FULLSCREEN_OVERLAYS_KEY, profile)
     assert isinstance(value["font_family"], str) and value["font_family"].strip()
     assert isinstance(value["font_size"], int) and FONT_SIZE_MIN <= value["font_size"] <= FONT_SIZE_MAX
-    assert set(value) == {"font_family", "font_size", *OVERLAY_IDS}
+    assert set(value) == {"font_family", "font_size", *OVERLAY_IDS, VOLUME_OSD_ID}
+    # The Volume OSD's placement over the expanded card: placement members only (no Settings options).
+    assert set(value[VOLUME_OSD_ID]) == set(PLACEMENT_KEYS[VOLUME_OSD_ID])
+    assert all(isinstance(number, float) for number in value[VOLUME_OSD_ID].values())
     for overlay in OVERLAY_IDS:
         options = value[overlay]
         # Placement: anchor corner + offset + scale relative to the safe area (M3c edits them).

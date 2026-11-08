@@ -9,7 +9,7 @@ import math
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QPoint, QRectF, QUrl, Signal, Qt
+from PySide6.QtCore import QObject, QPoint, QRectF, QUrl, Signal, Qt, SIGNAL
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
@@ -1408,13 +1408,32 @@ class QuickSceneController(QObject):
         artwork = stage.findChild(QQuickItem, "expandedOverlayArtwork")
         if text is None or artwork is None:
             return None
+        parts = {"preset": slots["preset"]["rect"], "now_playing": rect(text), "artwork": rect(artwork)}
+        # The Volume OSD (when this display has one): drawn at its expanded placement; its anchor is where a zero
+        # offset puts it (its ordinary rectangle scaled about its centre), in the coordinates its position is in.
+        osd = self._volume_osd_widget()
+        authored = osd.authored_geometry if osd is not None else None
+        if osd is not None and authored is not None:
+            from core.settings.fullscreen_overlays import volume_osd_anchor
+
+            options = self._visualizer_overlay_config.get("volumeOsd")
+            scale = float(options.get("scale", 1.0)) if isinstance(options, Mapping) else 1.0
+            item = osd.item
+            slots["volume_osd"] = {
+                "rect": rect(item),
+                "pos": (float(item.x()), float(item.y())),
+                "anchored": volume_osd_anchor((authored.x, authored.y, authored.width, authored.height), scale),
+                "font_size": 0.0,
+                "padding": 0.0,
+            }
+            parts["volume_osd"] = slots["volume_osd"]["rect"]
         return {
             "stage": rect(stage),
             "safe_inset": float(stage.property("safeInset")),
             "safe_width": float(stage.property("safeWidth")),
             "safe_height": float(stage.property("safeHeight")),
             "slots": slots,
-            "parts": {"preset": slots["preset"]["rect"], "now_playing": rect(text), "artwork": rect(artwork)},
+            "parts": parts,
         }
 
     def _set_visualizer_overlay_editing(self, editing: bool) -> None:
@@ -2544,6 +2563,77 @@ class QuickSceneController(QObject):
             return
         self._visualizer_overlay_config = value
         self._project_visualizer_root_property("expandedOverlayConfig", value)
+        self._project_expanded_osd_placement()
+
+    # The Volume OSD over the expanded card (``fullscreen_overlays.volume_osd``; Fullscreen Edit moves and sizes it).
+    VOLUME_OSD_IDENTITY = "system_audio_osd"
+
+    def _expanded_overlay_stage(self) -> QQuickItem | None:
+        root = self._visualizer_root
+        if root is None or not _qobject_is_alive(root):
+            return None
+        loader = root.findChild(QQuickItem, "visualizerExpandedOverlays")
+        stage = loader.property("item") if loader is not None else None
+        return stage if isinstance(stage, QQuickItem) and _qobject_is_alive(stage) else None
+
+    def _volume_osd_widget(self):
+        host = self._ordinary_widget_host
+        if host is None:
+            return None
+        widget = host.presentation_for_model_identity(self.VOLUME_OSD_IDENTITY)
+        return widget if widget is not None and not widget.is_retired and widget.is_qt_alive else None
+
+    def _volume_osd_safe_rect(self, stage: QQuickItem, widget) -> tuple[float, float, float, float] | None:
+        """The expanded card's safe area in the OSD's parent coordinates (where its geometry is assigned)."""
+
+        parent = widget.item.parentItem()
+        if parent is None:
+            return None
+        inset = float(stage.property("safeInset") or 0.0)
+        safe = stage.mapRectToItem(parent, QRectF(inset, inset, float(stage.property("safeWidth") or 0.0),
+                                                   float(stage.property("safeHeight") or 0.0)))
+        return (safe.x(), safe.y(), safe.width(), safe.height())
+
+    def _project_expanded_osd_placement(self) -> None:
+        """Place the Volume OSD by ``volume_osd`` while the display-wide card is drawn; otherwise as authored.
+
+        Event edges only: the overlays' config (a Save, a Fullscreen Edit draft sample), the overlays' stage
+        appearing or going, and the stage reporting its safe area or the OSD lane changing (``volumeOsdPlacement
+        Changed``). The OSD's layout keeps assigning its ordinary rectangle; this maps it (``set_display_placement``).
+        """
+
+        widget = self._volume_osd_widget()
+        if widget is None:
+            return
+        stage = self._expanded_overlay_stage() if self._visualizer_overlays_drawn else None
+        options = self._visualizer_overlay_config.get("volumeOsd") if stage is not None else None
+        safe = self._volume_osd_safe_rect(stage, widget) if isinstance(options, Mapping) else None
+        if safe is None or safe[2] <= 0.0 or safe[3] <= 0.0:
+            widget.set_display_placement(None)
+            return
+        from core.settings.fullscreen_overlays import volume_osd_rect
+
+        offset_x, offset_y = float(options.get("offsetX", 0.0)), float(options.get("offsetY", 0.0))
+        scale = float(options.get("scale", 1.0))
+
+        def placement(authored: OverlayWidgetGeometry) -> OverlayWidgetGeometry:
+            return OverlayWidgetGeometry(*volume_osd_rect(
+                (authored.x, authored.y, authored.width, authored.height), safe, offset_x, offset_y, scale))
+
+        widget.set_display_placement(placement)
+
+    def _on_expanded_overlays_item_changed(self) -> None:
+        # A QML signal's handler: a plain method (never a result Slot). The overlays' stage appeared or went.
+        stage = self._expanded_overlay_stage()
+        if stage is not None:
+            signal = getattr(stage, "volumeOsdPlacementChanged", None)
+            if signal is not None and hasattr(signal, "connect"):
+                signal.connect(self._on_expanded_osd_placement_changed)
+        self._project_expanded_osd_placement()
+
+    def _on_expanded_osd_placement_changed(self) -> None:
+        # A QML signal's handler: a plain method.
+        self._project_expanded_osd_placement()
 
     def announce_visualizer_preset(self, name: str, *, reveal: bool = True) -> None:
         """Publish the active preset's display name; ``reveal`` makes it an event the preset toast shows."""
@@ -2807,6 +2897,10 @@ class QuickSceneController(QObject):
         overlay_geometry = getattr(root, "expandedOverlayEditGeometryChanged", None)
         if overlay_geometry is not None and hasattr(overlay_geometry, "connect"):
             overlay_geometry.connect(self._on_expanded_overlay_edit_geometry_changed)
+        overlays_loader = root.findChild(QQuickItem, "visualizerExpandedOverlays")
+        if overlays_loader is not None:
+            # The overlays' stage appearing or going places the Volume OSD over the expanded card (or returns it).
+            QObject.connect(overlays_loader, SIGNAL("itemChanged()"), self._on_expanded_overlays_item_changed)
         volume_step_signal = getattr(root, "appVolumeStepRequested", None)
         if volume_step_signal is not None and hasattr(volume_step_signal, "connect"):
             volume_step_signal.connect(self._handle_visualizer_app_volume_step)

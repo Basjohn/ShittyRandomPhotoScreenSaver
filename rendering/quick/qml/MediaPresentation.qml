@@ -827,7 +827,9 @@ OverlayWidget {
             // orientation; child edits cannot move the whole parent or the band.
             height: visible ? mediaRoot.canonicalControlsHeight : 0.0
 
-            Rectangle {
+            // The one Media transport bar (MediaTransportBar.qml, shared with the Expanded Visualizer's Now Playing),
+            // at the card's size with the mute button as its child.
+            MediaTransportBar {
                 id: controlsRow
                 objectName: "mediaControlsRow"
                 visible: controlsBandSlot.visible
@@ -848,172 +850,36 @@ OverlayWidget {
                 height: mediaRoot.canonicalControlsHeight
                     * mediaRoot.mediaModel.customTransportHeightScale
                 radius: 12.0
-                // On a surface material the bar is material too, tinted by its fill.
-                color: controlsRowMaterial.active ? "transparent" : mediaRoot.mediaModel.controlsSurfaceColor
                 border.width: mediaRoot.scaleAwareChildStrokeWidth(1.5, Math.min(
                     mediaRoot.mediaModel.customTransportWidthScale,
                     mediaRoot.mediaModel.customTransportHeightScale))
                 border.color: mediaRoot.mediaModel.controlsBorderColor
-                clip: false
 
-                // Transport bar uses the same global direction with 15% more
-                // displacement and a deliberately small cached blur.
-                RectangularShadow {
-                    anchors.fill: parent
-                    visible: mediaRoot.mediaModel.surfaceShadowEnabled
-                    color: mediaRoot.mediaModel.surfaceShadowColor
-                    blur: mediaRoot.mediaModel.surfaceShadowBlur
-                    radius: parent.radius
-                    spread: 0.0
-                    offset: Qt.vector2d(
-                        mediaRoot.mediaModel.surfaceShadowOffsetX * 1.15,
-                        mediaRoot.mediaModel.surfaceShadowOffsetY * 1.15
-                    )
-                    cached: true
-                    z: -1
-                }
-
-                ChildMaterialSurface {
-                    id: controlsRowMaterial
-                    objectName: "mediaControlsRowMaterial"
-                    card: mediaRoot
-                    fillColor: mediaRoot.mediaModel.controlsSurfaceColor
-                    cornerRadius: controlsRow.radius
-                }
-
-                Row {
-                    id: transportGroup
-                    objectName: "mediaTransportControls"
-                    visible: mediaRoot.mediaModel.controlsAvailable
-                    x: 0.0
-                    y: 0.0
-                    width: Math.max(
-                        1.0,
-                        parent.width
-                            - (systemMuteButton.visible && mediaRoot.muteOnAuthoredRail
-                                ? systemMuteButton.width
-                                    + systemMuteButton.anchors.rightMargin + 4.0 : 0.0)
-                    )
-                    height: parent.height
-
-                    Item {
-                        id: previousButton
-                        objectName: "mediaPreviousButton"
-                        width: (parent.width - 2.0) / 3.0
-                        height: parent.height
-                        opacity: mediaRoot.mediaModel.canPrevious
-                            ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
-                            : 0.25
-                        scale: previousTap.pressed ? 1.10
-                            : (previousHover.hovered && previousTap.enabled ? 1.055 : 1.0)
-
-                        MediaTransportGlyph {
-                            anchors.centerIn: parent
-                            // One box for the whole set, from the bar's height.
-                            width: Math.max(10.0, Math.min(parent.height * 0.5, parent.width * 0.4))
-                            kind: "previous"
-                            glyphColor: mediaRoot.mediaModel.controlsIconColor
-                        }
-
-                        HoverHandler {
-                            id: previousHover
-                            enabled: previousTap.enabled
-                            blocking: false
-                            cursorShape: Qt.PointingHandCursor
-                        }
-
-                        TapHandler {
-                            id: previousTap
-                            enabled: mediaRoot.mediaModel.interactionEnabled
-                                && mediaRoot.mediaModel.canPrevious
-                            acceptedButtons: Qt.LeftButton
-                            onTapped: mediaRoot.previousRequested()
-                        }
-                    }
-
-                    Rectangle {
-                        width: mediaRoot.scaleAwareStrokeWidth(1.0)
-                        height: parent.height * 0.7
-                        y: (parent.height - height) / 2.0
-                        color: mediaRoot.mediaModel.controlsSeparatorColor
-                    }
-
-                    Item {
-                        id: playPauseButton
-                        objectName: "mediaPlayPauseButton"
-                        width: (parent.width - 2.0) / 3.0
-                        height: parent.height
-                        opacity: mediaRoot.mediaModel.canPlayPause
-                            ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
-                            : 0.25
-                        scale: playPauseTap.pressed ? 1.10
-                            : (playPauseHover.hovered && playPauseTap.enabled ? 1.055 : 1.0)
-
-                        MediaTransportGlyph {
-                            anchors.centerIn: parent
-                            // One box for the whole set, from the bar's height.
-                            width: Math.max(10.0, Math.min(parent.height * 0.5, parent.width * 0.4))
-                            kind: mediaRoot.mediaModel.playbackState === "playing" ? "pause" : "play"
-                            glyphColor: mediaRoot.mediaModel.controlsIconColor
-                        }
-
-                        HoverHandler {
-                            id: playPauseHover
-                            enabled: playPauseTap.enabled
-                            blocking: false
-                            cursorShape: Qt.PointingHandCursor
-                        }
-
-                        TapHandler {
-                            id: playPauseTap
-                            enabled: mediaRoot.mediaModel.interactionEnabled
-                                && mediaRoot.mediaModel.canPlayPause
-                            acceptedButtons: Qt.LeftButton
-                            onTapped: mediaRoot.playPauseRequested()
-                        }
-                    }
-
-                    Rectangle {
-                        width: mediaRoot.scaleAwareStrokeWidth(1.0)
-                        height: parent.height * 0.7
-                        y: (parent.height - height) / 2.0
-                        color: mediaRoot.mediaModel.controlsSeparatorColor
-                    }
-
-                    Item {
-                        id: nextButton
-                        objectName: "mediaNextButton"
-                        width: (parent.width - 2.0) / 3.0
-                        height: parent.height
-                        opacity: mediaRoot.mediaModel.canNext
-                            ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
-                            : 0.25
-                        scale: nextTap.pressed ? 1.10
-                            : (nextHover.hovered && nextTap.enabled ? 1.055 : 1.0)
-
-                        MediaTransportGlyph {
-                            anchors.centerIn: parent
-                            // One box for the whole set, from the bar's height.
-                            width: Math.max(10.0, Math.min(parent.height * 0.5, parent.width * 0.4))
-                            kind: "next"
-                            glyphColor: mediaRoot.mediaModel.controlsIconColor
-                        }
-
-                        HoverHandler {
-                            id: nextHover
-                            enabled: nextTap.enabled
-                            blocking: false
-                            cursorShape: Qt.PointingHandCursor
-                        }
-
-                        TapHandler {
-                            id: nextTap
-                            enabled: mediaRoot.mediaModel.interactionEnabled
-                                && mediaRoot.mediaModel.canNext
-                            acceptedButtons: Qt.LeftButton
-                            onTapped: mediaRoot.nextRequested()
-                        }
-                    }
+                canPrevious: mediaRoot.mediaModel.canPrevious
+                canPlayPause: mediaRoot.mediaModel.canPlayPause
+                canNext: mediaRoot.mediaModel.canNext
+                interactionEnabled: mediaRoot.mediaModel.interactionEnabled
+                playing: mediaRoot.mediaModel.playbackState === "playing"
+                transportVisible: mediaRoot.mediaModel.controlsAvailable
+                surfaceColor: mediaRoot.mediaModel.controlsSurfaceColor
+                iconColor: mediaRoot.mediaModel.controlsIconColor
+                separatorColor: mediaRoot.mediaModel.controlsSeparatorColor
+                separatorWidth: mediaRoot.scaleAwareStrokeWidth(1.0)
+                shadowEnabled: mediaRoot.mediaModel.surfaceShadowEnabled
+                shadowColor: mediaRoot.mediaModel.surfaceShadowColor
+                shadowBlur: mediaRoot.mediaModel.surfaceShadowBlur
+                shadowOffsetX: mediaRoot.mediaModel.surfaceShadowOffsetX
+                shadowOffsetY: mediaRoot.mediaModel.surfaceShadowOffsetY
+                materialCard: mediaRoot
+                transportReserve: systemMuteButton.visible && mediaRoot.muteOnAuthoredRail
+                    ? systemMuteButton.width + systemMuteButton.anchors.rightMargin + 4.0 : 0.0
+                onTransportRequested: function(key) {
+                    if (key === "previous")
+                        mediaRoot.previousRequested()
+                    else if (key === "next")
+                        mediaRoot.nextRequested()
+                    else
+                        mediaRoot.playPauseRequested()
                 }
 
                 Rectangle {

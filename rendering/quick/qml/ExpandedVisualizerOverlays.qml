@@ -58,8 +58,28 @@ Item {
     property real bottomRightReserve: 0.0
 
     signal transportRequested(string key)
+    // The Media card's transport bar look (MediaPresentationModel.transportBarLook: one JSON object of plain values,
+    // colour names; a string, so nothing here holds a reference into the model), or ``fallback`` without a model.
+    readonly property var mediaBarLook: {
+        const text = mediaModel ? mediaModel.transportBarLook : undefined
+        return typeof text === "string" && text.length > 0 ? JSON.parse(text) : ({})
+    }
+    function mediaLook(name, fallback) {
+        const value = mediaBarLook[name]
+        return value === undefined || value === null ? fallback : value
+    }
     // Fullscreen Edit: an overlay's (or a part's) geometry changed; only emitted while editing.
     signal editGeometryChanged()
+    // The Volume OSD's placement over the expanded card (``volume_osd``) depends on the safe area and on the OSD being
+    // in its lane: Python (the scene controller) re-places it on these edges only.
+    signal volumeOsdPlacementChanged()
+    onSafeInsetChanged: volumeOsdPlacementChanged()
+    onSafeWidthChanged: volumeOsdPlacementChanged()
+    onSafeHeightChanged: volumeOsdPlacementChanged()
+    Connections {
+        target: overlays.osdHost
+        function onChildrenChanged() { overlays.volumeOsdPlacementChanged() }
+    }
     function noteEditGeometry() {
         if (editing)
             editGeometryChanged()
@@ -256,6 +276,16 @@ Item {
         naturalHeight: Math.max(artHeight, textBlock.height)
 
         readonly property bool controlsShown: options.mediaControls === true
+        // Media Controls: the Media card's transport bar, small. The card's bar is 2.15 x its font size tall under a
+        // title of 1.12 x that size in points (1.12 x 4/3 px): bar / title = 2.15 / 1.4933 = 1.44. Here the bar keeps
+        // that ratio to Now Playing's artist line (0.74 x the title), the line it sits under, so it is the card's bar
+        // in proportion but smaller than the text block's headline. Compact: segments twice as wide as the bar is tall
+        // (the card's run the card's width), which keeps the card's glyph box (half the bar's height).
+        readonly property real controlsHeight: Math.max(16.0, Math.round(fontSize * 0.74 * 1.44))
+        readonly property real controlsWidth: Math.round(controlsHeight * 6.0) + 2.0
+        // The bar's size against the Media card's own bar (its outline, radius and shadow scale by this).
+        readonly property real controlsFactor: controlsHeight / Math.max(
+            38.0, overlays.mediaLook("fontSize", 17.0) * 2.15)
         function factor(raw) {
             const value = Number(raw)
             return isFinite(value) && value > 0 ? Math.max(0.5, Math.min(3.0, value)) : 1.0
@@ -418,11 +448,22 @@ Item {
             onWidthChanged: overlays.noteEditGeometry()
             onHeightChanged: overlays.noteEditGeometry()
 
-            Column {
+            // The rows at their natural spacing; a set box height (Fullscreen Edit's side handles) gives the title the
+            // extra lines that fit and spreads what is left between the rows (title to artist, artist to the Media
+            // Controls), so the artist and the controls follow the box's edge as the title does: the block fills its
+            // box, never a stale gap above and below it (Media's own content extent likewise widens its metadata
+            // spacing with the box's height).
+            Item {
                 id: textColumn
                 y: (parent.height - height) / 2.0
                 width: textBlock.width
-                spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
+                readonly property real spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
+                readonly property real naturalHeight: titleText.height + spacing + artistText.height
+                    + (controls.visible ? 2.0 * spacing + controlsSpacer.height + controls.height : 0.0)
+                readonly property real slack: nowPlayingSlot.boxHeight > 0.0
+                    ? Math.max(0.0, nowPlayingSlot.boxHeight - naturalHeight) : 0.0
+                readonly property real gapExtra: slack / (controls.visible ? 2.0 : 1.0)
+                height: naturalHeight + slack
 
                 ShadowedText {
                     id: titleText
@@ -446,6 +487,7 @@ Item {
                 ShadowedText {
                     id: artistText
                     objectName: "expandedOverlayArtist"
+                    y: titleText.height + textColumn.spacing + textColumn.gapExtra
                     width: textColumn.width
                     text: nowPlayingSlot.contentArtist
                     font.family: overlays.fontFamily
@@ -459,64 +501,51 @@ Item {
                     shadowOffsetX: 0.0
                     shadowOffsetY: overlays.textShadowOffset
                 }
-                // Media Controls (default off): previous / play-pause / next on the Media card's own transport owner.
+                // Media Controls (default off): a small version of the Media card's own transport bar (the one
+                // MediaTransportBar, its look from the Media model), on the Media card's own transport owner.
                 Item {
                     id: controlsSpacer
+                    y: artistText.y + artistText.height + textColumn.spacing
                     width: textColumn.width
                     height: Math.round(nowPlayingSlot.fontSize * 0.25)
                     visible: controls.visible
                 }
-                Row {
+                MediaTransportBar {
                     id: controls
                     objectName: "expandedOverlayMediaControls"
+                    readonly property var model: overlays.mediaModel
                     visible: nowPlayingSlot.controlsShown
                     x: nowPlayingSlot.rightSide ? textColumn.width - width : 0.0
-                    spacing: Math.round(nowPlayingSlot.fontSize * 0.35)
+                    y: controlsSpacer.y + controlsSpacer.height + textColumn.spacing + textColumn.gapExtra
+                    width: nowPlayingSlot.controlsWidth
+                    height: nowPlayingSlot.controlsHeight
+                    // The card's bar, scaled as one: its outline, radius and shadow by the same factor as its height.
+                    radius: 12.0 * nowPlayingSlot.controlsFactor
+                    border.width: Math.max(1.0, 1.5 * nowPlayingSlot.controlsFactor)
+                    border.color: overlays.mediaLook("borderColor", "#ffffffff")
 
-                    Repeater {
-                        model: ["previous", "play", "next"]
-                        delegate: Rectangle {
-                            id: control
-                            required property string modelData
-                            objectName: "expandedOverlayTransport_" + modelData
-                            readonly property var model: overlays.mediaModel
-                            readonly property bool available: !!model && (modelData === "previous" ? model.canPrevious
-                                : modelData === "next" ? model.canNext : model.canPlayPause)
-                            width: Math.round(nowPlayingSlot.fontSize * 1.3)
-                            height: width
-                            radius: width / 2.0
-                            // The card's in-card control look (Reset Camera, the preset steps).
-                            color: "#bb20262c"
-                            border.width: 1
-                            border.color: "#c2ffffff"
-                            opacity: !available ? 0.35 : (tap.enabled ? 1.0 : 0.68)
-                            scale: tap.pressed ? 1.10 : (tap.containsMouse && tap.enabled ? 1.06 : 1.0)
-
-                            MediaTransportGlyph {
-                                anchors.centerIn: parent
-                                width: Math.round(control.width * 0.52)
-                                kind: control.modelData === "play" ? (nowPlayingSlot.playing ? "pause" : "play")
-                                                                   : control.modelData
-                                glyphColor: "#ffffffff"
-                            }
-                            MouseArea {
-                                id: tap
-                                anchors.fill: parent
-                                enabled: nowPlayingSlot.interactive && control.available
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                propagateComposedEvents: false
-                                onPressed: function(mouse) { mouse.accepted = true }
-                                // An in-card control consumes every press of its own, a double-click's second included.
-                                readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
-                                onDoubleClicked: function(mouse) { mouse.accepted = true }
-                                onClicked: function(mouse) {
-                                    mouse.accepted = true
-                                    overlays.transportRequested(control.modelData)
-                                }
-                            }
-                        }
-                    }
+                    canPrevious: !!model && model.canPrevious === true
+                    canPlayPause: !!model && model.canPlayPause === true
+                    canNext: !!model && model.canNext === true
+                    interactionEnabled: nowPlayingSlot.interactive
+                    playing: nowPlayingSlot.playing
+                    surfaceColor: overlays.mediaLook("surfaceColor", "#b3101010")
+                    iconColor: overlays.mediaLook("iconColor", "#ffffffff")
+                    separatorColor: overlays.mediaLook("separatorColor", "#66ffffff")
+                    separatorWidth: 1.0
+                    shadowEnabled: overlays.mediaLook("shadowEnabled", false) === true
+                    shadowColor: overlays.mediaLook("shadowColor", "#00000000")
+                    shadowBlur: Number(overlays.mediaLook("shadowBlur", 0.0)) * nowPlayingSlot.controlsFactor
+                    shadowOffsetX: Number(overlays.mediaLook("shadowOffsetX", 0.0)) * nowPlayingSlot.controlsFactor
+                    shadowOffsetY: Number(overlays.mediaLook("shadowOffsetY", 0.0)) * nowPlayingSlot.controlsFactor
+                    // Over the Visualizer, whose double-click cycles its mode: each segment holds its own presses.
+                    exclusivePress: true
+                    materialObjectName: "expandedOverlayMediaControlsMaterial"
+                    transportObjectName: "expandedOverlayTransportControls"
+                    previousObjectName: "expandedOverlayTransport_previous"
+                    playPauseObjectName: "expandedOverlayTransport_play"
+                    nextObjectName: "expandedOverlayTransport_next"
+                    onTransportRequested: function(key) { overlays.transportRequested(key) }
                 }
             }
         }

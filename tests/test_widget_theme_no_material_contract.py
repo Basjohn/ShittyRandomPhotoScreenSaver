@@ -122,6 +122,9 @@ def test_only_preexisting_local_image_multieffects_remain() -> None:
         # artwork-frame contract (static layers, enabled only while visible).
         "FeedPresentation.qml",
         "GamesYouFollowPresentation.qml",
+        # Expanded Visualizer M3b: Now Playing's artwork takes the same local
+        # rounded-mask artwork-frame contract (Contracts: rounded artwork frames).
+        "ExpandedVisualizerOverlays.qml",
     }
     found = set()
     for path in QML.glob("*.qml"):

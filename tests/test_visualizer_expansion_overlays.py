@@ -529,7 +529,8 @@ def test_the_overlays_sit_below_the_cards_controls_the_osd_lane_and_the_menu(dis
                 if child.metaObject().className().startswith(("QQuickTapHandler", "QQuickHoverHandler",
                                                               "QQuickWheelHandler", "QQuickDragHandler"))]
     assert len(takers) == 3 and handlers == []
-    assert all(item.parentItem().objectName().startswith("expandedOverlayTransport_") for item in takers)
+    # Each press area is its segment's (the shared bar loads it into the segment).
+    assert all(item.parentItem().parentItem().objectName().startswith("expandedOverlayTransport_") for item in takers)
     assert all(item.property("consumesDoubleClick") is True for item in takers)
 
 
@@ -598,6 +599,67 @@ def test_media_controls_emit_one_semantic_request_only_while_admitted(display):
     media.update(canNext=False)                        # the model says it cannot: nothing is asked
     _click(display, controls["next"])
     assert requests == ["previous", "play", "next"]
+
+
+def _qml_type(item) -> str:
+    """The QML component an item instantiates (``Name_QMLTYPE_n`` -> ``Name``)."""
+    return item.metaObject().className().split("_QMLTYPE_", 1)[0]
+
+
+@pytest.mark.qt
+def test_media_controls_are_the_media_cards_own_transport_bar_small(display):
+    """Operator, 8 Nov: "it should have the media control bar just a small version". Now Playing's Media Controls are
+    the one MediaTransportBar the Media card draws (shared, never a copy), below the card's size, and Fullscreen Edit's
+    narrowest text box still holds the whole bar."""
+    from core.settings.defaults import get_default_settings
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+    from rendering.quick.widgets.media import (
+        MediaPresentationConfig,
+        MediaPresentationModel,
+        MediaPresentationStyle,
+        RetainedMediaPresentation,
+    )
+
+    widgets = get_default_settings()["widgets"]
+    config = MediaPresentationConfig.from_widgets_mapping(widgets)
+    model = MediaPresentationModel(config, MediaPresentationStyle.project(config, widgets.get("shadows", {})),
+                                   display.factory.media_artwork_provider)
+    card = RetainedMediaPresentation(host=display.scene.ordinary_widget_host, model=model,
+                                     geometry=OverlayWidgetGeometry(20.0, 20.0, 600.0, 300.0))
+    try:
+        display.render()
+        card_bar = card.item.findChild(QQuickItem, "mediaControlsRow")
+        assert card_bar is not None and _qml_type(card_bar) == "MediaTransportBar"
+
+        # A text box narrower than anything (Fullscreen Edit's side handle) is floored at the bar's width.
+        from dataclasses import replace
+
+        model._replace_snapshot(replace(model._snapshot, has_track=True, title="Track One", artist="Artist One",
+                                        playback_state="playing"))
+        _draw(display, media=model, config=_config(now_playing={"media_controls": True, "always_show": True,
+                                                                "text_width": 0.01}))
+        _open(display)
+        slot = _slot(display, "expandedOverlayNowPlaying")
+        _settle(display, lambda: _prop(slot, "presence") >= 1.0)
+        layer = _layer(display)
+        bar = _named(layer, "expandedOverlayMediaControls")
+        assert bar is not None and _qml_type(bar) == _qml_type(card_bar)
+        # The card's bar parts (three segments of the one bar), each pressing with the overlay's own keys.
+        segments = [_named(bar, f"expandedOverlayTransport_{key}") for key in ("previous", "play", "next")]
+        assert all(segment is not None and segment.parentItem().parentItem() is bar for segment in segments)
+        # The card's own look, from the one Media model.
+        for name in ("surfaceColor", "iconColor", "separatorColor", "shadowEnabled", "shadowColor"):
+            assert bar.property(name) == card_bar.property(name), name
+        assert bar.property("playing") is card_bar.property("playing") is True
+        # Small: shorter and much narrower than the card's bar.
+        assert 0.0 < bar.height() < card_bar.height() and bar.width() < card_bar.width() / 2.0
+        text_block = _named(layer, "expandedOverlayNowPlayingText")
+        assert text_block.width() >= bar.width() - 0.5
+        assert _rect(bar, layer).left() >= _rect(text_block, layer).left() - 0.5
+    finally:
+        display.scene.set_visualizer_overlay_media_model(None)
+        card.retire()
+        model.deleteLater()
 
 
 def _manager_route(unit, *, menu=False, admission=True):

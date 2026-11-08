@@ -394,7 +394,9 @@ next admitted edge). The checklist below stays as its review list.
     gently; it never pops. Off by default.
   - **Media Controls:** previous / play-pause / next shown with the now-playing overlay, off by default. They drive
     the existing Media controller (the Media card's own transport path); no second controller, no second GSMTC read.
-    Their hit area joins the overlay's, outside the OSD, collapse glyph and camera/preset controls.
+    Their hit area joins the overlay's, outside the OSD, collapse glyph and camera/preset controls. They are the
+    Media card's own control bar, small (operator, 8 Nov: "it should have the media control bar just a small
+    version"), not separate buttons.
   - **Card:** an optional border and theme surface like the widget cards (the card chrome owner: border colour, width
     and radius, plus the active Widget Theme's surface material), wrapping the whole overlay; off by default, so the
     artwork alone keeps its themed border.
@@ -730,9 +732,22 @@ count (`tests/test_spectrum_expanded_bar_count.py`). The DSP recompute below rem
   shadow (`ShadowedText`'s soft profile). Artwork square (as tall as the text beside it), framed with the card's own
   chrome (border colour, the AC-09 width, the card radius) on a concentric mask; missing art shows the card surface
   with a quiet note glyph. Card wraps an overlay in `OverlayCard` (the widget cards' own card: theme border, surface,
-  material via the shared backdrop, card shadow). Media Controls use the card's in-card control look and
-  `MediaTransportGlyph`; each consumes its own presses (double-click included); nothing else in the overlays takes
-  input, so double-click, middle-click, wheel and orbit reach the card as before.
+  material via the shared backdrop, card shadow). Media Controls are the one Media transport bar,
+  `MediaTransportBar.qml`, which the Media card (`MediaPresentation.qml`, at the card's size, its mute button a child)
+  also draws: the rounded bar with its outline and shadow, previous | play-pause | next in three segments split by
+  thin separators, `MediaTransportGlyph` (pause while playing), the card's dim, hover and press. Its look is the
+  Media model's (`MediaPresentationModel.transportBarLook`: one JSON string of plain values, because a QColor or a
+  map read through QML `var` stays a reference connected to the model until JS garbage collection, which an
+  unloaded overlay must never leave behind); the overlay's own bar takes no card material (it sits over the
+  Visualizer, not the wallpaper). Size, from the card's own bar-to-text ratio: the card's bar is 2.15 x its font
+  size tall under a title of 1.12 x that size in points, so bar / title = 2.15 / 1.4933 = 1.44; Now Playing's bar
+  keeps that ratio to its artist line (0.74 x the title), the line it sits under: height = 1.07 x the overlay's
+  scaled font size (32 px at the 30 px default), width = six heights (segments twice as wide as tall, which keeps
+  the card's glyph box of half the bar's height), outline 1.5 px, radius 12 and shadow scaled by the bar's height
+  against the card's. It sits under the text on the anchor side, scales with the overlay's scale and fades with Now
+  Playing. Each segment holds its own presses (double-click included, `consumesDoubleClick`) and emits
+  `transportRequested` with the same keys; nothing else in the overlays takes input, so double-click, middle-click,
+  wheel and orbit reach the card as before.
 - *Media Controls route.* QML → `QuickSceneController.visualizer_overlay_transport_requested` → the display manager's
   `_route_expanded_overlay_transport` (owning unit, admission open, no context menu) → `_route_quick_media_transport`,
   the route the keyboard transport shortcuts take: the Media card's own transport owner, never fanned out.
@@ -816,8 +831,9 @@ can most geometry normally."
   the artwork, all new members of the one value (canonical default = today's look: text `0` = natural, artwork `1`
   = square; a value stored before them reads them so, no bridge). Mirrored semantics: the text box is ordinary
   Edit's content box (Media's card elides in a set width and reflows into a set height): a set width elides, a set
-  height adds lines (the toast's name and Now Playing's title wrap, then elide), the block centred in its box,
-  floored at one line (the toast) or the natural block (Now Playing), at least the Media Controls' width; extents
+  height adds lines (the toast's name and Now Playing's title wrap, then elide; the toast's name is centred in its
+  box; Now Playing's rows fill it, see the artist-line fix below), floored at one line (the toast) or the natural
+  block (Now Playing), at least the Media Controls bar's width; extents
   are in ems of the overlay's font, so a uniform scale (corner, wheel) and the font size keep the box's shape, as
   ordinary Edit's uniform scale keeps `content_extent`; a set box may use the whole safe area (the 45 % cap is only
   the natural growth). The artwork mirrors ordinary Edit's freeform artwork frame
@@ -831,6 +847,31 @@ can most geometry normally."
   Evidence: `tests/test_visualizer_expansion_fullscreen_edit.py` (side strips, one axis per handle, reflow and crop,
   undo, Restore Size, uniform scale, the parity map with side drags) and `..._overlay_settings.py`; stills outside the
   repository (`D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer\20261108_m3c_axes\`).
+- *Live defects (operator, 8 Nov, live; fixed the same day).* (1) **The artist line follows the box.** A set Now
+  Playing box height gives the title the lines that fit and spreads what is left between the rows (title to artist,
+  artist to the Media Controls): the title sits at the box's top and the last row at its bottom, so the artist moves
+  with the side handles as the title does (formerly the rows stayed bunched in the middle with a stale gap above and
+  below); Media's own content extent likewise widens its metadata spacing with its height. Natural boxes are
+  unchanged. (2) **Dragging the text.** Now Playing's text block dragged with real pointer events through the window
+  is taken by its Edit frame and moves Now Playing as one (guides, one undo step, Save); this did not reproduce on
+  the hidden production scene (DPR 1 and 1.5, with and without Media Controls, stacked corners, after side handles,
+  with the expanded card's item) and is now a permanent bar; the operator's live recheck is owed. (3) **The Volume
+  OSD is a Fullscreen Edit part (decided: it mirrors the overlays' model).** Its placement over the expanded card is
+  `fullscreen_overlays.volume_osd` = `offset_x` / `offset_y` (fractions of the safe area) and `scale`, relative to
+  where its ordinary layout puts it (canonical zero / one = exactly there; a value stored before it reads it so, no
+  bridge). The scene controller maps the OSD's layout rectangle through it (`RetainedOverlayWidget.
+  set_display_placement`, `core.settings.fullscreen_overlays.volume_osd_rect`: scaled about its centre, offset, kept
+  inside the safe area) only while the display-wide card is drawn, at event edges (the config, the overlays' stage
+  appearing or going, the stage's `volumeOsdPlacementChanged`: safe area or OSD lane). Its ordinary placement
+  (ordinary Edit, CUSTOM) is never changed: the layout keeps assigning the ordinary rectangle (the authored one) and
+  collapsing returns it exactly; writing the ordinary placement instead would have moved the collapsed OSD too and
+  broken Fullscreen Edit's rule that its Save never reaches the ordinary layout. In the session it moves with the
+  same snapping (the safe area, the overlays), one undo step, corner / wheel scale and Restore Size; it has no
+  single-axis extents (no side strips; its ordinary content extent stays ordinary Edit's). No Settings options.
+  Evidence: `tests/test_visualizer_expansion_fullscreen_edit.py` (artist rows with and without Media Controls, draft
+  and after Save, red on the former centred column; the real-pointer text drag; the OSD part, Save, the ordinary
+  rect kept and collapse, red without the part), `..._overlay_settings.py`; stills outside the repository
+  (`D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer\20261108_m3c_defects\`).
 - *Rotate Widget Content on the expanded card (operator, 8 Nov: the fullscreen Visualizer is missing "THE ROTATE
   GLYPH"; decided).* Ordinary Edit's Visualizer frame offers Rotate Widget Content (`rotateContentControl`, a
   quarter-turn of the content, CUSTOM layout state per mode) for a mode that can turn its content (Spectrum,

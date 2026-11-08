@@ -108,12 +108,15 @@ after the operator's yes on a question card; agents never run load (invisible ch
      artwork, sized apart) through the one Edit session; Save writes their value (and the Visualizer's turn to CUSTOM),
      other displays keep running without Edit chrome, and an unsaved draft holds Settings. Also there: Now Playing
      reveals when playback resumes (paused -> playing).
-     **Open defects (operator, 8 Nov, live):** (1) the X/Y (single-axis) contracts on Now Playing do not adjust the
-     artist line's spacing: the artist metadata does not follow a width/height change of the text box; (2) the
-     metadata text cannot be moved at all (Now Playing's text block does not drag); (3) the Volume OSD
-     (`rendering/quick/widgets/system_audio_osd.py`, its foreground lane handed to the overlays in `DisplayScene.qml`
-     ~297) is shown in Fullscreen Edit but cannot be moved or sized there. All three are assigned to the
-     Fullscreen Edit follow-up agent; tests must drive the real Edit path and fail without each fix.
+     The operator's three live defects (8 Nov) are fixed on an agent branch (plan 01 M3c "Live defects"): Now
+     Playing's rows fill a set box (the artist follows the side handles); the Volume OSD is a Fullscreen Edit part,
+     its placement over the expanded card `fullscreen_overlays.volume_osd` (its ordinary placement untouched). Open:
+     "the metadata text cannot be moved" did not reproduce on the hidden production scene (a real-pointer drag bar
+     now guards it): the operator's live recheck of all three is owed, and if the text still will not drag, note
+     the corner, Media Controls and what was dragged.
+     Side defect (8 Nov): `tests/test_qtquick_system_audio_osd.py::test_osd_colour_inheritance_respects_active_widget_
+     theme_and_authored_overrides` fails when run after `tests/test_visualizers_fullscreen_mode_pill.py` in one
+     process (passes alone; reproduced on the base): Widget Theme state leaks between the files.
    - M4 (plan 01 `02_E0_Covered_Display_Admission.md`): built 8 Nov, a covered display that already shows an image
      is left out of image batches at admission (no queue advance, decode, upload, transition or material refresh; the
      batch still closes; every display covered = edges are no-ops). Open: the GPU/render-thread measurement with

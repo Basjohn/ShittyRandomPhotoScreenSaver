@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+import json
 import math
 import re
 from typing import TYPE_CHECKING, Any
@@ -1572,6 +1573,30 @@ class MediaPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def surfaceShadowOffsetY(self) -> float:
         return self.style.surface_shadow_offset_y
+
+    @Property(str, notify=stateChanged)
+    def transportBarLook(self) -> str:
+        """The Media card's transport bar look (the properties MediaPresentation.qml binds on its bar) as one JSON
+        object of plain values, for the one bar's second drawing: the Expanded Visualizer's Now Playing Media Controls.
+        A string, never QColor or a map: either read through a QML ``var`` stays a value-type reference connected to
+        this model's notify signal until the JS heap is collected, so an unloaded overlay would leave connections
+        behind on the one Media model."""
+
+        def name(color) -> str:
+            return QColor(color).name(QColor.NameFormat.HexArgb)
+
+        return json.dumps({
+            "surfaceColor": name(self.controlsSurfaceColor),
+            "borderColor": name(self.controlsBorderColor),
+            "separatorColor": name(self.controlsSeparatorColor),
+            "iconColor": name(self.controlsIconColor),
+            "shadowEnabled": bool(self.surfaceShadowEnabled),
+            "shadowColor": name(self.surfaceShadowColor),
+            "shadowBlur": float(self.surfaceShadowBlur),
+            "shadowOffsetX": float(self.surfaceShadowOffsetX),
+            "shadowOffsetY": float(self.surfaceShadowOffsetY),
+            "fontSize": float(self.fontSize),
+        }, sort_keys=True)
 
 
 class RetainedMediaPresentation:

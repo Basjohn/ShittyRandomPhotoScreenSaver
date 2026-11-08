@@ -944,6 +944,17 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   to end on an unshown runtime (the display-wide card turns in place uncommitted, Cancel exactly back, Save commits,
   the collapsed card keeps it). Negative controls: the card not rotation-capable (2 red), Save not persisting the
   turn (2 red), the live promotion validating against the drawn display-wide record (the production test red).
+  The operator's live M3c defects (8 Nov): Now Playing's rows fill a set text box, the artist at its bottom (with
+  and without Media Controls, draft and after Save; red on the former centred column); Now Playing's text dragged
+  with real pointer events through the window moves it as one (guides, undo, Save); the Volume OSD as a part
+  (frame without side strips, move, undo, corner scale, Save writing `volume_osd`, the ordinary layout and the OSD's
+  layout rectangle untouched, collapse returning it exactly; red without the part).
+  `tests/test_visualizer_expansion_overlays.py` (M3b, hidden production scene) also holds the Media Controls bar:
+  Now Playing's controls and the Media card's bar are the one `MediaTransportBar` (the card's look from the one
+  Media model, its three segments pressing with the overlay's keys), smaller than the card's, and the narrowest set
+  text width still holds the whole bar; the overlays leave no connection on the Media model after Media state
+  changes and an undraw. Negative controls: the former three-circle Row (red), the card's former inline bar (red),
+  the bar's colours read as QColor through the model (`var`): 5 connections left per state change (red).
   `tests/test_visualizer_expansion_overlay_settings.py` holds the one value
   (`core/settings/fullscreen_overlays.py`): schema, clamps, projection, and a value stored before the extents
   reading them as the natural look (idempotent).

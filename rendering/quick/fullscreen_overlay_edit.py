@@ -11,6 +11,10 @@ This module is what differs about those items:
 
 * **Items.** The preset toast, Now Playing's text block (with its Media Controls when shown) and Now Playing's artwork.
   The artwork stays beside its text: dragging either moves Now Playing as one; its handles size the artwork alone.
+  On a display with a Volume OSD, the OSD too (operator, 8 Nov: it shows during Fullscreen Edit, so it must be
+  editable there): its placement over the expanded card, ``volume_osd`` (offset and scale from where its ordinary
+  layout puts it), moved and scaled like the toast; it has no single-axis extents (no side strips). Its ordinary
+  placement (ordinary Edit, CUSTOM) is never changed by it.
 * **Geometry is the overlays' own canonical value**, never a rectangle the session owns: each item's
   ``current_size_payload`` is its draft placement (``core.settings.fullscreen_overlays.PLACEMENT_KEYS``: the offset
   from the anchor corner in fractions of the expanded card's safe area, ``scale``, ``artwork_scale``) and its
@@ -84,16 +88,18 @@ PARTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "preset": ("preset", ("offset_x", "offset_y", "scale", "text_width", "text_height")),
     "now_playing": ("now_playing", ("offset_x", "offset_y", "scale", "text_width", "text_height")),
     "artwork": ("now_playing", ("artwork_scale", "artwork_width", "artwork_height")),
+    "volume_osd": ("volume_osd", ("offset_x", "offset_y", "scale")),
 }
 #: The size factor each part's corner handles and wheel change.
-SCALE_KEY = {"preset": "scale", "now_playing": "scale", "artwork": "artwork_scale"}
+SCALE_KEY = {"preset": "scale", "now_playing": "scale", "artwork": "artwork_scale", "volume_osd": "scale"}
 #: The (horizontal, vertical) extents each part's side handles change (ordinary Edit's content axes).
 EXTENT_KEYS = {"preset": ("text_width", "text_height"), "now_playing": ("text_width", "text_height"),
-               "artwork": ("artwork_width", "artwork_height")}
+               "artwork": ("artwork_width", "artwork_height"), "volume_osd": ()}
 #: Every part declares both content axes: the Edit layer draws its side strips and two-axis diagonal corners.
 CONTENT_AXES = frozenset({"horizontal", "vertical"})
 #: The part whose payload holds the overlay's position (the artwork moves Now Playing as one).
-POSITION_PART = {"preset": "preset", "now_playing": "now_playing", "artwork": "now_playing"}
+POSITION_PART = {"preset": "preset", "now_playing": "now_playing", "artwork": "now_playing",
+                 "volume_osd": "volume_osd"}
 #: Guide kinds a move publishes (the safe area's edges and centre, the other overlay's edges and centre).
 GUIDE_KINDS = frozenset({"edge", "display_center", "peer", "peer_center"})
 _CORNER_HANDLES = frozenset({"top_left", "top_right", "bottom_left", "bottom_right"})
@@ -273,6 +279,8 @@ class FullscreenOverlayEdit:
         if card is not None:
             self._admit_card(session, snapshot, card)
         for part, (overlay, keys) in PARTS.items():
+            if part not in snapshot["parts"]:
+                continue        # the Volume OSD on a display without one
             payload = {key: self._committed[overlay][key] for key in keys}
             rect = _qrect(snapshot["parts"][part], self._origin)
             session.add_item(CustomLayoutSessionItem(
@@ -286,7 +294,7 @@ class FullscreenOverlayEdit:
                 current_enabled=True,
                 resize_capable=True,
                 size_reset_capable=True,
-                content_extent_axes=CONTENT_AXES,
+                content_extent_axes=CONTENT_AXES if EXTENT_KEYS[part] else frozenset(),
                 current_display_identity=self._identity,
                 source_monitor_route=self._monitor_route,
             ))
@@ -418,7 +426,10 @@ class FullscreenOverlayEdit:
             return []
         changed: list[CustomLayoutSessionItem] = []
         for item in self.items():
-            rect = _qrect(snapshot["parts"][edit_part(item)], self._origin)
+            values = snapshot["parts"].get(edit_part(item))
+            if values is None:
+                continue        # the Volume OSD left this display mid-session: its frame stays where it was
+            rect = _qrect(values, self._origin)
             if rect != item.current_global_rect:
                 item.current_global_rect = QRect(rect)
                 changed.append(item)
@@ -471,8 +482,8 @@ class FullscreenOverlayEdit:
         inset = snapshot["safe_inset"]
         safe = QRect(int(round(stage_x + inset)), int(round(stage_y + inset)),
                      max(1, int(round(snapshot["safe_width"]))), max(1, int(round(snapshot["safe_height"]))))
-        peer = "now_playing" if overlay == "preset" else "preset"
-        peers = [_qrect(snapshot["slots"][peer]["rect"]).translated(-safe.x(), -safe.y())]
+        peers = [_qrect(slot["rect"]).translated(-safe.x(), -safe.y())
+                 for name, slot in snapshot["slots"].items() if name != overlay]
         resolution = resolve_snap_local_rect_for_edit(
             proposed_slot.translated(-safe.x(), -safe.y()), safe.size(), peer_rects=peers, min_size=QSize(1, 1))
         snapped = resolution.rect.translated(safe.topLeft())
@@ -540,11 +551,13 @@ class FullscreenOverlayEdit:
         handle = str(handle)
         if part is None or handle not in _CORNER_HANDLES | _SIDE_HANDLES | _CONTENT_CORNER_HANDLES:
             return False
+        if handle not in _CORNER_HANDLES and not EXTENT_KEYS[part]:
+            return False        # no single-axis extents (the Volume OSD): corners and the wheel only
         payload = item.current_size_payload
-        horizontal, vertical = EXTENT_KEYS[part]
+        extents = tuple(float(payload.get(key, 0.0)) for key in EXTENT_KEYS[part]) or (0.0, 0.0)
         self._resize_origins[item.source_key] = _ResizeOrigin(
             QRect(item.current_global_rect), QPoint(cursor), float(payload.get(SCALE_KEY[part], 1.0)), handle,
-            (float(payload.get(horizontal, 0.0)), float(payload.get(vertical, 0.0))))
+            extents)
         return True
 
     def update_resize(self, item: CustomLayoutSessionItem, handle: str, cursor: QPoint, finalize: bool) -> bool:
@@ -604,11 +617,11 @@ class FullscreenOverlayEdit:
         rect = edge_resize_rect(start, safe, QSize(1, 1), cursor.x() - origin.cursor.x(), cursor.y() - origin.cursor.y(),
                                 horizontal_edge=horizontal_edge, vertical_edge=vertical_edge)
         overlay = PARTS[POSITION_PART[part]][0]
-        peer = "now_playing" if overlay == "preset" else "preset"
         resolution = resolve_resize_edge_snap(
             rect.translated(-safe.x(), -safe.y()), safe.size(), horizontal_edge=horizontal_edge,
-            vertical_edge=vertical_edge, peer_rects=[_qrect(snapshot["slots"][peer]["rect"]).translated(
-                -safe.x(), -safe.y())], min_size=QSize(1, 1))
+            vertical_edge=vertical_edge, peer_rects=[
+                _qrect(slot["rect"]).translated(-safe.x(), -safe.y())
+                for name, slot in snapshot["slots"].items() if name != overlay], min_size=QSize(1, 1))
         target = resolution.rect
         changed = self._set_members(item, self._extents_for(
             part, origin, target.width() if horizontal_edge else None, target.height() if vertical_edge else None,
