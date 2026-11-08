@@ -146,8 +146,18 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
    (`tests/test_visualizer_engine_worker.py`; a different runtime generation fails it). Found and fixed on the way:
    Spline Curve's logical colours were `QColor`s (now the `(r, g, b, a)` tuple the frame always froze them to) and
    Neon Lake's terrain baker imported a Settings widget for a pure helper (now `utils/curve_nodes.py`). The runtime
-   generation is a control input (every frame carries it). Still in work order 4: live inputs from the main beat
-   engine (latest-wins, no per-input acknowledgement) and the identity gate on every recording.
+   generation is a control input (every frame carries it). Gate on every recording: `tools/visualizer_replay/
+   engine_worker_gate.py` (each recording's first seconds x every mode, in-process vs worker, at below-normal
+   priority; report under `.artifacts/evidence/architecture/native_core_p2/`).
+   **Live inputs (decided 8 Nov, not built):** `FeatureFrame` is the replay contract, not the live one. The recorder's
+   capture (`tools/visualizer_replay/record.py` `_frame`) clamps lanes to 0..1, resamples bars and waveform to fixed
+   counts and consumes scheduler events, so a forwarded `FeatureFrame` would not reproduce the in-process live tick.
+   P2a forwards a lossless engine snapshot instead: per tick, exactly the values the tick reads from the beat engine
+   (the getters `ReplayBeatEngine` overrides: pre-AGC / bubble / EB body / Waveform body / transient / live bands,
+   musical level, intensity, onset events after a serial, analysis spectrum, typed scheduler events, waveform and
+   capture history when demanded, playback state), unclamped and unresampled, with the worker's engine answering
+   from it. Its gate: the live engine's getter values equal the worker engine's for the same snapshot, then the
+   frames equal the in-process tick on recorded PCM through production DSP (`ProductionLaneEngine`).
 5. Lifecycle: generation start/retire, park, crash fail-closed, frozen spawn check (operator), dormancy baseline.
 6. Measurement (gate 3), then decide P2b.
 
