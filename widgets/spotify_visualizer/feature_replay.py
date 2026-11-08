@@ -444,8 +444,10 @@ def configure_offline_controller(controller, mode, preset: int = 0, overrides=No
     sequence, so it sets the mode, opens render admission at once and treats the controller as playing with the fence
     clear. Not the product's configure: the owner and the engine worker's session configure through
     ``logical_edges.configure_logical_controller`` (checkpoint audit 5, A5-M2; the logical-edges parity test compares
-    that step), and the frames it ticks equal the owner's for every mode on the shipped clip
-    (``tests/test_visualizer_engine_worker.py``).
+    that step). The frames it ticks equal those of the product's own path (the host binding's ``construct``: the
+    owner's configure, bind, Media edge, start and cadence step) for every mode on the shipped clip, once the engine is
+    built at the mode's bar count as the binding builds it (``tests/test_visualizer_owner_production_path.py``,
+    checkpoint audit 6, A6-L5); the engine-worker identity gates compare against it.
 
     ``settings``: a complete resolved settings mapping (or ``mode -> mapping``) used instead of the curated
     ``preset``; tests pass frozen copies so authored presets never decide them (Current_Plan N2)."""

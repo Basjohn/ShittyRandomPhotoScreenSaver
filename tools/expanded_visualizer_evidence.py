@@ -104,12 +104,16 @@ def fresh_drift_revisions():
 
 def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None, expand_at: int | None = None,
                  collapse_at: int | None = None, animate: bool = False, generation: int = 9001,
-                 committed: tuple[tuple[float, float, float, float], tuple[float, float]] | None = None) -> dict:
+                 committed: tuple[tuple[float, float, float, float], tuple[float, float]] | None = None,
+                 bar_count: int = 32) -> dict:
     """Replay ``clip`` through the production owner's publication path; optionally expand/collapse it.
 
     No cadence thread runs: each recorded frame is accepted, ticked once (the authored step) and published through
     ``owner.sync_present()``, exactly the edge the logical runtime's wake drives. Returns per-frame logical digests,
     the drawn presentation records' outer rects, the controller's committed extents and the completion events.
+    ``bar_count``: the owner and engine are built at it (32 by default, as every existing digest was made; the
+    configuration then applies the mode's own bar count, which advances the engine's identity when it differs). The
+    host binding builds them at the mode's resolved bar count (``tools/visualizer_replay/owner_production_replay.py``).
     """
     from PySide6.QtWidgets import QApplication
 
@@ -144,9 +148,9 @@ def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None,
     owner = None
     try:
         with deterministic_clock() as clock, fresh_drift_revisions():
-            engine = ReplayBeatEngine(32)
+            engine = ReplayBeatEngine(bar_count)
             owner = QuickDisplayVisualizerOwner(
-                runtime, bar_count=32, initial_mode=mode, engine_factory=lambda _count: engine,
+                runtime, bar_count=bar_count, initial_mode=mode, engine_factory=lambda _count: engine,
                 card_shadow_kwargs=CARD, transition_clock=lambda: clock[0],
             )
             controller = owner.controller
