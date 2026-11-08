@@ -52,3 +52,20 @@ def test_a_value_outside_the_canonical_domain_is_refused():
     payload = frame_codec.encode((1.0, 2.0))
     with pytest.raises(frame_codec.FrameCodecError):
         frame_codec.decode(payload+b'\x00')             # trailing bytes
+
+
+def test_every_ribbon_style_dataclass_round_trips():
+    # Waveform Ribbon's style types reach its frame (shading picks them); RibbonStrays was missing from the type table
+    # and a frame carrying it was refused at the worker's publish (found by the owner-on-the-worker identity gate,
+    # work order 5 slice 5.2).
+    import dataclasses
+    import inspect
+
+    import core.ribbon_style as ribbon_style
+
+    styles = [cls for _name, cls in inspect.getmembers(ribbon_style, inspect.isclass)
+              if cls.__module__ == ribbon_style.__name__ and dataclasses.is_dataclass(cls)]
+    assert {cls.__name__ for cls in styles} >= {"RibbonMaterial", "RibbonSparks", "RibbonStrays"}
+    for cls in styles:
+        value = cls()
+        assert repr(frame_codec.decode(frame_codec.encode(value))) == repr(value), cls

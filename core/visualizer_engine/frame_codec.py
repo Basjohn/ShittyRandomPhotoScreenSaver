@@ -36,6 +36,9 @@ _TYPES = tuple((_RENDER_STATE, name) for name in (
     "Recipe", "Environment", "Floor", "Flow", "Fog", "Shaping",
 )) + (
     ("core.ribbon_style", "RibbonMaterial"), ("core.ribbon_style", "RibbonSparks"),
+    # Waveform Ribbon's free strands (a style the shipped presets reach; found by the owner-on-the-worker identity
+    # gate, work order 5 slice 5.2: a frame carrying it was refused at the worker's publish).
+    ("core.ribbon_style", "RibbonStrays"),
 )
 
 _U16, _U32, _I64, _F64 = struct.Struct("<H"), struct.Struct("<I"), struct.Struct("<q"), struct.Struct("<d")
