@@ -45,17 +45,31 @@ def pcm():
 
 
 def _fast_heartbeat_supervisor():
-    """A real supervisor whose heartbeat judges every 0.25 s (the production interval is 3 s): a hung worker is
-    restarted after a few missed beats, so the test sees the bounded failure path in seconds."""
+    """A real supervisor at the production heartbeat; ``_fast_heartbeat`` speeds it up only while a hung worker is
+    being judged. A cold configure (the worker's imports and session build, run by its message loop between
+    heartbeats) is judged as production judges it (5 misses at 3 s), never by the fast beat's 1.25 s, which a first or
+    replacement configure can exceed on a cold or loaded machine since workers no longer preload `main.py`'s imports
+    (checkpoint audit 10, A10-M1): the fast beat then retired healthy workers mid-configure and the owner fell back."""
     from core.process.supervisor import ProcessSupervisor
     from core.process.types import WorkerType
     from core.visualizer_engine.engine_worker import visualizer_worker_main
 
     supervisor = ProcessSupervisor()
-    supervisor._heartbeat_interval_s = 0.25
     supervisor.register_worker_factory(WorkerType.VISUALIZER, visualizer_worker_main)
     assert supervisor.start(WorkerType.VISUALIZER)
     return supervisor
+
+
+def _fast_heartbeat(supervisor) -> None:
+    """Judge every 0.25 s (production: 3 s): a hung worker is retired after a few missed beats, in seconds."""
+    supervisor._heartbeat_interval_s = 0.25
+
+
+def _production_heartbeat(supervisor) -> None:
+    """Back to the production interval once the hung worker is retired, before its replacement configures."""
+    from core.process.types import HealthStatus
+
+    supervisor._heartbeat_interval_s = HealthStatus.HEARTBEAT_INTERVAL_MS / 1000.0
 
 
 def _timed(record: dict, name: str, call):
@@ -156,6 +170,7 @@ def test_control_edges_never_wait_on_a_hung_worker_and_the_heartbeat_ends_it(qt_
             _pump(rig, 1.0)
             hung = owner._worker
             process = psutil.Process(supervisor._workers[WorkerType.VISUALIZER].pid)
+            _fast_heartbeat(supervisor)
             process.suspend()
             try:
                 controller = owner.controller
@@ -171,6 +186,7 @@ def test_control_edges_never_wait_on_a_hung_worker_and_the_heartbeat_ends_it(qt_
                 started = time.perf_counter()
                 _pump(rig, 20.0, until=lambda: owner._worker is not hung)
                 detected_s = time.perf_counter() - started
+                _production_heartbeat(supervisor)
             finally:
                 try:
                     process.resume()
