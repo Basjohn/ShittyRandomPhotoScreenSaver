@@ -662,6 +662,82 @@ def test_a_park_reply_that_lands_after_the_unpark_never_clears_the_reader(qt_app
         stand_in.close()
 
 
+class _ManualSupervisor:
+    """The supervisor's asynchronous request surface with every reply in the test's hands (no worker). An abandoned
+    correlation's callback stays with the test: a late emit from a listener already running it."""
+
+    def __init__(self) -> None:
+        self.callbacks: dict = {}
+        self.sent: list = []
+
+    def register_worker_factory(self, *_args) -> None:
+        return None
+
+    def is_running(self, _worker_type) -> bool:
+        return True
+
+    def stop(self, _worker_type, timeout=None) -> bool:
+        return True
+
+    def start(self, _worker_type) -> bool:
+        return True
+
+    def register_response_callback(self, _worker_type, correlation_id, callback) -> bool:
+        self.callbacks[correlation_id] = callback
+        return True
+
+    def send_message(self, _worker_type, msg_type, payload, correlation_id=None):
+        self.sent.append((msg_type, correlation_id))
+        return correlation_id
+
+    def abandon_response(self, _worker_type, correlation_id, *, reason="") -> int:
+        return 0
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_late_reply_for_an_abandoned_correlation_never_answers_its_resend(qt_app, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-L4: the supervisor retires the worker before the configure is answered; the link sends
+    # the configure again under a new correlation. A late answer for the abandoned correlation (a listener already
+    # running its callback when it was abandoned) is dropped: only the resend's reply configures the link. Negative
+    # control (the pre-fix match by token): the stale answer configures it, and the resend's real reply is dropped.
+    from core.process.types import MessageType, WorkerResponse
+    from widgets.spotify_visualizer.engine_worker_link import ACTIVATION_KEYS, EngineWorkerLink
+
+    if pre_fix:
+        deliver = EngineWorkerLink._deliver_reply
+
+        def by_token(self, token, correlation, response, **kwargs):
+            entry = self._pending.get(token)
+            return deliver(self, token, entry[2] if entry is not None else correlation, response, **kwargs)
+
+        monkeypatch.setattr(EngineWorkerLink, "_deliver_reply", by_token)
+
+    def reply(correlation: str, identity: tuple[int, int]) -> WorkerResponse:
+        return WorkerResponse(msg_type=MessageType.VIS_CONFIGURE, seq_no=0, correlation_id=correlation, success=True,
+                              payload={"engine_generation": identity[0], "activation_id": identity[1]})
+
+    supervisor = _ManualSupervisor()
+    configured: list = []
+    link = EngineWorkerLink(supervisor, on_lost=lambda _link, _reason: None)
+    try:
+        link.configure(runtime_generation=1, mode="spectrum", bar_count=32,
+                       activation={key: None for key in ACTIVATION_KEYS}, on_configured=configured.append)
+        (_message, abandoned), = supervisor.sent
+        late = supervisor.callbacks[abandoned]
+        late(None)                                                # cancelled: the worker was retired
+        gate._event_loop_for(qt_app, 5.0, until=lambda: len(supervisor.sent) == 2)
+        (_message, resent) = supervisor.sent[1]
+        assert resent != abandoned
+        late(reply(abandoned, (7, 7)))                            # the abandoned correlation answers late
+        qt_app.processEvents()
+        supervisor.callbacks[resent](reply(resent, (8, 8)))
+        gate._event_loop_for(qt_app, 5.0, until=lambda: bool(configured) and not link.busy)
+        assert configured == ([(7, 7)] if pre_fix else [(8, 8)]), configured
+    finally:
+        link.close()
+
+
 class _HungSupervisor(_InProcessSupervisor):
     """A worker that answers nothing from its first configure on (hung inside it: a device open, a stuck build; or
     a spawn task queued behind a busy IO pool)."""

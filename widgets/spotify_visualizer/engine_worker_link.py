@@ -156,7 +156,7 @@ class _LinkEvents(QObject):
     correlation), the session's end (the wake listener), the worker's spawn (an IO task), and the view flush (one per GUI
     turn). It reaches its link weakly and is disarmed when the link closes, so a late delivery is a no-op."""
 
-    replied = Signal(object, object)          # token, the WorkerResponse (None: cancelled; _NOT_SENT: not sent)
+    replied = Signal(object, object, object)  # token, correlation, the WorkerResponse (None: cancelled; _NOT_SENT)
     ended = Signal(str)
     spawned = Signal(str)                     # "" started, else why not
     view = Signal()
@@ -173,10 +173,10 @@ class _LinkEvents(QObject):
     def _target(self) -> "EngineWorkerLink | None":
         return self._link() if self._armed else None
 
-    def _on_replied(self, token: Any, response: Any) -> None:
+    def _on_replied(self, token: Any, correlation: Any, response: Any) -> None:
         link = self._target()
         if link is not None:
-            link._deliver_reply(token, response)
+            link._deliver_reply(token, correlation, response)
 
     def _on_ended(self, reason: str) -> None:
         link = self._target()
@@ -315,7 +315,7 @@ class EngineWorkerLink:
         if error:
             for token, message, payload, _on_reply, on_failed in outbox:
                 self._pending[token] = (message, payload, "", None, on_failed)
-                self._deliver_reply(token, _NOT_SENT, reason=error)
+                self._deliver_reply(token, "", _NOT_SENT, reason=error)
             return
         for token, message, payload, on_reply, on_failed in outbox:
             self._dispatch(token, message, payload, on_reply, on_failed)
@@ -338,8 +338,8 @@ class EngineWorkerLink:
         correlation = uuid.uuid4().hex
         self._pending[token] = (message, payload, correlation, on_reply, on_failed)
 
-        def replied(response: Any, _token: int = token) -> None:     # the supervisor's listener thread
-            self._emit("replied", _token, response)
+        def replied(response: Any, _token: int = token, _correlation: str = correlation) -> None:   # listener thread
+            self._emit("replied", _token, _correlation, response)
 
         sent = False
         try:
@@ -349,11 +349,14 @@ class EngineWorkerLink:
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] %s could not be sent: %s", message.value, exc)
         if not sent:
             supervisor.abandon_response(worker_type, correlation, reason="not_sent")
-            self._emit("replied", token, _NOT_SENT)
+            self._emit("replied", token, correlation, _NOT_SENT)
 
-    def _deliver_reply(self, token: Any, response: Any, *, reason: str | None = None) -> None:
+    def _deliver_reply(self, token: Any, correlation: Any, response: Any, *, reason: str | None = None) -> None:
+        """A reply (or cancellation) for ``token``, matched by its correlation (A8-L4): a late event for a correlation
+        the link abandoned (``_respawn_unconfigured`` re-dispatched the token under a new one) is dropped, never taken
+        as the new request's answer."""
         entry = self._pending.get(token)
-        if entry is None or self._closed:
+        if entry is None or self._closed or entry[2] != correlation:
             return
         if response is None and not self.configured and not self._respawned:
             self._respawn_unconfigured()
