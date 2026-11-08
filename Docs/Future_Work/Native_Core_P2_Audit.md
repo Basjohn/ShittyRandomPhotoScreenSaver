@@ -1433,3 +1433,190 @@ are outside it (A7-M1, A7-M2). The flaky-test fix hides no starvation the eviden
 - The render thread's sync-time take and decode cost with a window; physical device behaviour; device changes.
 - Whether an armed crossfade deadline actually fires into a recovery in practice (A7-M3), and the paused-switch
   predicate (A7-L6).
+
+## Checkpoint audit 8 (8 Nov): asynchronous edges and inputs (5.5, 5.4)
+
+Scope: fe9e2487 (5.5: asynchronous control edges, bounded recovery, A7 lows) and 4df640b7 (5.4: presentation inputs on
+`VIS_SET_VIEW`, wallpaper frame completion, Sphere envelope fallback, Qt-free colours), behind `--viz-engine-worker`
+(default off). Read: both diffs; the 5.4 and 5.5 records and what is left (design doc); audit 7; the current
+`engine_worker_link.py`, the owner's worker path and recovery, `logical_edges.py` (presentation inputs),
+`backdrop.py`, `config_applier.py`, `edit_content_envelope.py`, `packet_mailbox.py`, the supervisor's
+start/stop/restart, heartbeat and response-callback code, `view_orbit.py`, `screensaver_engine._on_settings_changed`
+and the display manager's activation edges; the three test files; the evidence directory
+`20261108_p2b_55_gui_stall/`. Ran (foreground): `test_visualizer_owner_engine_worker_inputs.py` (12 passed, 44 s);
+`test_visualizer_owner_engine_worker_liveness.py`, `test_visualizer_owner_production_path.py` and
+`test_qtquick_visualizer_owner_contract.py` (31 passed, 91 s). Probes (in `D:\Temp\Scratch\SRPSS\native_audit8`,
+deleted; in-process stand-in supervisor, recorded PCM, no device, no window): (a) recording every recovery-deadline
+arm; (b) timing `complete_frame_backdrop` and `presentation_inputs_snapshot` per frame with a reflecting photograph;
+(c) the snapshot's value types and worker-vs-main parity for all nine modes; (d) the runtime-written view keys
+(Home pose, framed lens, scene transform, orbit, Auto Rotate) against `presentation_input_attrs`.
+
+### Medium
+
+**A8-M1. The recovery's reveal is not given its own deadline. The shot armed at the failure stays live, so a slow
+replacement is abandoned and the worker is turned off for the run even when the replacement is healthy.**
+- Claim: 5.5 record, "arms the transaction deadline's one-shot ... again at its reveal"; the code comment says "the
+  reveal is bounded too" (`quick_display_visualizer_owner.py:2188`).
+- Evidence: `_begin_worker_recovery` bumps the request serial and arms (`:2178-2180`). `_finish_worker_recovery`
+  arms again (`:2188`) without bumping it, so both shots carry the same serial and the first one is not fenced.
+  Probe (a), a session closed behind the owner's back: `arms = [(6000, serial 1, 'recovering', stage 1),
+  (6000, serial 1, 'waiting_target', stage 1)]`, final serial 1. `_on_recovery_deadline` (`:2265-2283`) takes the
+  first expiry in `waiting_target` at stage 1 with a live worker as "the replacement did not come back" and calls
+  `_fall_back_in_process(...)`, which counts for the run.
+- Failure scenario: the failure is detected at t0. The replacement's spawn, session build and paced fade-out finish
+  at t0 + 5 s. The evidence measured `build_with_spawn_ms` 3,988, and a prepared-reveal mode waits for its warm
+  frames. Then the replacement has about 1 s to produce a presentable frame instead of 6 s. When the shot fires, a
+  healthy replacement is retired, the activation falls back in process, and `worker_disabled_for_run` turns the
+  engine worker off for every later owner.
+- Fix: in `_finish_worker_recovery` (reveal branch), do `self._transition_request_serial += 1` before
+  `_arm_recovery_deadline()`. Do the same at any other re-arm that is meant to start a new window. Test: drive the
+  finish past half the deadline with a short `_ACTIVATION_TRANSACTION_DEADLINE_MS` and assert there is no fallback.
+  For the negative control, use today's code.
+
+**A8-M2. If the recovered Visualizer never reveals, it stays invisible for the rest of the session while its runtime
+keeps running. In process, the same `waiting_target` expiry rebuilds.**
+- Claim: 5.5 record, second expiry: "leaves the Visualizer faded out, logged, and requests admitted (it reappears
+  with the next activation)".
+- Evidence: `_on_recovery_deadline` (`:2284-2292`) sets the phase to `idle` with fade 0.0 and returns. The in-process
+  activation runtime started by the stage-1 fallback keeps ticking and publishing. Each frame is presented at content
+  fade 0. Nothing re-arms, and no retry is scheduled. In process, a `waiting_target` expiry goes to
+  `_signal_transition_failure("deadline:" + phase)` (`:1210-1232`), which reconstructs the committed runtime. In a
+  screensaver session the "next activation" depends on the user. Nothing else causes one: `_on_settings_changed`
+  (`screensaver_engine.py:2486`) has no Visualizer path, and the only activation edges are the display manager's mode
+  and preset requests (`display_manager.py:1949`, `:2050`).
+- Failure scenario: a capture or tick that never marks a frame presentable after the fallback, for example a
+  reveal predicate that waits on source frames that never come. The card fades out and stays gone until the saver
+  exits. The engine, capture lane and tick run at full cadence the whole time with nothing visible. This is "fade"
+  but not "never vanish", with no path back.
+- Fix: escalate the stage-2 `waiting_target` expiry to the generation-fenced reconstruction, as in process (or at
+  least stop or park the invisible runtime). If invisible-until-next-activation really is the wanted terminal state,
+  record it as an operator decision and stop the runtime.
+
+### Low
+
+**A8-L1. With a wallpaper, the frame completion re-freezes every reflecting frame's whole parameter map on the render
+thread. It never takes the "nothing differs" early-out.**
+- Evidence: the worker's frames always carry `backdrop` None, because the worker never has a wallpaper. So the
+  identity check in `backdrop.py:70-86` always differs once the owner holds one, and `freeze_render_fields` over all
+  the parameters plus two `dataclasses.replace` calls run on every decode (`:91-92`). Only the wallpaper's own freeze
+  is cached. Probe (b): Sphere median 117 us, max 309 us (137 frames); Extruded Spectrum median 78 us, max 128 us. The
+  decode happens at sync admission, where the GUI thread is blocked in Qt Quick's threaded loop. The 5.4 record gives
+  the snapshot's cost but not this one, and says frames without a wallpaper do no work, which is true but not the
+  common case for these modes. The module-global `_FROZEN_WALLPAPER` (`:95`) also keeps the last wallpaper alive after
+  the owner retires.
+- Fix: cache the completed `FrozenFields` keyed by the identity of the parameters object plus the wallpaper and
+  blend, or have the worker carry a sentinel the main side swaps in without re-freezing. Keep the cache per owner,
+  cleared on retire.
+
+**A8-L2. After a preset activation, Auto Rotate is armed twice, at two times, and the main side's later record
+replaces the worker's.**
+- Evidence: the worker's `commit_logical_activation(kind="preset")` arms on its own state at `view_now`
+  (`logical_edges.py:320-322`). The main side arms again at the reply event, at `now` (`:1946`), and forwards it
+  because the record differs from the last one sent. `AutoRotate` turns from its start time, so at the swap the turn
+  steps back by `speed × (reply latency + GUI queue delay)`. The view gate pins the clock
+  (`identity_script_view`), so it cannot see this.
+- Failure scenario: a small backward hitch in the swivel during the preset's fade-in. It is larger when the GUI
+  thread is busy at the reply.
+- Fix: arm on one side only. Either the main side arms and forwards with the commit (and the worker skips it on
+  `VIS_SET_MODE`), or the commit reply carries the worker's record and the main side adopts it instead of re-arming.
+
+**A8-L3. The park reply clears the reader even when the displays are already back on.**
+- Evidence: `_set_display_power_on_worker.applied` (`:1835-1841`) checks only `_link is self._worker` before
+  `controller.logical_mailbox.clear()`. Replies are in order, but the GUI can send OFF then ON before it processes the
+  OFF reply. By then the worker may already have published post-unpark frames.
+- Failure scenario: a fresh post-unpark frame is dropped (one tick late). If that frame was the target's first
+  presentable frame, the reveal is a tick late. "Parked" is logged after the display is already on.
+- Fix: in `applied`, also require `not self._display_power_on` (or a park sequence number matching the newest edge).
+
+**A8-L4. Replies are keyed by link token, not by correlation. After a resend, a late event for the abandoned
+correlation would complete the new one.**
+- Evidence: `replied` emits `(token, response)` (`engine_worker_link.py:341-342`). `_respawn_unconfigured`
+  (`:296-311`) keeps the tokens and re-dispatches them with new correlations, and `_deliver_reply` (`:354`) looks
+  only at the token. Today the old correlations' cancellations are emitted before the spawn's event, so they find no
+  pending entry. That ordering is a timing argument, not a guarantee: an `_invoke_response_callback` already running
+  on the listener when `abandon_response` runs would still emit.
+- Fix: carry the correlation in the event and drop it when it no longer matches the pending entry's.
+
+**A8-L5. The first configure has no deadline of its own.**
+- Evidence: `bind` defers render admission until the configure's reply, and `sync_present` presents nothing
+  meanwhile. Only a recovery arms `_on_recovery_deadline`. A configure that hangs inside the worker (a device open, a
+  stuck build) is ended only by the heartbeat: about 17 s measured, twice because of the one resend, before the
+  in-process fallback. A spawn task waiting behind a busy IO pool is not bounded at all.
+- Failure scenario: on a stall, the Visualizer first appears roughly 35-45 s late. It does not vanish, because it
+  was never shown.
+- Fix: arm the same one-shot from the first configure (fall back in process, not counted for the run, on expiry).
+
+**A8-L6. The presentation-input diff compares by reference for nested mutables.**
+- Evidence: `presentation_inputs_snapshot` copies only top-level lists (`logical_edges.py:590`). Probe (c) found
+  `_waveform_ribbon_palette` is a `dict` held by reference in `_presentation_sent`, and lists of lists are copied
+  shallowly. An in-place mutation on the main side would compare equal to "sent" and never be forwarded. No writer
+  mutates in place today (every write goes through `apply_presentation_vis_mode_kwargs`, which replaces the value),
+  so this is latent.
+- Fix: deep-copy or freeze the snapshot's values (`freeze_render_value`), or assert that the values are immutable in
+  the snapshot.
+
+**A8-L7. Records overstate a few things.**
+- The commit message's "GUI worst stall ... first configure 1.78 s -> 86 ms" is not the worst stall after the
+  change. The configure's reply handler costs 161-209 ms on the GUI thread (the render-source bind; evidence
+  `configured_reply` 161 ms). The design record says this, but the summary and the gate do not: the one-frame gate
+  covers the edges only, not the reply handlers.
+- "Again at its reveal" (A8-M1).
+- "Recovered on a fresh worker" after a hung worker is shown only with a 0.25 s test heartbeat. In the evidence probe
+  at production heartbeat, the hung case was the probe's second failure (after the kill scenario), so
+  `after_hung.on_worker` is false. Recovery to a fresh worker after a production-timed hang (about 17 s detection,
+  then a restart that races the link's own spawn) is unmeasured.
+
+### Verified sound
+
+- **With admission off, production is unchanged.**
+  - The colours are now `(r, g, b, a)` tuples. Their only reader is `logical_frame_capture._common_style`
+    (`logical_frame_capture.py:837`), which puts them into the frame's style, and the frame freezes a `QColor` to the
+    same tuple. Search across `*.py`/`*.qml`: no renderer, QML binding, Studio adapter (they use offline
+    controllers and frames), Settings preview or Edit route reads `_bar_fill_color` / `_bar_border_color`. The
+    production-path frame test and the owner contract test pass.
+  - `_color_or_none` now refuses out-of-range or over-long values, which validated settings never produce.
+  - `complete_frame_backdrop` and `presentation_inputs_snapshot` are wired only in `_adopt_engine_worker_session`
+    (worker path).
+  - The Sphere envelope fallback reads `logical_mailbox.last_taken`. Only `PacketMailbox` has that attribute;
+    `LatestStateMailbox` does not, so in process `getattr` gives None and the behaviour is unchanged.
+  - `_forward_view` runs only when `on_worker`. `engine_identity`, `bind`, `admit_latest_at_sync` and
+    `set_display_power` add only `_worker` / `_recovery_stage` checks.
+  - `_fade_out_from` is 1.0 in process: requests are admitted only from `idle`, and every in-process path to `idle`
+    leaves fade 1.0.
+- **"No logical settings delta" is correct.** In process there is no per-slider runtime path. `_on_settings_changed`
+  handles only interval, display mode, shuffle and sources. A running Visualizer changes only through mode and preset
+  activations or a rebuild, and the worker path matches with `VIS_SET_MODE`.
+- **The forwarded set covers what changes at runtime.**
+  - Probe (d): for all nine modes, every runtime-written key is in `presentation_input_attrs`: the Home pose and
+    framed lens, scene transform, orbit and Auto Rotate keys, the view records and the tier.
+  - The captures read the view records only (`apply_view_orbit_motion` is read-only), so the worker never diverges
+    by writing them.
+  - Probe (c): after the settle, the worker's and main's forwarded attributes are equal in all nine modes. No Qt
+    values are skipped.
+  - `apply_presentation_inputs` refuses anything outside the union.
+  - The tick publishes every step (`tick_pipeline.py:1474-1497`), so forwarding at each presentation's end never
+    starves.
+- **Delivery is on the GUI thread.**
+  - Every cross-thread delivery (reply, cancel, not-sent, pipe end, spawn, view flush) is a `QueuedConnection` signal
+    on a `QObject` created on the GUI thread. That includes a buffered reply that `register_response_callback`
+    invokes synchronously on the caller.
+  - Events are disarmed and dropped on close. The owner fences every callback by link and commit identity.
+  - A stop is addressed to its mapping. The old link's queued edges precede its stop and the new configure on the
+    one request queue.
+  - A resend goes to fresh queues, so it does not duplicate a session.
+- **The ThreadManager spawn.**
+  - `submit_task` raises after shutdown, so the configure fails and falls back.
+  - `supervisor.start` is serialised per role and retires a child started during shutdown.
+  - A link retired mid-spawn leaves an idle worker, owned by the supervisor until shutdown (already recorded for 5.7),
+    not an orphan.
+- **The recovery's fences.** The deadline is a one-shot and never polled, fenced by the serial and display power.
+  The unpark re-arms it. The fallback is contained. A park during recovery drops the hold.
+
+### Not verified
+
+- The two 9-mode gates' realtime variant and the full gate tool; the evidence JSON was read, not reproduced.
+- Recovery onto a fresh worker after a hang at production heartbeat timing (A8-L7). The heartbeat restart racing the
+  link's own `stop` + `start` in the IO task (the record notes it; not exercised here).
+- The render-thread decode and completion cost with a real window (probe (b) is an unshown rig).
+- `send_wake_byte_without_blocking`'s Windows cancel race (a byte written and still counted as dropped). Harmless by
+  reading, not tested.
