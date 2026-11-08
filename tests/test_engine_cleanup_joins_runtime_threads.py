@@ -28,7 +28,9 @@ def _display_guard() -> dict:
                 if isinstance(getattr(module, "_DISPLAY_GUARD", None), dict))
 
 
-def test_reaching_the_display_window_guard_leaves_no_non_daemon_thread(qt_app, tmp_path):
+def test_reaching_the_display_window_guard_leaves_no_non_daemon_thread(qt_app, tmp_path, visualizer_in_process):
+    # In process, stated: the started Visualizer's non-daemon logical runtime is the thread this test guards (on the
+    # engine worker the tick runs in the worker; this engine has no process supervisor anyway).
     from PySide6.QtCore import QCoreApplication, QEvent
     from core.settings.settings_manager import SettingsManager
     from engine.screensaver_engine import ScreensaverEngine

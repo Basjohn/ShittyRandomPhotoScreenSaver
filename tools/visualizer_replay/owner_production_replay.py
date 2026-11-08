@@ -8,7 +8,9 @@
 the host binding's own ``VisualizerHostBinding.construct`` builds the real ``QuickDisplayVisualizerOwner`` on an unshown
 ``QuickDisplayRuntime`` (a stub host around it: no window is shown, created or mapped by this tool), resolving the
 activation from the Settings section and passing the production presentation kwargs (``DisplayManager``'s: the model
-plus the resolved 3D Detail tier, no Settings manager), then configures, binds, commits Media's state and starts it.
+plus the resolved 3D Detail tier, no Settings manager), then configures, binds, commits Media's state and starts it,
+on the in-process path, stated (the engine worker's fallback; the worker, the default on Windows, is covered by
+``owner_worker_gate``'s identity against this same owner in process).
 The only substitutions: the recorded ``ReplayBeatEngine`` (deterministic inputs, as every replay) and the cadence
 thread (``start_logical_runtime`` keeps the step the owner installed and runs no thread; each recorded frame then
 runs that step once, the authored clock pinned to the frame's time, and the owner's ``sync_present`` publishes it).
@@ -20,6 +22,7 @@ commit before the configure refactor); the tool itself uses only interfaces both
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import sys
@@ -117,8 +120,29 @@ def _presentation_kwargs(model: Any, mode: str) -> dict:
     return {**asdict(model), "scene3d_detail": resolve_visualizer_tier(None, str(mode), gpu=last_validated_gpu())}
 
 
+@contextlib.contextmanager
+def _in_process_path():
+    """The in-process path, stated (the engine worker is the product's default on Windows since 8 Nov; this replay
+    ticks the owner's own in-process cadence step, which is also the worker's fallback). A tree from before the
+    default flip (``--root``) has the same field with ``False`` meaning in process."""
+    import dataclasses
+
+    from core.diagnostics import experiment_flags
+
+    flags = experiment_flags.active_experiment_flags()
+    if not hasattr(flags, "visualizer_engine_worker"):
+        yield                                   # a tree from before the engine worker: in process is its only path
+        return
+    experiment_flags.override_active_flags_for_testing(dataclasses.replace(flags, visualizer_engine_worker=False))
+    try:
+        yield
+    finally:
+        experiment_flags.override_active_flags_for_testing(flags)
+
+
 def production_owner_replay(clip: Any, mode: str, *, preset: int = 0, generation: int = GENERATION) -> list[str]:
-    """Per recorded frame of ``clip``, the digest of the logical frame the production owner's own path ticks."""
+    """Per recorded frame of ``clip``, the digest of the logical frame the production owner's own in-process path
+    ticks (stated explicitly: the in-process fallback, ``_in_process_path``)."""
     from unittest import mock
 
     from PySide6.QtWidgets import QApplication
@@ -200,7 +224,8 @@ def production_owner_replay(clip: Any, mode: str, *, preset: int = 0, generation
 
             with mock.patch.object(owner_module, "QuickDisplayVisualizerOwner", build), \
                     mock.patch.object(tick_pipeline, "logical_tick", recording_tick), \
-                    mock.patch.object(VisualizerRuntimeController, "start_logical_runtime", keep_step):
+                    mock.patch.object(VisualizerRuntimeController, "start_logical_runtime", keep_step), \
+                    _in_process_path():
                 if not VisualizerHostBinding(services).construct(host):
                     raise RuntimeError(f"the binding refused the owner: {record.get('outcome')}")
                 owner = record["owner"]

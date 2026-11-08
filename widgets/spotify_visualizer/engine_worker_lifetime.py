@@ -1,7 +1,8 @@
 """The engine worker's lifetime (native core P2b, work order 5 slice 5.7): the ``WorkerType.VISUALIZER`` process
 exists only while a Visualizer uses it.
 
-Imported only on the engine-worker path (``--viz-engine-worker``); off, nothing here runs and no worker exists.
+Imported only on the engine-worker path (the default on Windows; ``experiment_flags.visualizer_engine_worker_admitted``);
+in process (Linux, ``--viz-in-process``), nothing here runs and no worker exists.
 
 **Leases.** Every ``engine_worker_link.EngineWorkerLink`` holds one lease from its configure to its close (one
 session). The worker is spawned lazily by the first link that finds it not running (``EngineWorkerLink._ensure_worker``)

@@ -22,14 +22,19 @@ Admissions:
   Center window the splash top-level role instead of the tool role.
 * ``--log-dir=<path>`` — harness log-root redirect: the logger writes its files
   under ``<path>`` (a scratch folder) so the operator's own logs stay untouched.
-* ``--viz-engine-worker`` — native core P2b, work order 5 slice 5.2: the production
-  Visualizer owner runs its Visualizer on the engine worker (``WorkerType.VISUALIZER``:
-  capture, DSP and the tick out of process; the owner sends control edges and presents
-  the worker's frames). Default OFF until gate 3 accepts it: off, no worker process
-  exists and the owner's in-process path is unchanged. Read once per owner
-  construction (:func:`visualizer_engine_worker_admitted`).
+* The Visualizer's process path (native core P2b). The production Visualizer owner runs
+  its Visualizer on the engine worker (``WorkerType.VISUALIZER``: capture, DSP and the
+  tick out of process; the owner sends control edges and presents the worker's frames)
+  by DEFAULT on Windows (the operator's decision of 8 Nov, after gates 3 and 4), and in
+  process on Linux until the worker's spawn and Pulse capture there are proven
+  (:func:`visualizer_engine_worker_platform_default`). In process stays the automatic
+  fallback when the worker fails (``engine_worker_link``'s bounded recovery). Two
+  diagnostic tokens choose the path for A/B runs, whatever the platform:
+  ``--viz-in-process`` (the in-process path; it wins when both are given) and
+  ``--viz-engine-worker`` (the worker). Read once per owner construction
+  (:func:`visualizer_engine_worker_admitted`).
 
-All three are ordinary argv tokens in the ``=`` form, so a harness that launches a
+All are ordinary argv tokens in the ``=`` form, so a harness that launches a
 child passes them as arguments; nothing is read from the environment.
 
 Contract:
@@ -63,7 +68,9 @@ class ExperimentFlags:
     profile_cpu: bool = False
     mc_window_splash: bool = False
     log_dir: str | None = None
-    visualizer_engine_worker: bool = False
+    # The Visualizer's process path: None follows the platform default (the engine worker on Windows), True is
+    # ``--viz-engine-worker``, False ``--viz-in-process`` (tests and tools state their path the same way).
+    visualizer_engine_worker: bool | None = None
 
     @property
     def lifecycle_telemetry_admitted(self) -> bool:
@@ -91,13 +98,17 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
     profile_cpu = False
     mc_window_splash = False
     log_dir: str | None = None
-    visualizer_engine_worker = False
+    visualizer_engine_worker: bool | None = None
+    in_process_chosen = False
     for index, arg in enumerate(args):
         if arg == "--viz-switch-telemetry":
             viz_switch_telemetry = True
             continue
         if arg == "--viz-engine-worker":
             visualizer_engine_worker = True
+            continue
+        if arg == "--viz-in-process":
+            in_process_chosen = True
             continue
         if arg == "--profile-cpu":
             profile_cpu = True
@@ -138,6 +149,8 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
                 abc_exclude_seconds = max(0.0, float(exclude.strip()))
             except ValueError:
                 pass
+    if in_process_chosen:
+        visualizer_engine_worker = False          # the in-process choice wins (the known-good fallback path)
     return ExperimentFlags(
         abc_drive=abc_drive,
         viz_switch_telemetry=viz_switch_telemetry,
@@ -164,6 +177,7 @@ def experiment_flag_tokens(argv: Sequence[str]) -> tuple[str, ...]:
         if (
             arg == "--viz-switch-telemetry"
             or arg == "--viz-engine-worker"
+            or arg == "--viz-in-process"
             or arg == "--profile-cpu"
             or arg.startswith("--mc-window-flags=")
             or arg.startswith("--log-dir=")
@@ -231,9 +245,21 @@ def visualizer_switch_telemetry_admitted() -> bool:
     return active_experiment_flags().lifecycle_telemetry_admitted
 
 
+def visualizer_engine_worker_platform_default() -> bool:
+    """Whether the Visualizer runs on the engine worker when no path was chosen: on Windows (the measured, accepted
+    platform: gates 3 and 4, the frozen checks), not on Linux, where the worker's spawn (the ``multiprocessing`` start
+    method) and its Pulse capture (``utils/audio_capture_pulse.py``) are unproven (``Linux_Plan.md``). Read at call
+    time from ``core.platform_paths`` (the platform owner)."""
+    from core import platform_paths
+
+    return bool(platform_paths.IS_WINDOWS)
+
+
 def visualizer_engine_worker_admitted() -> bool:
-    """True when ``--viz-engine-worker`` admitted the production owner's engine-worker path (P2b slice 5.2)."""
-    return active_experiment_flags().visualizer_engine_worker
+    """True when the production owner runs its Visualizer on the engine worker: the chosen path
+    (``--viz-engine-worker`` / ``--viz-in-process``), else the platform default."""
+    chosen = active_experiment_flags().visualizer_engine_worker
+    return visualizer_engine_worker_platform_default() if chosen is None else bool(chosen)
 
 
 def override_active_flags_for_testing(flags: ExperimentFlags | None) -> None:
@@ -254,6 +280,7 @@ __all__ = [
     "profile_cpu_admitted",
     "mc_window_splash_admitted",
     "visualizer_switch_telemetry_admitted",
+    "visualizer_engine_worker_platform_default",
     "visualizer_engine_worker_admitted",
     "override_active_flags_for_testing",
 ]

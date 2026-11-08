@@ -29,8 +29,9 @@ meets it before the operator does.
 * **Mode switches:** ``--mode-switch 30,42`` makes the production cycle gesture (double-click / context menu: the next
   enabled mode) at those times and records each completion (``tools/live_check_mode_switch.py``); a switch that never
   completes fails the run (exit 3).
-* **Experiment admissions:** ``--app-arg=--viz-engine-worker`` adds that token to the saver's argv (only
-  ``core.diagnostics.experiment_flags`` tokens are accepted). With the engine worker admitted and a ``--clip``, the
+* **Experiment admissions:** ``--app-arg=<token>`` adds that token to the saver's argv (only
+  ``core.diagnostics.experiment_flags`` tokens are accepted). The Visualizer runs on the engine worker by default
+  (Windows); ``--app-arg=--viz-in-process`` runs the in-process control (``engine_worker_path``). On the worker with a ``--clip``, the
   worker plays the same recording (its first ``WORKER_PCM_LOOP_S`` seconds, looped, on the worker's own audio clock:
   the link's recorded-capture control, as its gates use it) and never opens the loopback device.
 * **Resource readings:** ``--resource-readings`` reads the saver's process tree from outside (this parent: psutil,
@@ -47,7 +48,7 @@ meets it before the operator does.
   revision's age at sync and how many newer ones were waiting), render-mode time, swap pacing, the first 2 s after
   startup, the HUD age, and for Extruded Bubble the render stages (``tools/eb_live_phases.py``). Lines starting
   ``FLAG`` name a known trap; see ``Docs/Guides/Visualizer_Change_Checklist.md`` "Live-shape performance".
-  With ``--app-arg=--viz-engine-worker`` the same age chain is read from the worker's own publish stamps (each frame
+  On the engine worker the same age chain is read from the worker's own publish stamps (each frame
   slot's ``publish_ns``, on the clock every process shares; the main side records a frame's publish when it takes
   it), and the tick and GIL are labelled by process (``tick_and_gil``): ``tick_process``, ``tick_to_publish_ms`` and
   ``tick_gil_share`` (both paths, from the trace), ``main_gil_share`` (in process the logical tick's, on the worker
@@ -90,6 +91,16 @@ STEADY_AFTER_STARTUP_NS = 2_000_000_000
 LATE_MS = 25.0
 WORKER_PCM_LOOP_S = 20.0      # the engine worker's recorded stream (looped): a few MB in each VIS_CONFIGURE
 ENGINE_WORKER_ARG = "--viz-engine-worker"
+IN_PROCESS_ARG = "--viz-in-process"
+
+
+def engine_worker_path(app_args) -> bool:
+    """Whether the saver runs its Visualizer on the engine worker: as ``core.diagnostics.experiment_flags`` resolves
+    the run's tokens (the product's default on Windows; ``--app-arg=--viz-in-process`` for the in-process control)."""
+    from core.diagnostics.experiment_flags import parse_experiment_flags, visualizer_engine_worker_platform_default
+
+    chosen = parse_experiment_flags(list(app_args)).visualizer_engine_worker
+    return visualizer_engine_worker_platform_default() if chosen is None else bool(chosen)
 
 # Guide numbers for a 60 Hz panel and the ~90 Hz authored cadence (flags, not pass/fail gates).
 _FLAGS = (
@@ -489,7 +500,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
         set_playing = QuickDisplayVisualizerOwner.set_playing
         QuickDisplayVisualizerOwner.set_playing = (
             lambda self, _playing, *, observed_ts=None: set_playing(self, True, observed_ts=observed_ts))
-        if ENGINE_WORKER_ARG in app_args:
+        if engine_worker_path(app_args):
             # The engine worker captures in its own process: every session it hosts plays the same recording on the
             # worker's audio clock and refuses the device (the link's recorded-capture control, as its gates use it).
             from widgets.spotify_visualizer import engine_worker_link
@@ -497,7 +508,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
             stack.enter_context(engine_worker_link.recorded_capture_for_testing(
                 pcm=pcm[: int(rate * WORKER_PCM_LOOP_S)], pcm_rate=int(rate)))
     phases._install()
-    if ENGINE_WORKER_ARG in app_args:
+    if engine_worker_path(app_args):
         phases._install_frame_take()          # main's per-frame cost on the worker path (the tick runs in the worker)
     if mode=='waveform_ribbon':phases._install_waveform()
     if display_off:
@@ -714,7 +725,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="make the production mode-cycle gesture AT s after the runner starts (one at a time); "
                              "a switch that never completes fails the run")
     parser.add_argument("--app-arg", action="append", default=[], type=parse_app_arg, metavar="=TOKEN",
-                        help="an experiment-flag token added to the saver's argv, e.g. --app-arg=--viz-engine-worker")
+                        help="an experiment-flag token added to the saver's argv, e.g. --app-arg=--viz-in-process "
+                             "(the in-process control; the engine worker is the default)")
     parser.add_argument("--resource-readings", action="store_true",
                         help="read the saver's process tree from outside every second and --settle s after each "
                              "reveal / completed mode switch; growth fails the run (resource_summary.json)")
@@ -732,7 +744,7 @@ def parse_app_arg(text: str) -> str:
     token = str(text)
     needs_value = ("--abc-drive", "--abc-layout-slot", "--abc-exclude-seconds")      # only their "=" form is one token
     if experiment_flag_tokens([token]) != (token,) or token.startswith("--log-dir=") or token in needs_value:
-        raise ValueError(f"--app-arg takes one experiment-flag token (e.g. --viz-engine-worker), got {token!r}")
+        raise ValueError(f"--app-arg takes one experiment-flag token (e.g. --viz-in-process), got {token!r}")
     return token
 
 
@@ -878,7 +890,7 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     edges_path = out / "power_edges.jsonl"
     edges = ([json.loads(line) for line in edges_path.read_text(encoding="utf-8").splitlines() if line.strip()]
              if edges_path.exists() else [])
-    worker_path = ENGINE_WORKER_ARG in args.app_arg
+    worker_path = engine_worker_path(args.app_arg)
     summary.update(analyse_trace(trace, steady_stop_ns=edges[0]["perf_ns"] if edges else None,
                                  worker_path=worker_path))
     if worker_path and not summary["publish_records_per_s"]:

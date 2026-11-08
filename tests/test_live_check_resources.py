@@ -38,6 +38,17 @@ def test_app_args_admit_only_experiment_flags_and_are_forwarded_with_the_mode_sw
             mode_switch.parse_mode_switch(bad)
 
 
+def test_the_run_reads_the_saver_path_as_the_saver_resolves_it(windows_platform):
+    # The engine worker is the product's default (Windows): a run with no path token measures it, and the in-process
+    # control is stated with --app-arg=--viz-in-process (it wins over --viz-engine-worker, as in experiment_flags).
+    assert live_check.parse_app_arg(live_check.IN_PROCESS_ARG) == "--viz-in-process"
+    assert live_check.engine_worker_path([]) is True
+    assert live_check.engine_worker_path(["--viz-switch-telemetry"]) is True
+    assert live_check.engine_worker_path([live_check.ENGINE_WORKER_ARG]) is True
+    assert live_check.engine_worker_path([live_check.IN_PROCESS_ARG]) is False
+    assert live_check.engine_worker_path([live_check.ENGINE_WORKER_ARG, live_check.IN_PROCESS_ARG]) is False
+
+
 def test_growth_flags_a_monotonic_rise_beyond_noise_and_passes_a_noisy_flat_series():
     flat = [1500, 1512, 1498, 1507, 1503, 1511, 1499, 1505, 1509, 1501, 1504, 1510, 1500, 1506]
     assert resources.growth(flat, 10.0)["growth"] is False

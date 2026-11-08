@@ -67,8 +67,8 @@ def stop_qtimer_safe(
 def hold_engine_worker_for_reload(engine: ScreensaverEngine, reason: str) -> None:
     """A display reload (a CUSTOM layout commit, a monitor topology change) keeps the Visualizer's engine worker running
     from the old generation's teardown until its replacement is constructed, so the rebuilt owner adopts it instead of
-    spawning a fresh one (``widgets.spotify_visualizer.engine_worker_lifetime``). Only on the engine-worker path
-    (``--viz-engine-worker``): off, nothing is imported or held. A hold left by an earlier reload is ended first."""
+    spawning a fresh one (``widgets.spotify_visualizer.engine_worker_lifetime``). Only on the engine-worker path (the
+    default on Windows): in process, nothing is imported or held. A hold left by an earlier reload is ended first."""
     end_engine_worker_reload_hold(engine)
     from core.diagnostics.experiment_flags import visualizer_engine_worker_admitted
 

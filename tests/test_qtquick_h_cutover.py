@@ -235,6 +235,7 @@ def test_display_manager_constructs_only_authoritative_quick_units(
     qt_app,
     qtbot,
     monkeypatch,
+    visualizer_in_process,          # the manager has no process supervisor: its Visualizer runs in process
 ) -> None:
     """The production constructor owns one factory and only Quick units."""
 
@@ -325,6 +326,7 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
     qt_app,
     qtbot,
     monkeypatch,
+    visualizer_in_process,          # the patched shared beat engine and tick run in this process
 ) -> None:
     """Production orchestration resolves settings once and owns one destination."""
     from core.settings.visualizer_presets import get_preset_count

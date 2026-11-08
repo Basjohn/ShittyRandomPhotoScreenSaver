@@ -129,7 +129,7 @@ def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app, qtb
     assert all(display not in old_displays for display in engine.display_manager.displays)
 
 
-def test_display_initialized_flag_lifecycle(qt_app):
+def test_display_initialized_flag_lifecycle(qt_app, visualizer_in_process):   # no process supervisor: in process
     """
     Test _display_initialized flag through lifecycle.
     
