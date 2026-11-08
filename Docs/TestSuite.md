@@ -1099,6 +1099,13 @@ High-value permanent guards include:
   the worker path's age chain (consumed age, newest age, publish -> swap, tick -> publish) equals the in-process one,
   and revisions/s is the worker's 90/s from the revision numbering although main took 45/s; negative controls: read as
   in process the rate halves, and without the stamps the chain is empty; the tick and GIL are labelled by process.
+  The recorded-PCM check is path-aware (gate 3 record): the real Waveform body (`WaveformRibbonFrameRuntime.advance`)
+  ticked on loud synthetic inputs, its frame built as the capture builds it and carried through the frame codec (the
+  worker-to-main seam), is a receipt (`eb_live_phases.note_waveform_frame`: playing, its own source identity, passage
+  above zero); negative controls through the same seam: silence, a paused body and another activation's source are
+  not. `waveform_pcm_receipt` passes in process on a body input row and on the worker path on rendered frames; it
+  fails with no evidence on either path (the 8 Nov worker run's crash), on a stale or silent row, on rendered frames
+  standing in for input rows in process, and on input rows on the worker path (the body ran in main).
   `tests/test_visualizer_logical_edges_parity.py` (A4-H1, A5-M2, A5-L1, A6-L4): the
   production owner and the engine session call one module for configuration, activation and the engine edges
   (`widgets/spotify_visualizer/logical_edges.py`); the same edge scripts through each host's own path (the owner built,

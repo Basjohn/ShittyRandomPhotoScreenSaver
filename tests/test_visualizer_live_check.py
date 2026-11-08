@@ -176,3 +176,84 @@ def test_the_tick_and_the_gil_are_labelled_by_process():
     # A new session's revisions start again: the step back adds nothing.
     assert revision_rate([(0, 1), (10 ** 9, 91), (2 * 10 ** 9, 5), (3 * 10 ** 9, 95)]) == 60.0
     assert revision_rate([(0, 1)]) is None
+
+
+# -- the recorded-PCM receipt on both paths (native core P2 gate 3 record) --------------------------------------------
+
+_IDENTITY = (2, 5, 7)          # (runtime generation, engine generation, activation id)
+
+
+def _worker_frame(*, playing=True, source=_IDENTITY[1:], bands=(.7, .6, .5), loudness=8.0, intensity=.8):
+    """The worker-to-main seam with the real body: ``WaveformRibbonFrameRuntime.advance`` (the Waveform body) ticked
+    at 90 Hz on synthetic inputs until ready and 2 s beyond, its frame built as the capture builds it, wrapped in the
+    logical frame and carried through the frame codec (what main decodes from the worker's slot)."""
+    from core.visualizer_engine import frame_codec
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
+    from widgets.spotify_visualizer.render_state import (
+        VisualizerCommonState, VisualizerLogicalFrame, WaveformRibbonFrame)
+    from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
+
+    frozen = dict(frozen_visualizer_settings("waveform_ribbon"))
+    runtime = WaveformRibbonFrameRuntime()
+    configuration = runtime.configure({control.key: frozen[control.key]
+                                       for control in require_mode_settings("waveform_ribbon").controls})
+    tick, extra = 0, None
+    while extra is None or extra > 0:
+        snapshot = runtime.advance(onsets=(), now_ts=tick / 90, playing=playing, identity=_IDENTITY,
+                                   source_identity=source, controls=configuration.controls, body_bands=bands,
+                                   intensity=intensity, loudness=loudness, presence=1.0)
+        tick += 1
+        if snapshot.ready:
+            extra = 180 if extra is None else extra - 1
+        assert tick < 5000, "the body never became ready"
+    state = WaveformRibbonFrame(snapshot.packet, configuration.scene(snapshot), snapshot.time, snapshot.travel,
+                                snapshot.rotation_angle, snapshot.rotation_speed, snapshot.drives, snapshot.realized,
+                                ready=snapshot.ready, particle_serial=snapshot.particle_serial,
+                                passage=snapshot.passage)
+    logical = VisualizerLogicalFrame(
+        runtime_generation=_IDENTITY[0], engine_generation=_IDENTITY[1], activation_id=_IDENTITY[2],
+        source_generation=source[0], source_activation_id=source[1], mode_id="waveform_ribbon", playing=playing,
+        logical_timestamp=tick / 90, source_timestamp=tick / 90, changed=True, present_frame=True,
+        mode_reveal_ready=True, common=VisualizerCommonState(bars=(), bar_count=0), mode_state=state)
+    return frame_codec.decode(frame_codec.encode(logical))
+
+
+def test_a_rendered_worker_frame_is_the_receipt_only_when_audible_input_reached_a_live_body():
+    from tools.eb_live_phases import note_waveform_frame
+
+    receipt = {}
+    assert note_waveform_frame(receipt, _worker_frame())
+    assert receipt["rendered_frames"] == 1 and receipt["first_identity"] == list(_IDENTITY)
+    assert receipt["passage_max"] > 0.
+    # Negative controls through the same seam: silence, a paused body and another activation's source all leave the
+    # body's passage at 0 or the frame not live, so none of them is a receipt.
+    for kwargs in ({"bands": (0., 0., 0.), "loudness": 0., "intensity": 0.}, {"playing": False},
+                   {"source": (4, 7)}):
+        assert not note_waveform_frame(receipt, _worker_frame(**kwargs)), kwargs
+    assert receipt["rendered_frames"] == 1
+
+
+def test_the_pcm_check_is_path_aware_and_fails_closed_on_both_paths():
+    from tools.visualizer_live_check import waveform_pcm_receipt
+
+    row = {"bands": [.4, .2, .1], "playing": True, "identity": [2, 5, 7], "source_identity": [5, 7], "bursts": 3}
+    receipt = {"rendered_frames": 120, "first_identity": [2, 5, 7], "passage_max": .6, "burst_serial": 9}
+    inproc = waveform_pcm_receipt({"waveform_signals": [row]}, recorded=True, worker_path=False)
+    assert inproc["waveform_signal_samples"] == 1 and inproc["waveform_burst_serial"] == 3
+    assert inproc["waveform_pcm_evidence"].startswith("body input rows")
+    worker = waveform_pcm_receipt({"waveform_frame_receipt": receipt}, recorded=True, worker_path=True)
+    assert worker["waveform_signal_samples"] == 0 and worker["waveform_burst_serial"] == 9
+    assert worker["waveform_pcm_evidence"].startswith("rendered worker frames")
+    # Negative controls: no evidence on either path is an error (the 8 Nov gate 3 worker run's crash was the in-process
+    # check reading an empty list on the worker path); a stale or silent row is no evidence; rendered frames do not
+    # stand in for the input rows in process; input rows on the worker path mean the body ran in main.
+    for phases, worker_path in (({}, True), ({"waveform_frame_receipt": {"rendered_frames": 0}}, True), ({}, False),
+                                ({"waveform_signals": [dict(row, source_identity=[4, 7])]}, False),
+                                ({"waveform_signals": [dict(row, bands=[0., 0., 0.])]}, False),
+                                ({"waveform_frame_receipt": receipt}, False),
+                                ({"waveform_signals": [row], "waveform_frame_receipt": receipt}, True)):
+        with pytest.raises(RuntimeError):
+            waveform_pcm_receipt(phases, recorded=True, worker_path=worker_path)
+    # Without a recording nothing is required.
+    assert waveform_pcm_receipt({}, recorded=False, worker_path=True)["waveform_pcm_evidence"] is None
