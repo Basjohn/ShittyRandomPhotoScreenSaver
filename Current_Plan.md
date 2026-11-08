@@ -690,6 +690,9 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   frame (`glFinish`); other users sampling animations should too, or the host could finish its frames itself.
 
 **Found while building Expanded Visualizer M3c (8 Nov; recorded, not yet admitted):**
+- `tests/test_visualizer_preset_glyphs.py` opens a real window (offscreen QPA hangs it), so the glyph-row agent
+  could not run its updated assertion (Edit's glyphs match the card's 26 px). Port it to the hidden production host
+  (QQuickRenderControl, as `tests/test_visualizer_glyph_row.py` does) and run it.
 - **The expanded card's hover Edit lane stays withdrawn (operator's call if wanted back).** The rotate glyph the
   operator missed is now on the expanded card in Fullscreen Edit (plan 01 M3c, "Rotate Widget Content"); the
   ordinary Visualizer's hover lane never offered rotate. What the display-wide card still does not show outside Edit
