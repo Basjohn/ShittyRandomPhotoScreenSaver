@@ -104,7 +104,7 @@ class EngineSession:
                  bar_count: int = 32, label_namespace: int = 0, wake: Any = None, inputs: str = "feature",
                  seed: int | None = None, order: str = "production",
                  cadence: str = "input", pcm: Any = None, pcm_rate: int | None = None,
-                 interval_s: float | None = None, activation: Any = None) -> None:
+                 interval_s: float | None = None, activation: Any = None, publish_stamps: bool = False) -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.packet_mailbox import PacketMailbox
         from widgets.spotify_visualizer import extruded_bubble_drift_log
@@ -162,7 +162,10 @@ class EngineSession:
         # from 1, as a fresh in-process replay does (the identity gates).
         extruded_bubble_drift_log._REVISIONS = itertools.count((int(label_namespace) << 32) + 1)
         # ``wake``: the writer end of the owner's wake pipe (one byte per publish; the owner's emitter coalesces).
-        self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake)
+        # ``publish_stamps``: the owner's ``--frame-trace`` is admitted, so every slot carries its publish time (the
+        # main side's trace records the publish from it; gate 3). Off: the slot carries 0 and no clock is read.
+        self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake,
+                                     publish_stamps=bool(publish_stamps))
         self._stack.callback(self.mailbox.close)
         self._live = inputs == "live"
         if self._live:

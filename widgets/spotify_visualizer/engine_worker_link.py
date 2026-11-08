@@ -491,6 +491,9 @@ class EngineWorkerLink:
             # Production: the live engine on the worker's own cadence and the loopback device (no ``pcm``).
             "inputs": "live", "order": "free", "cadence": "worker",
             "activation": {key: activation[key] for key in ACTIVATION_KEYS},
+            # Only while this process's ``--frame-trace`` is admitted: each slot then carries its publish time, which
+            # the reader records as the trace's publish (native core P2 gate 3). Nothing is stamped at rest.
+            "publish_stamps": mailbox.traces_publications,
         }
         if _test_session_overrides is not None:
             payload.update(_test_session_overrides)

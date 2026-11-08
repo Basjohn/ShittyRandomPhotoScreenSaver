@@ -19,6 +19,7 @@ slot i at HEADER_BYTES + i * slot_bytes:
    16  f64 logical_timestamp     24 f64 source_timestamp (NaN: none)
    32  u32 flags (FLAG_*)        36 u32 protected_edge_mask
    40  u32 runtime_generation    44 u32 engine_generation    48 u32 activation_id   52 u32 mode_code
+   56  u64 publish_ns            (the writer's ``time.perf_counter_ns()`` at publish; 0: not stamped)
    64  payload ...               (at most slot_bytes - SLOT_OVERHEAD bytes)
   slot_bytes - 8  u64 sequence_end  (equal to sequence_begin, and even, once the slot is whole)
 
@@ -43,6 +44,17 @@ are the configure-time identity (written once by the session before any frame: w
 mapping was configured for); they are not updated in place and never decide a slot. Identity values are u32; -1
 ("none") is stored as 0xFFFFFFFF. ``flags`` carry the publication's ``FLAG_*`` bits on every slot. ABI 1 had no slot
 identity (payload at 48); ABI 2 moved the payload to 64.
+
+Publish time (native core P2 gate 3 preparation, appended to ABI 2): slot bytes 56-63, until then the zero padding
+before the payload, hold ``publish_ns``, the writer's ``time.perf_counter_ns()`` at publish, under the slot's seqlock
+like every head field. An append into reserved bytes, not a renumbering: no field moved, the payload stays at 64, a
+reader that ignores the field is unaffected, and 0 (what ``initialise`` leaves and what an unstamped writer stores)
+means "not stamped", so the ABI version stays 2. The clock is ``perf_counter`` because it is the one clock every SRPSS
+process shares: on Windows it is QueryPerformanceCounter, system-wide and monotonic, with no per-process origin (the
+authored clock and ``--frame-trace`` read it too), so a stamp made in the engine worker is directly comparable with the
+main process's own trace timestamps (``tests/test_visualizer_engine_publish_stamp.py`` proves it across a spawn). The
+engine worker stamps only while the main process's ``--frame-trace`` is admitted (``PacketMailbox``'s
+``publish_stamps``); otherwise the field is written 0 in the same store as the rest of the head.
 """
 from __future__ import annotations
 
@@ -85,8 +97,8 @@ def mode_code(mode_id: str | None) -> int:
 
 
 _HEADER = struct.Struct("<4sHHIIIIIIQQ")          # through consumed_sequence (48 bytes, padded to 64)
-_SLOT_HEAD = struct.Struct("<QIIddIIIIII")        # through the slot identity (56 bytes, payload at 64)
-_SLOT_HEAD_REST = struct.Struct("<IIddIIIIII")    # the slot head after sequence_begin (stored at offset 8)
+_SLOT_HEAD = struct.Struct("<QIIddIIIIIIQ")       # through publish_ns (64 bytes, payload at 64)
+_SLOT_HEAD_REST = struct.Struct("<IIddIIIIIIQ")   # the slot head after sequence_begin (stored at offset 8)
 _U64 = struct.Struct("<Q")
 _IDENTITY = struct.Struct("<III")                 # runtime_generation, engine_generation, activation_id at 8
 _U32 = struct.Struct("<I")
@@ -122,6 +134,7 @@ class FramePacket:
     engine_generation: int = 0
     activation_id: int = 0
     mode_code: int = 0
+    publish_ns: int = 0                  # the writer's perf_counter_ns at publish (0: not stamped)
 
 
 def mapping_bytes(slot_bytes: int) -> int:
@@ -183,8 +196,13 @@ class FramePacketWriter:
     def publish(self, payload: bytes, *, payload_schema: int, logical_timestamp: float,
                 source_timestamp: float | None = None, flags: int = 0, protected_edges: int = 0,
                 runtime_generation: int = 0, engine_generation: int = 0, activation_id: int = 0,
-                mode_code: int = 0) -> int:
+                mode_code: int = 0, publish_ns: int = 0) -> int:
+        """Publish one whole frame; its sequence. ``publish_ns``: the publish time on ``time.perf_counter_ns`` (the
+        module docstring's shared clock), 0 when the caller does not stamp it."""
         payload = bytes(payload)
+        publish_ns = int(publish_ns)
+        if not 0 <= publish_ns <= 0xFFFFFFFFFFFFFFFF:
+            raise ValueError(f"publish time {publish_ns} does not fit a u64")
         if len(payload) > self.capacity:
             raise ValueError(f"frame payload of {len(payload)} bytes exceeds the slot's {self.capacity}")
         identity = (_u32(runtime_generation), _u32(engine_generation), _u32(activation_id), _u32(mode_code))
@@ -202,7 +220,7 @@ class FramePacketWriter:
         _U64.pack_into(view, base, sequence-1)
         _SLOT_HEAD_REST.pack_into(view, base+_U64.size, len(payload), int(payload_schema), float(logical_timestamp),
                                   math.nan if source_timestamp is None else float(source_timestamp), int(flags), mask,
-                                  *identity)
+                                  *identity, publish_ns)
         view[base+SLOT_PAYLOAD_OFFSET:base+SLOT_PAYLOAD_OFFSET+len(payload)] = payload
         _U64.pack_into(view, base, sequence)
         _U64.pack_into(view, base+self._slot_bytes-8, sequence)
@@ -265,14 +283,15 @@ class FramePacketReader:
             end = _U64.unpack_from(view, base+self._slot_bytes-8)[0]
             if end != latest:
                 break
-            head, size, schema, logical, source, flags, edges, *identity = _SLOT_HEAD.unpack_from(view, base)
+            # ``identity_and_stamp``: the slot's four identity fields, then publish_ns (FramePacket's last fields).
+            head, size, schema, logical, source, flags, edges, *identity_and_stamp = _SLOT_HEAD.unpack_from(view, base)
             payload = bytes(view[base+SLOT_PAYLOAD_OFFSET:base+SLOT_PAYLOAD_OFFSET+min(size, self._slot_bytes-SLOT_OVERHEAD)])
             begin = _U64.unpack_from(view, base)[0]
             if head != latest or begin != latest or latest % 2 or size > self._slot_bytes-SLOT_OVERHEAD:
                 break
             self.accepted = latest
             return FramePacket(latest, schema, logical, None if math.isnan(source) else source, flags, edges, payload,
-                               *identity)
+                               *identity_and_stamp)
         self.torn_reads += 1
         return None
 

@@ -47,6 +47,12 @@ meets it before the operator does.
   revision's age at sync and how many newer ones were waiting), render-mode time, swap pacing, the first 2 s after
   startup, the HUD age, and for Extruded Bubble the render stages (``tools/eb_live_phases.py``). Lines starting
   ``FLAG`` name a known trap; see ``Docs/Guides/Visualizer_Change_Checklist.md`` "Live-shape performance".
+  With ``--app-arg=--viz-engine-worker`` the same age chain is read from the worker's own publish stamps (each frame
+  slot's ``publish_ns``, on the clock every process shares; the main side records a frame's publish when it takes
+  it), and the tick and GIL are labelled by process (``tick_and_gil``): ``tick_process``, ``tick_to_publish_ms``
+  (both paths, from the trace), ``main_gil_share`` (in process the logical tick's, on the worker path the frame
+  take's) and ``worker_tick_ms`` / ``worker_gil_share`` (the worker's own process). A worker run with no publish
+  records fails.
 
 Runs take ``--seconds`` plus ~30 s (profile copy, load calibration, startup, teardown). Stop strays by exact PID.
 """
@@ -90,6 +96,7 @@ _FLAGS = (
     ("publish_to_swap_ms", 20.0, "publish -> swap median over 20 ms: the frame age budget is gone"),
     ("revisions_waiting_at_sync", 0.0, "the sync consumed a stale revision while newer ones waited"),
     ("logical_gil_share", 0.30, "the logical tick holds the GIL over 30% of the time: render/GUI threads stall"),
+    ("main_gil_share", 0.30, "main's per-frame Visualizer work holds its GIL over 30% of the time: render/GUI threads stall"),
     ("render_mode_ms", 8.0, "render-mode time over 8 ms: the frame no longer fits half a 60 Hz period"),
     ("steady_late_pct", 10.0, "over 10% of steady frames later than 25 ms"),
     ("post_startup_late_pct", 20.0, "over 20% of the first 2 s after startup later than 25 ms"),
@@ -109,15 +116,35 @@ def _stats(values):
 
 # -- analysis -----------------------------------------------------------------------------------------------------
 
-def analyse_trace(path: Path, *, steady_stop_ns: int | None = None) -> dict:
+def revision_rate(publishes: list[tuple[int, int]]) -> float | None:
+    """Publications per second from the revision numbering of ``(ts, revision)`` publish records in time order: the
+    sum of each step's revision advance over the time they span. On the engine-worker path the main process records
+    only the frames it takes, and their revisions are the worker's publication count (``PacketMailbox``: the slot
+    sequence), so this is the worker's own publication rate; a step that goes back (a new session) adds nothing."""
+    if len(publishes) < 2:
+        return None
+    advance = sum(max(0, b[1] - a[1]) for a, b in zip(publishes, publishes[1:]))
+    span = (publishes[-1][0] - publishes[0][0]) / 1e9
+    return round(advance / span, 1) if span > 0 else None
+
+
+def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path: bool = False) -> dict:
+    """The steady window's age chain from the frame trace. ``worker_path`` (the engine worker admitted): the publish
+    records are the frames the main process took, each at the worker's own publish time (``PacketMailbox`` records them
+    from the slot's ``publish_ns``, on the clock every process shares), so revisions/s comes from their revision
+    numbering (``revision_rate``), ``publish_records_per_s`` counts them, and the waiting count and newest age at sync see only
+    newer frames that main later took (lower bounds). The rest of the chain reads exactly as in process."""
     sys.path.insert(0, str(ROOT))
     from tools.frame_trace_report import HEADER, RECORD, _read_trace_chain
 
     raw, _segments = _read_trace_chain(path)
     events: list[tuple[int, int, int]] = []
+    logical: dict[tuple[int, int], int] = {}          # (ts, revision) of a publish -> its logical timestamp (ns)
     for i in range((len(raw) - HEADER.size) // RECORD.size):
-        ts, event, _screen, revision, _logical, _aux = RECORD.unpack_from(raw, HEADER.size + i * RECORD.size)
+        ts, event, _screen, revision, logical_ns, _aux = RECORD.unpack_from(raw, HEADER.size + i * RECORD.size)
         events.append((ts, event, revision))
+        if event == 1:
+            logical[(ts, revision)] = logical_ns
     events.sort()
     begins = [ts for ts, e, _ in events if e == 62]
     ends = [ts for ts, e, _ in events if e == 63]
@@ -155,9 +182,21 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None) -> dict:
             render_mode.append((ts - begin_mode.pop(r)) / 1e6)
     early = [ts for ts, e, _ in events if e == 6 and startup_end <= ts < start]
     early_gaps = [(b - a) / 1e6 for a, b in zip(early, early[1:])]
+    steady_publishes = [(ts, r) for ts, e, r in steady if e == 1]
+    # The tick's own time: its logical timestamp (the tick's authored now, ``perf_counter``) to its publish, both on
+    # the publishing process's clock (in process: main; worker path: the worker's stamp). Async-resolved modes carry
+    # the resolved frame's time, so theirs includes the resolve.
+    tick = [(ts - logical[(ts, r)]) / 1e6 for ts, r in steady_publishes if logical.get((ts, r), 0) > 0]
+    tick = [value for value in tick if 0.0 <= value < 1000.0]
+    records_per_s = round(len(steady_publishes) / seconds, 1)
     return {
+        "path": "engine_worker" if worker_path else "in_process",
+        "publish_records": ("frames main took, at the worker's publish stamp" if worker_path
+                            else "every publication, at its publish"),
         "steady_seconds": round(seconds, 1),
-        "revisions_per_s": round(sum(1 for _, e, _ in steady if e == 1) / seconds, 1),
+        "revisions_per_s": revision_rate(steady_publishes) if worker_path else records_per_s,
+        "publish_records_per_s": records_per_s,
+        "tick_to_publish_ms": _stats(tick),
         "frames_per_s": round(len(swaps) / seconds, 1),
         "consumed_age_at_sync_ms": _stats(consumed),
         "newest_age_at_sync_ms": _stats(newest_age),
@@ -171,6 +210,28 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None) -> dict:
         "post_startup_late_pct": round(100.0 * sum(g > LATE_MS for g in early_gaps) / max(len(early_gaps), 1), 1),
         "sync_admissions_per_s": round(sum(1 for _, e, _ in steady if e == 74) / seconds, 1),
     }
+
+
+def tick_and_gil(summary: dict, *, worker_path: bool) -> dict:
+    """The tick and the GIL, labelled by process (gate 3 compares them in process and on the engine worker).
+
+    ``tick_process``: where the logical tick ran (its ``tick_to_publish_ms`` is from the trace on that process's clock).
+    ``main_gil_share``: the main process's per-frame GIL holder for the Visualizer's frames; in process the logical tick
+    (``logical_tick_ms``, its publish phase, times revisions/s: ``logical_gil_share``), on the worker path the frame
+    take (``frame_take_ms``: slot copy, decode and the owner's completion, times the frames taken per second).
+    ``worker_gil_share``: the engine worker's own GIL (another process, it never stalls main's threads): its tick to
+    publish times its revisions/s; None in process."""
+    def share(stats, rate):
+        return round(stats["median"] * rate / 1000.0, 2) if stats and rate else None
+
+    if worker_path:
+        return {"tick_process": "engine_worker",
+                "main_gil_holder": "frame take (slot copy, decode, completion)",
+                "main_gil_share": share(summary.get("frame_take_ms"), summary.get("publish_records_per_s")),
+                "worker_tick_ms": summary.get("tick_to_publish_ms"),
+                "worker_gil_share": share(summary.get("tick_to_publish_ms"), summary.get("revisions_per_s"))}
+    return {"tick_process": "main", "main_gil_holder": "logical tick (publish phase)",
+            "main_gil_share": summary.get("logical_gil_share"), "worker_tick_ms": None, "worker_gil_share": None}
 
 
 def hud_ages(perf_log: Path, mode: str) -> dict | None:
@@ -432,6 +493,8 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
             stack.enter_context(engine_worker_link.recorded_capture_for_testing(
                 pcm=pcm[: int(rate * WORKER_PCM_LOOP_S)], pcm_rate=int(rate)))
     phases._install()
+    if ENGINE_WORKER_ARG in app_args:
+        phases._install_frame_take()          # main's per-frame cost on the worker path (the tick runs in the worker)
     if mode=='waveform_ribbon':phases._install_waveform()
     if display_off:
         _inject_display_power(out, display_off)
@@ -811,7 +874,12 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     edges_path = out / "power_edges.jsonl"
     edges = ([json.loads(line) for line in edges_path.read_text(encoding="utf-8").splitlines() if line.strip()]
              if edges_path.exists() else [])
-    summary.update(analyse_trace(trace, steady_stop_ns=edges[0]["perf_ns"] if edges else None))
+    worker_path = ENGINE_WORKER_ARG in args.app_arg
+    summary.update(analyse_trace(trace, steady_stop_ns=edges[0]["perf_ns"] if edges else None,
+                                 worker_path=worker_path))
+    if worker_path and not summary["publish_records_per_s"]:
+        # Fail closed: without the worker's publish stamps the age chain would read as empty, not as measured.
+        raise RuntimeError("engine-worker run recorded no publish in the trace (no publish_ns reached the main side)")
     if args.display_off:
         (out / "power_samples.jsonl").write_text("".join(json.dumps(row) + "\n" for row in power_samples),
                                                  encoding="utf-8")
@@ -846,14 +914,18 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
         summary["logical_tick_ms"] = tick
         if tick:
             summary["logical_gil_share"] = round(tick["median"] * summary["revisions_per_s"] / 1000.0, 2)
+        summary["frame_take_ms"] = phases.get("frame_take")
         summary["render_stages_ms"] = {k: v for k, v in phases.items()
-                                       if isinstance(v, dict) and k != "logical_publish"}
+                                       if isinstance(v, dict) and k not in ("logical_publish", "frame_take")}
+    summary.update(tick_and_gil(summary, worker_path=worker_path))
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     for key, value in summary.items():
         if key not in ("render_stages_ms", "process_tree", "actual_waveform_configuration", "display_power",
                        "settings_roundtrip"):
             print(f"{key:28s} {value}")
     for key, limit, message in _FLAGS:
+        if key == "main_gil_share" and summary.get("tick_process") == "main":
+            continue                                   # in process it is logical_gil_share, flagged above
         value = summary.get(key)
         value = value["median"] if isinstance(value, dict) else value
         if value is not None and value > limit:

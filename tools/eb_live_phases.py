@@ -35,6 +35,25 @@ _ticks: list[float] = []
 _restarts: list = []
 _waveform_signals: list = []
 _waveform_configuration: dict = {}
+_takes: list[float] = []
+
+
+def _install_frame_take() -> None:
+    """The engine-worker path's main-side frame cost: each frame the main process takes from the worker's mapping (the
+    slot copy, the decode and the owner's frame completion, ``PacketMailbox._read`` when it decodes a new frame). In
+    process this GIL time is the logical tick's; on the worker path it is what main still pays per frame."""
+    from core.visualizer_engine.packet_mailbox import PacketMailbox
+
+    read = PacketMailbox._read
+
+    def timed(self):
+        cached = self._peeked is not None
+        start = time.perf_counter()
+        publication = read(self)
+        if publication is not None and not cached and self._writer is None:
+            _takes.append((time.perf_counter() - start) * 1000.0)
+        return publication
+    PacketMailbox._read = timed
 
 
 def _wrap(owner, attr, label):
@@ -132,6 +151,10 @@ def _summary() -> dict:
     if ticks:
         summary["logical_publish"] = {"median": round(statistics.median(ticks), 3),
                                       "p90": round(ticks[int(0.9 * (len(ticks) - 1))], 3)}
+    takes = sorted(_takes[200:])
+    if takes:
+        summary["frame_take"] = {"median": round(statistics.median(takes), 3),
+                                 "p90": round(takes[int(0.9 * (len(takes) - 1))], 3), "takes": len(_takes)}
     if _waveform_signals:summary['waveform_signals']=_waveform_signals
     if _waveform_configuration:summary['waveform_configuration']=_waveform_configuration
     return summary

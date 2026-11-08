@@ -17,12 +17,14 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 import uuid
 import zlib
 from multiprocessing.shared_memory import SharedMemory
 from typing import Any, Callable, Literal, Optional
 
 from core.authored_clock import authored_now
+from core.performance.frame_trace import FrameTraceEvent, logical_timestamp_ns
 from core.visualizer_engine import frame_codec
 from core.visualizer_engine.packet_abi import (
     FIRST_SEQUENCE,
@@ -100,12 +102,22 @@ class PacketMailbox(LatestStateMailbox):
 
     ``role``: "both" (in-process loopback), "reader" (the main process: creates, owns and finally unlinks the
     mapping, takes frames) or "writer" (the engine worker: attaches to ``attach`` by name and publishes).
+
+    ``publish_stamps`` (writer side; native core P2 gate 3): stamp every slot's ``publish_ns`` with
+    ``time.perf_counter_ns()`` at publish (``packet_abi``: the clock every process shares). The engine worker's
+    configure turns it on only while the main process's ``--frame-trace`` is admitted (``traces_publications``);
+    otherwise the slot carries 0 and nothing reads a clock. Reader side, with ``--frame-trace`` admitted in this
+    process: every frame taken that carries a stamp is recorded as the trace's ``LOGICAL_PUBLISH`` at its publish time
+    (the in-process mailbox records it at publish; across processes the main side sees a frame first when it takes it).
     """
 
     def __init__(self, *, slot_bytes: int = DEFAULT_SLOT_BYTES, generation: int = 0, engine_generation: int = 0,
                  activation_id: int = 0, mode_code: int = 0, role: Literal["both", "reader", "writer"] = "both",
-                 attach: str | None = None, wake_sender: Any = None) -> None:
+                 attach: str | None = None, wake_sender: Any = None, publish_stamps: bool = False) -> None:
         super().__init__()
+        self._publish_stamps = bool(publish_stamps)
+        self._peeked_publish_ns = 0                  # reader side: the peeked frame's publish stamp (0: none) ...
+        self._peeked_logical = 0.0                   # ... and its logical timestamp (the slot head's)
         # Across processes the GUI wake is one byte down a pipe per publish (the writer's side of
         # ``multiprocessing.Pipe``); the reader's ``listen_for_wakes`` turns it back into the wake callback, and the
         # owner's emitter coalesces repeats (``quick_presentation_sync``).
@@ -163,6 +175,7 @@ class PacketMailbox(LatestStateMailbox):
                 # The slot's own identity, under its seqlock (ABI 2): an in-place mode switch changes it.
                 runtime_generation=int(generation), engine_generation=int(getattr(state, "engine_generation", -1)),
                 activation_id=int(activation_id), mode_code=mode_code(getattr(state, "mode_id", None)),
+                publish_ns=time.perf_counter_ns() if self._publish_stamps else 0,
             )
             self._unread = (state, int(generation), int(activation_id), sequence)
             self._revision += 1
@@ -237,6 +250,8 @@ class PacketMailbox(LatestStateMailbox):
             activation_id=activation_id, produced_ts=produced,
         )
         self._peeked_sequence = packet.sequence
+        self._peeked_publish_ns = packet.publish_ns
+        self._peeked_logical = packet.logical_timestamp
         return self._peeked
 
     def _consume(self) -> LogicalPublication | None:
@@ -245,7 +260,21 @@ class PacketMailbox(LatestStateMailbox):
             self._reader.acknowledge(self._peeked_sequence)
             self._peeked = None
             self._last_taken = publication
+            trace = self._frame_trace
+            if trace is not None and self._peeked_publish_ns:
+                # The frame's publish, at the writer's own stamp (the shared clock), recorded when this side first
+                # sees it: the trace's age chain (publish -> sync -> render -> swap) then reads as in process.
+                trace.record(FrameTraceEvent.LOGICAL_PUBLISH, screen_index=self._trace_screen_index,
+                             revision=publication.revision,
+                             logical_timestamp_ns=logical_timestamp_ns(self._peeked_logical),
+                             auxiliary=int(publication.generation), timestamp_ns=self._peeked_publish_ns)
         return publication
+
+    @property
+    def traces_publications(self) -> bool:
+        """Whether this process's ``--frame-trace`` is admitted (read once, at construction): the reader then wants
+        the writer's ``publish_stamps``."""
+        return self._frame_trace is not None
 
     def set_frame_completion(self, completion: Callable[[Any], Any] | None) -> None:
         """Reader side: ``completion(state)`` runs on every decoded frame and returns the frame presentation reads

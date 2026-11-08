@@ -56,6 +56,7 @@ slot[i] (slot_bytes each):
   u32 flags (changed, present_frame, mode_reveal_ready, playing)
   u32 protected_edge_mask   (coalesced edge kinds since the last sync consume)
   u32 runtime_generation   u32 engine_generation   u32 activation_id   u32 mode_code   (ABI 2: the slot's identity)
+  u64 publish_ns   (at 56, appended to ABI 2: the writer's perf_counter_ns at publish; 0 = not stamped)
   payload ...  (at 64: fixed-width fields, then float32/u8 blocks at 16-byte alignment)
   u64 sequence_end     (equal to sequence_begin when the slot is whole)
 ```
@@ -66,6 +67,14 @@ in its head (covered by the slot's seqlock; payload moved from 48 to 64) and a n
 accepts without Python. The header's identity fields are the configure-time identity (written once by the session
 before any frame) and never decide a slot. `mode_code` is `packet_abi.MODE_CODES` (append-only, 0 = none). The
 writer fills `flags` and `source_timestamp` from the publication on every publish.
+
+**Publish time (gate 3 preparation, 8 Nov):** slot bytes 56-63, the zero padding before the payload until then, carry
+`publish_ns`, the writer's `time.perf_counter_ns()` at publish, under the slot's seqlock. An append into reserved
+bytes: no field moved, the payload stays at 64, 0 (what `initialise` leaves) means "not stamped", so the version stays
+2. `perf_counter` is QueryPerformanceCounter on Windows, system-wide with no per-process origin, so the worker's stamp
+is on the main process's own trace clock. The worker stamps only while the main process's `--frame-trace` is admitted
+(the configure's `publish_stamps`); the main side then records the trace's `LOGICAL_PUBLISH` for each frame it takes,
+at the worker's publish time (`PacketMailbox`). Nothing is stamped or recorded at rest.
 
 - **Writer (worker):** picks the slot that is neither the newest nor being read, bumps `sequence_begin` to odd,
   writes, sets `sequence_end`, publishes `latest_sequence`. Never blocks on the reader.
