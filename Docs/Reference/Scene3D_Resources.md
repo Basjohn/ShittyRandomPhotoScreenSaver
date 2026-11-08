@@ -58,6 +58,37 @@ one `glBindTextures` call. There is no texture-binding cache: Qt may have change
 Frame admission already requires positive source/destination names; the binding helper never fills gaps with zero
 names, which would unbind all texture targets on that unit. Program retirement also retires sampler initialization.
 
+## Program links and the program binary cache
+
+Every custom GL program (Visualizer modes, transitions, scene3d passes, the background and backdrop nodes, the
+Visualizer clip; `BaseGLProgram.create_program` too) is linked by one function, `rendering/quick/render/gl_resources.py`
+`_link`, reached through `compile_program` / `compile_compute_program`; no other production module calls
+`glLinkProgram` (`tests/test_gl_program_cache.py` holds that). It links on the caller's render thread, in the frame or
+warm-up step that needs the program, as before.
+
+`_link` first asks the app-owned program binary cache (`rendering/quick/render/gl_program_cache.py`), because the
+driver's own shader cache is per executable path and every onefile build is a new path (R-180: Neon Lake's basin is one
+5-7 s cold `glLinkProgram` that holds every display):
+
+- **Key:** SHA-256 of the store's schema, the context's `GL_VENDOR` / `GL_RENDERER` / `GL_VERSION` strings, its
+  `GL_PROGRAM_BINARY_FORMATS`, and every stage's type and source in link order. A shader edit, a driver update or
+  another GPU is a clean miss; labels are not part of it.
+- **Location:** `<LOCALAPPDATA>/SRPSS/gl_program_cache/<key>.bin` via `core.platform_paths.user_local_root()`
+  (`$XDG_STATE_HOME` on Linux): outside the onefile extraction folder, shared by Standard, Media Center and source
+  runs (the key carries everything that decides validity). No local root: the store is off and links behave as before.
+- **Hit:** the file's header (magic, schema, format, length, key, payload SHA-256) must check out and the format must be
+  one the driver lists, so `glProgramBinary` never raises a GL error that the node's per-frame drain would report;
+  the program is kept only when `GL_LINK_STATUS` is true. Neon Lake's basin: ~0.6 MB, loaded in ~30 ms.
+- **Miss:** the ordinary compile and link with `GL_PROGRAM_BINARY_RETRIEVABLE_HINT` set before linking, then
+  `glGetProgramBinary` and an atomic write (per-writer temporary, `os.replace`), so concurrent render threads or
+  processes never see a partial file. A damaged, foreign or driver-refused entry is a miss and is replaced; a failed
+  compile stores nothing; any I/O failure only skips the store.
+- **Bound:** after each write, least-recently-used entries (a hit refreshes the file time) are removed until the store
+  is within 64 MB (`MAX_CACHE_BYTES`; the whole app's programs are a few MB), with temporaries older than an hour.
+- **Diagnostics:** one INFO line per saved cold link (`[GL_PROGRAM_CACHE] <label> linked cold in N ms, saved K KB
+  (hits=h misses=m)`); a hit is a DEBUG line. Nothing runs between links: no thread, timer or poll, and gradual
+  warm-up still compiles one program per spaced, already-rendered frame (a hit just makes that step short).
+
 Two-sampler warm passes remove five Python-to-GL calls. A bounded local measurement (32×32 offscreen context,
 7 batches of 4,000 warm `bind_frame` calls, sampler initialization excluded) measured 41.56 → 28.91 microseconds
 median per call. This measures only frame binding, not whole-transition FPS or loaded-desktop tails. Static DSA mesh

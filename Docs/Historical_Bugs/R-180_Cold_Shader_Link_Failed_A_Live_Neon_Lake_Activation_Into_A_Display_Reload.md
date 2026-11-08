@@ -1,6 +1,7 @@
 # R-180 | A cold driver link of Neon Lake's basin program held the GUI thread past the 6 s activation deadline, which reloaded every display for a target that was alive
 
-**Status:** the reload fixed 8 Nov 2026; the freeze itself remains (see "Left open"). The activation deadline now tells
+**Status:** the reload fixed 8 Nov 2026; the freeze itself fixed the same day after the first link on a machine by
+the app-owned program binary cache (`8c4bec4d`, see "Follow-up: the freeze"). The activation deadline now tells
 a slow-but-alive target from a silent one by the render thread's preparation progress for the committed target
 (`QuickVisualizerRenderHost.preparation_progress`, read through the item), extending at most
 `_SLOW_TARGET_DEADLINE_EXTENSIONS` (4) times; the prepared reveal's 1.5 s bound now runs from the last completed
@@ -68,12 +69,34 @@ After the fix, the same cold runs: the Neon Lake switch completed in 8.5 s on th
 completed in 4.5 / 4.2 s (worker) and 4.5 / 3.9 s (in process). Warm: 1.55 / 1.85 / 1.77 s (worker) and 1.56 / 1.94 /
 1.78 s (in process), no extension.
 
-## Left open
+## Follow-up: the freeze
 
-The GUI freeze of a cold link (about 6 s for Neon Lake, once per build per machine) is still there: compiling on a
-driver thread or a shared context is excluded by the warm-up rules, and a dynamic-count loop for the glass taps did
-not shorten the link (5.7 s; removing the four extra taps outright: 3.4 s). Current_Plan carries the follow-up (an
-app-owned program binary cache keyed by source and driver, or a smaller basin program).
+The GUI freeze of a cold link (about 6 s for Neon Lake, once per build per machine) outlived the deadline fix:
+compiling on a driver thread or a shared context is excluded by the warm-up rules, and a dynamic-count loop for the
+glass taps did not shorten the link (5.7 s; removing the four extra taps outright: 3.4 s).
+
+Fixed by `8c4bec4d`: the one program link owner (`rendering/quick/render/gl_resources.py` `_link`, every Visualizer,
+transition and scene3d program) keeps an app-owned program binary cache (`gl_program_cache.py`) in
+`<LOCALAPPDATA>/SRPSS/gl_program_cache/`, outside any onefile folder and shared by Standard, Media Center and source
+runs. It is keyed by every stage's source and the GL vendor/renderer/version strings and binary formats, so a new
+build of the same shaders loads the binary (`glProgramBinary`, kept only on `GL_LINK_STATUS`) instead of linking;
+a shader edit, a driver update or a damaged entry is an ordinary cold link that saves a new binary. Details:
+`Docs/Reference/Scene3D_Resources.md` "Program links and the program binary cache".
+
+Measured 8 Nov with the R-180 reproduction changed so that it separates the two caches: the cache key carried a fixed
+measurement tag (the same across runs) and every compiled source a per-process random comment (so any compile was a
+cold driver link whatever NVIDIA's own cache held); both temporary, never committed. `visualizer_live_check.py --mode
+extruded_spectrum --mode-switch 20 --load none`, in process:
+
+| run | Neon Lake basin | switch completed | GlobalClockTicker gap | event loop late max | deadline |
+| --- | --- | --- | --- | --- | --- |
+| cold (empty cache) | linked in 6963 ms, saved 608 KB | 9253 ms | 7608 ms | 6963 ms | `slow but alive` (1/4) |
+| hit (next process) | loaded in 33 ms | 1636 ms | none | 187 ms | no extension |
+
+The hit run loaded all 18 programs it had seen before in 0.7-33 ms each (the sky 7.6 ms, was 440 ms cold) and linked
+cold only the one transition program the first run had not used. The first link of each program on a machine (and
+after a driver update or a shader edit) still pays the full cost once. Evidence:
+`.artifacts/evidence/architecture/gl_program_cache/20261108_cold/` and `20261108_hit/`.
 
 ## Why it hid
 

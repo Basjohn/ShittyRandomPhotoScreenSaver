@@ -778,6 +778,14 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   counted from the last completed preparation unit); R-180: the render host counts each unit and first draw per
   activation, and a slow-but-alive target extends the 6 s activation deadline (bounded, never for an uncommitted
   worker target) instead of reloading the displays (negative control: the same live target is failed);
+- `tests/test_gl_program_cache.py` — R-180's follow-up, the program binary cache behind the one link owner
+  (`gl_resources._link`), on a real offscreen context: a miss compiles, links and saves once (one INFO line); a hit
+  loads with no compile or link and draws the same pixel (negative control: with the store disabled the same case
+  compiles twice); a source edit and a driver-string change miss; a truncated, flipped, foreign-key or driver-refused
+  entry falls back to the compile and is replaced, and the next link hits; a failed compile stores nothing; the size
+  bound prunes least-recently-used entries and stale temporaries; the key covers every stage and driver field; the
+  store lives under the per-user local root and is off without one; no production module calls `glLinkProgram`
+  outside the owner;
 - `tests/test_visualizer_view_orbit.py`, `tests/test_visualizer_direct_gestures.py` — W/A/S/D and Alt + left orbit;
   Alt + right move and Alt + wheel resize outside Edit through Edit's own session, one commit at the gesture's end;
 - `tests/test_visualizer_geometry_profiles.py`, `tests/test_visualizer_custom_geometry_profiles.py` — independent descriptor
