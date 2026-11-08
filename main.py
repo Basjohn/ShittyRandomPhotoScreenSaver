@@ -3,6 +3,9 @@ ShittyRandomPhotoScreenSaver - Main Entry Point
 
 Windows screensaver application that displays photos with transitions.
 """
+# Annotations stay unevaluated: a worker process skips the application imports they name (below).
+from __future__ import annotations
+
 import sys
 import os
 import shutil
@@ -24,51 +27,59 @@ from core.native_threads import configure_native_thread_pools
 
 configure_native_thread_pools()
 
-# Before anything imports OpenGL.GL: GL errors are checked once per rendered frame, not after
-# every GL call (rendering/gl_error_policy.py: 45-60% of render-thread CPU).
-from rendering.gl_error_policy import disable_per_call_gl_error_checking
+# Everything below is the application's own: a worker process (an image worker, the Visualizer's engine worker)
+# re-executes this module level before its target (``__mp_main__`` from source, ``__parents_main__`` in a Nuitka
+# build) and needs none of it. Skipped there, each spawn no longer loads the Qt GUI, Quick and Widgets stack, the
+# engine and Settings (checkpoint audit 10, A10-M1: ~1.3 s and ~80 MB per worker); its environment, the Quick
+# bootstrap's variables included, is inherited from this process. In this process the order is unchanged.
+from core.spawn_child import importing_parents_main
 
-disable_per_call_gl_error_checking()
+if not importing_parents_main(__name__):
+    # Before anything imports OpenGL.GL: GL errors are checked once per rendered frame, not after
+    # every GL call (rendering/gl_error_policy.py: 45-60% of render-thread CPU).
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
 
-from rendering.quick.bootstrap import (
-    configure_quick_environment,
-    configure_quick_graphics,
-)
+    disable_per_call_gl_error_checking()
 
-# The render loop and QML import root must be fixed before importing Qt.
-configure_quick_environment()
+    from rendering.quick.bootstrap import (
+        configure_quick_environment,
+        configure_quick_graphics,
+    )
 
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QEvent, Qt, QTimer
-from PySide6.QtGui import QImageReader, QIcon
-from core.logging.logger import (
-    clear_logs_for_fresh_start,
-    flush_and_close_logging,
-    flush_logging,
-    setup_logging,
-    set_forced_log_dir,
-    get_logger,
-    get_log_dir,
-    is_perf_metrics_enabled,
-    resolve_logging_bootstrap_profile,
-)
-from core.build_profile import (
-    activate_diagnostic_build,
-    get_build_flavour,
-    is_compiled_runtime,
-    is_diagnostic_build,
-)
-from core.source_head import log_source_head
-from core.settings.settings_manager import SettingsManager
-from core.settings.persistence import (
-    flush_and_close_settings_persistence,
-    terminal_settings_durability_state,
-)
-from core.animation import AnimationManager
-from engine.screensaver_engine import ScreensaverEngine
-from versioning import APP_VERSION, APP_EXE_NAME
+    # The render loop and QML import root must be fixed before importing Qt.
+    configure_quick_environment()
 
-logger = get_logger(__name__)
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QEvent, Qt, QTimer
+    from PySide6.QtGui import QImageReader, QIcon
+    from core.logging.logger import (
+        clear_logs_for_fresh_start,
+        flush_and_close_logging,
+        flush_logging,
+        setup_logging,
+        set_forced_log_dir,
+        get_logger,
+        get_log_dir,
+        is_perf_metrics_enabled,
+        resolve_logging_bootstrap_profile,
+    )
+    from core.build_profile import (
+        activate_diagnostic_build,
+        get_build_flavour,
+        is_compiled_runtime,
+        is_diagnostic_build,
+    )
+    from core.source_head import log_source_head
+    from core.settings.settings_manager import SettingsManager
+    from core.settings.persistence import (
+        flush_and_close_settings_persistence,
+        terminal_settings_durability_state,
+    )
+    from core.animation import AnimationManager
+    from engine.screensaver_engine import ScreensaverEngine
+    from versioning import APP_VERSION, APP_EXE_NAME
+
+    logger = get_logger(__name__)
 
 
 def _settings_dialog_class():

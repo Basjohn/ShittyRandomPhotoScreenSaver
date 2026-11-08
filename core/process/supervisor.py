@@ -499,14 +499,7 @@ class ProcessSupervisor:
             True if worker restarted successfully
         """
         if judged is not None:
-            with self._lock:
-                replaced = self._workers.get(worker_type) is not judged
-            if replaced:
-                logger.info(
-                    "Skipping the %s worker restart: the judged process was already replaced",
-                    worker_type.value,
-                )
-                return self.is_running(worker_type)
+            return self._restart_judged(worker_type, judged)
         with self._lock:
             health = self._health[worker_type]
             
@@ -530,14 +523,51 @@ class ProcessSupervisor:
             )
         
         # Stop then start (outside lock to avoid deadlock)
-        if judged is None:
-            self.stop(worker_type)
-        elif not self._stop_if_current(worker_type, judged, 5.0):
-            return self.is_running(worker_type)
+        self.stop(worker_type)
 
         # Apply backoff delay
         time.sleep(backoff_ms / 1000.0)
-        
+
+        return self.start(worker_type)
+
+    def _restart_judged(self, worker_type: WorkerType, judged: Any) -> bool:
+        """The heartbeat's restart of the process it judged dead or hung (the image roles; slice 5.7's fence).
+
+        The identity check, the restart budget and the stop happen under the role's lifecycle lock, so a start cannot
+        land in between: a role already replaced (a foreground start won the race) is left alone and the skip is not
+        charged against ``MAX_RESTARTS_PER_WINDOW``, since it restarted nothing (checkpoint audit 10, A10-L3; until
+        then the check ran unlocked and ``record_restart`` came before the fenced stop). The backoff and the start
+        follow outside the lock, as an unfenced restart's do."""
+        with self._lifecycle_locks[worker_type]:
+            with self._lock:
+                replaced = self._workers.get(worker_type) is not judged
+                if not replaced:
+                    health = self._health[worker_type]
+                    if not health.should_restart():
+                        logger.warning(
+                            "Cannot restart %s worker: restart limit exceeded",
+                            worker_type.value,
+                        )
+                        return False
+                    health.state = WorkerState.RESTARTING
+                    health.record_restart()
+                    backoff_ms = health.get_restart_backoff_ms()
+                    logger.info(
+                        "Restarting %s worker after %dms backoff (attempt %d)",
+                        worker_type.value,
+                        backoff_ms,
+                        health.restart_count,
+                    )
+            if not replaced:
+                self._stop_response_listener(worker_type, reason="worker_stopping")
+                self._stop_role(worker_type, 5.0)
+        if replaced:
+            logger.info(
+                "Skipping the %s worker restart: the judged process was already replaced (not counted)",
+                worker_type.value,
+            )
+            return self.is_running(worker_type)
+        time.sleep(backoff_ms / 1000.0)
         return self.start(worker_type)
     
     def send_message(

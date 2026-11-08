@@ -14,10 +14,15 @@ from __future__ import annotations
 
 import sys
 from main import main as core_main, parse_screensaver_args
-from core.settings.settings_manager import SettingsManager
-from core.logging.logger import get_logger
+from core.spawn_child import importing_parents_main
 
-logger = get_logger(__name__)
+# A worker process of the MC build re-executes this module first (``__parents_main__``): it needs none of the
+# application's imports (checkpoint audit 10, A10-M1; ``main.py`` skips its own the same way).
+if not importing_parents_main(__name__):
+    from core.settings.settings_manager import SettingsManager
+    from core.logging.logger import get_logger
+
+    logger = get_logger(__name__)
 
 
 def _inject_run_mode_arg() -> None:

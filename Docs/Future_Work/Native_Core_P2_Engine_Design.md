@@ -1073,8 +1073,10 @@ switch never remaps.
        `custom_edit`, `monitor_topology`) until `_construct_and_start_replacement_runtime` has built the replacement
        (its owner leases the running worker synchronously inside `initialize_displays`); a replacement with no owner on
        the worker ends the hold and retires it. Settings holds nothing: its dialog can stay open for minutes with no
-       Visualizer, so the worker is retired with its owner and respawned at the close (about 1.5 s off the GUI thread,
-       measured below; the first configure's deadline bounds it). Why this policy: it is event-driven (no idle timer),
+       Visualizer, so the worker is retired with its owner and respawned at the close, off the GUI thread (spawn
+       to ready: 0.29 s from the production entry since checkpoint audit 10's A10-M1, 1.6 s before it; the Visualizer
+       shows after that, the configure, the session's build, its first presentable frame and its fade; the first
+       configure's deadline bounds it). Why this policy: it is event-driven (no idle timer),
        it never thrashes on the frequent edges (mode/preset changes are in-session; a recovery swaps links within a
        turn; reloads are held) and it leaves no worker where no Visualizer runs. The retirement is fenced: the task
        re-checks under the lifetime lock that no lease or hold arrived and marks the role retiring; a link that
@@ -1088,7 +1090,10 @@ switch never remaps.
        a core, ~570 context switches/s; parked 0-15.6 ms of CPU over 10 s (one psutil tick), ~10.6 switches/s, which is
        the idle worker's own: `BaseWorker`'s 100 ms request-queue wait (its parent-death watch, shared with the image
        workers, left as is). 33 threads while a session exists, 29 after it (numpy's and the runtime's pools), flat
-       over three more sessions.
+       over three more sessions. These figures are from a bare entry (no `main.py` module level, no
+       `configure_native_thread_pools` of its own); until A10-M1 the production entry's worker was a different process
+       (112 MB RSS idle, the Qt GUI stack loaded), since then it is the same as the bare one at ready (32 MB). The
+       production worker inside a session (RSS, threads with `OPENBLAS_NUM_THREADS=1`) is not measured here.
      - *Diagnostics:* `ProcessSupervisor.get_visualizer_worker_usage_snapshot()` names the worker's PID from supervisor
        state (no OS query); `main.py`'s `--usage` resource provider adds it, and the sampler logs
        `visualizer_worker_pid`, `_cpu_pct`, `_rss_mb` and `_threads` from its own per-process pass (the values it
@@ -1111,7 +1116,10 @@ switch never remaps.
        alone; the image roles keep their restart, now fenced the same way (`restart(..., judged=process)`).
      - *Session (3c, A6-M3's open half): a session whose steps keep failing fails closed.* `EngineSession
        .FAILED_STEPS_BEFORE_CLOSE = 60` consecutive failed steps (a count: about 0.67 s at 90 Hz; a successful step
-       resets it; a transient failure stays the runtime's retry, as in process): the session records why, requests a
+       resets it; a shorter run of failures stays the runtime's retry, as in process. A longer one, which in process
+       recovers silently, is a visible recovery here: fade out, reconfigure, fade in. Corrected by checkpoint audit 10,
+       A10-L4, which also stopped it counting toward the owner's two strikes for life: a recovery whose reveal
+       completes starts the count again): the session records why, requests a
        park from inside its own step (`VisualizerLogicalRuntime.request_park`, the non-waiting half of `park`) and closes
        its wake sender, so the owner's listener sees the session's end (the existing recovery: hold, fade, reconfigure
        once); a later edge closes it and replies `session_closed`, and `VIS_STOP`'s report carries `failed`.
@@ -1129,9 +1137,25 @@ switch never remaps.
        target's loop, ready in 1.45 s). **Found:** that child executes `main.py`'s whole module level first, so the
        production worker process loads QtGui, QtWidgets, QtQuick, QtQml, QtNetwork and QtOpenGL (and the engine's import
        graph) before its target, frozen or not, as the image workers do: the "QtCore only" property holds for the
-       worker's own imports, not for its process. **Operator check:** a frozen build with `--viz-engine-worker` (the
-       Visualizer on the worker, its frames shown) and the cold spawn's time to the first configure's reply against
-       the 6 s bound (audit 9, A9-L2), plus the worker's RSS in `--usage`.
+       worker's own imports, not for its process. **Fixed (checkpoint audit 10, A10-M1):** `main.py` and
+       `main_mc.py` skip their application imports while a worker re-executes them
+       (`core.spawn_child.importing_parents_main`: the spawn name `__mp_main__` / `__parents_main__`, a frozen
+       `__parents_main__` being imported, or multiprocessing's own inheriting marker; stdlib only); the parent runs the
+       same module-level statements in the same order. From the production entry, three runs each (evidence
+       `.artifacts/evidence/architecture/native_core_p2/20261108_audit10_spawn_cost/`, probe scripts kept there):
+
+       | Worker, parent | Ready | RSS | USS | Private | Qt in the child |
+       |---|---|---|---|---|---|
+       | engine, `main.py` before | 1.62 s | 112 MB | 83 MB | 91 MB | 7 PySide6 modules, 10 Qt6 DLLs |
+       | engine, `main.py` after | 0.29 s | 32 MB | 19 MB | 22 MB | none |
+       | image, `main.py` before | 1.56 s | 112 MB | 83 MB | 92 MB | 10 Qt6 DLLs |
+       | image, `main.py` after | 0.29 s | 32 MB | 19 MB | 22 MB | none |
+       | engine / image, bare parent (reference) | 0.30 / 0.29 s | 31 MB | 18 MB | 21 MB | none |
+
+       The `main_mc.py` parent measures the same as `main.py` after the fix. Medians of three; the ranges are within
+       0.06 s and 1 MB except the first engine run before the fix (1.73 s). **Operator check:** a frozen build with
+       `--viz-engine-worker` (the Visualizer on the worker, its frames shown) and the cold spawn's time to the first
+       configure's reply against the 6 s bound (audit 9, A9-L2), plus the worker's RSS in `--usage`.
      - *Audit 9:* A9-L1, the first configure's deadline is inert once `retire()` began (`_retiring`, set first: a retire
        whose logical join failed returns before `_retired`). A9-L2, the spawn task belongs to its link: it stops nothing
        (the link no longer stops the role), starts nothing once its link closed, and a worker it started for a link that
@@ -1145,6 +1169,29 @@ switch never remaps.
        roles (both only act on a dead or replaced process), `retire()` setting `_retiring`, the `--usage` line's four
        new fields (`na` at rest) and the build families compiling `core.visualizer_engine`. The production-path frame
        test and the owner contract suites pass unchanged.
+     - *Checkpoint audit 10 (8 Nov), fixed:* A10-M1, every worker role skips `main.py`'s (and `main_mc.py`'s)
+       application imports (the frozen-spawn record above). A10-L1, a lease is released on every exit path: the link's
+       `close()` takes it out first and releases it in a `finally`; the owner's `retire()` retires the link (its
+       `VIS_STOP` sent, never awaited) and releases the frame completion before the logical join. A10-L2, under
+       `--usage` a named PID the topology refresh cannot find (a dead worker still registered) forces one refresh, not
+       one per sample, and a process the sample's own refresh added reports `na` CPU and stays out of `cpu_app_pct`.
+       A10-L3, the heartbeat's restart of an image worker checks the judged process's identity, charges the restart
+       budget and stops it under the role's lifecycle lock (`_restart_judged`): a role replaced meanwhile is left alone
+       and the skip costs no restart. A10-L4, a recovery whose replacement completes its reveal on the worker resets
+       the owner's failure count: the second strike is a failure before a recovery completed, not any second failure
+       in the owner's life (smallest correct fix: one reset at an existing event; not counting a step-failure
+       fail-close would need the reason sent over the pipe and would loop a deterministic step failure until the
+       recovery deadline). A recovery that never reveals still falls back at its deadline (counted). A10-L5 (test only):
+       an engine-level CUSTOM reload hands the held worker to the replacement's owner. Audit 9 correction: the engine's
+       IO pool has four workers (`ThreadManager`'s default), not two (A9-L2's premise; `create_helper_manager` defaults
+       to two).
+     - *Audit 10, with `--viz-engine-worker` off:* the startup import order is unchanged in the parent (one stdlib
+       module, `core.spawn_child`, is imported before the GL error policy); every worker process (the image workers)
+       no longer runs the application's imports, from source or frozen. The owner's `retire()` order change touches
+       nothing in process (no link, no frame completion: two no-ops move before the join), and the strike reset never
+       runs (no worker). Under `--usage` only: one refresh per unseen named PID (none is named at rest) and a newly
+       added child's first CPU reads `na` (an image worker's first sample). The supervisor's heartbeat restart of an
+       image worker charges a restart only when it restarts.
      - *Tests:* `tests/test_visualizer_engine_worker_lifetime.py`, `tests/test_visualizer_engine_frozen_spawn.py`,
        `tests/test_usage_sampler.py` (two new), `tests/test_frozen_build_audit.py`,
        `tests/test_build_closeout_contract.py` (TestSuite lists each, with its negative control).
@@ -1155,10 +1202,10 @@ switch never remaps.
        `test_process_supervisor.py`, `_availability`, `test_usage_sampler.py`, `test_worker_parent_death.py`,
        `test_optional_worker_startup.py`, the build/frozen-audit/layout suites and the engine replacement suites
        (Settings round trips, display selection, replacement hang window, S hotkey, no display shown).
-     - **Left for step 6 / gate 3:** gate 3's game60 run (lead, operator's yes); the operator's frozen check above;
-       the production worker's `main.py` import graph (a worker entry that skips `main.py`'s module level would bring
-       its process back to QtCore only and cut its spawn time and RSS; it touches every worker role, so it is its own
-       change); 5.3's rest (device changes); the reply handlers outside the one-frame gate (the configure's reply,
+     - **Left for step 6 / gate 3:** gate 3's game60 run (lead, operator's yes); the operator's frozen check above
+       (now also confirming the frozen worker loads no Qt GUI stack: A10-M1 is proven on the source spawn path and
+       on the entry module run as `__parents_main__`, not on a build); the production worker's RSS and threads inside
+       a session; 5.3's rest (device changes); the reply handlers outside the one-frame gate (the configure's reply,
        161-209 ms); the render-thread decode and completion cost with a real window; gate 4's 20 Settings open/close
        and 20 mode switches with no process, mapping or handle growth (the lifetime now retires the worker at each
        Settings open; to measure); `BaseWorker`'s 100 ms queue wait (10 wakes/s in an idle or parked worker, every

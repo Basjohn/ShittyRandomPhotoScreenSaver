@@ -117,6 +117,11 @@ class ProcessUsageCollector:
         # Visualizer's engine worker).
         self._threads_by_pid: dict[int, int] = {}
         self.last_process_breakdown: dict[int, dict[str, float | int | None]] = {}
+        # Named PIDs that already forced a topology refresh (``expect_pids``), kept only while they are still named; and
+        # the processes the current sample's refresh added, whose first CPU read covers no interval (checkpoint audit
+        # 10, A10-L2).
+        self._refreshed_for_pids: set[int] = set()
+        self._primed_this_sample: set[int] = set()
         self.last_sample_was_heavy = False
         self.last_topology_source = "uninitialized"
         self._topology_fallback_logged = False
@@ -155,14 +160,19 @@ class ProcessUsageCollector:
         """Named children the next sample must see (slice 5.7: the engine worker's PID from its supervisor): one not
         yet in the cached tree makes the next sample a topology refresh, so a child spawned between the slow refreshes
         is measured from the next sample instead of up to ``heavy_refresh_samples`` later. Nothing changes while every
-        named child is known (at rest: none is named)."""
-        for pid in pids:
-            if pid is None:
-                continue
-            value = int(pid)
-            if value > 0 and value not in self._processes and value not in self._excluded_pids:
-                self._samples_since_heavy = self._heavy_refresh_samples
-                return
+        named child is known (at rest: none is named, and an empty call only forgets).
+
+        Once per distinct PID (checkpoint audit 10, A10-L2): a named PID the refresh did not find (a worker that died
+        while its supervisor still names it, until the heartbeat reaps it) is not refreshed for again on every sample
+        (each refresh ~10 ms of mostly GIL-held enumeration); it is measured if a later slow refresh finds it. A PID
+        no longer named is forgotten, so a later worker that reuses it is refreshed for."""
+        named = {int(pid) for pid in pids if pid is not None and int(pid) > 0}
+        self._refreshed_for_pids &= named
+        unseen = {pid for pid in named
+                  if pid not in self._processes and pid not in self._excluded_pids and pid not in self._refreshed_for_pids}
+        if unseen:
+            self._refreshed_for_pids |= unseen
+            self._samples_since_heavy = self._heavy_refresh_samples
 
     @staticmethod
     def _log_topology_change(change: str, process: psutil.Process, threads: int | None) -> None:
@@ -217,6 +227,7 @@ class ProcessUsageCollector:
                             continue
                         self._processes[pid] = cached
                         self._prime_cpu(cached)
+                        self._primed_this_sample.add(pid)
                         self._log_topology_change("added", cached, discovered.get(pid, 0))
                     live.append(cached)
                     live_pids.add(pid)
@@ -255,6 +266,7 @@ class ProcessUsageCollector:
                 cached = child
                 self._processes[child.pid] = cached
                 self._prime_cpu(cached)
+                self._primed_this_sample.add(child.pid)
             live.append(cached)
             live_pids.add(child.pid)
 
@@ -272,6 +284,7 @@ class ProcessUsageCollector:
         self._samples_since_heavy += 1
         heavy_sample = self._samples_since_heavy >= self._heavy_refresh_samples
         topology_threads: int | None = None
+        self._primed_this_sample.clear()
         if heavy_sample:
             self._samples_since_heavy = 0
             processes, topology_threads, topology_source = self._refresh_topology()
@@ -306,13 +319,18 @@ class ProcessUsageCollector:
 
         for process in processes:
             try:
-                cpu = max(0.0, float(process.cpu_percent(interval=None)))
+                cpu: float | None = max(0.0, float(process.cpu_percent(interval=None)))
                 memory = process.memory_info()
                 live_pids.append(process.pid)
             except (psutil.Error, OSError):
                 continue
 
-            app_cpu += cpu
+            if process.pid in self._primed_this_sample:
+                # Primed by this sample's own refresh: its read covers microseconds, not the cadence, so it is no
+                # measurement (``na`` in the labelled breakdown, left out of the app's total; A10-L2).
+                cpu = None
+            else:
+                app_cpu += cpu
             rss = int(getattr(memory, "rss", 0) or 0)
             breakdown[process.pid] = {"cpu_pct": cpu, "rss_mb": _mb(rss)}
             rss_app += rss
@@ -643,6 +661,7 @@ class UsageTelemetryService:
         self._skipped_samples = 0
         self._sequence = 0
         self._latest_lifecycle_snapshot: dict[str, Any] | None = None
+        self._worker_pid_named = False      # the last sample named the engine worker's PID (A10-L2)
 
     def get_latest_lifecycle_snapshot(self) -> dict[str, Any]:
         """Return the latest worker-collected totals without collecting again."""
@@ -816,8 +835,10 @@ class UsageTelemetryService:
             resources = self._resource_snapshot()
             visualizer_pid = resources.get("visualizer_worker_pid")
             expect_pids = getattr(self._process_collector, "expect_pids", None)
-            if visualizer_pid is not None and callable(expect_pids):
-                expect_pids((visualizer_pid,))
+            if callable(expect_pids) and (visualizer_pid is not None or self._worker_pid_named):
+                # Named: refresh once for it if unseen. The sample after it is no longer named forgets it (once).
+                expect_pids(() if visualizer_pid is None else (visualizer_pid,))
+            self._worker_pid_named = visualizer_pid is not None
             process = self._process_collector.collect()
             gpu = self._gpu_collector.collect(process.pids)
             threads = self._thread_snapshot()

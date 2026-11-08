@@ -1323,6 +1323,15 @@ class QuickDisplayVisualizerOwner:
                 self._mode_transition_phase = "idle"
                 self._mode_transition_started_at = 0.0
                 self._mode_transition_fade = 1.0
+                if self._recovery_stage and self._worker is not None and self._worker_failures:
+                    # An engine-worker recovery's replacement session is fully revealed (its first presentable frame
+                    # faded in): it proved itself, so the two-strike rule starts again (checkpoint audit 10, A10-L4). A
+                    # second strike is now a failure before a recovery completes; an isolated failure hours later (a
+                    # fail-closed run of failed steps during a device change, a crash) recovers again instead of
+                    # leaving the worker for the run. A recovery revealed after the fallback (stage 2) runs in process.
+                    logger.info("[SPOTIFY_VIS][ENGINE_WORKER] Recovery completed; the failure count starts again "
+                                "mode=%s", self._controller.mode_id)
+                    self._worker_failures = 0
                 self._recovery_stage = 0              # an engine-worker recovery's reveal completed
                 callback = None if pending is None else pending.get("on_complete")
                 if callable(callback):
@@ -2077,8 +2086,9 @@ class QuickDisplayVisualizerOwner:
         """A session failed (a failed reply, ``session_closed``, the session's end or worker death, a cancelled
         correlation: the supervisor's heartbeat restarted a hung worker). The last presented frame is held and fades
         out (never vanishes) while the replacement comes up: the first failure reconfigures the worker once, a second
-        keeps this owner in process for the run. Never waits on the worker (the old session's stop and the
-        replacement's configure are sent); bounded by the recovery deadline (``_on_recovery_deadline``)."""
+        before that recovery's reveal completed keeps this owner in process for the run (a completed reveal starts the
+        count again: A10-L4). Never waits on the worker (the old session's stop and the replacement's configure are
+        sent); bounded by the recovery deadline (``_on_recovery_deadline``)."""
         if self._retired or self._worker is None:
             return
         from widgets.spotify_visualizer import engine_worker_link as link_module
@@ -2399,15 +2409,18 @@ class QuickDisplayVisualizerOwner:
             self._presentation_runtime.scene_controller.set_visualizer_viewport_config_sink(None)
             self._presentation_runtime.scene_controller.set_presentation_image_listener(None)
             self._controller.presentation_state._backdrop = None
-        joined = bool(self._controller.stop_logical_runtime())
-        if not joined:
-            return False
         if self._worker is not None:
             link, self._worker = self._worker, None
             # The session's stop is sent, never awaited (it ends in the worker in order: capture and its mapping view
-            # released), then the reader closes and the main process unlinks the mapping.
+            # released), then the reader closes and the main process unlinks the mapping. Before the logical join
+            # (checkpoint audit 10, A10-L1): a join that fails or raises returns before the rest of the retirement, and
+            # the link's retire never waits, so the session's VIS_STOP and its lease's release never depend on it (an
+            # owner on the worker normally has no logical runtime to join; one in process has no link).
             link.retire()
-        self._release_frame_completion()
+        self._release_frame_completion()          # its reader is closed (or there was none): nothing in flight
+        joined = bool(self._controller.stop_logical_runtime())
+        if not joined:
+            return False
         if self._engine_acquired:
             release = getattr(self._controller.engine, "release", None)
             if callable(release):
