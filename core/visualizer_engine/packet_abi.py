@@ -149,6 +149,11 @@ class FramePacketWriter:
             self._edges.append((sequence, int(protected_edges)))
         return sequence
 
+    @property
+    def consumed_sequence(self) -> int:
+        """The newest sequence the reader has acknowledged (0: none yet)."""
+        return _U64.unpack_from(self._view, _CONSUMED_OFFSET)[0]
+
     def release(self) -> None:
         self._view.release()
 

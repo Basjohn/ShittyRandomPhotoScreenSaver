@@ -128,7 +128,14 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
    (torn-write detection, newest-state, edge survival across skipped frames, version refusal).
 2. Per-mode codecs with round-trip tests on every canonical frame (all seven mode frames).
 3. In-process loopback: the current logical thread publishes through the ABI and the owner reads it back (no worker
-   yet), proving the codecs and the reader on live code with identical replay digests.
+   yet), proving the codecs and the reader on live code with identical replay digests. **Done 8 Nov:**
+   `core/visualizer_engine/packet_mailbox.py` `PacketMailbox`, a drop-in for `LatestStateMailbox` (the controller's
+   `replace_logical_mailbox` seam) whose slot is the ABI's newest whole frame: frames are encoded with
+   (generation, activation, produced time) into the writer, read, decoded and acknowledged by the reader; protected
+   edges carry into the newest unread frame until acknowledged (`FramePacketWriter.consumed_sequence`); one wake per
+   empty -> populated edge. With it the production owner hands the renderer the identical frames for all modes on a
+   shipped clip (digests of the snapshots it publishes to the bridge; a 1 ns change to a decoded frame fails it).
+   Production still uses the in-process mailbox; the worker (4) takes the writer side out of the process.
 4. The worker (`WorkerType.VISUALIZER`): tick + mode runtimes behind the control channel, fed post-DSP inputs (P2a);
    identity gate on all recordings x all modes.
 5. Lifecycle: generation start/retire, park, crash fail-closed, frozen spawn check (operator), dormancy baseline.

@@ -132,7 +132,9 @@ after the operator's yes on a question card; agents never run load (invisible ch
      runtimes into one `WorkerType.VISUALIZER` per generation (capture and DSP stay until measured), frames cross a
      versioned C-readable seqlock triple buffer in shared memory that P3 reads directly. Landed: the packet ABI and
      the exact frame codec (work orders 1-2; every mode's production frames round-trip byte-identically; main-thread
-     decode at most ~.4 ms per frame). Next: the in-process loopback (3), then the worker (4).
+     decode at most ~.4 ms per frame) and the in-process loopback (3: `PacketMailbox`, the logical mailbox over the
+     ABI; the production owner delivers identical frames for every mode through it; the tick side imports QtCore
+     only). Next: the worker (4).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 
