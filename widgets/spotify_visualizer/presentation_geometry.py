@@ -101,6 +101,7 @@ def resolve_visualizer_presentation(
     shadow_offset: Sequence[object],
     shadow_spread: float,
     shadow_extensions: Sequence[object],
+    expanded_display: bool = False,
 ) -> ResolvedVisualizerPresentation:
     """Resolve one display-local, scale-committed visualizer presentation.
 
@@ -254,6 +255,7 @@ def resolve_visualizer_presentation(
         border_width=resolved_border,
         content_rotation_quarters=rotation_quarters,
         shell_style=style,
+        expanded_display=bool(expanded_display),
     )
 
 
@@ -315,6 +317,7 @@ def resize_visualizer_presentation(
         viewport_extent=target_extent,
         committed_outer_size=committed_outer_size,
         content_rotation_quarters=target_rotation,
+        expanded_display=baseline.expanded_display,
         scene_fade=baseline.scene_fade,
         content_fade=baseline.content_fade,
         border_width=float(style["authored_border_width"]),
@@ -433,6 +436,7 @@ def resolve_expanded_visualizer_presentation(
         # The inset display rect is the one stage authority: exact, never re-derived from extent x scale.
         committed_outer_size=(card_width, card_height),
         content_rotation_quarters=ordinary.content_rotation_quarters,
+        expanded_display=True,
         scene_fade=ordinary.scene_fade,
         content_fade=ordinary.content_fade,
         border_width=float(style["authored_border_width"]),

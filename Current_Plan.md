@@ -87,6 +87,12 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - Double-click cycling while expanded skips incapable enabled modes and stays expanded; an explicit selection of
      an incapable mode collapses.
    - Spectrum gains bars in proportion to the extra width (its own milestone after M2, with a fade at the edges).
+     Operator, 8 Nov: "20% more if fullscreen and horizontal". Landed (agent branch): the expanded, horizontal card
+     draws round(1.2 x) the authored bars (cap 64), resampled from the same logical frame by the renderer; the rule's
+     one owner is `widgets/spotify_visualizer/spectrum_display_bar_count.py`, read from the display-wide record
+     (`expanded_display`), so it switches at the fade-through's invisible midpoint. A quarter turn, the ordinary card
+     and Extruded Spectrum (not expansion-capable) keep the authored count. The width-ratio DSP recompute of plan 01
+     M2b stays open; it needs the hidden activation transaction (an engine bar-count change bumps its generation).
    - Operator, 7 Nov night: "Don't reach nearly close enough to the screen borders" and "Don't really hide/disable
      the widgets underneath". Landed 8 Nov (agent branch, lead-audited): the expanded card is inset only by its own
      chrome plus 2 px (14 logical px at 2560 x 1440 with canonical chrome, was 30) and draws the card's own shadow;
