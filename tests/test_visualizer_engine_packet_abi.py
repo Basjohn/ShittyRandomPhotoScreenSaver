@@ -199,3 +199,33 @@ def test_the_named_mapping_carries_frames_across_processes():
     finally:
         memory.close()
         memory.unlink()
+
+
+def test_each_slot_carries_its_own_identity_under_the_seqlock():
+    # ABI 2 (checkpoint audit 3, A3-M4): the frame's identity lives in its slot's head, so an in-place mode switch
+    # never relabels a slot a reader is validating; -1 ("none") is stored as 0xFFFFFFFF; plain struct reads it at 40.
+    buffer, writer, reader = fresh()
+    sequence = writer.publish(b'a', payload_schema=1, logical_timestamp=1., runtime_generation=11,
+                              engine_generation=-1, activation_id=4, mode_code=abi.MODE_CODES['sphere'])
+    packet = reader.read_latest()
+    assert (packet.runtime_generation, packet.engine_generation, packet.activation_id, packet.mode_code) == (
+        11, 0xFFFFFFFF, 4, abi.MODE_CODES['sphere'])
+    base = next(abi.HEADER_BYTES+slot*SLOT for slot in range(abi.SLOT_COUNT)
+                if struct.unpack_from('<Q', buffer, abi.HEADER_BYTES+slot*SLOT)[0] == sequence)
+    assert struct.unpack_from('<IIII', buffer, base+40) == (11, 0xFFFFFFFF, 4, abi.MODE_CODES['sphere'])
+    assert abi.SLOT_PAYLOAD_OFFSET % 16 == 0 and struct.calcsize('<QIIddIIIIII') <= abi.SLOT_PAYLOAD_OFFSET
+    # The header keeps the configure-time identity.
+    writer.write_identity(runtime_generation=11, engine_generation=2, activation_id=3, mode_code=5)
+    assert reader.read_identity() == (11, 2, 3, 5)
+
+
+def test_every_registered_mode_has_one_stable_header_code():
+    # A new mode fails here until it is given the next code (codes are append-only; 0 means none).
+    from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
+
+    modes = {d.mode_id for d in iter_all_visualizer_mode_descriptors()}
+    assert modes <= set(abi.MODE_CODES)
+    codes = list(abi.MODE_CODES.values())
+    assert len(set(codes)) == len(codes) and 0 not in codes and abi.mode_code(None) == 0
+    with pytest.raises(KeyError):
+        abi.mode_code('not_a_mode')

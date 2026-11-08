@@ -25,9 +25,14 @@ from core.authored_clock import authored_now
 from core.visualizer_engine import frame_codec
 from core.visualizer_engine.packet_abi import (
     FIRST_SEQUENCE,
+    FLAG_CHANGED,
+    FLAG_MODE_REVEAL_READY,
+    FLAG_PLAYING,
+    FLAG_PRESENT_FRAME,
     FramePacketReader,
     FramePacketWriter,
     create_frame_mapping,
+    mode_code,
 )
 from widgets.spotify_visualizer.logical_runtime import (
     LatestStateMailbox,
@@ -37,6 +42,16 @@ from widgets.spotify_visualizer.logical_runtime import (
 
 #: 1 MiB slots hold every mode's frame (Extruded Bubble's ~617 KiB is the largest; P2 design, measured 8 Nov).
 DEFAULT_SLOT_BYTES = 1 << 20
+
+
+def publication_flags(state: Any) -> int:
+    """The slot's ``flags``: the publication's changed / present / mode-reveal-ready / playing bits."""
+    flags = 0
+    for name, bit in (("changed", FLAG_CHANGED), ("present_frame", FLAG_PRESENT_FRAME),
+                      ("mode_reveal_ready", FLAG_MODE_REVEAL_READY), ("playing", FLAG_PLAYING)):
+        if getattr(state, name, False):
+            flags |= bit
+    return flags
 
 
 def protected_edge_mask(state: Any) -> int:
@@ -95,10 +110,16 @@ class PacketMailbox(LatestStateMailbox):
                     state = _coalesce_protected_state(previous[0], state)
             produced = float(now_ts if now_ts is not None else authored_now())
             payload = frame_codec.encode((int(generation), int(activation_id), produced, state))
+            source = getattr(state, "source_timestamp", None)
             sequence = self._writer.publish(
                 payload, payload_schema=frame_codec.CODEC_SCHEMA,
                 logical_timestamp=float(getattr(state, "logical_timestamp", 0.0) or 0.0),
+                source_timestamp=None if source is None else float(source),
+                flags=publication_flags(state),
                 protected_edges=protected_edge_mask(state),
+                # The slot's own identity, under its seqlock (ABI 2): an in-place mode switch changes it.
+                runtime_generation=int(generation), engine_generation=int(getattr(state, "engine_generation", -1)),
+                activation_id=int(activation_id), mode_code=mode_code(getattr(state, "mode_id", None)),
             )
             self._unread = (state, int(generation), int(activation_id), sequence)
             self._revision += 1
@@ -110,6 +131,14 @@ class PacketMailbox(LatestStateMailbox):
         if wake is not None:
             wake()
         return revision
+
+    def write_identity(self, *, runtime_generation: int, engine_generation: int, activation_id: int,
+                       mode: str | None) -> None:
+        """Writer side: the header's configure-time identity (a session's configure, before any frame). Each slot
+        carries its own frame's identity; the header is not updated in place."""
+        with self._lock:
+            self._writer.write_identity(runtime_generation=runtime_generation, engine_generation=engine_generation,
+                                        activation_id=activation_id, mode_code=mode_code(mode))
 
     def _send_wake(self) -> None:
         try:

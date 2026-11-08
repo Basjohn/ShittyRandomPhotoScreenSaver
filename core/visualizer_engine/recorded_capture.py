@@ -76,16 +76,25 @@ class RecordedCaptureBackend(AudioCaptureBackend):
                  on_started: Callable[["RecordedCaptureBackend"], None] | None = None) -> None:
         self._config = config or AudioCaptureConfig()
         self._rate = int(self._config.sample_rate)
-        # What a device negotiates: the configured block, or its own 10 ms period on Auto (0).
-        self._negotiated_block_size = int(self._config.block_size) or self._rate // 100
+        self._negotiate()
         self._callback: Callable[[Any], None] | None = None
         self._on_started = on_started
+        self.restarts = 0
+
+    def _negotiate(self) -> None:
+        # What a device reports when it opens: the configured block, 0 on Auto (PortAudio's unspecified size, as
+        # pyaudiowpatch and sounddevice report it; checkpoint audit 3, A3-L2). A restart re-negotiates (the capture
+        # lane sets the new block size on ``_config`` before ``restart``).
+        self._negotiated_block_size = int(self._config.block_size)
+        self._delivered_block_size = self._negotiated_block_size or self._rate // 100
 
     @property
     def block_size(self) -> int:
-        return self._negotiated_block_size
+        """The block each push delivers: the negotiated size, or a device's own 10 ms period on Auto."""
+        return self._delivered_block_size
 
     def start(self, callback: Callable[[Any], None]) -> bool:
+        self._negotiate()
         self._callback = callback
         self._note_capture_starting()
         if self._on_started is not None:
@@ -107,6 +116,7 @@ class RecordedCaptureBackend(AudioCaptureBackend):
 
     def restart(self) -> bool:
         callback = self._callback
+        self.restarts += 1        # how often the capture lane restarted this source (wake's stale path, block size)
         self.stop()
         return callback is not None and self.start(callback)
 
@@ -122,4 +132,31 @@ class RecordedCaptureBackend(AudioCaptureBackend):
         return 2
 
 
-__all__ = ["CaptureHistoryStream", "RecordedCaptureBackend", "appended_sample_count"]
+def synthesise_pause(frames: Any, *, at_s: float, pause_s: float, resume_frames: int = 2) -> tuple:
+    """``frames`` (a recording's ``FeatureFrame``s) with Media paused for ``pause_s`` once ``at_s`` seconds have
+    played, as the recorder would record it (P2b slice 2, the off-steady-state gate clips; audit H3).
+
+    The recorder records the engine's waveform history each tick, and a paused engine consumes no capture, so every
+    paused tick (``playing=False``, at the recording's own cadence) carries the last playing frame's history: no new
+    publication. Then ``resume_frames`` playing ticks still carry it (capture reopening or warming up: the next
+    publication lands after them), and the rest of the recording follows shifted by the inserted time (playback
+    continues where it paused). Only the live-engine fields matter here (timestamp, playing, capture history)."""
+    import dataclasses
+
+    frames = tuple(frames)
+    start = frames[0].timestamp_us
+    head = [frame for frame in frames if frame.timestamp_us - start < at_s * 1e6]
+    if not head or len(head) == len(frames):
+        raise ValueError("the pause must start inside the recording")
+    steps = np.diff([frame.timestamp_us for frame in frames])
+    step = int(np.median(steps))
+    last = head[-1]
+    paused = max(1, round(pause_s * 1e6 / step))
+    inserted = [dataclasses.replace(last, timestamp_us=last.timestamp_us + step * (k + 1), playing=k >= paused)
+                for k in range(paused + max(0, int(resume_frames)))]
+    shift = step * len(inserted)
+    tail = [dataclasses.replace(frame, timestamp_us=frame.timestamp_us + shift) for frame in frames[len(head):]]
+    return (*head, *inserted, *tail)
+
+
+__all__ = ["CaptureHistoryStream", "RecordedCaptureBackend", "appended_sample_count", "synthesise_pause"]
