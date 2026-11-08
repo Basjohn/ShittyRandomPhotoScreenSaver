@@ -152,7 +152,10 @@ def test_sessions_never_reuse_a_drift_family_label(qt_app):
 
 
 @pytest.mark.qt
-def test_the_writer_wakes_only_on_the_empty_to_populated_edge(qt_app):
+def test_the_worker_writer_wakes_the_owner_on_every_publish(qt_app):
+    # Across processes the edge cannot be derived from the reader's acknowledgement (it lands only after the decode,
+    # so a publish in between was mistaken for "still unread" and no wake was ever sent again: audit C1). One byte per
+    # publish; the owner's emitter coalesces them.
     import tools.expanded_visualizer_evidence as evidence
 
     class Recorder:
@@ -172,13 +175,61 @@ def test_the_writer_wakes_only_on_the_empty_to_populated_edge(qt_app):
     session.mailbox._wake_sender = sender                 # the writer end of the owner's wake pipe
     try:
         session.tick(frames[0])
-        session.tick(frames[1])                           # still unread: no second wake
-        assert sender.sent == 1
+        reader.peek()                                     # the owner has accepted but not yet acknowledged
+        session.tick(frames[1])
         reader.take()
         session.tick(frames[2])
-        assert sender.sent == 2
+        session.tick(frames[3])
+        assert sender.sent == 4
     finally:
         session.close()
+        reader.close()
+
+
+def _free_running_writer(mapping, wake, count, words):
+    import time
+
+    mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake)
+    try:
+        for index in range(1, count+1):
+            mailbox.publish((index,)*words, generation=1, activation_id=1, now_ts=float(index))
+            time.sleep(1/165)
+    finally:
+        mailbox.close()
+
+
+def test_a_free_running_writer_never_strands_or_tears_a_frame():
+    # Audit C1/C2: a writer in its own process at ~165 Hz, the reader taking on wakes with random 0-20 ms stalls.
+    # Every frame taken is whole (its payload repeats its own number), and the newest frame is always taken by a wake.
+    import multiprocessing
+    import random
+    import threading
+
+    count, words = 330, 4096
+    reader = PacketMailbox(role="reader")
+    receiver, sender = multiprocessing.Pipe(duplex=False)
+    woke = threading.Event()
+    reader.set_wake_callback(woke.set)
+    reader.listen_for_wakes(receiver)
+    child = multiprocessing.get_context("spawn").Process(
+        target=_free_running_writer, args=(reader.mapping_name, sender, count, words))
+    child.start()
+    sender.close()
+    rng = random.Random(7)
+    taken = []
+    try:
+        while not taken or taken[-1] != count:
+            assert woke.wait(5.0), f"stranded after {taken[-1:] or 'nothing'}"   # no poll: only a wake may deliver it
+            woke.clear()
+            publication = reader.take()
+            if publication is not None:
+                state = publication.state
+                assert len(set(state)) == 1 and len(state) == words, "a torn frame was accepted"
+                taken.append(state[0])
+            threading.Event().wait(rng.uniform(0.0, 0.02))
+        assert taken == sorted(taken) and taken[-1] == count
+    finally:
+        child.join(30)
         reader.close()
 
 

@@ -59,6 +59,47 @@ def test_a_torn_slot_is_never_accepted():
     assert reader.read_latest().payload == b'second'
 
 
+class _InterleavedStruct:
+    """A struct whose read of the slot under test lets the writer start overwriting that slot right after it."""
+
+    def __init__(self, real, on_read):
+        self._real, self._on_read = real, on_read
+        self.size = real.size
+
+    def unpack_from(self, buffer, offset=0):
+        value = self._real.unpack_from(buffer, offset)
+        self._on_read(offset)
+        return value
+
+    def pack_into(self, *args):
+        return self._real.pack_into(*args)
+
+
+def test_a_write_begun_while_the_reader_copies_is_never_accepted(monkeypatch):
+    # The writer comes round to the slot being read (two frames later) and starts the next frame into it while the
+    # reader is mid-read: begin goes odd and the payload changes, sequence_end still holds the old value. The reader
+    # must reject whatever its first read of the slot was (audit C2: reading begin first accepted the torn copy).
+    buffer, writer, reader = fresh()
+    sequence = writer.publish(b'AAAAAAAA', payload_schema=1, logical_timestamp=1.)
+    base = next(abi.HEADER_BYTES+slot*SLOT for slot in range(abi.SLOT_COUNT)
+                if struct.unpack_from('<Q', buffer, base := abi.HEADER_BYTES+slot*SLOT)[0] == sequence)
+    state = {"scanned": False, "torn": False}
+
+    def writer_starts(offset):
+        if not base <= offset < base+SLOT or state["torn"]:
+            return
+        if offset == base and not state["scanned"]:
+            state["scanned"] = True            # the reader's slot search, before it reads the slot itself
+            return
+        state["torn"] = True
+        struct.pack_into('<Q', buffer, base, sequence+5)                        # begin odd: a new frame starts
+        buffer[base+abi.SLOT_PAYLOAD_OFFSET:base+abi.SLOT_PAYLOAD_OFFSET+8] = b'DDDDDDDD'
+
+    monkeypatch.setattr(abi, "_U64", _InterleavedStruct(abi._U64, writer_starts))
+    monkeypatch.setattr(abi, "_SLOT_HEAD", _InterleavedStruct(abi._SLOT_HEAD, writer_starts))
+    assert reader.read_latest() is None and state["torn"] and reader.torn_reads == 1
+
+
 def test_protected_edges_survive_skipped_frames_until_acknowledged():
     buffer, writer, reader = fresh()
     writer.publish(b'a', payload_schema=1, logical_timestamp=1., protected_edges=0b001)   # never read on its own

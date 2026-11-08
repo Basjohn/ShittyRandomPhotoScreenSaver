@@ -24,8 +24,13 @@ slot i at HEADER_BYTES + i * slot_bytes:
 Sequences start at 2 and grow by 2 per frame; a slot whose begin is odd, or whose begin and end differ, is torn and
 is never accepted. Protected edges (one bit per edge kind) survive frames the reader skipped: each slot carries the OR
 of every edge published after the reader's ``consumed_sequence``, so an edge stays visible until a read acknowledges
-it. Ordering: CPython stores to the mapping in program order and x86 keeps store order; the P3 C reader uses acquire
-loads of ``sequence_end``/``latest_sequence`` and the writer's release order (begin, payload, end, latest).
+it. Ordering (a seqlock): the writer stores ``sequence_begin`` odd (with the slot head), the payload,
+``sequence_begin`` even, ``sequence_end``, then ``latest_sequence``. The reader loads in the opposite order: the word
+the writer stores last first (``sequence_end``), then the head and payload, then ``sequence_begin`` again, and
+accepts only if both equal ``latest`` and are even, so a write that starts while the payload is copied always shows in
+the final ``sequence_begin``. CPython stores to the mapping in program order and x86 keeps store order; the P3 C
+reader acquire-loads ``latest_sequence`` and ``sequence_end``, copies, then loads ``sequence_begin`` after a load
+fence.
 """
 from __future__ import annotations
 
@@ -181,10 +186,15 @@ class FramePacketReader:
             base = HEADER_BYTES+slot*self._slot_bytes
             if _U64.unpack_from(view, base)[0] != latest:
                 continue
-            begin, size, schema, logical, source, flags, edges = _SLOT_HEAD.unpack_from(view, base)
-            payload = bytes(view[base+SLOT_PAYLOAD_OFFSET:base+SLOT_PAYLOAD_OFFSET+min(size, self._slot_bytes-SLOT_OVERHEAD)])
+            # Seqlock read order: sequence_end (stored last) first, then head and payload, then sequence_begin
+            # (stored first) again; a write begun during the copy has made sequence_begin odd or newer by then.
             end = _U64.unpack_from(view, base+self._slot_bytes-8)[0]
-            if begin != latest or end != latest or begin % 2 or size > self._slot_bytes-SLOT_OVERHEAD:
+            if end != latest:
+                break
+            head, size, schema, logical, source, flags, edges = _SLOT_HEAD.unpack_from(view, base)
+            payload = bytes(view[base+SLOT_PAYLOAD_OFFSET:base+SLOT_PAYLOAD_OFFSET+min(size, self._slot_bytes-SLOT_OVERHEAD)])
+            begin = _U64.unpack_from(view, base)[0]
+            if head != latest or begin != latest or latest % 2 or size > self._slot_bytes-SLOT_OVERHEAD:
                 break
             self.accepted = latest
             return FramePacket(latest, schema, logical, None if math.isnan(source) else source, flags, edges, payload)

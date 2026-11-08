@@ -3,8 +3,10 @@
 A drop-in for ``logical_runtime.LatestStateMailbox`` whose publications cross a real shared-memory triple buffer:
 the producer encodes each logical frame (``frame_codec``) and publishes it with ``FramePacketWriter``; the consumer
 reads the newest whole frame with ``FramePacketReader``, decodes it and acknowledges it. Same contract as the
-in-process mailbox: one latest-wins slot (never a queue), superseded states counted, a GUI wake only on the
-empty -> populated edge, short-lived protected edges carried into the newest unread state until the reader
+in-process mailbox: one latest-wins slot (never a queue), superseded states counted, a GUI wake on the
+empty -> populated edge in process (one lock serialises publish and take), and across processes one wake byte per
+publish (audit C1: the reader acknowledges only after decoding, so an edge derived from its acknowledgement can be
+missed for good; the owner's wake emitter coalesces repeated wakes), short-lived protected edges carried into the newest unread state until the reader
 acknowledges, and a retired generation's frame never handed to a replacement runtime.
 
 Work order 3 proves the codec and the reader on the production owner's live publication path with identical frame
@@ -99,10 +101,10 @@ class PacketMailbox(LatestStateMailbox):
             )
             self._unread = (state, int(generation), int(activation_id), sequence)
             self._revision += 1
-            if previous is None:
+            if self._wake_sender is not None:
+                wake = self._send_wake                # every publish across processes (never a missed edge)
+            elif previous is None:
                 wake = self._wake_callback
-                if self._wake_sender is not None:
-                    wake = self._send_wake
             revision = self._revision
         if wake is not None:
             wake()
