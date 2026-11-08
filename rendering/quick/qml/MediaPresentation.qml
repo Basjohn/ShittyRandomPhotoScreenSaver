@@ -1146,10 +1146,22 @@ OverlayWidget {
                         : Math.min(parent.height, Math.max(2.0, parent.height * normalizedLevel))
                     y: (parent.height - height) / 2.0
                     radius: width / 2.0
-                    color: mediaRoot.mediaModel.appVolumeFillColor
+                    // The adjustable level takes the card's material like its track (operator,
+                    // 8 Nov: it "does not inherit surfaces"), tinted by its own fill at full
+                    // strength so it still reads above the track's lighter tint.
+                    color: appVolumeFillMaterial.active ? "transparent" : mediaRoot.mediaModel.appVolumeFillColor
                     border.width: height > 0.0
                         ? mediaRoot.scaleAwareStrokeWidth(2.5) : 0.0
                     border.color: mediaRoot.mediaModel.appVolumeBorderColor
+
+                    ChildMaterialSurface {
+                        id: appVolumeFillMaterial
+                        objectName: "mediaAppVolumeFillMaterial"
+                        card: mediaRoot
+                        fillColor: mediaRoot.mediaModel.appVolumeFillColor
+                        cornerRadius: parent.radius
+                        legibilityPanel: false
+                    }
                 }
     
                 MouseArea {

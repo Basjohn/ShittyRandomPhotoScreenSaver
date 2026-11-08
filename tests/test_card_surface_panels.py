@@ -114,9 +114,10 @@ def test_media_volume_and_mute_children_take_the_card_material(material_scene, t
     _media(scene, tmp_path)
     root = scene.scene.root
     track = _find(root, "mediaAppVolumeTrackMaterial")
+    level = _find(root, "mediaAppVolumeFillMaterial")       # the volume's adjustable part (operator, 8 Nov)
     mute = _find(root, "mediaSystemMuteMaterial")
     controls = _find(root, "mediaControlsRowMaterial")
-    loaders = (track, mute, controls)
+    loaders = (track, level, mute, controls)
     assert all(loader is not None for loader in loaders)
     assert all(loader.property("item") is None for loader in loaders)   # Normal: no item
     normal = numpy.asarray(scene.read(), numpy.int16)
@@ -133,6 +134,11 @@ def test_media_volume_and_mute_children_take_the_card_material(material_scene, t
     fill = volume.property("normalColor")
     assert volume.property("tintColor").alphaF() < fill.alphaF()
     assert volume.property("glassLegibility").z() == 0.0
+    # The level inside it is material too, tinted by its own fill colour, and reads above the track.
+    filled = level.property("item")
+    assert filled.property("glassLegibility").z() == 0.0
+    assert filled.property("tintColor").alphaF() > volume.property("tintColor").alphaF()
+    assert _find(root, "mediaAppVolumeFill").property("color").alpha() == 0     # it drops its flat colour
     scene.set_material("normal")
     scene.render(4)
     assert all(loader.property("item") is None for loader in loaders)

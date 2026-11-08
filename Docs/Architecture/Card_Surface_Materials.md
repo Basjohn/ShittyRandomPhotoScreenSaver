@@ -186,8 +186,12 @@ mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and th
 - No inner rim ("the mute button shouldn't have an extra inside border"): a child passes a negative border width, so
   the shaders' panel covers its whole face (`plateInset` is -1 there); its own outline is its only border.
 - The volume track carries no text: its tint takes 40 % of its fill's alpha and it has no darker panel
-  (`legibilityPanel: false`), so the backdrop reads through ("deserves more transparency"); the level fill and
-  outline sit on top unchanged.
+  (`legibilityPanel: false`), so the backdrop reads through ("deserves more transparency"); the outline sits on top
+  unchanged.
+- The volume's level (the adjustable part inside the track) is material too (operator, 8 Nov: it "does not inherit
+  surfaces"): its own `ChildMaterialSurface` tinted by the fill colour at full strength, no darker panel, so it reads
+  above the track's 40 % tint; it drops its flat colour while the material is active and keeps it on Normal
+  (`tests/test_card_surface_panels.py`).
 - The transport glyphs are vectors (`MediaTransportGlyph.qml`): previous, next, play and pause share one stroke
   weight (at least 2 px) and one ink height and sit centred in their segments at every DPR. They were font characters
   ("←", "||", "▶", "→") in the card's font since the Quick port (ace52dcb, Phase F4; the QWidget painter had set
