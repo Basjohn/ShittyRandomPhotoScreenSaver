@@ -739,12 +739,13 @@ def test_actual_framed_camera_route_keeps_layout_and_persists_once(production_ca
 
 @pytest.mark.qt
 def test_actual_camera_reset_glyph_retains_press_before_plain_orbit(production_card):
-    from tests.test_framed_scene_input import mouse, NONE
+    from tests.test_framed_scene_input import mouse, NONE, polish_glyph_row
     card = production_card
     root = card.scene._visualizer_root
     root.setProperty('cameraResetAvailable', True)
     root.setProperty('alwaysShowGlyphs', True)
     root.setProperty('widgetGlowAdmitted', True)
+    polish_glyph_row(card)
     glyph = root.findChild(type(root), 'visualizerCameraResetGlyph')
     assert glyph is not None
     # Admit the glyph's completed hover presentation directly. Its animation
