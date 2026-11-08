@@ -976,6 +976,16 @@ High-value permanent guards include:
 - `tests/test_frame_trace.py` — binary trace format, bounded rolling retention, optional phase/clip/Bubble attribution and backward-compatible reporting;
 - `tests/test_lifecycle_window.py` — startup/teardown are not stall points: every display teardown opens the lifecycle window before anything is torn down and the current generation's coordinated reveal closes it; inside it the event-loop recorder, Visualizer latency and slow-tick warnings stay silent and count again after; the trace report keeps lifecycle frames out of steady-state spacing and flags late frames in the 2 s after a reveal;
 - `tests/test_visualizer_switch_abc_harness.py` — causal switch/lifecycle scoring and freshness gates;
+- Native core P2 engine worker (`Docs/Future_Work/Native_Core_P2_Engine_Design.md`):
+  `tests/test_visualizer_engine_live.py` is P2b's live-engine gate — the production `_SpotifyBeatEngine` with its real
+  audio worker, capture lane and compute pool, fed the shipped clip's PCM through the capture callback
+  (`RecordedCaptureBackend` via the audio worker's source seam; a device open fails the test), ticks identical frames
+  in process and in a `WorkerType.VISUALIZER` process for every mode; the recorded stream rebuilds every capture
+  history; each tick reads the asynchronous commit of its own block (the engine's analysis-settled edge, committed on
+  the lane's thread); paused inputs fail closed until 4b. The fresh-spawn probe in
+  `tests/test_visualizer_engine_worker.py` ticks one live input per mode and pins QtCore/QtGui only (it caught the
+  Spectrum DSP importing the Settings shape editor). Whole-clip gate and cost: `tools/visualizer_replay/
+  live_engine_gate.py`, `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 
 The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.
