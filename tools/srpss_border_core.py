@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import re
 import tempfile
 import zipfile
@@ -59,6 +60,25 @@ class Settings:
             raise AssetError("Size cap outside supported range.")
         if self.still_format not in ("PNG", "WEBP"):
             raise AssetError("Still format must be PNG or WEBP.")
+
+
+@dataclass(frozen=True)
+class SlideshowSettings:
+    enabled: bool = False
+    hold_ms: int = 2000
+    fade_ms: int = 400
+    fps: int = 24
+    loop_back_to_first: bool = True
+
+    def validate(self):
+        if not (0 <= self.hold_ms <= 120_000):
+            raise AssetError("Slideshow hold duration must be between 0 and 120000 ms.")
+        if not (0 <= self.fade_ms <= 60_000):
+            raise AssetError("Slideshow crossfade duration must be between 0 and 60000 ms.")
+        if not (1 <= self.fps <= 60):
+            raise AssetError("Slideshow FPS must be between 1 and 60.")
+        if self.enabled and self.hold_ms == 0 and self.fade_ms == 0:
+            raise AssetError("Slideshow mode needs a non-zero hold or fade duration.")
 
 
 @dataclass(frozen=True)
@@ -319,6 +339,165 @@ def _safe_name(source_name: str) -> str:
     return re.sub(r"[^\w .()-]+", "_", base).strip(" .")[:90] or "SRPSS_Image"
 
 
+def _prepare_content_frame(info: SourceInfo, target_size: tuple[int, int], replace_existing_border: bool) -> Image.Image:
+    trim = 4 if info.border_present and replace_existing_border else 0
+    with Image.open(io.BytesIO(info.payload)) as image:
+        image.seek(0)
+        frame = image.convert("RGBA")
+    if trim:
+        if frame.width <= trim * 2 or frame.height <= trim * 2:
+            raise AssetError(f"{info.name}: source too small after removing an existing border.")
+        frame = frame.crop((trim, trim, frame.width - trim, frame.height - trim))
+    target_w, target_h = target_size
+    if target_w < 4 or target_h < 4:
+        raise AssetError("Normalization target became too small.")
+    if frame.size != target_size:
+        # Preserve aspect ratio. Normalize every input into the first source's trimmed canvas.
+        scale = min(target_w / frame.width, target_h / frame.height)
+        resized_w = max(1, round(frame.width * scale))
+        resized_h = max(1, round(frame.height * scale))
+        resized = frame.resize((resized_w, resized_h), Image.Resampling.LANCZOS)
+        normalized = Image.new("RGBA", target_size, (0, 0, 0, 0))
+        offset = ((target_w - resized_w) // 2, (target_h - resized_h) // 2)
+        normalized.alpha_composite(resized, offset)
+        frame = normalized
+    return frame
+
+
+def _duration_sequence(total_ms: int, fps: int) -> list[int]:
+    if total_ms <= 0:
+        return []
+    frame_count = max(1, round(total_ms * fps / 1000))
+    base = total_ms // frame_count
+    remainder = total_ms % frame_count
+    durations = [base] * frame_count
+    for i in range(remainder):
+        durations[i] += 1
+    return durations
+
+
+def _sample_indices(total: int) -> set[int]:
+    if total <= 0:
+        return set()
+    return {0, total // 4, total // 2, (total * 3) // 4, total - 1}
+
+
+def _collapse_identical_frames(frames: list[Image.Image], durations: list[int]) -> tuple[list[Image.Image], list[int]]:
+    if len(frames) != len(durations):
+        raise AssetError("Internal frame/duration mismatch while collapsing slideshow frames.")
+    if not frames:
+        return [], []
+    collapsed_frames = [frames[0].copy()]
+    collapsed_durations = [durations[0]]
+    previous_bytes = frames[0].tobytes()
+    previous_size = frames[0].size
+    for frame, duration in zip(frames[1:], durations[1:]):
+        current_bytes = frame.tobytes()
+        if frame.size == previous_size and current_bytes == previous_bytes:
+            collapsed_durations[-1] += duration
+        else:
+            collapsed_frames.append(frame.copy())
+            collapsed_durations.append(duration)
+            previous_bytes = current_bytes
+            previous_size = frame.size
+    return collapsed_frames, collapsed_durations
+
+
+def _compose_slideshow_bordered_frames(
+    infos: list[SourceInfo],
+    slideshow: SlideshowSettings,
+    notify: Callable[[str], None],
+    cancelled: Callable[[], bool],
+) -> tuple[list[Image.Image], list[int], tuple[int, int], list[dict], bytes | None]:
+    if len(infos) < 2:
+        raise AssetError("Slideshow mode requires at least two still images.")
+    for info in infos:
+        if info.frame_count != 1:
+            raise AssetError(f"{info.name}: slideshow mode accepts still images only.")
+
+    trim0 = 4 if infos[0].border_present else 0
+    target_size = (infos[0].width - 2 * trim0, infos[0].height - 2 * trim0)
+    if target_size[0] < 4 or target_size[1] < 4:
+        raise AssetError("First slideshow image becomes too small after border removal.")
+    notify(f"Slideshow normalization target: {target_size[0]}×{target_size[1]} content from first source.")
+
+    normalized_contents: list[Image.Image] = []
+    normalization_report: list[dict] = []
+    icc_profile = infos[0].icc_profile
+    for idx, info in enumerate(infos, 1):
+        if cancelled():
+            raise Cancelled("Processing cancelled; no final output was published.")
+        content = _prepare_content_frame(info, target_size, replace_existing_border=True)
+        normalized_contents.append(content)
+        normalization_report.append({
+            "source": info.name,
+            "input_size": [info.width, info.height],
+            "trimmed_border": bool(info.border_present),
+            "normalized_content_size": [content.width, content.height],
+        })
+        notify(f"  Normalized {idx}/{len(infos)}: {info.name}")
+
+    bordered_stills = [_new_border(content) for content in normalized_contents]
+    hold_durations = _duration_sequence(slideshow.hold_ms, slideshow.fps)
+    fade_durations = _duration_sequence(slideshow.fade_ms, slideshow.fps)
+    if not hold_durations and not fade_durations:
+        raise AssetError("Slideshow mode needs a non-zero hold or fade duration.")
+
+    frames: list[Image.Image] = []
+    durations: list[int] = []
+    total_transitions = len(bordered_stills) if slideshow.loop_back_to_first else len(bordered_stills) - 1
+
+    for i, base_frame in enumerate(bordered_stills):
+        if cancelled():
+            raise Cancelled("Processing cancelled; no final output was published.")
+        for duration in hold_durations:
+            frames.append(base_frame.copy())
+            durations.append(duration)
+        if total_transitions <= 0:
+            continue
+        if i == len(bordered_stills) - 1 and not slideshow.loop_back_to_first:
+            continue
+        next_frame = bordered_stills[(i + 1) % len(bordered_stills)]
+        fade_count = len(fade_durations)
+        if fade_count:
+            for fade_index, duration in enumerate(fade_durations, 1):
+                blend = fade_index / (fade_count + 1)
+                frames.append(Image.blend(base_frame, next_frame, blend))
+                durations.append(duration)
+
+    if not frames:
+        raise AssetError("Slideshow assembly produced zero frames.")
+    if len(frames) > 10_000:
+        raise AssetError("Slideshow assembly would exceed the 10,000 frame safety limit.")
+    return frames, durations, target_size, normalization_report, icc_profile
+
+
+def _verify_visual_samples(reference_frames: list[Image.Image], encoded_path: Path, strict_visual_check: bool):
+    verify = Image.open(encoded_path)
+    sampled_indices = _sample_indices(len(reference_frames))
+    visual_diffs: list[float] = []
+    for idx, reference in enumerate(reference_frames):
+        verify.seek(idx)
+        decoded = verify.convert("RGBA")
+        _check_border_alpha(decoded)
+        if strict_visual_check and idx in sampled_indices:
+            region = (4, 4, reference.width - 4, reference.height - 4)
+            reference_region = reference.crop(region)
+            actual_region = decoded.crop(region)
+            black = Image.new("RGBA", reference_region.size, (0, 0, 0, 255))
+            reference_rgb = Image.alpha_composite(black, reference_region).convert("RGB")
+            actual_rgb = Image.alpha_composite(black, actual_region).convert("RGB")
+            stats = ImageStat.Stat(ImageChops.difference(reference_rgb, actual_rgb))
+            mean_abs = sum(stats.mean) / 3
+            visual_diffs.append(round(mean_abs, 3))
+            if mean_abs > 15:
+                verify.close()
+                raise AssetError(f"Visible image-difference check failed (frame {idx}, mean error {mean_abs:.1f}). "
+                                 "Output rejected; try a higher quality or smaller dimensions.")
+    verify.close()
+    return visual_diffs
+
+
 def process_asset(source_path: str | Path, destination: str | Path,
                   settings: Settings | None = None,
                   notify: Callable[[str], None] | None = None,
@@ -556,4 +735,250 @@ def process_asset(source_path: str | Path, destination: str | Path,
             report["zip_path"] = str(final_zip)
         report["output_path"] = str(final_file)
         notify("PASS: frame count, timing, looping, border and ZIP verified.")
+        return report
+
+
+def process_slideshow(source_paths: list[str | Path], destination: str | Path,
+                      settings: Settings | None = None,
+                      slideshow: SlideshowSettings | None = None,
+                      notify: Callable[[str], None] | None = None,
+                      cancelled: Callable[[], bool] | None = None) -> dict:
+    """Build one bordered animated WebP from a queue of still images."""
+    cfg = settings or Settings()
+    slide_cfg = slideshow or SlideshowSettings(enabled=True)
+    cfg.validate()
+    slide_cfg.validate()
+    if not slide_cfg.enabled:
+        raise AssetError("Slideshow settings must be enabled for slideshow processing.")
+    if not features.check("webp"):
+        raise AssetError("This Pillow build lacks libwebp support.")
+    notify = notify or (lambda msg: None)
+    cancelled = cancelled or (lambda: False)
+
+    def check_cancel():
+        if cancelled():
+            raise Cancelled("Processing cancelled; no final output was published.")
+
+    if len(source_paths) < 2:
+        raise AssetError("Slideshow mode requires at least two sources.")
+
+    infos = [inspect_source(path) for path in source_paths]
+    for info in infos:
+        if info.frame_count != 1:
+            raise AssetError(f"{info.name}: slideshow mode only accepts still images.")
+    notify(f"Queue slideshow mode: {len(infos)} still images → one animated WebP.")
+
+    dest = Path(destination).expanduser().resolve()
+    dest.mkdir(parents=True, exist_ok=True)
+    name_root = _safe_name(f"{Path(infos[0].name).stem}_Queue_Crossfade")
+    final_file = _unique_path(dest / f"{name_root}_SRPSS_Bordered.webp")
+    final_zip = final_file.with_suffix(".zip")
+    while final_zip.exists():
+        final_file = _unique_path(final_file.with_name(final_file.stem + "_v2" + final_file.suffix))
+        final_zip = final_file.with_suffix(".zip")
+
+    preferred_scales = list(range(cfg.scale_percent, cfg.min_scale_percent - 1, -cfg.scale_step_percent))
+    if preferred_scales[-1] != cfg.min_scale_percent:
+        preferred_scales.append(cfg.min_scale_percent)
+
+    with tempfile.TemporaryDirectory(prefix="srpss_border_slideshow_") as td:
+        candidate = Path(td) / "candidate.webp"
+        logs = []
+        selected_quality = None
+        selected_scale = None
+        skip_scales_above = cfg.scale_percent
+        final_reference_frames: list[Image.Image] | None = None
+        final_durations: list[int] | None = None
+        final_content_size: tuple[int, int] | None = None
+        normalization_report: list[dict] | None = None
+        icc_profile: bytes | None = None
+
+        for scale in preferred_scales:
+            check_cancel()
+            if scale > skip_scales_above:
+                notify(f"Skipping {scale}% after file-size projection (image quality priority).")
+                continue
+
+            if scale != 100:
+                # Temporarily rescale the first source dimensions by wrapping the slideshow assembly.
+                # We scale AFTER normalization target selection to preserve queue layout.
+                base_trim = 4 if infos[0].border_present else 0
+                base_target = (infos[0].width - 2 * base_trim, infos[0].height - 2 * base_trim)
+                scaled_target = (max(4, round(base_target[0] * scale / 100)), max(4, round(base_target[1] * scale / 100)))
+            else:
+                base_trim = 4 if infos[0].border_present else 0
+                scaled_target = (infos[0].width - 2 * base_trim, infos[0].height - 2 * base_trim)
+            if scaled_target[0] < 4 or scaled_target[1] < 4:
+                continue
+
+            predicted_frames = len(_duration_sequence(slide_cfg.hold_ms, slide_cfg.fps)) * len(infos)
+            predicted_frames += len(_duration_sequence(slide_cfg.fade_ms, slide_cfg.fps)) * (len(infos) if slide_cfg.loop_back_to_first else len(infos) - 1)
+            predicted = (scaled_target[0] + 8) * (scaled_target[1] + 8) * 4 * max(1, predicted_frames)
+            if predicted > MAX_ESTIMATED_RGBA_BYTES:
+                notify(f"Skipping {scale}%: estimated decoded frames exceed 1.5 GB safety cap.")
+                logs.append({"scale_percent": scale, "skipped": "memory safety"})
+                continue
+
+            # Build a scaled clone of the info set by temporarily overriding the first-target logic.
+            patched_infos: list[SourceInfo] = []
+            for idx, info in enumerate(infos):
+                if idx == 0:
+                    patched_infos.append(SourceInfo(
+                        info.name,
+                        scaled_target[0] + (4 if info.border_present else 0) * 2,
+                        scaled_target[1] + (4 if info.border_present else 0) * 2,
+                        info.frame_count,
+                        info.durations_ms,
+                        info.loop,
+                        info.bytes_size,
+                        info.source_format,
+                        info.border_present,
+                        info.icc_profile,
+                        info.payload,
+                    ))
+                else:
+                    patched_infos.append(info)
+
+            notify(f"Preparing slideshow at {scaled_target[0]}×{scaled_target[1]} content ({scale}%).")
+            frames, durations, content_size, norm_report, icc_profile = _compose_slideshow_bordered_frames(
+                patched_infos, slide_cfg, notify, cancelled
+            )
+            final_frame_size = (content_size[0] + 8, content_size[1] + 8)
+            check_cancel()
+            if len(frames) != len(durations):
+                raise AssetError("Internal slideshow frame/duration mismatch.")
+
+            selected_quality = None
+            if cfg.prefer_quality_over_pixels and scale > cfg.min_scale_percent:
+                candidates = [cfg.preferred_quality]
+            else:
+                candidates = _iter_qualities(cfg.preferred_quality, cfg.minimum_quality)
+            most_recent_encoded_size = None
+            for quality in candidates:
+                check_cancel()
+                notify(f"  Encoding slideshow quality {quality}, scale {scale}%...")
+                args = {
+                    "format": "WEBP",
+                    "quality": quality,
+                    "method": 3,
+                    "exact": True,
+                    "save_all": True,
+                    "append_images": frames[1:],
+                    "duration": durations,
+                    "loop": 0 if slide_cfg.loop_back_to_first else 1,
+                    "minimize_size": False,
+                }
+                if icc_profile:
+                    args["icc_profile"] = icc_profile
+                frames[0].save(candidate, **args)
+                length = candidate.stat().st_size
+                most_recent_encoded_size = length
+                notify(f"  q{quality}: {length:,} bytes")
+                logs.append({"scale_percent": scale, "quality": quality, "bytes": length})
+                if length <= cfg.max_bytes:
+                    selected_quality = quality
+                    selected_scale = scale
+                    final_reference_frames = frames
+                    final_durations = durations
+                    final_content_size = content_size
+                    normalization_report = norm_report
+                    break
+            if selected_quality is not None:
+                break
+            if cfg.prefer_quality_over_pixels and most_recent_encoded_size and scale > cfg.min_scale_percent:
+                projected = int(scale * (cfg.max_bytes / most_recent_encoded_size) ** 0.5 * 0.98)
+                projected = max(cfg.min_scale_percent, min(scale - cfg.scale_step_percent, projected))
+                permitted = [s for s in preferred_scales if s <= projected]
+                skip_scales_above = max(permitted) if permitted else cfg.min_scale_percent
+                notify(f"  Too large at q{cfg.preferred_quality}; next projected scale: {skip_scales_above}%.")
+        else:
+            raise AssetError("No slideshow result fits within the byte cap above your minimum scale/quality. "
+                             "Lower minimum scale, adjust quality floor, or shorten the slideshow.")
+
+        if not final_reference_frames or not final_durations or not final_content_size or normalization_report is None:
+            raise AssetError("Slideshow assembly did not produce a publishable candidate.")
+        check_cancel()
+        collapsed_reference_frames, collapsed_durations = _collapse_identical_frames(final_reference_frames, final_durations)
+        encoded_bytes = candidate.read_bytes()
+        actual_durations, actual_loop = webp_timeline(encoded_bytes)
+        if len(actual_durations) != len(collapsed_durations):
+            raise AssetError(f"Encoder changed slideshow frame structure unexpectedly: {len(collapsed_durations)} expected encoded frames, got {len(actual_durations)}. Output rejected.")
+        expected_loop = 0 if slide_cfg.loop_back_to_first else 1
+        if actual_durations != list(collapsed_durations) or actual_loop != expected_loop:
+            notify("  Encoder changed slideshow timestamp metadata: repairing timestamps WITHOUT re-encoding frames.")
+            encoded_bytes = patch_webp_timeline(encoded_bytes, list(collapsed_durations), expected_loop)
+            candidate.write_bytes(encoded_bytes)
+            confirm_durations, confirm_loop = webp_timeline(candidate.read_bytes())
+            if confirm_durations != list(collapsed_durations) or confirm_loop != expected_loop:
+                raise AssetError("Slideshow frame timing repair failed; output rejected.")
+        if candidate.stat().st_size > cfg.max_bytes:
+            raise AssetError("Validated slideshow output crossed the size limit; output rejected.")
+
+        verify = Image.open(candidate)
+        if verify.size != (final_content_size[0] + 8, final_content_size[1] + 8):
+            raise AssetError("Slideshow output resolution changed unexpectedly.")
+        if getattr(verify, "n_frames", 1) != len(collapsed_durations):
+            raise AssetError("Slideshow decoder frame count mismatch in final result.")
+        if icc_profile and verify.info.get("icc_profile") != icc_profile:
+            raise AssetError("ICC color profile could not be retained in slideshow output; output rejected.")
+        verify.close()
+        visual_diffs = _verify_visual_samples(collapsed_reference_frames, candidate, cfg.strict_visual_check)
+        check_cancel()
+
+        with final_file.open("xb") as stream:
+            stream.write(candidate.read_bytes())
+        report = {
+            "tool": "SRPSS Border Studio",
+            "mode": "queue_slideshow",
+            "sources": [
+                {
+                    "name": info.name,
+                    "source_size_bytes": info.bytes_size,
+                    "source_format": info.source_format,
+                    "size": [info.width, info.height],
+                    "existing_srpss_border_detected": info.border_present,
+                }
+                for info in infos
+            ],
+            "normalization": {
+                "strategy": "normalize every source into the first source's trimmed content size using aspect-ratio-preserving fit",
+                "per_source": normalization_report,
+            },
+            "output_file": final_file.name,
+            "output_size_bytes": final_file.stat().st_size,
+            "content_size": [final_content_size[0], final_content_size[1]],
+            "final_size": [final_content_size[0] + 8, final_content_size[1] + 8],
+            "scale_percent": selected_scale,
+            "quality": selected_quality,
+            "logical_generated_frame_count": len(final_durations),
+            "frame_count": len(collapsed_durations),
+            "duration_ms": sum(collapsed_durations),
+            "frame_durations_ms": list(collapsed_durations),
+            "loop": expected_loop,
+            "slideshow": {
+                "hold_ms_per_image": slide_cfg.hold_ms,
+                "crossfade_ms": slide_cfg.fade_ms,
+                "fps": slide_cfg.fps,
+                "loop_back_to_first": slide_cfg.loop_back_to_first,
+            },
+            "border": {"padding_px": 2, "black_outline_px": 2, "radius_px": 3},
+            "mean_absolute_rgb_diffs": visual_diffs,
+            "attempts": logs,
+            "validation": "PASS: strict count, timings, loop, transparent perimeter and black outline",
+        }
+        if cfg.make_zip:
+            try:
+                with zipfile.ZipFile(final_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=5) as archive:
+                    archive.write(final_file, arcname=final_file.name)
+                    archive.writestr("PROCESSING_REPORT.json", json.dumps(report, indent=2))
+                with zipfile.ZipFile(final_zip) as archive:
+                    if archive.testzip() is not None:
+                        raise AssetError("Output ZIP CRC verification failed.")
+            except Exception:
+                final_zip.unlink(missing_ok=True)
+                final_file.unlink(missing_ok=True)
+                raise
+            report["zip_path"] = str(final_zip)
+        report["output_path"] = str(final_file)
+        notify("PASS: slideshow frame count, timing, looping, border and ZIP verified.")
         return report

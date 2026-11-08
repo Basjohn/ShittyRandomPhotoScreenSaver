@@ -4394,6 +4394,7 @@ class FoundriesTab(QWidget):
             ("MUSIC CLIP RECORDER\n60-second clips · full waveforms + events", "music_recorder.py", False),
             ("VISUALIZER PRESET REPAIR\nReview and repair preset / SST files", "visualizer_preset_repair.py", False),
             ("BORDER STUDIO\nWebP/PNG borders · lossless timing checks", "srpss_border_studio.py", False),
+            ("VISUALIZER CAPTURE STUDIO\nOffscreen visualizers · recorded music → WebP", "visualizer_capture_studio.py", False),
         ))
         layout.addStretch(1)
 
