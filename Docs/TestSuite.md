@@ -967,6 +967,10 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   display's refresh-edge clock (the production `RefreshStateGlyph.qml` settles at once, no phase callback) and
   animates again after uncover. Negative controls: no host call at the cover edge (3 red), the Clock not bound to
   the cover (2 red), refresh edges animating while covered (1 red), a transfer ignoring the target's cover (1 red).
+- `tests/test_vulkan_shader_readiness.py` — port-readiness rule 5: every GLSL compute shader compiles to SPIR-V
+  with PySide6's `qsb`, except the shrinking legacy list of 18 loose-uniform sources (P3 converts them per mode);
+  a listed shader that now compiles must leave the list. A second test pins the rule's two sides on a tiny
+  program (loose uniform fails, std140 block compiles). Negative control: dropping a legacy entry fails it.
 - `tests/test_visualizer_glyph_row.py` — the Visualizer card's one bottom-right glyph row (operator, 8 Nov) on the
   hidden production scene: on the ordinary, a narrow and the display-wide card, every combination of Reset Camera and
   the expand glyph lays the offered glyphs in one row (one bottom edge and size, preset steps then Reset Camera then

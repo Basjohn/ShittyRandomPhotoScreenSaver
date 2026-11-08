@@ -90,8 +90,10 @@ measured, which no API change made from Python can fix.
    `glMultiDraw*Indirect` are fine; GL-specific state tricks or extensions are not).
 4. Coordinate conventions explicit (clip-space depth range, framebuffer Y-origin, texture origin) and isolated in one
    helper per program, since GL and Vulkan differ.
-5. When a SPIR-V compiler is admitted to the dev tooling, a test compiles every program to SPIR-V; until then, reviews
-   enforce 1-4.
+5. A test compiles every program to SPIR-V. Enforced for compute shaders since 8 Nov 2026 with PySide6's own `qsb`
+   (`tests/test_vulkan_shader_readiness.py`, `tools/vulkan_shader_readiness.py`): the 18 compute sources written
+   before it use loose uniforms (rule 1) and sit on a legacy list that only shrinks as P3 ports each mode; every other
+   compute shader must compile. Vertex/fragment programs: extend the same test when P3's first port lands.
 
 ## Addendum, 7 Nov 2026: a universal visualizer performance architecture (operator direction)
 
