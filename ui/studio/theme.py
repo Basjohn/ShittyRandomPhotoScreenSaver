@@ -4,7 +4,8 @@ The Settings window composes translucent semantic surfaces over a native backdro
 Every Studio surface token is composited over an opaque base taken from the theme's
 own backdrop tint (so contrast is checked against a known colour); under a Glass or
 Acrylic theme the Studio window takes the same native backdrop as Settings and the
-window surface, title bar and large panels then let it through (``panelAlpha``). The accent is the theme's
+window surface, title bar and large panels then let it through (``panelAlpha``). Off Windows there is no native
+material: the window surface is composed over Settings' opaque material underlay instead. The accent is the theme's
 most saturated interaction colour (slider fill, focus, selection, outer border).
 Contrast is enforced after derivation (text >= 4.5:1 on surfaces, accent and
 outlines >= 3:1 / 1.6:1), so any theme stays legible. Scene colours never pass
@@ -159,7 +160,17 @@ def studio_theme(theme=None) -> dict[str, str]:
 
     if translucent:
         window_colour, window_alpha = token("window.dialog_glass", (60, 60, 60, 20))
-        window_surface = _hex(window_colour, window_alpha)
+        from core import platform_paths
+        if platform_paths.IS_WINDOWS:
+            window_surface = _hex(window_colour, window_alpha)
+        else:
+            # No native material off Windows (core/windows/dwm_blur.py is never called there): the window surface
+            # is composed over Settings' own opaque material underlay (ui/settings_material_underlay.py), the same
+            # stand-in Settings paints for every material, so nothing beneath the window shows through.
+            from ui.settings_material_underlay import material_underlay
+            underlay = material_underlay(theme)
+            window_surface = _hex(_over(window_colour, window_alpha,
+                                        (underlay.r / 255.0, underlay.g / 255.0, underlay.b / 255.0)))
         titlebar = _hex(titlebar_colour, titlebar_alpha)
         _panel_colour, panel_alpha = token("panel.group.surface", (60, 60, 60, 120))
         panel_alpha = max(PANEL_MATERIAL_FLOOR, panel_alpha + window_alpha * (1.0 - panel_alpha))

@@ -251,6 +251,11 @@ underlay beneath the dialog content instead (`ui/settings_material_underlay.py`)
 palette polarity (`settings_theme_is_light`), with the native tint (`backdrop.native_tint()`: Acrylic's authored
 tint, the other tinted materials' derived one) applied at its strength and Glass left untinted, exactly mirroring the native split above. Semantic surfaces paint over it unchanged and theme
 files carry no per-platform data. Mode `off` paints no underlay. Windows never paints it.
+The Studio window, which wears the same material, never calls `dwm_blur` off Windows either
+(`StudioWindowSurface.apply_backdrop`); its theme owner (`ui/studio/theme.py` `studio_theme`) composes the window
+surface over this same underlay, so the Studio is opaque there for every material. Off Windows, Settings text over
+the underlay is never less legible than the Windows black/white-desktop bound the legibility contract checks
+(`tools/theme_legibility.py` with the underlay as the desktop: no role of any shipped theme regresses, 8 Nov).
 
 Why opaque: Linux compositors (where present) show the raw, unblurred desktop through translucent layers, and
 without a compositor those layers fall onto black, so the authored look and readability would depend on the
