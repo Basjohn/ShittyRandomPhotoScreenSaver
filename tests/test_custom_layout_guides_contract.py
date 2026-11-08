@@ -386,7 +386,10 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     child_layer_start = qml.index("id: childRoleLayer")
     child_layer_end = qml.index("function overlapsEditRect(", child_layer_start)
     child_layer = qml[child_layer_start:child_layer_end]
-    assert "NumberAnimation on opacity" in child_layer
+    # The layer fades with its lock edge, not as a one-shot bound to its creation
+    # (that ran unseen while the layer was loaded locked, so unlocking popped).
+    assert "NumberAnimation" in child_layer
+    assert "running: true" not in child_layer
     # Alignment is an admitted role capability inside child_geometry, not a
     # family-owned side store. Only eligible roles render the tiny centre flip.
     assert "alignment_flip: bool = False" in child

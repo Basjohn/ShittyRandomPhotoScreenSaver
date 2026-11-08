@@ -1449,6 +1449,56 @@ def test_the_block_offers_no_child_editing_to_the_preset_toast_and_the_parts_fol
     assert edit.flips == [True, False]
 
 
+@pytest.mark.qt
+def test_the_blocks_lock_exposes_its_parts_while_another_overlay_is_selected(display, tmp_path):
+    """Operator, 8 Nov: "clicking the child lock open does not expose the child widgets. You have to edit/move/adjust
+    the parent widget afterwards until they are exposed." The block's lock shows on hover while the toast is selected;
+    with real pointer events its click alone opens the parts (focusing the block), at the frames a block edit would
+    give them, and the block stays put."""
+    from PySide6.QtCore import QEvent, Qt
+
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"media_controls": True})
+    _draw(display, media=_Media(title="A Track Title", artist="An Artist"), config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    assert edit.model.selectItem(edit.row("preset"))
+    _run(display, 60)
+    frame = edit.layer_item(f"customLayoutEditFrame-{BLOCK}")
+    lock = edit.layer_item(f"customLayoutChildEditLock-{BLOCK}")
+    assert frame.property("selectedForChildEdit") is False and frame.property("childEditingLocked") is True
+    block = QRect(edit.item("now_playing").current_global_rect)
+    _send(display, QEvent.Type.MouseMove, _scene_point(frame, 0.5, 0.5), Qt.MouseButton.NoButton,
+          Qt.MouseButton.NoButton)
+    _settle(display, lambda: lock.isEnabled() and float(lock.opacity()) > 0.5)
+    assert _real_click(display, _scene_point(lock)) == f"customLayoutChildEditLockHitArea-{BLOCK}"
+    assert frame.property("childEditingLocked") is False and frame.property("selectedForChildEdit") is True
+    layer = edit.layer_item(f"customLayoutChildRoleLayer-{BLOCK}")
+    _settle(display, lambda: float(layer.opacity()) >= 1.0)
+
+    def shown() -> dict[str, tuple[float, float, float, float]]:
+        rects = {role: edit.child_frame(role) for role in NP_PARTS}  # each is asserted shown
+        return {role: (item.x(), item.y(), item.width(), item.height()) for role, item in rects.items()}
+
+    exposed = shown()
+    assert all(width > 0 and height > 0 for _x, _y, width, height in exposed.values()), exposed
+    assert edit.item("now_playing").current_global_rect == block
+    # The operator's workaround, a block edit with no net change (one pixel and back), shows the same frames.
+    local = edit._local(block)
+    edit.model.moveItem(edit.row("now_playing"), local.x() + 1, local.y(), local.x() + 1, local.y())
+    _run(display, 40)
+    edit.model.moveItem(edit.row("now_playing"), local.x(), local.y(), local.x(), local.y())
+    edit.model.finishMove()
+    _run(display, 80)
+    assert edit.item("now_playing").current_global_rect == block
+    nudged = shown()
+    for role, rect in exposed.items():
+        assert nudged[role] == pytest.approx(rect, abs=0.01), role
+    assert edit.owner.cancel()
+
+
 # ------------------------------------------------------------------------------ guides on the Edit layer
 
 

@@ -325,6 +325,13 @@ Item {
             function toggleChildEditLock() {
                 if (!childEditingLocked && customLayoutOverlay.sessionModel)
                     customLayoutOverlay.sessionModel.cancelChildGesture(index)
+                // Only the selected parent loads its child layer, but the lock
+                // glyph is hover-revealed on every child-capable frame. A lock
+                // click on an unselected frame therefore selects that parent
+                // first, as pressing the parent does; otherwise the opened
+                // children have no layer until the parent is edited.
+                if (!selectedForChildEdit && customLayoutOverlay.sessionModel)
+                    customLayoutOverlay.sessionModel.selectItem(index)
                 childEditingLocked = !childEditingLocked
             }
             HoverHandler {
@@ -1717,16 +1724,31 @@ Item {
                         id: childRoleLayer
                         objectName: "customLayoutChildRoleLayer-" + editFrame.widgetId
                         anchors.fill: parent
-                        visible: !editFrame.childEditingLocked
+                        // The lock gates hit-testing at once; paint fades with it,
+                        // in on unlock and out on lock (fade, never vanish). The
+                        // layer stays loaded while locked for its geometry
+                        // observation, so the lock edge owns the fade: a fade
+                        // started by the layer's creation finished unseen and
+                        // the first unlock popped in at full opacity.
+                        readonly property bool locked: editFrame.childEditingLocked
+                        enabled: !locked
+                        visible: !locked || opacity > 0.0
                         opacity: 0.0
 
-                        NumberAnimation on opacity {
-                            from: 0.0
-                            to: 1.0
+                        NumberAnimation {
+                            id: childRoleFade
+                            target: childRoleLayer
+                            property: "opacity"
                             duration: 110
                             easing.type: Easing.OutCubic
-                            running: true
                         }
+                        function fadeToLockState() {
+                            childRoleFade.stop()
+                            childRoleFade.to = locked ? 0.0 : 1.0
+                            childRoleFade.start()
+                        }
+                        onLockedChanged: fadeToLockState()
+                        Component.onCompleted: if (!locked) fadeToLockState()
 
                         // One line per axis. Keep the two guide items retained
                         // throughout a selected Edit session: assigning a fresh
@@ -1762,14 +1784,6 @@ Item {
                             width: childRoleLayer.width
                             height: semantic ? 3 : 2
                             color: semantic ? "#dc7a8088" : "#b4666c74"
-                        }
-
-                        NumberAnimation on opacity {
-                            from: 0.0
-                            to: 1.0
-                            duration: 110
-                            easing.type: Easing.OutCubic
-                            running: true
                         }
 
                         function overlapsEditRect(candidate) {

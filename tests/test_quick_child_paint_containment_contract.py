@@ -66,7 +66,9 @@ def test_edit_lock_hides_only_child_overlay_and_never_changes_card_paint() -> No
     assert 'editFrame.toggleChildEditLock()' in editor
     child_loader = editor.split('id: childRoleLoader', 1)[1].split('sourceComponent:', 1)[0]
     assert '&& !editFrame.childEditingLocked' not in child_loader
-    assert 'visible: !editFrame.childEditingLocked' in editor.split('id: childRoleLayer', 1)[1].split('NumberAnimation on opacity', 1)[0]
+    child_layer = editor.split('id: childRoleLayer', 1)[1].split('function overlapsEditRect(', 1)[0]
+    assert 'readonly property bool locked: editFrame.childEditingLocked' in child_layer
+    assert 'enabled: !locked' in child_layer
     assert 'visible: targetReady && roleId.length > 0' in editor
     assert 'editFrame.syncChildRequirementNow()' not in editor
     assert 'id: childRoleRepeater' in editor
