@@ -157,9 +157,9 @@ switch never remaps.
    priority; report under `.artifacts/evidence/architecture/native_core_p2/`). **Result (8 Nov, 20 s per recording):**
    all 160 replayable (recording, mode) pairs identical, 291,024 frames, 19 recordings x 9 modes; Waveform Ribbon is
    skipped on the 11 recordings without native PCM (it replays only from PCM, in process too). Report:
-   `.artifacts/evidence/architecture/native_core_p2/20261108_worker_gate/report.json`. Note (audit, M4): that
-   report predates the skip; it records those 11 rows as `error` and `"mismatches": 11` (the run exited 1). The
-   160 replayable pairs are identical in it; re-run with the current script to make the file match the claim.
+   `.artifacts/evidence/architecture/native_core_p2/20261108_worker_gate/report_rerun.json` (re-run after the audit's
+   C1/C2 fixes with the current script: 160 pairs, 291,024 frames, 0 mismatching, exit 0, 34 min at below-normal
+   priority). The first `report.json` predates the skip and records the 11 rows as errors (audit M4).
    **Live inputs: the lossless engine snapshot (built 8 Nov):** `FeatureFrame` is the replay contract, not the live
    one: the recorder's capture (`tools/visualizer_replay/record.py` `_frame`) clamps lanes to 0..1, resamples bars and
    waveform to fixed counts and consumes scheduler events. `core/visualizer_engine/engine_snapshot.py` instead:
