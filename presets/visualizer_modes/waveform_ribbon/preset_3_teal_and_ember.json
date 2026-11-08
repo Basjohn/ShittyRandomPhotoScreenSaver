@@ -14,7 +14,7 @@
     "widgets": {
       "spotify_visualizer": {
         "waveform_ribbon_attack": 0.045,
-        "waveform_ribbon_breathing": 0.7,
+        "waveform_ribbon_breathing": 0.491869918699187,
         "waveform_ribbon_kick_accent": 0.7,
         "waveform_ribbon_audio_block_size": 256,
         "waveform_ribbon_auto_rotate": false,
@@ -44,20 +44,20 @@
         "waveform_ribbon_damping": 0.6,
         "waveform_ribbon_dynamic_zoom": false,
         "waveform_ribbon_pulse_colour": 0.6,
-        "waveform_ribbon_pulse_direction": "Head To Tail",
+        "waveform_ribbon_pulse_direction": "Tail To Head",
         "waveform_ribbon_travel_direction": "Right To Left",
         "waveform_ribbon_reaction_mode": "Travelling Pulse",
         "waveform_ribbon_height_mode": "Dynamic Height Shift",
         "waveform_ribbon_tilt_shift": false,
         "waveform_ribbon_pulse_fade": 2.5,
-        "waveform_ribbon_pulse_particles": 1.0,
+        "waveform_ribbon_pulse_particles": 1.1951219512195121,
         "waveform_ribbon_pulse_rim": 2.0,
         "waveform_ribbon_pulse_saturation": 0.6,
-        "waveform_ribbon_pulse_speed": 12.0,
+        "waveform_ribbon_pulse_speed": 4.349593495934941,
         "waveform_ribbon_pulse_strands": 0.4,
-        "waveform_ribbon_pulse_width": 2.5,
+        "waveform_ribbon_pulse_width": 9.19308943089431,
         "waveform_ribbon_pulse_count": 2,
-        "waveform_ribbon_pulse_falloff": 1.0,
+        "waveform_ribbon_pulse_falloff": 5.679200542005413,
         "waveform_ribbon_frozen_deflate": 0.0,
         "waveform_ribbon_depth": [
           0.15,
@@ -402,27 +402,27 @@
         "waveform_ribbon_routing": {
           "height": [
             [
-              0.0,
+              0.9616858237547888,
               1.0
             ],
             [
-              0.0,
+              1.3218390804597702,
+              0.6
+            ],
+            [
+              0.8007662835249038,
               1.0
             ],
             [
-              0.0,
+              1.5057471264367817,
+              1.4
+            ],
+            [
+              0.37164750957854387,
               1.0
             ],
             [
-              1.0,
-              1.6
-            ],
-            [
-              0.0,
-              1.0
-            ],
-            [
-              0.0,
+              0.3563218390804598,
               1.0
             ]
           ],
