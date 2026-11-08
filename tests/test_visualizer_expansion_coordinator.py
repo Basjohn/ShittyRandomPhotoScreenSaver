@@ -484,3 +484,139 @@ def test_the_display_managers_double_click_cycles_through_the_takeover(monkeypat
     target, kwargs = requested[0]
     assert target in capable - {CAPABLE} and kwargs == {"_through_takeover": False}
     assert owner.calls == [(True, False)]                     # only the restore: the cycle never collapsed
+
+
+# ------------------------------------------------------------------------------- the V key: the glyph's own press
+
+
+class _GlyphScene(SimpleNamespace):
+    """The scene's retained glyph projection, as the real scene controller keeps it."""
+
+    glyph = (False, False)
+
+    def set_visualizer_expand_glyph(self, available, expanded):
+        self.glyph = (bool(available), bool(expanded))
+
+    @property
+    def visualizer_expand_glyph(self):
+        return self.glyph
+
+
+def _v_key_manager(mode: str):
+    """The manager harness with the V route, the glyph's route and the generation gate, admitted input on the
+    Visualizer's display, and a scene that retains the published glyph."""
+    from engine.display_manager import DisplayManager
+
+    manager, owner, _published = _manager(mode, requested=False)
+    for name in ("_route_quick_visualizer_input", "_route_quick_visualizer_expand_glyph",
+                 "_toggle_quick_visualizer_expansion_from_key"):
+        setattr(manager, name, getattr(DisplayManager, name).__get__(manager))
+    unit = manager._quick_visualizer_unit
+    stub = vars(unit.runtime.scene_controller)
+    unit.runtime.scene_controller = _GlyphScene(**{k: v for k, v in stub.items()
+                                                   if k != "set_visualizer_expand_glyph"})
+    unit.runtime.runtime_generation = 1
+    unit.runtime.input_controller = SimpleNamespace(
+        input_state=SimpleNamespace(admission_open=True, context_menu_active=False))
+    manager._runtime_generation = 1
+    manager.intent_writes = []
+    manager.settings_manager = SimpleNamespace(
+        set=lambda key, value: manager.intent_writes.append((key, value)), save=lambda: None,
+        get=lambda key, default=None: None)                         # sections fall back to the snapshot
+    manager._expanded_display_ready()
+    return manager, owner, unit
+
+
+def _spy_glyph_presses(manager) -> list[tuple[object, bool]]:
+    presses: list[tuple[object, bool]] = []
+    coordinator = manager._expanded_display_coordinator
+    real = coordinator.glyph_pressed
+    coordinator.glyph_pressed = lambda unit, expand: presses.append((unit, bool(expand))) or real(unit, expand)
+    return presses
+
+
+def _press_v(manager, source) -> None:
+    """What the runtime's V signal reaches in the manager: the generation/admission gate, then the V route."""
+    manager._route_quick_visualizer_input(source, manager._toggle_quick_visualizer_expansion_from_key, source)
+
+
+def test_v_presses_the_glyph_entry_in_the_glyphs_direction_and_a_second_v_collapses():
+    manager, owner, unit = _v_key_manager(CAPABLE)
+    presses = _spy_glyph_presses(manager)
+    coordinator = manager._expanded_display_coordinator
+    assert unit.runtime.scene_controller.visualizer_expand_glyph == (True, False)
+    _press_v(manager, unit)
+    assert presses == [(unit, True)] and owner.calls == [(True, True)]
+    owner.finish()
+    assert coordinator.phase is Phase.EXPANDED
+    intent_key = "widgets.spotify_visualizer.expanded_display_requested"
+    assert manager.intent_writes == [(intent_key, True)]         # the glyph's persisted intent, once
+    assert manager._expanded_display_requested() is True
+    assert unit.runtime.scene_controller.visualizer_expand_glyph == (True, True)
+    _press_v(manager, unit)                                       # the second V: the collapse the glyph offers
+    assert presses == [(unit, True), (unit, False)]
+    assert owner.calls[-1] == (False, True)
+    owner.finish()
+    assert coordinator.phase is Phase.ORDINARY and manager._expanded_display_requested() is False
+    assert manager.intent_writes == [(intent_key, True), (intent_key, False)]
+
+
+def test_v_and_the_glyph_reach_the_same_entry_with_the_same_outcome():
+    """Control: the glyph's own route on an identical manager records exactly what V records."""
+    by_v, owner_v, unit_v = _v_key_manager(CAPABLE)
+    by_glyph, owner_g, unit_g = _v_key_manager(CAPABLE)
+    v_presses, glyph_presses = _spy_glyph_presses(by_v), _spy_glyph_presses(by_glyph)
+    _press_v(by_v, unit_v)
+    by_glyph._route_quick_visualizer_expand_glyph(unit_g, True)
+    assert [expand for _unit, expand in v_presses] == [expand for _unit, expand in glyph_presses] == [True]
+    assert owner_v.calls == owner_g.calls == [(True, True)]
+
+
+def test_v_is_refused_under_the_context_menu_closed_input_and_edit():
+    manager, owner, unit = _v_key_manager(CAPABLE)
+    presses = _spy_glyph_presses(manager)
+    coordinator = manager._expanded_display_coordinator
+    state = unit.runtime.input_controller.input_state
+    state.context_menu_active = True
+    _press_v(manager, unit)
+    state.context_menu_active = False
+    state.admission_open = False
+    _press_v(manager, unit)
+    state.admission_open = True
+    unit.runtime.runtime_generation = 0                           # a stale generation's key
+    _press_v(manager, unit)
+    unit.runtime.runtime_generation = 1
+    assert presses == [] and owner.calls == []
+    # Edit withdraws the glyph, so V's press is refused exactly as an unoffered glyph's would be.
+    manager._quick_custom_layout_owner = SimpleNamespace(is_active=True)
+    coordinator.edit_entered()
+    _press_v(manager, unit)
+    assert owner.calls == [] and coordinator.phase is Phase.ORDINARY
+    assert manager._route_quick_visualizer_expand_glyph(unit, True) is False
+    # Negative control: the same V once Edit has gone expands.
+    manager._quick_custom_layout_owner = SimpleNamespace(is_active=False)
+    coordinator.edit_exited(saved=False)
+    _press_v(manager, unit)
+    assert owner.calls == [(True, True)]
+
+
+def test_the_runtimes_v_signal_reaches_the_v_route_through_the_generation_gate():
+    import inspect
+
+    from engine.display_manager import DisplayManager
+
+    source = "".join(inspect.getsource(DisplayManager._connect_quick_runtime).split())
+    wiring = source.split("runtime.visualizer_expand_toggle_requested.connect(", 1)[1].split(".connect(", 1)[0]
+    assert "self._route_quick_visualizer_input(" in wiring
+    assert "self._toggle_quick_visualizer_expansion_from_key" in wiring
+    # ...and the V route ends in the glyph's own route, never a second takeover entry.
+    route = inspect.getsource(DisplayManager._toggle_quick_visualizer_expansion_from_key)
+    assert "self._route_quick_visualizer_expand_glyph(" in route and "glyph_pressed" not in route
+
+
+def test_v_on_an_incapable_mode_does_what_an_unoffered_glyph_does():
+    manager, owner, unit = _v_key_manager(INCAPABLE)
+    assert manager._expanded_display_coordinator is None
+    assert manager._toggle_quick_visualizer_expansion_from_key(unit) is False
+    assert manager._route_quick_visualizer_expand_glyph(unit, True) is False   # the glyph's own answer
+    assert owner.calls == []

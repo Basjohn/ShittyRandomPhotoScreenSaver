@@ -2339,6 +2339,12 @@ class DisplayManager(QObject):
                 bool(expand),
             )
         )
+        runtime.visualizer_expand_toggle_requested.connect(
+            lambda: live_unit_route(
+                lambda display: self._route_quick_visualizer_input(
+                    display, self._toggle_quick_visualizer_expansion_from_key, display),
+            )
+        )
         runtime.scene_controller.visualizer_overlay_transport_requested.connect(
             lambda key: live_unit_route(
                 lambda display, value: self._route_quick_visualizer_input(
@@ -3395,6 +3401,25 @@ class DisplayManager(QObject):
             return False
         coordinator = _takeover_coordinator(self)
         return False if coordinator is None else coordinator.glyph_pressed(unit, bool(expand))
+
+    def _toggle_quick_visualizer_expansion_from_key(self, source: QuickDisplayUnit) -> bool:
+        """The V key, pressed on ``source``: exactly a press of the Visualizer's expand/collapse glyph.
+
+        The press goes in the direction the glyph shows and through the glyph's own route, so every rule of the glyph
+        holds (a capable mode, the Visualizer's own display, no context menu, Edit or closed input, the takeover's
+        fences and its persisted intent). Where the glyph is not offered the press is refused as the glyph's would be.
+        """
+
+        if self._retired or source.is_retired:
+            return False
+        state = source.runtime.input_controller.input_state
+        if not state.admission_open or state.context_menu_active:
+            return False
+        unit = self._quick_visualizer_unit
+        if unit is None or unit.is_retired:
+            return False
+        _available, expanded = unit.runtime.scene_controller.visualizer_expand_glyph
+        return self._route_quick_visualizer_expand_glyph(unit, not bool(expanded))
 
     def _request_quick_app_volume_step_from_visualizer(self, direction: int) -> bool:
         """Route Visualizer wheel input through an already-admitted Media owner.
