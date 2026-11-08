@@ -576,6 +576,151 @@ def test_a_display_reload_holds_the_worker_and_settings_or_the_exit_never_do(adm
         experiment_flags.override_active_flags_for_testing(flags)
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize("configure", ("synchronous", "later_turn"))
+def test_a_custom_reload_hands_the_running_worker_to_the_replacements_owner(qt_app, pcm, monkeypatch, tmp_path,
+                                                                            configure):
+    # Checkpoint audit 10, A10-L5: the reload hold, end to end through the engine. A CUSTOM commit runs the real
+    # ``engine_lifecycle.stop`` (the hold), the old generation's teardown (its owner retires, its lease goes), the
+    # strict destruction barrier (later turns) and ``_construct_and_start_replacement_runtime``, whose real
+    # ``_initialize_display`` wires the supervisor and builds the replacement; the display manager is a stand-in whose
+    # ``initialize_displays`` admits the REAL owner through the host binding (the owner rig, an unshown runtime), as
+    # the real manager does, synchronously. The rebuilt owner adopts the held worker: no stop, no start, one lease once
+    # the turn settled. Negative control (the owner configured on a later turn, the regression A10-L5 guards): the
+    # hold ends with no lease, the worker is retired, and the late configure has to start a fresh one.
+    import dataclasses
+    import uuid
+    import weakref
+
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    from core.diagnostics import experiment_flags
+    from core.settings import SettingsManager
+    from engine import engine_handlers
+    from engine.screensaver_engine import EngineState, ScreensaverEngine
+    from tests.test_settings_roundtrip_retired_generations import _cyclic_display_manager_class
+    from tests.test_visualizer_owner_engine_worker import _InProcessSupervisor
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import engine_worker_lifetime as lifetime
+
+    class _Worker(_InProcessSupervisor):
+        """The engine worker in this process; whether it runs, its start and its stop recorded."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.running = True
+            self.events: list[str] = []
+            self.stopped = threading.Event()
+
+        def is_running(self, _worker_type) -> bool:
+            return self.running
+
+        def start(self, _worker_type) -> bool:
+            self.events.append("start")
+            self.running = True
+            return True
+
+        def stop(self, _worker_type, timeout=None) -> bool:
+            self.events.append("stop")
+            self.running = False
+            self.stopped.set()
+            return True
+
+        def get_visualizer_worker_usage_snapshot(self) -> dict:
+            return {"visualizer_worker_pid": 4242 if self.running else None}
+
+    rigs: list = []
+    pending: list = []
+
+    class _Manager(_cyclic_display_manager_class()):
+        """The display manager stand-in: its one display's Visualizer owner is the owner rig's real one."""
+
+        build_now = True
+
+        def __init__(self, *, runtime_generation, **kwargs):
+            super().__init__(runtime_generation=runtime_generation, **kwargs)
+            self._supervisor = None
+            self._rig = None
+
+        def set_process_supervisor(self, supervisor) -> None:
+            self._supervisor = supervisor
+
+        def initialize_displays(self) -> int:
+            self._rig = gate.OwnerRig("spectrum", worker=True, supervisor=self._supervisor, cadence="thread")
+            rigs.append(self._rig)
+            if type(self).build_now:
+                self._rig.build()                      # the owner admitted (and configured) inside, as in production
+            else:
+                pending.append(self._rig)              # the regression: configured on a later turn
+            return 1
+
+        def cleanup(self) -> None:
+            if self._rig is not None and self._rig.owner is not None:
+                self._rig.owner.retire()               # the display's owner retires with its generation
+
+    worker = _Worker()
+    engine = ScreensaverEngine()
+    engine.settings_manager = SettingsManager(organization="Test", application=f"EngineWorkerReload_{uuid.uuid4().hex}",
+                                              storage_base_dir=tmp_path)
+    engine._process_supervisor = worker
+
+    def _start(*, show_first_image=True):
+        engine._transition_state(EngineState.RUNNING)
+        return True
+
+    monkeypatch.setattr("engine.screensaver_engine.DisplayManager", _Manager)
+    monkeypatch.setattr(engine, "_initialize_image_sources", lambda: True)
+    monkeypatch.setattr(engine, "_start_rss_background_refresh_if_needed", lambda: None)
+    monkeypatch.setattr(engine, "_setup_rotation_timer", lambda: None)
+    monkeypatch.setattr(engine, "_arm_replacement_watchdog", lambda label=None: None)
+    monkeypatch.setattr(engine, "start", _start)
+    monkeypatch.setattr(engine_handlers, "log_lifecycle_resource_snapshot", lambda *_a, **_k: None)
+    monkeypatch.setattr(engine_handlers, "suppress_runtime_pointer_input", lambda *_a, **_k: None)
+    monkeypatch.setattr("core.windows.reddit_helper_runtime.clear_session_ticket", lambda **_k: True)
+    flags = experiment_flags.active_experiment_flags()
+    experiment_flags.override_active_flags_for_testing(dataclasses.replace(flags, visualizer_engine_worker=True))
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            assert engine._initialize_display()        # the first generation, its owner on the running worker
+            _start()
+            old = weakref.ref(engine.display_manager)          # never kept alive by the test (the barrier's watch)
+            assert rigs[0].owner._worker is not None and lifetime.describe()["leases"] == 1
+            _Manager.build_now = configure == "synchronous"
+            engine_handlers.on_custom_layout_reload_requested(engine, "custom_layout_commit",
+                                                              old()._runtime_generation, id(old()))
+
+            def rebuilt() -> bool:
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)    # the barrier's destruction
+                return (len(rigs) == 2 and engine._engine_worker_reload_hold is None
+                        and engine._get_state() == EngineState.RUNNING)
+
+            gate._event_loop_for(qt_app, 20.0, until=rebuilt)
+            assert rebuilt(), (len(rigs), engine._engine_worker_reload_hold, engine._get_state())
+            assert engine.display_manager is not None and engine.display_manager is not old()
+            gate._event_loop_for(qt_app, 0.3)             # the turn settles (the lifetime's queued settle runs)
+            if configure == "synchronous":
+                assert worker.events == [] and worker.running
+                assert lifetime.describe() == {"leases": 1, "holds": [], "retiring": False, "retirements": 0}
+                assert rigs[1].owner._worker is not None and rigs[1].owner._worker.configured
+                return
+            assert worker.stopped.wait(10.0) and worker.events == ["stop"]
+            late = pending.pop()
+            late.build()                                # the late configure finds no worker and starts one
+            assert worker.events == ["stop", "start"] and lifetime.describe()["retirements"] == 1
+    finally:
+        experiment_flags.override_active_flags_for_testing(flags)
+        for rig in reversed(rigs):
+            rig.close()
+        worker.close()
+        engine.display_manager = None
+        gate_installed = engine._refresh_transition_gate       # the replacement generation's admission gate
+        if gate_installed is not None:
+            from core.threading.refresh_transition_gate import install_gate
+
+            gate_installed.close()
+            install_gate(None)
+
+
 def test_the_engine_wires_the_supervisor_before_the_displays_admit_the_visualizer():
     # 5.7 (4): the Visualizer owner is admitted synchronously inside ``initialize_displays`` and reads the supervisor at
     # its configure; wired after it, the first owner never had one (on the worker path it ran in process).
