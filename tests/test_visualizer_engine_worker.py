@@ -151,6 +151,79 @@ def test_sessions_never_reuse_a_drift_family_label(qt_app):
         EngineSession(mapping="unused", mode="spectrum", runtime_generation=1, label_namespace=-1)
 
 
+@pytest.mark.qt
+def test_the_writer_wakes_only_on_the_empty_to_populated_edge(qt_app):
+    import tools.expanded_visualizer_evidence as evidence
+
+    class Recorder:
+        def __init__(self):
+            self.sent = 0
+
+        def send_bytes(self, _data):
+            self.sent += 1
+
+        def close(self):
+            pass
+
+    frames = evidence.shipped_clip(0.3).frames
+    reader = PacketMailbox(role="reader")
+    sender = Recorder()
+    session = EngineSession(mapping=reader.mapping_name, mode="spectrum", runtime_generation=GENERATION)
+    session.mailbox._wake_sender = sender                 # the writer end of the owner's wake pipe
+    try:
+        session.tick(frames[0])
+        session.tick(frames[1])                           # still unread: no second wake
+        assert sender.sent == 1
+        reader.take()
+        session.tick(frames[2])
+        assert sender.sent == 2
+    finally:
+        session.close()
+        reader.close()
+
+
+@pytest.mark.qt
+def test_a_worker_frame_wakes_the_owner_across_processes(qt_app):
+    import multiprocessing
+    import threading
+
+    import tools.expanded_visualizer_evidence as evidence
+
+    frames = evidence.shipped_clip(0.3).frames
+    supervisor = ProcessSupervisor()
+    supervisor.register_worker_factory(WorkerType.VISUALIZER, visualizer_worker_main)
+    assert supervisor.start(WorkerType.VISUALIZER)
+    reader = PacketMailbox(role="reader")
+    receiver, sender = multiprocessing.Pipe(duplex=False)
+    taken, woke = [], threading.Event()
+
+    def on_wake():                                        # what the owner's GUI wake does: take the newest frame
+        publication = reader.take()
+        if publication is not None:
+            taken.append(publication.revision)
+            woke.set()
+
+    reader.set_wake_callback(on_wake)
+    reader.listen_for_wakes(receiver)
+    try:
+        configured = supervisor.send_request_and_await_response(
+            WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE,
+            {"mapping": reader.mapping_name, "mode": "spectrum", "runtime_generation": GENERATION, "wake": sender},
+            timeout_ms=60_000)
+        assert configured is not None and configured.success, configured and configured.error
+        sender.close()                                    # the worker holds its own end now
+        for index in range(3):
+            woke.clear()
+            response = supervisor.send_request_and_await_response(
+                WorkerType.VISUALIZER, MessageType.VIS_INPUT, {"frame": frames[index]}, timeout_ms=30_000)
+            assert response is not None and response.success
+            assert woke.wait(10.0), index                 # the frame arrived by a wake, never a poll
+        assert taken == [1, 2, 3]
+    finally:
+        supervisor.shutdown()
+        reader.close()
+
+
 def test_a_writer_attaches_only_to_an_owned_mapping():
     with pytest.raises(ValueError):
         PacketMailbox(role="writer")

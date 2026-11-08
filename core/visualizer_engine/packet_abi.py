@@ -191,6 +191,10 @@ class FramePacketReader:
         self.torn_reads += 1
         return None
 
+    def has_unread(self) -> bool:
+        """Whether a frame newer than the last accepted one has been published (no copy, nothing accepted)."""
+        return _U64.unpack_from(self._view, _LATEST_OFFSET)[0] > self.accepted
+
     def acknowledge(self, sequence: int) -> None:
         """Mark protected edges up to ``sequence`` as delivered (they stop being carried into later slots)."""
         _U64.pack_into(self._view, _CONSUMED_OFFSET, int(sequence))

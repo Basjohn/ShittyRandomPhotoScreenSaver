@@ -168,8 +168,11 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
   restarted workers) and numbers from `namespace << 32`; the main process's own counter stays far below, and
   namespace 0 keeps the in-process numbering for the identity gates. Production wiring must pass a fresh namespace on
   every `VIS_CONFIGURE` (`tests/test_visualizer_engine_worker.py`).
-- **The GUI wake (8 Nov):** in process the mailbox wakes the GUI on its empty -> populated edge; across processes the
-  main side needs that edge too (a pipe or event signalled by the worker, read on the GUI thread), never a poll.
+- **The GUI wake (8 Nov, resolved):** in process the mailbox wakes the GUI on its empty -> populated edge. Across
+  processes the writer sends one byte down a `multiprocessing.Pipe` on exactly that edge (handed to the worker in
+  `VIS_CONFIGURE` as `wake`); the reader's `listen_for_wakes` thread blocks on the pipe and runs the same wake callback
+  (the owner's thread-safe emitter). Never a poll; closing the mailbox ends the thread
+  (`tests/test_visualizer_engine_worker.py`: one byte per edge; three worker frames taken by wake across processes).
 - **Hidden GUI-thread reads inside the tick:** every attribute the tick reads from the owner/widget must become a
   control input. The audit for step 4 lists them from `logical_tick`'s reads; a missed one shows up as an identity
   failure, not silently.

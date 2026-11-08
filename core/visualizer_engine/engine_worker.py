@@ -28,7 +28,7 @@ class EngineSession:
     """One activation's tick host: inputs in, frames into the shared mapping ``mapping`` (attached as writer)."""
 
     def __init__(self, *, mapping: str, mode: str, runtime_generation: int, preset: int = 0, settings: Any = None,
-                 bar_count: int = 32, label_namespace: int = 0) -> None:
+                 bar_count: int = 32, label_namespace: int = 0, wake: Any = None) -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.packet_mailbox import PacketMailbox
         from widgets.spotify_visualizer import extruded_bubble_drift_log
@@ -48,7 +48,8 @@ class EngineSession:
         # revisions start at ``namespace << 32`` (the main process's own counter stays far below). Namespace 0 numbers
         # from 1, as a fresh in-process replay does (the identity gates).
         extruded_bubble_drift_log._REVISIONS = itertools.count((int(label_namespace) << 32) + 1)
-        self.mailbox = PacketMailbox(role="writer", attach=mapping)
+        # ``wake``: the writer end of the owner's wake pipe (the GUI is woken on the empty -> populated edge only).
+        self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake)
         self._stack.callback(self.mailbox.close)
         engine = ReplayBeatEngine(bar_count)
         # The main process's runtime generation (a control input: every frame carries it).

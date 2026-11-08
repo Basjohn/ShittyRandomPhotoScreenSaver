@@ -13,6 +13,7 @@ engine worker (work order 4) owns the writer side; nothing here runs at rest.
 """
 from __future__ import annotations
 
+import threading
 import uuid
 import zlib
 from multiprocessing.shared_memory import SharedMemory
@@ -53,8 +54,13 @@ class PacketMailbox(LatestStateMailbox):
 
     def __init__(self, *, slot_bytes: int = DEFAULT_SLOT_BYTES, generation: int = 0, engine_generation: int = 0,
                  activation_id: int = 0, mode_code: int = 0, role: Literal["both", "reader", "writer"] = "both",
-                 attach: str | None = None) -> None:
+                 attach: str | None = None, wake_sender: Any = None) -> None:
         super().__init__()
+        # Across processes the GUI wake is one byte down a pipe on the empty -> populated edge (the writer's side of
+        # ``multiprocessing.Pipe``); the reader's ``listen_for_wakes`` turns it back into the wake callback.
+        self._wake_sender = wake_sender
+        self._wake_thread: threading.Thread | None = None
+        self._wake_receiver: Any = None
         if (role == "writer") != (attach is not None):
             raise ValueError("a writer attaches to the owner's mapping by name; readers and loopbacks create it")
         if attach is None:
@@ -95,10 +101,18 @@ class PacketMailbox(LatestStateMailbox):
             self._revision += 1
             if previous is None:
                 wake = self._wake_callback
+                if self._wake_sender is not None:
+                    wake = self._send_wake
             revision = self._revision
         if wake is not None:
             wake()
         return revision
+
+    def _send_wake(self) -> None:
+        try:
+            self._wake_sender.send_bytes(b"w")
+        except (OSError, ValueError):
+            pass                                    # the owner has gone; its reader no longer needs waking
 
     # ---------------------------------------------------------------------------------------------- consumer
 
@@ -145,9 +159,31 @@ class PacketMailbox(LatestStateMailbox):
             self._wake_callback = callback
             pending = self._peeked is not None or (
                 self._writer is not None and self._unread is not None
-                and self._unread[3] > self._writer.consumed_sequence)
+                and self._unread[3] > self._writer.consumed_sequence) or (
+                self._writer is None and self._reader is not None and self._reader.has_unread())
         if callback is not None and pending:
             callback()
+
+    def listen_for_wakes(self, receiver: Any) -> None:
+        """Reader side: a daemon thread blocks on ``receiver`` (the pipe's other end) and runs the wake callback for
+        each byte. It blocks, never polls; closing the mailbox closes the pipe and ends it."""
+        if self._reader is None or self._wake_thread is not None:
+            raise RuntimeError("only a reader listens for wakes, once")
+        self._wake_receiver = receiver
+
+        def listen() -> None:
+            while True:
+                try:
+                    receiver.recv_bytes()
+                except (EOFError, OSError, ValueError):
+                    return
+                with self._lock:
+                    callback = self._wake_callback
+                if callback is not None:
+                    callback()
+
+        self._wake_thread = threading.Thread(target=listen, name="srpss-visualizer-engine-wake", daemon=True)
+        self._wake_thread.start()
 
     def clear(self) -> None:
         with self._lock:
@@ -166,6 +202,12 @@ class PacketMailbox(LatestStateMailbox):
             if self._closed:
                 return
             self._closed = True
+            for end in (self._wake_receiver, self._wake_sender):
+                if end is not None:
+                    try:
+                        end.close()
+                    except OSError:
+                        pass
             for side in (self._writer, self._reader):
                 if side is not None:
                     side.release()
