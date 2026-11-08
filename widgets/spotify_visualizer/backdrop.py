@@ -53,46 +53,98 @@ def make_visualizer_backdrop(image) -> VisualizerBackdrop:
     return VisualizerBackdrop(identity=str(image.identity), size=target, rgba=bits[:row * target[1]])
 
 
-def complete_frame_backdrop(state, presentation_state):
-    """A frame the engine worker ticked, completed with the reflected wallpaper the owner keeps (native core P2b,
-    work order 5 slice 5.4; checkpoint audit 7, A7-M1).
+_FIELD_NAMES: dict[type, tuple[str, ...]] = {}
+
+
+def _with_field(instance, name: str, value):
+    """A frozen frame dataclass with one field substituted, built as the frame codec builds a decoded frame (a new
+    instance, every field set as it is; nothing re-validated or re-frozen: the other fields are the decoded ones)."""
+    import dataclasses
+
+    cls = type(instance)
+    names = _FIELD_NAMES.get(cls)
+    if names is None:
+        names = _FIELD_NAMES[cls] = tuple(field.name for field in dataclasses.fields(cls))
+    copy = object.__new__(cls)
+    for field_name in names:
+        object.__setattr__(copy, field_name, value if field_name == name else getattr(instance, field_name))
+    return copy
+
+
+class FrameBackdropCompletion:
+    """The frame completion for frames the engine worker ticked: the reflected wallpaper the owner keeps put into a
+    reflecting frame's parameters (native core P2b, work order 5 slice 5.4; checkpoint audits 7 A7-M1 and 8 A8-L1).
 
     The wallpaper is presentation data the owner makes on the GUI thread from the displayed photograph; the worker's
     presentation state never has one (shipping pixels to the worker to have them shipped back in the frame would be
     the wrong owner). A reflecting mode's frame carries ``backdrop`` / ``backdrop_blend_s`` in its parameters as
-    captured in process (Sphere, Extruded Spectrum); the main side puts its own there when it takes the frame, so
-    the renderer reads exactly what it reads in process. Returns ``state`` itself when nothing differs (no
-    wallpaper: no work)."""
-    import dataclasses
+    captured in process (Sphere, Extruded Spectrum); the main side puts its own there when it takes the frame
+    (``PacketMailbox.set_frame_completion``, on the render thread at sync admission), so the renderer reads exactly
+    what it reads in process.
 
-    mode_state = getattr(state, "mode_state", None)
-    parameters = getattr(mode_state, "parameters", None)
-    if parameters is None or "backdrop" not in parameters:
-        return state
-    backdrop = getattr(presentation_state, "_backdrop", None)
-    blend_s = getattr(presentation_state, "_backdrop_blend_s", None)
-    carried = parameters.get("backdrop")
-    carried_identity = None if carried is None else carried.get("identity")
-    if carried_identity == (None if backdrop is None else backdrop.identity) and \
-            parameters.get("backdrop_blend_s") == blend_s:
-        return state
-    from widgets.spotify_visualizer.render_state import freeze_render_fields, freeze_render_value
+    O(changed) (A8-L1): the decoded parameters are already frozen, so only the two entries are replaced (their
+    positions found once per parameter layout) and the frame and its mode state are rebuilt around them without
+    re-validation, as the codec built them; the wallpaper is frozen once per wallpaper. Before, every reflecting
+    frame re-froze its whole parameter map and re-ran both frames' validation (117 / 78 us median, Sphere / Extruded
+    Spectrum). One per owner session, holding the frozen wallpaper; ``release`` (the owner's retire or its fallback in
+    process) drops it, so nothing keeps a wallpaper past its owner."""
 
-    # The frozen wallpaper is made once per wallpaper (the frame freezes it as the in-process capture does), not per
-    # frame: one reference kept with the wallpaper it froze.
-    cached = _FROZEN_WALLPAPER
-    if backdrop is None:
-        frozen = None
-    elif cached[0] is backdrop:
-        frozen = cached[1]
-    else:
-        frozen = freeze_render_value(backdrop)
-        cached[0], cached[1] = backdrop, frozen
-    fields = freeze_render_fields({**dict(parameters), "backdrop": frozen, "backdrop_blend_s": blend_s})
-    return dataclasses.replace(state, mode_state=dataclasses.replace(mode_state, parameters=fields))
+    __slots__ = ("_presentation", "_wallpaper", "_frozen", "_layout")
+
+    def __init__(self, presentation_state) -> None:
+        self._presentation = presentation_state
+        self._wallpaper = None             # the wallpaper last frozen, and its frozen fields
+        self._frozen = None
+        self._layout = None                # (entries length, backdrop index, blend index) of the last layout
+
+    def release(self) -> None:
+        self._presentation = self._wallpaper = self._frozen = self._layout = None
+
+    def _positions(self, entries) -> tuple[int, int] | None:
+        layout = self._layout
+        if layout is not None and layout[0] == len(entries) and entries[layout[1]][0] == "backdrop" \
+                and entries[layout[2]][0] == "backdrop_blend_s":
+            return layout[1], layout[2]
+        found = {name: index for index, (name, _value) in enumerate(entries)
+                 if name in ("backdrop", "backdrop_blend_s")}
+        if len(found) != 2:
+            return None
+        self._layout = (len(entries), found["backdrop"], found["backdrop_blend_s"])
+        return found["backdrop"], found["backdrop_blend_s"]
+
+    def __call__(self, state):
+        """``state`` completed (``state`` itself when nothing differs: no wallpaper, or one the frame has)."""
+        from widgets.spotify_visualizer.render_state import FrozenFields, freeze_render_value
+
+        presentation = self._presentation
+        mode_state = getattr(state, "mode_state", None)
+        parameters = getattr(mode_state, "parameters", None)
+        if presentation is None or not isinstance(parameters, FrozenFields):
+            return state
+        entries = parameters.entries
+        positions = self._positions(entries)
+        if positions is None:
+            return state
+        backdrop = getattr(presentation, "_backdrop", None)
+        blend_s = getattr(presentation, "_backdrop_blend_s", None)
+        at_backdrop, at_blend = positions
+        carried = entries[at_backdrop][1]
+        carried_identity = None if carried is None else carried.get("identity")
+        if carried_identity == (None if backdrop is None else backdrop.identity) and \
+                entries[at_blend][1] == blend_s:
+            return state
+        if backdrop is None:
+            frozen = None
+        elif self._wallpaper is backdrop:
+            frozen = self._frozen
+        else:
+            frozen = freeze_render_value(backdrop)            # once per wallpaper, as the in-process capture freezes it
+            self._wallpaper, self._frozen = backdrop, frozen
+        completed = list(entries)
+        completed[at_backdrop] = ("backdrop", frozen)
+        completed[at_blend] = ("backdrop_blend_s", freeze_render_value(blend_s))
+        fields = FrozenFields._from_frozen_entries(tuple(completed))
+        return _with_field(state, "mode_state", _with_field(mode_state, "parameters", fields))
 
 
-_FROZEN_WALLPAPER: list = [None, None]          # (the wallpaper, its frozen fields): the completion's one entry
-
-
-__all__ = ["VisualizerBackdrop", "backdrop_size", "complete_frame_backdrop", "make_visualizer_backdrop"]
+__all__ = ["FrameBackdropCompletion", "VisualizerBackdrop", "backdrop_size", "make_visualizer_backdrop"]

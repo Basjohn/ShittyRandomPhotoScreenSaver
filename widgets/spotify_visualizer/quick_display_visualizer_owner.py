@@ -127,6 +127,7 @@ class QuickDisplayVisualizerOwner:
     _recovery_stage = 0
     _worker_playback_edges = 0
     _display_power_edges = 0
+    _frame_completion: Any = None
     # The fade a crossfade's fade-out starts from (1.0 in process; a recovery that ended faded out leaves 0).
     _fade_out_from = 1.0
 
@@ -254,8 +255,10 @@ class QuickDisplayVisualizerOwner:
         self._bind_deferred = False
         self._recovery_stage = 0
         self._fade_out_from = 1.0
-        # Audit 8: the display-power edges sent to the worker (only the newest one's reply acts, A8-L3).
+        # Audit 8: the display-power edges sent to the worker (only the newest one's reply acts, A8-L3) and the reader's
+        # frame completion (the reflected wallpaper, per session, released with it: A8-L1).
         self._display_power_edges = 0
+        self._frame_completion: Any = None
 
     @property
     def controller(self) -> Any:
@@ -1789,16 +1792,25 @@ class QuickDisplayVisualizerOwner:
         # The framed view the tick reads follows the main controller's layout metrics and the presentation inputs the
         # capture reads (the view records, the mode's presentation-only controls: slice 5.4), latest wins, never
         # awaited; the reflected wallpaper stays here and completes each frame taken (A7-M1).
-        from widgets.spotify_visualizer.backdrop import complete_frame_backdrop
+        from widgets.spotify_visualizer.backdrop import FrameBackdropCompletion
         from widgets.spotify_visualizer.logical_edges import presentation_inputs_snapshot
 
         presentation = controller.presentation_state
         link.set_view_source(lambda: (controller.layout_metrics_snapshot,
                                       presentation_inputs_snapshot(presentation, controller.mode_id)))
-        link.mailbox.set_frame_completion(lambda state: complete_frame_backdrop(state, presentation))
+        self._release_frame_completion()
+        self._frame_completion = FrameBackdropCompletion(presentation)
+        link.mailbox.set_frame_completion(self._frame_completion)
         controller.set_layout_metrics_observer(self._on_layout_metrics_written)
         self._view_dirty = False
         link.send_view()
+
+    def _release_frame_completion(self) -> None:
+        """The frame completion's wallpaper goes with the session it completed (A8-L1): called once the session's
+        reader is closed (no completion in flight: the reader's lock) or replaced."""
+        completion, self._frame_completion = self._frame_completion, None
+        if completion is not None:
+            completion.release()
 
     def _on_worker_configured(self, link: Any, identity: tuple[int, int]) -> None:
         """GUI thread, the configure's reply: the session's engine identity. A first bind deferred for it binds now;
@@ -2141,6 +2153,7 @@ class QuickDisplayVisualizerOwner:
         if link is not None:
             self._hold_for_recovery(link)
             link.retire()
+        self._release_frame_completion()
         if count_for_run and link_module.disable_worker_for_run(reason):
             logger.error("[SPOTIFY_VIS][ENGINE_WORKER] Off for the rest of the run: %s", reason)
         logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Running in process (%s) mode=%s", reason,
@@ -2385,6 +2398,7 @@ class QuickDisplayVisualizerOwner:
             # The session's stop is sent, never awaited (it ends in the worker in order: capture and its mapping view
             # released), then the reader closes and the main process unlinks the mapping.
             link.retire()
+        self._release_frame_completion()
         if self._engine_acquired:
             release = getattr(self._controller.engine, "release", None)
             if callable(release):

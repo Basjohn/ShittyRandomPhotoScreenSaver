@@ -93,10 +93,6 @@ def test_the_reflected_wallpaper_completes_the_worker_frames(qt_app, pcm, monkey
     # A7-M1: the wallpaper is presentation data and stays on the main side; each frame taken from the worker carries
     # the owner's own (the renderer reads it from the frame's parameters, as in process). Negative control: frames as
     # decoded carry none (the worker never has a photograph).
-    from widgets.spotify_visualizer import backdrop
-
-    if not completed:
-        monkeypatch.setattr(backdrop, "complete_frame_backdrop", lambda state, _presentation: state)
     stand_in, rig, owner = _stand_in_rig(pcm, "sphere")
     try:
         if not completed:
@@ -110,6 +106,68 @@ def test_the_reflected_wallpaper_completes_the_worker_frames(qt_app, pcm, monkey
         carried = [logical.mode_state.parameters["backdrop"] for logical in recent]
         identities = [None if value is None else value["identity"] for value in carried]
         assert all(identity == wallpaper.identity for identity in identities) is completed, identities
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("mode", gate.REFLECTING_MODES)
+def test_the_frame_completion_refreezes_nothing_per_frame_and_leaves_with_its_owner(qt_app, pcm, monkeypatch, mode):
+    # Checkpoint audit 8, A8-L1: completing a reflecting frame with the wallpaper replaces its two entries only: no
+    # parameter map is frozen per frame (the wallpaper is frozen once), and the completed frame equals freezing the
+    # whole map afresh (the pre-fix completion, which did that on every frame on the render thread). The frozen
+    # wallpaper is the owner's and leaves with it: after the retire nothing in the completion or the backdrop module
+    # keeps it (the pre-fix module-level cache kept the last one for the process's life).
+    import dataclasses
+
+    from widgets.spotify_visualizer import backdrop, render_state
+
+    freezes = {"inside": False, "maps": 0, "frames": 0}
+    freeze = render_state.freeze_render_fields
+
+    def counting(values=None):
+        if freezes["inside"]:
+            freezes["maps"] += 1
+        return freeze(values)
+
+    monkeypatch.setattr(render_state, "freeze_render_fields", counting)
+    stand_in, rig, owner = _stand_in_rig(pcm, mode)
+    try:
+        rig.reflect()
+        owner.forward_presentation_inputs()
+        mailbox = owner._worker.mailbox
+        completion = mailbox._frame_completion
+        pairs: list = []
+
+        def measured(state):
+            freezes["inside"] = True
+            try:
+                completed = completion(state)
+            finally:
+                freezes["inside"] = False
+            freezes["frames"] += 1
+            pairs.append((state, completed))
+            return completed
+
+        mailbox.set_frame_completion(measured)
+        _pump(rig, 0.8)
+        mailbox.set_frame_completion(completion)
+        assert freezes["frames"] >= 10 and freezes["maps"] <= 1, freezes      # the wallpaper's own freeze, once
+        presentation = owner.controller.presentation_state
+        state, completed = pairs[-1]
+        whole = render_state.freeze_render_fields({**dict(state.mode_state.parameters),
+                                                   "backdrop": render_state.freeze_render_value(presentation._backdrop),
+                                                   "backdrop_blend_s": presentation._backdrop_blend_s})
+        afresh = dataclasses.replace(state, mode_state=dataclasses.replace(state.mode_state, parameters=whole))
+        assert completed == afresh
+        wallpaper = presentation._backdrop
+        assert completed.mode_state.parameters["backdrop"]["identity"] == wallpaper.identity
+        owner.retire()
+        assert owner._frame_completion is None and completion._wallpaper is None and completion._frozen is None
+        held = [value for value in vars(backdrop).values()
+                if value is wallpaper or (isinstance(value, list) and any(item is wallpaper for item in value))]
+        assert not held
     finally:
         rig.close()
         stand_in.close()
