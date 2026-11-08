@@ -316,7 +316,7 @@ class EngineWorkerLink:
 
     def _respawn_unconfigured(self) -> None:
         """The supervisor retired the worker before the configure was answered (the process the configure was queued
-        to had died, and the supervisor's heartbeat restarted it: the session never existed). Once per link, every
+        to had died, and the supervisor's heartbeat retired it: the session never existed). Once per link, every
         unanswered request goes out again, in order, to a (re)started worker; a second retirement is a failure."""
         self._respawned = True
         pending, self._pending = self._pending, {}

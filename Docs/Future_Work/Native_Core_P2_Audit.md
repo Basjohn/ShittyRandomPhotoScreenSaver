@@ -1666,3 +1666,24 @@ Focused runs after the fixes: the three engine-worker owner files 69 passed; the
 edge, retirement and logical-ownership suites, the logical-edges parity, engine-worker and packet-mailbox suites 92
 passed. With `--viz-engine-worker` off nothing on these paths runs (all changes are on the worker path or its
 link), and the production-path frame test is unchanged.
+
+### Audit 9 resolution (8 Nov, with slice 5.7)
+
+The checkpoint audit 9 section itself is on main (3d856690). Fixed in 5.7 (design doc, "5.7 record"); tests in
+`tests/test_visualizer_engine_worker_lifetime.py`, each with its negative control.
+
+- **A9-L1** fixed: `retire()` sets `_retiring` first, and `_on_first_configure_deadline` is inert once it is set, joined
+  or not. Test: `test_the_first_configure_deadline_is_inert_on_a_half_retired_owner` (the pre-fix fence falls back and
+  starts a logical runtime on the half-retired owner).
+- **A9-L2** fixed: the spawn task belongs to its link. It no longer stops the role (the supervisor's start retires a
+  dead role's leftovers itself), starts nothing once its link closed, and retires a worker it started for a link that
+  closed meanwhile when no lease claims it (`engine_worker_lifetime.retire_if_unused`). Tests:
+  `test_a_stale_spawn_task_never_touches_a_later_links_worker` (the pre-5.7 stop-then-start stops the later link's
+  worker), `test_a_spawn_that_finishes_after_its_link_closed_retires_the_worker_it_started`. The frozen cold spawn
+  against the 6 s bound is recorded as the operator's check (the source-run spawn from `main.py`'s entry: ready in
+  1.45 s on the dev box).
+- **A9-L3** settled: the owner's recovery docstring now says the reconstruction is as in process, neither capped nor
+  guaranteed (a refused reload leaves the owner `failed` at fade 0 with its runtime running). No cap added here: the
+  same uncapped loop exists in process and no worker failure loops on its own; the general follow-up (a per-run
+  reconstruction cap, or a `failed` owner that stops its runtime when its reload is refused) is in `Current_Plan.md`.
+- **A9-L4** is Bubble's owner's (not 5.7).

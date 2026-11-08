@@ -1060,6 +1060,112 @@ switch never remaps.
      check). From 5.2: the worker process stays up after the owner retires (its session closed) until the supervisor
      shuts down; the production supervisor reaches the display manager after the displays initialise, so an owner
      built before it runs in process (logged once).
+     **Built (8 Nov, with checkpoint audit 9's A9-L1..L3):**
+     - *Lifetime (dormancy), decided: leases, and a hold across display reloads.* The worker was already spawned
+       lazily (the first link that finds it not running starts it on an IO task; off the admission nothing imports or
+       spawns it). New, `widgets/spotify_visualizer/engine_worker_lifetime.py`: every link holds a lease from its
+       configure to its close; when the last one goes the worker is retired at the end of that GUI turn (one queued
+       settle event; the retirement is an IO task: `supervisor.stop`, behind the session's queued `VIS_STOP`, then the
+       graceful `SHUTDOWN` and the reaping). A link replaced inside one turn keeps the worker (a recovery retires the
+       failed link and opens its replacement in the same call); mode and preset activations never touch the link. A
+       display reload rebuilds the owner several turns later (teardown, destruction barrier, replacement), so a CUSTOM
+       layout commit or a monitor topology change holds the worker from `engine_lifecycle.stop` (reasons
+       `custom_edit`, `monitor_topology`) until `_construct_and_start_replacement_runtime` has built the replacement
+       (its owner leases the running worker synchronously inside `initialize_displays`); a replacement with no owner on
+       the worker ends the hold and retires it. Settings holds nothing: its dialog can stay open for minutes with no
+       Visualizer, so the worker is retired with its owner and respawned at the close (about 1.5 s off the GUI thread,
+       measured below; the first configure's deadline bounds it). Why this policy: it is event-driven (no idle timer),
+       it never thrashes on the frequent edges (mode/preset changes are in-session; a recovery swaps links within a
+       turn; reloads are held) and it leaves no worker where no Visualizer runs. The retirement is fenced: the task
+       re-checks under the lifetime lock that no lease or hold arrived and marks the role retiring; a link that
+       configures meanwhile spawns afresh, and its start (`serialised_start`) waits for the retirement's stop (one lock
+       orders the two IO tasks). A hold that is never ended (a replacement that was never constructed) keeps the
+       worker until the next hold ends or the supervisor shuts down; a newer reload replaces an older hold; the exit
+       ends it. Off the admission the engine's two calls are a flag read per reload and nothing is imported.
+     - *Park (verified, measured):* the existing park covers capture (the engine reference released) and cadence (the
+       runtime parked with no wake). A real worker, Spectrum on recorded PCM (evidence
+       `.artifacts/evidence/architecture/native_core_p2/20261108_p2b_57_dormancy/dormancy_probe.json`): running 12% of
+       a core, ~570 context switches/s; parked 0-15.6 ms of CPU over 10 s (one psutil tick), ~10.6 switches/s, which is
+       the idle worker's own: `BaseWorker`'s 100 ms request-queue wait (its parent-death watch, shared with the image
+       workers, left as is). 33 threads while a session exists, 29 after it (numpy's and the runtime's pools), flat
+       over three more sessions.
+     - *Diagnostics:* `ProcessSupervisor.get_visualizer_worker_usage_snapshot()` names the worker's PID from supervisor
+       state (no OS query); `main.py`'s `--usage` resource provider adds it, and the sampler logs
+       `visualizer_worker_pid`, `_cpu_pct`, `_rss_mb` and `_threads` from its own per-process pass (the values it
+       already reads for every process in the tree; threads from the heavy refresh's Toolhelp map, carried forward like
+       `threads_app`). A named PID the cached tree does not know yet makes that sample a topology refresh (one Toolhelp
+       snapshot, ctypes, GIL released) instead of waiting up to eight samples; with no worker (at rest) nothing changes:
+       no per-tick psutil call, no new cadence. The logs: the supervisor's start/stop lines carry the PID, the
+       lifetime logs every retirement with it, and a session that failed closed reaches the main log as the owner's
+       session failure (its reason, the step's exception, is in `VIS_STOP`'s report; the worker process's own logging
+       stays as every worker's: `worker_visualizer.log` on perf runs only).
+     - *Supervisor (3a): a start retires what a dead role left.* `ProcessSupervisor.start` runs `_retire_dead_role`
+       under the role's lifecycle lock: a registered process that died, or a listener with no process, has its
+       response listener stopped (its callbacks cancelled with None: the link resends an unanswered configure once) and
+       its entry cleaned before `_start_role` replaces the queues. The link no longer stops the role before its start.
+     - *Supervisor (3b): one owner of restart decisions for the role.* `CLIENT_RESTARTED_ROLES = {VISUALIZER}`: the
+       heartbeat retires a dead or hung engine worker (hung: `MISSED_HEARTBEAT_THRESHOLD` misses, no restart-window
+       limit, since a retirement is not a restart) and never starts it; the link starts it on its owner's demand (the
+       owner's reconfigure, through its next link). Every heartbeat action is fenced by the judged process's identity
+       (`_stop_if_current`, checked and stopped under the lifecycle lock), so a fresh worker started meanwhile is left
+       alone; the image roles keep their restart, now fenced the same way (`restart(..., judged=process)`).
+     - *Session (3c, A6-M3's open half): a session whose steps keep failing fails closed.* `EngineSession
+       .FAILED_STEPS_BEFORE_CLOSE = 60` consecutive failed steps (a count: about 0.67 s at 90 Hz; a successful step
+       resets it; a transient failure stays the runtime's retry, as in process): the session records why, requests a
+       park from inside its own step (`VisualizerLogicalRuntime.request_park`, the non-waiting half of `park`) and closes
+       its wake sender, so the owner's listener sees the session's end (the existing recovery: hold, fade, reconfigure
+       once); a later edge closes it and replies `session_closed`, and `VIS_STOP`'s report carries `failed`.
+     - *Wiring order:* `ScreensaverEngine._initialize_display` wires the supervisor into the display manager before
+       `initialize_displays` (the Visualizer owner is admitted synchronously inside it and reads the supervisor at its
+       configure). For both paths: in process the controller only stores the supervisor, so nothing else changes.
+     - *Frozen spawn:* Nuitka's always-on multiprocessing plugin runs the child (`--multiprocessing-fork`) as
+       `__parents_main__`, `main.py`'s module code plus a freeze-support call into `multiprocessing.spawn.spawn_main`,
+       which unpickles the supervisor's `Process` and calls `core.visualizer_engine.engine_worker
+       .visualizer_worker_main` by name. That package was reached only through a function-level import; every build
+       family now compiles it explicitly (`--include-package=core.visualizer_engine` in `scripts/venv/build_nuitka.ps1`,
+       `build_nuitka_mc_onedir.ps1`, `tools/build_layout.ps1`) and the post-build audit requires
+       `core.visualizer_engine.engine_worker` (`tools/frozen_build_audit.py`). The source-run equivalent is tested
+       (`tests/test_visualizer_engine_frozen_spawn.py`: a parent whose `__main__` is `main.py`; the child reaches the
+       target's loop, ready in 1.45 s). **Found:** that child executes `main.py`'s whole module level first, so the
+       production worker process loads QtGui, QtWidgets, QtQuick, QtQml, QtNetwork and QtOpenGL (and the engine's import
+       graph) before its target, frozen or not, as the image workers do: the "QtCore only" property holds for the
+       worker's own imports, not for its process. **Operator check:** a frozen build with `--viz-engine-worker` (the
+       Visualizer on the worker, its frames shown) and the cold spawn's time to the first configure's reply against
+       the 6 s bound (audit 9, A9-L2), plus the worker's RSS in `--usage`.
+     - *Audit 9:* A9-L1, the first configure's deadline is inert once `retire()` began (`_retiring`, set first: a retire
+       whose logical join failed returns before `_retired`). A9-L2, the spawn task belongs to its link: it stops nothing
+       (the link no longer stops the role), starts nothing once its link closed, and a worker it started for a link that
+       closed meanwhile is retired at once when no lease claims it (`engine_worker_lifetime.retire_if_unused`). A9-L3,
+       the recovery's docstring: the reconstruction is as in process, neither capped nor guaranteed (a refused reload
+       leaves the owner `failed` at fade 0 with its runtime running; an activation that never reveals reloads about
+       every 6 s); recorded in `Current_Plan.md` as a general follow-up, not changed here (the same loop exists in
+       process, and no worker failure loops on its own).
+     - *Off the admission:* unchanged, except where intended for both paths: the wiring order (above), the
+       supervisor's start retiring a dead role's listener and the heartbeat's identity-fenced restart of the image
+       roles (both only act on a dead or replaced process), `retire()` setting `_retiring`, the `--usage` line's four
+       new fields (`na` at rest) and the build families compiling `core.visualizer_engine`. The production-path frame
+       test and the owner contract suites pass unchanged.
+     - *Tests:* `tests/test_visualizer_engine_worker_lifetime.py`, `tests/test_visualizer_engine_frozen_spawn.py`,
+       `tests/test_usage_sampler.py` (two new), `tests/test_frozen_build_audit.py`,
+       `tests/test_build_closeout_contract.py` (TestSuite lists each, with its negative control).
+     - Ran: the new files, `test_visualizer_engine_paced.py`, `_worker`, `test_visualizer_owner_engine_worker.py`,
+       `_liveness`, `_inputs`, `test_visualizer_owner_production_path.py`, the owner contract, edge and retirement
+       suites, `test_p2_logical_runtime.py`, `test_engine_lifecycle.py`, `test_runtime_destruction.py`,
+       `test_visualizer_logical_edges_parity.py`, `test_display_power.py`, `test_visualizer_engine_import_weight.py`,
+       `test_process_supervisor.py`, `_availability`, `test_usage_sampler.py`, `test_worker_parent_death.py`,
+       `test_optional_worker_startup.py`, the build/frozen-audit/layout suites and the engine replacement suites
+       (Settings round trips, display selection, replacement hang window, S hotkey, no display shown).
+     - **Left for step 6 / gate 3:** gate 3's game60 run (lead, operator's yes); the operator's frozen check above;
+       the production worker's `main.py` import graph (a worker entry that skips `main.py`'s module level would bring
+       its process back to QtCore only and cut its spawn time and RSS; it touches every worker role, so it is its own
+       change); 5.3's rest (device changes); the reply handlers outside the one-frame gate (the configure's reply,
+       161-209 ms); the render-thread decode and completion cost with a real window; gate 4's 20 Settings open/close
+       and 20 mode switches with no process, mapping or handle growth (the lifetime now retires the worker at each
+       Settings open; to measure); `BaseWorker`'s 100 ms queue wait (10 wakes/s in an idle or parked worker, every
+       role). Carried from 5.5: an established session's hung-worker bound is the production heartbeat's (~17 s, the
+       held frame frozen meanwhile), and recovery onto a fresh worker after a production-timed hang is unmeasured (since
+       5.7 the heartbeat retires and the owner's next link starts the fresh worker, so the race the 5.5 record named is
+       gone, but the timing is not measured).
 
 6. Measurement (gate 3), then decide P2b. P3 note (audit H5): the tagged codec is P2's Python-to-Python transport,
    not a C layout; P3 gets per-mode fixed layouts under new `payload_schema` values, and the native reader validates
