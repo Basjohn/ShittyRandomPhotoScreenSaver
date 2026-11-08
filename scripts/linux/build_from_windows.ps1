@@ -14,7 +14,10 @@
       Auto (default)     - Dispatch when GitHub already knows the workflow (its file is
                            on the default branch), otherwise Tag; the choice is printed.
       Dispatch           - `gh workflow run`; GitHub allows this only once the
-                           workflow file is on the default branch.
+                           workflow file is on the default branch. Inputs (commit,
+                           token) are sent only with -Commit; without it the dispatch
+                           carries none (a branch whose workflow predates them accepts
+                           it) and the run is found by its commit and start time.
       Tag                - pushes a temporary tag linux-build/<timestamp> at the
                            branch's pushed commit (works before the workflow is
                            merged) and deletes it after the run.
@@ -86,11 +89,19 @@ try {
     $tag = $null
     $token = $null
     if ($Mode -eq 'Dispatch') {
-        # The token names the run (the workflow's run-name), so exactly this dispatch is followed.
-        $token = 'srpss-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
-        Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch at $remoteSha (run token $token)"
-        Invoke-Checked gh @('workflow', 'run', $Workflow, '--ref', $Branch, '-f', "commit=$remoteSha",
-            '-f', "token=$token") | Out-Null
+        if ($Commit) {
+            # The Remote tab's pinned commit: the workflow checks it out and verifies it, and the token names the
+            # run (the workflow's run-name), so exactly this dispatch is followed. Only with -Commit: GitHub refuses
+            # a dispatch whose inputs the ref's linux-build.yml does not declare (HTTP 422), so a branch cut before
+            # the inputs existed keeps the plain dispatch below on the other tabs.
+            $token = 'srpss-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
+            Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch at $remoteSha (run token $token)"
+            Invoke-Checked gh @('workflow', 'run', $Workflow, '--ref', $Branch, '-f', "commit=$remoteSha",
+                '-f', "token=$token") | Out-Null
+        } else {
+            Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch at $remoteSha"
+            Invoke-Checked gh @('workflow', 'run', $Workflow, '--ref', $Branch) | Out-Null
+        }
         $runEvent = 'workflow_dispatch'
     } else {
         $tag = 'linux-build/' + (Get-Date -Format 'yyyyMMdd-HHmmss')

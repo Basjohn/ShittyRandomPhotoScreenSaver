@@ -97,6 +97,31 @@ def test_cancel_and_shutdown_terminate_only_the_active_owned_tree_once() -> None
     assert job.close_calls == 1
 
 
+def test_a_dependent_owner_runs_its_own_tree_and_is_cancelled_with_its_parent() -> None:
+    # Checkpoint audit 11, A11-L2: the GitHub Remote tab's Linux job runs beside the pipeline's processes (one active
+    # process per owner), so it takes a dependent owner; the pipeline's cancel or shutdown ends both trees, the
+    # dependent's own cancel leaves the parent alone, and a dependent taken after a cancel is cancelled at once.
+    processes = [_FakeProcess(), _FakeProcess()]
+    jobs = [_FakeJob(), _FakeJob()]
+    launched = iter(processes)
+    made = iter(jobs)
+    parent = build_runner.BuildProcessOwner(popen_factory=lambda *_a, **_k: next(launched), windows=True,
+                                            job_factory=lambda: next(made), resume_windows_process=lambda _pid: None)
+    child = parent.dependent()
+    assert parent.start(["windows"]) is processes[0] and child.start(["linux"]) is processes[1]   # side by side
+    assert parent.cancel() is True
+    assert [job.terminate_calls for job in jobs] == [1, 1] and child.cancellation_requested
+    assert parent.retire(processes[0]) is True and child.retire(processes[1]) is True
+
+    lone = build_runner.BuildProcessOwner(popen_factory=lambda *_a, **_k: _FakeProcess(), windows=True,
+                                          job_factory=_FakeJob, resume_windows_process=lambda _pid: None)
+    lone.dependent().shutdown()
+    assert not lone.cancellation_requested
+    lone.shutdown()
+    late = lone.dependent()
+    assert late.cancellation_requested
+
+
 def test_cancel_cannot_terminate_a_job_handle_after_completion_retires_it() -> None:
     class _BlockingJob(_FakeJob):
         def __init__(self) -> None:

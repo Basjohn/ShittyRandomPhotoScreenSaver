@@ -106,7 +106,8 @@ From Windows (no WSL, Hyper-V or Docker; needs only the GitHub CLI, `winget inst
 
 Both run `.github/workflows/linux-build.yml` on a GitHub Ubuntu 22.04 runner (build, smoke test) and download
 the tarball into `release\linux`. The branch must be pushed; GitHub builds the pushed commit (`-Commit <sha>` pins
-one; the Build Runner's GitHub Remote tab passes the commit its pre-flight fixed).
+one and is the only dispatch that sends the workflow's `commit`/`token` inputs, so a branch whose workflow predates
+them still dispatches without it; the Build Runner's GitHub Remote tab passes the commit its pre-flight fixed).
 
 ## 8. Develop and test on Linux
 
