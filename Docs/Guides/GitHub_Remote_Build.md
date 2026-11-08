@@ -29,9 +29,9 @@ runner job), `tools/build_runner.py` (the tab). Normal and Repo Venv are unchang
 3. Read the pre-flight line. It names exactly what GitHub will build: `GitHub builds origin/main @ 1a2b3c4d: <subject>`.
    It warns when your local HEAD is not that commit (unpushed commits) or when you have uncommitted changes, which
    are not part of the remote build.
-4. Tick **Standard + Diagnostic (GitHub)**, **Media Center (GitHub)** or both. Optionally tick **Reddit Helper
-   (local)** (pre-selected when its fingerprint says it is stale), the installers you want afterwards, and **Linux
-   (GitHub runner)**.
+4. Tick **Standard + Diagnostic (GitHub)**, **Media Center (GitHub)** or both. **Reddit Helper (local)** is
+   pre-selected when its fingerprint says it is stale, and the two installers are pre-selected as on the venv tab;
+   optionally tick **Linux (GitHub runner)**.
 5. **START SELECTED.** Both selected products are dispatched at once and build in parallel on separate runners. Each
    row shows `Queued`, `Building`, `Downloading`, `Validating`, `Publishing`; the progress line shows the runner's
    current step, and a **GitHub run** link opens the run in your browser. The Linux build (if selected) starts first,
@@ -87,22 +87,15 @@ Ctrl+C cancels the runs on GitHub. Installers are compiled from the Build Runner
 | Evidence bundle | `logs\build_evidence_<product>_*.zip` (Evidence ZIP link; same bundle as a local build) |
 | The run on GitHub | the row's **GitHub run** link (artifacts expire after 3 days; failure logs after 7) |
 
-## Installers (local, after download)
+## Installers (local)
 
-Installers are opt-in on this tab and compile with the same Inno Setup path and version stamping as the other tabs.
-They are compiled only for a build that was downloaded **and validated in the same run**, and only when every
-repository file the installer reads beside the payload equals the built commit in your working tree:
-
-- Standard installer: `scripts\SRPSS_Installer.iss`, `scripts\reddit_helper_task_template.xml`, `SRPSS.ico`,
-  `versioning.py`, `presets\visualizer_modes`, `themes`, `resources\tutuogg.ogg`, `resources\jedimodeyall.mp3`,
-  `ui\assets\installer`, and the Reddit Helper's fingerprinted sources. It also needs a current Reddit Helper payload
-  (`release\reddit_helper`): select **Reddit Helper (local)** when its badge says rebuild.
-- Media Center installer: `scripts\SRPSS_MediaCenter_Installer.iss`, `SRPSS.ico`, `versioning.py`,
-  `ui\assets\installer` (its presets, themes and sounds come from the downloaded payload).
-
-Build Runner's own version stamp on the `.iss` files is not a difference. Anything else (an uncommitted preset or
-theme, a different `versioning.py`) blocks that installer with the list of differing files, so a remote payload is
-never packaged with another revision's assets. Commit and push them, or revert them, and run again.
+The installers are local jobs, exactly the venv tab's own: the same Inno Setup path and version stamping, compiling
+whatever `release\` holds (operator, 8 Nov: "It's supposed to be local, github has no say"). On this tab they run after
+this run's GitHub products are published when those are selected, and straight away when they are not (for example
+after an earlier GitHub run or a headless `tools/github_remote_build.py run`). Like the venv tab, an installer is
+compiled even when its product's build failed in the same run: it packages the previous payload, which a failed
+retrieval leaves in place. The Standard installer packages `release\reddit_helper` as it is: select **Reddit Helper
+(local)** when its badge says rebuild.
 
 ## Limitations
 

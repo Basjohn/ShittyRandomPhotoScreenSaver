@@ -52,7 +52,6 @@ STAGING_DIR = Path("build") / "github_remote"
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _APP_VERSION = re.compile(r"""^APP_VERSION\s*(?::\s*str\s*)?=\s*["']([^"']+)["']""", re.MULTILINE)
-_ISS_VERSION_LINE = re.compile(r"^(AppVersion|VersionInfoVersion)=.*$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -80,19 +79,6 @@ TARGETS: dict[str, RemoteTarget] = {
     ),
     "media_center": RemoteTarget("media_center", ("media_center",), "media_center/SRPSS_Media_Center.exe"),
 }
-
-# Repository inputs an installer reads beside the downloaded payload (scripts/*.iss ``Source:`` lines, the version
-# stamp). A local installer is compiled only when these equal the built commit, so a remote payload is never
-# packaged with other presets, themes, sounds, helper sources or version.
-STANDARD_INSTALLER_INPUTS: tuple[str, ...] = (
-    "scripts/SRPSS_Installer.iss", "scripts/reddit_helper_task_template.xml", "SRPSS.ico", "versioning.py",
-    "presets/visualizer_modes", "themes", "resources/tutuogg.ogg", "resources/jedimodeyall.mp3",
-    "ui/assets/installer",
-)
-MEDIA_CENTER_INSTALLER_INPUTS: tuple[str, ...] = (
-    "scripts/SRPSS_MediaCenter_Installer.iss", "SRPSS.ico", "versioning.py", "ui/assets/installer",
-)
-
 
 class RemoteBuildError(RuntimeError):
     """A remote build, its retrieval or its validation failed; the published payload is untouched."""
@@ -175,36 +161,6 @@ def resolve_pushed_commit(repo_root: Path = REPO_ROOT, branch: str | None = None
     head = _git(repo_root, "rev-parse", "HEAD").strip()
     uncommitted = tuple(line[3:] for line in _git(repo_root, "status", "--porcelain").splitlines() if len(line) > 3)
     return PushedCommit(branch, sha, subject, head, uncommitted)
-
-
-def _iss_same_but_version(repo_root: Path, sha: str, relative: str) -> bool:
-    """Build Runner stamps the installer scripts' version lines from versioning.py; that alone is no mismatch."""
-
-    try:
-        committed = _git(repo_root, "show", f"{sha}:{relative}")
-        local = (repo_root / relative).read_text(encoding="utf-8")
-    except (RemoteBuildError, OSError):
-        return False
-
-    def normal(text: str) -> str:
-        return _ISS_VERSION_LINE.sub(r"\1=", text.replace("\r\n", "\n"))
-
-    return normal(committed) == normal(local)
-
-
-def installer_input_mismatches(repo_root: Path, sha: str, paths: Sequence[str]) -> tuple[str, ...]:
-    """Repository inputs of an installer that differ in the working tree from the built commit (empty: they match)."""
-
-    changed = [line for line in _git(repo_root, "diff", "--name-only", sha, "--", *paths).splitlines() if line]
-    untracked = [
-        line for line in _git(repo_root, "ls-files", "--others", "--exclude-standard", "--", *paths).splitlines()
-        if line
-    ]
-    differing = {
-        relative for relative in changed
-        if not (relative.endswith(".iss") and _iss_same_but_version(repo_root, sha, relative))
-    }
-    return tuple(sorted(differing | set(untracked)))
 
 
 # ----------------------------------------------------------------------------------------- manifest (runner side)

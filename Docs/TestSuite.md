@@ -313,7 +313,7 @@ owner (and its dependent owner: a second tree beside it, cancelled with it, chec
 `tests/test_github_remote_build.py` protects the GitHub Remote contract without contacting GitHub (the
 workflow builds only the requested commit with the canonical workers; a download is published only when it is that
 commit's whole, unaltered build; any failure keeps the previous payload; a stop cancels the real runs; installers
-package only validated builds whose inputs equal the built commit; the optional Linux job builds the pinned commit
+are the venv tab's own local jobs, compiled alone or after this run's products, with no GitHub gate; the optional Linux job builds the pinned commit
 on its own thread and process owner, started before the Reddit Helper, while the Windows runs are retrieved and
 published and their installers compiled without waiting for it (the job inside `between` fails it), and one stop ends
 both (an unlinked Linux owner runs on); a stop cancels the Linux run even before the worker followed it, by its run

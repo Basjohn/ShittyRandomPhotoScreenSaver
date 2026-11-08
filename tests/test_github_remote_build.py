@@ -15,6 +15,7 @@ import subprocess
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -228,25 +229,6 @@ def test_a_failed_swap_restores_the_previous_payload(tmp_path, monkeypatch):
     assert not list(release.glob(".remote_previous_*"))
 
 
-# --------------------------------------------------------------------------------------- installer input checks
-
-
-def test_installer_inputs_must_equal_the_built_commit(tmp_path):
-    root = _repo(tmp_path)
-    sha = _git(root, "rev-parse", "HEAD")
-    inputs = ("scripts/SRPSS_MediaCenter_Installer.iss", "themes", "versioning.py")
-    assert remote.installer_input_mismatches(root, sha, inputs) == ()
-    iss = root / "scripts" / "SRPSS_MediaCenter_Installer.iss"
-    iss.write_text(iss.read_text(encoding="utf-8").replace("=1.0", "=9.8.7"), encoding="utf-8")
-    assert remote.installer_input_mismatches(root, sha, inputs) == ()           # Build Runner's version stamp only
-    (root / "themes" / "a.srtheme").write_text('{"changed": 1}', encoding="utf-8")
-    (root / "themes" / "new.srtheme").write_text("{}", encoding="utf-8")
-    iss.write_text(iss.read_text(encoding="utf-8") + "OutputDir=x\n", encoding="utf-8")
-    assert remote.installer_input_mismatches(root, sha, inputs) == (
-        "scripts/SRPSS_MediaCenter_Installer.iss", "themes/a.srtheme", "themes/new.srtheme",
-    )
-
-
 # ----------------------------------------------------------------------------------------- remote orchestration
 
 
@@ -422,7 +404,9 @@ def test_the_github_tab_offers_the_remote_products_and_local_steps(tmp_path):
         assert remote.TARGETS[key].artifacts == tuple(
             path.relative_to(tmp_path / "release").as_posix() for path in github[key].artifacts)
     assert github["reddit_helper"].script == venv["reddit_helper"].script          # built locally, venv worker
-    assert not github["standard_installer"].default_selected and not github["media_center_installer"].default_selected
+    # The installers are the venv tab's own local jobs, unchanged but for the label: GitHub has no say (operator, 8 Nov).
+    for key in ("standard_installer", "media_center_installer"):
+        assert replace(github[key], name=venv[key].name) == venv[key]
     assert build_runner.normalize_mode("GitHub") == "github" and build_runner.normalize_mode("x") == "normal"
     assert build_runner.parse_args(["--mode", "github"]).mode == "github"
     # The other tabs are untouched.
@@ -439,29 +423,9 @@ def _ok(key):
     return remote.RemoteResult(key, 0, "Completed", Path("log"), Path("out"))
 
 
-def test_installers_package_only_validated_builds_of_matching_inputs(monkeypatch):
-    commit = remote.PushedCommit("main", "c" * 40, "x", "c" * 40)
-    mismatches = {"value": ()}
-    monkeypatch.setattr(remote, "installer_input_mismatches", lambda *_a: mismatches["value"])
-    helper = {"stale": False}
-    monkeypatch.setattr(build_runner, "helper_build_status", lambda *_a, **_k: SimpleNamespace(
-        needs_rebuild=helper["stale"], reason="Helper inputs changed"))
-    refusal = build_runner.github_installer_refusal
-    assert "not part of this run" in refusal("standard_installer", {}, commit)
-    failed = remote.RemoteResult("standard", 1, "x", Path("l"), Path("o"))
-    assert "did not complete" in refusal("standard_installer", {"standard": failed}, commit)
-    assert refusal("media_center_installer", {"media_center": _ok("media_center")}, commit) is None
-    mismatches["value"] = ("themes/a.srtheme",)
-    assert "themes/a.srtheme" in refusal("media_center_installer", {"media_center": _ok("media_center")}, commit)
-    mismatches["value"] = ()
-    helper["stale"] = True
-    assert "Reddit Helper" in refusal("standard_installer", {"standard": _ok("standard")}, commit)
-    assert refusal("media_center_installer", {"media_center": _ok("media_center")}, commit) is None
-
-
 def test_the_pipeline_runs_the_helper_while_github_builds_and_installers_after(monkeypatch, tmp_path):
     jobs = build_runner.jobs_for_mode("github", tmp_path)
-    selected = {"standard", "media_center", "reddit_helper", "media_center_installer"}
+    selected = {"standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer"}
     order = []
 
     def run_remote(_root, _cli, keys, _commit, _token, *, emit, between, **_kwargs):
@@ -482,9 +446,6 @@ def test_the_pipeline_runs_the_helper_while_github_builds_and_installers_after(m
     monkeypatch.setattr(build_runner, "record_helper_build", lambda *_a, **_k: True)
     monkeypatch.setattr(build_runner, "helper_build_status", lambda *_a, **_k: SimpleNamespace(
         needs_rebuild=False, reason="ok", fingerprint="f"))
-    monkeypatch.setattr(build_runner, "github_installer_refusal", lambda key, results, _c, *_a: (
-        None if results[{"standard_installer": "standard", "media_center_installer": "media_center"}[key]].ok
-        else "not validated"))
     app = SimpleNamespace(_events=queue.Queue())
     owner = build_runner.BuildProcessOwner()
     preflight = build_runner.PreflightResult(remote_commit=remote.PushedCommit("main", "c" * 40, "x", "c" * 40))
@@ -492,12 +453,42 @@ def test_the_pipeline_runs_the_helper_while_github_builds_and_installers_after(m
     events = []
     while not app._events.empty():
         events.append(app._events.get())
+    # Installers compile locally after the GitHub products, whatever GitHub reported, exactly as the venv tab
+    # compiles them after its own builds: the failed Standard build leaves the previous payload, which is packaged.
     assert order == [("dispatch", ("standard", "media_center")), ("local", "reddit_helper"),
-                     ("local", "media_center_installer")]
-    assert ("job_skipped", "standard_installer") in events
+                     ("local", "standard_installer"), ("local", "media_center_installer")]
     done = {event[1]: event[2] for event in events if event[0] == "job_done"}
-    assert set(done) == {"standard", "media_center", "reddit_helper", "media_center_installer"}
+    assert set(done) == {"standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer"}
     assert events[-1][0] == "pipeline_done" and events[-1][1] is False               # the Standard build failed
+
+
+def test_installers_alone_on_the_github_tab_compile_locally_like_the_venv_tab(monkeypatch, tmp_path):
+    # Operator, 8 Nov: the GitHub tab's installers refused to compile ("Its GitHub build was not part of this run")
+    # when selected alone after a build already published, while the venv tab compiled them: "It's supposed to be
+    # local, github has no say". Nothing is dispatched; both installers run as local jobs.
+    jobs = build_runner.jobs_for_mode("github", tmp_path)
+    order = []
+
+    def run_remote(*_a, **_k):
+        raise AssertionError("no GitHub product was selected")
+
+    def run_job(job, _preflight, *, process_owner):
+        order.append(job.key)
+        return build_runner.JobResult(0, "Completed", Path("log"), job.output_dir)
+
+    monkeypatch.setattr(remote, "run_remote_builds", run_remote)
+    monkeypatch.setattr(build_runner, "run_job", run_job)
+    monkeypatch.setattr(build_runner, "helper_build_status", lambda *_a, **_k: SimpleNamespace(
+        needs_rebuild=False, reason="ok", fingerprint="f"))
+    app = SimpleNamespace(_events=queue.Queue())
+    preflight = build_runner.PreflightResult(remote_commit=remote.PushedCommit("main", "c" * 40, "x", "c" * 40))
+    build_runner.BuildRunnerApp._github_pipeline_worker(
+        app, jobs, {"standard_installer", "media_center_installer"}, preflight, build_runner.BuildProcessOwner())
+    events = []
+    while not app._events.empty():
+        events.append(app._events.get())
+    assert order == ["standard_installer", "media_center_installer"]
+    assert events[-1][0] == "pipeline_done" and events[-1][1] is True
 
 
 def test_the_linux_build_runs_on_the_pinned_commit_while_github_builds(monkeypatch, tmp_path):
@@ -525,7 +516,6 @@ def _local_pipeline_fakes(monkeypatch, run_remote, run_job):
     monkeypatch.setattr(build_runner, "record_helper_build", lambda *_a, **_k: True)
     monkeypatch.setattr(build_runner, "helper_build_status", lambda *_a, **_k: SimpleNamespace(
         needs_rebuild=False, reason="ok", fingerprint="f"))
-    monkeypatch.setattr(build_runner, "github_installer_refusal", lambda *_a, **_k: None)
 
 
 def test_the_linux_build_runs_beside_the_windows_runs_and_never_holds_their_retrieval(monkeypatch, tmp_path):
@@ -839,7 +829,8 @@ def test_the_headless_run_drives_the_tabs_own_pipeline(monkeypatch):
     monkeypatch.setattr(build_runner.BuildRunnerApp, "_github_pipeline_worker", pipeline)
     lines = []
     assert build_runner.run_headless(None, out=lines.append) == 0
-    assert seen["selected"] == {"standard", "media_center", "reddit_helper"}       # what the tab pre-selects
+    assert seen["selected"] == {"standard", "media_center", "reddit_helper",       # what the tab pre-selects (the
+                                "standard_installer", "media_center_installer"}    # venv tab's installers included)
     assert lines[0] == f"[FOUNDRY] GitHub builds {commit.describe()}" and lines[-1].endswith("successfully.")
     assert build_runner.run_headless(["standard", "bogus"], out=lines.append) == 2
     assert build_runner.main(["--mode", "venv", "--run"]) == 2                     # local modes stay in the window

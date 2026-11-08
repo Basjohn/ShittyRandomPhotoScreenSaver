@@ -808,8 +808,9 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
 
 def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
     """GitHub Remote: the two Nuitka products build on GitHub (the venv workers, same outputs); the Reddit Helper
-    and the installers stay local and are the venv mode's own jobs. Installers are opt-in here and package only
-    builds downloaded and validated in the same run (``github_installer_refusal``). The optional Linux build is the
+    and the installers stay local and are the venv mode's own jobs, unchanged: an installer compiles whatever
+    ``release/`` holds, exactly as on the venv tab (operator, 8 Nov: "It's supposed to be local, github has no say"),
+    after this run's GitHub products are published when they are selected. The optional Linux build is the
     other tabs' own job (a GitHub Ubuntu runner, followed by ``scripts/linux/build_from_windows.ps1``), here on the
     commit the pre-flight fixed (``_job_arguments``), on its own thread from the pipeline's start, beside the Windows
     runs (``BuildRunnerApp._github_pipeline_worker``)."""
@@ -819,10 +820,8 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
         replace(by_key["standard"], name="Standard + Diagnostic (GitHub)", kind="github", script=workflow),
         replace(by_key["media_center"], name="Media Center (GitHub)", kind="github", script=workflow),
         replace(by_key["reddit_helper"], name="Reddit Helper (local)"),
-        replace(by_key["standard_installer"], name="Standard Installer (local, after download)",
-                default_selected=False),
-        replace(by_key["media_center_installer"], name="Media Center Installer (local, after download)",
-                default_selected=False),
+        replace(by_key["standard_installer"], name="Standard Installer (local)"),
+        replace(by_key["media_center_installer"], name="Media Center Installer (local)"),
         by_key["linux"],
     )
 
@@ -976,62 +975,6 @@ def _github_preflight(result: PreflightResult, jobs: Sequence[Job], repo_root: P
             f"{len(commit.uncommitted)} uncommitted change(s) are not in the GitHub build "
             f"(e.g. {commit.uncommitted[0]}); installers refuse mismatched inputs"
         )
-
-
-def github_installer_refusal(
-    job_key: str,
-    remote_results: dict,
-    commit: Any,
-    repo_root: Path = REPO_ROOT,
-) -> str | None:
-    """Why a GitHub Remote installer must not be compiled now (None: compile it).
-
-    Only a build downloaded and validated in this run is packaged, and only when every repository input the
-    installer reads beside it (installer script, presets, themes, sounds, version, and for the Standard installer
-    the Reddit Helper sources) equals the built commit in the working tree: a remote payload is never combined
-    with another revision's assets. The Standard installer also needs a current Reddit Helper payload.
-    """
-    from tools import github_remote_build as remote
-
-    source = {"standard_installer": "standard", "media_center_installer": "media_center"}[job_key]
-    result = remote_results.get(source)
-    if result is None:
-        return "Its GitHub build was not part of this run; select it too"
-    if not result.ok:
-        return "Its GitHub build did not complete and validate; nothing to package"
-    inputs = list(
-        remote.STANDARD_INSTALLER_INPUTS if source == "standard" else remote.MEDIA_CENTER_INSTALLER_INPUTS
-    )
-    if source == "standard":
-        for path in helper_input_paths(helper_mode("github"), repo_root):
-            try:
-                inputs.append(path.relative_to(repo_root).as_posix())
-            except ValueError:
-                continue
-    try:
-        mismatches = remote.installer_input_mismatches(repo_root, commit.sha, inputs)
-    except remote.RemoteBuildError as exc:
-        return f"Could not compare installer inputs with {commit.short}: {exc}"
-    if mismatches:
-        listed = ", ".join(mismatches[:4]) + (f" and {len(mismatches) - 4} more" if len(mismatches) > 4 else "")
-        return f"Local installer inputs differ from the built commit {commit.short}: {listed}"
-    if source == "standard":
-        status = helper_build_status("github", repo_root)
-        if status.needs_rebuild:
-            return f"Reddit Helper payload is not current ({status.reason}); select Reddit Helper"
-    return None
-
-
-def _write_refusal_log(job: Job, detail: str, log_dir: Path = LOG_DIR) -> Path:
-    log_dir.mkdir(parents=True, exist_ok=True)
-    path = log_dir / f"build_runner_{_safe_slug(job.key)}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.log"
-    try:
-        path.write_text(
-            f"SRPSS Build Runner {APP_VERSION}\nJob: {job.name}\nNot compiled: {detail}\n", encoding="utf-8"
-        )
-    except OSError:
-        pass
-    return path
 
 
 def _owner_gh_runner(process_owner: BuildProcessOwner):
@@ -3060,13 +3003,7 @@ class BuildRunnerApp:
                 if process_owner.cancellation_requested:
                     self._events.put(("job_cancelled", key))
                     continue
-                refusal = github_installer_refusal(key, remote_results, commit)
-                if refusal is not None:
-                    result = JobResult(1, refusal, _write_refusal_log(job, refusal), job.output_dir)
-                    local_results[key] = result
-                    self._events.put(("job_done", key, result))
-                    continue
-                run_local(job)
+                run_local(job)                      # the venv tab's own installer job: local, GitHub has no say
             if linux_thread is not None:
                 linux_thread.join()                 # the Linux build follows its own run; nothing else waits on it
             aborted = process_owner.cancellation_requested
