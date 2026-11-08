@@ -444,7 +444,8 @@ Each foundation slice adds what it learned here.
   reflects the displayed photograph, downsampled once per image change, instead of copying the target.
 - A first draw compiles every program it touches and allocates every target on that visible frame, and a cold driver
   shader cache makes one compile 100+ ms, and a large program's link takes seconds (Neon Lake's basin 5-6 s on an
-  RTX 4090; NVIDIA's cache is per executable path, so every new frozen build starts cold: R-180). A 3D Visualizer
+  RTX 4090; NVIDIA's cache is per executable path, so every new frozen build started cold: R-180; the app's own
+  program binary cache now pays that once per machine and driver, Scene3D_Resources.md). A 3D Visualizer
   prepares on the hidden frames of its reveal instead (`prepare_step`, Visualizer_Reference "Prepared reveal"); a
   transition warms the next run ahead.
   Either way the list of what a first frame creates must stay in step with the draw, and a test must show the first

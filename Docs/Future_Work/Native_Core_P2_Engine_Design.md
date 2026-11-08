@@ -1540,11 +1540,13 @@ switch never remaps.
      the committed target's render progress (extended while it advances, at most 4 times; silent targets still fail)
      and the prepared reveal's bound running from the last completed unit. Cold after the fix: Neon Lake completed in
      8.5 s (worker) / 8.0 s (in process) with one extension and no reload; Extruded Bubble 4.6 / 4.5 s, Waveform
-     Ribbon 4.2 / 3.9 s; warm 1.55-1.94 s for all three either way. The ~6 s freeze itself remains on first use per
-     build (Current_Plan, R-180 follow-up).
-     - *Next frozen run should show:* the first Neon Lake switch logs `Activation slow but alive ... deadline extended
-       (1/4)`, a clock gap of about 6-7 s, no `MODE_ACTIVATION_FAIL` and no `visualizer_activation_failed` reload, and
-       the switch completing with a fade-in; later Neon Lake activations in the same build are warm (no gap).
+     Ribbon 4.2 / 3.9 s; warm 1.55-1.94 s for all three either way. The ~6 s freeze itself is now paid once per
+     machine and driver, not per build: the app-owned program binary cache (R-180 "Follow-up: the freeze").
+     - *Next frozen run should show:* either the first Neon Lake switch logs `[GL_PROGRAM_CACHE] Neon Lake basin
+       linked cold ... saved` with `Activation slow but alive ... deadline extended (1/4)` and a clock gap of about
+       6-7 s (the cache had no entry for these sources and this driver), or neither line and no gap (it had one, a
+       source run's included); never `MODE_ACTIVATION_FAIL` or a `visualizer_activation_failed` reload; the switch
+       completes with a fade-in, and a second run of the same build links nothing cold.
      - Evidence: `.artifacts/evidence/architecture/native_core_p2/20261108_frozen_diagnostic_check2/` (the operator's
        logs and `process_samples.json`); the source reproduction's numbers are in R-180.
 

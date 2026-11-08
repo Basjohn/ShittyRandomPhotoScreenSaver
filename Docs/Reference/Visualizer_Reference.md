@@ -372,8 +372,9 @@ forcing the miss): Neon Lake's basin program links in 5.1-6.4 s (warm 39 ms), it
 0.14 s; Extruded Bubble's programs 0.35-0.54 s each, Waveform Ribbon's two ribbon primitives ~1.0 s each. The 6 s
 activation deadline therefore extends while the committed target's render progress advances
 (`_SLOW_TARGET_DEADLINE_EXTENSIONS`, 4): a slow-but-alive target stays hidden and then fades in; only a target with no
-render progress in a whole window is reconstructed. The freeze itself remains on first use per build until the link
-cost moves out of the frame (Current_Plan, R-180 follow-up).
+render progress in a whole window is reconstructed. The freeze itself is now paid once per machine and driver, not
+per build: every program link goes through the app-owned program binary cache (`Docs/Reference/Scene3D_Resources.md`
+"Program links and the program binary cache"), and a later process loads the same basin in ~33 ms.
 
 Audio analysis uses one persistent serial `visualizer.audio_analysis` compute lane with one in-flight packet plus newest-pending source replacement. Detached DSP state is retained across ordinary frames and rebuilt/fenced only at real config/activation/reset epochs; no generic per-frame Future/task fallback is part of the current architecture.
 
