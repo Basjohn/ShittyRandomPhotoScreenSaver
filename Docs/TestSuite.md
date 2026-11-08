@@ -1123,13 +1123,15 @@ High-value permanent guards include:
   wake listener draining while the GUI thread is blocked; A6-L8 (the reader cleared after the park reply: clearing
   before it or never fails); a preset change as a session re-activation with the owner's inputs; the binding's own
   activation in the session (A6-L4); the framed view (layout metrics, `VIS_SET_VIEW`) following the owner's controller;
-  a fresh label namespace per configure; a worker that cannot configure or start leaving that activation in process; a
+  a retired owner leaving no callback of its own on its controller (gate 4, R-178: the layout-metrics observer kept
+  owner -> controller -> observer -> owner alive, the Settings barrier timed out and the saver exited; the test also
+  fails if the worker path stops installing an owner callback at all); a fresh label namespace per configure; a worker that cannot configure or start leaving that activation in process; a
   lost session's held frame fading out on the replacement's frames, reconfigured once, a second loss in process for the
   run; the production session opening the device through the normal capture path on its capture lane, and a device
   that does not open keeping the session and being retried at the next capture edge (A7-L4). The edge-order tests run the same `VisualizerEngineWorker` in
   this process behind a supervisor stand-in. Mutations each failing their test: the admission ignored, an engine kept in
   the main process, no recovery fade, no second-failure rule, a failed start kept, the device unchecked or refused, the
-  offline activation, no view forwarding. Whole-gate run (identity, real time and the main process's cost on vs off,
+  offline activation, no view forwarding, the layout-metrics observer left on the controller at retire. Whole-gate run (identity, real time and the main process's cost on vs off,
   per mode): `tools/visualizer_replay/owner_worker_gate.py` (below-normal priority; never in the suite);
   `tests/test_visualizer_owner_engine_worker_liveness.py` (slice 5.5 and checkpoint audit 7's failure items): no
   control edge waits on the worker (against a suspended, hung worker each edge returns within one frame, and the

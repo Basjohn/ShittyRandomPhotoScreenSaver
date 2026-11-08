@@ -205,7 +205,14 @@ after the operator's yes on a question card; agents never run load (invisible ch
      is reopened once on the current default output through the audio worker's own stale-capture restart; digital
      silence and a pause never count; a reopen that fails is a device failure, never a worker failure; the main log
      shows the device state at the next edge's reply (never a reopen after the session's last edge: the owner's
-     retire does not await `VIS_STOP`'s report). Next: 6 (gate 3).
+     retire does not await `VIS_STOP`'s report). Gate 4 (dormancy and lifecycle) passed 8 Nov (design doc, Gate 4
+     record): 20 Settings round trips and 20 mode switches with no process, mapping, handle or thread growth, the worker
+     retired at each Settings open and respawned at its close, the Visualizer-off run and the overhead baseline
+     identical with the admission on and off; it first found and fixed R-178 (every display reload under the
+     admission timed its destruction barrier out and the saver exited). Next: 6 (gate 3). Before gate 3's run: the
+     live check's age chain is blind on the worker path (the main frame trace has no publish events for worker frames:
+     revisions/s 0, publish -> swap empty); put the worker's publish time (each slot carries its produced time) in the
+     trace.
      Operator checks for 6: a frozen build with `--viz-engine-worker` (the Visualizer on the worker), its cold
      spawn timed as ready plus the first configure against its 6 s bound, and the worker's RSS in `--usage` inside a
      session; the 5.3 device checks on a real device (design doc, 5.3 record: default switch, a pinned player, a
@@ -213,8 +220,17 @@ after the operator's yes on a question card; agents never run load (invisible ch
      here (Spotify Connect or casting, a player pinned elsewhere from the start, network buffering: one PortAudio
      re-init per silent run and per capture edge), and a second app on the old default hiding a switch). Known
      limit: a reopen's cost on a real device is unmeasured (whether PyAudioWPatch holds the GIL in
-     `Pa_Terminate`/`Pa_Initialize`); time it in the worker with the cadence's step dt across it. Open for 6: gate 4's
-     open/close and switch counts.
+     `Pa_Terminate`/`Pa_Initialize`); time it in the worker with the cadence's step dt across it.
+     Side finding (gate 4's in-process control, 8 Nov; not the worker path): cycling modes in process grows the main
+     process's private bytes about 150-250 MB a lap of nine switches, lap after lap (20 switches: same mode, first ->
+     last lap, median +371 MB; RSS only +42). Not Python (a collection at each switch frees under 1 MB; tracked objects
+     plateau after the first lap), not the heaps (+30 / +45 / +17 MB heap / heap_large / arenas a lap): the native map's
+     `private_other` (VirtualAlloc outside the heaps, mostly not resident) rises at Extruded Bubble and Waveform Ribbon
+     (629 -> 1376 MB) and only partly returns (940 at Bubble on lap 2 against 601 on lap 1). On the worker path the main
+     process's private bytes stay flat and the worker plateaus at ~110 MB. Evidence
+     `.artifacts/evidence/architecture/native_core_p2/20261108_gate4_dormancy/` (`modes20_flag_off`,
+     `modes_census_flag_off`, `modes_map_flag_off`). Next: attribute the allocations (the map's diff by owner between
+     two laps, or allocation-size buckets per switch).
      Open (5.3, in-process parity; operator's call, after the 5.3 device checks): in process, a mid-song default-output
      switch, an unplugged device or a stale stream leaves the Visualizer at rest until Media's next pause and play,
      display park or an activation (the loopback stays on the dead endpoint). The worker's delivery watch
@@ -521,6 +537,10 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
     (`QuickSceneFactory` 14 times: flat), and not GL accounting, threads, handles or the driver's `private_other`.
     Left: the Quick window, its GL context and scene graph, and the Visualizer's GL programs per generation. Next:
     a heap-block histogram per reveal, or an offscreen render-control loop (the Studio saw 1–2 MB a session).
+    Gate 4 (8 Nov, 20 round trips, Spectrum P1, readings from outside the saver): the same residual with the engine
+    worker on and off (main +4.2 / +3.2 MB RSS, +7.0 / +6.1 MB private a trip); handles, threads and Section handles
+    flat on both. Each trip also leaves ~1,700-1,800 tuples and as many weakrefs tracked (census, on and off) and
+    the main process's pagefile-backed section views rose by 2 over the 20 trips on both paths (106 -> 108 off).
   - **Test:** `tests/test_settings_roundtrip_retired_generations.py` fails on main (3 retired display generations and
     3 dialogs still reachable) and passes on the fix.
   - Evidence: `.artifacts/evidence/memory/settings_roundtrip/20261107_settings_roundtrip/`.
