@@ -1849,3 +1849,191 @@ The checkpoint audit 9 section itself is on main (3d856690). Fixed in 5.7 (desig
   same uncapped loop exists in process and no worker failure loops on its own; the general follow-up (a per-run
   reconstruction cap, or a `failed` owner that stops its runtime when its reload is refused) is in `Current_Plan.md`.
 - **A9-L4** is Bubble's owner's (not 5.7).
+
+## Checkpoint audit 10 (8 Nov): slice 5.7
+
+Scope: `git diff 3d856690 794d64db` (code hunks; the doc hunks only to check claims). Read: the design doc's 5.7 record,
+audit 9 and its resolution, `Current_Plan.md`'s 5.7 lines, `TestSuite.md`'s 5.7 entries, the dormancy evidence JSON;
+the current supervisor (start, stop, restart, the listener, the heartbeat, shutdown), `engine_worker_lifetime.py`, the
+link, the owner's worker paths (configure, loss, recovery, fallback, retire), `engine_lifecycle.stop`, the replacement
+construction and both reload flows, `DisplayManager.set_process_supervisor` and every reader of the controller's
+supervisor, the usage collector and its Toolhelp provider, `main.py`'s module level, and `frame_codec`'s dynamic
+imports. Ran (foreground): `test_visualizer_engine_worker_lifetime.py`, `test_usage_sampler.py`,
+`test_process_supervisor.py` (71 passed, 19 s). Probes (`D:\Temp\Scratch\SRPSS\native_audit10`, deleted; no window, no
+device): (a) a real `visualizer_worker_main` spawn from a parent whose `__main__` is `main.py`, against the same spawn
+from a bare parent, three runs each: time to ready, and RSS/USS/private/threads one second after ready; (b) the image
+role's heartbeat restart of a dead worker and the fenced skip (`restart(judged=)`), on the lifetime test's stand-in
+processes; (c) the Toolhelp topology refresh, timed 20 times.
+
+No high findings.
+
+### Medium
+
+**A10-M1. `main.py`'s module level costs the production worker about 1.1 s and 80 MB per spawn. Since 5.7 that cost is
+paid on every Settings round trip. The records give no figures for it.**
+- Evidence: probe (a), three runs each, on a warm source tree:
+
+  | Parent `__main__` | Ready | RSS | USS | Private | Qt modules |
+  |---|---|---|---|---|---|
+  | `main.py` (production) | 1.33-1.34 s | 112 MB | 83 MB | 92 MB | 7 |
+  | Bare | 0.23 s | 32 MB | 18.5 MB | 21 MB | 0 |
+
+  Idle threads are 6 in both. Since 5.7 the lifetime retires the worker at every Settings open (`RELOAD_REASONS`
+  excludes "settings", `engine_worker_lifetime.py:46`) and spawns it again at the close. The record's "about 1.5 s off
+  the GUI thread" is mostly this overhead. The record files the import graph under "Left for step 6" with no numbers.
+  The dormancy evidence's RSS figures (31 MB idle, 71 MB in a session) come from a bare entry, so they are not
+  production's: the production idle worker is about 112 MB.
+- Failure scenario: every Settings close shows the Visualizer at least 1.1 s later than a bare entry would, and spends
+  an extra ~1.1 s of the 6 s first-configure bound before the session build starts. The record measured the build plus
+  spawn at up to ~4 s (A9-L2). The frozen cold spawn is unmeasured. If it pushes the total past 6 s, that activation
+  runs in process. Separately, both image workers carry the same ~65 MB USS each for the whole run (this predates
+  5.7).
+- Fix: keep `main.py`'s module level to what a child needs (stdlib, `configure_native_thread_pools`, the flavour). Move
+  the Qt, engine and settings imports into `main()` or the `__main__` block. The spawned child (`__mp_main__` from
+  source, `__parents_main__` when frozen) then reaches its target without the GUI stack. Then measure the source spawn
+  again (expect about 0.25 s and 32 MB) and the frozen one. This touches every worker role, so it needs its own slice.
+  Until then, record the figures above in the 5.7 record and in the operator's frozen check.
+
+### Low
+
+**A10-L1. A worker lease is not exception-safe on two exit paths. A lease that is never released keeps the worker,
+and possibly a live session, running until the supervisor shuts down.**
+- Evidence: `EngineWorkerLink.close()` releases the lease last (`engine_worker_link.py:641-645`). That comes after
+  `self._events.disarm()`, `mailbox.close()` (whose `SharedMemory.close()` can raise `BufferError` while a view is
+  exported, `packet_mailbox.py:361`) and `deleteLater()`. `_closed` is already True at that point, so a retry releases
+  nothing. `QuickDisplayVisualizerOwner.retire()` returns at `:2403` when the join fails, and propagates when
+  `stop_logical_runtime()` raises. Both happen before `link.retire()` at `:2406-2409`.
+- Failure scenario: a close that raises, or a retire whose join fails with a worker link set, leaves the lease held.
+  In the retire case `VIS_STOP` is never sent either, so the worker's session keeps its 90 Hz cadence and the loopback
+  capture until the supervisor's shutdown (about 12% of a core, from the dormancy evidence). On the worker path the
+  owner's controller normally has no logical runtime, so the join cannot fail. Reachability is low, which is why this
+  is Low. The 5.7 claim "it leaves no worker where no Visualizer runs" still does not hold on these paths.
+- Fix: in `close()`, take the lease out first and release it in a `finally` around the rest. In `retire()`, retire
+  the link before the logical join, or in a `finally`; the link's retire never waits. Test: a mailbox close that
+  raises, then assert `describe()["leases"] == 0`. For the negative control, use today's order.
+
+**A10-L2. Under `--usage`, a dead but registered engine worker forces a topology refresh on every sample. The first
+labelled CPU value after a spawn is not a measurement.**
+- Evidence: `get_visualizer_worker_usage_snapshot` (`supervisor.py:961-968`) names the PID without checking
+  `is_alive()`. `expect_pids` (`usage_sampler.py:154-165`) forces a heavy sample for any PID not in the cached tree, and
+  a dead process is never in the Toolhelp snapshot. Probe (c): one refresh takes 9.96 ms (median of 20), mostly a
+  GIL-held Python loop over every process on the system (`windows_process_snapshot.py:83-93`). The refresh that first
+  adds the worker also primes its `cpu_percent` (`_prime_cpu`) in the same sample that reads it, so that sample's
+  `visualizer_worker_cpu_pct` covers microseconds.
+- Failure scenario: between the worker's death and the heartbeat's retirement (up to one heartbeat interval, or
+  longer when nothing runs the heartbeat), every usage sample pays about 10 ms of GIL-heavy enumeration. That is the
+  hitch class the usage sampler is known for. This only happens with `--usage` and is bounded, which is why it is Low.
+  Nothing new happens at rest: with no worker the PID is None and `expect_pids` is never called.
+- Fix: report the PID only while `process.is_alive()`. Report `na` for the CPU of a process first seen in this sample.
+
+**A10-L3. The image roles' identity-fenced heartbeat restart has no test. A skipped restart still charges the restart
+budget.**
+- Evidence: no test calls `_heartbeat_check` or `restart(judged=)` for `IMAGE` or `IMAGE_PREFETCH`. The only test
+  hits are the VISUALIZER retirement tests (`test_visualizer_engine_worker_lifetime.py:145-190`). Probe (b): a dead
+  image worker is restarted correctly (backoff sleep 2.0 s, one start, `restart_count` 1, state RUNNING). When the
+  role is replaced between the unlocked pre-check (`supervisor.py:501-509`) and `_stop_if_current` (`:535`),
+  `restart()` returns True without starting anything. That is correct, but `record_restart()` (`:521`) has already
+  counted a restart against `MAX_RESTARTS_PER_WINDOW`.
+- Failure scenario: a dead image worker that a foreground `start(IMAGE)` replaces in that window still uses one of
+  the five restarts in the window. This is negligible on its own, but it is untested production behaviour on the
+  default path (the record's "Off the admission").
+- Fix: a test with a dead image worker (heartbeat → one start after backoff), and one where the role is replaced
+  before the stop (no stop of the fresh worker, no start). Do the identity check under the lifecycle lock before
+  `record_restart`, or accept the charge and say so in the docstring.
+
+**A10-L4. A transient run of 60 failed steps now costs a visible recovery and counts toward the owner's two-strike
+rule, which is never reset. In process the same run recovers silently.**
+- Evidence: `FAILED_STEPS_BEFORE_CLOSE = 60` (`engine_worker.py:81`) ends the session. The owner's loss path adds one
+  to `_worker_failures` (`quick_display_visualizer_owner.py:2090`), which is reset only in `__init__` (`:248`). The
+  second loss in an owner's life falls back in process and disables the worker for the run (`:2113`). The record says
+  "a transient failure stays the runtime's retry, as in process", which holds only for runs shorter than 60 steps
+  (0.67 s).
+- On the question asked: the count resets correctly. A success sets it to 0 (`engine_worker.py:465`), and failures are counted only
+  while the step raises. A legitimate slow start cannot trip it: a device open, the first build and the live-edge waits
+  publish nothing, but they do not raise, and those waits are bounded separately (`LIVE_EDGE_TIMEOUT_S`). Successes
+  do not cross a park, so failures before a park and after the unpark add up. That is by design ("a count of steps").
+- Failure scenario: a step-failure run longer than 0.67 s (for example during an audio device change, which is still
+  open as 5.3's rest) fades the Visualizer out and back in. If any second loss follows in the same owner (a crash, a
+  hang retirement, another fail-closed), the run goes in process for good.
+- Fix: decide whether one successful recovery resets `_worker_failures` (for example on the replacement's reveal).
+  Otherwise, reword the record: transient runs of 60 steps or more are now recoveries that count toward the
+  two-strike rule.
+
+**A10-L5. The reload hold is proven on the lifetime module alone. No test drives the real reload into the
+replacement's lease.**
+- Evidence: `test_a_reload_hold_keeps_the_worker_across_turns_until_the_replacement_is_built` calls
+  `lease`/`hold_for_reload`/`end_hold` by hand. `test_a_display_reload_holds_the_worker_and_settings_or_the_exit_never_do`
+  checks only that `stop` takes the hold. By reading, the chain holds today: `_construct_and_start_replacement_runtime`
+  → `_initialize_display` → `VisualizerHostBinding` → `owner.configure` (`visualizer_host_binding.py:448`) →
+  `_configure_on_engine_worker` → `link.configure` → `lease`, all synchronous and before the `finally` that ends the
+  hold (`engine_handlers.py:774-777`).
+- Failure scenario: a later change that defers the owner's configure (to the reveal, or to a queued turn) turns every
+  CUSTOM commit and monitor change into a retirement and a 1.3 s+ respawn (A10-M1), and no test fails.
+- Fix: one engine-level test with a stub supervisor. Run CUSTOM commit → teardown → barrier → replacement, and assert
+  no worker stop and one lease after the turn settles. For the negative control, configure the owner on a later turn.
+
+### Questions answered
+
+- **1. Off the admission.**
+  - Image restart: correct (probe (b)). Backoff, the restart limit and the ERROR → RESTARTING → STARTING → RUNNING
+    states are unchanged apart from A10-L3's budget charge. The fence improves on the old behaviour: before 5.7 the
+    heartbeat could stop a worker that a foreground start had just replaced.
+  - `_retire_dead_role` on a first start, or with a live process and a live listener: a no-op. With no process and a
+    leftover listener (a listener stop that timed out earlier), it adds the listener's 2 s join to that start. For
+    `IMAGE` that start is on the GUI thread. This is rare, and the record's "only act on a dead or replaced process"
+    misses this branch.
+  - Wiring before displays: `DisplayManager.set_process_supervisor` only stores the supervisor and sets the owner's
+    controller. In process, the controller only stores it. No beat-engine or media consumer reads it:
+    `BeatEngine.set_process_supervisor` has no caller and calls a method `AudioWorker` does not have (dead code,
+    caught). The image pipeline reads the engine's own supervisor. With `display_count == 0` it is now wired with
+    nothing to receive it, which is harmless.
+  - Usage sampler at rest: no new OS call. It reorders `_resource_snapshot` and builds a small per-process dict per
+    sample. A10-L2 covers the case with a worker.
+- **2. Lifetime.**
+  - Leaks: the configure's exception path releases its lease (`close()` in its `except BaseException`).
+    `_construct_and_start_replacement_runtime`'s discard and `finally` end the hold, and the exit ends it. The leak
+    paths are A10-L1's. A hold left by a raise before the `try` (`collect_retired_generations`, the watchdog arm) lasts
+    until the next stop or the supervisor's shutdown, as the record says.
+  - Thrash: none on mode or preset changes (no link change), display power (the lease is kept), a recovery (the
+    replacement link is opened in the same call, `:2101`) or a CUSTOM commit (held). By reading, a
+    `visualizer_activation_failed` reconstruction releases the lease at the failure and takes the hold at its later
+    stop, so it may retire and respawn once. That is acceptable on a failure path.
+  - Event-driven: one queued signal per release, the retirement is a one-off IO task, and there is no `QTimer`.
+  - Stop against start: one lock (`_start_lock`) serialises them, and the lease and `_retiring` are read and written
+    under `_lock`, which closes the window. The wait happens on IO threads, never on the GUI thread, except the
+    bare-rig branch with no thread manager.
+  - The engine's IO pool has four workers (`core/threading/manager.py:664`). Audit 9 said two (`:633` is the helper
+    manager's default), so A9-L2's "two-worker pool" premise was wrong. A retirement plus a waiting spawn occupies two
+    of the four.
+- **3.** See A10-L4.
+- **4. Lock order.** Lifecycle lock → `_lock` everywhere, and `_start_lock` → lifecycle lock. Nothing takes them in
+  reverse. Callbacks cancelled under the lifecycle lock (`_stop_if_current`, `_retire_dead_role`) only emit queued
+  events (the link) or complete a prefetch future, and take no lifecycle lock. The heartbeat skips `_transitioning`
+  roles and fences by identity. A spawn that finds a dead role cleans it itself. No remaining race found.
+- **5. Frozen.** See A10-M1. The codec's string imports (`core.ribbon_packet`, `core.waveform_ribbon_scene`,
+  `core.ribbon_style`, `widgets.spotify_visualizer.extruded_bubble_drift_log`) are reachable from static imports in
+  the main graph, so Nuitka includes them.
+
+### Records overstated
+
+- "Parked ~0 CPU" and "thread count flat": both are measured on a bare-entry worker with recorded PCM. That entry
+  does not run `configure_native_thread_pools` (`OPENBLAS_NUM_THREADS=1`) at its own module level, and its RSS (31/71
+  MB) is not production's (A10-M1). The probe script was not kept, so the figures cannot be reproduced. "Flat" is
+  within one worker across three sessions. Under 5.7 the churn that matters is a fresh process at every Settings round
+  trip (handles, mappings), and that is unmeasured. Gate 4 covers it, so this is about wording, not a gap.
+- "Respawned at the close (about 1.5 s)": that figure is spawn-to-ready only. The Visualizer shows after the
+  configure, the build, the first presentable frame and its fade.
+- "Off the admission ... both only act on a dead or replaced process": see `_retire_dead_role`'s orphaned-listener
+  branch above.
+
+### Not verified
+
+- The frozen build: the cold spawn against 6 s, and the worker's RSS there (the operator's check).
+- The production-entry worker inside a session: RSS and threads with `OPENBLAS_NUM_THREADS=1`, and park with a real
+  loopback device.
+- The Settings round trip's time to a visible Visualizer, and process, handle and mapping growth over repeated round
+  trips (gate 4).
+- Whether display sleep on DisplayPort monitors produces `monitor_topology` reloads whose replacement has no
+  Visualizer. In that case the worker would be retired and respawned at every sleep and wake.
+- Whether `SharedMemory.close()` can actually raise in `PacketMailbox.close()`: that depends on whether a held
+  publication keeps a view into the mapping. A10-L1 is filed by reading.
