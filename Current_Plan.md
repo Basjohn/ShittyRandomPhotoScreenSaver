@@ -270,6 +270,35 @@ after the operator's yes on a question card; agents never run load (invisible ch
      holds for only ~61% of Random Group Drift draws (2,000 seeds; Diagonal for all); it had passed on the process-RNG
      state earlier tests left behind and is seeded now. Open for Bubble's owner: what Random Group Drift should
      guarantee (an aligned axis, or none), then assert that; no retune under Bubble Temporal Fidelity without it.
+   - **P2 phase-boundary audit (8 Nov, Opus 5.5 high; `Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md`):
+     verdict: do not make the worker the default until H1 and H2 are fixed. Awaiting the operator's go-ahead for the
+     audit work (nothing started).**
+     - [ ] H1: the 1 MiB frame slot overflows for Extruded Bubble at non-default settings (Particles at its schema
+       default range: 1.8 MiB; every control at the top: 17.9 MiB): the mailbox refuses the frame, the worker path
+       fades and drops in process for the run; in process works. Root cause M1.
+     - [ ] H2: the worker gets no diagnostic flags and logs to a null handler: tick/DSP/device exceptions, `[PERF]`
+       and fail-closed reasons reach no log; the owner never reads `VIS_STOP`'s report (the design doc's claim is false).
+     - [ ] H3: the worker path has never run on Linux (forkserver on 3.14, POSIX wake path, Pulse capture).
+     - [ ] M1: EB ships `DriftFamily.source` CPU-reference arrays (482 KiB) and per-revision-constant geometry in every
+       frame; production never reads `source` (default frame 609 -> 138 KiB, decode 0.56 -> 0.34 ms).
+     - [ ] M2: the first configure's fixed 6 s deadline vs ~5 s measured under game60: slow machines would wait ~6 s
+       hidden and run in process at startup and after every Settings close.
+     - [ ] M3: Spec/Contracts/Guardrails/Index do not describe the engine worker, the slot layout, lifetime or recovery.
+     - [ ] M4: every gate used default presets; gate 2 (no visual change) has no record.
+     - [ ] M5: the in-process mode-cycling memory growth (gate 4 side finding) still hits the fallback and the Studios.
+     - [ ] L1: a full request queue drops the oldest message (wrong for ordered control edges; a lost `VIS_SET_VIEW`
+       silently stops Edit's orbit reaching the worker).
+     - [ ] L2: gate 3's "GIL share" fields are wall time, not GIL hold; "revisions waiting 0/0" is zero by
+       construction on the worker path; the worker's audio feed differs from a real device.
+     - [ ] L3: `--usage` costs ~13 ms more per 15 s sample with the worker (see §5's usage-sample hitch).
+     - [ ] L4: the wake listener takes the GIL every frame (unmeasured); presentation inputs holding a Qt type are not
+       forwarded silently; a blocked tick thread whose loop still answers heartbeats freezes undetected.
+     - [ ] L5: doc drift: gate 4's worker memory predates R-179; Current_Plan's "next frozen build" is already shown by
+       frozen check 2; `test_visualizer_engine_import_weight.py` missing from TestSuite; the writer comment overstates.
+     - [ ] P3 decisions before its first slice: the native reader vs the GUI thread closing the mapping mid-copy; a
+       single consumer and a non-consuming head read for the Python owner; EB geometry once per revision, not per
+       frame; EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check scans
+       a fixed module list and cannot see it).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 
