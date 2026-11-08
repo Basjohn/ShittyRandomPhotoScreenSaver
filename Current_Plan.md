@@ -209,10 +209,11 @@ after the operator's yes on a question card; agents never run load (invisible ch
      record): 20 Settings round trips and 20 mode switches with no process, mapping, handle or thread growth, the worker
      retired at each Settings open and respawned at its close, the Visualizer-off run and the overhead baseline
      identical with the admission on and off; it first found and fixed R-178 (every display reload under the
-     admission timed its destruction barrier out and the saver exited). Next: 6 (gate 3). Before gate 3's run: the
-     live check's age chain is blind on the worker path (the main frame trace has no publish events for worker frames:
-     revisions/s 0, publish -> swap empty); put the worker's publish time (each slot carries its produced time) in the
-     trace.
+     admission timed its destruction barrier out and the saver exited). Next: 6 (gate 3): the game60 run in process
+     and on the worker (lead, operator's yes). Its live check is ready (8 Nov, design doc step 6 "Gate 3
+     preparation"): each slot carries its publish time (`publish_ns`, ABI 2 bytes 56-63, `perf_counter_ns`), stamped
+     only while `--frame-trace` is admitted, and the main trace records each frame it takes at that time, so both
+     paths report the same age chain; the tick and GIL are labelled by process.
      The first frozen check ran 8 Nov (lead, build of `5fb8dab7`; design doc, step 6 "Frozen check"): first configure
      1.62 s inside the 6 s bound, a Waveform Ribbon switch committed on the worker; it found Nuitka's PySide6 icon hook
      loading QtGui and QtWidgets in every worker (R-176's frozen half, fixed by a build plugin plus a frozen-audit

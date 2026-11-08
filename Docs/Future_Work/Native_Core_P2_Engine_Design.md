@@ -1485,12 +1485,62 @@ switch never remaps.
        folder per run with `resource_readings.json`, `resource_samples.jsonl`, `resource_summary.json`, the drivers'
        state and the saver's logs; `console/`; `overhead_flag_off.json` / `_on.json`; frame traces deleted, profile
        copies deleted by the tool).
-     - **Left for gate 3:** the game60 run (lead, operator's yes). Before it, the live check's age chain on the worker
-       path: the main process's frame trace has no publish events for worker frames (revisions/s 0, publish -> swap and
-       the logical tick's GIL share empty), so gate 3's frame-age comparison needs the worker's publish time in the trace
-       (each slot carries its frame's produced time). The production worker in a session, from source: 74-75 MB RSS,
-       58-59 MB private and 10 threads with Spectrum, 90-130 MB RSS and 7-10 threads across the modes (the frozen
-       build's figures: the frozen check below). Everything 5.7 left above except gate 4.
+     - **Left for gate 3:** the game60 run (lead, operator's yes); its live check is ready (the next record). The
+       production worker in a session, from source: 74-75 MB RSS, 58-59 MB private and 10 threads with Spectrum,
+       90-130 MB RSS and 7-10 threads across the modes (the frozen build's figures: the frozen check below). Everything
+       5.7 left above except gate 4.
+   - **Gate 3 preparation (8 Nov): the live check reads the same age chain on both paths.** Gate 4 found the main
+     process's frame trace blind on the worker path: no publish events for worker frames (revisions/s 0, publish -> swap
+     and the logical tick's GIL share empty).
+     - *How the publish time crosses:* each frame slot carries `publish_ns` (ABI 2, slot bytes 56-63, until then the zero
+       padding before the payload; the ABI section above), the writer's `time.perf_counter_ns()` at publish, under the
+       slot's seqlock. No field moved and 0 means "not stamped", so the version stays 2. `perf_counter` is
+       QueryPerformanceCounter on Windows, system-wide with no per-process origin: the worker's stamp is on the main
+       process's own trace clock (a stamp made in a spawned writer lies between two parent readings around it; a
+       per-process clock does not). Zero cost at rest: the link's `VIS_CONFIGURE` asks for stamps
+       (`publish_stamps`) only while the main process's `--frame-trace` is admitted (`PacketMailbox
+       .traces_publications`, read once per reader); otherwise the writer reads no clock and the field is 0. The
+       reader records the trace's `LOGICAL_PUBLISH` when it takes a stamped frame, at the stamp, with the frame's
+       revision (the worker's publication count) and logical timestamp; a peek and a superseded frame record nothing.
+     - *The live check* (`tools/visualizer_live_check.py`) reports the same fields on both paths, labelled
+       (`path`, `publish_records`). On the worker path revisions/s comes from the revision numbering (the worker's own
+       rate; `publish_records_per_s` counts the frames main took), and the waiting count and the newest age at sync see
+       only newer frames main later took (lower bounds). New on both paths, from the trace: `tick_to_publish_ms` (the
+       tick's authored now to its publish record, on the ticking process's clock) and `tick_gil_share`, with
+       `tick_process` naming the process. The main process's GIL is `main_gil_share` with `main_gil_holder`: in
+       process the logical tick (`_publish_logical_state`: capture, publish and the GUI wake, `logical_gil_share`), on
+       the worker path the frame take (`frame_take_ms`: slot copy, decode and the owner's completion, measured by
+       `tools/eb_live_phases.py`'s passive wrapper on `PacketMailbox._read`); `worker_tick_ms` / `worker_gil_share`
+       are the worker's own. A worker run with no publish records fails.
+     - *Proof (invisible MC saver, Spectrum P1, recorded `anything_mixed2`, `--load none`, `--usage`, 120 s each,
+       admission on then off; other processes ~24-28% CPU median, GPU ~42-44% busy, other sessions):*
+
+       | Field (steady, median / p90) | Engine worker on | Off (in process) |
+       |---|---|---|
+       | Revisions/s (records/s) | 90.0 (89.8 taken) | 89.9 (89.9) |
+       | Tick -> publish, ms | 0.75 / 0.98 (`engine_worker`) | 0.60 / 0.77 (`main`) |
+       | Consumed age at sync, ms | 5.80 / 6.52 | 6.18 / 6.96 |
+       | Newest age at sync, ms | 5.80 / 6.51 | 6.18 / 6.96 |
+       | Revisions waiting at sync | 0 / 0 | 0 / 0 |
+       | Publish -> swap, ms | 9.37 / 10.56 | 9.54 / 12.71 |
+       | Render mode, ms | 0.24 / 0.37 | 0.23 / 0.37 |
+       | Swap gap, ms; frames/s | 11.06 / 12.38; 91.3 | 11.06 / 13.41; 91.0 |
+       | HUD age, ms | 10.98 / 12.35 | 11.01 / 14.31 |
+       | Main GIL share (holder) | 0.02 (frame take 0.246 / 0.315 ms) | 0.12 (logical tick 1.307 / 1.707 ms) |
+       | Tick GIL share (process) | 0.07 (worker) | 0.05 (main) |
+       | Hitches/min; late % | 0.53; 0.1 | 0.53; 0.1 |
+       | `--usage` processes / threads | 4 / 56 | 3 / 54 |
+
+       Both summaries carry the same age-chain fields. Main's per-frame GIL time falls from the tick's 1.3 ms to the
+       take's 0.25 ms; the tick itself costs about the same in either process (0.6-0.75 ms to its publish). The
+       in-process tick's `logical_tick_ms` exceeds its `tick_to_publish_ms` by the GUI wake after the publish (a
+       queued signal handed to the GUI thread), which the trace's publish record precedes. Evidence:
+       `.artifacts/evidence/architecture/native_core_p2/20261108_gate3_prep/` (`worker_on/`, `worker_off/`: summary,
+       phases, frame trace and logs; `console_worker_*.txt`; profile copies deleted by the tool).
+       Tests: `tests/test_visualizer_engine_publish_stamp.py`, `tests/test_visualizer_live_check.py` (Docs/TestSuite.md).
+     - *Gate 3's run:* `--load game60` with and without `--app-arg=--viz-engine-worker`, the same mode, preset, clip
+       and seconds; compare `main_gil_share`, the age chain and hitches, with `tick_gil_share` / `worker_gil_share`
+       labelled by process.
    - **Frozen check (8 Nov, lead; the operator check of step 6): the worker path runs frozen; two defects found and
      fixed, a confirming build is next.** The GitHub Remote build of `5fb8dab7` (A10-M1 included, R-178 not), the
      compiled diagnostic `release/diagnostic/SRPSS_Diagnostic.scr --viz-engine-worker`, a visible saver run of 90 s

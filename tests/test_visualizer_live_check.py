@@ -167,10 +167,11 @@ def test_the_tick_and_the_gil_are_labelled_by_process():
     worker = tick_and_gil({"frame_take_ms": {"median": 0.5}, "publish_records_per_s": 40.0, "revisions_per_s": 90.0,
                            "tick_to_publish_ms": {"median": 2.0}}, worker_path=True)
     assert worker["tick_process"] == "engine_worker" and worker["main_gil_holder"].startswith("frame take")
-    assert worker["main_gil_share"] == 0.02 and worker["worker_gil_share"] == 0.18
+    assert worker["main_gil_share"] == 0.02 and worker["worker_gil_share"] == worker["tick_gil_share"] == 0.18
     assert worker["worker_tick_ms"] == {"median": 2.0}
-    inproc = tick_and_gil({"logical_gil_share": 0.21, "tick_to_publish_ms": {"median": 2.0}}, worker_path=False)
-    assert inproc["tick_process"] == "main" and inproc["main_gil_share"] == 0.21
+    inproc = tick_and_gil({"logical_gil_share": 0.21, "tick_to_publish_ms": {"median": 2.0}, "revisions_per_s": 90.0},
+                          worker_path=False)
+    assert inproc["tick_process"] == "main" and inproc["main_gil_share"] == 0.21 and inproc["tick_gil_share"] == 0.18
     assert inproc["worker_tick_ms"] is None and inproc["worker_gil_share"] is None
     # A new session's revisions start again: the step back adds nothing.
     assert revision_rate([(0, 1), (10 ** 9, 91), (2 * 10 ** 9, 5), (3 * 10 ** 9, 95)]) == 60.0

@@ -1079,7 +1079,20 @@ High-value permanent guards include:
   edge never crosses into another activation's slot (A4-M4, control within one activation); the odd `sequence_begin`
   is its own store before the rest of the slot head (A4-L1). `tests/test_visualizer_engine_packet_mailbox.py`: a
   writer-side clear drops its pending edges from the frame and the slot's edge mask (A5-L3; control: without the
-  clear the edge is carried). `tests/test_visualizer_logical_edges_parity.py` (A4-H1, A5-M2, A5-L1, A6-L4): the
+  clear the edge is carried). `tests/test_visualizer_engine_publish_stamp.py` (gate 3 preparation): each slot's
+  `publish_ns` is bytes 56-63 with the identity still at 40, the payload at 64 and the version 2; an unstamped frame
+  carries 0, a stamp that does not fit a u64 is refused (nothing published), a torn slot is refused with its stamp; a
+  stamp made by the engine worker's writer in a spawned process lies between two `perf_counter_ns` readings the parent
+  takes around it (negative control: a per-process clock, `process_time_ns`, falls outside the bracket); the reader
+  records `LOGICAL_PUBLISH` at the writer's stamp once per frame it takes (a peek records nothing, superseded frames
+  never), and nothing with an unstamped writer or no trace; an unstamped writer reads no clock (control: the stamping
+  one reads it once per publish); the reader asks for stamps only while the trace is admitted; end to end, the owner on
+  a spawned worker with the trace admitted configures `publish_stamps`, runs no tick in main, and records over 30
+  worker publishes whose stamps lie on main's clock. `tests/test_visualizer_live_check.py` reads synthetic traces:
+  the worker path's age chain (consumed age, newest age, publish -> swap, tick -> publish) equals the in-process one,
+  and revisions/s is the worker's 90/s from the revision numbering although main took 45/s; negative controls: read as
+  in process the rate halves, and without the stamps the chain is empty; the tick and GIL are labelled by process.
+  `tests/test_visualizer_logical_edges_parity.py` (A4-H1, A5-M2, A5-L1, A6-L4): the
   production owner and the engine session call one module for configuration, activation and the engine edges
   (`widgets/spotify_visualizer/logical_edges.py`); the same edge scripts through each host's own path (the owner built,
   configured, bound, started and parked by the host binding's own `VisualizerHostBinding.construct`, its activation

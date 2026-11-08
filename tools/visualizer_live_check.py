@@ -49,10 +49,10 @@ meets it before the operator does.
   ``FLAG`` name a known trap; see ``Docs/Guides/Visualizer_Change_Checklist.md`` "Live-shape performance".
   With ``--app-arg=--viz-engine-worker`` the same age chain is read from the worker's own publish stamps (each frame
   slot's ``publish_ns``, on the clock every process shares; the main side records a frame's publish when it takes
-  it), and the tick and GIL are labelled by process (``tick_and_gil``): ``tick_process``, ``tick_to_publish_ms``
-  (both paths, from the trace), ``main_gil_share`` (in process the logical tick's, on the worker path the frame
-  take's) and ``worker_tick_ms`` / ``worker_gil_share`` (the worker's own process). A worker run with no publish
-  records fails.
+  it), and the tick and GIL are labelled by process (``tick_and_gil``): ``tick_process``, ``tick_to_publish_ms`` and
+  ``tick_gil_share`` (both paths, from the trace), ``main_gil_share`` (in process the logical tick's, on the worker
+  path the frame take's) and ``worker_tick_ms`` / ``worker_gil_share`` (the worker's own process). A worker run with
+  no publish records fails.
 
 Runs take ``--seconds`` plus ~30 s (profile copy, load calibration, startup, teardown). Stop strays by exact PID.
 """
@@ -215,22 +215,26 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
 def tick_and_gil(summary: dict, *, worker_path: bool) -> dict:
     """The tick and the GIL, labelled by process (gate 3 compares them in process and on the engine worker).
 
-    ``tick_process``: where the logical tick ran (its ``tick_to_publish_ms`` is from the trace on that process's clock).
+    ``tick_process``: where the logical tick ran. ``tick_to_publish_ms`` (from the trace, on that process's clock) is
+    the tick's start (its authored now) to its publish record, before the wake; ``tick_gil_share`` is that times
+    revisions/s, the same figure on both paths, in the process named by ``tick_process``.
     ``main_gil_share``: the main process's per-frame GIL holder for the Visualizer's frames; in process the logical tick
-    (``logical_tick_ms``, its publish phase, times revisions/s: ``logical_gil_share``), on the worker path the frame
-    take (``frame_take_ms``: slot copy, decode and the owner's completion, times the frames taken per second).
-    ``worker_gil_share``: the engine worker's own GIL (another process, it never stalls main's threads): its tick to
-    publish times its revisions/s; None in process."""
+    (``logical_tick_ms``: ``_publish_logical_state``, capture + publish + the GUI wake, times revisions/s:
+    ``logical_gil_share``), on the worker path the frame take (``frame_take_ms``: slot copy, decode and the owner's
+    completion, times the frames taken per second).
+    ``worker_tick_ms`` / ``worker_gil_share``: the engine worker's own tick and GIL (another process: it never stalls
+    main's threads); None in process."""
     def share(stats, rate):
         return round(stats["median"] * rate / 1000.0, 2) if stats and rate else None
 
+    tick_share = share(summary.get("tick_to_publish_ms"), summary.get("revisions_per_s"))
     if worker_path:
-        return {"tick_process": "engine_worker",
+        return {"tick_process": "engine_worker", "tick_gil_share": tick_share,
                 "main_gil_holder": "frame take (slot copy, decode, completion)",
                 "main_gil_share": share(summary.get("frame_take_ms"), summary.get("publish_records_per_s")),
-                "worker_tick_ms": summary.get("tick_to_publish_ms"),
-                "worker_gil_share": share(summary.get("tick_to_publish_ms"), summary.get("revisions_per_s"))}
-    return {"tick_process": "main", "main_gil_holder": "logical tick (publish phase)",
+                "worker_tick_ms": summary.get("tick_to_publish_ms"), "worker_gil_share": tick_share}
+    return {"tick_process": "main", "tick_gil_share": tick_share,
+            "main_gil_holder": "logical tick (_publish_logical_state: capture, publish, wake)",
             "main_gil_share": summary.get("logical_gil_share"), "worker_tick_ms": None, "worker_gil_share": None}
 
 
