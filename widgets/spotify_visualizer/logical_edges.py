@@ -437,7 +437,7 @@ def start_logical_cadence(
 ) -> Any:
     """Start (or return) the controller's one logical runtime: ``VisualizerLogicalRuntime``, the cadence owner (one
     non-Qt thread, a monotonic deadline sequence, missed deadlines skipped, parking with no wake cadence). ``step``
-    (the deadline timestamp in) defaults to the tick on the controller's tick state; ``interval_s`` to the authored
+    (the step's wake time in: the runtime's ``perf_counter`` read just before the step, not its deadline) defaults to the tick on the controller's tick state; ``interval_s`` to the authored
     cadence. A runtime started while the controller is parked starts parked."""
     from widgets.spotify_visualizer.tick_pipeline import logical_tick
 

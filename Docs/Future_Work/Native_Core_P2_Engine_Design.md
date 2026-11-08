@@ -614,43 +614,109 @@ switch never remaps.
      and reports the frames published, the cadence's accounting and the paced audio. The authored clock is the
      process's own (no pin). Every step: the audio due, then the tick (its own engine step consumes the newest block
      and submits the analysis, which commits on the compute lane while the tick reads the previous commit: the
-     production engine's own order, `free`). A step that raised fails the session closed: nothing more is ticked or
-     published and the failure is in the report (reporting it to the owner unprompted, the fade and the reconfigure
-     are 5.5). The recorded-PCM identity gates keep `cadence="input"` (one tick per input, deterministic); a paced
-     session refuses `tick`.
+     production engine's own order, `free`). A step that raised is the cadence owner's, exactly as in process
+     (checkpoint audit 6, A6-M3, decided by the lead): `VisualizerLogicalRuntime` logs it (once per run of failures),
+     counts it (`step_failures`) and the next step retries; nothing in the session catches it. In process there is no
+     fail-closed bound on repeated step failures either, so none is added: a session whose steps keep failing publishes
+     nothing new, which the owner's heartbeat and fade (5.5) handle. The recorded-PCM identity gates keep
+     `cadence="input"` (one tick per input, deterministic); a paced session refuses `tick`.
      - *Audio on the audio clock, without a poll:* `recorded_capture.PacedPcmSource` holds the recording's continuous
        PCM (`pcm_from_capture_histories`: the capture histories' new samples in order; the stream loops) and at each
-       cadence edge hands over the whole device blocks the audio clock produced since the previous edge (elapsed
-       deadline time x rate, in the negotiated block size, the remainder carried; a late edge hands over several, as a
-       device's queued callbacks), through `RecordedCaptureBackend.offer` (the worker's own capture callback; a block
-       offered while capture is closed is not captured). Nothing is due while capture is closed or Media is paused
-       (the playhead holds), and a capture (re)open restarts the clock (the backend's `on_started`), so an unpark
-       delivers no burst for the parked gap. It is not a poll and not a timer: it has no thread, never waits and wakes
-       nothing; it runs only inside the cadence's own step, which the runtime wakes for anyway, and its clock is that
-       step's deadline timestamp. (A feeder thread sleeping to each block's due time would be a second timer; a
-       device's own clock is slice 5.3.)
+       cadence edge hands over the whole device blocks the audio clock produced since the previous edge (the time
+       between the steps' wake times x rate, in the negotiated block size, the remainder carried; a late edge hands over
+       several, at most a device's buffer, `MAX_BACKLOG_S` = 0.1 s: older audio overflowed, the playhead moves past it,
+       A6-L1), through `RecordedCaptureBackend.offer` (the worker's own capture callback; a block offered while capture
+       is closed is not captured). The blocks are phase-locked to the tick (delivered on the cadence thread just before
+       it, never concurrently with it as a real device's own thread would be: A6-L2; the device's own phase and the
+       callback/tick lock interaction are slice 5.3's). Nothing is due while capture is closed or Media is paused (the
+       playhead holds), and a capture (re)open restarts the clock (the backend's `on_started`, which runs before the
+       stream's callback is installed, A6-L1), so an unpark delivers no burst for the parked gap. It is not a poll and
+       not a timer: it has no thread, never waits and wakes nothing; it runs only inside the cadence's own step, which
+       the runtime wakes for anyway, and its clock is that step's wake time (the `perf_counter` the runtime reads just
+       before the step, not its deadline: a late step really gets the late audio; A6-L3). (A feeder thread sleeping to
+       each block's due time would be a second timer; a device's own clock is slice 5.3.)
      - *Gate:* `tests/test_visualizer_engine_paced.py` and `tools/visualizer_replay/live_engine_gate.py --paced`: a
        free-running session per mode, the reader taking the newest frame per wake on its own thread and then stalling
        40 ms (a slow GUI; the wake listener only sets an event, the owner's emitter): no exception or step failure, one
-       frame per step at the cadence, coalescing observed (taken < published), the newest frame reached by a wake
-       after the stop, revisions only advance, 0 torn reads, the audio delivered >= 97% of the paced audio time and
-       the paced time >= 80% of the run. Also: the cadence parks with the display (no frame while parked, capture
-       reopened, no burst), a mode switch restarts it on the new activation, a failing step publishes nothing more.
-       Negative controls: a writer held by its reader (the cadence falls to the reader's rate), one block per edge (the
-       audio falls behind the clock), and mutations: no cadence start, no rebase at a reopen (the park test's burst),
-       the pre-C1 wake rule (the worker-process gate strands a frame). **Result (8 Nov, 3 s per mode in the
-       `WorkerType.VISUALIZER` process, below-normal priority):** all nine modes OK: 270-272 frames each at 89.5-90.1
-       Hz of 90, one frame per step, 0-1 skipped deadlines, the stalling reader took 65-66 (coalesced), the last frame
-       taken by a wake every time, 0 torn reads, audio delivered 2.997-3.008 s of 3.000-3.011 s paced, no failure;
-       32 s (`.artifacts/evidence/architecture/native_core_p2/20261108_paced_gate/paced_gate.json`).
+       frame per step, the cadence's own rate (its steps over its run time, less parked time) within 5% of the
+       authored rate, coalescing (taken < published) and latest wins (every take after a stall is the newest frame
+       the header named before it; A6-L6), the newest frame reached by a wake after the stop, revisions only advance,
+       0 torn reads, and the audio reached the engine (A6-M1): the source delivered >= 97% of the paced audio time,
+       the paced time >= 80% of the run, the audio worker's capture callback published every offered block into the
+       engine's audio buffer (`engine.capture_publications`, >= 97% of the paced time), the engine committed an
+       analysis on >= 80% of the steps and >= 50% of the frames taken carry energy. Also: the cadence parks with the
+       display (no frame while parked, capture reopened, no burst, its rate after the unpark), a mode switch restarts
+       it on the new activation (its rate after the switch), a step that raises once is logged and the next one
+       publishes (in the owner's cadence and the session's), a failed paced switch and a failed stop close the
+       session.
+       Negative controls: a writer held by its reader (the cadence falls to the reader's rate), an ~11% slow cadence
+       (passed the old 60% floor), a FIFO reader (stale takes), one block per edge (the audio falls behind the clock),
+       an `offer` that never calls the capture callback (the source's own arithmetic still says delivered; the engine
+       got nothing), the pre-fix catch-and-freeze step, and mutations: no cadence start, no rebase at a reopen (the
+       park test's burst), the pre-C1 wake rule (the worker-process gate strands a frame). **Result (8 Nov, after
+       audit 6; 3 s per mode in the `WorkerType.VISUALIZER` process, below-normal priority):** all nine modes OK:
+       270-272 frames each, the cadence at 89.88-90.23 Hz of 90, one frame per step, 0-1 skipped deadlines, no step
+       failure, the stalling reader took 65-66 with 64-65 latest-wins checks and no stale take, the last frame taken
+       by a wake every time, 0 torn reads, audio paced 3.000-3.012 s, delivered and published into the engine
+       2.997-3.011 s, 269-271 analysis commits, 95-98% of the frames taken with energy; 32 s
+       (`.artifacts/evidence/architecture/native_core_p2/20261108_a6_paced_gate/paced_gate.json`; the pre-audit run:
+       `20261108_paced_gate/`).
      - *Not in 5.1:* the production owner on the worker (5.2); the wake pipe's backpressure (a reader process whose
        listener stops draining fills the pipe, and `send_bytes` would then block the cadence: 5.5's "a full wake pipe
-       never blocks the tick"; the gate's listener drains continuously); a failed session reporting itself unprompted
-       and parking its cadence (5.5: today its steps return at once until the owner stops it).
+       never blocks the tick"; the gate's listener drains continuously); the owner noticing a session whose steps
+       keep failing (5.5's heartbeat and fade: the runtime keeps stepping and logs each run of failures once, as in
+       process).
+     - **Checkpoint audit 6 follow-ups (8 Nov; all closed before 5.2):**
+       - *A6-M1 (the paced audio check read only the source's arithmetic):* the session counts the blocks the audio
+         worker's capture callback published into the engine's audio buffer (`_SpotifyBeatEngine.capture_publications`,
+         `TripleBuffer.published`: reads for rigs, nothing per frame) and the engine's analysis commits since the
+         cadence started, and reports them (`finish()["engine"]`); the gate gates on them and on frames with energy.
+         The audit's dropping stub now fails (`delivered_over_paced` 0.999 as before, `accepted_over_paced` 0).
+       - *A6-M2 (a failed paced switch stayed open):* `VIS_SET_MODE` validates first (a refused request leaves the
+         session as it was, the input-paced contract), then an apply that raised closes the session with
+         `session_closed` (capture, compute lane and mapping released), as `VIS_INPUT` does.
+       - *A6-M3 (a failed step froze the session silently):* the retry contract above; the session's step catches
+         nothing. Test: one injected failure is logged once and the next step publishes, in the owner's cadence
+         (`_start_logical_runtime`) and the session's; the pre-fix step fails it.
+       - *A6-L1 (unpark burst):* `RecordedCaptureBackend.start` restarts the paced clock before installing the
+         callback, and one edge hands over at most `MAX_BACKLOG_S`. Tests: an edge landing anywhere inside `start`
+         after a 60 s park delivers nothing; a 60 s open gap delivers at most a device's buffer; each fails with its
+         fix reverted.
+       - *A6-L2, A6-L3 (wording):* "phase-locked to the tick" and "the step's wake time", above and in
+         `recorded_capture.py` / `engine_worker.py`.
+       - *A6-L4 (the parity test's owner side was a hand copy):* it is now built by `VisualizerHostBinding.construct`
+         (activation resolved from the Settings section, configure, bind, Media's edge, display power, start), and
+         both hosts' cadence starts are recorded at start and after every activation (worker-paced and input-paced
+         sessions). `test_visualizer_host_binding.py` pins that the binding passes `activation=` (dropping it fails
+         that test and the parity). `activation` stays optional on the owner's `configure` (about twenty focused
+         owner tests configure without one; the binding test is the guard). The parity compares the park raised
+         before a start (built while the displays are off) by count, not position: the binding raises it after
+         Media's play edge, the session before its start; neither reads the other.
+       - *A6-L5 (no production-path frame check):* `tools/visualizer_replay/owner_production_replay.py` replays a
+         shipped clip through the product's own path (the binding's `construct` builds the real owner on an unshown
+         runtime with the production presentation kwargs; the recorded engine at the binding's bar count; the owner's
+         installed cadence step once per frame, no thread). The same replay at `32f28d4f^` (b1baa58c, a temporary
+         archive checkout, deleted) and at this tree gave **identical digests for all nine modes** (137 frames each;
+         `.artifacts/evidence/architecture/native_core_p2/20261108_a6_l5_owner_path/`): the configure refactor left
+         production frames unchanged. `tests/test_visualizer_owner_production_path.py` keeps the real path equal to
+         the offline replay (`owner_replay`, built at the mode's bar count: its default 32 re-applies the bar count at
+         configure and advances the engine identity, the only difference, in six modes) for every mode; dropping the
+         logical, engine or presentation kwargs from the configure fails it. Frame-neutral steps (the activation
+         record, a cold engine's fence, Media's edge before start) are the parity and binding tests'.
+       - *A6-L6 (loose gate):* the rate within 5% of the cadence (park and switch tests: after the event) and the
+         latest-wins check, above.
+       - *A6-L7 (`VIS_STOP` left the session open):* the session closes even when `finish` raises (`session_closed` in
+         the reply).
+       - *A6-L8 (the worker keeps the pre-park unread frame):* a 5.2 obligation, recorded in 5.2 below.
    - 5.2 The owner on the worker: one code path in `quick_display_visualizer_owner.py` that sends the
      `logical_edges` edges to the worker instead of running them, admitted by a code-level admission in
      `core/diagnostics/experiment_flags.py` (never an environment flag) until gate 3 accepts it; the in-process path
-     stays the default and the fallback.
+     stays the default and the fallback. Obligations from checkpoint audit 6: the owner clears its reader after the
+     `VIS_SET_DISPLAY_POWER(off)` reply (after the worker's last pre-park publish), never before it, so the pre-park
+     unread frame and its protected edges are dropped as in process (A6-L8: the worker's park keeps them); the worker
+     receives the binding's own activation inputs and `presentation_kwargs` (with `scene3d_detail`), not an offline
+     request (A6-L4); the owner's wake callback never blocks (a queued signal), and a stalled GUI leaves the listener
+     draining (the wake-pipe backpressure note); a worker step failure is the runtime's retry, as in process (A6-M3).
    - 5.3 The live device in the worker: capture opens there; Media's playback truth stays the one owner of
      "playing" (sent as an edge); audio device changes, COM initialisation on the worker's capture lane, capture
      failure reported as a crash.

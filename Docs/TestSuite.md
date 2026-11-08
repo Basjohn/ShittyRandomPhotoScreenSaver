@@ -1045,26 +1045,46 @@ High-value permanent guards include:
   edge never crosses into another activation's slot (A4-M4, control within one activation); the odd `sequence_begin`
   is its own store before the rest of the slot head (A4-L1). `tests/test_visualizer_engine_packet_mailbox.py`: a
   writer-side clear drops its pending edges from the frame and the slot's edge mask (A5-L3; control: without the
-  clear the edge is carried). `tests/test_visualizer_logical_edges_parity.py` (A4-H1, A5-M2, A5-L1): the production
-  owner and the engine session call one module for configuration, activation and the engine edges
-  (`widgets/spotify_visualizer/logical_edges.py`); the same edge scripts through each host's own path (the owner's
-  `configure` + bind and `set_playing` + `start` as the host binding drives them; the session's `_configure` and first
-  input) on warm and cold recording engines give identical engine/controller call logs and logical state, including a
-  start while the displays are off; the owner's Edit-profile and backdrop steps sit inside the transaction / configure;
+  clear the edge is carried). `tests/test_visualizer_logical_edges_parity.py` (A4-H1, A5-M2, A5-L1, A6-L4): the
+  production owner and the engine session call one module for configuration, activation and the engine edges
+  (`widgets/spotify_visualizer/logical_edges.py`); the same edge scripts through each host's own path (the owner built,
+  configured, bound, started and parked by the host binding's own `VisualizerHostBinding.construct`, its activation
+  resolved from the Settings section, never a hand copy; the session's `_configure`, display power and start) on warm
+  and cold recording engines, worker-paced and input-paced sessions, give identical engine/controller call logs and
+  logical state, including a construction while the displays are off (the pre-start park flag compared by count); both
+  hosts' cadence starts are recorded (`controller.start_logical_runtime`: the owner's real `_start_logical_runtime`, a
+  worker-paced session's at start and after every activation, an input-paced one's never); the owner's Edit-profile
+  and backdrop steps sit inside the transaction / configure;
   the park order with a running logical runtime and the owner's activation failure stages are pinned (the failure log
   names `begin_engine_transaction` for a profile-discard failure, A5-L5); negative controls: the session configured
   with the replay copy, a drifted hand copy of its play edge, and unparking before the resume inside the shared module
-  each fail it. The fresh-spawn probe in
+  each fail it, and (shown by reverting) so do a binding that drops `activation=` and a paced session that does not
+  restart its cadence after a switch. `tests/test_visualizer_host_binding.py` also pins that the binding hands the
+  owner's `configure` the resolved activation (model, activation, technical cache; A6-L4).
+  `tests/test_visualizer_owner_production_path.py` (A6-L5): the product's own configure-and-start path
+  (`tools/visualizer_replay/owner_production_replay.py`: the binding's `construct` on an unshown runtime, the recorded
+  engine at the binding's bar count, the owner's installed cadence step once per frame, no thread) ticks the offline
+  replay's frames (`owner_replay(..., bar_count=)`) for every mode; dropping the logical, engine or presentation kwargs
+  from the configure fails it (frame-neutral steps, the activation record and a cold engine's fence, are the parity
+  and binding tests'). The same replay at `32f28d4f^` gave identical digests for all nine modes. The fresh-spawn probe in
   `tests/test_visualizer_engine_worker.py` ticks one live input per mode and pins QtCore/QtGui only (it caught the
   Spectrum DSP importing the Settings shape editor); it also reports the worker's Qt modules at spawn (QtCore at most)
   and after its first activation (QtCore and QtGui today: the presentation config's `QColor`s, A5-L2; work order 5
-  slice 5.4 flips it). `tests/test_visualizer_engine_paced.py` (work order 5 slice 5.1): a worker-paced session
-  (`cadence="worker"`) ticks on the logical runtime's own cadence, fed the shipped clip's PCM on the audio clock at
-  the cadence's edges (`PacedPcmSource`: device blocks, the remainder carried, nothing while closed or paused, no burst
-  after a reopen), with a reader that stalls after every take: one frame per step at the cadence, coalescing observed,
-  never stranded, 0 torn, the audio on the clock, in process and in the worker for every mode; the cadence parks with
-  the display, a mode switch restarts it, a failing step publishes nothing more; negative controls: a writer held by
-  its reader and one block per edge each fail the gate. Whole-clip gate (scenarios steady / pause_warm / pause_cold /
+  slice 5.4 flips it). `tests/test_visualizer_engine_paced.py` (work order 5 slice 5.1, checkpoint audit 6): a
+  worker-paced session (`cadence="worker"`) ticks on the logical runtime's own cadence, fed the shipped clip's PCM on
+  the audio clock at the cadence's edges (`PacedPcmSource`: device blocks, the remainder carried, nothing while closed
+  or paused, at most a device's buffer per edge, A6-L1), with a reader that stalls after every take: one frame per step,
+  the cadence within 5% of the authored rate, latest wins on every take after a stall (A6-L6), never stranded, 0 torn,
+  and the audio reached the engine (A6-M1: every offered block published by the audio worker's capture callback,
+  analysis commits on most steps, frames with energy), in process and in the worker for every mode; the cadence parks
+  with the display and resumes at its rate with no burst, a mode switch restarts it at its rate; a capture open
+  restarts the clock before its stream can deliver (an edge anywhere inside `start` after a 60 s park delivers
+  nothing, A6-L1); a step that raises once is logged and the next step publishes, in the owner's cadence and the
+  session's alike (A6-M3); a failed paced `VIS_SET_MODE` closes the session with `session_closed` and releases capture,
+  a refused one leaves it (A6-M2); `VIS_STOP` closes the session even when `finish` raises (A6-L7). Negative controls:
+  a writer held by its reader, an ~11% slow cadence, a FIFO reader, one block per edge, an `offer` that never calls
+  the capture callback (the audit's probe b) and the pre-fix catch-and-freeze step each fail; reverting each fix fails
+  its test (the start order, the backlog cap, the switch and stop handlers). Whole-clip gate (scenarios steady / pause_warm / pause_cold /
   reentry / switch, `--order`, `--stress`; `--paced` for 5.1) and cost: `tools/visualizer_replay/live_engine_gate.py`,
   `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
 - real-GL visualizer clip/render tests where driver/context behavior matters.
