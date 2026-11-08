@@ -319,7 +319,7 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
         "<p><b>Hotkeys While Running:</b></p>"
         "<p>"
         "<b>Right-Click (Ctrl Held/Interaction Mode)</b> - Opens Context Menu<br>"
-        "<b>S</b>  - Stop screensaver and open Settings<br>"
+        "<b>V</b> - Toggle the fullscreen Visualizer<br>"
         "<b>ESC</b> - Exit screensaver<br>"
         "<b>Ctrl (HOLD)</b> - Temporary interaction mode (widgets clickable without exiting)<br>"
         "<b>Mouse Click/Any Other Key</b> - Exit screensaver"

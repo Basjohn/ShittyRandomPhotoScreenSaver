@@ -1,4 +1,5 @@
-"""Settings material underlay: the non-Windows stand-in for native Glass/Acrylic.
+"""Settings material underlay: the non-Windows stand-in for every native material (Glass, Acrylic, Frosted, Mica,
+Smoked), in the Settings dialog and the Studio window that wears the same material.
 
 Themes here are test-owned derivations of the code default, never curated files.
 """
@@ -66,7 +67,21 @@ def _forbid_native(monkeypatch) -> None:
         monkeypatch.setattr(f"core.windows.dwm_blur.{name}", forbidden)
 
 
-@pytest.mark.parametrize("mode", ["glass", "acrylic"])
+@pytest.mark.parametrize("mode", ["frosted", "mica", "smoked"])
+def test_the_newer_materials_apply_their_derived_native_tint(mode) -> None:
+    """Frosted, Mica and Smoked: the same neutral, under the material's own derived tint (never the authored one)."""
+    theme = _theme(mode, Rgba(90, 30, 110, 120))
+    tint = theme.backdrop.native_tint()
+    assert tint is not None and tint != theme.backdrop.tint
+    weight = tint.a / 255
+    expected = tuple(round(base + (over - base) * weight) for base, over in (
+        (DARK_MATERIAL_NEUTRAL.r, tint.r), (DARK_MATERIAL_NEUTRAL.g, tint.g), (DARK_MATERIAL_NEUTRAL.b, tint.b)))
+    underlay = material_underlay(theme)
+    assert (underlay.r, underlay.g, underlay.b, underlay.a) == (*expected, 255)
+    assert underlay != DARK_MATERIAL_NEUTRAL
+
+
+@pytest.mark.parametrize("mode", ["glass", "acrylic", "frosted", "mica", "smoked"])
 def test_non_windows_paints_the_underlay_and_never_touches_dwm(monkeypatch, mode) -> None:
     monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
     _forbid_native(monkeypatch)
@@ -82,3 +97,78 @@ def test_non_windows_paints_the_underlay_and_never_touches_dwm(monkeypatch, mode
     # Off removes the substitute; no native call either.
     dialog._apply_native_backdrop_theme(_theme("off"))
     assert dialog._material_underlay is None
+
+
+# ----------------------------------------------------------------- the Studio window (same material, same underlay)
+ALL_MATERIALS = ("glass", "acrylic", "frosted", "mica", "smoked")
+
+
+def _rgba(text: str) -> tuple[int, int, int, int]:
+    """A Studio token (``#rrggbb`` or ``#aarrggbb``) as RGBA."""
+    digits = text.lstrip("#")
+    if len(digits) == 6:
+        return int(digits[0:2], 16), int(digits[2:4], 16), int(digits[4:6], 16), 255
+    return int(digits[2:4], 16), int(digits[4:6], 16), int(digits[6:8], 16), int(digits[0:2], 16)
+
+
+def _window_role(theme) -> Rgba:
+    try:
+        return theme.color("window.dialog_glass")
+    except KeyError:
+        return Rgba(60, 60, 60, 20)                 # the Studio theme owner's own fallback
+
+
+@pytest.mark.parametrize("light", [False, True])
+@pytest.mark.parametrize("mode", ALL_MATERIALS)
+def test_non_windows_studio_window_surface_is_composed_over_the_underlay(monkeypatch, mode, light) -> None:
+    from ui.studio.theme import studio_theme
+
+    theme = _theme(mode, Rgba(90, 30, 110, 120), light=light)
+    # Control: on Windows the material shows through the window surface.
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", True)
+    assert _rgba(studio_theme(theme)["windowSurface"])[3] < 255
+
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
+    tokens = studio_theme(theme)
+    assert tokens["backdrop"] == mode
+    red, green, blue, alpha = _rgba(tokens["windowSurface"])
+    assert alpha == 255                              # nothing beneath the window shows through
+    underlay, role = material_underlay(theme), _window_role(theme)
+    weight = role.a / 255
+    expected = [channel * weight + base * (1 - weight)
+                for channel, base in zip((role.r, role.g, role.b), (underlay.r, underlay.g, underlay.b))]
+    assert all(abs(got - want) <= 1 for got, want in zip((red, green, blue), expected))
+
+
+def test_non_windows_studio_off_stays_its_opaque_normal_window(monkeypatch) -> None:
+    from ui.studio.theme import studio_theme
+
+    theme = _theme("off")
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", True)
+    windows = studio_theme(theme)["windowSurface"]
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
+    assert studio_theme(theme)["windowSurface"] == windows and _rgba(windows)[3] == 255
+
+
+def test_non_windows_studio_window_never_calls_the_native_backdrop(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from ui.studio.surface import StudioWindowSurface
+
+    calls: list[str] = []
+    monkeypatch.setattr("core.windows.dwm_blur.apply_backdrop",
+                        lambda _hwnd, mode, _tint=None: calls.append(mode) or True)
+
+    def surface(mode: str) -> SimpleNamespace:
+        return SimpleNamespace(material=mode, backdrop_applied=False, theme=_theme(mode, Rgba(90, 30, 110, 120)),
+                               window=SimpleNamespace(winId=lambda: 4242))
+
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
+    for mode in ALL_MATERIALS:
+        assert StudioWindowSurface.apply_backdrop(surface(mode)) is False
+    assert calls == []
+    # Control: the same surfaces on Windows reach the shared mapping with each material.
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", True)
+    for mode in ALL_MATERIALS:
+        assert StudioWindowSurface.apply_backdrop(surface(mode)) is True
+    assert calls == list(ALL_MATERIALS)

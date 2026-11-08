@@ -274,6 +274,9 @@ class QuickInputController(RuntimeInputOwner):
         if custom_active and event.key() == Qt.Key.Key_Escape:
             self.custom_layout_cancel_requested.emit()
             return True
+        if custom_active and self.is_expand_toggle_key(event):
+            # Edit never shows an expanded state: V is consumed and does nothing there.
+            return True
         # Development/diagnostic-only, single physical key edge. No subscription,
         # polling or readback in the compiled release build.
         if event.key() == Qt.Key.Key_Backslash:

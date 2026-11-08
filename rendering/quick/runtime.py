@@ -61,6 +61,7 @@ class QuickDisplayRuntime(QObject):
     context_menu_requested = Signal(QPoint)
     layout_slot_load_requested = Signal(str)
     layout_slot_save_requested = Signal(str)
+    visualizer_expand_toggle_requested = Signal()
     # Floats: a drag's steps are fractions (an int signature truncated them all to nothing).
     view_orbit_rates_changed = Signal(float, float)
     view_framed_flight_rates_changed = Signal(float, float, float, float)
@@ -248,6 +249,9 @@ class QuickDisplayRuntime(QObject):
         )
         self._input.layout_slot_save_requested.connect(
             self.layout_slot_save_requested.emit
+        )
+        self._input.visualizer_expand_toggle_requested.connect(
+            self.visualizer_expand_toggle_requested.emit
         )
         self._input.view_orbit_rates_changed.connect(self.view_orbit_rates_changed.emit)
         self._input.view_framed_flight_rates_changed.connect(self.view_framed_flight_rates_changed.emit)

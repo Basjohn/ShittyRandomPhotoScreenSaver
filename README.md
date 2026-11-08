@@ -250,6 +250,7 @@ Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. 
 | --- | --- |
 | `Z` / `X` | Previous / next image |
 | `C` | Cycle transition type |
+| `V` | Toggle the fullscreen (Expanded) Visualizer, where its mode offers it |
 | `Shift+0`–`Shift+9` | Save a layout slot |
 | `0`–`9` | Recall a layout slot |
 | `W` / `A` / `S` / `D` | Orbit a free-form 3D visualizer such as Extruded Spectrum; in framed Extruded Bubble these keys fly/strafe instead |

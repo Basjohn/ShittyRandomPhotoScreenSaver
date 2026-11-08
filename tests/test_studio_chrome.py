@@ -171,6 +171,9 @@ def test_normal_and_materials_follow_the_active_theme(studio, monkeypatch, mode)
     from ui.studio.surface import StudioWindowSurface
     from ui.studio.theme import studio_theme
     theme = _theme_with_mode(mode)
+    # The Windows contract: the material shows through the window surface (off Windows it is composed over the
+    # opaque underlay instead, tests/test_linux_settings_material_underlay.py).
+    monkeypatch.setattr(platform_paths, "IS_WINDOWS", True)
     tokens = studio_theme(theme)
     assert tokens["backdrop"] == mode
     window_alpha = QColor(tokens["windowSurface"]).alphaF()
@@ -180,7 +183,6 @@ def test_normal_and_materials_follow_the_active_theme(studio, monkeypatch, mode)
         assert window_alpha < 1.0 and float(tokens["panelAlpha"]) < 1.0
 
     calls = []
-    monkeypatch.setattr(platform_paths, "IS_WINDOWS", True)
     monkeypatch.setattr("core.windows.dwm_blur.apply_backdrop",
                         lambda hwnd, applied_mode, tint=None: calls.append((applied_mode, tint)) or True)
     controller, _surface = studio("waveform_ribbon")

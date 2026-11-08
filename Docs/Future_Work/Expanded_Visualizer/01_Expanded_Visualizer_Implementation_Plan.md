@@ -527,6 +527,12 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   right inside the card, Reset Camera's admission and hover fade, a delayed "FULL DISPLAY" / "EXIT FULL DISPLAY"
   tip, consumes its own presses including a double-click's second; the control hint moves left of it; the Edit
   hover glyphs are withdrawn while expanded. The coordinator publishes it (`set_visualizer_expand_glyph`).
+- *V key (operator, 8 Nov).* V while the saver runs is a press of this glyph: `RuntimeInputOwner` emits
+  `visualizer_expand_toggle_requested` once per physical press (no repeat, nothing under the context menu, consumed
+  and refused in Edit), and `DisplayManager._toggle_quick_visualizer_expansion_from_key` passes the generation gate,
+  then calls `_route_quick_visualizer_expand_glyph` on the Visualizer's unit in the direction the glyph shows. Every
+  glyph rule and the persisted intent therefore hold; where the glyph is not offered (an incapable mode, Edit, no
+  coordinator) V does nothing, like the glyph.
 - *Reducer additions.* `ModeCycleRequested` (the cycling rule, §0.6) and `OwnerRetired` (reload, Visualizer off,
   failed construction: the state dies, the intent persists).
 - *Not M2:* fades of the other widgets (M3), wallpaper policy (M4), expanded transfer (M5), the Spectrum bar count

@@ -76,6 +76,80 @@ def test_edit_only_undo_and_lock_hotkeys_preserve_plain_z_and_ignore_repeats() -
         controller.deleteLater()
 
 
+def test_v_requests_the_expanded_visualizer_toggle_once_and_leaves_other_hotkeys_alone() -> None:
+    edit_active = [False]
+    controller = QuickInputController(
+        screen_index=0, runtime_generation=1,
+        custom_layout_active_provider=lambda: edit_active[0],
+    )
+    routed: list[str] = []
+    for name in ("visualizer_expand_toggle_requested", "next_image_requested", "previous_image_requested",
+                 "cycle_transition_requested", "exit_requested", "custom_layout_cancel_requested"):
+        getattr(controller, name).connect(lambda name=name: routed.append(name))
+
+    def press(key: Qt.Key, text: str = "", repeat: bool = False) -> bool:
+        return controller.handle_key_press(QKeyEvent(
+            QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier, text, repeat, 1,
+        ))
+
+    try:
+        # Outside interaction mode an unbound letter exits the saver; V is bound and never does.
+        assert press(Qt.Key.Key_V, "v") is True
+        assert routed == ["visualizer_expand_toggle_requested"]
+        assert press(Qt.Key.Key_V, "v", repeat=True) is True        # key repeat never re-toggles
+        assert press(Qt.Key.Key_V, "v") is True                     # a second press is a second toggle
+        assert routed == ["visualizer_expand_toggle_requested"] * 2
+        # The other hotkeys keep their own routes.
+        routed.clear()
+        press(Qt.Key.Key_X, "x")
+        press(Qt.Key.Key_Z, "z")
+        press(Qt.Key.Key_C, "c")
+        assert routed == ["next_image_requested", "previous_image_requested", "cycle_transition_requested"]
+        # Negative control: an unbound letter still exits (V's consumption is its own binding, not a blanket one).
+        routed.clear()
+        press(Qt.Key.Key_B, "b")
+        assert routed == ["exit_requested"]
+
+        # Under the context menu V is consumed and requests nothing; once the menu closes it works again.
+        other = QuickInputController(screen_index=1, runtime_generation=1)
+        other_routed: list[str] = []
+        other.visualizer_expand_toggle_requested.connect(lambda: other_routed.append("toggle"))
+        other.exit_requested.connect(lambda: other_routed.append("exit"))
+        try:
+            other.set_context_menu_active(True)
+            assert other.handle_key_press(_key_press(Qt.Key.Key_V, "v")) is True
+            assert other_routed == []
+            other.set_context_menu_active(False)
+            assert other.handle_key_press(_key_press(Qt.Key.Key_V, "v")) is True
+            assert other_routed == ["toggle"]
+            # Closed input (a retiring generation) consumes V and emits nothing.
+            other_routed.clear()
+            other.close_input()
+            assert other.handle_key_press(_key_press(Qt.Key.Key_V, "v")) is True
+            assert other_routed == []
+        finally:
+            other.deleteLater()
+    finally:
+        controller.deleteLater()
+
+
+def test_v_is_refused_in_edit_without_touching_edits_own_keys() -> None:
+    controller = QuickInputController(
+        screen_index=0, runtime_generation=1, custom_layout_active_provider=lambda: True,
+    )
+    routed: list[str] = []
+    for name in ("visualizer_expand_toggle_requested", "exit_requested", "custom_layout_cancel_requested",
+                 "custom_layout_lock_requested"):
+        getattr(controller, name).connect(lambda name=name: routed.append(name))
+    try:
+        assert controller.handle_key_press(_key_press(Qt.Key.Key_V, "v")) is True
+        assert routed == []
+        # Negative control: Edit's own keys still reach Edit.
+        controller.handle_key_press(_key_press(Qt.Key.Key_L, "l"))
+        controller.handle_key_press(_key_press(Qt.Key.Key_Escape))
+        assert routed == ["custom_layout_lock_requested", "custom_layout_cancel_requested"]
+    finally:
+        controller.deleteLater()
 
 
 def test_double_right_click_requests_existing_custom_edit_owner_not_next_image() -> None:
@@ -162,6 +236,7 @@ def test_quick_input_uses_the_single_neutral_policy_owner():
         "context_menu_requested",
         "layout_slot_load_requested",
         "layout_slot_save_requested",
+        "visualizer_expand_toggle_requested",
         "view_orbit_requested",
         "view_orbit_finished",
     ):

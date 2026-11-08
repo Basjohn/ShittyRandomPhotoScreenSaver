@@ -59,7 +59,7 @@ contract; SRPSS itself is never configured through environment variables). One o
 
 | Feature | On Linux |
 | --- | --- |
-| Settings Glass/Acrylic | an opaque underlay derived from each theme replaces the Windows blur |
+| Settings and Studio materials (Glass, Acrylic, Frosted, Mica, Smoked) | an opaque underlay derived from each theme replaces the Windows blur; widget card materials are the same as on Windows |
 | Media widget | MPRIS (Spotify, browsers, most players); same provider settings |
 | Visualizer audio | the default output's monitor (what is playing), never the microphone |
 | Volume slider, mute, volume OSD | PulseAudio/PipeWire through `pactl` |

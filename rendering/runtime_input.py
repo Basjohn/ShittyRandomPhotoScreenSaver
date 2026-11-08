@@ -91,6 +91,9 @@ class RuntimeInputOwner(QObject):
     context_menu_requested = Signal(QPoint)
     layout_slot_load_requested = Signal(str)
     layout_slot_save_requested = Signal(str)
+    # V: toggle the Expanded (fullscreen) Visualizer, one physical press. The product owner
+    # routes it to the expand/collapse glyph's own press, with every admission rule it has.
+    visualizer_expand_toggle_requested = Signal()
     # While a 3D freeform Visualizer is shown: W/A/S/D publish the held keys' combined direction
     # (turn, tilt) whenever it changes (the view turns at a steady rate while held, whatever the
     # OS key repeat does); an Alt + left drag on it in interaction/Ctrl mode steps it (a step per
@@ -342,6 +345,21 @@ class RuntimeInputOwner(QObject):
     def is_context_menu_active(self) -> bool:
         return self._context_menu_active
 
+    @staticmethod
+    def is_expand_toggle_key(event: QKeyEvent) -> bool:
+        """The V key (by key, text or native virtual key, like the other letter hotkeys)."""
+        if event.key() == Qt.Key.Key_V:
+            return True
+        try:
+            if (event.text() or "").lower() == "v":
+                return True
+        except Exception:
+            pass
+        try:
+            return int(event.nativeVirtualKey() or 0) == 0x56
+        except Exception:
+            return False
+
     def handle_key_press(self, event: QKeyEvent) -> bool:
         """Route the shared hotkey/exit policy and report event consumption."""
 
@@ -397,6 +415,11 @@ class RuntimeInputOwner(QObject):
             return True
         if key_text == "c" or key == Qt.Key.Key_C or native_vk == 0x43:
             self.cycle_transition_requested.emit()
+            return True
+        if self.is_expand_toggle_key(event):
+            # Key repeat never re-toggles; under the context menu the key does nothing.
+            if not event.isAutoRepeat() and not self._context_menu_active:
+                self.visualizer_expand_toggle_requested.emit()
             return True
         if (self._view_orbit_enabled and (key == Qt.Key.Key_R or key_text == "r" or native_vk == 0x52)
                 and not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier

@@ -478,11 +478,11 @@ CONTEXT_MENU_SUMMARY = (
 KEY_SUMMARY = (
     ("Z / X", "Previous / next image"),
     ("C", "Cycle transition"),
-    ("S", "Open Settings"),
+    ("V", "Fullscreen Visualizer on / off"),
     ("Space  ·  ← / →", "Play/pause  ·  previous/next track"),
     ("↑ / ↓  ·  PgUp / PgDn", "Media volume  ·  system volume"),
     ("1–9, 0  ·  Shift + number", "Load / save a layout slot"),
-    ("Esc / Q", "Exit"),
+    ("Esc", "Exit"),
 )
 
 
