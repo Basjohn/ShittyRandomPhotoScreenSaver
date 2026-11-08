@@ -44,14 +44,14 @@
         ],
         "spectrum_ghost_color_source": "Custom",
         "spectrum_ghost_decay": 0.18,
-        "spectrum_ghost_gradient": false,
+        "spectrum_ghost_gradient": true,
         "spectrum_ghost_tip_color": [
-          255,
-          255,
-          255,
+          188,
+          0,
+          45,
           255
         ],
-        "spectrum_ghosting_enabled": false,
+        "spectrum_ghosting_enabled": true,
         "spectrum_gloss": 0.16,
         "spectrum_glow_color": [
           255,

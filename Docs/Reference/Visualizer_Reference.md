@@ -158,9 +158,11 @@ Rules:
   passes through yellow, not olive; a grey, white or black end takes the other end's hue. Rim glow reaches at most
   30% of a bar's width in from each side, so on 37 narrow bars it stays a rim instead of recolouring the bar
   (`tests/test_spectrum_decor.py`, each with a negative control against the old rule).
-- Translucent ghost trails over the dark card read as dark smudges under bright caps (alpha fading over black is
-  darkening). The curated presets 2-15 therefore carry their peak memory in caps, with ghosts off; Preset 1's hollow
-  rainbow ghosts stay.
+- Every curated preset ghosts (operator, 8 Nov 2026: caps alone "only draw the line, not the ghost effect"). This
+  supersedes the 7 Nov rule that presets 2-15 carry their peak memory in caps with ghosts off. A ghost fades toward
+  the card, so a dim warm or olive hue reads as a smudge under a bright cap. Presets 2-15 therefore ghost in a
+  light or luminous colour taken from their own palette (white, cloud, cyan, aqua, green, red or orange). None
+  shades toward a darker tip.
 - Toggling fades (`SpectrumDecorFade`, `FADE_SECONDS`): one envelope per option on the presentation owner, advanced
   only on the capture timestamp (no timer, thread or second clock); a pattern switched to another dips through zero.
   A fresh owner starts settled, so exact Studio replays and new activations show the settings directly.

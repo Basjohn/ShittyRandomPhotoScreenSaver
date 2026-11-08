@@ -35,11 +35,11 @@
           88,
           255
         ],
-        "spectrum_ghost_alpha": 0.8,
+        "spectrum_ghost_alpha": 0.9,
         "spectrum_ghost_color": [
-          255,
-          255,
-          255,
+          86,
+          214,
+          88,
           255
         ],
         "spectrum_ghost_color_source": "Custom",
@@ -51,7 +51,7 @@
           255,
           255
         ],
-        "spectrum_ghosting_enabled": false,
+        "spectrum_ghosting_enabled": true,
         "spectrum_gloss": 0.5,
         "spectrum_glow_color": [
           255,
