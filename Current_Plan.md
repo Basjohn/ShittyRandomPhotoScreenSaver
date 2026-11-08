@@ -288,7 +288,9 @@ after the operator's yes on a question card; agents never run load (invisible ch
      3. Merge `p2/worker-default` (worker is the Windows default).
      4. M2 (first-configure deadline on slow machines) and L1 (ordered control edges never dropped).
      5. M4: gates with non-default presets and settings; a gate 2 (no visual change) record.
-     6. H3: prove the worker on Linux, then decide its default there.
+     6. H3 (operator, 8 Nov: there is no Linux machine to prove it on; assume it works with basic support): make the
+        worker the default on Linux too (the branch keeps Linux in process; flip `visualizer_engine_worker_platform_default`
+        to every platform and update `Linux_Plan.md` Phase 4 and the platform tests). No Linux proving step.
      7. M5, L2-L5 and what M3 still lacks.
      8. P3's four decisions (listed last below) before P3's first slice.
      - [ ] H1: the 1 MiB frame slot overflows for Extruded Bubble at non-default settings (Particles at its schema
@@ -296,7 +298,9 @@ after the operator's yes on a question card; agents never run load (invisible ch
        fades and drops in process for the run; in process works. Root cause M1.
      - [ ] H2: the worker gets no diagnostic flags and logs to a null handler: tick/DSP/device exceptions, `[PERF]`
        and fail-closed reasons reach no log; the owner never reads `VIS_STOP`'s report (the design doc's claim is false).
-     - [ ] H3: the worker path has never run on Linux (forkserver on 3.14, POSIX wake path, Pulse capture).
+     - [ ] H3: the worker path has never run on Linux (forkserver on 3.14, POSIX wake path, Pulse capture). Operator,
+       8 Nov: it cannot be proven (no Linux machine); assume basic support and make the worker the Linux default too
+       (step 6).
      - [ ] M1: EB ships `DriftFamily.source` CPU-reference arrays (482 KiB) and per-revision-constant geometry in every
        frame; production never reads `source` (default frame 609 -> 138 KiB, decode 0.56 -> 0.34 ms).
      - [ ] M2: the first configure's fixed 6 s deadline vs ~5 s measured under game60: slow machines would wait ~6 s
