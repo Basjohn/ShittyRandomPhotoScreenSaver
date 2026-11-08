@@ -930,6 +930,17 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   (Cancel writes nothing), writes only the edited key into a tmp copy of a real curated preset in the file's own
   shape (LF and CRLF), reloads presets, and a read-only file gives the message and writes nothing (negative
   control: writable prompts); opened on Custom it is not offered; the shared patcher touches nothing else.
+- `tests/test_visualizer_expansion_fullscreen_edit.py` — Expanded Visualizer Fullscreen Edit (plan 01 M3c) on the
+  hidden production scene with the real Edit owner, model and gestures: the parity map (one gesture script, moves,
+  wheel, corners, side handles and a two-axis diagonal included, through a draft; Cancel restores exactly, Save
+  commits what the draft showed); every part shows the ordinary content-extent side strips, each grabbable on a
+  one-line toast; a side handle changes only its axis and one extent member (the text parts keep the opposite
+  edge); a set extent elides, wraps and crops (the artwork keeps its size under a taller text box); undo and
+  Restore Size; a uniform scale keeps the font-relative box. Negative controls: no content axes on the parts (18
+  red), writing both axes from a side drag (8 red), the toast ignoring its set width (3 red), the old 20 px strip
+  inset (the strip check red). `tests/test_visualizer_expansion_overlay_settings.py` holds the one value
+  (`core/settings/fullscreen_overlays.py`): schema, clamps, projection, and a value stored before the extents
+  reading them as the natural look (idempotent).
 
 Cost: `tools/visualizer_cost_probe.py` (one mode) and `tools/overhead_baseline.py` (everything): offscreen, production host, control-relative GPU/CPU, GL and Python call counts and recorded system conditions; how to run and read them and the expected results are in `Docs/Reference/Benchmarks.md`.
 

@@ -246,9 +246,11 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
         assert f"customLayoutEditFrame-fullscreen_overlay.{part}" in frames
         assert not frames[f"customLayoutClose-fullscreen_overlay.{part}"].isVisible()
         assert frames[f"customLayoutResize-fullscreen_overlay.{part}-bottom_right"].isVisible()
-        # ... and the same single-axis side strips as ordinary content-extent widgets.
+        # ... and the same single-axis side strips as ordinary content-extent widgets, each one grabbable (a one-line
+        # toast is shorter than the strips' usual corner insets).
         for edge in ("left", "right", "top", "bottom"):
-            assert frames[f"customLayoutViewportEdge-fullscreen_overlay.{part}-{edge}"].isVisible(), (part, edge)
+            strip = frames[f"customLayoutViewportEdge-fullscreen_overlay.{part}-{edge}"]
+            assert strip.isVisible() and min(strip.width(), strip.height()) >= 8, (part, edge)
     before_config = dict(display.scene._visualizer_overlay_config)
     before = edit.frames()
     assert before == edit.drawn()

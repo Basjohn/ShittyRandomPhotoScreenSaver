@@ -748,6 +748,31 @@ can most geometry normally."
   clamped like `scale`), on top of the text-derived size; it stays beside its text, so dragging the artwork or the
   text moves Now Playing as one (its undo step is Now Playing's), and the artwork grows away from the overlay's anchor
   corner. Media Controls belong to the text block (they scale with the text).
+- *Single-axis sizing (operator, 8 Nov: "Does the edit allow x only and y only changes like our proper edits do? It
+  should."; decided).* Every part declares both content axes (`content_extent_axes`), so the one Edit layer draws
+  ordinary Edit's side strips and, on the selected part, its two-axis diagonals; the owner routes them to
+  `FullscreenOverlayEdit` like the corners. A side drag uses ordinary Edit's edge rule (`edge_resize_rect`, bounded
+  by the safe area) and resize-edge snap (`resolve_resize_edge_snap`: the safe area's centre, the other overlay's
+  edges and centre), changes one member and keeps the other exactly (ordinary `content_extent_resize_payload`):
+  `text_width` / `text_height` for the toast and the Now Playing text block, `artwork_width` / `artwork_height` for
+  the artwork, all new members of the one value (canonical default = today's look: text `0` = natural, artwork `1`
+  = square; a value stored before them reads them so, no bridge). Mirrored semantics: the text box is ordinary
+  Edit's content box (Media's card elides in a set width and reflows into a set height): a set width elides, a set
+  height adds lines (the toast's name and Now Playing's title wrap, then elide), the block centred in its box,
+  floored at one line (the toast) or the natural block (Now Playing), at least the Media Controls' width; extents
+  are in ems of the overlay's font, so a uniform scale (corner, wheel) and the font size keep the box's shape, as
+  ordinary Edit's uniform scale keeps `content_extent`; a set box may use the whole safe area (the 45 % cap is only
+  the natural growth). The artwork mirrors ordinary Edit's freeform artwork frame
+  (`freeform_artwork_child_role`: free X/Y, image `PreserveAspectCrop`), so it may go non-square; its size still
+  follows the natural (one-line) text block, never a set text height. The text parts keep the opposite edge (and
+  the untouched axis's position); the artwork grows from its place beside the text, as its corner drag does, which
+  keeps each change one undo step of one item. The stored extent is the one drawn (floors and the safe area
+  applied), as offsets are. Restore Size returns scale and extents to canonical (ordinary Restore Size drops
+  `content_extent`). Shared chrome change: a side strip on a frame shorter than 56 px keeps a 16 px grabbable length
+  clear of the corner squares (it had none on a one-line toast; ordinary frames of 56 px and more are unchanged).
+  Evidence: `tests/test_visualizer_expansion_fullscreen_edit.py` (side strips, one axis per handle, reflow and crop,
+  undo, Restore Size, uniform scale, the parity map with side drags) and `..._overlay_settings.py`; stills outside the
+  repository (`D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer\20261108_m3c_axes\`).
 - *Corner change in Settings (decided).* `rebase_offset_for_corner` (the one owner): per axis, the offset is kept when
   it still points into the display from the new corner (right of a left corner, left of a right one, below a top
   corner, above a bottom one), so the overlay stays in bounds the same distance in from the new anchor's edge; an axis

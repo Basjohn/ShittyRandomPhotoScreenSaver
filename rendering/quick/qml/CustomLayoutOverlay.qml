@@ -1440,8 +1440,11 @@ Item {
                     property string edge: modelData
                     property bool horizontalEdge: edge === "left" || edge === "right"
                     // Inset the strips so they never sit on top of the corner
-                    // handles or the close control.
-                    property int edgeInset: 20
+                    // handles or the close control. A short frame (a one-line
+                    // Fullscreen Edit toast) keeps a grabbable 16 px strip
+                    // clear of its 14 px corner squares instead of none.
+                    readonly property real edgeSpan: horizontalEdge ? editFrame.height : editFrame.width
+                    property real edgeInset: Math.min(20, Math.max(8, (edgeSpan - 16) / 2))
                     property int edgeThickness: 10
 
                     objectName: "customLayoutViewportEdge-" + editFrame.widgetId + "-" + edge
