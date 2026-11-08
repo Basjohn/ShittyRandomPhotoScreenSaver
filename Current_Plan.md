@@ -87,6 +87,12 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - Double-click cycling while expanded skips incapable enabled modes and stays expanded; an explicit selection of
      an incapable mode collapses.
    - Spectrum gains bars in proportion to the extra width (its own milestone after M2, with a fade at the edges).
+     Operator, 8 Nov: "20% more if fullscreen and horizontal". Landed (agent branch): the expanded, horizontal card
+     draws round(1.2 x) the authored bars (cap 64), resampled from the same logical frame by the renderer; the rule's
+     one owner is `widgets/spotify_visualizer/spectrum_display_bar_count.py`, read from the display-wide record
+     (`expanded_display`), so it switches at the fade-through's invisible midpoint. A quarter turn, the ordinary card
+     and Extruded Spectrum (not expansion-capable) keep the authored count. The width-ratio DSP recompute of plan 01
+     M2b stays open; it needs the hidden activation transaction (an engine bar-count change bumps its generation).
    - Operator, 7 Nov night: "Don't reach nearly close enough to the screen borders" and "Don't really hide/disable
      the widgets underneath". Landed 8 Nov (agent branch, lead-audited): the expanded card is inset only by its own
      chrome plus 2 px (14 logical px at 2560 x 1440 with canonical chrome, was 30) and draws the card's own shadow;
@@ -149,10 +155,13 @@ after the operator's yes on a question card; agents never run load (invisible ch
      cross-process wake and per-session label namespaces are built). Independent Fable audit, 8 Nov
      (`Docs/Future_Work/Native_Core_P2_Audit.md`): its two critical findings (a lost cross-process wake that froze the
      display; the seqlock reader accepting torn slots) and H3a/H4/H6/M2 are fixed with failing-first tests. Next, in
-     order (design doc work orders): 4b live-engine and pause/resume/re-entry/mode-switch gates; 4c the main
-     process's per-mode cost of the snapshot path, which decides whether P2a's wiring or P2b (the worker owns capture
-     and DSP) goes first; then 5 (production wiring with a latest-wins main -> worker snapshot mapping, in-place
-     mode and settings deltas, park, fail-closed, QtCore-only worker), then 6 (measurement, gate 3).
+     order (design doc work orders): 4c measured 8 Nov: the snapshot path saves nothing for Spectrum, Oscilloscope,
+     Sphere, Extruded Spectrum and Neon Lake (its capture + pickle + take cost about their whole tick) and ~1.0-1.3 ms
+     for the four heavy modes, while moving DSP too would save ~.7-2.2 ms for every mode, so **P2b goes first**: the
+     worker owns audio capture, DSP and the tick, the snapshot layer is deleted. Next: the P2b work order (capture
+     and DSP in the worker, control edges only from the main process), the 4b gates against the live engine in the
+     worker, then 5 (production wiring: in-place mode and settings deltas, park, fail-closed, QtCore-only worker)
+     and 6 (gate 3).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 
@@ -322,10 +331,15 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   Evidence: `.artifacts/evidence/visualizers/spectrum/presets/20261107_lead/` (contact sheets, motion strips, metrics, the
   authoring script). Open: the operator's eyes. Silhouette is the plainest by concept.
 
-  **Operator, 8 Nov:** "definitely better", but none of them ghosted. They drew only the cap line, because the 7 Nov
-  authoring turned ghosting off in all 14. Each now ghosts under its caps in a light colour from its own palette
-  (only the Ghost keys changed). Before and after renders:
-  `.artifacts/evidence/visualizers/spectrum/20261108_ghost/`.
+  **Operator, 8 Nov (twice):** first none of them ghosted; then the flat-colour ghosts under caps were "horsepiss":
+  a solid line on every ghost's top, no blend, and bad colours on 2 and 6. Cause: Peak Caps draw an opaque line
+  right on each ghost's faintest row, and a flat Custom colour cannot continue flag, gradient or patterned bars.
+  Now (v2): caps off on 2-15, and a new Ghost Colour source **Bar Fill** makes each ghost a fading copy of its own
+  bar (fill, gradient, flag or pattern, outline), as Preset 1's Rainbow Ghost continues its rainbow borders. Glass
+  Player ghosts in its cyan Bar Colour, Holo Foil keeps its Rainbow Ghost; opacities sit near Preset 1's.
+  Evidence (falling instants, each preset beside Preset 1 with 2x ghost-top crops):
+  `D:\Temp\Scratch\SRPSS\evidence\visualizers\spectrum\20261108_ghost_v2\` (`before/`, `after/`). Open: the
+  operator's eyes.
 - **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`).
   **The tick cut is merged (7 Nov).** Lead audit: three realistic mutations are each caught by
   `tests/test_waveform_logical_tick_exactness.py` (a Gaussian cache key ignoring the width, one shifted grid shared
@@ -687,6 +701,9 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   frame (`glFinish`); other users sampling animations should too, or the host could finish its frames itself.
 
 **Found while building Expanded Visualizer M3c (8 Nov; recorded, not yet admitted):**
+- `tests/test_visualizer_preset_glyphs.py` opens a real window (offscreen QPA hangs it), so the glyph-row agent
+  could not run its updated assertion (Edit's glyphs match the card's 26 px). Port it to the hidden production host
+  (QQuickRenderControl, as `tests/test_visualizer_glyph_row.py` does) and run it.
 - **The expanded card's hover Edit lane stays withdrawn (operator's call if wanted back).** The rotate glyph the
   operator missed is now on the expanded card in Fullscreen Edit (plan 01 M3c, "Rotate Widget Content"); the
   ordinary Visualizer's hover lane never offered rotate. What the display-wide card still does not show outside Edit

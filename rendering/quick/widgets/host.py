@@ -53,6 +53,11 @@ class RefreshTransitionClock(QObject):
     count, or feed-instance count can lengthen the animation.  Multiple edges
     that arrive while the clock is already running coalesce into that same epoch.
     Idle state owns no timer, poller, animation, or scene invalidation.
+
+    While the display's ordinary widgets are covered (Expanded Visualizer) nobody
+    can see a glyph cross-fade, so an edge then starts no epoch: it completes at
+    once (phase 1.0) and the glyph simply shows its current state. An epoch
+    already running when the cover begins finishes inside the cover's fade-out.
     """
 
     phaseChanged = Signal()
@@ -64,6 +69,7 @@ class RefreshTransitionClock(QObject):
         super().__init__(parent)
         self._phase = 1.0
         self._epoch = 0
+        self._covered = False
         self._animation = QVariantAnimation(self)
         self._animation.setDuration(self.DURATION_MS)
         self._animation.setStartValue(0.0)
@@ -111,11 +117,19 @@ class RefreshTransitionClock(QObject):
 
         if self.active:
             return {"epoch": self._epoch, "phase": self._phase}
+        if self._covered:
+            # Settled at once: no animation (and no per-frame Python) for glyphs nobody can see.
+            return {"epoch": self._epoch, "phase": 1.0}
         self._epoch += 1
         self.epochChanged.emit()
         self._set_phase(0.0)
         self._animation.start()
         return {"epoch": self._epoch, "phase": self._phase}
+
+    def set_covered(self, covered: bool) -> None:
+        """The display's ordinary widgets are covered (True) or shown again: edges stop (resume) animating."""
+
+        self._covered = bool(covered)
 
     def stop(self) -> None:
         if self._animation.state() != QAbstractAnimation.State.Stopped:
@@ -235,6 +249,9 @@ class RetainedOverlayWidget:
             [Mapping[str, object]], None
         ] | None = None
         self._input_state_handler: Callable[[object], bool] | None = None
+        # The family's presentation-only pause while its display's ordinary lanes are covered (see
+        # ``OrdinaryWidgetPresentationHost.set_ordinary_widgets_covered``); None: nothing to pause.
+        self._cover_handler: Callable[[bool], object] | None = None
         self._surface_material = "normal"
         self._authored_geometry: OverlayWidgetGeometry | None = None
         self._display_placement: Callable[[OverlayWidgetGeometry], OverlayWidgetGeometry] | None = None
@@ -386,6 +403,25 @@ class RetainedOverlayWidget:
         if callback not in self._retirement_callbacks:
             self._retirement_callbacks.append(callback)
 
+    def set_cover_handler(self, handler: Callable[[bool], object] | None) -> None:
+        """Bind the family's presentation pause for its display's Expanded Visualizer cover.
+
+        ``handler(True)`` runs at the cover edge and ``handler(False)`` at the uncover edge (events, never a timer
+        or a poll), and at once when the widget is bound, or transferred, onto a display that is already covered.
+        Only presentation cadence belongs here (work that exists only to draw); providers, models and leases are
+        never paused by it (plan 01 M3, Suspension).
+        """
+
+        self._cover_handler = handler
+        host = self._host
+        if handler is not None and host is not None and host._covers(self):
+            handler(True)
+
+    def _apply_cover(self, covered: bool) -> None:
+        handler = self._cover_handler
+        if handler is not None:
+            handler(bool(covered))
+
     def _set_input_state_handler(
         self,
         handler: Callable[[object], bool] | None,
@@ -470,6 +506,7 @@ class RetainedOverlayWidget:
         self._retirement_callbacks = []
         self._custom_layout_size_payload_handler = None
         self._input_state_handler = None
+        self._cover_handler = None
         for callback in callbacks:
             callback()
         if _qobject_is_alive(shadow_item):
@@ -558,6 +595,9 @@ class OrdinaryWidgetPresentationHost:
         self._refresh_transition_clock = RefreshTransitionClock(
             host_item if isinstance(host_item, QObject) else None
         )
+        # Expanded Visualizer cover (plan 01 M3): the scene controller's one edge. QML fades the lanes; this host
+        # pauses the presentation-only cadence beneath them (bound cover handlers, the refresh-edge clock).
+        self._ordinary_widgets_covered = False
         self._retired = False
 
     @property
@@ -592,6 +632,43 @@ class OrdinaryWidgetPresentationHost:
         for widget in self._live:
             if widget.is_qt_alive:
                 widget.item.setProperty("cardSurfaceBackdrop", backdrop)
+
+    @property
+    def ordinary_widgets_covered(self) -> bool:
+        return self._ordinary_widgets_covered
+
+    def set_ordinary_widgets_covered(self, covered: bool) -> bool:
+        """Pause (or resume) presentation-only work under the display's covered ordinary lanes.
+
+        Called by ``QuickSceneController.set_ordinary_widgets_covered`` at the takeover's cover edges only. Each
+        ordinary widget's bound cover handler runs (the OSD's foreground lane is outside the cover), and refresh
+        edges stop animating. Nothing is retired, rebuilt or re-admitted, and no provider, model or lease is
+        touched: on uncover every widget resumes from its live state (a Clock publishes the current time before
+        the lanes start fading back in). Returns whether anything changed.
+        """
+
+        covered = bool(covered)
+        if self._retired or covered == self._ordinary_widgets_covered:
+            return False
+        self._ordinary_widgets_covered = covered
+        clock = self._refresh_transition_clock
+        if clock is not None:
+            clock.set_covered(covered)
+        for widget in tuple(self._live):
+            if self._in_cover_lane(widget):
+                widget._apply_cover(covered)
+        return True
+
+    def _in_cover_lane(self, widget: RetainedOverlayWidget) -> bool:
+        """Whether a widget paints in the ordinary lane the cover fades (everything but the foreground OSD)."""
+
+        if widget.is_retired:
+            return False
+        foreground = self._foreground_host_item
+        return foreground is None or widget.item.parentItem() is not foreground
+
+    def _covers(self, widget: RetainedOverlayWidget) -> bool:
+        return self._ordinary_widgets_covered and self._in_cover_lane(widget)
 
     @property
     def refresh_transition_clock(self) -> RefreshTransitionClock:
@@ -1195,6 +1272,7 @@ class OrdinaryWidgetPresentationHost:
             )
         source_refresh_clock = self.refresh_transition_clock
         target_refresh_clock = target.refresh_transition_clock
+        was_covered = self._covers(widget)
         try:
             item.setParentItem(target_item)
             item.setParent(target_item)
@@ -1226,6 +1304,8 @@ class OrdinaryWidgetPresentationHost:
         if identity:
             target._by_model_identity[identity] = widget
         widget._host = target
+        if target._covers(widget) != was_covered:
+            widget._apply_cover(not was_covered)
         item.setProperty("cardSurfaceBackdrop", target._surface_backdrop)
         if widget.surface_material != "normal":
             self._note_surface_demand()
@@ -1242,6 +1322,7 @@ class OrdinaryWidgetPresentationHost:
         self._custom_layout_input_blocked = False
         self._unexpected_qt_deaths = []
         self._retired = True
+        self._ordinary_widgets_covered = False
         self._surface_demand_listener = None
         self._surface_backdrop = None
         clock, self._refresh_transition_clock = self._refresh_transition_clock, None

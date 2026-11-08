@@ -98,6 +98,17 @@ def point(card):
     return QPointF(x + w / 2, y + h / 2)
 
 
+def polish_glyph_row(card):
+    """Lay out the card's bottom-right glyph row (a ``Row``) as the next frame would: this unshown window runs no
+    frames, so a positioner's change waits for a polish that never comes. Call after changing what the row offers."""
+    from PySide6.QtQuick import QQuickItem
+
+    row = card.scene._visualizer_root.findChild(QQuickItem, 'visualizerGlyphRow')
+    assert row is not None
+    row.ensurePolished()
+    return row
+
+
 def mouse(card, kind, position, button, modifiers=ALT):
     global_position = QPointF(card.window.mapToGlobal(position.toPoint()))
     buttons = Qt.MouseButton.NoButton if kind == QEvent.Type.MouseButtonRelease else button

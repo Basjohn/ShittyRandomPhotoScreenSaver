@@ -455,9 +455,10 @@ def _controls(root) -> dict[str, QRectF]:
     assert all(item is not None for item in found.values())
     rects = {name: _rect(item, root) for name, item in found.items() if item.width() > 0 and item.height() > 0}
     tip = root.findChild(QQuickItem, "visualizerPresetTooltip")
-    reset, steps = found["visualizerCameraResetGlyph"], found["visualizerPresetControls"]
-    for label, right in (("reset", reset.x() + reset.width()), ("previous", steps.x() + reset.width()),
-                         ("next", steps.x() + steps.width())):
+    reset, steps = rects["visualizerCameraResetGlyph"], rects["visualizerPresetControls"]
+    # The glyph row places the controls; a tip's right edge is its glyph's (in the card's coordinates).
+    for label, right in (("reset", reset.right()), ("previous", steps.left() + reset.width()),
+                         ("next", steps.right())):
         root.setProperty("cameraActionTipX", right)
         rects[f"visualizerPresetTooltip@{label}"] = _rect(tip, root)
     root.setProperty("cameraActionTipX", 0.0)
@@ -511,9 +512,12 @@ def test_the_overlays_sit_below_the_cards_controls_the_osd_lane_and_the_menu(dis
     _draw(display, media=_Media(), config=_config(now_playing={"media_controls": True}))
     root = _root(display)
     loader = root.findChild(QQuickItem, "visualizerExpandedOverlays")
+    # The card's controls are the bottom-right glyph row's members; the row stacks above the overlays.
+    row = root.findChild(QQuickItem, "visualizerGlyphRow")
+    assert row.parentItem() is loader.parentItem() and row.z() > loader.z()
     for name in ("visualizerExpandGlyph", "visualizerCameraResetGlyph", "visualizerPresetControls"):
         control = root.findChild(QQuickItem, name)
-        assert control.parentItem() is loader.parentItem() and control.z() > loader.z(), name
+        assert control.parentItem().parentItem() is row, name          # each in its own slot of the row
     scene_root = display.scene.scene_root
     visualizer_lane = scene_root.findChild(QQuickItem, "visualizerPresentationLoader")
     osd_lane = scene_root.findChild(QQuickItem, "systemAudioOSDForegroundHost")

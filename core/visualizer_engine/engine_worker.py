@@ -34,7 +34,18 @@ class EngineSession:
     #: (``engine_snapshot``), through ``SnapshotBeatEngine``; requires ``initial_snapshot``.
     INPUTS = ("feature", "lanes", "snapshot")
 
-    def __init__(self, *, mapping: str, mode: str, runtime_generation: int, preset: int = 0, settings: Any = None,
+    def __init__(self, **kwargs: Any) -> None:
+        # A session that fails while being built releases what it entered (the pinned authored clock, the attached
+        # mapping) before the error reaches the worker (checkpoint audit 2, A2-M1).
+        try:
+            self._construct(**kwargs)
+        except BaseException:
+            stack = self.__dict__.get("_stack")
+            if stack is not None:
+                stack.close()
+            raise
+
+    def _construct(self, *, mapping: str, mode: str, runtime_generation: int, preset: int = 0, settings: Any = None,
                  bar_count: int = 32, label_namespace: int = 0, wake: Any = None, inputs: str = "feature",
                  initial_snapshot: Any = None, seed: int | None = None) -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
@@ -63,7 +74,9 @@ class EngineSession:
             self._clock = [0.0]
             self._stack.enter_context(pinned_authored_clock(lambda: self._clock[0]))
             # Bubble's spawn draws from the process RNG, by design random (as in process). ``seed`` (a control
-            # input) lets the identity gates compare against a seeded replay; production passes none.
+            # input) lets the identity gates compare against a seeded replay; production passes none. With the seed
+            # passed, the gates cannot tell a new global-RNG read in the tick from Bubble's (checkpoint audit 2,
+            # A2-M2): giving Bubble its own generator is a P2b item.
             if seed is not None:
                 import random
 
@@ -75,7 +88,7 @@ class EngineSession:
         # revisions start at ``namespace << 32`` (the main process's own counter stays far below). Namespace 0 numbers
         # from 1, as a fresh in-process replay does (the identity gates).
         extruded_bubble_drift_log._REVISIONS = itertools.count((int(label_namespace) << 32) + 1)
-        # ``wake``: the writer end of the owner's wake pipe (the GUI is woken on the empty -> populated edge only).
+        # ``wake``: the writer end of the owner's wake pipe (one byte per publish; the owner's emitter coalesces).
         self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake)
         self._stack.callback(self.mailbox.close)
         if inputs == "snapshot":
@@ -177,7 +190,7 @@ class VisualizerEngineWorker(BaseWorker):
             if msg.msg_type == MessageType.VIS_STOP:
                 self._close_session()
                 return self._reply(msg)
-        except Exception as exc:                       # reported to the owner, never a silent worker death
+        except (Exception, SnapshotContractError) as exc:   # reported to the owner, never a silent worker death
             return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}")
         return self._reply(msg, success=False, error=f"unsupported message {msg.msg_type}")
 

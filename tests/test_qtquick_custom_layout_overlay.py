@@ -1369,9 +1369,13 @@ def test_quick_custom_layout_overlay_is_presentation_only() -> None:
     assert "width: closeControl.width * 0.484" in close_block
     assert "propagateComposedEvents: false" in close_block
     assert "onPressed: function(mouse) { mouse.accepted = true }" in close_block
-    rotate_block = qml[qml.index("id: rotateContentControl"):qml.index("id: restoreSizeControl")]
-    assert "x: Math.max(1.0, editFrame.width - width - 10.0)" in rotate_block
-    assert "y: Math.max(1.0, editFrame.height - height - 10.0)" in rotate_block
+    # Rotate Widget Content is the last member of Edit's bottom-right glyph row (the row places it; on a
+    # Visualizer frame the row continues the card's own row from the card's geometry).
+    row_block = qml[qml.index("id: editGlyphRow"):qml.index("// Passive tooltip observers")]
+    assert row_block.index("id: presetControls") < row_block.index("id: rotateContentControl")
+    rotate_block = row_block[row_block.index("id: rotateContentControl"):]
+    assert not any(line.strip().startswith(("x:", "y:")) for line in rotate_block.splitlines())
+    assert "editFrame.cardGlyphRow" in row_block and "transformOrigin: Item.BottomRight" in row_block
     assert "sessionModel.transferItem(editFrame.index, \"left\")" in qml
     assert "sessionModel.transferItem(editFrame.index, \"right\")" in qml
     assert "canTransferLeft" in qml

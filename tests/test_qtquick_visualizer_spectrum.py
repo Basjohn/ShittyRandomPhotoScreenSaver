@@ -643,9 +643,10 @@ def test_spectrum_shader_separates_fill_border_and_ghost_rainbow_participation()
     # In particular, no accidental second hue application and no border-alpha gate.
     assert "uniform int u_rainbow_ghost" in source
     assert "uniform float u_ghost_hue_offset" in source
-    # Ghost Gradient may shade the ghost colour toward its tip colour; nothing else recolours it.
-    assert "vec4 ghost_base = spectrum_ghost_tip(spectrum_ghost_colour(bar_index, u_fade), t)" in source
-    assert "vec4 ghost = spectrum_ghost_tip(spectrum_ghost_colour(bar_index, u_fade), ghost_t)" in source
+    # Ghost Colour Bar Fill may take the bar's own surface and Ghost Gradient may then shade it toward its tip
+    # colour (both in bars and segments); nothing else recolours it.
+    assert source.count(
+        "spectrum_ghost_tip(spectrum_ghost_fill(spectrum_ghost_colour(bar_index, u_fade), fill,") == 2
     assert "!is_ghost &&" in source
     assert "!is_ghost_frag &&" in source
     assert "ghost_base = apply_spectrum_rainbow" not in source

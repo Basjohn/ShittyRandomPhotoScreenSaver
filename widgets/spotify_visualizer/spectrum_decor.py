@@ -33,6 +33,7 @@ DECOR_KEYS = (
 _ATTRS = tuple((key, "_" + key) for key in DECOR_KEYS)
 _TOGGLES = {
     "ghost_custom": lambda pres: pres._spectrum_ghost_color_source == "Custom",
+    "ghost_fill": lambda pres: pres._spectrum_ghost_color_source == "Bar Fill",
     "ghost_gradient": lambda pres: bool(pres._spectrum_ghost_gradient),
     "fill_gradient": lambda pres: bool(pres._spectrum_fill_gradient),
     "peak_caps": lambda pres: bool(pres._spectrum_peak_caps),

@@ -14,7 +14,7 @@ import pytest
 from PySide6.QtCore import QEvent, QPointF, Qt
 
 from rendering.quick.visualizer.double_click_admission import QuickVisualizerDoubleClickAdmission
-from tests.test_framed_scene_input import NONE, card as production_card, mouse, point  # noqa: F401
+from tests.test_framed_scene_input import NONE, card as production_card, mouse, point, polish_glyph_row  # noqa: F401
 
 LEFT = Qt.MouseButton.LeftButton
 
@@ -41,6 +41,7 @@ def _control(card, object_name):
         if item.objectName() == object_name:
             return item
         return next((hit for child in item.childItems() if (hit := find(child)) is not None), None)
+    polish_glyph_row(card)                                    # the card's bottom-right row places the controls
     item = find(card.scene._visualizer_root)
     assert item is not None, object_name
     holder = item if object_name in ("visualizerCameraResetGlyph", "visualizerExpandGlyph") else item.parentItem()

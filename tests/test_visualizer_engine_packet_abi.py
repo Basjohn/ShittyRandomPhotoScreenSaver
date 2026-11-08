@@ -77,27 +77,52 @@ class _InterleavedStruct:
 
 def test_a_write_begun_while_the_reader_copies_is_never_accepted(monkeypatch):
     # The writer comes round to the slot being read (two frames later) and starts the next frame into it while the
-    # reader is mid-read: begin goes odd and the payload changes, sequence_end still holds the old value. The reader
-    # must reject whatever its first read of the slot was (audit C2: reading begin first accepted the torn copy).
+    # reader copies the payload: begin goes odd and the payload changes after the reader has read the slot head (and
+    # sequence_end, still the old value). Only the final sequence_begin re-read can see it (audit C2; checkpoint
+    # audit 2, A2-H1: an earlier version of this test tore before the head read, which the head check alone caught).
     buffer, writer, reader = fresh()
     sequence = writer.publish(b'AAAAAAAA', payload_schema=1, logical_timestamp=1.)
     base = next(abi.HEADER_BYTES+slot*SLOT for slot in range(abi.SLOT_COUNT)
-                if struct.unpack_from('<Q', buffer, base := abi.HEADER_BYTES+slot*SLOT)[0] == sequence)
-    state = {"scanned": False, "torn": False}
+                if struct.unpack_from('<Q', buffer, abi.HEADER_BYTES+slot*SLOT)[0] == sequence)
+    state = {"torn": False}
 
-    def writer_starts(offset):
-        if not base <= offset < base+SLOT or state["torn"]:
-            return
-        if offset == base and not state["scanned"]:
-            state["scanned"] = True            # the reader's slot search, before it reads the slot itself
+    def writer_starts_after_the_head(offset):
+        if offset != base or state["torn"]:
             return
         state["torn"] = True
         struct.pack_into('<Q', buffer, base, sequence+5)                        # begin odd: a new frame starts
         buffer[base+abi.SLOT_PAYLOAD_OFFSET:base+abi.SLOT_PAYLOAD_OFFSET+8] = b'DDDDDDDD'
 
-    monkeypatch.setattr(abi, "_U64", _InterleavedStruct(abi._U64, writer_starts))
-    monkeypatch.setattr(abi, "_SLOT_HEAD", _InterleavedStruct(abi._SLOT_HEAD, writer_starts))
+    monkeypatch.setattr(abi, "_SLOT_HEAD", _InterleavedStruct(abi._SLOT_HEAD, writer_starts_after_the_head))
     assert reader.read_latest() is None and state["torn"] and reader.torn_reads == 1
+
+
+def test_the_final_sequence_begin_read_is_what_rejects_a_mid_copy_write(monkeypatch):
+    # Negative control for the test above: a reader that skips the final sequence_begin re-read accepts the torn
+    # copy under the same interleaving, so that re-read is what the test proves.
+    import inspect
+    import textwrap
+
+    source = textwrap.dedent(inspect.getsource(abi.FramePacketReader.read_latest))
+    assert source.count("begin = _U64.unpack_from(view, base)[0]") == 1
+    weakened = source.replace("begin = _U64.unpack_from(view, base)[0]", "begin = head")
+    namespace = dict(vars(abi))
+    exec(compile(weakened, "<weakened read_latest>", "exec"), namespace)
+    buffer, writer, reader = fresh()
+    sequence = writer.publish(b'AAAAAAAA', payload_schema=1, logical_timestamp=1.)
+    base = next(abi.HEADER_BYTES+slot*SLOT for slot in range(abi.SLOT_COUNT)
+                if struct.unpack_from('<Q', buffer, abi.HEADER_BYTES+slot*SLOT)[0] == sequence)
+    torn = {"done": False}
+
+    def tear(offset):
+        if offset == base and not torn["done"]:
+            torn["done"] = True
+            struct.pack_into('<Q', buffer, base, sequence+5)
+            buffer[base+abi.SLOT_PAYLOAD_OFFSET:base+abi.SLOT_PAYLOAD_OFFSET+8] = b'DDDDDDDD'
+
+    namespace["_SLOT_HEAD"] = _InterleavedStruct(abi._SLOT_HEAD, tear)
+    packet = namespace["read_latest"](reader)
+    assert packet is not None and packet.payload == b'DDDDDDDD'       # the weakened reader takes the torn bytes
 
 
 def test_protected_edges_survive_skipped_frames_until_acknowledged():

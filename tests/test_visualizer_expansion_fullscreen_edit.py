@@ -32,7 +32,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QPoint, QRect, QRectF
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF
 from PySide6.QtQuick import QQuickItem
 
 from tests.test_visualizer_expansion_overlays import (
@@ -859,12 +859,14 @@ def test_the_expanded_card_offers_rotate_widget_content_through_the_one_edit_ses
         assert not chrome["customLayoutRestoreSize-fullscreen_overlay.visualizer"].isVisible()
         corner = chrome.get("customLayoutResize-fullscreen_overlay.visualizer-bottom_right")
         assert corner is None or not corner.isVisible()                # never sized
-        # Its lower-right slot sits inside the card, above the card's own lower-right controls.
-        geometry = display.scene.expanded_overlay_edit_geometry()
+        # It sits in the card's own bottom-right glyph row: the card's baseline and glyph size, at the row's far
+        # corner here (the card offers no other member under Edit); test_visualizer_glyph_row.py has the full row.
+        root = _root(display)
         glyph = rotate.mapRectToItem(layer, QRectF(0.0, 0.0, rotate.width(), rotate.height()))
-        stage_x, stage_y, stage_w, stage_h = geometry["stage"]
-        assert glyph.right() <= stage_x + stage_w and glyph.bottom() <= stage_y + stage_h - geometry[
-            "bottom_right_reserve"]
+        corner = root.mapToItem(layer, QPointF(float(root.property("glyphRowRight")),
+                                               float(root.property("glyphRowBottom"))))
+        assert abs(glyph.bottom() - corner.y()) < 0.5 and abs(glyph.right() - corner.x()) < 0.5
+        assert abs(glyph.width() - float(root.property("glyphSize")) * float(root.property("glyphRowScale"))) < 0.5
         # A clean draft publishes nothing to the Visualizer (its committed orientation stays the authority).
         assert all(extent_ is None for extent_, _state in published)
 

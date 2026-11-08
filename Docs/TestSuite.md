@@ -953,6 +953,27 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   `tests/test_visualizer_expansion_overlay_settings.py` holds the one value
   (`core/settings/fullscreen_overlays.py`): schema, clamps, projection, and a value stored before the extents
   reading them as the natural look (idempotent).
+- `tests/test_visualizer_expansion_covered_presentation.py` — Expanded Visualizer M3 Suspension on the hidden
+  production scene, cover driven through the scene controller's one setter: a covered Clock leaves the real global
+  ticker (its timer stops when it is the only Clock), straggling ticks reach nothing, uncovering publishes the
+  current time at the edge before the first fade-in frame and rejoins with one subscription and one timer, and the
+  frame at the pre-cover time is pixel-identical; a Clock built under the cover or moved onto a covered display
+  joins it paused (and resumes when moved off); a refresh BUSY edge under the cover starts no epoch on the
+  display's refresh-edge clock (the production `RefreshStateGlyph.qml` settles at once, no phase callback) and
+  animates again after uncover. Negative controls: no host call at the cover edge (3 red), the Clock not bound to
+  the cover (2 red), refresh edges animating while covered (1 red), a transfer ignoring the target's cover (1 red).
+- `tests/test_visualizer_glyph_row.py` — the Visualizer card's one bottom-right glyph row (operator, 8 Nov) on the
+  hidden production scene: on the ordinary, a narrow and the display-wide card, every combination of Reset Camera and
+  the expand glyph lays the offered glyphs in one row (one bottom edge and size, preset steps then Reset Camera then
+  expand, one spacing, no overlap, inside the card, the last member at the row's corner); admission hides and never
+  moves a member; the tips sit above the row; the upper-right corner is the 3D hint's alone. Ordinary Edit continues
+  the row (Edit's preset steps, Rotate Widget Content, then the card's Reset Camera) clear of every Edit chrome, and
+  the card's admission never moves Edit's members while a withdrawn member still gives its place up; Fullscreen
+  Edit's expanded card carries Rotate Widget Content in the same row, and overlays moved into the right-hand column
+  keep clear of it. Structure only (no pinned size or wording). Negative controls: 16 of 19 red on the pre-row code
+  (only the preset-steps-plus-Reset-Camera case lined up before); admission back on the Row itself (its width then
+  goes stale while not admitted) turns the two Edit Reset Camera cases red. Card-level fixtures without a frame
+  loop lay the row out with `tests/test_framed_scene_input.polish_glyph_row`.
 
 Cost: `tools/visualizer_cost_probe.py` (one mode) and `tools/overhead_baseline.py` (everything): offscreen, production host, control-relative GPU/CPU, GL and Python call counts and recorded system conditions; how to run and read them and the expected results are in `Docs/Reference/Benchmarks.md`.
 

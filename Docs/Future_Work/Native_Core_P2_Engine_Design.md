@@ -157,9 +157,9 @@ switch never remaps.
    priority; report under `.artifacts/evidence/architecture/native_core_p2/`). **Result (8 Nov, 20 s per recording):**
    all 160 replayable (recording, mode) pairs identical, 291,024 frames, 19 recordings x 9 modes; Waveform Ribbon is
    skipped on the 11 recordings without native PCM (it replays only from PCM, in process too). Report:
-   `.artifacts/evidence/architecture/native_core_p2/20261108_worker_gate/report.json`. Note (audit, M4): that
-   report predates the skip; it records those 11 rows as `error` and `"mismatches": 11` (the run exited 1). The
-   160 replayable pairs are identical in it; re-run with the current script to make the file match the claim.
+   `.artifacts/evidence/architecture/native_core_p2/20261108_worker_gate/report_rerun.json` (re-run after the audit's
+   C1/C2 fixes with the current script: 160 pairs, 291,024 frames, 0 mismatching, exit 0, 34 min at below-normal
+   priority). The first `report.json` predates the skip and records the 11 rows as errors (audit M4).
    **Live inputs: the lossless engine snapshot (built 8 Nov):** `FeatureFrame` is the replay contract, not the live
    one: the recorder's capture (`tools/visualizer_replay/record.py` `_frame`) clamps lanes to 0..1, resamples bars and
    waveform to fixed counts and consumes scheduler events. `core/visualizer_engine/engine_snapshot.py` instead:
@@ -200,6 +200,45 @@ switch never remaps.
    processes; a free-running writer stranded the reader after frame 7 on the old edge rule), C2 (seqlock read order:
    `sequence_end` first, `sequence_begin` last; an interleaved overwrite was accepted torn), H3a, H4, H6, M2. Open:
    4b, 4c and 5 below.
+4P. **P2b (decided 8 Nov, 4c): the worker owns audio capture, DSP and the tick.** The main process keeps no beat
+   engine on the product path; it sends control edges and takes frames.
+   - **Worker side:** `WorkerType.VISUALIZER` hosts the production `_SpotifyBeatEngine` with its
+     `SpotifyVisualizerAudioWorker` (loopback capture through `utils/audio_capture.py`: pyaudiowpatch WASAPI on
+     Windows, sounddevice / Pulse monitor elsewhere), its own `ThreadManager` (the capture lane and the compute pool
+     the engine requires, `beat_engine.py:252-272`), and the logical runtime's cadence (the worker paces its own
+     ticks; the main process no longer drives them). Frames go out through the existing `PacketMailbox` writer and
+     wake; everything below the engine (ABI, codec, mailbox, wake, `EngineSession`'s controller and mode runtimes) is
+     reused unchanged.
+   - **Control edges (main -> worker), from the owner's engine calls today** (`quick_display_visualizer_owner.py`):
+     display power (`acquire` / `ensure_started` / `release`, `set_display_power` ~251), playing (`set_playback_state`
+     and `wake`, `set_playing` ~594; it also reads the private `_play_ramp_start_ts`, which becomes a field of the
+     frame or the reply), mode activation (`begin_activation_transaction` / `end_activation_transaction`,
+     `_activate_pending_mode` ~1578), start/retire (`set_runtime_generation`, `acquire` / `release`, `start` ~1766,
+     `retire` ~1845), configuration (`_apply_configuration` ~389: the DSP technical config and the logical config,
+     as a resolved-settings delta applied at a tick boundary, never a rebuild), plus the framed view inputs and park.
+     `visualizer_host_binding.py:468` reads the engine's generation/activation at bind: they come back in the
+     configure reply and in every frame.
+   - **What the main process still needs from the engine:** only what frames carry (identities, playing,
+     readiness). Anything else the owner or Settings reads from the live engine today must be found and turned into
+     a frame field or a reply (inventory first, as 4's read audit did).
+   - **Not affected:** the Studios and offline replays keep their in-process replay engines
+     (`ui/studio/*`, `feature_replay`); only the product path moves.
+   - **Capture device ownership:** one process owns the loopback device; the worker opens it after `VIS_CONFIGURE`
+     and closes it on park/retire/stop, so a restarted worker never collides with a dying one (the supervisor waits
+     for the old process's exit before starting capture in the new one). A capture failure is reported like a crash
+     (fail closed, fade, reconfigure once).
+   - **Gates:** (1) identity: the worker's production DSP on recorded PCM (`inputs="lanes"`, already built) equals the
+     in-process owner; (2) 4b's live-engine gate: `_SpotifyBeatEngine` with the real audio worker fed PCM blocks
+     offline through the capture callback, in process vs in the worker; (3) gate 3 with the main process's GIL time
+     before/after.
+   - **Also required (checkpoint audit 2, A2-M5):** Media's playback truth against the worker's own silence/ramp
+     detection (one owner of "playing"); audio device changes and COM initialisation on the worker's capture
+     thread; the usage sampler counting a long-lived child; worker logging into the app's log; where the frame
+     decode runs (render-thread latency above); wake-pipe backpressure (a full pipe must never block the worker's
+     tick: drop the byte, the reader coalesces anyway); Bubble's spawn on its own generator, so the gates need no
+     process-wide seed (A2-M2); the main-process listener thread's wake cost counted in gate 3.
+   - **Deleted when P2b lands:** `core/visualizer_engine/engine_snapshot.py`, the `snapshot` session input and its
+     tests and tools (`engine_main_cost.py` stays as the record of the decision).
 4b. Live-engine and off-steady-state gates (audit H3): a gate whose reference is the live `_SpotifyBeatEngine` fed
    PCM through the real audio worker (offline, blocks pushed into the capture callback, so asynchronous commits are in
    play); gate clips with pause/resume, a warm re-entry (fence armed) and an in-session mode switch; the read audit
@@ -210,6 +249,39 @@ switch never remaps.
    Extruded Spectrum: P2a only gains for Bubble, Spline Curve, Waveform Ribbon, Extruded Bubble and Neon Lake. Decide
    on these numbers whether P2a's production wiring proceeds (capturing only what the mode reads) or P2b (the worker
    owns capture and DSP; the snapshot layer is deleted) goes first.
+   **Measured and decided (8 Nov): P2b first.** `tools/visualizer_replay/engine_main_cost.py` (every mode, 20 s of both
+   shipped clips through production DSP, 2,312 ticks per mode; report
+   `.artifacts/evidence/architecture/native_core_p2/20261108_main_cost/main_cost.json`; three agents ran focused work
+   at the same time, so absolute numbers carry noise, the per-mode comparison does not). p50 per tick, ms:
+
+   | Mode | in-process tick | P2a main side (capture + pickle + take) | P2a saves | DSP | P2b saves (tick + DSP - take) |
+   |---|---|---|---|---|---|
+   | Spectrum | .31 | .40 | -.09 | 1.14 | ~1.34 |
+   | Oscilloscope | .42 | .38 | +.04 | .46 | ~.81 |
+   | Bubble | 1.78 | .46 | +1.32 | .60 | ~2.20 |
+   | Spline Curve | 1.69 | .46 | +1.23 | .51 | ~2.03 |
+   | Sphere | .30 | .41 | -.12 | .50 | ~.68 |
+   | Extruded Spectrum | .30 | .38 | -.08 | 1.08 | ~1.29 |
+   | Neon Lake | .48 | .54 | -.07 | 1.08 | ~1.30 |
+   | Extruded Bubble | 1.79 | .66 | +1.13 | .46 | ~1.88 |
+   | Waveform Ribbon | 1.59 | .56 | +1.03 | .48 | ~1.79 |
+
+   Capture is ~.21 ms whatever the mode (22 deep-copied getters); a per-mode capture set (only what the tick read, 10-15
+   values) would recover ~.1 ms, so the five cheap modes stay at break-even under P2a. DSP here is one analysis block
+   per frame; live it runs per capture callback on the compute pool (same GIL), so P2b's gain is a floor. P2b removes
+   the whole snapshot layer (capture, scheduler tap, the main side of the mode rules) and with it audit H1, H2 and M1;
+   the main process keeps only control edges and the frame take. P2a's built pieces stay until P2b's worker owns the
+   engine: the ABI, codec, mailbox, wake and worker session are P2b's too; `engine_snapshot.py` and the `snapshot`
+   session input are deleted when P2b lands.
+   **Corrections (checkpoint audit 2, 8 Nov):** the DSP column double-counts for Spectrum, Extruded Spectrum and Neon
+   Lake: `ProductionLaneEngine` analyses each new block twice for them (`feature_replay.py:255` and `:376`, 1.54
+   passes per frame against .77) plus ~.2 ms of replay-only bookkeeping, so P2b saves ~.8 ms for those three, not
+   ~1.3; and "a floor" is unproven (live DSP per callback, and how much of NumPy's FFT holds the GIL, are unmeasured:
+   the live-engine rig, P2b slice 1, measures them). The worker tick ran in the measuring process, so its garbage
+   collection can land inside the timed take; the per-mode capture set came from two clips at default settings. Under
+   P2b the frame take's decode (.07-.37 ms) runs on the render thread while the GUI thread waits
+   (`quick_presentation_sync.py:308-311`): it is added sync latency, not only main-process time. The decision stands:
+   P2b removes more main-process work than P2a for every mode after the corrections.
 5. Production wiring and lifecycle. Must specify (audit H2, M5): a main -> worker latest-wins snapshot mapping (the
    ABI with roles swapped, a wake byte to the worker; the supervisor's FIFO request queue carries edges only); an
    in-place `set_mode` and a resolved-settings delta applied to the existing session at a tick boundary (a rebuild per

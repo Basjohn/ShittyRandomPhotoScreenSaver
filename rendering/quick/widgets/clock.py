@@ -587,6 +587,8 @@ class ClockPresentationModel(QObject):
         self._ticker_provider = ticker_provider
         self._ticker: GlobalClockTicker | None = None
         self._active = False
+        # Expanded Visualizer cover (plan 01 M3): nobody can see this Clock, so it holds no ticker subscription.
+        self._covered = False
         self._timezone = _parse_timezone(config.timezone_name)
         self._snapshot = self._build_snapshot(config, style)
         # A read-only reference to the Settings-authored primary font, not an
@@ -624,7 +626,35 @@ class ClockPresentationModel(QObject):
         self._ticker = ticker
         self._active = True
         self._publish_tick()
-        ticker.subscribe(self._publish_tick)
+        if not self._covered:
+            ticker.subscribe(self._publish_tick)
+
+    @property
+    def is_covered(self) -> bool:
+        return self._covered
+
+    def set_presentation_covered(self, covered: bool) -> bool:
+        """Pause the one-second publication while this Clock's display is covered; resume exactly on uncover.
+
+        The tick exists only to draw, so a covered Clock drops its subscription to the process-global ticker (the
+        ticker stops when no visible Clock remains). Uncovering publishes the current time at once, before the
+        lanes fade back in, then rejoins the shared tick, so it never shows a stale second and never runs a burst.
+        Bound by ``RetainedClockPresentation`` to its widget's cover edge. Returns whether the state changed.
+        """
+
+        covered = bool(covered)
+        if covered == self._covered:
+            return False
+        self._covered = covered
+        ticker = self._ticker
+        if not self._active or ticker is None:
+            return True
+        if covered:
+            ticker.unsubscribe(self._publish_tick)
+        else:
+            self._publish_tick()
+            ticker.subscribe(self._publish_tick)
+        return True
 
     def retire(self) -> None:
         """Stop publication without constructing a replacement ticker."""
@@ -1077,6 +1107,8 @@ class RetainedClockPresentation:
             font_size=model.config.font_size,
         )
         self._retained.add_retirement_callback(model.retire)
+        # The Expanded Visualizer cover pauses the tick (presentation only) and resumes it on uncover.
+        self._retained.set_cover_handler(model.set_presentation_covered)
         self._retained.set_custom_layout_size_payload_handler(
             self._apply_custom_layout_size_payload
         )
