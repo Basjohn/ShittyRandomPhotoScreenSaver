@@ -97,9 +97,11 @@ after the operator's yes on a question card; agents never run load (invisible ch
      with a customizable font; later, cheap bright-area detection to switch the text to black. No volume rail.
      Options: any corner per overlay, Always Show, Media Controls with the now-playing (default off), an optional card
      border + theme surface (default off); all in a new Visualizers pill "Fullscreen Mode", first after Setup.
-   - Fullscreen Edit (operator, 8 Nov; plan 01 M3c, after M3b): Edit entered while expanded stays expanded and edits
-     the overlays' size/position (toast, now-playing text, artwork, media controls) like ordinary widget geometry,
-     through the existing Edit session; supersedes "entering Edit collapses".
+   - Fullscreen Edit (operator, 8 Nov; plan 01 M3c): built 8 Nov on an agent branch, awaiting the lead's audit and
+     the operator's look. Edit entered while expanded stays expanded and edits only the overlays (the toast, Now
+     Playing's text and its artwork, sized apart) through the one Edit session; Save writes only their value, other
+     displays keep running without Edit chrome, and an unsaved draft holds Settings. Also there: Now Playing reveals
+     when playback resumes (paused -> playing).
    - M4 (plan 01 `02_E0_Covered_Display_Admission.md`): built 8 Nov, a covered display that already shows an image
      is left out of image batches at admission (no queue advance, decode, upload, transition or material refresh; the
      batch still closes; every display covered = edges are no-ops). Open: the GPU/render-thread measurement with
@@ -657,6 +659,22 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   queues unthrottled frames, so the next texture upload (a glyph, a layer) waits for the whole queue (40-390 ms
   measured on the M3b scene) and time-based QML animations jump past what a test samples. The M3b tests finish each
   frame (`glFinish`); other users sampling animations should too, or the host could finish its frames itself.
+
+**Found while building Expanded Visualizer M3c (8 Nov; recorded, not yet admitted):**
+- **"The fullscreen visualizer is also missing its rotate glyph" (operator) needs the operator's call.** Measured on
+  the production presentation, the display-wide card shows the card's camera controls under the same admission
+  (Reset Camera, the preset steps, the 3D hint; now a bar). What it does not show is the hover Edit lane (Restore
+  Widget Size's curved arrow, Close, the transfer arrows), withdrawn since M2 because each edits the ordinary card's
+  layout, which the display-wide view does not draw (Restore would resize a hidden card, Close would disable the
+  Visualizer under its own takeover, transfers are M5). Returning it needs a decision on what each does while
+  expanded; nothing was changed.
+- **A pause does nothing to the overlays (by the spec, not built):** Now Playing is event-only and has already faded
+  after its window; with Always Show it stays up by definition. A fade-out on pause would need the operator's word.
+- **`tests/test_qtquick_context_menu.py` fails after `tests/test_qtquick_custom_layout_owner.py` in one process**
+  (two right-click tests; each file passes alone; identical on the M3c base without its changes). Likely a
+  process-wide pointer-suppression deadline or input state one file leaves for the next. Not investigated further.
+- **The overlays' Edit placeholders are fixed English words** ("Preset Name", "Track Title", "Artist"), shown only in
+  Fullscreen Edit when there is nothing to show yet.
 
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
