@@ -143,6 +143,30 @@ Item {
         cycle.start()
     }
 
+    // Playback resumed: show again like an event, without swapping the (unchanged) content. An overlay already up
+    // keeps showing: Always Show is untouched, a showing one just holds its window again from now.
+    function resume() {
+        if (holding && presence > 0.001)
+            return
+        cycle.stop()
+        hideAnimation.stop()
+        const showing = presence > 0.001
+        if (!showing) {
+            order = stage ? stage.nextRevealOrder() : order + 1
+            contentOpacity = 1.0
+        }
+        shown = true
+        const makeRoom = !showing && !!stage && stage.cornerPeerShowing(slot)
+        swapOut.duration = 0
+        settle.duration = makeRoom ? stackGlideMs : 0
+        fadeIn.duration = Math.round(fadeInMs * (1.0 - Math.min(1.0, presence)))
+        contentIn.duration = showing ? Math.round(swapInMs * (1.0 - contentOpacity)) : 0
+        hold.duration = holding ? 0 : holdMs
+        fadeOut.to = holding ? 1.0 : 0.0
+        fadeOut.duration = holding ? 0 : fadeOutMs
+        cycle.start()
+    }
+
     // Fullscreen Edit ended: back to the authored visibility. Always Show (with content) stays; anything else fades.
     function endEdit(hasContent) {
         if (alwaysShow && hasContent)

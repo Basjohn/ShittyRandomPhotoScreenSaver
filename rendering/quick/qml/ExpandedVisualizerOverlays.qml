@@ -15,7 +15,8 @@ import QtQuick.Effects
 // routes it to the Media card's own transport owner.
 //
 // Events: entering the full display (once the startup reveal has opened), a preset announcement, a change of the
-// track's identity. Nothing else reveals an overlay; nothing runs at rest.
+// track's identity, and playback resuming (paused -> playing: Now Playing shows again, as on a track change; operator,
+// 8 Nov). Nothing else reveals an overlay; nothing runs at rest.
 //
 // Fullscreen Edit (M3c): while ``editing`` (the Edit session is open on this display's overlays) both overlays show
 // and hold, with a quiet placeholder where there is no preset name or track yet, so each can be grabbed; their
@@ -126,6 +127,9 @@ Item {
     readonly property string liveTrackKey: mediaModel && mediaModel.hasTrack
         ? String(mediaModel.artist) + "\u001f" + String(mediaModel.title) : ""
     property bool entered: false
+    // The Media model's own playback state (the one the Visualizer binds); its paused -> playing edge is an event.
+    readonly property string livePlaybackState: mediaModel ? String(mediaModel.playbackState).toLowerCase() : ""
+    property string seenPlaybackState: ""
 
     function enter() {
         if (entered || !revealOpen)
@@ -137,7 +141,18 @@ Item {
             nowPlayingSlot.reveal()
     }
 
-    Component.onCompleted: enter()
+    Component.onCompleted: {
+        seenPlaybackState = livePlaybackState
+        enter()
+    }
+    onLivePlaybackStateChanged: {
+        const previous = seenPlaybackState
+        seenPlaybackState = livePlaybackState
+        // Playback resumed: Now Playing shows again with its gentle fade (one-shot from this edge, latest wins, the
+        // same bounded window as a track change). Already up (Always Show, or still showing) it stays as it is.
+        if (entered && previous === "paused" && livePlaybackState === "playing" && liveTrackKey.length > 0)
+            nowPlayingSlot.resume()
+    }
     onRevealOpenChanged: enter()
     onPresetSerialChanged: {
         if (entered && (presetName.length > 0 || editing))
