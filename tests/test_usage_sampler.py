@@ -611,11 +611,90 @@ def test_collector_labels_a_named_child_from_its_own_per_process_pass_and_refres
     collector.collect()
     assert len(refreshes) == 2 and collector.last_sample_was_heavy
     labelled = collector.last_process_breakdown[child]
-    assert labelled["threads"] == 31 and labelled["rss_mb"] > 0.0 and labelled["cpu_pct"] >= 0.0
+    # Its first CPU read is primed by this same refresh: no measurement, so ``na`` (A10-L2), its memory measured.
+    assert labelled["threads"] == 31 and labelled["rss_mb"] > 0.0 and labelled["cpu_pct"] is None
     collector.expect_pids((child,))
     collector.collect()
     assert len(refreshes) == 2                                   # known: the cadence is unchanged
     assert collector.last_process_breakdown[child]["threads"] == 31          # carried forward like threads_app
+    assert collector.last_process_breakdown[child]["cpu_pct"] >= 0.0         # measured over a whole interval now
+
+
+def test_a_named_pid_the_refresh_cannot_find_forces_one_refresh_not_one_per_sample():
+    # Checkpoint audit 10, A10-L2: the engine worker died while its supervisor still names it (until the heartbeat
+    # reaps it). A dead process is never in the topology snapshot, so before the fix every sample paid a refresh
+    # (~10 ms of mostly GIL-held enumeration each). Now: one refresh per distinct named PID; forgotten once no longer
+    # named, so a later worker reusing the PID is refreshed for again. At rest nothing is named and nothing changes.
+    proc = _CountingProc()
+    tree = {proc.pid: 23}
+    refreshes = []
+
+    def topology(pid):
+        refreshes.append(pid)
+        return dict(tree)
+
+    collector = ProcessUsageCollector(proc, heavy_refresh_samples=8, topology_snapshot_provider=topology)
+    collector.collect()
+    dead = 987_654_321                                           # never in the tree
+    for _ in range(5):
+        collector.expect_pids((dead,))
+        collector.collect()
+    assert len(refreshes) == 2                                   # the first sample, then once for the dead PID
+    collector.expect_pids(())                                    # no longer named: forgotten
+    collector.collect()
+    collector.expect_pids((dead,))                               # named again (a later worker on the same PID)
+    collector.collect()
+    assert len(refreshes) == 3
+
+
+def test_a_process_added_by_this_samples_refresh_is_left_out_of_the_cpu_total():
+    # A10-L2: the refresh that discovers a child primes its CPU counter and the same sample read it over
+    # microseconds (0, or a huge figure when a scheduler tick landed in between): left out of cpu_app_pct.
+    class _Child(_CountingProc):
+        def __init__(self, pid):
+            super().__init__(pid)
+            self.reads = 0
+
+        def cpu_percent(self, interval=None):
+            self.reads += 1
+            return 0.0 if self.reads == 1 else (5000.0 if self.reads == 2 else 7.0)
+
+    proc = _CountingProc()
+    child = _Child(31337)
+    # The psutil fallback path (no injected topology, a test double main process), as on a host without Toolhelp.
+    collector = ProcessUsageCollector(proc, heavy_refresh_samples=8)
+    collector.collect()
+    proc.children = lambda recursive=False: [child]
+    collector.expect_pids((child.pid,))
+    first = collector.collect()
+    assert child.reads == 2 and first.cpu_app_pct == 5.0      # the main process only; the child's 5000 % left out
+    assert collector.last_process_breakdown[child.pid]["cpu_pct"] is None
+    second = collector.collect()
+    assert second.cpu_app_pct == 12.0 and collector.last_process_breakdown[child.pid]["cpu_pct"] == 7.0
+
+
+def test_usage_service_forgets_the_engine_workers_pid_once_after_it_is_no_longer_named():
+    # A10-L2: the service names the worker's PID while the supervisor reports one, and tells the collector once when
+    # it stops (so a later worker reusing the PID is refreshed for); at rest it never calls the collector.
+    class _Expecting(_ProcessCollector):
+        def __init__(self):
+            super().__init__()
+            self.expected = []
+            self.last_process_breakdown = {}
+
+        def expect_pids(self, pids):
+            self.expected.append(tuple(pids))
+
+    named = [None, 101, 101, None, None, None]
+    process = _Expecting()
+    manager = _Manager()
+    service = UsageTelemetryService(manager, process_collector=process, gpu_collector=_GpuCollector(),
+                                    resource_snapshot_provider=lambda: {"visualizer_worker_pid": named.pop(0)})
+    assert service.start() is True
+    while named:
+        manager.callback()
+    assert process.expected == [(101,), (101,), ()]
+    service.stop()
 
 
 def test_usage_service_logs_the_engine_workers_labelled_breakdown(caplog):
