@@ -194,10 +194,26 @@ after the operator's yes on a question card; agents never run load (invisible ch
      it; parked it costs ~0 CPU), the link is the role's one starter (the heartbeat only retires, fenced by identity),
      a session whose steps keep failing fails closed into the recovery, the supervisor reaches the display manager
      before the Visualizer is admitted, `--usage` labels the worker's CPU/RSS/threads, and every build family
-     compiles the worker's package. Next: 5.3's rest (device changes), then 6 (gate 3). Operator checks for 6: a frozen
-     build with `--viz-engine-worker` (the Visualizer on the worker) and its cold spawn against the first configure's
-     6 s bound. Open for 6 (design doc, 5.7's "Left"): the production worker process runs `main.py`'s module level
-     before its target (QtGui/QtWidgets/QtQuick loaded in every worker role); gate 4's open/close and switch counts.
+     compiles the worker's package. 5.3's rest built 8 Nov: on the worker, a capture that publishes nothing for 180
+     cadence steps (~2 s) while Media plays (a default-output switch the player follows, an unplugged or stale device)
+     is reopened once on the current default output through the audio worker's own stale-capture restart; digital
+     silence and a pause never count; a reopen that fails is a device failure, never a worker failure; the main log
+     shows the device state at the next edge's reply. Next: 6 (gate 3). Operator checks for 6: a frozen build with
+     `--viz-engine-worker` (the Visualizer on the worker) and its cold spawn against the first configure's 6 s bound;
+     the 5.3 device checks on a real device (design doc, 5.3 record: default switch, a pinned player, a USB/Bluetooth
+     unplug, the only output unplugged, the in-process control). Open for 6 (design doc, 5.7's "Left"): the production
+     worker process runs `main.py`'s module level before its target (QtGui/QtWidgets/QtQuick loaded in every worker
+     role); gate 4's open/close and switch counts.
+     Open (5.3, in-process parity; operator's call, after the 5.3 device checks): in process, a mid-song default-output
+     switch, an unplugged device or a stale stream leaves the Visualizer at rest until Media's next pause and play,
+     display park or an activation (the loopback stays on the dead endpoint). The worker's delivery watch
+     (`EngineSession._watch_device_delivery` with `restart_stale_capture`) could run in the owner's in-process cadence
+     step too; it would change the default path's capture behaviour, so it waits for the physical check.
+     Side finding (5.3): `test_visualizer_owner_engine_worker_liveness.py`'s hung-worker and killed-worker tests fail on
+     91397ca2 itself (3/3 runs at ~16% CPU load, the 5.3 files reverted to the base): the replacement's configure is
+     retired by the test's sped-up heartbeat before it is answered ("the engine worker retired before replying"), so the
+     owner ends in process. Likely the spawn's `main.py` module level (A10-M1, ~1.3 s per spawn) against the 0.25 s
+     heartbeat; re-check once A10-M1 lands, then fix the test's timing or the cause.
      General follow-up (checkpoint audit 9, A9-L3; not a P2b item): a reconstruction that never reveals reloads about
      every 6 s with no cap, and a refused reload leaves the owner `failed` at fade 0 with its runtime running (both as
      in process): decide a per-run reconstruction cap, or a `failed` owner that stops its runtime when its reload is

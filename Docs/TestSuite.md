@@ -1155,6 +1155,17 @@ High-value permanent guards include:
   admission); the supervisor wired before the displays admit the Visualizer; the first configure's deadline inert on a
   half-retired owner (the pre-fix fence falls back and starts a runtime); and, on a real worker process with the REAL
   owner, the worker spawned by its first owner and retired (the process reaped) with its last.
+  `tests/test_visualizer_engine_worker_device.py` (slice 5.3's rest: audio device changes): the production session in
+  process on a loopback stand-in with its own delivery thread (a device's clock, concurrent with the tick; bound at
+  open to the default output, silent while nothing renders there; no device is opened). With the session's delivery
+  watch, and without it as each case's negative control: a default-output switch the player follows is followed
+  mid-song by one reopen on the audio worker's own restart (without it, only Media's next play edge follows); a device
+  that raises mid-stream (every packet fails in the capture callback) is reopened (without it, silent and reported
+  healthy); a device whose callbacks stop is reopened once per silent run (no retry loop, re-armed when it publishes
+  again); the only output unplugged is a device failure in the replies, never a step failure or a session end, retried
+  at the next capture edge. Guards: a player pinned to the old output keeps its capture; digital silence and a pause
+  never reopen (an energy-keyed watch without the stale gate fails it); the link logs each device-state change once
+  (the store-only link fails it). Evidence and the mutation runs: the design doc's 5.3 record;
   `tests/test_visualizer_engine_frozen_spawn.py`: the worker factory pickles by name, and a spawn from a parent whose
   `__main__` is `main.py` (the child runs `main.py`'s module level first, as the Nuitka child runs it as
   `__parents_main__`) reaches `visualizer_worker_main`'s message loop (the frozen run itself is the operator's).
