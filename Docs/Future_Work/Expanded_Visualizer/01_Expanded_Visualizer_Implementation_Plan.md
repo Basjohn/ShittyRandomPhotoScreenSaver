@@ -393,7 +393,9 @@ next admitted edge). The checklist below stays as its review list.
     gently; it never pops. Off by default.
   - **Media Controls:** previous / play-pause / next shown with the now-playing overlay, off by default. They drive
     the existing Media controller (the Media card's own transport path); no second controller, no second GSMTC read.
-    Their hit area joins the overlay's, outside the OSD, collapse glyph and camera/preset controls.
+    Their hit area joins the overlay's, outside the OSD, collapse glyph and camera/preset controls. They are the
+    Media card's own control bar, small (operator, 8 Nov: "it should have the media control bar just a small
+    version"), not separate buttons.
   - **Card:** an optional border and theme surface like the widget cards (the card chrome owner: border colour, width
     and radius, plus the active Widget Theme's surface material), wrapping the whole overlay; off by default, so the
     artwork alone keeps its themed border.
@@ -672,9 +674,22 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   shadow (`ShadowedText`'s soft profile). Artwork square (as tall as the text beside it), framed with the card's own
   chrome (border colour, the AC-09 width, the card radius) on a concentric mask; missing art shows the card surface
   with a quiet note glyph. Card wraps an overlay in `OverlayCard` (the widget cards' own card: theme border, surface,
-  material via the shared backdrop, card shadow). Media Controls use the card's in-card control look and
-  `MediaTransportGlyph`; each consumes its own presses (double-click included); nothing else in the overlays takes
-  input, so double-click, middle-click, wheel and orbit reach the card as before.
+  material via the shared backdrop, card shadow). Media Controls are the one Media transport bar,
+  `MediaTransportBar.qml`, which the Media card (`MediaPresentation.qml`, at the card's size, its mute button a child)
+  also draws: the rounded bar with its outline and shadow, previous | play-pause | next in three segments split by
+  thin separators, `MediaTransportGlyph` (pause while playing), the card's dim, hover and press. Its look is the
+  Media model's (`MediaPresentationModel.transportBarLook`: one JSON string of plain values, because a QColor or a
+  map read through QML `var` stays a reference connected to the model until JS garbage collection, which an
+  unloaded overlay must never leave behind); the overlay's own bar takes no card material (it sits over the
+  Visualizer, not the wallpaper). Size, from the card's own bar-to-text ratio: the card's bar is 2.15 x its font
+  size tall under a title of 1.12 x that size in points, so bar / title = 2.15 / 1.4933 = 1.44; Now Playing's bar
+  keeps that ratio to its artist line (0.74 x the title), the line it sits under: height = 1.07 x the overlay's
+  scaled font size (32 px at the 30 px default), width = six heights (segments twice as wide as tall, which keeps
+  the card's glyph box of half the bar's height), outline 1.5 px, radius 12 and shadow scaled by the bar's height
+  against the card's. It sits under the text on the anchor side, scales with the overlay's scale and fades with Now
+  Playing. Each segment holds its own presses (double-click included, `consumesDoubleClick`) and emits
+  `transportRequested` with the same keys; nothing else in the overlays takes input, so double-click, middle-click,
+  wheel and orbit reach the card as before.
 - *Media Controls route.* QML → `QuickSceneController.visualizer_overlay_transport_requested` → the display manager's
   `_route_expanded_overlay_transport` (owning unit, admission open, no context menu) → `_route_quick_media_transport`,
   the route the keyboard transport shortcuts take: the Media card's own transport owner, never fanned out.
@@ -759,7 +774,8 @@ can most geometry normally."
   = square; a value stored before them reads them so, no bridge). Mirrored semantics: the text box is ordinary
   Edit's content box (Media's card elides in a set width and reflows into a set height): a set width elides, a set
   height adds lines (the toast's name and Now Playing's title wrap, then elide), the block centred in its box,
-  floored at one line (the toast) or the natural block (Now Playing), at least the Media Controls' width; extents
+  floored at one line (the toast) or the natural block (Now Playing), at least the Media Controls
+  bar's width; extents
   are in ems of the overlay's font, so a uniform scale (corner, wheel) and the font size keep the box's shape, as
   ordinary Edit's uniform scale keeps `content_extent`; a set box may use the whole safe area (the 45 % cap is only
   the natural growth). The artwork mirrors ordinary Edit's freeform artwork frame
