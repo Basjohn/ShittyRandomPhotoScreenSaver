@@ -912,6 +912,16 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   controls without the re-expose and an opaque control. Mechanism-level on a bare window with Settings' window recipe (the real
   `SettingsDialog` raises visible guided-setup / "No Image Sources" popups when shown); every window has an empty region and an
   `EnumWindows` guard asserts no visible window with pixels.
+- `tests/test_studio_exit_single_transition.py` — leaving a Studio is one transition, recorded in order on the real
+  SettingsDialog, the real controller and presence and the production `StudioWindowSurface` (its show, the native
+  calls and material applications recorded, never made): through Close, Esc, window X and application quit, Settings
+  is shown once beneath the Studio window, painted while covered, and comes forward exactly once, after the window is
+  gone; no opacity change or material re-applied. Negative control: the former reveal in front is named; a window
+  whose retirement fails never leaves Settings behind it.
+- `tests/test_studio_camera_survives_edits.py` — every Studio with a camera, curated and Custom, view included and
+  not: after orbit / zoom / dolly / pan, a slider drag and a switch keep every camera axis (the controller's view,
+  the evaluated frame's values, the stored orbit); a camera row applies only its own value. Negative control: the
+  store's former aim rule resets the camera on a curated preset.
 - `tests/test_settings_percent_slider_round_trip.py` — Settings sliders reload stored hundredths exactly (no `int`
   truncation in any Settings tab), through the real widgets and a Studio commit.
 - `tests/test_studio_preset_row_and_save_to_preset.py` — on the real SettingsDialog: every registered Studio mode

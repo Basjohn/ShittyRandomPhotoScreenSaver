@@ -2337,6 +2337,23 @@ class StudioController(QObject):
         timings: dict[str, float] = {}
         failures: list[str] = []
         mark = time.perf_counter()
+        # One transition out: while the Studio's window is still on screen, Settings is revealed beneath it (shown and
+        # painted, not activated) and comes forward once the window is gone. Raising and activating it over the still
+        # shown application-modal window made Settings and the Studio swap places twice (the 8 Nov double flicker).
+        covering = None
+        if reveal:
+            find = getattr(self.surface, "covering_window", None)
+            try:
+                covering = find() if callable(find) else None
+            except Exception:
+                logger.exception("[STUDIO] Could not read the Studio window's state; Settings comes forward at once")
+        awaiting_window = False
+
+        def reveal_settings() -> None:
+            if covering is not None:
+                self.presence.reveal(beneath=covering)
+            else:
+                self.presence.reveal()
 
         def step(name: str, action: Callable[[], Any] | None = None) -> None:
             nonlocal mark
@@ -2369,6 +2386,7 @@ class StudioController(QObject):
                 unsubscribe()
 
         def retire_surface() -> None:
+            nonlocal awaiting_window
             surface, self.surface = self.surface, None
             self.viewport = None
             if surface is None:
@@ -2384,10 +2402,13 @@ class StudioController(QObject):
             window = getattr(surface, "window", None)
             if watch is not None and watch.active and window is not None:
                 window.destroyed.connect(lambda *_a: watch.note("studio window destroyed"))
-            repaint = getattr(self.presence, "repaint_revealed", None)
-            if repaint is not None and window is not None and getattr(self.presence, "reveal_count", 0):
-                # Settings repaints once more after the modal Studio window is gone (see repaint_revealed).
-                window.destroyed.connect(lambda *_a: repaint())
+            forward = (getattr(self.presence, "bring_forward", None)
+                       or getattr(self.presence, "repaint_revealed", None))
+            if reveal and forward is not None and window is not None and getattr(self.presence, "reveal_count", 0):
+                # Once the modal Studio window is gone, Settings comes forward (when it was revealed beneath it) and
+                # repaints once more (see WindowPresence.bring_forward / repaint_revealed).
+                window.destroyed.connect(lambda *_a: forward())
+                awaiting_window = True
             surface.retire()
 
         def release_models() -> None:
@@ -2405,7 +2426,7 @@ class StudioController(QObject):
             session = self.session
             step("gesture", session.cancel_gesture if session is not None else None)   # a drag is not a save
             step("transport", self.transport.stop)
-            step("settings", self.presence.reveal if reveal else None)                  # Settings back first
+            step("settings", reveal_settings if reveal else None)                       # Settings back first
             step("jobs", cancel_jobs)
             step("surface", retire_surface)
             step("evaluator", release_models)
@@ -2414,6 +2435,11 @@ class StudioController(QObject):
                 StudioController._active = None
             if reveal and getattr(self.presence, "concealed", False):
                 step("settings_retry", self.presence.reveal)   # the first reveal raised before un-concealing
+            forward = getattr(self.presence, "bring_forward", None)
+            if reveal and covering is not None and callable(forward) and (not awaiting_window or "surface" in failures):
+                # Revealed beneath a window whose going is not awaited (or whose retirement failed, so it may stay):
+                # Settings comes forward now, never left behind it.
+                step("settings_forward", forward)
             timings["total"] = round(sum(timings.values()), 2)
             self.close_timings = timings
             self.close_failures = tuple(failures)

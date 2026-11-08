@@ -149,13 +149,12 @@ class VisualizerSettingsStore:
         self._load_into_settings(config)
         camera = spec_for_mode(self._mode)
         if camera is not None:
-            aimed = {camera.key("turn"), camera.key("tilt")} & set(changed)
-            if aimed:
-                # Persist the exact previewed orbit through the camera editor's own pose authority.
-                pose = getattr(tab, fce.pose_attr(self._mode))
-                for key in (camera.key("turn"), camera.key("tilt")):
-                    pose[key] = config[key]
-                setattr(tab, fce.aim_dirty_attr(self._mode), True)
+            # Persist the exact previewed orbit through the camera editor's own pose authority: the orbit this edit
+            # aimed, and an orbit committed earlier that the save does not hold yet (a curated preset's draft). The
+            # load above re-hydrated the pose as if these values were saved and dropped that aim, so every later edit
+            # read the preset's view back and reset the Studio's camera (operator, 8 Nov).
+            aimed = bool({camera.key("turn"), camera.key("tilt")} & set(changed))
+            fce.hold_aim(tab, self._mode, config, aimed=aimed)
         if curated is not None:
             # On a curated preset the edit is held, not saved: no automatic switch to Custom.
             self._draft = True

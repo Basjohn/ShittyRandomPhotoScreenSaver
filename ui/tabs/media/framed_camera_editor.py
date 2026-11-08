@@ -50,6 +50,28 @@ def _pose(tab, mode_id: str) -> dict:
     return getattr(tab, pose_attr(mode_id), {})
 
 
+def hold_aim(tab, mode_id: str, values, *, aimed: bool = False) -> bool:
+    """Hold ``values``' turn/tilt as the aimed view the next save persists: when ``aimed`` (the edit itself moved the
+    orbit) or whenever they differ from the saved view. Returns whether an aim is held.
+
+    ``hydrate_pose`` treats the values it loads as the saved view and clears the aim. A Studio loads its whole value map
+    on every commit, and that map can run ahead of the save: an orbit committed on a curated preset is held in the
+    unsaved draft, never saved. Clearing its aim there made the draft read the saved view back, so every later edit
+    snapped the Studio's camera back to the preset's view."""
+    spec = spec_for_mode(mode_id)
+    keys = (spec.key('turn'), spec.key('tilt'))
+    if any(values.get(key) is None for key in keys):
+        return False
+    if not aimed and all(values[key] == _saved(tab, key) for key in keys):
+        return False
+    pose = _pose(tab, mode_id)
+    for key in keys:
+        pose[key] = values[key]
+    setattr(tab, pose_attr(mode_id), pose)
+    setattr(tab, aim_dirty_attr(mode_id), True)
+    return True
+
+
 def _values(tab, mode_id: str, spec: FramedCameraSpec, **overrides) -> dict:
     pose = _pose(tab, mode_id)
     values = {key: pose[key] if key in pose else live_value(tab, mode_id, key) for key in spec.input_keys}
