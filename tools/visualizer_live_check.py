@@ -26,6 +26,17 @@ meets it before the operator does.
   replacement up to its reveal, with per-trip timings, generations, memory and the GC thaw/re-freeze; any barrier
   timeout, missing re-freeze or early process exit fails the run (exit 3). The steady figures cover the time before
   the first round trip.
+* **Mode switches:** ``--mode-switch 30,42`` makes the production cycle gesture (double-click / context menu: the next
+  enabled mode) at those times and records each completion (``tools/live_check_mode_switch.py``); a switch that never
+  completes fails the run (exit 3).
+* **Experiment admissions:** ``--app-arg=--viz-engine-worker`` adds that token to the saver's argv (only
+  ``core.diagnostics.experiment_flags`` tokens are accepted). With the engine worker admitted and a ``--clip``, the
+  worker plays the same recording (its first ``WORKER_PCM_LOOP_S`` seconds, looped, on the worker's own audio clock:
+  the link's recorded-capture control, as its gates use it) and never opens the loopback device.
+* **Resource readings:** ``--resource-readings`` reads the saver's process tree from outside (this parent: psutil,
+  handles by object type, section views, the session's named ``srpss_viz_`` mappings) every second and ``--settle``
+  seconds after each reveal or completed mode switch (``tools/live_check_resources.py``): a per-cycle table, slopes and
+  a growth verdict (``resource_summary.json``; growth fails the run, exit 4).
 * **Output** goes to ``.artifacts/evidence/visualizers/<mode>/live_check/<YYYYMMDD>_<label>/``
   (``tools/artifact_paths.py``; an explicit ``--out`` inside the repository must follow that layout). The profile
   copy lives only while the run needs it: at the end of every run, failures included, its settings are kept beside
@@ -63,10 +74,16 @@ from tools.live_check_settings_roundtrip import (  # noqa: E402  (stdlib-only at
     analyse_settings_roundtrips, gc_policy_lines, parse_roundtrip_memory, parse_settings_roundtrip,
     print_settings_roundtrips,
 )
+from tools.live_check_mode_switch import (  # noqa: E402  (stdlib-only at import)
+    analyse_mode_switches, parse_mode_switch, print_mode_switches,
+)
+from tools import live_check_resources  # noqa: E402  (stdlib-only at import)
 from tools import artifact_paths  # noqa: E402
 DEFAULT_CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"    # mixed real music, ~2 min
 STEADY_AFTER_STARTUP_NS = 2_000_000_000
 LATE_MS = 25.0
+WORKER_PCM_LOOP_S = 20.0      # the engine worker's recorded stream (looped): a few MB in each VIS_CONFIGURE
+ENGINE_WORKER_ARG = "--viz-engine-worker"
 
 # Guide numbers for a 60 Hz panel and the ~90 Hz authored cadence (flags, not pass/fail gates).
 _FLAGS = (
@@ -343,7 +360,10 @@ def analyse_display_power(trace: Path, edges: list[dict], samples: list[dict]) -
 
 def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float, mode: str,
             display_off: list[tuple[float, float]] | None = None,
-            settings_roundtrip: list[float] | None = None, roundtrip_memory: tuple[str, ...] = ()) -> None:
+            settings_roundtrip: list[float] | None = None, roundtrip_memory: tuple[str, ...] = (),
+            app_args: tuple[str, ...] = (), mode_switch: list[float] | None = None) -> None:
+    import contextlib
+
     began = time.monotonic()
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
@@ -363,7 +383,8 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
     logger._FORCED_LOG_DIR=(out/'logs').resolve()
 
     # --usage as the operator always runs: its sampler is part of the live shape (a 15 s GIL-held hitch, 2026-10-31).
-    sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)), "/s"]
+    sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)),
+                *app_args, "/s"]
     phases.production_startup()
     if not visible:
         # Invisible but presented like a visible window: an empty window region clips every pixel and every click,
@@ -390,6 +411,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
 
         state.QuickWindowPolicy.flags = invisible_flags
         window.QuickDisplayWindow.show_on_screen = invisible_show
+    stack = contextlib.ExitStack()
     if clip is not None:
         # Recorded music where the loopback would deliver it, and playback truth to match: the whole live audio
         # path runs (capture callback, mono mix, DSP, analysis lane) whatever the machine is playing.
@@ -402,6 +424,13 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
         set_playing = QuickDisplayVisualizerOwner.set_playing
         QuickDisplayVisualizerOwner.set_playing = (
             lambda self, _playing, *, observed_ts=None: set_playing(self, True, observed_ts=observed_ts))
+        if ENGINE_WORKER_ARG in app_args:
+            # The engine worker captures in its own process: every session it hosts plays the same recording on the
+            # worker's audio clock and refuses the device (the link's recorded-capture control, as its gates use it).
+            from widgets.spotify_visualizer import engine_worker_link
+
+            stack.enter_context(engine_worker_link.recorded_capture_for_testing(
+                pcm=pcm[: int(rate * WORKER_PCM_LOOP_S)], pcm_rate=int(rate)))
     phases._install()
     if mode=='waveform_ribbon':phases._install_waveform()
     if display_off:
@@ -415,9 +444,22 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
                                          memory_probe=probe)
         driver.install()
         atexit.register(driver.finish)
+    if mode_switch:
+        # The production cycle gesture at each time, one at a time (tools/live_check_mode_switch.py).
+        from tools.live_check_mode_switch import ModeSwitchDriver
+
+        from tools.live_check_settings_roundtrip import RoundTripMemoryProbe
+
+        # --roundtrip-memory without round trips classifies at each completed switch instead (same probe, R-175).
+        probe = (RoundTripMemoryProbe(roundtrip_memory, out_dir=out)
+                 if roundtrip_memory and not settings_roundtrip else None)
+        switcher = ModeSwitchDriver(mode_switch, began=began, state_path=out / "mode_switch.json", memory_probe=probe)
+        switcher.install()
+        atexit.register(switcher.finish)
     atexit.register(lambda: (out / "phases.json").write_text(json.dumps(phases._summary(), indent=1), encoding="utf-8"))
     import runpy
-    runpy.run_path(str(ROOT / "main_mc.py"), run_name="__main__")
+    with stack:
+        runpy.run_path(str(ROOT / "main_mc.py"), run_name="__main__")
 
 
 # -- parent: profile, load, guard, report -------------------------------------------------------------------------
@@ -599,9 +641,32 @@ def build_parser() -> argparse.ArgumentParser:
                              "timeout, a reveal without a GC re-freeze or a process exit")
     parser.add_argument("--roundtrip-memory", metavar="census[,collect][,tracemalloc][,map]", type=parse_roundtrip_memory,
                         default=(), help="with --settings-roundtrip: classify what each round trip leaves behind "
-                                         "at every reveal (runner only; settings_roundtrip_memory.json)")
+                                         "at every reveal; with --mode-switch alone, at every completed switch "
+                                         "(runner only; settings_roundtrip_memory.json)")
+    parser.add_argument("--mode-switch", metavar="AT[,AT]", type=parse_mode_switch,
+                        help="make the production mode-cycle gesture AT s after the runner starts (one at a time); "
+                             "a switch that never completes fails the run")
+    parser.add_argument("--app-arg", action="append", default=[], type=parse_app_arg, metavar="=TOKEN",
+                        help="an experiment-flag token added to the saver's argv, e.g. --app-arg=--viz-engine-worker")
+    parser.add_argument("--resource-readings", action="store_true",
+                        help="read the saver's process tree from outside every second and --settle s after each "
+                             "reveal / completed mode switch; growth fails the run (resource_summary.json)")
+    parser.add_argument("--settle", type=float, default=live_check_resources.DEFAULT_SETTLE_S,
+                        help="seconds after a lifecycle edge before its resource reading (default %(default)s)")
     parser.add_argument("--runner", action="store_true", help=argparse.SUPPRESS)
     return parser
+
+
+def parse_app_arg(text: str) -> str:
+    """An experiment admission for the saver's argv (``core.diagnostics.experiment_flags``); nothing else reaches it
+    (a mode, display or log-root token could make the run visible or move its logs away from the report)."""
+    from core.diagnostics.experiment_flags import experiment_flag_tokens
+
+    token = str(text)
+    needs_value = ("--abc-drive", "--abc-layout-slot", "--abc-exclude-seconds")      # only their "=" form is one token
+    if experiment_flag_tokens([token]) != (token,) or token.startswith("--log-dir=") or token in needs_value:
+        raise ValueError(f"--app-arg takes one experiment-flag token (e.g. --viz-engine-worker), got {token!r}")
+    return token
 
 
 def runner_command(args, out: Path, clip: Path | None) -> list[str]:
@@ -613,7 +678,9 @@ def runner_command(args, out: Path, clip: Path | None) -> list[str]:
             + (["--settings-roundtrip", ",".join(f"{at:g}" for at in args.settings_roundtrip)]
                if args.settings_roundtrip else [])
             + (["--roundtrip-memory", ",".join(args.roundtrip_memory)]
-               if args.settings_roundtrip and args.roundtrip_memory else []))
+               if (args.settings_roundtrip or args.mode_switch) and args.roundtrip_memory else [])
+            + (["--mode-switch", ",".join(f"{at:g}" for at in args.mode_switch)] if args.mode_switch else [])
+            + [f"--app-arg={token}" for token in args.app_arg])
 
 
 def default_out(args) -> Path:
@@ -627,7 +694,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.runner:
         _runner(args.out, args.seconds, args.visible, clip, args.clip_start, args.mode,
                 parse_display_off(args.display_off) if args.display_off else None, args.settings_roundtrip,
-                args.roundtrip_memory if args.settings_roundtrip else ())
+                args.roundtrip_memory if (args.settings_roundtrip or args.mode_switch) else (), tuple(args.app_arg),
+                args.mode_switch)
         return 0
     out = artifact_paths.checked_output(args.out) if args.out is not None else default_out(args)
     if clip is not None and not clip.exists():
@@ -655,10 +723,14 @@ def _measure(args, out: Path, clip: Path | None) -> int:
     runner = subprocess.Popen(command, cwd=ROOT, stdout=(out / "runner.txt").open("w"),
                               stderr=subprocess.STDOUT)
     violation, tree, started = None, None, time.monotonic()
+    resources = (live_check_resources.TreeResourceSampler(runner.pid, out, settle_s=args.settle)
+                 if args.resource_readings else None)
     try:
         while runner.poll() is None:
             time.sleep(1.0)
             conditions.append(sampler.sample())
+            if resources is not None:
+                resources.poll(live_check_resources.recorded_edges(out))
             if gpu is not None:
                 pids = _process_tree(runner.pid)
                 now_ns, cpu_now = time.perf_counter_ns(), _tree_cpu_seconds(pids)
@@ -681,9 +753,30 @@ def _measure(args, out: Path, clip: Path | None) -> int:
             _kill_tree(runner.pid)
         if load is not None:
             _kill_tree(load.pid)
+        if resources is not None:
+            resources.close()
     if violation:
         print("STOPPED: a saver window was visible:", *violation, sep="\n  ")
         return 2
+    switches = None
+    if args.mode_switch:
+        state_path = out / "mode_switch.json"
+        switches = analyse_mode_switches(json.loads(state_path.read_text(encoding="utf-8"))
+                                         if state_path.exists() else None,
+                                         times=args.mode_switch, returncode=runner.returncode)
+        (out / "mode_switch_summary.json").write_text(json.dumps(switches, indent=1), encoding="utf-8")
+        print_mode_switches(switches)
+    resource_summary = None
+    if resources is not None:
+        kinds = (("settings_reveal",) if args.settings_roundtrip else ()) + (("mode_switch",) if args.mode_switch
+                                                                             else ())
+        resource_summary = live_check_resources.analyse_resource_readings(
+            out, kinds=kinds or ("settings_reveal", "startup_reveal"))
+        (out / "resource_summary.json").write_text(json.dumps(resource_summary, indent=1), encoding="utf-8")
+        live_check_resources.print_resource_table(resource_summary)
+    if switches is not None and switches["failures"]:
+        print(f"FAILED: {len(switches['failures'])} mode switch failure(s); see {out / 'mode_switch_summary.json'}")
+        return 3
     roundtrips = None
     if args.settings_roundtrip:
         state_path = out / "settings_roundtrip.json"
@@ -698,7 +791,12 @@ def _measure(args, out: Path, clip: Path | None) -> int:
             return 3
     if runner.returncode != 0:
         raise RuntimeError(f'Live runner exited {runner.returncode}; see {out / "runner.txt"}')
-    return _report(args, out, clip, overrides, summarise_environment(conditions), power_samples, tree, roundtrips)
+    result = _report(args, out, clip, overrides, summarise_environment(conditions), power_samples, tree, roundtrips)
+    if resource_summary is not None and (resource_summary["growth"] or resource_summary["exact_not_flat"]):
+        print(f"FAILED: resource growth {resource_summary['growth']}, exact counts not flat "
+              f"{resource_summary['exact_not_flat']}; see {out / 'resource_summary.json'}")
+        return 4
+    return result
 
 
 def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dict, power_samples: list,

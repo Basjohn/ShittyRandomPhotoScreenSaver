@@ -15,7 +15,9 @@ the stop with reason ``settings``, the display teardown and its destruction barr
   that never reached its reveal, a visible dialog or a popup, or any process exit before the ``--exit-after``
   deadline's own terminal stop.
 
-The runner writes its state to ``settings_roundtrip.json`` after every edge, so a run that dies still leaves it.
+The runner writes its state to ``settings_roundtrip.json`` after every edge, so a run that dies still leaves it. Every
+event carries its wall time as well as its runner time, so the parent's external resource readings
+(``--resource-readings``, ``tools/live_check_resources.py``) are taken a settle after each reveal.
 
 **Memory classification (opt-in, ``--roundtrip-memory census[,collect][,tracemalloc][,map]``):** at every
 coordinated reveal, just before the reveal's GC freeze, ``RoundTripMemoryProbe`` records what one round trip left
@@ -694,7 +696,8 @@ class SettingsRoundTripDriver:
         return round(time.monotonic() - self.began, 3)
 
     def _event(self, name: str, **fields) -> None:
-        self.events.append({"event": name, "at": self._now(), **fields})
+        # Wall time too: the parent's external readings (``tools/live_check_resources.py``) align with the edges by it.
+        self.events.append({"event": name, "at": self._now(), "wall": time.time(), **fields})
         self._flush()
 
     def finish(self) -> None:
@@ -722,6 +725,8 @@ def gc_policy_lines(log_dir: Path) -> list[str]:
         return (match.group(1), -int(match.group(2) or 0))
 
     lines: list[str] = []
+    if not Path(log_dir).is_dir():          # the runner died before logging: its failure is in runner.txt
+        return lines
     parts = [path for path in Path(log_dir).iterdir() if re.fullmatch(r".*\.log(?:\.\d+)?", path.name)]
     for path in sorted(parts, key=age):
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
