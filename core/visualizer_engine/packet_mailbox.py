@@ -13,10 +13,10 @@ engine worker (work order 4) owns the writer side; nothing here runs at rest.
 """
 from __future__ import annotations
 
-import threading
 import uuid
 import zlib
-from typing import Any, Callable, Optional
+from multiprocessing.shared_memory import SharedMemory
+from typing import Any, Callable, Literal, Optional
 
 from core.authored_clock import authored_now
 from core.visualizer_engine import frame_codec
@@ -45,17 +45,28 @@ def protected_edge_mask(state: Any) -> int:
 
 
 class PacketMailbox(LatestStateMailbox):
-    """``LatestStateMailbox`` whose single slot is the frame packet ABI's newest whole frame."""
+    """``LatestStateMailbox`` whose single slot is the frame packet ABI's newest whole frame.
+
+    ``role``: "both" (in-process loopback), "reader" (the main process: creates, owns and finally unlinks the
+    mapping, takes frames) or "writer" (the engine worker: attaches to ``attach`` by name and publishes).
+    """
 
     def __init__(self, *, slot_bytes: int = DEFAULT_SLOT_BYTES, generation: int = 0, engine_generation: int = 0,
-                 activation_id: int = 0, mode_code: int = 0) -> None:
+                 activation_id: int = 0, mode_code: int = 0, role: Literal["both", "reader", "writer"] = "both",
+                 attach: str | None = None) -> None:
         super().__init__()
-        self._memory = create_frame_mapping(
-            generation=generation, slot_bytes=slot_bytes, engine_generation=engine_generation,
-            activation_id=activation_id, mode_code=mode_code, token=uuid.uuid4().hex[:12],
-        )
-        self._writer = FramePacketWriter(self._memory.buf)
-        self._reader = FramePacketReader(self._memory.buf)
+        if (role == "writer") != (attach is not None):
+            raise ValueError("a writer attaches to the owner's mapping by name; readers and loopbacks create it")
+        if attach is None:
+            self._memory = create_frame_mapping(
+                generation=generation, slot_bytes=slot_bytes, engine_generation=engine_generation,
+                activation_id=activation_id, mode_code=mode_code, token=uuid.uuid4().hex[:12],
+            )
+        else:
+            self._memory = SharedMemory(name=attach)
+        self._owner = attach is None
+        self._writer = FramePacketWriter(self._memory.buf) if role in ("both", "writer") else None
+        self._reader = FramePacketReader(self._memory.buf) if role in ("both", "reader") else None
         # Producer side: the newest publication not yet acknowledged (its edges carry into the next one).
         self._unread: tuple[Any, int, int, int] | None = None     # (state, generation, activation, sequence)
         self._peeked: LogicalPublication | None = None
@@ -133,7 +144,8 @@ class PacketMailbox(LatestStateMailbox):
                 raise TypeError("logical mailbox wake callback must be callable or None")
             self._wake_callback = callback
             pending = self._peeked is not None or (
-                self._unread is not None and self._unread[3] > self._writer.consumed_sequence)
+                self._writer is not None and self._unread is not None
+                and self._unread[3] > self._writer.consumed_sequence)
         if callback is not None and pending:
             callback()
 
@@ -154,7 +166,9 @@ class PacketMailbox(LatestStateMailbox):
             if self._closed:
                 return
             self._closed = True
-            self._writer.release()
-            self._reader.release()
+            for side in (self._writer, self._reader):
+                if side is not None:
+                    side.release()
             self._memory.close()
-            self._memory.unlink()
+            if self._owner:
+                self._memory.unlink()

@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from PySide6.QtGui import QColor
-
 from core.logging.logger import get_logger
 from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
@@ -28,10 +26,24 @@ def _visualizer_default(key: str) -> Any:
     return require_canonical_default(f"widgets.spotify_visualizer.{key}")
 
 
-def _color_or_none(value: Any) -> QColor | None:
-    """Return a QColor if *value* is a list/tuple of ≥3 ints, else None."""
+def _color_or_none(value: Any) -> Any:
+    """Return a QColor if *value* is a list/tuple of ≥3 ints, else None (presentation state only)."""
     if isinstance(value, (list, tuple)) and len(value) >= 3:
+        from PySide6.QtGui import QColor   # presentation-only: the logical tick (and its engine worker) stays QtGui-free
         return QColor(*value)
+    return None
+
+
+def _rgba_or_none(value: Any) -> tuple[int, int, int, int] | None:
+    """The (r, g, b, a) a [r, g, b(, a)] settings colour has as ``QColor(*value).getRgb()``, for logical state.
+
+    Logical state stays Qt-free (native core P2: the tick runs in an engine worker that imports QtCore at most); the
+    logical frame freezes colours to exactly this tuple (``render_state.freeze_render_value``), so frames are
+    unchanged. Out-of-range channels (never produced by validated settings) are refused like a missing value."""
+    if isinstance(value, (list, tuple)) and 3 <= len(value) <= 4:
+        channels = [int(channel) for channel in value] + ([255] if len(value) == 3 else [])
+        if all(0 <= channel <= 255 for channel in channels):
+            return (channels[0], channels[1], channels[2], channels[3])
     return None
 
 
@@ -108,14 +120,13 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         if en_key in kwargs:
             setattr(host, f'_devcurve_layer_{src}_enabled', bool(kwargs[en_key]))
         if color_key in kwargs:
-            c = _color_or_none(kwargs[color_key])
+            c = _rgba_or_none(kwargs[color_key])
             if c is not None:
                 setattr(host, f'_devcurve_layer_{src}_color', c)
         if outline_color_key in kwargs:
-            oc = _color_or_none(kwargs[outline_color_key])
+            oc = _rgba_or_none(kwargs[outline_color_key])
             if oc is not None:
-                oc.setAlpha(255)
-                setattr(host, f'_devcurve_layer_{src}_outline_color', oc)
+                setattr(host, f'_devcurve_layer_{src}_outline_color', (*oc[:3], 255))
         if alpha_key in kwargs:
             setattr(host, f'_devcurve_layer_{src}_alpha', max(0.0, min(1.0, float(kwargs[alpha_key]))))
         if power_key in kwargs:
@@ -183,6 +194,7 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
             host._bar_border_color = c
     if 'bar_border_opacity' in kwargs:
         opacity = max(0.0, min(1.0, float(kwargs['bar_border_opacity'])))
+        from PySide6.QtGui import QColor
         color = QColor(host._bar_border_color)
         color.setAlphaF(opacity)
         host._bar_border_color = color

@@ -22,6 +22,7 @@ class WorkerType(Enum):
     """Types of worker processes."""
     IMAGE = "image"           # foreground decode/prescale with path|scaled:WxH cache keys
     IMAGE_PREFETCH = "image_prefetch"  # speculative scaled derivatives only; isolated from foreground image latency
+    VISUALIZER = "visualizer"  # native core P2: the logical tick and mode runtimes (core/visualizer_engine/engine_worker.py)
 
 
 class WorkerState(Enum):
@@ -52,6 +53,11 @@ class MessageType(Enum):
     # This is handled by the foreground IMAGE worker; it is not a worker role.
     IMAGE_PREFETCH_BATCH = "image_prefetch_batch"
     IMAGE_RESULT = "image_result"
+
+    # Visualizer engine worker (native core P2): configure one session, feed post-DSP inputs, stop.
+    VIS_CONFIGURE = "vis_configure"
+    VIS_INPUT = "vis_input"
+    VIS_STOP = "vis_stop"
     
     # Error messages
     ERROR = "error"

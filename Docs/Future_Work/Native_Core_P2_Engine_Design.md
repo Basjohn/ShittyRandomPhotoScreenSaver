@@ -137,7 +137,17 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
    shipped clip (digests of the snapshots it publishes to the bridge; a 1 ns change to a decoded frame fails it).
    Production still uses the in-process mailbox; the worker (4) takes the writer side out of the process.
 4. The worker (`WorkerType.VISUALIZER`): tick + mode runtimes behind the control channel, fed post-DSP inputs (P2a);
-   identity gate on all recordings x all modes.
+   identity gate on all recordings x all modes. **First slice done 8 Nov:** `core/visualizer_engine/engine_worker.py`.
+   `EngineSession` hosts one activation (the runtime controller and tick state configured from Settings, a post-DSP
+   input engine, the mailbox's writer side attached to the main process's mapping by name); `VisualizerEngineWorker`
+   runs it as `WorkerType.VISUALIZER` under `ProcessSupervisor` (`VIS_CONFIGURE` / `VIS_INPUT` / `VIS_STOP`). Fed the
+   recorded post-DSP inputs (`FeatureFrame`, the live engine's own recording schema), the worker ticks frames
+   identical to the production owner's in-process tick for all nine modes, in process and across processes
+   (`tests/test_visualizer_engine_worker.py`; a different runtime generation fails it). Found and fixed on the way:
+   Spline Curve's logical colours were `QColor`s (now the `(r, g, b, a)` tuple the frame always froze them to) and
+   Neon Lake's terrain baker imported a Settings widget for a pure helper (now `utils/curve_nodes.py`). The runtime
+   generation is a control input (every frame carries it). Still in work order 4: live inputs from the main beat
+   engine (latest-wins, no per-input acknowledgement) and the identity gate on every recording.
 5. Lifecycle: generation start/retire, park, crash fail-closed, frozen spawn check (operator), dormancy baseline.
 6. Measurement (gate 3), then decide P2b.
 
@@ -148,6 +158,15 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
   tick and mode runtimes. Measured 8 Nov: the logical runtime, the tick pipeline, render state, the ABI, the codec and
   all eight mode frame runtimes import QtCore only (no QtGui/QtQml/QtQuick); about 0.9-1.1 s cold and ~350 modules
   each. `tests/test_visualizer_engine_import_weight.py` pins it.
+- **The tick still reads presentation config (8 Nov):** the logical capture reads Spectrum's decoration fades and
+  colours and the Oscilloscope/Bubble spec parameters from the presentation state, so the worker configures both
+  sides and loads QtGui for `QColor` (never Quick, QML or Widgets; pinned by a fresh-spawn test). Move those reads into
+  the logical config before production wiring, so the worker imports QtCore only.
+- **Process-unique labels across worker generations (8 Nov):** Extruded Bubble numbers its drift families from a
+  process-wide counter that the renderer uses as a cache identity. A restarted or re-generated worker starts again at 1,
+  so labels must be namespaced by worker generation before production wiring (a stale GPU cache hit otherwise).
+- **The GUI wake (8 Nov):** in process the mailbox wakes the GUI on its empty -> populated edge; across processes the
+  main side needs that edge too (a pipe or event signalled by the worker, read on the GUI thread), never a poll.
 - **Hidden GUI-thread reads inside the tick:** every attribute the tick reads from the owner/widget must become a
   control input. The audit for step 4 lists them from `logical_tick`'s reads; a missed one shows up as an identity
   failure, not silently.

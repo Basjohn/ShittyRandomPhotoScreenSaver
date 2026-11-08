@@ -63,7 +63,7 @@ def normalize_terrain_shaper(value: object, default: Mapping) -> dict:
 def bake_terrain_shaper(shaper: Mapping) -> dict:
     """Elevation tables for the height shader: per sample, the lane's band index, its weight (curve x
     lane strength) and the curve alone (the bias Pulses and Swell follow)."""
-    from ui.tabs.media.spectrum_shape_editor import interpolate_nodes
+    from utils.curve_nodes import interpolate_nodes
 
     curve = interpolate_nodes(shaper["nodes"], REACTION_SAMPLES)
     notches = shaper["notches"]

@@ -134,7 +134,10 @@ after the operator's yes on a question card; agents never run load (invisible ch
      the exact frame codec (work orders 1-2; every mode's production frames round-trip byte-identically; main-thread
      decode at most ~.4 ms per frame) and the in-process loopback (3: `PacketMailbox`, the logical mailbox over the
      ABI; the production owner delivers identical frames for every mode through it; the tick side imports QtCore
-     only). Next: the worker (4).
+     only) and the worker's first slice (4: `WorkerType.VISUALIZER` under `ProcessSupervisor`; fed recorded post-DSP
+     inputs it ticks frames identical to the in-process owner for all nine modes). Next in 4: live inputs from the main
+     beat engine and the gate on every recording; then 5 (lifecycle, wake, park, crash fail-closed, label namespace,
+     the tick's presentation-config reads moved to logical config).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 
