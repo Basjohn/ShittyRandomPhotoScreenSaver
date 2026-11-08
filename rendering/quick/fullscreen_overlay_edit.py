@@ -68,9 +68,17 @@ from rendering.custom_layout_contract import (
 )
 from rendering.custom_layout_session import CustomLayoutKey, CustomLayoutSession, CustomLayoutSessionItem
 from rendering.quick.custom_layout_size import edge_resize_rect, uniform_wheel_scale
+from widgets.spotify_visualizer.presentation_orientation import (
+    CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
+    normalize_content_rotation_by_mode,
+)
 
 #: The Edit items' widget ids share this prefix (the Edit QML hides the close control for them).
 EDIT_ID_PREFIX = "fullscreen_overlay."
+#: The expanded Visualizer card's Edit item: it carries only Rotate Widget Content (never moved or sized; see
+#: ``FullscreenOverlayEdit.admit``). Its payload is the Visualizer's per-mode orientation map, as on the ordinary
+#: Visualizer item.
+CARD_EDIT_ID = f"{EDIT_ID_PREFIX}visualizer"
 #: Edit part -> (the overlay whose value holds it, the members it writes).
 PARTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "preset": ("preset", ("offset_x", "offset_y", "scale", "text_width", "text_height")),
@@ -112,6 +120,12 @@ def edit_part(item: CustomLayoutSessionItem) -> str | None:
 
 def is_fullscreen_overlay_item(item: CustomLayoutSessionItem) -> bool:
     return edit_part(item) is not None
+
+
+def is_card_item(item: CustomLayoutSessionItem) -> bool:
+    """The expanded Visualizer card's item (Rotate Widget Content only)."""
+
+    return str(item.model_identity) == CARD_EDIT_ID
 
 
 def draft_value(committed: Mapping[str, Any], items: tuple[CustomLayoutSessionItem, ...]) -> dict[str, Any]:
@@ -219,6 +233,7 @@ class FullscreenOverlayEdit:
         geometry: Callable[[], Mapping[str, Any] | None],
         project: Callable[[Mapping[str, Any]], None],
         guides: Callable[[tuple[tuple[int, str], ...], tuple[tuple[int, str], ...]], None],
+        orientation: Callable[[], None] | None = None,
     ) -> None:
         self._identity = str(display_identity)
         self._origin = QPoint(display_origin)
@@ -227,6 +242,8 @@ class FullscreenOverlayEdit:
         self._geometry = geometry
         self._project_value = project
         self._publish_guides = guides
+        # Publishes the card part's draft orientation to the Visualizer (the scene's viewport/orientation seam).
+        self._publish_orientation = orientation
         self._session: CustomLayoutSession | None = None
         self._resize_origins: dict[CustomLayoutKey, _ResizeOrigin] = {}
         # Re-entrancy: a projection syncs every frame itself; QML geometry reports during it are its own echo.
@@ -238,12 +255,23 @@ class FullscreenOverlayEdit:
     def committed(self) -> dict[str, Any]:
         return deepcopy(self._committed)
 
-    def admit(self, session: CustomLayoutSession) -> bool:
-        """Add the three parts to ``session`` from the committed value and the drawn overlays (False: not drawn)."""
+    def admit(self, session: CustomLayoutSession, *,
+              card: tuple[tuple[float, float], Mapping[str, int]] | None = None) -> bool:
+        """Add the three parts to ``session`` from the committed value and the drawn overlays (False: not drawn).
+
+        ``card`` (the Visualizer's committed physical extent and per-mode orientation map), given when the live mode
+        can turn its content, adds the expanded card's item first, below the overlays' frames: ordinary Edit's
+        Visualizer frame offers Rotate Widget Content, and so does the expanded card. It is never moved or sized
+        (the expanded card is a viewport, not a layout): it is not resizable, has no Restore Size, no content axes,
+        and its QML frame takes no press, so the background stays Edit's (its double-click Saves). Its frame is the
+        card above the card's own lower-right controls, so the glyph's lower-right slot sits clear of them.
+        """
 
         snapshot = self._geometry()
         if snapshot is None:
             return False
+        if card is not None:
+            self._admit_card(session, snapshot, card)
         for part, (overlay, keys) in PARTS.items():
             payload = {key: self._committed[overlay][key] for key in keys}
             rect = _qrect(snapshot["parts"][part], self._origin)
@@ -265,9 +293,55 @@ class FullscreenOverlayEdit:
         self._session = session
         return True
 
+    def _admit_card(self, session: CustomLayoutSession, snapshot: Mapping[str, Any],
+                    card: tuple[tuple[float, float], Mapping[str, int]]) -> None:
+        extent, rotations = card
+        x, y, width, height = snapshot["stage"]
+        reserve = max(0.0, min(float(height) / 2.0, float(snapshot.get("bottom_right_reserve", 0.0))))
+        rect = _qrect((x, y, width, height - reserve), self._origin)
+        payload: dict[str, Any] = {}
+        normalized = normalize_content_rotation_by_mode(rotations)
+        if normalized:
+            payload[CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY] = normalized
+        session.add_item(CustomLayoutSessionItem(
+            source_key=CustomLayoutKey(CARD_EDIT_ID, self._identity),
+            model_identity=CARD_EDIT_ID,
+            baseline_global_rect=rect,
+            current_global_rect=rect,
+            baseline_size_payload=payload,
+            current_size_payload=dict(payload),
+            baseline_enabled=True,
+            current_enabled=True,
+            resize_capable=False,
+            size_reset_capable=False,
+            content_rotation_capable=True,
+            # The committed physical world the orientation turns (published with it; never edited here).
+            baseline_viewport_extent=(float(extent[0]), float(extent[1])),
+            current_display_identity=self._identity,
+            source_monitor_route=self._monitor_route,
+        ))
+
     def retire(self) -> None:
         self._session = None
         self._resize_origins.clear()
+
+    # ------------------------------------------------------------------------------ the card's orientation
+
+    def card_item(self) -> CustomLayoutSessionItem | None:
+        session = self._session
+        return next((item for item in session.items() if is_card_item(item)), None) if session else None
+
+    def orientation_draft(self) -> dict[str, int] | None:
+        """The card's draft per-mode orientation map (None: no card part, so nothing to turn)."""
+
+        card = self.card_item()
+        if card is None:
+            return None
+        return normalize_content_rotation_by_mode(card.current_size_payload.get(CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, {}))
+
+    def orientation_pending(self) -> bool:
+        card = self.card_item()
+        return card is not None and card.current_size_payload != card.baseline_size_payload
 
     # ----------------------------------------------------------------------------------------- the draft
 
@@ -284,7 +358,8 @@ class FullscreenOverlayEdit:
     def pending(self) -> bool:
         """An unsaved draft: any part's placement differs from what Edit started from."""
 
-        return any(item.current_size_payload != item.baseline_size_payload for item in self.items())
+        return self.orientation_pending() or any(
+            item.current_size_payload != item.baseline_size_payload for item in self.items())
 
     def position_item(self, item: CustomLayoutSessionItem) -> CustomLayoutSessionItem:
         """The item whose payload holds ``item``'s position (the artwork moves Now Playing)."""
@@ -298,6 +373,11 @@ class FullscreenOverlayEdit:
     def project(self, _item: CustomLayoutSessionItem | None = None) -> None:
         """Publish the draft onto the overlays and read every frame back (the session's change publisher)."""
 
+        if _item is not None and is_card_item(_item):
+            # A turn (or its undo): the expanded card shows the draft orientation; the overlays are unchanged.
+            if self._publish_orientation is not None:
+                self._publish_orientation()
+            return
         if self._projecting:
             return
         self._projecting = True
@@ -576,6 +656,7 @@ class FullscreenOverlayEdit:
         return True
 
 __all__ = [
+    "CARD_EDIT_ID",
     "CONTENT_AXES",
     "EDIT_ID_PREFIX",
     "EXTENT_KEYS",
@@ -586,6 +667,7 @@ __all__ = [
     "edit_part",
     "edit_widget_id",
     "extent_value",
+    "is_card_item",
     "is_fullscreen_overlay_item",
     "offsets_for_position",
     "resize_edges",

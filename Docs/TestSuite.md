@@ -938,7 +938,13 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   edge); a set extent elides, wraps and crops (the artwork keeps its size under a taller text box); undo and
   Restore Size; a uniform scale keeps the font-relative box. Negative controls: no content axes on the parts (18
   red), writing both axes from a side drag (8 red), the toast ignoring its set width (3 red), the old 20 px strip
-  inset (the strip check red). `tests/test_visualizer_expansion_overlay_settings.py` holds the one value
+  inset (the strip check red). Rotate Widget Content on the expanded card: the card item's glyph, preview through
+  the viewport/orientation seam, undo, Cancel, a turn-free Save byte-identical, Save writing the Visualizer's CUSTOM
+  entry at its unchanged rect and promoting it; no glyph for a mode that cannot turn; and the production owner end
+  to end on an unshown runtime (the display-wide card turns in place uncommitted, Cancel exactly back, Save commits,
+  the collapsed card keeps it). Negative controls: the card not rotation-capable (2 red), Save not persisting the
+  turn (2 red), the live promotion validating against the drawn display-wide record (the production test red).
+  `tests/test_visualizer_expansion_overlay_settings.py` holds the one value
   (`core/settings/fullscreen_overlays.py`): schema, clamps, projection, and a value stored before the extents
   reading them as the natural look (idempotent).
 
