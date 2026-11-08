@@ -871,7 +871,7 @@ can most geometry normally."
   Evidence: `tests/test_visualizer_expansion_fullscreen_edit.py` (artist rows with and without Media Controls, draft
   and after Save, red on the former centred column; the real-pointer text drag; the OSD part, Save, the ordinary
   rect kept and collapse, red without the part), `..._overlay_settings.py`; stills outside the repository
-  (`D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer61108_m3c_defects\`).
+  (`D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer\20261108_m3c_defects\`).
 - *Rotate Widget Content on the expanded card (operator, 8 Nov: the fullscreen Visualizer is missing "THE ROTATE
   GLYPH"; decided).* Ordinary Edit's Visualizer frame offers Rotate Widget Content (`rotateContentControl`, a
   quarter-turn of the content, CUSTOM layout state per mode) for a mode that can turn its content (Spectrum,
