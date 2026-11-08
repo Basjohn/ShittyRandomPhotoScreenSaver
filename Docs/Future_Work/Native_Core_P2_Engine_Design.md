@@ -817,9 +817,129 @@ switch never remaps.
      "playing" (sent as an edge); audio device changes, COM initialisation on the worker's capture lane, capture
      failure reported as a crash. **Core built with 5.2 (above):** capture opens in the worker through the normal
      path on its capture lane (COM there), Media's state is an edge, a failed open ends the session for the owner.
-     **Left:** audio device changes (a default-device switch or an unplugged device mid-session: today the audio
+     **Left (then):** audio device changes (a default-device switch or an unplugged device mid-session: today the audio
      worker's wake-driven restart on resume, nothing reported to the owner), a device that opens and then goes silent
      or stale (not a failure today), and the physical check on a real device (operator).
+     **Built (8 Nov), the rest:**
+     - *In process today (read, the parity reference):* nothing follows device changes on the Visualizer's behalf. The
+       loopback stream (`PyAudioWPatchBackend`) stays bound to the endpoint it opened on. A WASAPI loopback stream
+       delivers nothing while nothing renders to its endpoint, and an invalidated (unplugged) stream's thread ends
+       without the audio worker hearing of it (`is_running` stays True; nothing raises into Python). So a
+       default-output switch the player follows, an unplugged device and a stale stream all look the same: no
+       callbacks. The engine's silence decay takes the bars to rest (frames go on), and capture moves only at the
+       next capture edge: Media's pause -> play (`apply_playback_edge`'s `wake` restarts a capture the audio worker
+       calls stale; `restart` terminates and re-initialises PortAudio and opens the current default), a pause longer
+       than the 6 s warm grace (capture stopped; the next play opens the current default), display park/unpark, or an
+       activation whose block size differs. Mid-song, without one of those, the Visualizer stays at rest. The worker
+       path did exactly this (it shares `apply_playback_edge` and the audio worker), and was worse in one respect:
+       `capture_failed` (A7-L4) covers only a stream that did not open, so a dead stream was reported as healthy.
+     - *Decided: follow the audio, on the cadence's own edge, in the worker.* The one IMMNotificationClient in the
+       codebase (`core/media/core_audio_callback_probe.py`) belongs to the Media/OSD system-audio owner: the main
+       process's GUI COM apartment, registered only while a Media or OSD consumer is active. Following the default is
+       also not the goal. A player pinned to the old output keeps rendering there, and moving capture to the new
+       default would lose the music (test). What the picture needs is capture where the audio is, and one signal for
+       "the audio is not here" covers the switch, the unplug and the stale stream: no capture publication while
+       Media says playing. `EngineSession._watch_device_delivery` (device sessions only) compares the engine's capture
+       publications (`capture_publications`, one counter read) with the previous step's on every cadence step. After
+       `SILENT_CAPTURE_STEPS_BEFORE_REOPEN = 180` consecutive playing steps with none (about 2 s at 90 Hz), it reopens
+       the stream once through `_SpotifyBeatEngine.restart_stale_capture`. That is new, and nothing in process calls
+       it. 180 steps is twice the stream's own first-callback grace, so a stream that is still opening, or a player
+       still buffering after its play edge, is not bounced. `restart_stale_capture` is the audio worker's own
+       stale-capture restart, the one `wake` makes: gated by `is_capture_stale`, restarted on the capture lane, and the
+       smoothing clock restarted as `wake` restarts it, so the first analysis after the gap is smoothed, not snapped.
+       - *Why in the worker, not the owner's recovery:* the capture lane is the device's one owner, and a reopen costs
+         one restart there (20 ms on the stand-in), invisible beyond the gap. The owner's recovery would fade,
+         reconfigure a whole session onto the same device path, and count a strike.
+       - *Not a timer, poll or retry loop:* it is a count on the cadence step that runs anyway (as 5.7's 60 failed
+         steps). There is one reopen per silent run, re-armed only by the device publishing again (logged as resumed)
+         or by a capture edge (start, Media's play edge, display power, an activation). A reopened stream that stays
+         silent is left until one of those, as in process.
+       - *What never counts:* digital silence (a playing silent passage renders zeros, which are published) and a
+         pause (Media is the one owner of "playing"). Two guards hold it: the publication count, and the stale gate,
+         which refuses a stream that is publishing (negative control below).
+       - The watch never raises into the step. A device problem is never a step failure, so it never feeds
+         `FAILED_STEPS_BEFORE_CLOSE` (A10-L4's "a step-failure run during an audio device change": none here, measured
+         below, including a switch to another rate and channel count).
+     - *A device failure stays a device failure (A7-L4).* A reopen that fails (no output left) leaves capture closed.
+       The check queued behind it on the lane reports `capture_failed` (logged once). The session keeps running (idle
+       frames, as in process), and the next capture edge retries the device through the normal path (test: an output
+       plugged in meanwhile opens at Media's next play edge). No step fails, the session does not fail closed and its
+       wake pipe stays open, so the owner sees no session end and nothing counts towards the two-strike rule.
+     - *Reported to the owner.* Every reply that carried `capture_failed` now carries the session's device report
+       (`EngineSession.device_report`: `capture_failed`, `capture_reopens`, `capture_resumed`), and so does
+       `VIS_STOP`'s report. The worker process's own log lines never reach the main log: a worker logs nowhere unless
+       perf metrics are on, and the session's module loggers not even then. So the link logs the device state in the
+       main log when a reply changes it (`EngineWorkerLink._note_device_report`). A reopen between two edges reaches
+       the main log at the next edge's reply (Media's pause or play, display power, a mode or preset change, a view
+       change). The owner does nothing else with it: as in process, the Visualizer shows the engine's idle frames
+       until the audio comes back (fade, never vanish: the bars go down through the existing silence decay, and the
+       frames never stop).
+     - *Measured* (evidence `.artifacts/evidence/architecture/native_core_p2/20261108_p2b_53_devices/
+       device_reopen_probe.json`). Setup: the production count, the session's own 90 Hz cadence in process, a loopback
+       stand-in with its own delivery thread (no device), three runs per scenario.
+       - A default switch the player follows (the new output at 44.1 kHz with six channels), a stream whose thread
+         ends, and a stream whose packets fail in the capture callback: reopened 1.99-2.02 s after the event, and
+         publishing again 20 ms later. 273-275 frames over ~3.04 s (the cadence never paused). The bars went down to
+         0 in the gap and back to 0.99 after. 0 step failures, no session end.
+       - The only output unplugged: reopened at 2.0 s, `capture_failed`, 181 frames over the 2.0 s, 0 step failures,
+         no session end.
+       - The watch's own cost (isolated, the real method on a stand-in engine): 0.41 us per step while the device
+         publishes, 0.50 us while it is silent. The first draft looked its logger up on every step (`logging
+         .getLogger` takes the logging lock; ~2.5 us). It now looks it up only where it writes.
+     - *Tests* (`tests/test_visualizer_engine_worker_device.py`). The production session runs in process on the
+       loopback stand-in (its own delivery thread: a device's clock, concurrent with the tick, which the paced source
+       is not, A6-L2), with no device. The four device-change cases run with the watch and, as their negative control,
+       without it (the count out of reach: the pre-5.3 session).
+       - A default switch mid-song is followed by one reopen, on the audio worker's own restart. Without the watch,
+         capture stays on the silent output until Media's play edge, which then follows (the in-process trigger,
+         shared).
+       - A player pinned to the old output: no reopen.
+       - A device that raises mid-stream (every packet fails in the capture callback): reopened. Without the watch,
+         silent for good and reported healthy.
+       - A device whose callbacks stop: reopened once. There is no second reopen while it stays silent; it publishing
+         again re-arms the watch, and a later stop is reopened again.
+       - The only output unplugged: a device failure (`capture_failed` in the replies), never a worker failure (no
+         failed step, no session end), retried at the next capture edge. Without the watch the replies say all is
+         well.
+       - Digital silence and a pause never reopen; the same quiet output while Media says playing does (positive
+         control).
+       - The link logs each change of the device state once.
+       - Negative controls (`negative_controls.txt` in the evidence directory): with the watch's call removed from the
+         step, the five watch cases fail. A watch keyed on the analysis energy that restarts without the stale gate
+         reopens on digital silence and fails the silence test. The pre-5.3 link (store, no log) fails the logging
+         test.
+     - *Off the admission:* unchanged. `restart_stale_capture` has no in-process caller, and the remaining changes are
+       on the worker path or are docstrings (`capture_publications`, `TripleBuffer.published`). Production-path frames
+       and the owner contract and audio suites pass unchanged. In process keeps today's behaviour (above). Whether to
+       wire the same watch into the owner's in-process cadence step is recorded in `Current_Plan.md` (not done here:
+       it changes the default path's capture behaviour, which needs this slice's physical check first).
+     - *Operator checks* (physical, a real device; run with `--viz-engine-worker`, Media playing, a Visualizer
+       showing; main log lines below):
+       1. *Default switch:* switch the Windows default output (sound settings or the taskbar's output picker) to
+          another device the player follows. Expected: the bars rest for about 2 s, then react on the new output with
+          no fade. At the next Media pause the main log shows `[SPOTIFY_VIS][ENGINE_WORKER] The engine worker reopened
+          its loopback device after it stopped delivering while playing: 1 reopen(s) this session, 1 delivering
+          again`. There is no `Session failed` line and no `Running in process` line.
+       2. *Player pinned to the old output* (a player set to a specific device): switch the Windows default. Expected:
+          the bars keep reacting throughout, and no reopen line at the next pause.
+       3. *Unplug a USB or Bluetooth output that is the default while playing,* with another output left: Windows
+          moves the default and the player follows. Expected: as in check 1. Also, no `Session failed` line at the
+          next pause or play. A native close failure on an invalidated stream would show there as a session failure
+          naming "native release failure"; by reading, PyAudio tolerates a stopped stream, but this is unverified.
+       4. *Unplug the only output while playing* (if the player keeps playing): the bars rest. At the next pause:
+          `... 1 reopen(s) this session, 0 delivering again` and `[SPOTIFY_VIS][ENGINE_WORKER] The engine worker's
+          loopback device is not open; the session keeps running and retries it at the next capture edge`. Plug it
+          back in and press play: `... loopback device is open again`, and the bars react. If the player pauses
+          itself on the unplug, the watch never counts (Media says paused), and the play after replugging opens the
+          device as in process.
+       5. *Control, in process* (without `--viz-engine-worker`): check 1 leaves the bars at rest until Media's next
+          pause and play (today's in-process behaviour).
+     - **Left for step 6:** the operator checks above. The worker's own log lines are still invisible: the main log
+       learns of a reopen only at the next edge's reply, because there is no worker -> main event channel for
+       diagnostics (an unsolicited response or the heartbeat's acknowledgement would be one; the supervisor is not
+       changed here). In-process parity (`Current_Plan.md`). Linux (`utils/audio_capture_pulse.py`) is unexamined:
+       the watch is backend-neutral, but whether a Pulse monitor stream goes quiet or keeps delivering on a sink
+       change was not read.
    - 5.4 Settings: a resolved-settings delta applied to the existing session at a tick boundary (no rebuild per
      slider step); the presentation-config reads moved to logical config so the worker imports QtCore only, at call
      time too (checkpoint audit 5, A5-L2: today an activation loads QtGui through `config_applier.py`'s
@@ -1205,7 +1325,7 @@ switch never remaps.
      - **Left for step 6 / gate 3:** gate 3's game60 run (lead, operator's yes); the operator's frozen check above
        (now also confirming the frozen worker loads no Qt GUI stack: A10-M1 is proven on the source spawn path and
        on the entry module run as `__parents_main__`, not on a build); the production worker's RSS and threads inside
-       a session; 5.3's rest (device changes); the reply handlers outside the one-frame gate (the configure's reply,
+       a session; 5.3's operator device checks and what its record leaves (5.3 above); the reply handlers outside the one-frame gate (the configure's reply,
        161-209 ms); the render-thread decode and completion cost with a real window; gate 4's 20 Settings open/close
        and 20 mode switches with no process, mapping or handle growth (the lifetime now retires the worker at each
        Settings open; to measure); `BaseWorker`'s 100 ms queue wait (10 wakes/s in an idle or parked worker, every

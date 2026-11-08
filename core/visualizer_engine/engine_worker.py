@@ -23,7 +23,9 @@ and wake (``tests/test_visualizer_engine_paced.py``). Slice 5.2 runs the product
 activation (``activation``: settings model, resolved activation, technical cache, logical and presentation kwargs),
 started, played, parked and switched by the owner's control edges, and in production (no ``pcm``) its engine opens the
 real loopback device through the normal capture path on its own capture lane (slice 5.3's core); a capture that fails to
-open is a device failure (slice 5.5, A7-L4): the session keeps running and retries it at the next capture edge.
+open is a device failure (slice 5.5, A7-L4): the session keeps running and retries it at the next capture edge; a
+capture that stops publishing while Media plays (a default-output switch, an unplugged or stale device) is reopened once
+on the current default output by the session's delivery watch, a count on its cadence step (slice 5.3's rest).
 Imports and every configuration load QtCore only (the presentation config the tick reads is Qt-free since slice 5.4;
 A5-L2), and the owner forwards the presentation inputs it changes at runtime (``VIS_SET_VIEW``).
 """
@@ -302,6 +304,88 @@ class EngineSession:
     def capture_failed(self) -> bool:
         return self._capture_failed
 
+    # ------------------------------------------------------------- the device's delivery (slice 5.3, the rest)
+
+    #: A device session whose capture publishes nothing into the engine for this many consecutive cadence steps while
+    #: Media says playing reopens the device once (about 2 s at the 90 Hz cadence; a count on the cadence's own edge, as
+    #: ``FAILED_STEPS_BEFORE_CLOSE`` is, never a timer). A WASAPI loopback stream delivers nothing while nothing renders
+    #: to its endpoint, so a stream whose player moved to a new default output, an unplugged (invalidated) device and a
+    #: device that went stale all look alike from here: no callbacks at all. Digital silence is not that: a playing
+    #: silent passage still renders zeros, which arrive and are published, so it never counts. Twice the stream's own
+    #: first-callback grace, so a stream that is still opening (or a player still buffering after its play edge) is not
+    #: bounced; the reopen itself also waits until the audio worker calls the stream stale.
+    SILENT_CAPTURE_STEPS_BEFORE_REOPEN = 180
+
+    _capture_edges = 0          # capture edges handled (start, play, display power, activation): each re-arms the watch
+    _capture_reopens = 0        # the watch's reopens
+    _capture_resumed = 0        # reopens after which the device published again
+    _delivery_seen = -1         # the engine's capture publications at the watch's previous step
+    _delivery_edges = -1        # the capture edges at the watch's previous step
+    _silent_steps = 0           # consecutive playing steps with no new publication
+    _delivery_latched = False   # this silent run has had its one reopen (or found capture not open)
+    _delivery_reopened = False  # ... and it was a reopen (the next publication is the device delivering again)
+
+    @property
+    def capture_reopens(self) -> int:
+        return self._capture_reopens
+
+    def device_report(self) -> dict:
+        """The session's device state, carried in every reply that reports capture (``capture_failed``: the device is
+        not open, A7-L4; ``capture_reopens`` / ``capture_resumed``: the delivery watch's reopens, and those after which
+        the device published again). The main side logs it when it changes (``engine_worker_link``): the worker
+        process's own log lines never reach the main log."""
+        return {"capture_failed": self._capture_failed, "capture_reopens": self._capture_reopens,
+                "capture_resumed": self._capture_resumed}
+
+    def _watch_device_delivery(self) -> None:
+        """The cadence thread, every step of a device session (work order 5 slice 5.3): a capture that publishes nothing
+        for ``SILENT_CAPTURE_STEPS_BEFORE_REOPEN`` consecutive steps while Media says playing is reopened once, on its
+        capture lane, through the audio worker's own restart (the one Media's play edge makes for a stale capture in
+        process: ``_SpotifyBeatEngine.restart_stale_capture``): the stream reopens on the current default output, so the
+        capture follows a default-device switch, an unplugged device or a stale stream without waiting for Media's next
+        play edge. One reopen per silent run: the run ends when the device publishes again (logged as resumed) or at a
+        capture edge (Media's play edge, display power, an activation; each re-arms it), never by retrying. A reopen
+        that fails is a device failure (A7-L4: ``capture_failed``, the session keeps running, the next capture edge
+        retries); a capture that is not open at all is left to that path. Reads one counter per step (the engine's
+        capture publications); never raises into the step (a device problem is never a step failure)."""
+        try:
+            engine = self._engine
+            published = engine.capture_publications()
+            edges = self._capture_edges
+            if published != self._delivery_seen or edges != self._delivery_edges or not self._controller.playing:
+                if self._delivery_reopened and published > self._delivery_seen and edges == self._delivery_edges:
+                    self._capture_resumed += 1
+                    _log().info("[SPOTIFY_VIS][ENGINE_WORKER] The loopback device publishes again after its reopen")
+                self._delivery_seen, self._delivery_edges = published, edges
+                self._silent_steps = 0
+                self._delivery_latched = self._delivery_reopened = False
+                return
+            if self._delivery_latched:
+                return
+            self._silent_steps += 1
+            if self._silent_steps < self.SILENT_CAPTURE_STEPS_BEFORE_REOPEN:
+                return
+            if not engine.is_capture_running():
+                self._delivery_latched = True     # not open: a device failure (A7-L4), retried at the next capture edge
+                return
+            admitted = engine.restart_stale_capture()
+            if admitted is None:
+                return                            # not stale yet by the stream's own clock (its first-callback grace)
+            self._delivery_latched = True
+            if not admitted:
+                _log().error("[SPOTIFY_VIS][ENGINE_WORKER] The loopback device published nothing for %d steps while "
+                             "playing, and its capture lane refused the reopen", self._silent_steps)
+                return
+            self._delivery_reopened = True
+            self._capture_reopens += 1
+            _log().warning("[SPOTIFY_VIS][ENGINE_WORKER] The loopback device published nothing for %d steps while "
+                           "playing; reopened it on the current default output (reopen %d)", self._silent_steps,
+                           self._capture_reopens)
+            self._watch_device_capture()          # a reopen that fails is reported as a device failure
+        except Exception:
+            self._delivery_latched = True
+            _log().exception("[SPOTIFY_VIS][ENGINE_WORKER] The loopback device's delivery watch failed")
+
     @property
     def mapping_name(self) -> str:
         """The frame mapping this session writes (a stop addressed to another mapping leaves it alone)."""
@@ -380,6 +464,7 @@ class EngineSession:
         import threading
 
         if self._device:
+            self._capture_edges += 1          # a capture edge re-arms the delivery watch (slice 5.3)
             self._watch_device_capture()
             return
         done = threading.Event()
@@ -500,6 +585,8 @@ class EngineSession:
                 self._offered_blocks += len(blocks)
                 self._accepted_blocks += published
                 self._accepted_samples += published * len(blocks[0])
+        elif self._device:
+            self._watch_device_delivery()     # the device's own delivery (slice 5.3): never raises into the step
         logical_tick(controller.logical_tick_state)
 
     def _stop_cadence(self) -> None:
@@ -529,7 +616,7 @@ class EngineSession:
             report.update(cadence=self._cadence_record, cadence_s=self._cadence_s, capture=self.capture_counts)
             if self._source is None:              # the device: what its callback published, and the commits
                 report.update(audio=None, engine={"capture_publications": int(self._engine.capture_publications()),
-                                                  "analysis_commits": commits, "capture_failed": self._capture_failed})
+                                                  "analysis_commits": commits, **self.device_report()})
             else:
                 report.update(audio=self._source.describe(),
                               engine={"offered_blocks": self._offered_blocks, "accepted_blocks": self._accepted_blocks,
@@ -798,7 +885,7 @@ class VisualizerEngineWorker(BaseWorker):
                     return self._reply(msg, success=False, error="no engine session is configured")
                 if msg.msg_type == MessageType.VIS_SET_VIEW:
                     self._session.set_view(**dict(msg.payload))   # state only: a refused view leaves the session
-                    return self._reply(msg, capture_failed=self._session.capture_failed)
+                    return self._reply(msg, **self._session.device_report())
                 if msg.msg_type in (MessageType.VIS_START, MessageType.VIS_SET_PLAYING):
                     session = self._session
                     try:
@@ -810,7 +897,7 @@ class VisualizerEngineWorker(BaseWorker):
                         self._close_session()       # the edge may have half-applied: fail closed
                         return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}",
                                            session_closed=True)
-                    return self._reply(msg, capture_failed=session.capture_failed)
+                    return self._reply(msg, **session.device_report())
                 if msg.msg_type == MessageType.VIS_SET_MODE:
                     # Validated now (a refused request leaves the session as it was), applied at the session's next
                     # tick boundary (the newest request wins), or at once on a worker-paced session: an apply that
@@ -830,14 +917,14 @@ class VisualizerEngineWorker(BaseWorker):
                         return self._reply(msg)
                     return self._reply(msg, engine_generation=committed[0], activation_id=committed[1],
                                        bar_count=session.bar_count, view_records=session.view_records,
-                                       capture_failed=session.capture_failed)
+                                       **session.device_report())
                 try:
                     changed = self._session.set_display_power(bool(msg.payload["on"]))
                 except Exception as exc:
                     # The edge may have half-applied (capture reference, fence): fail closed, as a tick does.
                     self._close_session()
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
-                return self._reply(msg, changed=changed, capture_failed=self._session.capture_failed)
+                return self._reply(msg, changed=changed, **self._session.device_report())
             if msg.msg_type == MessageType.VIS_STOP:
                 # The session closes even when ``finish`` raises (an unjoined cadence: A6-L7), releasing capture,
                 # the compute lane and the mapping; the reply then carries the error. A stop addressed to another
@@ -877,3 +964,11 @@ class VisualizerEngineWorker(BaseWorker):
 def visualizer_worker_main(request_queue, response_queue) -> None:
     """``ProcessSupervisor`` factory for ``WorkerType.VISUALIZER``."""
     VisualizerEngineWorker(request_queue, response_queue).run()
+
+
+def _log():
+    """This module's logger, looked up only where a line is written (``logging.getLogger`` takes the logging module's
+    lock: never on a per-step path such as the device session's delivery watch)."""
+    import logging
+
+    return logging.getLogger(__name__)

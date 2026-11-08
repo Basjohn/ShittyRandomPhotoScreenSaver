@@ -196,10 +196,20 @@ after the operator's yes on a question card; agents never run load (invisible ch
      before the Visualizer is admitted, `--usage` labels the worker's CPU/RSS/threads, and every build family
      compiles the worker's package. Checkpoint audit 10's findings are fixed (8 Nov): every worker role (image workers
      included) skips `main.py`'s application imports, so a spawn from the production entry is ready in 0.29 s with
-     32 MB RSS (was 1.6 s / 112 MB, Qt GUI stack loaded). Next: 5.3's rest (device changes), then 6 (gate 3).
-     Operator checks for 6: a frozen build with `--viz-engine-worker` (the Visualizer on the worker), its cold spawn
-     against the first configure's 6 s bound, and the worker's RSS in `--usage`. Open for 6: gate 4's open/close and
-     switch counts.
+     32 MB RSS (was 1.6 s / 112 MB, Qt GUI stack loaded). 5.3's rest built 8 Nov: on the worker, a capture that publishes nothing for 180
+     cadence steps (~2 s) while Media plays (a default-output switch the player follows, an unplugged or stale device)
+     is reopened once on the current default output through the audio worker's own stale-capture restart; digital
+     silence and a pause never count; a reopen that fails is a device failure, never a worker failure; the main log
+     shows the device state at the next edge's reply. Next: 6 (gate 3).
+     Operator checks for 6: a frozen build with `--viz-engine-worker` (the Visualizer on the worker), its cold
+     spawn against the first configure's 6 s bound, and the worker's RSS in `--usage`; the 5.3 device checks on a
+     real device (design doc, 5.3 record: default switch, a pinned player, a USB/Bluetooth unplug, the only output
+     unplugged, the in-process control). Open for 6: gate 4's open/close and switch counts.
+     Open (5.3, in-process parity; operator's call, after the 5.3 device checks): in process, a mid-song default-output
+     switch, an unplugged device or a stale stream leaves the Visualizer at rest until Media's next pause and play,
+     display park or an activation (the loopback stays on the dead endpoint). The worker's delivery watch
+     (`EngineSession._watch_device_delivery` with `restart_stale_capture`) could run in the owner's in-process cadence
+     step too; it would change the default path's capture behaviour, so it waits for the physical check.
      Side finding (audit 10 fixes): the negative-control half of
      `test_visualizer_owner_engine_worker.py::test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`
      (`run(False)`) failed once in a combined run of the four owner suites and passed alone and in its own file (not
