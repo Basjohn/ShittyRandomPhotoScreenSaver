@@ -23,6 +23,53 @@ from rendering.widget_stacking import ORDINARY_WIDGET_MIN_RESIZE_SCALE
 # Clock retains its variant-aware per-value path. Visualizer owns a distinct viewport contract.
 CUSTOM_LAYOUT_MIN_RESIZE_SCALE = ORDINARY_WIDGET_MIN_RESIZE_SCALE
 CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY = "_custom_resize_scale"
+# A Visualizer card's content scale is its pixels per world unit (card pixels over ``viewport_extent``). The canonical
+# card, with no CUSTOM entry, draws its canonical world 1:1 (``resolve_visualizer_presentation``'s default uniform
+# scale), so the shared ordinary-widget minimum applies to that absolute value. The size payload stores no scale
+# scalar, so a floor measured from each session's starting card compounded across sessions (R-181).
+VISUALIZER_CANONICAL_PIXELS_PER_WORLD = 1.0
+VISUALIZER_MIN_PIXELS_PER_WORLD = CUSTOM_LAYOUT_MIN_RESIZE_SCALE * VISUALIZER_CANONICAL_PIXELS_PER_WORLD
+# The stored Visualizer variants whose world is tied to the card: the shared card profile every planar (2D and framed
+# 3D) mode uses, and the legacy ``default`` record a card profile interprets. Freeform 3D stages keep a world that is
+# independent of their stage by design, and a retired profile is read by nothing.
+VISUALIZER_CARD_LAYOUT_VARIANTS: frozenset[str] = frozenset({"planar", "default"})
+
+
+def repair_visualizer_card_content_scale(size_payload: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return a repaired copy of a stored Visualizer card payload whose content scale is below the minimum.
+
+    The content scale is judged from the stored card pixels (``width``/``height``, which every Edit/Arrange save
+    writes) over ``viewport_extent``; the card is legal when it encodes the minimum within the half pixel its integer
+    rect carries, so Edit's own floor output is legal. Repair keeps the visible card (rect, width, height and every
+    other key) and shrinks the world uniformly until its smaller axis scale is exactly the minimum: the world's
+    aspect, and so the card's framing, stays as authored. ``None``: legal, or nothing judgeable (no stored card size
+    or world, malformed values); those payloads stay bit-identical.
+    """
+
+    from rendering.custom_layout_session import normalize_viewport_extent
+
+    try:
+        extent = normalize_viewport_extent(size_payload.get("viewport_extent"))
+    except (TypeError, ValueError):
+        return None
+    size = []
+    for key in ("width", "height"):
+        value = size_payload.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        value = float(value)
+        if not math.isfinite(value) or value <= 0.0:
+            return None
+        size.append(value)
+    if extent is None:
+        return None
+    width, height = size
+    if min((width + 0.5) / extent[0], (height + 0.5) / extent[1]) >= VISUALIZER_MIN_PIXELS_PER_WORLD:
+        return None
+    factor = min(width / extent[0], height / extent[1]) / VISUALIZER_MIN_PIXELS_PER_WORLD
+    repaired = dict(size_payload)
+    repaired["viewport_extent"] = [extent[0] * factor, extent[1] * factor]
+    return repaired
 _PAYLOAD_MINIMUMS: dict[str, int] = {
     "font_size": 8,
 }
@@ -439,6 +486,18 @@ def uniform_scale_geometry(
         float(display_size.width()) / reference_width,
         float(display_size.height()) / reference_height,
     )
+    card_world = (item.viewport_resize_capable and item.geometry_kind != "freeform_3d"
+                  and pixels_per_world is not None and math.isfinite(float(pixels_per_world))
+                  and float(pixels_per_world) > 0.0)
+    if card_world:
+        # A Visualizer card's minimum is absolute: its content scale (pixels per world unit) never goes below the
+        # minimum relative to the canonical card, however many sessions shrink it. ``resize_scale`` restarts at every
+        # session's admission, so a floor on it alone compounded (R-181). A card already below the minimum is lifted
+        # to it by its next uniform gesture.
+        floor_scale = max(
+            floor_scale,
+            current_scale * VISUALIZER_MIN_PIXELS_PER_WORLD / float(pixels_per_world),
+        )
     if world is not None:
         if (
             pixels_per_world is None
@@ -522,6 +581,10 @@ __all__ = [
     "CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY",
     "UNIFORM_TRANSFORM_RESIZE_MODES",
     "UniformScaleGeometry",
+    "VISUALIZER_CANONICAL_PIXELS_PER_WORLD",
+    "VISUALIZER_CARD_LAYOUT_VARIANTS",
+    "VISUALIZER_MIN_PIXELS_PER_WORLD",
+    "repair_visualizer_card_content_scale",
     "capture_quick_size_payload",
     "content_extent_resize_payload",
     "edge_resize_rect",

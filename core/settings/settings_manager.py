@@ -1623,6 +1623,9 @@ class SettingsManager(QObject):
                 clamp_repairs = self._clamp_visualizer_manual_floors(widgets)
                 if clamp_repairs:
                     repairs.update(clamp_repairs)
+                    widgets = self._settings.value('widgets')
+                if isinstance(widgets, Mapping):
+                    repairs.update(self._clamp_visualizer_card_content_scale(widgets))
 
             # Validate transitions - must be dict
             transitions = self._settings.value('transitions')
@@ -1692,7 +1695,76 @@ class SettingsManager(QObject):
             self._store_widgets_root_locked(widgets_copy)
 
         return repairs
-    
+
+    def _clamp_visualizer_card_content_scale(self, widgets_map: Mapping[str, Any]) -> Dict[str, str]:
+        """Bring every stored Visualizer card entry's content scale up to the absolute minimum (R-181).
+
+        Before the fix, Edit's uniform-scale minimum restarted from each session's card, so stored cards could hold a
+        content scale far below it (a framed lens widens with the world). Every place a card entry is stored is
+        repaired: the live CUSTOM map and each layout slot's. The visible card is kept and only the world shrinks
+        (``repair_visualizer_card_content_scale``); legal entries, freeform stages and unread retired profiles stay
+        bit-identical.
+        """
+
+        from rendering.quick.custom_layout_size import (
+            VISUALIZER_CARD_LAYOUT_VARIANTS,
+            repair_visualizer_card_content_scale,
+        )
+
+        repairs: Dict[str, str] = {}
+
+        def repair_map(layout: Any, path: str) -> Any:
+            displays = layout.get('displays') if isinstance(layout, Mapping) else None
+            if not isinstance(displays, Mapping):
+                return layout
+            new_displays = None
+            for signature, entries in displays.items():
+                variants = entries.get('spotify_visualizer') if isinstance(entries, Mapping) else None
+                if not isinstance(variants, Mapping):
+                    continue
+                new_variants = None
+                for variant, entry in variants.items():
+                    if variant not in VISUALIZER_CARD_LAYOUT_VARIANTS or not isinstance(entry, Mapping):
+                        continue
+                    payload = entry.get('size_payload')
+                    repaired = (repair_visualizer_card_content_scale(payload)
+                                if isinstance(payload, Mapping) else None)
+                    if repaired is None:
+                        continue
+                    new_variants = dict(variants) if new_variants is None else new_variants
+                    new_variants[variant] = {**entry, 'size_payload': repaired}
+                    key = f"{path}.displays.{signature}.spotify_visualizer.{variant}.viewport_extent"
+                    repairs[key] = (
+                        f"Card content scale raised to the minimum: world {payload.get('viewport_extent')!r} -> "
+                        f"{repaired['viewport_extent']!r} (card {payload.get('width')}x{payload.get('height')} kept)"
+                    )
+                    logger.warning("[CUSTOM_LAYOUT] Repairing %s: %s", key, repairs[key])
+                if new_variants is not None:
+                    new_displays = dict(displays) if new_displays is None else new_displays
+                    new_displays[signature] = {**entries, 'spotify_visualizer': new_variants}
+            return layout if new_displays is None else {**layout, 'displays': new_displays}
+
+        widgets_copy = dict(widgets_map)
+        layout = widgets_map.get('custom_layout')
+        repaired_layout = repair_map(layout, 'widgets.custom_layout')
+        if repaired_layout is not layout:
+            widgets_copy['custom_layout'] = repaired_layout
+        slots_root = widgets_map.get('layout_slots')
+        slots = slots_root.get('slots') if isinstance(slots_root, Mapping) else None
+        if isinstance(slots, Mapping):
+            new_slots = None
+            for slot_id, slot in slots.items():
+                slot_layout = slot.get('custom_layout') if isinstance(slot, Mapping) else None
+                repaired_slot = repair_map(slot_layout, f'widgets.layout_slots.slots.{slot_id}.custom_layout')
+                if repaired_slot is not slot_layout:
+                    new_slots = dict(slots) if new_slots is None else new_slots
+                    new_slots[slot_id] = {**slot, 'custom_layout': repaired_slot}
+            if new_slots is not None:
+                widgets_copy['layout_slots'] = {**slots_root, 'slots': new_slots}
+        if repairs:
+            self._store_widgets_root_locked(widgets_copy)
+        return repairs
+
     def backup_settings(self, backup_path: Optional[Path] = None) -> Optional[Path]:
         """Create a backup of current settings.
         
