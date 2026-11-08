@@ -132,6 +132,8 @@ class EngineSession:
             self._admission_failed = False
             self._stream = CaptureHistoryStream()
             self._live_started = False         # the owner's ``start`` runs at the first input (its clock)
+            self._engine_acquired = False      # the session's engine reference (taken at ``start``)
+            self._released_for_display_power = False
             self._display_on = True            # display power: a parked session does not tick
             self._pending_mode: tuple | None = None   # the newest mode request, applied at the next tick boundary
         else:
@@ -159,43 +161,49 @@ class EngineSession:
         self._reanalysis = PcmReanalysis() if raw and inputs == "feature" else None
 
     def _start_live_engine(self, mode: str) -> None:
-        """As the owner's ``start`` does (configured first): the engine on its own ``ThreadManager`` (the capture
-        lane and the compute pool), its reference held; capture opens at the first input's play edge."""
+        """Wire the engine as the owner's ``configure`` leaves it: its own ``ThreadManager`` (the capture lane and the
+        compute pool) on the controller, the recorded capture source, the device refused; the owner's ``start``
+        (engine reference, playback commit, cold capture) runs at the first input."""
         from core.threading.manager import ThreadManager
-        from widgets.spotify_visualizer import audio_worker
         from widgets.spotify_visualizer.tick_pipeline import declare_mode_engine_demands
 
         engine = self._engine
         # A recorded-PCM session never opens a device, in whichever process it runs (checkpoint audit 3, A3-L1: a
-        # test's monkeypatch reaches only its own process): the audio worker's device factory refuses for the
-        # session's life (entered first, restored last). The recorded backend comes through the factory seam.
-        self._stack.enter_context(_devices_refused(audio_worker))
+        # test's monkeypatch reaches only its own process): this engine's audio worker refuses the device path for
+        # its life (per engine, never a process-wide swap: A4-L3). The recorded backend comes through the factory
+        # seam.
+        engine.refuse_capture_devices()
         manager = ThreadManager()
         self._stack.callback(manager.shutdown, wait=True, timeout=self.LIVE_EDGE_TIMEOUT_S)
         engine.set_capture_backend_factory(self._open_capture)
         engine.set_analysis_settled_observer(self._settled.set)
         if self.order == "production":
             engine.set_analysis_admission_gate(self._admit_analysis)
-        engine.set_thread_manager(manager)
+            # An admission failure refuses that tick's frame before it reaches the mapping (A4-L6).
+            self.mailbox.set_publish_guard(self._check_admission)
+        self._controller.thread_manager = manager
         # Closed before the manager shuts down (LIFO): capture fenced and released on its lane, the compute lane
         # stopped, then the manager joins both.
         self._stack.callback(engine.force_stop)
-        engine.acquire()
         # The mode's demands are rules of the mode, which the tick declares before every engine step; capture needs
         # them before the first block arrives (the history accumulates in the capture callback).
         declare_mode_engine_demands(engine, mode)
 
     @property
     def device_refused(self) -> bool:
-        """Whether this process's audio worker refuses a device now (the gates assert it in the worker)."""
-        from widgets.spotify_visualizer import audio_worker
-
-        return getattr(audio_worker.create_audio_capture, "refuses_devices", False)
+        """Whether this session's engine refuses an audio device (the gates assert it in the worker)."""
+        return bool(getattr(self._engine, "capture_devices_refused", False))
 
     def _admit_analysis(self) -> None:
         """The compute lane's admission gate (production order): an analysis waits until the tick has read."""
         if not self._admission.wait(self.LIVE_EDGE_TIMEOUT_S):
             self._admission_failed = True
+
+    def _check_admission(self) -> None:
+        """The mailbox's publish guard (production order): a tick whose analysis outwaited the admission gate ran
+        in an unheld order, so its frame never reaches the mapping (fail closed before the publish)."""
+        if self._admission_failed:
+            raise RuntimeError("an analysis waited too long at the admission gate")
 
     def _open_capture(self, config: Any) -> Any:
         """The audio worker's capture source (its factory seam): a recorded backend, opened on the capture lane."""
@@ -211,8 +219,9 @@ class EngineSession:
         return len(self._backends), sum(backend.restarts for backend in self._backends)
 
     # ------------------------------------------------------------------------------------- live control edges
-    # Each mirrors the production owner's engine calls (``quick_display_visualizer_owner.py``) on the logical side;
-    # capture (re)opens and closes asynchronously on its lane, so every edge ends on the lane's completion edge.
+    # Each is the production owner's own sequence (``logical_edges``, shared with ``quick_display_visualizer_owner``;
+    # ``tests/test_visualizer_logical_edges_parity.py`` compares the engine call logs); capture (re)opens and closes
+    # asynchronously on its lane, so every edge ends on the lane's completion edge.
 
     def _settle_capture(self) -> None:
         """Wait until every capture start/stop/restart admitted so far has run on the capture lane (the lane's own
@@ -228,42 +237,35 @@ class EngineSession:
             raise RuntimeError("the live engine's capture never opened")
 
     def _start_playback(self, playing: bool) -> None:
-        """The owner's ``start`` (``start`` ~1774-1783) at the first input: Media's state committed to the engine
-        (``set_playing`` with no edge), then the cold capture admission when playing."""
-        controller, engine = self._controller, self._engine
+        """The owner's ``start`` at the first input (Media's state then is its configure-time ``playing``): the engine
+        bound to the session's ``ThreadManager``, the engine reference, Media's state committed with no edge, then the
+        cold capture admission when playing."""
+        from widgets.spotify_visualizer.logical_edges import admit_engine_start, prepare_engine_start
+
+        controller = self._controller
         controller.playing = bool(playing)
-        engine.set_playback_state(bool(playing))
-        if playing:
-            engine.ensure_started()
+        engine = prepare_engine_start(controller)
+        admit_engine_start(controller, engine, on_acquired=self._on_engine_acquired)
         self._live_started = True
         self._settle_capture()
 
-    def _set_playing(self, active: bool) -> None:
-        """A playback edge, as the owner's ``set_playing`` (~594-617): on resume ``wake`` (restarts a stale capture,
-        starts a stopped one), the engine's playback state (pause schedules the warm-capture stop after its grace;
-        play restarts the reactivity ramp unless capture stayed warm), and on resume the warm re-entry fence armed
-        on the engine's commit sequence (``tick_pipeline.arm_reentry_fresh_frame_fence``)."""
-        from widgets.spotify_visualizer.tick_pipeline import arm_reentry_fresh_frame_fence
+    def _on_engine_acquired(self) -> None:
+        self._engine_acquired = True
+        self._released_for_display_power = False
 
-        controller, engine = self._controller, self._engine
-        active, previous = bool(active), bool(controller.playing)
-        controller.playing = active
-        if active and not previous:
-            engine.wake()
-        engine.set_playback_state(active)
-        if active and not previous:
-            arm_reentry_fresh_frame_fence(controller.logical_tick_state, engine)
+    def _set_playing(self, active: bool) -> None:
+        """A playback edge: the owner's ``set_playing`` (``logical_edges.apply_playback_edge``)."""
+        from widgets.spotify_visualizer.logical_edges import apply_playback_edge
+
+        apply_playback_edge(self._controller, active, started=self._live_started)
         self._settle_capture()
 
     def set_display_power(self, on: bool) -> bool:
-        """Display power (park/unpark), as the owner's ``set_display_power`` (~239-285) on the logical side: park
-        releases the engine's capture reference (capture stops) and no input ticks while parked; unpark re-acquires
-        it, reopens capture when playing, arms the warm re-entry fence and rebases the logical clocks. The owner's
-        reader-side mailbox clear stays the main process's. Whether anything changed."""
-        from widgets.spotify_visualizer.tick_pipeline import (
-            arm_reentry_fresh_frame_fence,
-            rebase_logical_clocks_after_park,
-        )
+        """Display power (park/unpark), the owner's ``set_display_power`` engine side (``logical_edges``): park
+        releases the engine reference (capture stops) and no input ticks while parked; unpark re-acquires it, reopens
+        capture when playing, arms the warm re-entry fence and rebases the logical clocks. The owner's cadence park and
+        reader-side mailbox clear stay the main process's. Whether anything changed."""
+        from widgets.spotify_visualizer.logical_edges import release_engine_for_park, resume_engine_after_park
 
         if not self._live:
             raise ValueError("display power is a live-session control")
@@ -271,24 +273,23 @@ class EngineSession:
         if on == self._display_on:
             return False
         self._display_on = on
-        controller, engine = self._controller, self._engine
+        controller = self._controller
         if not on:
-            engine.release()
+            if release_engine_for_park(controller, engine_acquired=self._engine_acquired):
+                self._engine_acquired = False
+                self._released_for_display_power = True
         else:
-            engine.acquire()
-            if self._live_started:
-                if controller.playing:
-                    engine.ensure_started()
-                state = controller.logical_tick_state
-                arm_reentry_fresh_frame_fence(state, engine)
-                rebase_logical_clocks_after_park(state, controller.logical_mode_states_snapshot())
+            resume_engine_after_park(controller, started=self._live_started,
+                                     released_for_display_power=self._released_for_display_power,
+                                     on_reacquired=self._on_engine_acquired)
         self._settle_capture()
         return True
 
     def request_mode(self, mode: str, *, preset: int = 0, settings: Any = None) -> None:
-        """An in-session mode switch, applied at the next tick boundary (the newest request wins): the owner's
-        activation commit on the existing engine and controller (``feature_replay.switch_offline_controller_mode``),
-        never a rebuild."""
+        """An in-session activation, applied at the next tick boundary (the newest request wins): the owner's
+        activation commit (``logical_edges.commit_logical_activation``) on the existing engine and controller, never a
+        rebuild. Another mode is a mode activation; the current mode with its ``preset`` / ``settings`` is the
+        owner's same-mode preset activation (A4-M3: never dropped)."""
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.packet_abi import mode_code
 
@@ -299,15 +300,20 @@ class EngineSession:
         self._pending_mode = (str(mode), int(preset), settings)
 
     def _apply_pending_mode(self) -> None:
-        from widgets.spotify_visualizer.feature_replay import switch_offline_controller_mode
+        from widgets.spotify_visualizer.feature_replay import offline_activation_request
+        from widgets.spotify_visualizer.logical_edges import commit_logical_activation
 
         if self._pending_mode is None:
             return
         mode, preset, settings = self._pending_mode
         self._pending_mode = None
-        if mode == self.mode:
-            return
-        switch_offline_controller_mode(self._controller, mode, preset, None, settings)
+        controller = self._controller
+        generation, activation_id = commit_logical_activation(
+            controller, kind="preset" if mode == self.mode else "mode", target=mode,
+            **offline_activation_request(mode, preset, None, settings),
+        )
+        # Render admission for the committed identity (the owner binds it into its scene).
+        controller.begin_render_activation(engine_generation=generation, activation_id=activation_id)
         self.mode = mode
         # The target's block size may differ: capture restarts on its lane before the next block.
         self._settle_capture()
@@ -360,12 +366,11 @@ class EngineSession:
         self._settled.clear()
         self._admission.clear()
         try:
-            frame = logical_tick(self._controller.logical_tick_state)
+            frame = logical_tick(self._controller.logical_tick_state)   # the publish guard checks admission first
         finally:
             self._admission.set()
         self._wait_settled()
-        if self._admission_failed:
-            raise RuntimeError("an analysis waited too long at the admission gate")
+        self._check_admission()             # an analysis that failed after the publish fails the next edge here
         return frame
 
     @property
@@ -410,21 +415,6 @@ class EngineSession:
 
     def close(self) -> None:
         self._stack.close()
-
-
-@contextlib.contextmanager
-def _devices_refused(audio_worker: Any):
-    """The audio worker's device factory raises while the context is open (restored on exit)."""
-    def refuse(_config: Any = None) -> Any:
-        raise RuntimeError("a recorded-PCM engine session never opens an audio device")
-
-    refuse.refuses_devices = True
-    saved = audio_worker.create_audio_capture
-    audio_worker.create_audio_capture = refuse
-    try:
-        yield
-    finally:
-        audio_worker.create_audio_capture = saved
 
 
 class VisualizerEngineWorker(BaseWorker):

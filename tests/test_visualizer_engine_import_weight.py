@@ -22,7 +22,9 @@ names = ["widgets.spotify_visualizer.logical_runtime", "widgets.spotify_visualiz
          # P2b: the live engine, its audio worker and ThreadManager, and the recorded capture source.
          "widgets.spotify_visualizer.beat_engine", "widgets.spotify_visualizer.audio_worker",
          "widgets.spotify_visualizer.bar_computation", "core.threading.manager",
-         "core.visualizer_engine.recorded_capture"]
+         "core.visualizer_engine.recorded_capture",
+         # A4-H1: the activation commit and engine edges the worker shares with the owner (and a preset's view motion).
+         "widgets.spotify_visualizer.logical_edges", "widgets.spotify_visualizer.view_orbit"]
 runtimes = sorted(p.stem for p in __import__("pathlib").Path("widgets/spotify_visualizer").glob("*_frame_runtime.py"))
 names += ["widgets.spotify_visualizer." + stem for stem in runtimes]
 for name in names:

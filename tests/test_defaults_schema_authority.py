@@ -438,7 +438,8 @@ def test_visualizer_runtime_config_has_canonical_replacement_not_empty_holes() -
 
     logical = _text("widgets/spotify_visualizer/logical_tick_state.py")
     presentation = _text("widgets/spotify_visualizer/presentation_state.py")
-    owner = _text("widgets/spotify_visualizer/quick_display_visualizer_owner.py")
+    # The owner configures through the shared logical configuration (logical_edges, A4-H1).
+    owner = _text("widgets/spotify_visualizer/logical_edges.py")
     sphere_capture = _text("widgets/spotify_visualizer/sphere_capture.py")
     devcurve_tick = _text("widgets/spotify_visualizer/tick_pipeline.py")
 

@@ -5,7 +5,9 @@ tick's own step submits the newest block and the tick reads the previous commit,
 lane's admission gate) through pause/resume (warm and cold capture), the warm re-entry fence (resume and display
 power), and in-session mode switches (``VIS_SET_MODE``), identical in a ``WorkerType.VISUALIZER`` process; the
 per-slot identity and flags a native reader validates with plain ``struct`` (audits H5, A3-M4); the spectrum demand at
-activation (A3-M1); the device refusal in any process (A3-L1); and the warm resume's capture restart (A3-L2)."""
+activation (A3-M1); the device refusal in any process (A3-L1), per engine (A4-L3, A3-L5); and the warm resume's capture
+restart (A3-L2). Checkpoint audit 4: a same-mode request is the owner's preset activation (A4-M3); an admission failure
+publishes nothing of its tick (A4-L6)."""
 import dataclasses
 import struct
 
@@ -237,6 +239,61 @@ def test_a_mode_switch_is_applied_in_place_never_a_rebuild(qt_app):
 
 
 @pytest.mark.qt
+def test_a_same_mode_request_is_the_owners_preset_activation_never_dropped(qt_app):
+    # A4-M3: VIS_SET_MODE for the current mode carries a preset (or settings); it is applied as the owner's same-mode
+    # preset activation (new settings, a new engine activation, frames under it), never acknowledged and dropped.
+    from widgets.spotify_visualizer.feature_replay import offline_activation_request
+
+    frames = _clip(1.0)
+    reader = PacketMailbox(role="reader")
+    session = _session(reader, "spectrum")
+    try:
+        for feature in frames[:10]:
+            session.tick(feature)
+            reader.take()
+        engine, controller = session._engine, session._controller
+        activation = engine.get_activation_id()
+        session.request_mode("spectrum", preset=1)
+        session.tick(frames[10])
+        state = reader.take().state
+        assert engine.get_activation_id() == activation + 1 and state.activation_id == activation + 1
+        assert state.mode_id == "spectrum" and session.mode == "spectrum"
+        assert controller.settings_model == offline_activation_request("spectrum", 1)["settings_model"]
+    finally:
+        session.close()
+        reader.close()
+
+
+@pytest.mark.qt
+def test_an_admission_failure_publishes_nothing_of_that_tick(qt_app, monkeypatch):
+    # A4-L6: an analysis that outwaits the admission gate (production order) fails the session before that tick's
+    # frame reaches the mapping, not after. The failure is recorded while the tick runs (as the compute lane would).
+    from widgets.spotify_visualizer import tick_pipeline
+
+    frames = _clip(0.5)
+    reader = PacketMailbox(role="reader")
+    session = _session(reader, "spectrum")
+    try:
+        for feature in frames[:5]:
+            session.tick(feature)
+            reader.take()
+        original = tick_pipeline.consume_engine_bars
+
+        def failed_admission(widget, now_ts):
+            session._admission_failed = True
+            return original(widget, now_ts)
+
+        monkeypatch.setattr(tick_pipeline, "consume_engine_bars", failed_admission)
+        revision = session.mailbox.revision
+        with pytest.raises(RuntimeError, match="admission gate"):
+            session.tick(frames[5])
+        assert reader.take() is None and session.mailbox.revision == revision
+    finally:
+        session.close()
+        reader.close()
+
+
+@pytest.mark.qt
 def test_each_slot_carries_the_identity_and_flags_a_native_reader_validates(qt_app):
     # Plain struct at the ABI's offsets, no codec: the header's configure-time identity; every slot's own identity
     # (runtime/engine generation, activation, mode code) and flags under its seqlock, equal to the frame it holds,
@@ -310,19 +367,37 @@ def test_spectrum_readers_publish_on_the_first_commit_after_activation(qt_app, m
 @pytest.mark.qt
 def test_a_recorded_session_refuses_an_audio_device_in_any_process(qt_app, supervisor):
     # A3-L1: a test's monkeypatch reaches only its own process; the session itself refuses a device for its life,
-    # in process and in the worker (the configure reply reports it), and restores the factory on close.
+    # in process and in the worker (the configure reply reports it). A4-L3: per engine, never a process-wide swap:
+    # two sessions closing out of order (A opened first, closed first) never touch the module's device factory, each
+    # session's engine refuses the device path (its own factory removed, capture fails closed), and an engine that is
+    # not a session's keeps the device path while sessions are open.
     from widgets.spotify_visualizer import audio_worker
 
     device = audio_worker.create_audio_capture
-    reader = PacketMailbox(role="reader")
-    session = _session(reader, "spectrum")
+    first_reader, second_reader = PacketMailbox(role="reader"), PacketMailbox(role="reader")
+    first = _session(first_reader, "spectrum")
+    second = None
     try:
-        with pytest.raises(RuntimeError, match="never opens an audio device"):
-            audio_worker.create_audio_capture()
-        assert session.device_refused
+        second = _session(second_reader, "oscilloscope")
+        assert first.device_refused and second.device_refused
+        assert audio_worker.create_audio_capture is device
+        production = audio_worker.SpotifyVisualizerAudioWorker()
+        assert production._capture_factory() is device and not production.devices_refused
+        for session in (first, second):
+            worker = session._engine._audio_worker
+            assert worker._capture_factory() == session._open_capture   # the recorded source seam
+            worker._capture_backend_factory = None                       # without it, the device path refuses
+            with pytest.raises(RuntimeError, match="never opens an audio device"):
+                worker._capture_factory()(None)
+            worker._capture_backend_factory = session._open_capture
+        first.close()
+        assert audio_worker.create_audio_capture is device and second.device_refused
     finally:
-        session.close()
-        reader.close()
+        first.close()
+        if second is not None:
+            second.close()
+        first_reader.close()
+        second_reader.close()
     assert audio_worker.create_audio_capture is device
     worker_reader = PacketMailbox(role="reader")
     try:
@@ -330,6 +405,28 @@ def test_a_recorded_session_refuses_an_audio_device_in_any_process(qt_app, super
         assert configured.payload["device_refused"] is True
     finally:
         worker_reader.close()
+
+
+@pytest.mark.qt
+def test_an_installed_capture_source_is_used_whatever_its_truth_value(qt_app):
+    # A3-L5: the device is the source only when no factory is installed (``is None``), never when an installed one is
+    # falsy (a source object with ``__len__`` or ``__bool__``). Control: the former ``factory or device`` lookup sends
+    # such a source to the device.
+    from widgets.spotify_visualizer import audio_worker
+
+    class EmptySource:
+        def __len__(self):
+            return 0
+
+        def __call__(self, config):
+            return None
+
+    source = EmptySource()
+    worker = audio_worker.SpotifyVisualizerAudioWorker()
+    worker.set_capture_backend_factory(source)
+    with worker._capture_lock:
+        assert worker._capture_factory() is source
+    assert (source or audio_worker.create_audio_capture) is audio_worker.create_audio_capture
 
 
 @pytest.mark.qt

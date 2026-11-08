@@ -95,12 +95,18 @@ class PacketMailbox(LatestStateMailbox):
         self._unread: tuple[Any, int, int, int] | None = None     # (state, generation, activation, sequence)
         self._peeked: LogicalPublication | None = None
         self._closed = False
+        # Writer side: checked before every publish, so a host can refuse a frame before it reaches the mapping
+        # (the engine session's production-order admission failure; None otherwise: one attribute read).
+        self._publish_guard: Callable[[], None] | None = None
 
     # ---------------------------------------------------------------------------------------------- producer
 
     def publish(self, state: Any, *, generation: int, activation_id: int = -1,
                 now_ts: Optional[float] = None) -> int:
         wake: Optional[Callable[[], None]] = None
+        guard = self._publish_guard
+        if guard is not None:
+            guard()                                   # raises: nothing of this frame is published
         with self._lock:
             consumed = self._writer.consumed_sequence
             previous = self._unread if self._unread is not None and self._unread[3] > consumed else None
@@ -131,6 +137,12 @@ class PacketMailbox(LatestStateMailbox):
         if wake is not None:
             wake()
         return revision
+
+    def set_publish_guard(self, guard: Callable[[], None] | None) -> None:
+        """Writer side: ``guard()`` runs before every publish and raises to refuse the frame (None: no guard)."""
+        if guard is not None and not callable(guard):
+            raise TypeError("a publish guard must be callable or None")
+        self._publish_guard = guard
 
     def write_identity(self, *, runtime_generation: int, engine_generation: int, activation_id: int,
                        mode: str | None) -> None:
@@ -219,6 +231,12 @@ class PacketMailbox(LatestStateMailbox):
 
     def clear(self) -> None:
         with self._lock:
+            if self._reader is None:
+                # Writer (the engine worker): the unread frame is the reader's to drop (the main process clears its
+                # own mailbox); the producer forgets its unread record, so the next publication coalesces none of its
+                # edges, as the in-process mailbox's clear drops them.
+                self._unread = None
+                return
             self._consume()
             self._peeked = None
 

@@ -21,6 +21,18 @@ from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
 from core.authored_clock import authored_now
+from widgets.spotify_visualizer.logical_edges import (
+    ActivationProgress,
+    LogicalRuntimeNotJoined,
+    admit_engine_start,
+    apply_logical_configuration,
+    apply_playback_edge,
+    commit_logical_activation,
+    mode_runtime_factory,
+    prepare_engine_start,
+    release_engine_for_park,
+    resume_engine_after_park,
+)
 
 logger = get_logger(__name__)
 
@@ -72,28 +84,8 @@ def _shared_beat_engine(bar_count: int) -> Any:
     return get_shared_spotify_beat_engine(bar_count)
 
 
-def _mode_runtime_factory(mode_id: str) -> Callable[[], Any]:
-    """Resolve a mode's frame-runtime class from the canonical descriptor wiring.
-
-    The per-mode import path lives once in
-    ``core.settings.visualizer_mode_registry``; this reads that string and
-    imports lazily, so no frame runtime is imported until its mode is actually
-    constructed. An unknown/empty mode falls back to Spectrum exactly as the
-    previous hand-written switch did.
-    """
-    from importlib import import_module
-
-    from core.settings.visualizer_mode_registry import (
-        get_visualizer_mode_descriptor,
-    )
-
-    normalized = str(mode_id or "").lower()
-    try:
-        descriptor = get_visualizer_mode_descriptor(normalized)
-    except KeyError:
-        descriptor = get_visualizer_mode_descriptor("spectrum")
-    module = import_module(descriptor.frame_runtime_module)
-    return getattr(module, descriptor.frame_runtime_class)
+# The canonical descriptor wiring's frame-runtime factory (one owner: ``logical_edges``).
+_mode_runtime_factory = mode_runtime_factory
 
 
 class QuickDisplayVisualizerOwner:
@@ -249,42 +241,24 @@ class QuickDisplayVisualizerOwner:
             if not controller.set_logical_parked(True):
                 logger.error("[SPOTIFY_VIS][DISPLAY_POWER] Logical runtime did not park; it stays requested")
             controller.logical_mailbox.clear()
-            if self._engine_acquired:
-                release = getattr(controller.engine, "release", None)
-                if callable(release):
-                    release()
+            if release_engine_for_park(controller, engine_acquired=self._engine_acquired):
                 self._engine_acquired = False
                 self._engine_released_for_display_power = True
             logger.info("[SPOTIFY_VIS][DISPLAY_POWER] Visualizer parked mode=%s", controller.mode_id)
             return True
-        engine = controller.ensure_engine() if self._started else None
-        if engine is not None:
-            if self._engine_released_for_display_power:
-                acquire = getattr(engine, "acquire", None)
-                if callable(acquire):
-                    acquire()
-                self._engine_acquired = True
-                self._engine_released_for_display_power = False
-                if controller.playing:
-                    ensure_started = getattr(engine, "ensure_started", None)
-                    if callable(ensure_started):
-                        ensure_started()
-            from widgets.spotify_visualizer.tick_pipeline import (
-                arm_reentry_fresh_frame_fence,
-                rebase_logical_clocks_after_park,
-            )
-
-            state = controller.logical_tick_state
-            arm_reentry_fresh_frame_fence(state, engine)
-            runtime = controller.logical_runtime
-            if runtime is None or not runtime.is_running() or runtime.is_parked():
-                rebase_logical_clocks_after_park(state, controller.logical_mode_states_snapshot())
-            else:
-                logger.error("[SPOTIFY_VIS][DISPLAY_POWER] Resume found the logical runtime unparked; "
-                             "clocks not rebased")
+        resume_engine_after_park(
+            controller,
+            started=self._started,
+            released_for_display_power=self._engine_released_for_display_power,
+            on_reacquired=self._on_engine_reacquired_for_display_power,
+        )
         controller.set_logical_parked(False)
         logger.info("[SPOTIFY_VIS][DISPLAY_POWER] Visualizer resumed mode=%s", controller.mode_id)
         return True
+
+    def _on_engine_reacquired_for_display_power(self) -> None:
+        self._engine_acquired = True
+        self._engine_released_for_display_power = False
 
     @property
     def render_identity(self) -> Any:
@@ -336,130 +310,17 @@ class QuickDisplayVisualizerOwner:
         playing: bool,
         reason: str,
     ) -> None:
-        from widgets.spotify_visualizer.config_applier import (
-            apply_logical_vis_mode_kwargs,
-            apply_presentation_vis_mode_kwargs,
-        )
-        from widgets.spotify_visualizer.logical_tick_state import (
-            install_default_logical_tick_state,
-        )
-
-        from widgets.spotify_visualizer.presentation_state import (
-            install_default_presentation_state,
-        )
-
-        controller = self._controller
-        state = controller.logical_tick_state
-        from widgets.spotify_visualizer.source_config_applier import (
-            resolve_mode_source_config,
-        )
-
-        resolved_logical_kwargs = (
-            resolve_mode_source_config(controller.mode_id, logical_kwargs)
-            if logical_kwargs is not None
-            else None
-        )
-        resolved_presentation_kwargs = (
-            resolve_mode_source_config(controller.mode_id, presentation_kwargs)
-            if presentation_kwargs is not None
-            else None
-        )
-        install_default_logical_tick_state(state, bar_count=controller.bar_count)
-        install_default_presentation_state(controller.presentation_state)
-        if resolved_logical_kwargs:
-            apply_logical_vis_mode_kwargs(state, resolved_logical_kwargs)
-        if resolved_presentation_kwargs:
-            apply_presentation_vis_mode_kwargs(
-                controller.presentation_state, resolved_presentation_kwargs
-            )
-        if is_viz_diagnostics_enabled():
-            presentation_state = controller.presentation_state
-            logger.debug(
-                "[VIS_RAINBOW] stage=CONFIG reason=%s mode=%s enabled=%s speed=%.3f",
-                reason,
-                controller.mode_id,
-                bool(presentation_state._rainbow_enabled),
-                float(presentation_state._rainbow_speed),
-            )
-        controller.enabled = True
-        controller.playing = bool(playing)
-        if thread_manager is not None:
-            controller.thread_manager = thread_manager
-        if process_supervisor is not None:
-            controller.process_supervisor = process_supervisor
-        engine = controller.ensure_engine()
-
-        # Source-owned preset semantics used to be side effects of the mixed
-        # QWidget config applier.  Quick has no widget presenter, so route those
-        # values explicitly to the one existing BeatEngine at configuration
-        # time.  ``logical_kwargs`` is the canonical settings payload in
-        # production; presentation is only a fallback for focused callers.
-        source_kwargs = (
-            resolved_logical_kwargs
-            if resolved_logical_kwargs is not None
-            else resolved_presentation_kwargs
-        )
-        if source_kwargs:
-            from widgets.spotify_visualizer.source_config_applier import (
-                apply_engine_vis_mode_kwargs,
-            )
-
-            apply_engine_vis_mode_kwargs(engine, source_kwargs)
-
-        # Technical settings are a complete canonical/preset-resolved contract.
-        # Missing mode configuration is an authority error at configuration
-        # time; it must not leak into renderer/DSP fallbacks later.
-        resolved_technical = technical_config
-        if resolved_technical is None:
-            cache = controller.technical_config_cache
-            if not isinstance(cache, dict):
-                raise RuntimeError("visualizer technical cache is unavailable")
-            from widgets.spotify_visualizer.technical_config import (
-                resolve_technical_config,
-            )
-            resolved_technical = resolve_technical_config(cache, controller.mode_id)
-        from widgets.spotify_visualizer.quick_technical_config import (
-            apply_controller_technical_config,
-        )
-
-        apply_controller_technical_config(
-            controller,
-            resolved_technical,
+        apply_logical_configuration(
+            self._controller,
+            logical_kwargs=logical_kwargs,
+            presentation_kwargs=presentation_kwargs,
+            technical_config=technical_config,
+            thread_manager=thread_manager,
+            process_supervisor=process_supervisor,
+            playing=playing,
             reason=reason,
+            refresh_presentation=self._refresh_backdrop,
         )
-        self._refresh_backdrop()
-
-        controller.resolve_logical_mode_state(
-            controller.mode_id, _mode_runtime_factory(controller.mode_id)
-        )
-        state._mode_teardown_block_until_ready = False
-        state._mode_transition_ready = True
-        # Lead E1: a persistent (shared) beat engine keeps its last committed frame
-        # across owner recreation. On a same-generation warm re-entry that retained
-        # frame would satisfy the generation-only fresh-frame fence and be admitted
-        # as the first reactive result (a flash of seconds-old audio energy). Arm
-        # the fence with a commit-seq watermark so only a frame committed after this
-        # re-entry is accepted. A cold engine (no prior frame) is left unfenced, so
-        # cold start is byte-for-byte unchanged.
-        from widgets.spotify_visualizer.tick_pipeline import (
-            arm_reentry_fresh_frame_fence,
-        )
-
-        warm_reentry = arm_reentry_fresh_frame_fence(state, engine)
-        if warm_reentry and is_viz_diagnostics_enabled():
-            # E2 attribution (diagnostics-only): arm the existing T3..T6 markers on
-            # this warm recreation so the fresh-source -> retained-presentation gap
-            # is attributable exactly like a play/pause edge, labelled kind=recreation.
-            from widgets.spotify_visualizer.reactivity_diagnostics import (
-                begin_playback_edge,
-            )
-
-            begin_playback_edge(
-                state,
-                now_ts=authored_now(),
-                playing=bool(controller.playing),
-                kind="recreation",
-            )
 
     def _refresh_backdrop(self) -> None:
         """Keep the reflected wallpaper (``backdrop.py``) while the active mode reflects it (its
@@ -591,29 +452,7 @@ class QuickDisplayVisualizerOwner:
                 edge_ts,
             )
 
-        controller.playing = active
-        engine = controller.ensure_engine()
-        if active and not previous and self._started:
-            wake = getattr(engine, "wake", None)
-            if callable(wake):
-                # Historical pause->play contract: wake the sole shared capture
-                # owner before committing playback truth.  wake() itself only
-                # restarts stale capture and otherwise remains a cheap no-op.
-                wake()
-        set_playback_state = getattr(engine, "set_playback_state", None)
-        if not callable(set_playback_state):
-            raise RuntimeError("visualizer BeatEngine has no playback-state authority")
-        set_playback_state(active)
-        if active and not previous:
-            # Lead E1: warm resume must not admit the pre-pause retained frame as
-            # the first reactive result. Arm the commit-seq watermark so the first
-            # accepted reactive frame is one the engine committed after this resume
-            # edge. Cold engines are left unfenced (see the helper).
-            from widgets.spotify_visualizer.tick_pipeline import (
-                arm_reentry_fresh_frame_fence,
-            )
-
-            arm_reentry_fresh_frame_fence(controller.logical_tick_state, engine)
+        engine = apply_playback_edge(controller, active, started=self._started)
         if edge_seq > 0:
             committed_ts = authored_now()
             warm_resume = bool(
@@ -1576,92 +1415,25 @@ class QuickDisplayVisualizerOwner:
                         self._mode_transition_phase = "idle"
                         self._mode_transition_fade = 1.0
                         return
-        engine = controller.ensure_engine()
-        if not controller.stop_logical_runtime():
-            if edit_profile_switched and self._edit_layout_profile_activator is not None:
-                self._edit_layout_profile_activator(previous_mode)
-            self._mode_transition_phase = "failed"
-            raise RuntimeError("visualizer logical runtime did not join for activation")
+        target = target_mode
+        outgoing_mode = previous_mode
+        progress = ActivationProgress()
 
-        begin = getattr(engine, "begin_activation_transaction", None)
-        end = getattr(engine, "end_activation_transaction", None)
-        if not callable(begin) or not callable(end):
-            self._mode_transition_phase = "failed"
-            raise RuntimeError("visualizer BeatEngine has no activation transaction")
+        def change_layout_profile(profile_target: str) -> None:
+            # The logical runtime is stopped and the target is still hidden.
+            # Drop any unread old-mode snapshot before switching geometry so
+            # it cannot be rejected later as a one-frame stale presentation.
+            controller.render_bridge.discard_pending()
+            # Edit's target profile was already projected/validated
+            # BEFORE stopping the outgoing logical runtime. Never
+            # repeat a fallible QML projection inside this transaction.
+            self._activate_committed_layout_profile(profile_target)
 
-        target = str(pending["mode"])
-        kind = str(pending.get("kind") or "mode")
-        outgoing_mode = str(controller.mode_id)
-        activation_step = "begin_engine_transaction"
-        try:
-            begin()
-        except Exception:
-            self._mode_transition_phase = "failed"
-            raise
-        try:
-            if kind == "mode":
-                from core.settings.visualizer_mode_registry import (
-                    get_visualizer_layout_profile,
-                )
-
-                if (
-                    get_visualizer_layout_profile(target)
-                    != get_visualizer_layout_profile(controller.mode_id)
-                ):
-                    # The logical runtime is stopped and the target is still hidden.
-                    # Drop any unread old-mode snapshot before switching geometry so
-                    # it cannot be rejected later as a one-frame stale presentation.
-                    controller.render_bridge.discard_pending()
-                    # Edit's target profile was already projected/validated
-                    # BEFORE stopping the outgoing logical runtime. Never
-                    # repeat a fallible QML projection inside this transaction.
-                    activation_step = "activate_committed_profile"
-                    self._activate_committed_layout_profile(target)
-                activation_step = "set_controller_mode"
-                controller.set_mode(target)
-            elif target != controller.mode_id:
-                raise RuntimeError("preset activation attempted to change visualizer mode")
-            activation_step = "configure_target"
-            controller.settings_model = pending["settings_model"]
-            controller.record_resolved_activation(pending["resolved_activation"])
-            controller.technical_config_cache = dict(pending["technical_cache"])
-            from widgets.spotify_visualizer.technical_config import (
-                resolve_technical_config,
-            )
-            self._apply_configuration(
-                logical_kwargs=pending["logical_kwargs"],
-                presentation_kwargs=pending["presentation_kwargs"],
-                technical_config=resolve_technical_config(
-                    controller.technical_config_cache, target
-                ),
-                thread_manager=controller.thread_manager,
-                process_supervisor=controller.process_supervisor,
-                playing=controller.playing,
-                reason=f"quick_owner_{kind}_change",
-            )
-            if kind == "preset":
-                from widgets.spotify_visualizer.view_orbit import (
-                    arm_view_auto_rotate, rebase_view_orbit_motion,
-                )
-                # The target is configured and hidden, and logical capture is
-                # stopped. Publish its complete motion state before restarting:
-                # old same-mode auto rotation must not override its first pose.
-                activation_step = "activate_target_view_motion"
-                view_now = authored_now()
-                rebase_view_orbit_motion(controller.presentation_state, view_now)
-                arm_view_auto_rotate(controller.presentation_state, target, view_now, immediate=True)
-            cancel = getattr(engine, "cancel_pending_compute_tasks", None)
-            reset_smoothing = getattr(engine, "reset_smoothing_state", None)
-            reset_floor = getattr(engine, "reset_floor_state", None)
-            if not all(callable(operation) for operation in (cancel, reset_smoothing, reset_floor)):
-                raise RuntimeError("visualizer BeatEngine has no canonical reset contract")
-            cancel()
-            reset_smoothing()
-            reset_floor()
-        except Exception:
-            # Qt's GUI callback boundary may otherwise discard the Python
-            # traceback, leaving only an invisible Visualizer and a stopped
-            # logical runtime. Record the exact failed transaction stage.
+        def recover(activation_step: str) -> bool:
+            # Inside the failed transaction, before it ends. Qt's GUI callback
+            # boundary may otherwise discard the Python traceback, leaving only
+            # an invisible Visualizer and a stopped logical runtime. Record the
+            # exact failed transaction stage.
             logger.exception(
                 "[SPOTIFY_VIS] Hidden %s activation FAILED step=%s "
                 "source=%s target=%s; retained Edit Save must refuse",
@@ -1689,21 +1461,52 @@ class QuickDisplayVisualizerOwner:
                         "[SPOTIFY_VIS] Restored outgoing mode after failed hidden "
                         "activation source=%s target=%s", outgoing_mode, target,
                     )
-                    return
+                    return True
+            self._mode_transition_phase = "failed"
+            return False
+
+        # One logical activation commit (``logical_edges``), shared with the
+        # engine worker's session: runtime stop, engine transaction, target
+        # configuration, reset, pending identity.
+        try:
+            committed = commit_logical_activation(
+                controller,
+                kind=kind,
+                target=target,
+                settings_model=pending["settings_model"],
+                resolved_activation=pending["resolved_activation"],
+                technical_cache=pending["technical_cache"],
+                logical_kwargs=pending["logical_kwargs"],
+                presentation_kwargs=pending["presentation_kwargs"],
+                progress=progress,
+                on_layout_profile_change=change_layout_profile,
+                configure=self._apply_configuration,
+                recover=recover,
+            )
+        except LogicalRuntimeNotJoined:
+            if edit_profile_switched and self._edit_layout_profile_activator is not None:
+                self._edit_layout_profile_activator(previous_mode)
             self._mode_transition_phase = "failed"
             raise
-        finally:
-            end(reason=f"quick_{kind}_change:{target}")
+        except Exception:
+            # ``prepare``: the runtime stop itself raised (unchanged state);
+            # ``transaction``: ``recover`` already ran.
+            if progress.stage == "begin":
+                self._mode_transition_phase = "failed"
+            elif progress.stage == "bind":
+                logger.exception(
+                    "[SPOTIFY_VIS] Hidden %s activation FAILED step=%s "
+                    "source=%s target=%s; retained Edit Save must refuse",
+                    kind, progress.step, outgoing_mode, target,
+                )
+                self._mode_transition_phase = "failed"
+            raise
+        if committed is None:
+            return                                   # restored the outgoing mode
+        generation, activation_id = committed
 
         activation_step = "bind_fresh_target"
         try:
-            generation = int(engine.get_generation_id())
-            activation_id = int(engine.get_activation_id())
-            state = controller.logical_tick_state
-            state._pending_engine_generation = generation
-            state._pending_engine_activation_id = activation_id
-            state._waiting_for_fresh_engine_frame = True
-            state._waiting_for_fresh_frame = True
             self._render_identity = self._runtime.bind_visualizer_render_source(
                 controller,
                 engine_generation=generation,
@@ -1764,24 +1567,13 @@ class QuickDisplayVisualizerOwner:
         controller = self._controller
         if not self._configured or not self._bound:
             raise RuntimeError("visualizer owner must be configured and bound before start")
-        engine = controller.ensure_engine()
-        set_thread_manager = getattr(engine, "set_thread_manager", None)
-        if controller.thread_manager is not None and callable(set_thread_manager):
-            set_thread_manager(controller.thread_manager)
-        set_generation = getattr(engine, "set_runtime_generation", None)
-        if callable(set_generation):
-            set_generation(controller.runtime_generation)
-        acquire = getattr(engine, "acquire", None)
+        engine = prepare_engine_start(controller)
+
+        def acquired() -> None:
+            self._engine_acquired = True
+
         try:
-            if callable(acquire):
-                acquire()
-                self._engine_acquired = True
-            self.set_playing(controller.playing)
-            if controller.playing:
-                # Media may have committed True before start acquired the source and bound ThreadManager.
-                # Same-state playback does not create a BeatEngine edge, so cold admission is explicit here.
-                ensure_started=getattr(engine,'ensure_started',None)
-                if callable(ensure_started):ensure_started()
+            admit_engine_start(controller, engine, on_acquired=acquired, commit_playback=self.set_playing)
             # Arm the authored scene fade before the logical producer can publish
             # the first frame. Mailbox empty->populated publication wakes Qt's GUI
             # thread directly; there is no display-refresh polling pacer here.

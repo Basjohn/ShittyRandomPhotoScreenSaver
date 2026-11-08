@@ -7,7 +7,6 @@ last-read slot and the tick saw "no new audio" (~23% of Spectrum ticks; the bars
 from __future__ import annotations
 
 from dataclasses import asdict, replace
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -110,34 +109,17 @@ def _model(mode):
 
 
 def _production_hot_swap(controller, engine, target):
-    """The QuickDisplayVisualizerOwner activation transaction, minus its Qt presentation."""
-    from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
-    from widgets.spotify_visualizer.technical_config import build_technical_cache, resolve_technical_config
+    """The production owner's activation commit (``logical_edges``, the one the owner itself runs), minus its Qt
+    presentation, then render admission for the committed identity."""
+    from widgets.spotify_visualizer.logical_edges import commit_logical_activation
+    from widgets.spotify_visualizer.technical_config import build_technical_cache
 
     model = _model(target)
-    cache = build_technical_cache(None, model)
-    engine.begin_activation_transaction()
-    try:
-        controller.set_mode(target)
-        controller.settings_model = model
-        controller.technical_config_cache = dict(cache)
-        QuickDisplayVisualizerOwner._apply_configuration(
-            SimpleNamespace(_controller=controller, _refresh_backdrop=lambda: None),
-            logical_kwargs=asdict(model), presentation_kwargs=asdict(model),
-            technical_config=resolve_technical_config(cache, target), thread_manager=None,
-            process_supervisor=None, playing=True, reason="quick_owner_mode_change")
-        engine.cancel_pending_compute_tasks()
-        engine.reset_smoothing_state()
-        engine.reset_floor_state()
-    finally:
-        engine.end_activation_transaction(reason=f"quick_mode_change:{target}")
-    state = controller.logical_tick_state
-    state._pending_engine_generation = engine.get_generation_id()
-    state._pending_engine_activation_id = engine.get_activation_id()
-    state._waiting_for_fresh_engine_frame = True
-    state._waiting_for_fresh_frame = True
-    controller.begin_render_activation(
-        engine_generation=engine.get_generation_id(), activation_id=engine.get_activation_id())
+    generation, activation_id = commit_logical_activation(
+        controller, kind="mode", target=target, settings_model=model, resolved_activation=None,
+        technical_cache=build_technical_cache(None, model), logical_kwargs=asdict(model),
+        presentation_kwargs=asdict(model))
+    controller.begin_render_activation(engine_generation=generation, activation_id=activation_id)
 
 
 def _spectrum_series(clip, *, warm_mode, warm_frames):

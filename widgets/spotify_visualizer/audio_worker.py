@@ -33,6 +33,11 @@ from core.authored_clock import authored_now
 logger = get_logger(__name__)
 
 
+def _refuse_device(_config=None):
+    """The device path of a worker that refuses devices (``refuse_devices``): capture fails closed."""
+    raise RuntimeError("a recorded-PCM engine session never opens an audio device")
+
+
 _COMPUTE_SNAPSHOT_ATTRS = (
     "_activation_id",
     "_np",
@@ -360,6 +365,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         # The one injection seam for where capture comes from (``set_capture_backend_factory``):
         # None is the device (``create_audio_capture``, looked up when capture opens).
         self._capture_backend_factory = None
+        # A recorded-PCM engine session's worker never opens a device (``refuse_devices``), per worker.
+        self._devices_refused = False
 
     def set_capture_backend_factory(self, factory) -> None:
         """Install the factory the capture lane opens its backend with (``factory(config) -> backend``).
@@ -381,6 +388,26 @@ class SpotifyVisualizerAudioWorker(QObject):
             ):
                 raise RuntimeError("cannot replace the capture source of an active audio capture owner")
             self._capture_backend_factory = factory
+
+    def refuse_devices(self) -> None:
+        """This worker never opens an audio device from now on: with no capture factory installed, capture fails
+        closed instead of opening the device. Per worker, never a process-wide swap (checkpoint audit 4, A4-L3): a
+        recorded-PCM engine session refuses for its own engine only, so sessions closing in any order leave every
+        other worker's device path untouched."""
+        with self._capture_lock:
+            self._devices_refused = True
+
+    @property
+    def devices_refused(self) -> bool:
+        return self._devices_refused
+
+    def _capture_factory(self):
+        """Where the next capture opens from (under ``_capture_lock``): the installed factory, else the device, or
+        the refusal when this worker refuses devices."""
+        factory = self._capture_backend_factory
+        if factory is not None:
+            return factory
+        return _refuse_device if self._devices_refused else create_audio_capture
 
     def set_capture_lane(self, lane) -> None:
         """Install the one engine-owned serial native-capture lane.
@@ -869,7 +896,7 @@ class SpotifyVisualizerAudioWorker(QObject):
                     return
                 config_epoch = self._capture_config_epoch
                 preferred = int(self._preferred_block_size or 0)
-                factory = self._capture_backend_factory or create_audio_capture
+                factory = self._capture_factory()
 
             if action == "stop":
                 # Keep the pointer until release succeeds. A failed native close

@@ -275,6 +275,15 @@ class _SpotifyBeatEngine(QObject):
         """
         self._audio_worker.set_capture_backend_factory(factory)
 
+    def refuse_capture_devices(self) -> None:
+        """This engine's audio worker never opens an audio device (``SpotifyVisualizerAudioWorker.refuse_devices``;
+        an offline engine session's, for its life)."""
+        self._audio_worker.refuse_devices()
+
+    @property
+    def capture_devices_refused(self) -> bool:
+        return self._audio_worker.devices_refused
+
     def fence_capture_transactions(self, callback) -> bool:
         """``callback`` on the capture lane after every capture start/stop/restart admitted so far (False: no lane).
 
