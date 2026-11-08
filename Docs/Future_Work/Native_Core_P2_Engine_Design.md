@@ -118,7 +118,9 @@ those values per tick, so they define the equivalence.
    Waveform Ribbon and Extruded Bubble). The codec round-trip test runs per mode on every canonical frame type.
 2. **No visual change:** the existing pixel oracles and BTF checks unchanged (P2 changes no drawing).
 3. **Gain:** GIL share and frame age before/after in ONE game60 run of at most 10 minutes, only after the operator's
-   yes (lead only); `--usage`/PERF instrumentation, compared against the stored baselines.
+   yes (lead only); `--usage`/PERF instrumentation, compared against the stored baselines. **Measured 8 Nov** (the
+   Gate 3 record under work order 6): main's GIL share 0.85 -> 0.08, frame age down; the pair's GPU conditions are not
+   established equal.
 4. **Dormancy and lifecycle:** overhead baseline identical with the Visualizer off; no process, mapping or handle growth
    over 20 Settings open/close and 20 mode switches; worker retired with its generation. **Passed 8 Nov** (the Gate 4
    record under work order 6; it found and fixed R-178 first).
@@ -1541,6 +1543,123 @@ switch never remaps.
      - *Gate 3's run:* `--load game60` with and without `--app-arg=--viz-engine-worker`, the same mode, preset, clip
        and seconds; compare `main_gil_share`, the age chain and hitches, with `tick_gil_share` / `worker_gil_share`
        labelled by process.
+   - **Gate 3 record (8 Nov): measured. The main process's GIL share falls 0.85 -> 0.08 and frame age falls; the pair's
+     CPU conditions match, its GPU conditions are not established equal.** Runs on `4248b8ab`; the live check's
+     recorded-PCM check made path-aware by this record.
+     - *Method:* the lead's one game60 measurement (the operator's yes): two invisible live checks
+       (`tools/visualizer_live_check.py`), Waveform Ribbon Preset 1, `--load game60`, recorded `anything_mixed2`,
+       `--seconds 210`, `--usage` and `--frame-trace` as always; admission on (21:12) then off (21:16). The off run
+       reported normally. The on run's report crashed on `Recorded PCM never reached the live Waveform body`: the check
+       read the Waveform body's input rows (`phases.json` `waveform_signals`), which only the main process records in
+       process; on the worker path the body runs in the worker, so main recorded none. The lead re-analysed the saved
+       trace offline (`_report` with `clip=None`, skipping that one check). Every figure below comes from the frame
+       trace, `phases.json` and the logs, which the skipped check never touched; the re-analysis lost only what the
+       parent held in memory during the run: the sampled conditions (`SystemSampler`), the process tree and the clip's
+       name (the summary's `clip: null` is the re-analysis; the run played the clip). The conditions are reconstructed
+       below from `load.txt` and the saver's own `--usage` log.
+     - *The check, path-aware now (`waveform_pcm_receipt`):* in process it still needs a body input row with bands
+       above zero, playing, its own source identity. On the worker path the receipt is the frames main renders
+       (`eb_live_phases.note_waveform_frame`, in the tool's existing render wrapper, both paths): at least one frame
+       from a live body (playing, its source identity its own, read from the frame's identity fields) whose published
+       `passage` is above zero. Passage is the body's level, 0 until audible bands or intensity reach it while live,
+       carried bit-exact by the codec from the worker; the worker plays the recording and refuses the device for its
+       life, so the audio that moved it is the recording. Input rows on the worker path (the body ran in main: the run
+       left the worker) fail, and no evidence on either path still fails. Tool-only: nothing in the product changes and
+       nothing runs outside the live check. Tests: the real body through the codec seam with silence, a paused body and
+       a stale source as negative controls (`tests/test_visualizer_live_check.py`). Proof on the real worker path: a
+       60 s run, `--load none`, the same preset and clip, reported `waveform_pcm_evidence: rendered worker frames`
+       with 4447 receipt frames (passage max 0.85, burst serial 336) and `waveform_signal_samples: 0`.
+     - *Side by side (steady window, median / p90; every comparable field of both `summary.json`; the last column, an
+       earlier in-process run of the same preset and clip under game60 at the reference conditions below, is context,
+       not the pair):*
+
+       | Field | Engine worker on | Off (in process) | 7 Nov in process (`r1_p1_main`), median |
+       |---|---|---|---|
+       | Steady seconds | 198.2 | 202.7 | - |
+       | Revisions/s (publish records/s) | 90.0 (87.0 taken) | 75.1 (75.1) | 88.6 |
+       | Tick -> publish, ms (process) | 6.12 / 7.52 (worker) | 11.38 / 19.17 (main) | - |
+       | Main's per-frame holder, ms | frame take 0.912 / 1.219 (17,443 takes) | logical tick 11.253 / 19.069 | 8.239 |
+       | **Main GIL share** | **0.08** | **0.85** | 0.73 |
+       | Tick GIL share (process) | 0.55 (worker) | 0.85 (main) | - |
+       | **Consumed age at sync, ms** | **6.25 / 11.01** | **6.89 / 10.54** | 3.94 |
+       | Newest age at sync, ms (worker: lower bound) | 5.73 / 10.55 | 6.89 / 10.54 | - |
+       | Revisions waiting at sync | 0 / 0 | 0 / 0 | - |
+       | **Publish -> swap, ms** | **25.78 / 31.36** | **41.51 / 49.54** | 26.07 |
+       | **HUD age, ms** | **34.97 / 41.18** | **60.88 / 71.96** | 36.52 |
+       | Render mode, ms | 11.97 / 13.97 | 18.29 / 20.90 | 16.51 |
+       | Waveform render stages, ms: state reads / reflection / ribbons | 0.101 / 1.698 / 1.48 | 1.027 / 2.377 / 2.034 | - |
+       | Swap gap, ms; frames/s | 20.84 / 23.50; 47.3 | 34.84 / 39.92; 28.3 | 23.33; 40.7 |
+       | Steady late % (> 25 ms) | 3.6 | 99.9 | 36.3 |
+       | Hitches/min (> 50 ms) | 6.96 | 11.54 | 7.98 |
+       | Post-startup frames; late % | 74; 20.5 | 45; 100.0 | 36.0 % |
+       | Sync admissions/s | 38.4 | 27.1 | - |
+       | `--usage` collect ms | 58.20 / 63.56 | 45.63 / 48.58 | 35.08 |
+       | `--usage` processes / threads / handles | 4.5 / 59.0 / 2293 | 3.5 / 57.5 / 2080 | - |
+       | Waveform input rows; burst serial | 0 (body in the worker); - | 1730; 1252 | - |
+       | Rendered frames measured (`phases.json`) | 9297 | 5616 | - |
+
+     - *Conditions:*
+       - *CPU (matched):* system CPU ~87% on both: the off run's sampler 87.4% median (others 87.3%, max 95.4%); the on
+         run's own `--usage` `cpu_system_pct` 87.35% median of its non-zero samples (86.7-89.3, one 57.1), the off
+         run's 87.5% by the same field, so the field agrees with the sampler where both exist. The generator's 22 CPU workers
+         settled at duty 0.64 (on) and 0.66 (off). The saver: main 101.8% of a core on the worker path against 136.5%
+         in process; the engine worker 59.8%; the app's tree 162% against 137%.
+       - *GPU (not established equal):* the off run: 1710 MHz median (1920 max), 95% busy, 51 C. The on run recorded
+         no clock or busy share (they were in the crashed report's memory). The generator sizes its frame by GPU
+         *time* at startup (12 timed frames, then the iteration count is fixed): 118 iterations (off) and 65 (on) for
+         the same 6.7 ms, against 156-214 (mostly 205-214) in every earlier game60 run (reference state: 2760 MHz,
+         55-81% busy, system CPU 65-80%). So at both calibrations the GPU gave far less per iteration than usual (clocked down or shared with
+         another client), at the on run's even less; whether each state held through its run is not recorded. The one
+         GPU figure the on run kept agrees with the off run: the saver's own GPU time per presented frame (`--usage`
+         `gpu_engine_sum_pct` / frames/s) 1.59 ms (7.5% at 47.3/s) against 1.52 ms (4.3% at 28.3/s), within 5%.
+       - *Machine state:* both runs were busier than the stored references (system CPU 87% against 65-80%, memory 74.8%
+         used in the off run against 58-71%); the off run is below the 7 Nov in-process reference on every figure (tick
+         11.25 against 8.24 ms, 75 against 89 revisions/s, 28 against 41 frames/s).
+       - *Audio:* the worker plays the clip's first 20 s looped (`WORKER_PCM_LOOP_S`, the link's recorded-capture
+         control), the in-process run the whole clip; content-dependent work (bursts, sparks) differs.
+       - *Fair?* For the gate's GIL share, yes: CPU matched, and the share is structural (the tick left main). For the
+         render side and frame age, the direction is fair and the magnitude is not established: the GPU state is
+         unknown for the on run, and the off run's degraded machine state inflates its own figures. The on run against
+         the 7 Nov in-process reference at lighter conditions still matches or beats it (publish -> swap 25.8 / 26.1 ms,
+         HUD age 35.0 / 36.5 ms, 47 / 41 frames/s, late 3.6 / 36.3%). The render-side gain also reads as GIL in the
+         render thread's own stages: its GL state reads, each a GIL hand-over with no GPU work, cost 0.101 ms against
+         1.027 ms (10x), more than any GPU-bound stage changed (reflection 0.71x, ribbons 0.73x).
+     - *Still flagged on the worker path, attributed (frame trace: each steady swap gap over 50 ms split into the render
+       loop's wait for the GUI thread's sync request, the sync, the scene render with the mode's own render inside it,
+       and the swap; its phase in the 15 s `--usage` cadence; the main log at the same second):*
+       - *Hitches, 6.96/min (23):* 13 at the usage sampler's tick, every tick in the window (15.00 s apart, phase
+         3.2 s; 3.9/min): the render thread stalls 71-106 ms in the scene render while the mode's own render is 10-12 ms
+         in 8 of them (the sampler's GIL-held C calls in main; the longest, 108.5 ms, is the sample that refreshed the
+         topology, `collect_ms` 137); 5 at the image change at 138-139 s (Melt Drip finished, the prefetch resumed and
+         the next transition's five programs linked cold, 21:14:45-47; three of them the GUI thread 35-49 ms late with
+         the request); 4 in the startup tail (0.2 s and 3.5-3.7 s after the steady window opens: the Gmail and Feeds
+         refreshes finishing, the first sample); 1 at 53.5 s (an 84 ms mode render in the second a Feeds refresh
+         finished). All main-side; none is the worker or the Visualizer's render cost, and the render thread is where
+         they show, not why. Without the sampler 10 remain (3.0/min, half of them the image change). In process 39
+         (11.54/min): 14 at the sampler's tick (4.1/min) and 25 more (11 of them in the startup tail at 6-10 s), render
+         stalls with mode renders of 18-114 ms while the logical tick held main's GIL 85% of the time.
+         The worker logged one tick dt spike (60.3 ms, `runner.txt`).
+       - *`usage_collect_ms` 58.2 (flag 40):* the sampler walks one more process (the engine worker): 4-5 processes on
+         the worker path, 3-4 in process, ~13 ms a process on both (58.2 / 4.5, 45.6 / 3.5) at 87% system CPU; the same
+         sampler took 22.9 ms for 4 processes on an idle machine (the proof run) and 35 ms for 3 at the reference
+         conditions. A main-side sampler cost both paths pay (the 15 s hitch above), recorded in `Current_Plan.md`.
+       - *`post_startup_late_pct` 20.5 (flag 20):* 15 of the 73 gaps in the first 2 s were 25.1-28.7 ms, none longer:
+         the render cycle (22-27 ms, mode render 11-19 ms) just after the reveal sat at the 25 ms line under the load.
+         Render-thread, lifecycle-adjacent, no stall; in process all 44 gaps were late (34-50 ms).
+     - *Verdict against the Decision's gate 3 ("GIL share and frame age before/after"):* **gain shown.** GIL share:
+       main's per-frame Visualizer GIL share 0.85 -> 0.08 (logical tick 11.25 ms at 75/s -> frame take 0.91 ms at
+       87/s); the tick now holds its own process's GIL (0.55), which never stalls main's threads, and runs at the full
+       90/s. Frame age: no worse at the sync (consumed age 6.9 -> 6.3 ms median, p90 10.5 -> 11.0; no revision ever
+       waiting), and lower to the screen (publish -> swap 41.5 -> 25.8 ms, HUD age 60.9 -> 35.0 ms). The GIL share
+       stands as measured; the frame-age magnitude in this pair is partly the off run's degraded conditions and the on
+       run's unrecorded GPU state. A repeat pair at a recorded, matched GPU state would size it (another game60 run:
+       the operator's call, never assumed).
+     - Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/live_check/20261108_gate3_game60_worker_on/` (its
+       `summary.json` is the offline re-analysis described under *Method*) and `..._worker_off/` (summary, phases,
+       `load.txt`, frame trace and logs; profile copies deleted by the tool); the receipt's proof run
+       `..._gate3rec_pcm_receipt_worker/`.
+     - **Left:** the operator's decision on making the worker the default, then the phase-boundary audit; the 15 s
+       usage-sample hitch (`Current_Plan.md` §5, main-side, both paths).
    - **Frozen check (8 Nov, lead; the operator check of step 6): the worker path runs frozen; two defects found and
      fixed, a confirming build is next.** The GitHub Remote build of `5fb8dab7` (A10-M1 included, R-178 not), the
      compiled diagnostic `release/diagnostic/SRPSS_Diagnostic.scr --viz-engine-worker`, a visible saver run of 90 s

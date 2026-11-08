@@ -209,11 +209,15 @@ after the operator's yes on a question card; agents never run load (invisible ch
      record): 20 Settings round trips and 20 mode switches with no process, mapping, handle or thread growth, the worker
      retired at each Settings open and respawned at its close, the Visualizer-off run and the overhead baseline
      identical with the admission on and off; it first found and fixed R-178 (every display reload under the
-     admission timed its destruction barrier out and the saver exited). Next: 6 (gate 3): the game60 run in process
-     and on the worker (lead, operator's yes). Its live check is ready (8 Nov, design doc step 6 "Gate 3
-     preparation"): each slot carries its publish time (`publish_ns`, ABI 2 bytes 56-63, `perf_counter_ns`), stamped
-     only while `--frame-trace` is admitted, and the main trace records each frame it takes at that time, so both
-     paths report the same age chain; the tick and GIL are labelled by process.
+     admission timed its destruction barrier out and the saver exited). Gate 3 measured 8 Nov (design doc, step 6
+     "Gate 3 record"; one game60 pair, Waveform Ribbon P1, the operator's yes): main's per-frame Visualizer GIL share
+     0.85 -> 0.08 (the tick runs in the worker at the full 90/s, its GIL its own), consumed age at sync no worse (6.9
+     -> 6.3 ms), publish -> swap 41.5 -> 25.8 ms, HUD age 60.9 -> 35.0 ms; CPU conditions matched, the GPU state not
+     established equal (the frame-age magnitude is not sized; a matched repeat pair is the operator's call). The worker
+     path's remaining hitches (6.96/min) are main-side: 13 of 23 the 15 s `--usage` sample (§5), the rest an image
+     change and the startup tail. The live check's recorded-PCM check is path-aware (rendered worker frames are the
+     receipt on the worker path). **Gates 3 and 4 are measured: P2 is ready for the operator's decision on making the
+     worker the default, then the phase-boundary audit.**
      The first frozen check ran 8 Nov (lead, build of `5fb8dab7`; design doc, step 6 "Frozen check"): first configure
      1.62 s inside the 6 s bound, a Waveform Ribbon switch committed on the worker; it found Nuitka's PySide6 icon hook
      loading QtGui and QtWidgets in every worker (R-176's frozen half, fixed by a build plugin plus a frozen-audit
@@ -318,6 +322,9 @@ answers.
   90° cap and visually the same as before (`.artifacts/evidence/architecture/framed_camera/20261108_scale_repair/`).
   45° on that card needs about 2.11 px per world unit (a 280-unit world). Decide: bound the framed aperture (or the
   vertical view) as well, or leave it to Edit (Restore Size, wheel up, side drag back to the wanted width).
+- **§1 8b P2 (8 Nov, decision):** gates 3 and 4 are measured (design doc step 6, Gate 3 / Gate 4 records): decide
+  whether the engine worker becomes the default (then the phase-boundary audit), and whether to size the frame-age
+  gain with a matched-GPU repeat game60 pair.
 - **§7.1 Waveform:** Preset 4 trade-offs of the fixed-scale v7 (sign off or ask for the tag's exact dynamics);
   Preset 7 and the Reaction Modes; Breathing; four-ribbon Preset 3; Particles; Strands; Colour/floor/mist; Fixed
   response; Floor Give; Pulse Rim; swell visibility; Travel Direction; Unified atmosphere.
@@ -1051,6 +1058,11 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
   The next MC run (19:47) and an invisible live check on current code were normal. On recurrence the sampler now
   logs `[USAGE] topology added ... name= parent= threads=` for every process entering the tree: identify them, then
   decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
+  Seen again 8 Nov with a normal tree (P2 gate 3's game60 pair, design doc step 6 "Gate 3 record"): every sample in both
+  runs stalled the render thread 71-106 ms in the scene render (13 of the worker path's 23 hitches, 14 of in process's
+  39); `collect_ms` ~13 ms per process walked at 87% system CPU (58 ms for 4-5 processes with the engine worker, 46 ms
+  for 3-4 in process; 23 ms for 4 on an idle machine). Main-side on both paths; the engine worker adds one process to
+  the walk.
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
