@@ -213,9 +213,15 @@ after the operator's yes on a question card; agents never run load (invisible ch
      live check's age chain is blind on the worker path (the main frame trace has no publish events for worker frames:
      revisions/s 0, publish -> swap empty); put the worker's publish time (each slot carries its produced time) in the
      trace.
-     Operator checks for 6: a frozen build with `--viz-engine-worker` (the Visualizer on the worker), its cold
-     spawn timed as ready plus the first configure against its 6 s bound, and the worker's RSS in `--usage` inside a
-     session; the 5.3 device checks on a real device (design doc, 5.3 record: default switch, a pinned player, a
+     The first frozen check ran 8 Nov (lead, build of `5fb8dab7`; design doc, step 6 "Frozen check"): first configure
+     1.62 s inside the 6 s bound, a Waveform Ribbon switch committed on the worker; it found Nuitka's PySide6 icon hook
+     loading QtGui and QtWidgets in every worker (R-176's frozen half, fixed by a build plugin plus a frozen-audit
+     refusal) and the frame codec's per-frame cycles (R-179: the worker's Waveform Ribbon sawtooth, fixed). Next, a
+     confirming GitHub Remote build of a commit with both fixes and R-178: the build log's `srpss-worker-qt: Removed`
+     line and the audit's Qt line for both families; the same sampled run with the engine worker on `qt6core.dll` only,
+     the image workers on `qt6core.dll` and `qt6gui.dll`, the engine worker's memory flat through Waveform Ribbon, the
+     window and `.scr` icons unchanged; one Settings round trip on the worker.
+     Operator checks for 6: the 5.3 device checks on a real device (design doc, 5.3 record: default switch, a pinned player, a
      USB/Bluetooth unplug, the only output unplugged, the in-process control, Media playing with nothing rendered
      here (Spotify Connect or casting, a player pinned elsewhere from the start, network buffering: one PortAudio
      re-init per silent run and per capture edge), and a second app on the old default hiding a switch). Known
@@ -328,6 +334,12 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - [ ] **Vocal-band scorer into the music-response tool (8 Nov):** the PCM vocal-band (300-3400 Hz) series behind the
   mid-led routing evidence and guide §2C lives only in scratch (`lead_audit/vocal_band.py`); add it to
   `tools/visualizer_replay/waveform_music_response.py` as a lane so it survives scratch pruning.
+- [ ] **Tool-output contract reds (found 8 Nov on `610e38c0`, not fixed there):** `tests/test_artifact_paths_contract.py`
+  fails 3 tests: `tools/github_remote_build.py` hard-codes `logs/` (lines 200, 249, 703); `--out` / `--json` bypass
+  `tools/artifact_paths.py` in `github_remote_build.py`, `theme_legibility.py`, `vulkan_shader_readiness.py` and
+  `visualizer_replay/{engine_main_cost,engine_worker_gate,live_engine_cost,live_engine_gate,owner_production_replay,
+  owner_worker_gate}.py`; `owner_worker_gate.py` writes PNG without `tools/evidence_media.py`. Route each through the
+  owners, or allowlist it there with its reason.
 - [ ] **Side findings of the Waveform second tick cut (7 Nov, not fixed there):**
   - `capture_visualizer_logical_frame` refreezes the common style (`freeze_render_fields(_common_style(widget))`,
     logical_frame_capture.py) on every tick of every mode, ~0.02-0.04 ms; a FrozenFieldsMemo would remove it.

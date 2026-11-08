@@ -35,6 +35,14 @@ _REQUIRED_MODULES = frozenset({
     "core.visualizer_engine.engine_worker",
 })
 
+#: The Nuitka trigger modules a compiled process runs when it imports ``PySide6.QtCore`` (the package's and QtCore's
+#: own pre/post-load code). None may import another Qt module: the engine worker imports QtCore only and the image
+#: workers QtCore and QtGui (R-176: with an executable icon, Nuitka's PySide6 plugin put ``import PySide6.QtWidgets``
+#: and QtGui into ``PySide6-postLoad``; ``tools/nuitka_worker_qt_plugin.py`` removes it).
+QTCORE_IMPORT_TRIGGERS = frozenset({
+    "PySide6-preLoad", "PySide6-postLoad", "PySide6.QtCore-preLoad", "PySide6.QtCore-postLoad",
+})
+
 
 def _tracked_sources(root: Path) -> list[Path]:
     result = [root / name for name in _ROOT_SOURCES if (root / name).is_file()]
@@ -54,6 +62,7 @@ def _tracked_sources(root: Path) -> list[Path]:
             root / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
             root / "tools" / "build_layout.ps1",
             root / "tools" / "frozen_build_audit.py",
+            root / "tools" / "nuitka_worker_qt_plugin.py",
         ) if p.is_file()
     )
     return sorted(set(result), key=lambda p: p.relative_to(root).as_posix())
@@ -84,6 +93,28 @@ def included_modules(report: Path) -> set[str]:
     return names
 
 
+def qt_gui_imports_on_qtcore_import(report: Path) -> tuple[set[str], dict[str, list[str]]]:
+    """The QtCore-import triggers the report compiled, and the Qt modules other than QtCore each of them uses."""
+    present: set[str] = set()
+    found: dict[str, list[str]] = {}
+    current = None
+    with report.open("rb") as stream:
+        for event, element in ET.iterparse(stream, events=("start", "end")):
+            if element.tag == "module":
+                if event == "start":
+                    name = element.get("name")
+                    current = name if name in QTCORE_IMPORT_TRIGGERS else None
+                    if current is not None:
+                        present.add(current)
+                else:
+                    current = None
+            elif event == "start" and element.tag == "module_usage" and current is not None:
+                used = element.get("name") or ""
+                if used.startswith("PySide6.Qt") and used != "PySide6.QtCore":
+                    found.setdefault(current, []).append(used)
+    return present, found
+
+
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -100,11 +131,20 @@ def verify_report(root: Path, report: Path, expected: str) -> dict[str, object]:
     absent = sorted(_REQUIRED_MODULES - present)
     if absent:
         raise ValueError("Nuitka omitted critical SRPSS runtime modules: " + ", ".join(absent))
+    triggers, gui = qt_gui_imports_on_qtcore_import(report)
+    if not triggers:
+        raise ValueError("The report shows no PySide6/QtCore load trigger (" + ", ".join(sorted(QTCORE_IMPORT_TRIGGERS))
+                         + "): the Qt-weight check cannot run; review tools/nuitka_worker_qt_plugin.py")
+    if gui:
+        raise ValueError("Importing PySide6.QtCore would load Qt GUI modules in every compiled process (workers "
+                         "included): " + "; ".join(f"{name} imports {', '.join(sorted(set(used)))}"
+                                                  for name, used in sorted(gui.items())))
     return {
         "schema_version": 1,
         "source_sha256": fingerprint,
         "source_file_count": file_count,
         "required_compiled_modules": sorted(_REQUIRED_MODULES),
+        "qtcore_import_triggers_without_gui": sorted(triggers),
         "nuitka_report_sha256": _sha256_file(report),
         "nuitka_report_path": str(report),
     }
@@ -150,6 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         args.receipt.write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
         print("[FROZEN-AUDIT] Critical menu/image-ban modules included; source and artifact fingerprint recorded")
+        print("[FROZEN-AUDIT] PySide6/QtCore load triggers import no Qt GUI module: "
+              + ", ".join(proof["qtcore_import_triggers_without_gui"]))
         print(f"[FROZEN-AUDIT] Receipt: {args.receipt}")
         return 0
     except (OSError, ValueError, ET.ParseError) as exc:

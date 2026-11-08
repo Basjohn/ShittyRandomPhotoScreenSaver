@@ -138,8 +138,13 @@ def encode(frame) -> bytes:
         else:
             raise FrameCodecError(f"not a canonical frame value: {kind.__name__}")
 
-    put(frame)
-    return bytes(out)
+    # ``put`` recurses through its own closure cell (a cycle holding ``out``): cleared on every exit, so the call's
+    # buffer goes with the call, never at the next cyclic collection (R-179: one per frame, in both processes).
+    try:
+        put(frame)
+        return bytes(out)
+    finally:
+        put = None
 
 
 def decode(payload: bytes):
@@ -219,7 +224,12 @@ def decode(payload: bytes):
             return array             # read-only, as the frame's own (never mutated)
         raise FrameCodecError(f"unknown tag {tag}")
 
-    frame = take()
-    if position != len(view):
-        raise FrameCodecError("trailing bytes after the frame")
-    return frame
+    # ``take`` recurses through its own closure cell (a cycle holding ``view``, the payload's memoryview): cleared on
+    # every exit, as ``encode``'s ``put`` (R-179).
+    try:
+        frame = take()
+        if position != len(view):
+            raise FrameCodecError("trailing bytes after the frame")
+        return frame
+    finally:
+        take = None
