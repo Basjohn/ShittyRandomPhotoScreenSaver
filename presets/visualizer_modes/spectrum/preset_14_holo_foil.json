@@ -35,7 +35,7 @@
           255,
           255
         ],
-        "spectrum_ghost_alpha": 0.8,
+        "spectrum_ghost_alpha": 0.6,
         "spectrum_ghost_color": [
           255,
           255,
@@ -136,7 +136,7 @@
           255
         ],
         "spectrum_peak_cap_thickness": 2,
-        "spectrum_peak_caps": true,
+        "spectrum_peak_caps": false,
         "spectrum_profile_floor": 0.2,
         "spectrum_rainbow_border": true,
         "spectrum_rainbow_enabled": true,

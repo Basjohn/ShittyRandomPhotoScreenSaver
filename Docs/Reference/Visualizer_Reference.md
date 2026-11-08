@@ -133,7 +133,7 @@ Spectrum and Extruded Spectrum expose separate **Rainbow Ghost** controls in the
 
 Spectrum (2D) carries optional, default-off decoration, declared in its spec and read only by Spectrum's own capture
 and Quick shader (`widgets/spotify_visualizer/spectrum_decor.py`, `widgets/spotify_visualizer/shaders/spectrum.frag`):
-**Ghost Colour** (Bar Colour / Custom; Rainbow Ghost, when on, still colours the ghosts), **Ghost Gradient** (toward a
+**Ghost Colour** (Bar Colour / Custom / Bar Fill; Rainbow Ghost, when on, still colours the ghosts), **Ghost Gradient** (toward a
 tip colour at the peak), the **Finish** bucket (Gloss, Fill Gradient toward a tip colour at the top of the field, Peak
 Caps resting on the existing decaying peaks) and the **Pattern** bucket (a second-colour pattern over the bar fill:
 Horizontal Bands, Scanlines, Dots, Diagonal Stripes, Grid, Chevrons; Pattern Anchor Per Bar or Shared; Colour, Scale,
@@ -158,11 +158,17 @@ Rules:
   passes through yellow, not olive; a grey, white or black end takes the other end's hue. Rim glow reaches at most
   30% of a bar's width in from each side, so on 37 narrow bars it stays a rim instead of recolouring the bar
   (`tests/test_spectrum_decor.py`, each with a negative control against the old rule).
-- Every curated preset ghosts (operator, 8 Nov 2026: caps alone "only draw the line, not the ghost effect"). This
-  supersedes the 7 Nov rule that presets 2-15 carry their peak memory in caps with ghosts off. A ghost fades toward
-  the card, so a dim warm or olive hue reads as a smudge under a bright cap. Presets 2-15 therefore ghost in a
-  light or luminous colour taken from their own palette (white, cloud, cyan, aqua, green, red or orange). None
-  shades toward a darker tip.
+- Ghost Colour **Bar Fill** makes a ghost a fading copy of its own bar: inside the bar's border it shows the colour
+  the bar's fill shows at that pixel (Fill Gradient at that height, Rainbow Fill, a pattern or flag sheet, gloss); on
+  the bar's side border (each segment's ring in Segments) the border colour at the border's own opacity. It never
+  takes the bar's top stroke, so nothing lines a ghost's top. A ghost's opacity falls toward its top; only Peak Caps
+  draw over it (`tests/test_spectrum_decor.py`, with negative controls).
+- Curated ghosts (operator, 8 Nov 2026, twice: caps alone "only draw the line, not the ghost effect"; then flat
+  ghosts under caps had "a solid top edge line" and "no blend"). Every curated preset ghosts the way Preset 1 does:
+  a trail continuing the bar's own colours, fading out, with no cap line. Preset 1 does it with Rainbow Ghost over
+  its rainbow borders, Holo Foil likewise, Glass Player with its cyan Bar Colour, and the rest with Bar Fill. Peak
+  Caps are off on all fifteen. Opacities sit near Preset 1's (about 0.6). This supersedes both the 7 Nov caps-only
+  rule and the first 8 Nov flat light colours.
 - Toggling fades (`SpectrumDecorFade`, `FADE_SECONDS`): one envelope per option on the presentation owner, advanced
   only on the capture timestamp (no timer, thread or second clock); a pattern switched to another dips through zero.
   A fresh owner starts settled, so exact Studio replays and new activations show the settings directly.

@@ -316,10 +316,15 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   Evidence: `.artifacts/evidence/visualizers/spectrum/presets/20261107_lead/` (contact sheets, motion strips, metrics, the
   authoring script). Open: the operator's eyes. Silhouette is the plainest by concept.
 
-  **Operator, 8 Nov:** "definitely better", but none of them ghosted. They drew only the cap line, because the 7 Nov
-  authoring turned ghosting off in all 14. Each now ghosts under its caps in a light colour from its own palette
-  (only the Ghost keys changed). Before and after renders:
-  `.artifacts/evidence/visualizers/spectrum/20261108_ghost/`.
+  **Operator, 8 Nov (twice):** first none of them ghosted; then the flat-colour ghosts under caps were "horsepiss":
+  a solid line on every ghost's top, no blend, and bad colours on 2 and 6. Cause: Peak Caps draw an opaque line
+  right on each ghost's faintest row, and a flat Custom colour cannot continue flag, gradient or patterned bars.
+  Now (v2): caps off on 2-15, and a new Ghost Colour source **Bar Fill** makes each ghost a fading copy of its own
+  bar (fill, gradient, flag or pattern, outline), as Preset 1's Rainbow Ghost continues its rainbow borders. Glass
+  Player ghosts in its cyan Bar Colour, Holo Foil keeps its Rainbow Ghost; opacities sit near Preset 1's.
+  Evidence (falling instants, each preset beside Preset 1 with 2x ghost-top crops):
+  `D:\Temp\Scratch\SRPSS\evidence\visualizers\spectrum\20261108_ghost_v2\` (`before/`, `after/`). Open: the
+  operator's eyes.
 - **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`).
   **The tick cut is merged (7 Nov).** Lead audit: three realistic mutations are each caught by
   `tests/test_waveform_logical_tick_exactness.py` (a Gaussian cache key ignoring the width, one shifted grid shared

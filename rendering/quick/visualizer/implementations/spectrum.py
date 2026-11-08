@@ -44,6 +44,7 @@ def resolve_spectrum_decor_uniforms(
     return (
         ("u_ghost_custom_mix", "1f", (unit("spectrum_ghost_custom_mix"),)),
         ("u_ghost_color", "4f", rgba(parameter(parameters, "spectrum_ghost_color"))),
+        ("u_ghost_fill_mix", "1f", (unit("spectrum_ghost_fill_mix"),)),
         ("u_ghost_gradient_mix", "1f", (unit("spectrum_ghost_gradient_mix"),)),
         ("u_ghost_tip_color", "4f", rgba(parameter(parameters, "spectrum_ghost_tip_color"))),
         ("u_gloss", "1f", (unit("spectrum_gloss"),)),
@@ -68,8 +69,8 @@ def resolve_spectrum_decor_uniforms(
 # Every frame parameter ``resolve_spectrum_decor_uniforms`` reads, fetched in ONE C call so a frame whose decoration
 # did not change costs no per-option Python work (the options are default-off; at rest they must cost nothing).
 _DECOR_SOURCES = (
-    "spectrum_ghost_custom_mix", "spectrum_ghost_color", "spectrum_ghost_gradient_mix", "spectrum_ghost_tip_color",
-    "spectrum_gloss", "spectrum_fill_gradient_mix", "spectrum_fill_tip_color", "spectrum_peak_caps_mix",
+    "spectrum_ghost_custom_mix", "spectrum_ghost_color", "spectrum_ghost_fill_mix", "spectrum_ghost_gradient_mix",
+    "spectrum_ghost_tip_color", "spectrum_gloss", "spectrum_fill_gradient_mix", "spectrum_fill_tip_color", "spectrum_peak_caps_mix",
     "spectrum_peak_cap_color", "spectrum_peak_cap_thickness", "spectrum_pattern_shown",
     "spectrum_pattern_anchor_shown", "spectrum_pattern_mix", "spectrum_pattern_strength", "spectrum_pattern_color",
     "spectrum_pattern_scale",
@@ -78,8 +79,8 @@ _decor_sources = operator.itemgetter(*_DECOR_SOURCES)
 
 
 _DECOR_UNIFORMS = (
-    "u_ghost_custom_mix", "u_ghost_color", "u_ghost_gradient_mix", "u_ghost_tip_color", "u_gloss",
-    "u_fill_gradient_mix", "u_fill_tip_color", "u_peak_cap_mix", "u_peak_cap_color", "u_peak_cap_thickness",
+    "u_ghost_custom_mix", "u_ghost_color", "u_ghost_fill_mix", "u_ghost_gradient_mix", "u_ghost_tip_color",
+    "u_gloss", "u_fill_gradient_mix", "u_fill_tip_color", "u_peak_cap_mix", "u_peak_cap_color", "u_peak_cap_thickness",
     "u_pattern", "u_pattern_shared", "u_pattern_mix", "u_pattern_color", "u_pattern_scale",
 )
 

@@ -1409,7 +1409,8 @@ _SPECTRUM = ModeSettings(
         Slider('spectrum_ghost_decay', 'Ghost Decay Speed:', 0.1, 1.0,
                '', bucket='ghost', truncate=True, logical=True, suffix='x', tick=5, when=('spectrum_ghosting_enabled', True)),
         Choice('spectrum_ghost_color_source', 'Ghost Colour:', SPECTRUM_GHOST_COLOUR_SOURCES,
-               'Bar Colour: ghosts take the bar border colour. Custom: their own colour (and opacity).\n'
+               "Bar Colour: ghosts take the bar border colour. Bar Fill: they continue the bar's own fill "
+               '(its gradient, pattern or flag) and fade out. Custom: their own colour (and opacity).\n'
                'Rainbow Ghost, when on, colours them instead.', bucket='ghost',
                when=('spectrum_ghosting_enabled', True), enabled_when=('spectrum_rainbow_ghost', False)),
         Colour('spectrum_ghost_color', 'Custom Ghost Colour:', 'Choose Spectrum Ghost Colour',
