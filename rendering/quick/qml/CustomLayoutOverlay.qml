@@ -1573,13 +1573,34 @@ Item {
                 id: columnRailLoader
                 anchors.fill: parent
                 z: 63
+                // Loaded for the selected parent, locked or not: the lock fades the rails like
+                // the child layer (fade, never vanish) and switches their input off at once (a
+                // grip held at the lock edge is cancelled, its preview dropped, nothing saved).
                 active: editFrame.selectedForChildEdit && editFrame.hasPresentationItem
-                    && !editFrame.childEditingLocked
                     && (editFrame.presentationItem.customColumnRailSpecs || []).length === 3
                 sourceComponent: Component {
                     Item {
                         id: columnRailLayer
+                        objectName: "customLayoutColumnRailLayer-" + editFrame.widgetId
                         anchors.fill: parent
+                        readonly property bool locked: editFrame.childEditingLocked
+                        enabled: !locked
+                        visible: !locked || opacity > 0.0
+                        opacity: 0.0
+                        NumberAnimation {
+                            id: columnRailFade
+                            target: columnRailLayer
+                            property: "opacity"
+                            duration: 110
+                            easing.type: Easing.OutCubic
+                        }
+                        function fadeToLockState() {
+                            columnRailFade.stop()
+                            columnRailFade.to = locked ? 0.0 : 1.0
+                            columnRailFade.start()
+                        }
+                        onLockedChanged: fadeToLockState()
+                        Component.onCompleted: if (!locked) fadeToLockState()
                         Repeater {
                             id: columnRailRepeater
                             model: editFrame.hasPresentationItem
