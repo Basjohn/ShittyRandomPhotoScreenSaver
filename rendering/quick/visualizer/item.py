@@ -131,6 +131,12 @@ class _RenderNodeRetirement:
             node = self._node
         return node is not None and node.render_host.prepared_activation == (mode_id, int(activation_id))
 
+    def renderer_preparation_progress(self, mode_id: str, activation_id: int) -> int:
+        """Preparation units the current node's render thread has completed for this activation."""
+        with self._lock:
+            node = self._node
+        return 0 if node is None else node.render_host.preparation_progress(mode_id, activation_id)
+
     def retained_snapshot(self, identity: VisualizerRenderIdentity) -> VisualizerRenderSnapshot | None:
         """Read only immutable pixels' input, never expose a render resource."""
         with self._lock:
@@ -229,6 +235,10 @@ class VisualizerRenderItem(QQuickItem):
     def renderer_prepared(self, mode_id: str, activation_id: int) -> bool:
         """GUI thread: whether the render thread has prepared this activation's renderer."""
         return self._retirement.renderer_prepared(mode_id, activation_id)
+
+    def renderer_preparation_progress(self, mode_id: str, activation_id: int) -> int:
+        """GUI thread: how many preparation units the render thread has completed for this activation."""
+        return self._retirement.renderer_preparation_progress(mode_id, activation_id)
 
     @property
     def render_identity(self) -> VisualizerRenderIdentity | None:

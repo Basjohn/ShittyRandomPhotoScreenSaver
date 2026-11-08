@@ -221,6 +221,17 @@ after the operator's yes on a question card; agents never run load (invisible ch
      line and the audit's Qt line for both families; the same sampled run with the engine worker on `qt6core.dll` only,
      the image workers on `qt6core.dll` and `qt6gui.dll`, the engine worker's memory flat through Waveform Ribbon, the
      window and `.scr` icons unchanged; one Settings round trip on the worker.
+     Frozen check 2 (operator, build of `098b3f0e`; design doc, step 6 "Frozen check 2") found R-180: the first Neon
+     Lake switch of a new build froze every display ~7 s on the basin program's cold driver link and the overdue 6 s
+     activation deadline then reloaded the displays for a live target (in process too). The reload is fixed (the
+     deadline reads the target's render progress). The next frozen run should log `Activation slow but alive` at the
+     first Neon Lake switch and no `MODE_ACTIVATION_FAIL` or `visualizer_activation_failed` reload.
+     Open (R-180 follow-up, lead): the cold link itself still freezes every display on first use per build and per
+     shader edit (Neon Lake's basin 5-6 s, Waveform Ribbon's ribbon primitives ~1 s each, Extruded Bubble 0.35-0.54 s a
+     program; RTX 4090, the driver's cache is per executable path). Candidates: an app-owned program binary cache
+     (`glGetProgramBinary`/`glProgramBinary` keyed by the sources and GL vendor/renderer/version, outside the onefile
+     folder), or a smaller basin program (dropping its four extra glass sky taps measured 3.4 s; a dynamic-count loop
+     for them 5.7 s, no gain). Measure with a nonce comment forcing the miss (R-180, "Reproduction from source").
      Operator checks for 6: the 5.3 device checks on a real device (design doc, 5.3 record: default switch, a pinned player, a
      USB/Bluetooth unplug, the only output unplugged, the in-process control, Media playing with nothing rendered
      here (Spotify Connect or casting, a player pinned elsewhere from the start, network buffering: one PortAudio

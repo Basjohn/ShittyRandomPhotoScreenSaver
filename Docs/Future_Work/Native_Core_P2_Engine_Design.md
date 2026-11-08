@@ -1529,6 +1529,24 @@ switch never remaps.
        `.scr`'s Explorer icon unchanged; then one Settings round trip on the worker.
      - Evidence: `.artifacts/evidence/architecture/native_core_p2/20261108_frozen_diagnostic_check/`
        (`process_samples.json`, `usage_samples.log`, `worker_log_lines.log`, the sampling script).
+   - **Frozen check 2 (8 Nov, operator; build of `098b3f0e`, 5 min, two displays, switches, Settings, the Studio,
+     presets): found 3, R-180, the reload fixed.** At 19:46:14 a switch to Neon Lake committed on the worker; the
+     render thread's first preparation unit, the basin program's link with the new build's cold NVIDIA cache (the cache
+     is per executable path), held the GUI thread ~7 s in Qt's sync (clock gap 7621 ms, every display), and the 6 s
+     activation deadline, overdue, fired the moment it returned: `deadline:waiting_target`, a full CUSTOM reload for a
+     live target. Screen 0's `scene_fps=2.08 dt_max_ms=1000` beforehand is normal (no Visualizer there: it renders only
+     on change). Not the worker path: from source with a nonce forcing the cache miss the basin link took 6.1 s (worker)
+     and 6.4 s (in process) and both reloaded the same way; warm it is 39 ms. Fixed by the activation deadline reading
+     the committed target's render progress (extended while it advances, at most 4 times; silent targets still fail)
+     and the prepared reveal's bound running from the last completed unit. Cold after the fix: Neon Lake completed in
+     8.5 s (worker) / 8.0 s (in process) with one extension and no reload; Extruded Bubble 4.6 / 4.5 s, Waveform
+     Ribbon 4.2 / 3.9 s; warm 1.55-1.94 s for all three either way. The ~6 s freeze itself remains on first use per
+     build (Current_Plan, R-180 follow-up).
+     - *Next frozen run should show:* the first Neon Lake switch logs `Activation slow but alive ... deadline extended
+       (1/4)`, a clock gap of about 6-7 s, no `MODE_ACTIVATION_FAIL` and no `visualizer_activation_failed` reload, and
+       the switch completing with a fade-in; later Neon Lake activations in the same build are warm (no gap).
+     - Evidence: `.artifacts/evidence/architecture/native_core_p2/20261108_frozen_diagnostic_check2/` (the operator's
+       logs and `process_samples.json`); the source reproduction's numbers are in R-180.
 
 ## Risks
 
