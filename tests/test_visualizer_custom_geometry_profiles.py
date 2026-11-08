@@ -668,6 +668,7 @@ def test_hidden_mode_cycles_restore_each_independent_profile_on_one_retained_own
     manager = DisplayManager.__new__(DisplayManager); manager._widgets_config_snapshot = deepcopy(widgets)
     manager.settings_manager = _Settings(widgets); manager._quick_visualizer_unit = unit
     manager._quick_custom_layout_owner = SimpleNamespace(is_editing=False, is_direct=False, is_active=False)
+    manager._quick_visualizer_media_model = None   # the Expanded Visualizer overlays' Media source (M3b) reads it
     engine = _ManagerVisualizerEngine()
     owner = QuickDisplayVisualizerOwner(unit.runtime, bar_count=32, initial_mode=start_mode,
         engine_factory=lambda _count: engine, card_shadow_kwargs=neutral_card_shadow_kwargs(),
