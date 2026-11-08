@@ -839,17 +839,25 @@ switch never remaps.
        other attribute). Latest wins, at most one in flight, sent at the end of every presentation (so an orbit edge
        reaches the session within one frame; the records are time-parameterised, so the pose at each later step is
        exact) and at once by `QuickDisplayVisualizerOwner.forward_presentation_inputs` (a rig's scripted edge). A
-       preset's immediate Auto Rotate is armed on the main state at the commit's reply and forwarded. The Fullscreen
+       preset's immediate Auto Rotate is armed once, by the session's commit (as the in-process commit arms it); the
+       commit's reply carries the session's view records and the main side adopts them, nothing sent back (checkpoint
+       audit 8, A8-L2: it used to arm again at the reply, stepping the turn back by the reply's latency). The values
+       are compared with the last send by value (A8-L6: what was sent is held as a detached copy, so an in-place edit
+       of a nested list or dict is forwarded; only a changed value is copied). The Fullscreen
        Edit envelopes: Sphere's reads the newest frame's resolved parameters when the main tick state has none (the
        worker path), and the main controller's bar count follows the session's (the configure and commit replies carry
        it), so Extruded Spectrum's envelope and a reconfigure use the target's count.
      - *The reflected wallpaper (A7-M1), decided: the main side completes the frame.* The wallpaper is presentation data
        the owner makes on the GUI thread from the displayed photograph; shipping its pixels to the worker only to have
        them shipped back in the frame would be the wrong owner, so the worker never sees it. The reader mailbox runs a
-       frame completion (`PacketMailbox.set_frame_completion`, set by the owner): `backdrop.complete_frame_backdrop` puts
+       frame completion (`PacketMailbox.set_frame_completion`, set by the owner): `backdrop.FrameBackdropCompletion` puts
        the owner's wallpaper (frozen once per wallpaper) and its crossfade into a reflecting frame's parameters (Sphere,
        Extruded Spectrum), exactly where the in-process capture puts them; frames with no wallpaper are untouched (no
-       work).
+       work). With a wallpaper (the common case for these modes) it replaces the two entries only and rebuilds the
+       frame around them without re-validation, as the codec builds a decoded frame (A8-L1: it used to re-freeze the
+       whole parameter map and re-validate both frames on every frame, 132 / 104 us median, Sphere / Extruded
+       Spectrum; now 17 / 15 us, evidence `20261108_audit8_l1_l6_timings/`). One per owner session, released on retire
+       and on the fallback (the module-level cache that kept the last wallpaper for the process's life is gone).
      - *Settings deltas, decided:* in process a preset or settings change is an activation (`commit_logical_activation
        (kind="preset")`: the runtime stop, the engine's resets, the crossfade), and the worker path does the same
        (`VIS_SET_MODE` for the current mode); a logical delta that kept the engine's state would differ from in process,
@@ -875,9 +883,11 @@ switch never remaps.
        Qt-free colours.
      - **Left for 5.6-5.7:** a GUI-thread edge between two presentations reaches the worker at the next presentation's
        end (at most one frame; frames ticked before it show the previous view, as a tick that ran just before the edge
-       would in process); presentation inputs are compared every presentation on the worker path (measured: the snapshot
-       is 1.7-18.7 us for 9-105 attributes, Sphere to Neon Lake, plus the comparison with the last send; nothing in
-       process); the frame completion runs where the frame is decoded (on the render thread at sync admission).
+       would in process); presentation inputs are compared every presentation on the worker path (measured with
+       audit 8's fixes: the snapshot and the comparison with the last send together 1.3-20 us for 5-105 attributes,
+       Spline Curve to Neon Lake; nothing in process); the frame completion runs where the frame is decoded (on the
+       render thread at sync admission: 15-17 us median per reflecting frame with a wallpaper, measured on an unshown
+       rig, not with a real window).
    - 5.5 Fail-closed: `session_closed` and heartbeat loss fade the Visualizer (never vanish) and reconfigure once;
      the label-namespace counter owned by the main process for the app's life; the wake sender closed after
      configure; a full wake pipe never blocks the tick. **Done in 5.2:** the namespace counter's owner
@@ -896,7 +906,10 @@ switch never remaps.
        flight restores the outgoing Edit and layout profiles and is the session's failure). The first configure never
        waits for the spawn: a worker that is not running is (re)started on a `ThreadManager` IO task (a dead one is
        stopped first, which retires its stale response listener), the requests sent meanwhile wait in the link's
-       outbox, in order. Found on the way: a session killed between the heartbeat's passes leaves the supervisor's
+       outbox, in order. The first configure is bounded by the same one-shot deadline as a recovery (A8-L5: fenced by
+       its session's label namespace; unanswered, the activation runs in process, not counted for the run), not by
+       the heartbeat. Replies are matched by correlation, so a late event for one the link abandoned never answers its
+       resend (A8-L4). Found on the way: a session killed between the heartbeat's passes leaves the supervisor's
        worker "running" for a moment, so the replacement's configure can be queued to the dead process and then
        cancelled by the heartbeat's restart; the link sends an unanswered configure (and everything queued behind it)
        once more to the restarted worker (the probe's kill showed it, and the killed-worker test fails without it).
@@ -916,48 +929,68 @@ switch never remaps.
      - *Bounded recovery (A7-M3).* A recovery always enters `recovering` at the failure (the held frame, or nothing
        held, waiting for the replacement's identity), bumps the request serial (a crossfade deadline armed earlier is
        inert in it) and arms the transaction deadline's one-shot (`_on_recovery_deadline`, generation-fenced; never
-       armed while the displays are off: the unpark arms it), again at its reveal. First expiry, still on the worker:
-       fall back in process once (counted for the run); the in-process runtime's publications pace the held frame's
-       fade and the reveal, under a second deadline. Second expiry: a reveal that never came leaves the Visualizer faded
-       out, logged, and requests admitted (a later crossfade fades out from the drawn fade, `_fade_out_from`: 1.0 in
-       process, so in-process frames are unchanged); a held frame nothing paces any more escalates to the
-       generation-fenced reconstruction. The fallback is contained (`_fall_back_in_process` catches and escalates once;
-       nothing reaches Media's or display power's handlers).
+       armed while the displays are off: the unpark arms it). The reveal gets a deadline of its own: the serial moves
+       on again there, so the failure's shot is inert (checkpoint audit 8, A8-M1: until then both shots carried the
+       same serial and a healthy replacement slower than the failure's window was retired, the worker off for the run;
+       the record's "again at its reveal" did not hold). First expiry, still on the worker: fall back in process once
+       (counted for the run); the in-process runtime's publications pace the held frame's fade and the reveal, under a
+       second deadline. Second expiry (in process): a reveal that never came, or a held frame nothing paces any more,
+       escalates to the generation-fenced reconstruction, exactly as an in-process activation's `waiting_target`
+       deadline does (A8-M2: it used to leave the Visualizer faded out for the session with its in-process runtime
+       running; the display's reload retires the owner and the rebuilt one fades in). The fallback is contained
+       (`_fall_back_in_process` catches and escalates once; nothing reaches Media's or display power's handlers).
      - *Lows.* A7-L1: the failure path never resets the drawn fade (the hold takes the fade actually drawn: 0 after a
        completed fade-out). A7-L3: no frame is held while the displays are off, and a park during a recovery drops its
        held frame, so the replacement reveals from hidden at the unpark. A7-L4: a device that does not open is a device
        failure, not a worker failure: the session keeps running (idle frames, as in process), logs it once per run of
        failures, reports `capture_failed` in its replies, and the next edge that opens capture retries the device; a
        later open clears it. A7-L5: Media's play edge on the worker records its `[VIS_PLAYBACK_EDGE]` T1 (sent) and T2
-       (the reply) under the reactivity diagnostics; "parked"/"resumed" is logged on the reply. A7-L6: a paused switch
+       (the reply) under the reactivity diagnostics; "parked"/"resumed" is logged on the reply, and only the newest
+       display-power edge's reply acts (A8-L3: after OFF then ON, the OFF reply no longer clears the reader with the
+       displays back on). A7-L6: a paused switch
        (Oscilloscope -> Bubble, Spectrum -> Sphere) reveals on the same frame with identical frames on both paths
        (`owner_worker_gate.identity_script_paused_switch`; the rig records the phase and fade of every publication).
        A closed reader mailbox now reads as empty (a retire after a failed fallback raised on its released view).
      - *GUI-thread stall, measured (`D:` probe on the real owner and process, below-normal priority; evidence
-       `.artifacts/evidence/architecture/native_core_p2/20261108_p2b_55_gui_stall/`):* before -> after, the worst single
-       GUI-thread call: the first configure 1,780 ms -> 86 ms (38 ms link setup with the cold import of the worker
-       modules, 47 ms the presentation side; the 0.5 s spawn and 1-2 s session build moved off the thread); the
-       configure's reply 161-209 ms (the render-source bind, which in process is `bind`'s 229 ms); Media's play edge
+       `.artifacts/evidence/architecture/native_core_p2/20261108_p2b_55_gui_stall/`):* before -> after, per GUI-thread
+       call: the first configure's edge 1,780 ms -> 86 ms (38 ms link setup with the cold import of the worker
+       modules, 47 ms the presentation side; the 0.5 s spawn and 1-2 s session build moved off the thread). That is
+       not the worst stall after the change (A8-L7): the configure's reply handler costs 161-209 ms on the GUI thread
+       (the render-source bind, which in process is `bind`'s 229 ms), so the worst single GUI-thread call of a first
+       activation on the worker is about 0.16-0.21 s, not 86 ms. Media's play edge
        0.6 -> 0.1 ms; display power 1.7 -> 0.15 ms; a view drag step 1.3 -> 0.1 ms; the mode commit 27 ms (inside
        `sync_present`) -> 0.9 ms plus the reply's 7.5-13 ms presentation configure; a killed worker mid-edge 2,639 ms
        (the edge) + 1,715 ms (the reconfigure) -> 0.1 ms + 3 ms; a hung worker 21,873 ms (the edge, until the
        heartbeat's restart released it) -> 0.2 ms for three edges, the failure path reached 16.8 s later by the
        heartbeat (production interval). Gate: no control edge over one frame (1/60 s); held in
-       `tests/test_visualizer_owner_engine_worker_liveness.py` against a suspended worker.
+       `tests/test_visualizer_owner_engine_worker_liveness.py` against a suspended worker. The gate covers the edges
+       only, not the reply handlers (the configure's reply above, the commit's presentation configure).
      - *Tests* (`tests/test_visualizer_owner_engine_worker_liveness.py`, each with its negative control shown): the
        full wake pipe (the blocking send never returns); edges against a hung worker (the waiting edge stalls 30 s) and
-       the heartbeat ending it, recovered on a fresh worker; a killed worker (without the configure's resend the
+       the heartbeat ending it, recovered on a fresh worker (shown only with the test's 0.25 s heartbeat, A8-L7: in the
+       evidence probe at the production heartbeat the hung case was the probe's second failure, so it ended in
+       process; recovery onto a fresh worker after a production-timed hang, ~17 s detection and a restart racing the
+       link's own spawn, is unmeasured); a killed worker (without the configure's resend the
        replacement fails and the owner ends in process); a replacement that never publishes (no deadline: frozen in
        `recovering`); a fallback that raises (unguarded: it escapes Media's play edge); a stale crossfade deadline (no
        fence: `deadline:recovering`); A7-L1 (the reset fade flashes), A7-L2 (synchronous failure delivery without the
        guard ends `failed`), A7-L3 (the old hold re-presents the pre-park frame), A7-L5 (logging before the reply logs
        a failed park), A7-L6 (a reveal predicate that waits for a playing frame differs). A7-L4:
-       `tests/test_visualizer_owner_engine_worker.py` (the old report closes the pipe).
+       `tests/test_visualizer_owner_engine_worker.py` (the old report closes the pipe). Checkpoint audit 8 (each with
+       its pre-fix variant): a slow but healthy replacement gets its own reveal deadline (A8-M1), a recovery that never
+       reveals escalates to the reconstruction (A8-M2), a park reply that lands after the unpark never clears the reader
+       (A8-L3), a late reply for an abandoned correlation never answers its resend (A8-L4), a first configure that is
+       never answered is bounded (A8-L5); in `tests/test_visualizer_owner_engine_worker_inputs.py`: the frame completion
+       refreezes nothing per frame and leaves with its owner (A8-L1), a preset's Auto Rotate is armed once by the
+       session (A8-L2), an in-place edit of a nested presentation input is forwarded (A8-L6).
      - **Left for 5.6-5.7:** the supervisor starts a dead role without retiring its stale response listener (the link
        stops it first; the supervisor itself is unchanged); a heartbeat restart racing the link's own restart can still
-       kill the fresh worker (the resend covers one; a second is a failure, fail closed); the hung-worker bound is the
-       production heartbeat's (~17 s measured) with the held frame frozen meanwhile; a session whose steps keep failing
-       (the runtime retries, A6-M3) still publishes nothing and is not detected; device changes (5.3).
+       kill the fresh worker (the resend covers one; a second is a failure, fail closed); the hung-worker bound of an
+       established session is the production heartbeat's (~17 s measured) with the held frame frozen meanwhile (the
+       first configure is bounded by the 6 s deadline since audit 8); recovery onto a fresh worker after a
+       production-timed hang is unmeasured (A8-L7); the reply handlers are outside the one-frame gate (the configure's
+       reply 161-209 ms on the GUI thread, the render-source bind); a session whose steps keep failing (the runtime
+       retries, A6-M3) still publishes nothing and is not detected; device changes (5.3).
    - 5.6 Cleanup: delete `engine_snapshot.py` and the `snapshot` input; Bubble's spawn on its own generator so no
      gate needs a process-wide seed.
    - 5.7 Dormancy and diagnostics: the worker exists only while a Visualizer is active and parks with the display;

@@ -1620,3 +1620,49 @@ correlation would complete the new one.**
 - The render-thread decode and completion cost with a real window (probe (b) is an unshown rig).
 - `send_wake_byte_without_blocking`'s Windows cancel race (a byte written and still counted as dropped). Harmless by
   reading, not tested.
+
+### Audit 8 resolution (8 Nov)
+
+Each fix has a regression test with its negative control (a pre-fix variant inside the test, and the test's fixed
+variant failing with the source change reverted). Liveness tests: `tests/test_visualizer_owner_engine_worker_liveness.py`;
+input tests: `tests/test_visualizer_owner_engine_worker_inputs.py`.
+
+- **A8-M1** fixed by 4f77e5bf: `_finish_worker_recovery` moves the request serial on before re-arming, so the reveal
+  has its own deadline and the failure's shot is inert. Test: `test_a_slow_but_healthy_replacement_gets_its_own_reveal_deadline`
+  (pre-fix: the replacement is retired and the worker is off for the run).
+- **A8-M2** fixed by 4f77e5bf: the second expiry in `waiting_target` escalates to the generation-fenced reconstruction,
+  as an in-process activation's deadline does (the display's reload retires the owner and its hidden runtime; the
+  rebuilt owner fades in). Test: `test_a_recovery_that_never_reveals_escalates_to_the_reconstruction_as_in_process`
+  (pre-fix: idle at fade 0, invisible frames still published).
+- **A8-L1** fixed by 873b8d0f: `backdrop.FrameBackdropCompletion` (per owner session) replaces the two entries only and
+  rebuilds the frame without re-validation; the per-frame whole-map freeze and both frames' `__post_init__` are gone.
+  Sphere 132 -> 17 us median, Extruded Spectrum 104 -> 15 us (stand-in rig, evidence
+  `.artifacts/evidence/architecture/native_core_p2/20261108_audit8_l1_l6_timings/`). The module-level cache is gone; the
+  owner releases the completion on retire and on the fallback. Test:
+  `test_the_frame_completion_refreezes_nothing_per_frame_and_leaves_with_its_owner` (Sphere, Extruded Spectrum; reverted:
+  one map frozen per frame).
+- **A8-L2** fixed by 43ddcc58: the session's commit is the one arming owner; the `VIS_SET_MODE` reply carries its view
+  records, the main side adopts them (a record the GUI replaced after the send is kept) and records them as sent.
+  Test: `test_a_presets_auto_rotate_is_armed_once_by_the_session` (pre-fix: two armings, the session's record replaced).
+- **A8-L3** fixed by 864e95c6: display-power edges are numbered; only the newest edge's reply clears the reader and
+  logs. Test: `test_a_park_reply_that_lands_after_the_unpark_never_clears_the_reader` (pre-fix: a clear with the
+  displays on).
+- **A8-L4** fixed by 1d3ee5e5: the reply event carries its correlation and `_deliver_reply` drops one that no longer
+  matches. Test: `test_a_late_reply_for_an_abandoned_correlation_never_answers_its_resend` (pre-fix: the stale answer
+  configures the link, the real one is dropped).
+- **A8-L5** fixed by 864e95c6: the first configure arms the recovery's one-shot (fenced by its label namespace);
+  unanswered, the activation runs in process, not counted for the run. Test:
+  `test_a_first_configure_that_is_never_answered_is_bounded` (unbounded: still on the worker, render binding deferred).
+- **A8-L6** fixed by c2d7c262: the link compares the state's values with detached copies of what it sent
+  (`logical_edges.detach_presentation_value`, applied to changed values only; the snapshot no longer copies lists per
+  frame). Snapshot plus comparison 1.4-25.0 us -> 1.3-20.0 us median (Spline Curve to Neon Lake). Test:
+  `test_an_in_place_edit_of_a_nested_presentation_input_is_forwarded` (by reference: never forwarded).
+- **A8-L7** corrected in the design doc (5.5 record): the configure's reply handler (161-209 ms) is the worst GUI-thread
+  call of a first activation on the worker, and the one-frame gate covers edges only; "again at its reveal" now holds
+  (A8-M1); recovery onto a fresh worker after a hang is shown only at the test's 0.25 s heartbeat, the production-timed
+  case is listed as unmeasured.
+
+Focused runs after the fixes: the three engine-worker owner files 69 passed; the production path, the owner contract,
+edge, retirement and logical-ownership suites, the logical-edges parity, engine-worker and packet-mailbox suites 92
+passed. With `--viz-engine-worker` off nothing on these paths runs (all changes are on the worker path or its
+link), and the production-path frame test is unchanged.

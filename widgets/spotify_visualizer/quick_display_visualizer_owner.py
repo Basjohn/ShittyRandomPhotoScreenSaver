@@ -128,7 +128,7 @@ class QuickDisplayVisualizerOwner:
     _worker_playback_edges = 0
     _display_power_edges = 0
     _frame_completion: Any = None
-    # The fade a crossfade's fade-out starts from (1.0 in process; a recovery that ended faded out leaves 0).
+    # The fade a crossfade's fade-out starts from: the fade drawn at the request (1.0 whenever the owner is idle).
     _fade_out_from = 1.0
 
     def __init__(
@@ -1471,8 +1471,8 @@ class QuickDisplayVisualizerOwner:
             "presentation_kwargs": dict(presentation_kwargs),
             "on_complete": on_complete,
         }
-        # The fade-out starts from the fade drawn now (1.0 in process; an engine-worker recovery that ended faded
-        # out leaves 0, so the request never flashes the hidden frame back in).
+        # The fade-out starts from the fade drawn now (1.0 in process, and after every completed engine-worker
+        # recovery since audit 8's A8-M2; kept so a request can never flash a hidden frame back in).
         self._fade_out_from = float(self._mode_transition_fade)
         self._mode_transition_phase = "fading_out"
         self._mode_transition_started_at = float(self._transition_clock())
