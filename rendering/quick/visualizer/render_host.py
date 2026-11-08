@@ -59,7 +59,8 @@ def create_lifecycle_telemetry_if_admitted() -> (
 # Hidden frames (content fade 0, as during a mode or preset reveal's waiting phase) let a renderer
 # that offers ``prepare_step`` compile or allocate one unit, at least this far apart, so no two
 # nearby frames of the window both carry a compile. Measured at the first visible frame before
-# this existed: Shockwave Grid 22 ms with a warm driver shader cache, 139 ms cold.
+# this existed: Shockwave Grid 22 ms with a warm driver shader cache. Truly cold (a new build's
+# executable path, an edited shader) one unit is a whole driver link: Neon Lake's basin 5-6 s (R-180).
 PREPARE_SPACING_S = 0.03
 
 
@@ -82,6 +83,11 @@ class QuickVisualizerRenderHost:
         # (mode id, activation id) whose renderer has everything its visible frames need. Written
         # here on the render thread, read by the GUI-side reveal (one reference, no lock needed).
         self._prepared: tuple[str, int] | None = None
+        # ((mode id, activation id), preparation units completed for it): the render thread's liveness for an
+        # unrevealed activation. One unit can be a multi-second driver link (Neon Lake's basin program with a cold
+        # shader cache, R-180); the GUI side tells a slow-but-alive target from a silent one by this count advancing.
+        # Written only on preparation edges (never per steady frame), read by the GUI (one reference, no lock).
+        self._preparation: tuple[tuple[str, int], int] | None = None
         self._next_prepare_at = 0.0
         # Opt-in only: injected telemetry (tests/tools) wins; otherwise consult
         # the process experiment admission. ``None`` == disabled == no new
@@ -145,6 +151,18 @@ class QuickVisualizerRenderHost:
     def prepared_activation(self) -> tuple[str, int] | None:
         """(mode id, activation id) whose renderer is ready to draw without compiling."""
         return self._prepared
+
+    def preparation_progress(self, mode_id: str, activation_id: int) -> int:
+        """Preparation units the render thread has completed for this activation (0 for any other)."""
+        preparation = self._preparation
+        if preparation is None or preparation[0] != (mode_id, int(activation_id)):
+            return 0
+        return preparation[1]
+
+    def _note_preparation(self, activation: tuple[str, int]) -> None:
+        preparation = self._preparation
+        count = preparation[1] if preparation is not None and preparation[0] == activation else 0
+        self._preparation = (activation, count + 1)
 
     def render(
         self,
@@ -241,10 +259,12 @@ class QuickVisualizerRenderHost:
                         self._next_prepare_at = now + PREPARE_SPACING_S
                         if prepare(frame):
                             self._prepared = activation
+                        self._note_preparation(activation)
             else:
                 implementation.render(frame)
                 if self._prepared != activation:
                     self._prepared = activation      # it has drawn: whatever it needed exists
+                    self._note_preparation(activation)
             if frame_trace is not None:
                 frame_trace.record(
                     FrameTraceEvent.RENDER_MODE_READY,
@@ -360,6 +380,7 @@ class QuickVisualizerRenderHost:
         self._quad_vao = 0
         self._last_render_mode_id = None
         self._prepared = None
+        self._preparation = None
         if self._lifecycle is not None:
             self._lifecycle.note_full_release(
                 error=(" | ".join(errors) if errors else None)

@@ -68,6 +68,11 @@ _PREPARED_REVEAL_DEADLINE_S = 1.5
 # It protects all transition phases, including no logical publication at all.
 # Actual prepared-reveal deadline above is shorter and remains unchanged.
 _ACTIVATION_TRANSACTION_DEADLINE_MS = 6000
+# A committed target is slow but alive when the render thread completed a preparation unit for it since the deadline
+# was armed (or last extended): one unit can be a multi-second driver link, and the GUI thread waits in Qt's sync for
+# it, so the overdue single-shot fires the moment the link returns (R-180). Such a deadline is extended, at most this
+# many times; a target with no render progress in a whole window fails as before (one fenced reconstruction).
+_SLOW_TARGET_DEADLINE_EXTENSIONS = 4
 
 
 class _TakeoverFade:
@@ -207,6 +212,10 @@ class QuickDisplayVisualizerOwner:
         self._mode_transition_fade = 1.0
         # (mode, activation id) the waiting target's reveal holds for, and since when.
         self._preparing_activation: tuple[str, int] | None = None
+        # (activation, its preparation units last seen, when they last advanced): the reveal's liveness bound.
+        self._preparing_progress: tuple[tuple[str, int], int, float] | None = None
+        # (request serial, preparation units at the last deadline, extensions): slow-but-alive deadline state.
+        self._deadline_liveness: tuple[int | None, int, int] = (None, 0, 0)
         self._waiting_target_since = 0.0
         # ``None`` until the owner first starts: any presentation resolved before
         # then is fully opaque (never hidden). Once armed, the authored scene
@@ -1238,7 +1247,43 @@ class QuickDisplayVisualizerOwner:
             else:
                 logger.error("[SPOTIFY_VIS] Cancelled stalled fade-out while outgoing mode remained live")
             return
+        if phase in ("waiting_target", "fading_in") and self._slow_target_alive(serial):
+            # Hidden (or fading in) and still being prepared: keep the faded frame and wait, never reload.
+            from core.threading.manager import ThreadManager
+
+            logger.warning(
+                "[SPOTIFY_VIS] Activation slow but alive phase=%s mode=%s: the render thread completed %d "
+                "preparation unit(s); deadline extended (%d/%d)", phase, self._controller.mode_id,
+                self._deadline_liveness[1], self._deadline_liveness[2], _SLOW_TARGET_DEADLINE_EXTENSIONS,
+            )
+            ThreadManager.single_shot(_ACTIVATION_TRANSACTION_DEADLINE_MS, self._on_transition_deadline, serial)
+            return
         self._signal_transition_failure("deadline:" + phase)
+
+    def _target_preparation_progress(self) -> int:
+        """Preparation units the render thread completed for the committed target (0 while it is not bound)."""
+        if getattr(self, "_worker", None) is not None and getattr(self, "_worker_commit", None) is not None:
+            return 0                                  # the engine worker has not committed the target yet
+        identity = getattr(self, "_render_identity", None)
+        if identity is None:
+            return 0
+        item = self._presentation_runtime.scene_controller.visualizer_item
+        return int(item.renderer_preparation_progress(identity.mode_id, identity.activation_id))
+
+    def _slow_target_alive(self, serial: int) -> bool:
+        """True (and the window's progress recorded) when the target's render advanced since the last deadline."""
+        seen_serial, seen, extensions = getattr(self, "_deadline_liveness", (None, 0, 0))
+        if seen_serial != serial:
+            seen, extensions = 0, 0
+        try:
+            progress = self._target_preparation_progress()
+        except Exception:
+            logger.exception("[SPOTIFY_VIS] Could not read the target's render progress")
+            return False
+        if progress <= seen or extensions >= _SLOW_TARGET_DEADLINE_EXTENSIONS:
+            return False
+        self._deadline_liveness = (serial, progress, extensions + 1)
+        return True
 
     def sync_present(self) -> bool:
         on_worker = self._worker is not None
@@ -1363,8 +1408,16 @@ class QuickDisplayVisualizerOwner:
         activation = self._preparing_activation
         if activation is None:
             return False
-        if now - self._waiting_target_since < _PREPARED_REVEAL_DEADLINE_S:
-            item = self._presentation_runtime.scene_controller.visualizer_item
+        item = self._presentation_runtime.scene_controller.visualizer_item
+        # The bound runs from the last preparation unit the render thread completed, not only from the commit: a
+        # long unit (a cold driver link holds this GUI thread in Qt's sync for its whole length, R-180) must not
+        # reveal the target into the rest of its compiles on visible frames. No progress for the bound: reveal.
+        progress = int(item.renderer_preparation_progress(*activation))
+        seen = getattr(self, "_preparing_progress", None)
+        if seen is None or seen[0] != activation or seen[1] != progress:
+            seen = (activation, progress, now if progress else self._waiting_target_since)
+            self._preparing_progress = seen
+        if now - max(self._waiting_target_since, seen[2]) < _PREPARED_REVEAL_DEADLINE_S:
             if not item.renderer_prepared(*activation):
                 return True
         else:
@@ -1660,6 +1713,7 @@ class QuickDisplayVisualizerOwner:
         self._preparing_activation = (
             (target, activation_id) if get_visualizer_mode_descriptor(target).prepared_reveal else None
         )
+        self._preparing_progress = None
         self._waiting_target_since = now
         self._mode_transition_phase = "waiting_target"
         self._mode_transition_started_at = 0.0
@@ -2030,6 +2084,7 @@ class QuickDisplayVisualizerOwner:
         self._preparing_activation = (
             (target, activation_id) if get_visualizer_mode_descriptor(target).prepared_reveal else None
         )
+        self._preparing_progress = None
         self._waiting_target_since = now
         logger.info("[SPOTIFY_VIS] Quick %s activation committed mode=%s generation=%s activation=%s (engine worker)",
                     kind, target, generation, activation_id)

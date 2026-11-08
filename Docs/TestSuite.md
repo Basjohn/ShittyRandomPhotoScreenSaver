@@ -774,7 +774,10 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   displayed wallpaper (uploaded once per photograph) with the old procedural brushed/hash grain barred from returning,
   translucent painter's order, onset events taken once by serial, reactivity (quiet gating, big vs. medium hits, echo, idle
   swell), glow that only adds light;
-- `tests/test_visualizer_prepared_reveal.py` — first use prepares on hidden frames, the reveal waits (with a deadline);
+- `tests/test_visualizer_prepared_reveal.py` — first use prepares on hidden frames, the reveal waits (with a deadline
+  counted from the last completed preparation unit); R-180: the render host counts each unit and first draw per
+  activation, and a slow-but-alive target extends the 6 s activation deadline (bounded, never for an uncommitted
+  worker target) instead of reloading the displays (negative control: the same live target is failed);
 - `tests/test_visualizer_view_orbit.py`, `tests/test_visualizer_direct_gestures.py` — W/A/S/D and Alt + left orbit;
   Alt + right move and Alt + wheel resize outside Edit through Edit's own session, one commit at the gesture's end;
 - `tests/test_visualizer_geometry_profiles.py`, `tests/test_visualizer_custom_geometry_profiles.py` — independent descriptor

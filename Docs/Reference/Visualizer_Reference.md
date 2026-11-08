@@ -355,12 +355,25 @@ offers `prepare_step(frame)`: on a hidden frame (content fade 0) the render host
 of what its first visible frame of that activation would create (a program, a mesh, the stream ring, the target, the
 glow chain, the backdrop copy), at least `PREPARE_SPACING_S` (30 ms) apart, and records the (mode, activation) as
 prepared; a visible draw records it too. The owner keeps a mode or preset reveal in `waiting_target` (fade 0) until the
-render thread reports the activation prepared, and reveals anyway after `_PREPARED_REVEAL_DEADLINE_S` (1.5 s) so a
-window that renders nothing cannot strand the activation. Nothing is preloaded: only the incoming activation prepares,
-and only what its parameters need. Measured at a 1600x900 card (RTX 4090), first visible frame: Extruded 6-8 ms ->
-3-4 ms, Neon Lake with glow 22 ms (139 ms with a cold driver shader cache) -> 4 ms; the steps themselves cost
-0.5-11 ms each on hidden frames. The first hidden frame of a session also imports the renderer's modules (~20 ms
-once, shared with the 3D transitions once those have run). Bars: `tests/test_visualizer_prepared_reveal.py`.
+render thread reports the activation prepared, and reveals anyway once `_PREPARED_REVEAL_DEADLINE_S` (1.5 s) passes
+with no preparation unit completed (counted from the commit or the last completed unit, `preparation_progress`), so a
+window that renders nothing cannot strand the activation and a long unit does not reveal the target into the rest of
+its compiles. Nothing is preloaded: only the incoming activation prepares, and only what its parameters need. Measured
+at a 1600x900 card (RTX 4090), first visible frame: Extruded 6-8 ms -> 3-4 ms, Neon Lake with glow 22 ms -> 4 ms; the
+steps themselves cost 0.5-11 ms each on hidden frames with the driver's shader cache warm. The first hidden frame of a
+session also imports the renderer's modules (~20 ms once, shared with the 3D transitions once those have run). Bars:
+`tests/test_visualizer_prepared_reveal.py`.
+
+**A cold driver shader cache (R-180).** NVIDIA keeps its GL program cache per executable path, so every new frozen
+build (a new onefile extraction folder) and every edited shader starts cold. Cold, one unit is the driver's whole
+link of that program, on the render thread, and Qt's threaded loop holds the GUI thread in its next sync for all of it
+(every display freezes; the clock ticker reports the gap). Measured 8 Nov (RTX 4090, driver 617.42, a nonce comment
+forcing the miss): Neon Lake's basin program links in 5.1-6.4 s (warm 39 ms), its sky 0.35-0.42 s and skyline 0.09-
+0.14 s; Extruded Bubble's programs 0.35-0.54 s each, Waveform Ribbon's two ribbon primitives ~1.0 s each. The 6 s
+activation deadline therefore extends while the committed target's render progress advances
+(`_SLOW_TARGET_DEADLINE_EXTENSIONS`, 4): a slow-but-alive target stays hidden and then fades in; only a target with no
+render progress in a whole window is reconstructed. The freeze itself remains on first use per build until the link
+cost moves out of the frame (Current_Plan, R-180 follow-up).
 
 Audio analysis uses one persistent serial `visualizer.audio_analysis` compute lane with one in-flight packet plus newest-pending source replacement. Detached DSP state is retained across ordinary frames and rebuilt/fenced only at real config/activation/reset epochs; no generic per-frame Future/task fallback is part of the current architecture.
 
