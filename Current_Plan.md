@@ -338,8 +338,11 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   bar (fill, gradient, flag or pattern, outline), as Preset 1's Rainbow Ghost continues its rainbow borders. Glass
   Player ghosts in its cyan Bar Colour, Holo Foil keeps its Rainbow Ghost; opacities sit near Preset 1's.
   Evidence (falling instants, each preset beside Preset 1 with 2x ghost-top crops):
-  `D:\Temp\Scratch\SRPSS\evidence\visualizers\spectrum\20261108_ghost_v2\` (`before/`, `after/`). Open: the
-  operator's eyes.
+  `D:\Temp\Scratch\SRPSS\evidence\visualizers\spectrum\20261108_ghost_v2\` (`before/`, `after/`).
+  **Open (operator, 8 Nov, on v2): "Those ghosts are too solid and not blurred."** The Bar Fill ghost must read like
+  Preset 1's: soft, blurred, translucent (no crisp stripes or stars inside it), fading sooner. Also a ~1 px dark
+  seam where a transparent-border bar meets its ghost. Both assigned to the ghost seam/blur agent (evidence
+  `20261108_ghost_seam`).
 - **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`).
   **The tick cut is merged (7 Nov).** Lead audit: three realistic mutations are each caught by
   `tests/test_waveform_logical_tick_exactness.py` (a Gaussian cache key ignoring the width, one shifted grid shared
