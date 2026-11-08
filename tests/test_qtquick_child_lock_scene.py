@@ -3,7 +3,7 @@
 No production timer/service/Settings dependency; the existing session owns geometry.
 This supplements the nine-family scene tests, not a claim of human visual acceptance.
 
-The exposure gates at the end run real Clock and Media families in the production
+The exposure gates at the end run real Clock and Media families (and a Reddit card for the column rails) in the production
 ``DisplayScene.qml`` + ``QuickSceneController`` inside the hidden ``QQuickRenderControl``
 host (polished and rendered, never shown), with real pointer events through its window.
 """
@@ -391,3 +391,150 @@ def test_the_hover_glyphs_lock_opens_edit_with_the_children_exposed(display, fam
     assert layer.isVisible() and layer.isEnabled()
     _settle(display, lambda: layer.opacity() >= 1.0)
     _assert_exposed(display, model, family, presentations[family])
+
+
+# ---------------------------------------------------------------------------------------------------
+# The column rails (Reddit/Gmail's three semantic column grips) follow the lock like the child layer:
+# loaded for the selected parent locked or not, fading in on unlock and out on lock (fade, never vanish),
+# their input off at the lock edge so a grip held while locking is cancelled and nothing is swapped.
+
+REDDIT_RECT = QRect(120, 90, 620, 340)  # display-local
+
+
+def _reddit(display):
+    """A real retained Reddit card with published posts and no runtime service: nothing can fetch from Reddit."""
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+    from rendering.quick.widgets.reddit import RetainedRedditPresentation
+    from tests.test_qtquick_reddit_presentation import _model as _reddit_model, _post
+
+    model = _reddit_model(limit=3)
+    model.publish_posts(tuple(_post(index) for index in (1, 2, 3)), now_ts=20_000.0)
+    presentation = RetainedRedditPresentation(
+        host=display.scene.ordinary_widget_host, model=model,
+        geometry=OverlayWidgetGeometry(float(REDDIT_RECT.x()), float(REDDIT_RECT.y()),
+                                       float(REDDIT_RECT.width()), float(REDDIT_RECT.height())))
+    presentation.activate()
+    _run(display, 200)
+    return presentation
+
+
+def _drag(display, start: QPointF, target: QPointF) -> None:
+    """Hover, press and drag horizontally towards ``target`` (moves carry no button, only held buttons: a move
+    with a button is a fresh press in Qt 6). The caller releases."""
+    none, left = Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton
+    _send(display, QEvent.Type.MouseMove, start, none, none)
+    _send(display, QEvent.Type.MouseButtonPress, start, left, left)
+    _send(display, QEvent.Type.MouseMove, QPointF(start.x() + 4.0, start.y()), none, left)
+    _send(display, QEvent.Type.MouseMove, QPointF(target.x(), start.y()), none, left)
+
+
+def _rail_specs(presentation) -> list:
+    specs = presentation.item.property("customColumnRailSpecs")
+    specs = specs.toVariant() if hasattr(specs, "toVariant") else specs
+    return [str(spec["roleId"]) for spec in specs or ()]
+
+
+@pytest.mark.qt
+def test_the_column_rails_fade_with_the_lock_and_a_grip_held_at_the_lock_edge_swaps_nothing(display, monkeypatch):
+    """Reddit's column rails fade in on unlock and out on lock (never popping), with input off at once. A grip held
+    across the lock (the L route) is cancelled; its release swaps nothing and adds no Undo, while the same drag
+    unlocked does swap."""
+    import socket
+
+    from rendering.custom_layout_session import CustomLayoutKey, CustomLayoutSession, CustomLayoutSessionItem
+    from rendering.quick.column_rails import COLUMN_RAIL_IDS
+    from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
+    from rendering.widget_descriptors import get_widget_runtime_descriptor
+
+    def _refuse(*_args, **_kwargs):
+        raise AssertionError("the Reddit rail test must never open a network connection")
+
+    monkeypatch.setattr(socket, "create_connection", _refuse)
+    monkeypatch.setattr(socket.socket, "connect", _refuse)
+
+    presentation = _reddit(display)
+    session = CustomLayoutSession()
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("reddit", DISPLAY), model_identity="reddit",
+        baseline_global_rect=REDDIT_RECT, current_global_rect=REDDIT_RECT, baseline_size_payload={},
+        current_size_payload={}, baseline_enabled=True, current_enabled=True, is_duplicate=False,
+        resize_capable=True, size_reset_capable=True,
+        custom_child_roles=get_widget_runtime_descriptor("reddit").custom_child_roles,
+    )
+    session.add_item(item)
+    # The production swap authority and its bounded Undo, without Settings or display bindings.
+    owner = QuickCustomLayoutOwner(settings_manager=None, participants_provider=lambda: (),
+                                   visualizer_provider=lambda: (None, None), reload_request=lambda _reason: None)
+    owner._active, owner._session = True, session
+    model = display.scene.bind_custom_layout_session(
+        session, display_identity=DISPLAY, display_origin=QPoint(0, 0),
+        column_rail_swap_handler=owner.swap_column_rail_roles)
+    assert model.selectItem(_row(model, "reddit"))
+    _run(display, 300)
+    frame = _edit_item(display, "customLayoutEditFrame-reddit")
+    lock = _edit_item(display, "customLayoutChildEditLock-reddit")
+    assert frame is not None and lock is not None
+    assert frame.property("childEditingLocked") is True
+    rails = _rail_specs(presentation)
+    assert sorted(rails) == sorted(COLUMN_RAIL_IDS["reddit"])
+    idle = _edit_item(display, "customLayoutColumnRailLayer-reddit")
+    assert idle is None or not idle.isVisible(), "the locked rails must paint nothing"
+    none, left = Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton
+    _send(display, QEvent.Type.MouseMove, _centre(frame), none, none)
+    _settle(display, lambda: lock.isEnabled() and lock.opacity() > 0.5)
+
+    # 1. Unlock with a real click: the rails fade in, input on.
+    _click_lock(display, lock)
+    assert frame.property("childEditingLocked") is False
+    layer = _edit_item(display, "customLayoutColumnRailLayer-reddit")
+    assert layer is not None and layer.isVisible() and layer.isEnabled()
+    assert layer.opacity() < 1.0, "the column rails popped in instead of fading in"
+    _settle(display, lambda: layer.opacity() >= 1.0)
+
+    def grip(rail: str):
+        return _edit_item(display, f"customLayoutColumnGrip-reddit-{rail}")
+
+    grips = {rail: grip(rail) for rail in rails}
+    assert all(g is not None and g.isVisible() and g.width() > 0.0 for g in grips.values()), grips
+
+    # 2. Lock with a real click: input off at once, the paint fades out (never vanishes).
+    _click_lock(display, lock)
+    assert frame.property("childEditingLocked") is True
+    assert not layer.isEnabled(), "locking must drop the rails' input at once"
+    assert layer.isVisible() and layer.opacity() > 0.0, "the column rails vanished instead of fading out"
+    _settle(display, lambda: not layer.isVisible())
+    assert layer.opacity() == 0.0
+    assert not any(g.isVisible() for g in grips.values())
+
+    # 3. Lock while a grip is held mid-drag (a drag whose release would swap): cancelled, nothing committed.
+    display.scene.toggle_selected_child_edit_lock()  # the runtime's L route
+    assert frame.property("childEditingLocked") is False
+    _settle(display, lambda: layer.opacity() >= 1.0)
+    held, onto = rails[-1], rails[0]  # the last delegate is topmost: its grip owns its own centre
+    rail = _edit_item(display, f"customLayoutColumnRail-reddit-{held}")
+    start, target = _centre(grip(held)), _centre(grip(onto))
+    assert abs(target.x() - start.x()) >= 9.0
+    before = item.current_size_payload.get("column_rails")
+    assert not owner._undo_history
+    _drag(display, start, target)
+    display.render()
+    assert rail.property("previewOffsetX") != 0.0, "the grip drag did not start"
+    display.scene.toggle_selected_child_edit_lock()
+    assert frame.property("childEditingLocked") is True and not layer.isEnabled()
+    assert rail.property("previewOffsetX") == 0.0, "the held grip was not cancelled at the lock edge"
+    _send(display, QEvent.Type.MouseButtonRelease, QPointF(target.x(), start.y()), left, none)
+    _settle(display, lambda: not layer.isVisible())
+    assert item.current_size_payload.get("column_rails") == before, "a grip held across the lock swapped columns"
+    assert owner.undo_last_change() is False, "Undo gained an entry from a cancelled grip"
+
+    # Control: the same drag unlocked reaches the swap authority (the assertions above are not vacuous).
+    display.scene.toggle_selected_child_edit_lock()
+    _settle(display, lambda: layer.isEnabled() and layer.opacity() >= 1.0)
+    start, target = _centre(grip(held)), _centre(grip(onto))
+    _drag(display, start, target)
+    _send(display, QEvent.Type.MouseButtonRelease, QPointF(target.x(), start.y()), left, none)
+    display.render()
+    swapped = list(rails)
+    swapped[0], swapped[-1] = swapped[-1], swapped[0]
+    assert item.current_size_payload.get("column_rails") == swapped
+    assert len(owner._undo_history) == 1
