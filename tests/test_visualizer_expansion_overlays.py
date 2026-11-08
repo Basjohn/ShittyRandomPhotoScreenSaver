@@ -496,6 +496,27 @@ def test_show_on_hover_fades_now_playing_back_in_where_it_sits_and_out_after_the
     _settle(display, lambda: not _shown(display, name))
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize("controls", [False, True])
+def test_show_on_hover_covers_exactly_where_now_playing_shows_while_it_is_faded_out(display, controls):
+    """The hover region is where Now Playing is placed: while faded out it is the very rectangle Now Playing occupies
+    when shown (its layout never depends on its own fade, Media Controls included), so a pointer on any part of it,
+    its top row included, reveals it."""
+    name = "expandedOverlayNowPlaying"
+    _draw(display, media=_Media(), config=_config(now_playing={"hover_reveal": True, "media_controls": controls}))
+    _open(display)
+    slot = _slot(display, name)
+    _settle(display, lambda: float(_prop(slot, "presence")) >= 1.0)
+    shown = _rect(slot, _root(display))
+    _settle(display, lambda: _prop(slot, "shown") is False)
+    region = _named(_layer(display), "expandedOverlayNowPlayingHoverRegion")
+    assert _rect(region, _root(display)) == shown == _rect(slot, _root(display))
+    _pointer(display, slot.mapToScene(QPointF(slot.width() / 2.0, 2.0)))       # its top edge
+    _settle(display, lambda: float(_prop(slot, "presence")) >= 1.0)
+    _pointer(display, QPointF(WIDTH * 0.75, HEIGHT * 0.45))
+    _settle(display, lambda: _prop(slot, "shown") is False)
+
+
 # --------------------------------------------------------------------------------------------- Always Show
 
 

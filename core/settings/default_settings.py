@@ -1303,6 +1303,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                                                             'artwork_scale': 1.0,
                                                                             'artwork_width': 1.0,
                                                                             'card': False,
+                                                                            'child_geometry': {},
                                                                             'corner': 'bottom_left',
                                                                             'hover_reveal': False,
                                                                             'media_controls': False,

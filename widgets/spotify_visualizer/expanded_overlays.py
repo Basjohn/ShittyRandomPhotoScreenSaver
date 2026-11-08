@@ -52,6 +52,9 @@ def resolve_expanded_overlay_config(section: Mapping[str, Any] | None, *, card_t
             projected["artworkScale"] = float(options["artwork_scale"])
             projected["artworkWidth"] = float(options["artwork_width"])
             projected["artworkHeight"] = float(options["artwork_height"])
+        if "child_geometry" in options:
+            # Fullscreen Edit's per-part geometry (ordinary Edit's child records, plain values; {} = today's layout).
+            projected["childGeometry"] = {role: dict(record) for role, record in options["child_geometry"].items()}
         return projected
 
     return {

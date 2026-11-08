@@ -441,7 +441,13 @@ class QuickCustomLayoutOwner:
         global prevents rollout slices from growing family-local shadow settings.
         """
 
-        if len(descriptor.custom_child_roles) <= 1:
+        return QuickCustomLayoutOwner._child_collision_for_roles(widgets, len(descriptor.custom_child_roles))
+
+    @staticmethod
+    def _child_collision_for_roles(widgets: Mapping[str, Any], role_count: int) -> bool:
+        """The global child/child collision preference for an item with ``role_count`` editable children."""
+
+        if int(role_count) <= 1:
             return True
         default = bool(
             require_canonical_default("widgets.global.child_collision_enabled")
@@ -620,7 +626,9 @@ class QuickCustomLayoutOwner:
             card = (tuple(visualizer.controller.committed_viewport_extent),
                     visualizer.controller.committed_content_rotations)
         session = CustomLayoutSession()
-        if not editor.admit(session, card=card):
+        # Now Playing's parts follow ordinary Edit's one global child/child collision preference.
+        child_collision = self._child_collision_for_roles(self._settings_manager.get_widgets_map(), 2)
+        if not editor.admit(session, card=card, child_collision=child_collision):
             logger.info("[CUSTOM_LAYOUT] Fullscreen Edit refused: the overlays are not drawn")
             return False
         try:
@@ -638,6 +646,15 @@ class QuickCustomLayoutOwner:
                 content_rotation_handler=self.rotate_visualizer_content,
                 item_change_publisher=editor.project,
                 geometry_listener=editor.geometry_changed,
+                # Now Playing's parts: ordinary Edit's child editor, the same owner methods as every widget's children.
+                child_resize_begin_handler=self.begin_child_resize,
+                child_resize_preview_handler=self.preview_child_resize,
+                child_resize_update_handler=self.update_child_resize,
+                child_move_begin_handler=self.begin_child_move,
+                child_move_update_handler=self.update_child_move,
+                child_gesture_cancel_handler=self.cancel_child_gesture,
+                child_content_extent_handler=self.ensure_child_content_extent,
+                child_content_extent_clear_handler=self.clear_child_content_extent,
             )
         except Exception:
             try:
@@ -1734,6 +1751,7 @@ class QuickCustomLayoutOwner:
         if finalize:
             self._child_resize_origins.pop(item.source_key, None)
             self._finish_undo_gesture("child_resize")
+        self._note_fullscreen_draft()       # Fullscreen Edit: Now Playing's parts are its draft too
         return changed
 
     def preview_child_resize(
@@ -1886,6 +1904,7 @@ class QuickCustomLayoutOwner:
                 item.custom_child_roles,
                 item.current_child_sizes,
             )
+        self._note_fullscreen_draft()       # Fullscreen Edit: Now Playing's parts are its draft too
         if finalize:
             self._child_move_origins.pop(item.source_key, None)
             self._finish_undo_gesture("child_move")

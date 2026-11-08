@@ -301,6 +301,58 @@ def test_the_qml_projection_carries_every_option():
     assert "mediaControls" not in projected["preset"]
     assert projected["nowPlaying"]["artworkScale"] == value["now_playing"]["artwork_scale"]
     assert "artworkScale" not in projected["preset"]
+    assert projected["nowPlaying"]["hoverReveal"] is value["now_playing"]["hover_reveal"]
+    assert "hoverReveal" not in projected["preset"]
+    # Now Playing's part records reach the QML as plain values (never a reference into the settings value).
+    value["now_playing"]["child_geometry"] = {"title": {"width_scale": 1.25, "height_scale": 1.25, "x_offset": 0.5}}
+    projected = resolve_expanded_overlay_config({KEY: value})
+    assert projected["nowPlaying"]["childGeometry"] == value["now_playing"]["child_geometry"]
+    assert projected["nowPlaying"]["childGeometry"]["title"] is not value["now_playing"]["child_geometry"]["title"]
+    assert "childGeometry" not in projected["preset"]
+
+
+# ----------------------------------------- Now Playing's parts: ordinary Edit's child records (operator, 8 Nov)
+
+
+def test_now_playings_part_records_are_ordinary_child_geometry_and_old_values_read_as_todays_look():
+    """``now_playing.child_geometry`` is ordinary Edit's CUSTOM child carrier for the block's declared roles: parsed
+    by the same ``normalize_child_geometry`` (known roles only, clamped by each role's own bounds, authored records
+    omitted), idempotent. A value stored before it (and before Show On Hover) reads both members as the canonical
+    value, everything stored kept; no bridge."""
+    from core.settings.fullscreen_overlays import CHILD_GEOMETRY_KEY, NOW_PLAYING_CHILD_ROLES
+
+    canonical = canonical_fullscreen_overlays()
+    roles = {role.role_id: role for role in NOW_PLAYING_CHILD_ROLES}
+    assert {"artwork", "title", "artist", "controls"} == set(roles)
+    assert all(role.movable for role in roles.values())
+    assert CHILD_GEOMETRY_KEY in PLACEMENT_KEYS["now_playing"] and CHILD_GEOMETRY_KEY not in canonical["preset"]
+    # The canonical value holds no record: every part where today's layout puts it.
+    assert normalize_fullscreen_overlays(canonical)["now_playing"][CHILD_GEOMETRY_KEY] == {}
+
+    stored = _flipped()
+    for key in (CHILD_GEOMETRY_KEY, "hover_reveal"):
+        stored["now_playing"].pop(key)
+    result = normalize_fullscreen_overlays(stored)
+    for key, item in result["now_playing"].items():
+        assert item == (stored["now_playing"][key] if key in stored["now_playing"] else canonical["now_playing"][key])
+    assert normalize_fullscreen_overlays(result) == result
+
+    title_max = roles["title"].maximum_scale[0]
+    raw = {"title": {"width_scale": title_max * 10, "x_offset": 0.25},
+           "artwork": {"width_scale": 1.5, "height_scale": 0.75, "y_offset": -0.5},
+           "controls": {"width_scale": 1.0, "height_scale": 1.0},          # authored: omitted
+           "artist": "junk", "stray": {"width_scale": 2.0}}
+    records = normalize_fullscreen_overlays({"now_playing": {CHILD_GEOMETRY_KEY: raw}})["now_playing"][
+        CHILD_GEOMETRY_KEY]
+    assert set(records) == {"title", "artwork"}
+    assert records["title"]["width_scale"] == records["title"]["height_scale"] == title_max   # uniform, clamped
+    assert records["title"]["x_offset"] == 0.25
+    assert records["artwork"] == raw["artwork"] | {"width_scale": 1.5, "height_scale": 0.75}
+    value = normalize_fullscreen_overlays({"now_playing": {CHILD_GEOMETRY_KEY: records}})
+    assert value["now_playing"][CHILD_GEOMETRY_KEY] == records
+    for junk in (None, "x", 3, []):
+        assert normalize_fullscreen_overlays({"now_playing": {CHILD_GEOMETRY_KEY: junk}})["now_playing"][
+            CHILD_GEOMETRY_KEY] == {}
 
 
 # ------------------------------------------------------------- a new corner rebases the offset (M3c decision)
