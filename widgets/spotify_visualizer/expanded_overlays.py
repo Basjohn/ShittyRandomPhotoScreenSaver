@@ -18,8 +18,12 @@ from collections.abc import Mapping
 from typing import Any
 
 
-def resolve_expanded_overlay_config(section: Mapping[str, Any] | None) -> dict[str, Any]:
-    """The overlays' options as the QML map ``ExpandedVisualizerOverlays.qml`` reads (camelCase)."""
+def resolve_expanded_overlay_config(section: Mapping[str, Any] | None, *, card_text_color: Any = None) -> dict[str, Any]:
+    """The overlays' options as the QML map ``ExpandedVisualizerOverlays.qml`` reads (camelCase).
+
+    ``card_text_color`` is the active Widget Theme's card text colour when the caller already resolved it (Fullscreen
+    Edit projects a draft per gesture sample and resolves the theme once per session).
+    """
 
     from core.settings.fullscreen_overlays import normalize_fullscreen_overlays
     from rendering.quick.widgets.surface_material import surface_text_color
@@ -38,12 +42,14 @@ def resolve_expanded_overlay_config(section: Mapping[str, Any] | None) -> dict[s
         }
         if "media_controls" in options:
             projected["mediaControls"] = bool(options["media_controls"])
+        if "artwork_scale" in options:
+            projected["artworkScale"] = float(options["artwork_scale"])
         return projected
 
     return {
         "fontFamily": str(values["font_family"]),
         "fontSize": int(values["font_size"]),
-        "cardTextColor": surface_text_color(),
+        "cardTextColor": surface_text_color() if card_text_color is None else card_text_color,
         "preset": overlay("preset"),
         "nowPlaying": overlay("now_playing"),
     }

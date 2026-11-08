@@ -1299,6 +1299,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'fullscreen_overlays': {'font_family': 'Inter',
                                                             'font_size': 30,
                                                             'now_playing': {'always_show': False,
+                                                                            'artwork_scale': 1.0,
                                                                             'card': False,
                                                                             'corner': 'bottom_left',
                                                                             'media_controls': False,

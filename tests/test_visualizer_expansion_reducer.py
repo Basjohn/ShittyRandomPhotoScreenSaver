@@ -17,7 +17,7 @@ import pytest
 import core.expanded_visualizer_takeover as tk
 from core.expanded_visualizer_takeover import (
     BeginEnter, BeginExit, BeginTransfer, CancelEnter, DisplayLost, EditEntered, EditExited,
-    EditResolutionDeclined, EnterCommitted, EnterFailed, EnterPrepared, ExitCommitted, ForwardModeRequest,
+    EditResolutionDeclined, EndFullscreenEdit, EnterCommitted, EnterFailed, EnterPrepared, ExitCommitted, ForwardModeRequest,
     GenerationReady, GlyphPressed, ModeActivated, ModeCycleRequested, ModeRejected, ModeRequested, Outcome,
     OwnerRetired, PersistIntent,
     Phase,
@@ -170,17 +170,62 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
      [*EXPAND_BY_USER, glyph(2, False), glyph(3, True), exited],
      [*EXPANDED_TRACE, "applied exiting Persist[False],BeginExit[user]", "applied exiting",
       "applied enter_pending BeginEnter[user,anim]"]),
-    ("Edit collapses without writing; Edit Cancel restores expansion after the editor exits",
-     [*EXPAND_BY_USER, EditEntered(GEN), exited, EditExited(GEN, saved=False), prepared, committed],
-     [*EXPANDED_TRACE, "applied exiting BeginExit[edit]", "applied ordinary",
+    ("Fullscreen Edit: Edit on an expanded view stays expanded, with no collapse transaction and no write",
+     [*EXPAND_BY_USER, EditEntered(GEN)], [*EXPANDED_TRACE, "applied expanded"]),
+    ("Fullscreen Edit Save and Cancel leave the view expanded and write nothing",
+     [*EXPAND_BY_USER, EditEntered(GEN), EditExited(GEN, saved=True), EditEntered(GEN),
+      EditExited(GEN, saved=False)],
+     [*EXPANDED_TRACE, "applied expanded", "applied expanded", "applied expanded", "applied expanded"]),
+    ("a collapse press under Fullscreen Edit asks the session to resolve its draft; declined, nothing collapses",
+     [*EXPAND_BY_USER, EditEntered(GEN), glyph(2, False), glyph(3, False), EditResolutionDeclined(GEN),
+      EditExited(GEN, saved=False)],
+     [*EXPANDED_TRACE, "applied expanded", "applied expanded RequestEditResolution", "duplicate expanded",
+      "applied expanded", "applied expanded"]),
+    ("a collapse press that waited for the session's own Save is the user's collapse after it",
+     [*EXPAND_BY_USER, EditEntered(GEN), glyph(2, False), EditExited(GEN, saved=True), exited],
+     [*EXPANDED_TRACE, "applied expanded", "applied expanded RequestEditResolution",
+      "applied exiting Persist[False],BeginExit[user]", "applied ordinary"]),
+    ("an expand press under Fullscreen Edit is a duplicate (already expanded)",
+     [*EXPAND_BY_USER, EditEntered(GEN), glyph(2, True)],
+     [*EXPANDED_TRACE, "applied expanded", "duplicate expanded"]),
+    ("an incapable mode under Fullscreen Edit is refused (Save or Cancel first); a capable one stays expanded",
+     [*EXPAND_BY_USER, EditEntered(GEN), ModeRequested(GEN, 7, INCAPABLE, False),
+      ModeRequested(GEN, 8, "capable-2", True), activated("capable-2", True, act=2)],
+     [*EXPANDED_TRACE, "applied expanded", "rejected expanded RejectModeRequest",
+      "applied expanded Forward[capable-2,keep]", "applied expanded"]),
+    ("a cycle under Fullscreen Edit stays on capable modes and stays expanded",
+     [*EXPAND_BY_USER, EditEntered(GEN), ModeCycleRequested(GEN, 7, ((INCAPABLE, False), ("capable-2", True)))],
+     [*EXPANDED_TRACE, "applied expanded", "applied expanded Forward[capable-2,keep]"]),
+    ("a transfer under Fullscreen Edit is refused before any change",
+     [*EXPAND_BY_USER, EditEntered(GEN), TransferRequested(GEN, ACT, 5, B, True)],
+     [*EXPANDED_TRACE, "applied expanded", "rejected expanded RejectTransfer"]),
+    ("an incapable activation under Fullscreen Edit ends the session with its view, then collapses",
+     [*EXPAND_BY_USER, EditEntered(GEN), activated(INCAPABLE, False, act=2), exited, EditExited(GEN, saved=False)],
+     [*EXPANDED_TRACE, "applied expanded", "applied exiting EndFullscreenEdit,BeginExit[capability_lost]",
+      "applied dormant Persist[False]", "duplicate dormant"]),
+    ("topology loss under Fullscreen Edit retires the state, not the intent; the replacement restores it",
+     [*EXPAND_BY_USER, EditEntered(GEN), DisplayLost(GEN, A), ready(requested=True, gen=2)],
+     [*EXPANDED_TRACE, "applied expanded", "applied retiring Retire[topology]",
+      "applied enter_pending BeginEnter[restore,still]"]),
+    ("Settings under Fullscreen Edit retires the state, not the intent",
+     [*EXPAND_BY_USER, EditEntered(GEN), SettingsOpened(GEN), ready(requested=True, gen=2)],
+     [*EXPANDED_TRACE, "applied expanded", "applied retiring Retire[settings]",
+      "applied enter_pending BeginEnter[restore,still]"]),
+    ("an ordinary Edit begun while entering collapses; its Cancel restores expansion after the editor exits",
+     [ready(), glyph(1, True), prepared, EditEntered(GEN), committed, exited, EditExited(GEN, saved=False),
+      prepared, committed],
+     ["applied ordinary", "applied enter_pending BeginEnter[user,anim]", "applied entering RunEnter",
+      "applied entering", "applied exiting Persist[True],BeginExit[edit]", "applied ordinary",
       "applied enter_pending BeginEnter[restore,anim]", "applied entering RunEnter", "applied expanded"]),
-    ("Edit Save restores expansion the same way",
-     [*EXPAND_BY_USER, EditEntered(GEN), exited, EditExited(GEN, saved=True)],
-     [*EXPANDED_TRACE, "applied exiting BeginExit[edit]", "applied ordinary",
+    ("an ordinary Edit's Save restores expansion the same way",
+     [ready(), glyph(1, True), prepared, EditEntered(GEN), committed, exited, EditExited(GEN, saved=True)],
+     ["applied ordinary", "applied enter_pending BeginEnter[user,anim]", "applied entering RunEnter",
+      "applied entering", "applied exiting Persist[True],BeginExit[edit]", "applied ordinary",
       "applied enter_pending BeginEnter[restore,anim]"]),
-    ("Edit ending before the collapse commits re-enters at the commit",
-     [*EXPAND_BY_USER, EditEntered(GEN), EditExited(GEN, saved=False), exited],
-     [*EXPANDED_TRACE, "applied exiting BeginExit[edit]", "applied exiting",
+    ("an ordinary Edit ending before its collapse commits re-enters at the commit",
+     [ready(), glyph(1, True), prepared, EditEntered(GEN), committed, EditExited(GEN, saved=False), exited],
+     ["applied ordinary", "applied enter_pending BeginEnter[user,anim]", "applied entering RunEnter",
+      "applied entering", "applied exiting Persist[True],BeginExit[edit]", "applied exiting",
       "applied enter_pending BeginEnter[restore,anim]"]),
     ("Edit during a pending restore cancels it",
      [ready(requested=True), EditEntered(GEN)],
@@ -234,12 +279,11 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
      ["applied enter_pending BeginEnter[restore,still]", "applied entering RunEnter", "applied entering",
       "applied dormant CancelEnter,Persist[False]"]),
     ("an incapable activation during an ordinary transfer clears the intent when it lands",
-     [ready(requested=True), prepared, committed, EditEntered(GEN), exited, EditExited(GEN, saved=True),
-      failed, TransferRequested(GEN, ACT, 5, B, True), activated(INCAPABLE, False, act=2), moved],
-     ["applied enter_pending BeginEnter[restore,still]", "applied entering RunEnter", "applied expanded",
-      "applied exiting BeginExit[edit]", "applied ordinary", "applied enter_pending BeginEnter[restore,anim]",
-      "applied ordinary CancelEnter", f"applied transfer_pending BeginTransfer[{B},ordinary]",
-      "applied transfer_pending", "applied dormant Persist[False]"]),
+     [ready(requested=True), failed, TransferRequested(GEN, ACT, 5, B, True), activated(INCAPABLE, False, act=2),
+      moved],
+     ["applied enter_pending BeginEnter[restore,still]", "applied ordinary CancelEnter",
+      f"applied transfer_pending BeginTransfer[{B},ordinary]", "applied transfer_pending",
+      "applied dormant Persist[False]"]),
     ("a rejected incapable target re-expands the still-active capable mode",
      [*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False), exited, ModeRejected(GEN, 7), prepared, committed],
      [*EXPANDED_TRACE, "applied exiting BeginExit[mode_incapable]", f"applied ordinary Forward[{INCAPABLE},plain]",
@@ -355,14 +399,19 @@ def test_intent_is_the_last_written_value_through_every_scenario():
 
 
 def test_restore_and_rollback_enters_never_write_the_intent():
-    for events in (
-        [ready(requested=True), prepared, committed],
-        [*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False), exited, ModeRejected(GEN, 7), prepared, committed],
-        [*EXPAND_BY_USER, EditEntered(GEN), exited, EditExited(GEN, saved=False), prepared, committed],
+    for events, skip in (
+        ([ready(requested=True), prepared, committed], 0),
+        ([*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False), exited, ModeRejected(GEN, 7), prepared,
+          committed], len(EXPAND_BY_USER)),
+        # An ordinary Edit (begun while entering) collapses; its Cancel restores without writing.
+        ([ready(), glyph(1, True), prepared, EditEntered(GEN), committed, exited, EditExited(GEN, saved=False),
+          prepared, committed], 5),
+        # A Fullscreen Edit round trip writes nothing either.
+        ([*EXPAND_BY_USER, EditEntered(GEN), EditExited(GEN, saved=True), EditEntered(GEN),
+          EditExited(GEN, saved=False)], len(EXPAND_BY_USER)),
     ):
         _state, steps = _run(events)
-        restore_tail = steps[len(EXPAND_BY_USER):] if len(steps) > len(EXPAND_BY_USER) else steps
-        assert not [a for s in restore_tail for a in s.actions if isinstance(a, PersistIntent)]
+        assert not [a for s in steps[skip:] for a in s.actions if isinstance(a, PersistIntent)]
 
 
 # ------------------------------------------------------------------------------- exhaustive invariant walk
@@ -448,12 +497,15 @@ def _check(s0: tk.TakeoverState, event: tk.Event, step: tk.Step) -> None:
             assert a.txn == s0.txn, ctx
     assert s1.txn >= s0.txn, ctx
     # Only the user's glyph (or the commit of the user's enter, on a capable mode) writes the intent True; False
-    # is the user's collapse, or an incapable mode clearing it where nothing is drawn expanded any more.
+    # is the user's collapse (also one that waited for Fullscreen Edit's own Save/Cancel), or an incapable mode
+    # clearing it where nothing is drawn expanded any more.
     writes = [a for a in actions if isinstance(a, PersistIntent)]
     assert len(writes) <= 1, ctx
     if writes:
         if writes[0].requested:
             assert isinstance(event, EnterCommitted) and s1.mode_capable, ctx
+        elif isinstance(event, EditExited) and s0.edit_collapse_press is not None:
+            assert any(isinstance(a, BeginExit) and a.reason.value == "user" for a in actions), ctx
         elif isinstance(event, _NON_WRITERS):
             incapable_edge = isinstance(event, (ModeActivated, GenerationReady)) and not event.mode_capable
             assert incapable_edge or getattr(s0, "clear_intent_at_rest", False), ctx
@@ -476,7 +528,24 @@ def _check(s0: tk.TakeoverState, event: tk.Event, step: tk.Step) -> None:
         if isinstance(a, ForwardModeRequest) and a.keep_expanded:
             assert s0.phase is Phase.EXPANDED and s1.phase is Phase.EXPANDED, ctx
     if isinstance(event, ModeRequested) and not event.mode_capable and s0.phase is Phase.EXPANDED:
-        assert not [a for a in actions if isinstance(a, ForwardModeRequest)] and s1.phase is Phase.EXITING, ctx
+        if s0.edit_fullscreen:
+            # Fullscreen Edit: refused until Save or Cancel; nothing changes.
+            assert step.outcome is Outcome.REJECTED and s1 == s0, ctx
+        else:
+            assert not [a for a in actions if isinstance(a, ForwardModeRequest)] and s1.phase is Phase.EXITING, ctx
+    # Fullscreen Edit (M3c): only ever with Edit, on an expanded view (or a retiring generation). Entering Edit on a
+    # resting expanded view never collapses it; under Fullscreen Edit nothing collapses the view except the user's
+    # collapse after the session's own Save/Cancel, or an incapable activation (which ends the session first).
+    if s1.edit_fullscreen:
+        assert s1.edit_active and s1.phase in (Phase.EXPANDED, Phase.RETIRING), ctx
+    if isinstance(event, EditEntered) and s0.phase is Phase.EXPANDED and step.outcome is Outcome.APPLIED:
+        assert not actions and s1.phase is Phase.EXPANDED and s1.edit_fullscreen, ctx
+    if s0.edit_fullscreen and any(isinstance(a, BeginExit) for a in actions):
+        assert isinstance(event, (EditExited, ModeActivated)), ctx
+        if isinstance(event, ModeActivated):
+            assert isinstance(actions[0], EndFullscreenEdit) and not s1.edit_active, ctx
+    if s0.edit_fullscreen and isinstance(event, TransferRequested) and step.outcome is not Outcome.STALE:
+        assert not [a for a in actions if isinstance(a, BeginTransfer)], ctx
     # A cycle never collapses an expanded view and never forwards an incapable mode from it.
     if isinstance(event, ModeCycleRequested) and s0.phase is Phase.EXPANDED and step.outcome is not Outcome.STALE:
         assert s1 == s0, ctx
@@ -497,6 +566,8 @@ _STARTS = {
     "expanded": _run(EXPAND_BY_USER)[0],
     "exiting": _run([*EXPAND_BY_USER, glyph(2, False)])[0],
     "edit": _run([ready(requested=True), EditEntered(GEN)])[0],
+    "fullscreen-edit": _run([*EXPAND_BY_USER, EditEntered(GEN)])[0],
+    "fullscreen-edit-collapse-held": _run([*EXPAND_BY_USER, EditEntered(GEN), glyph(2, False)])[0],
     "transfer": _run([*EXPAND_BY_USER, TransferRequested(GEN, ACT, 5, B, True)])[0],
     "held-mode": _run([*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False)])[0],
 }

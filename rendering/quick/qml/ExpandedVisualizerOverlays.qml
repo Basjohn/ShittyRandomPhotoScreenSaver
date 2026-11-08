@@ -15,7 +15,13 @@ import QtQuick.Effects
 // routes it to the Media card's own transport owner.
 //
 // Events: entering the full display (once the startup reveal has opened), a preset announcement, a change of the
-// track's identity. Nothing else reveals an overlay; nothing runs at rest.
+// track's identity, and playback resuming (paused -> playing: Now Playing shows again, as on a track change; operator,
+// 8 Nov). Nothing else reveals an overlay; nothing runs at rest.
+//
+// Fullscreen Edit (M3c): while ``editing`` (the Edit session is open on this display's overlays) both overlays show
+// and hold, with a quiet placeholder where there is no preset name or track yet, so each can be grabbed; their
+// geometry changes are reported through editGeometryChanged (Python re-reads the Edit frames: the preset toast, the
+// Now Playing text block and its artwork). When Edit ends they return to their authored visibility with a fade.
 Item {
     id: overlays
     objectName: "expandedVisualizerOverlays"
@@ -30,6 +36,12 @@ Item {
     // The generation's startup reveal has opened (a restore before reveal waits for it).
     property bool revealOpen: true
     property bool inputAdmitted: false
+    // Fullscreen Edit is open on these overlays (M3c).
+    property bool editing: false
+    // The left edge of the column the card's right-hand controls occupy (the collapse glyph, its tip and the 3D hint
+    // at the top; Reset Camera, the preset steps and their tips at the bottom). An overlay reaching into it keeps
+    // clear of them vertically (the reserves below).
+    property real rightControlsLeft: width
     property color borderColor: "#ffffffff"
     property real borderWidth: 4.0
     property real cornerRadius: 8.0
@@ -46,6 +58,12 @@ Item {
     property real bottomRightReserve: 0.0
 
     signal transportRequested(string key)
+    // Fullscreen Edit: an overlay's (or a part's) geometry changed; only emitted while editing.
+    signal editGeometryChanged()
+    function noteEditGeometry() {
+        if (editing)
+            editGeometryChanged()
+    }
 
     // ---- options (Settings: Visualizers -> Fullscreen Mode; widgets.spotify_visualizer.fullscreen_overlays)
     readonly property var presetOptions: config && config.preset ? config.preset : ({})
@@ -109,31 +127,62 @@ Item {
     readonly property string liveTrackKey: mediaModel && mediaModel.hasTrack
         ? String(mediaModel.artist) + "\u001f" + String(mediaModel.title) : ""
     property bool entered: false
+    // The Media model's own playback state (the one the Visualizer binds); its paused -> playing edge is an event.
+    readonly property string livePlaybackState: mediaModel ? String(mediaModel.playbackState).toLowerCase() : ""
+    property string seenPlaybackState: ""
 
     function enter() {
         if (entered || !revealOpen)
             return
         entered = true
-        if (presetName.length > 0)
+        if (presetName.length > 0 || editing)
             presetSlot.reveal()
-        if (liveTrackKey.length > 0)
+        if (liveTrackKey.length > 0 || editing)
             nowPlayingSlot.reveal()
     }
 
-    Component.onCompleted: enter()
+    Component.onCompleted: {
+        seenPlaybackState = livePlaybackState
+        enter()
+    }
+    onLivePlaybackStateChanged: {
+        const previous = seenPlaybackState
+        seenPlaybackState = livePlaybackState
+        // Playback resumed: Now Playing shows again with its gentle fade (one-shot from this edge, latest wins, the
+        // same bounded window as a track change). Already up (Always Show, or still showing) it stays as it is.
+        if (entered && previous === "paused" && livePlaybackState === "playing" && liveTrackKey.length > 0)
+            nowPlayingSlot.resume()
+    }
     onRevealOpenChanged: enter()
     onPresetSerialChanged: {
-        if (entered && presetName.length > 0)
+        if (entered && (presetName.length > 0 || editing))
             presetSlot.reveal()
     }
     onLiveTrackKeyChanged: {
         if (!entered)
             return
-        if (liveTrackKey.length > 0)
+        if (liveTrackKey.length > 0 || editing)
             nowPlayingSlot.reveal()
         else
             nowPlayingSlot.conceal()
     }
+    onEditingChanged: {
+        if (!entered)
+            return
+        if (editing) {
+            presetSlot.reveal()
+            nowPlayingSlot.reveal()
+            noteEditGeometry()
+        } else {
+            presetSlot.endEdit(presetName.length > 0)
+            nowPlayingSlot.endEdit(liveTrackKey.length > 0)
+        }
+    }
+
+    // Fullscreen Edit's placeholders where there is nothing to show yet (Title Case, quiet).
+    readonly property string editPresetPlaceholder: "Preset Name"
+    readonly property string editTitlePlaceholder: "Track Title"
+    readonly property string editArtistPlaceholder: "Artist"
 
     // ------------------------------------------------------------------------------------------ preset toast
     ExpandedOverlaySlot {
@@ -151,7 +200,8 @@ Item {
         naturalWidth: Math.min(Math.ceil(presetText.implicitWidth), maxContentWidth)
         naturalHeight: Math.ceil(presetText.implicitHeight)
         property string contentText: ""
-        onSwapContent: contentText = overlays.presetName
+        onSwapContent: contentText = overlays.presetName.length > 0 || !overlays.editing
+            ? overlays.presetName : overlays.editPresetPlaceholder
 
         ShadowedText {
             id: presetText
@@ -189,8 +239,14 @@ Item {
         naturalHeight: Math.max(artSize, textColumn.height)
 
         readonly property bool controlsShown: options.mediaControls === true
-        // Square artwork as tall as the text beside it (with Media Controls too), never smaller than its own size.
-        readonly property real artSize: Math.max(Math.round(fontSize * 3.1), Math.ceil(textColumn.height))
+        // Square artwork as tall as the text beside it (with Media Controls too), never smaller than its own size,
+        // times its own size factor (Fullscreen Edit sizes the artwork apart from the text; it stays beside it).
+        readonly property real artworkScale: {
+            const value = Number(options.artworkScale)
+            return isFinite(value) && value > 0 ? Math.max(0.5, Math.min(3.0, value)) : 1.0
+        }
+        readonly property real artSize: Math.round(Math.max(Math.round(fontSize * 3.1), Math.ceil(textColumn.height))
+                                                   * artworkScale)
         readonly property real gap: Math.round(fontSize * 0.55)
         readonly property real textWidthLimit: Math.max(48.0, maxContentWidth - artSize - gap)
         readonly property bool playing: !!overlays.mediaModel
@@ -203,8 +259,9 @@ Item {
         onSwapContent: {
             const model = overlays.mediaModel
             contentKey = overlays.liveTrackKey
-            contentTitle = model ? String(model.title) : ""
-            contentArtist = model ? String(model.artist) : ""
+            const placeholder = contentKey.length === 0 && overlays.editing
+            contentTitle = placeholder ? overlays.editTitlePlaceholder : (model ? String(model.title) : "")
+            contentArtist = placeholder ? overlays.editArtistPlaceholder : (model ? String(model.artist) : "")
         }
         // Identity fence: the model's artwork is shown only for the latched track, never under another's text.
         readonly property string artSource: contentKey.length > 0 && contentKey === overlays.liveTrackKey
@@ -218,6 +275,9 @@ Item {
             x: nowPlayingSlot.rightSide ? parent.width - width : 0.0
             y: (parent.height - height) / 2.0
             readonly property real imageInset: Math.max(0.75, overlays.borderWidth * 0.65)
+            onXChanged: overlays.noteEditGeometry()
+            onYChanged: overlays.noteEditGeometry()
+            onWidthChanged: overlays.noteEditGeometry()
 
             RectangularShadow {
                 anchors.fill: parent
@@ -308,6 +368,10 @@ Item {
                             Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth,
                                                controls.visible ? controls.width : 0.0)))
             spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
+            onXChanged: overlays.noteEditGeometry()
+            onYChanged: overlays.noteEditGeometry()
+            onWidthChanged: overlays.noteEditGeometry()
+            onHeightChanged: overlays.noteEditGeometry()
 
             ShadowedText {
                 id: titleText

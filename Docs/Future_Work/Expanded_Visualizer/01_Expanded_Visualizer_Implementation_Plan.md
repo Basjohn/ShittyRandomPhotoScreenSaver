@@ -89,8 +89,8 @@ Prove, not assert, each of these at M1 and again at M6:
   rollback fences for both takeover scopes (§D4).
 - Edit: entering Edit from the ordinary scene edits the ordinary layout as today. **Entering Edit while expanded
   (operator, 8 Nov; supersedes "entering Edit collapses") stays expanded and edits the full-display overlays' geometry**
-  (M3c); an active draft is resolved by the session's own Save/Cancel path (§D5); the CUSTOM working override and the
-  ordinary committed geometry are untouched by expansion.
+  (M3c, built 8 Nov); an active draft is resolved by the session's own Save/Cancel path (§D5); the CUSTOM working
+  override and the ordinary committed geometry are untouched by expansion.
 - Terminal exit: HUD animations, leases and GL resources retire under the existing render-thread owner; no new
   release path.
 
@@ -695,24 +695,97 @@ Operator: "when we choose edit mode during a fullscreen visualizer we should be 
 placement of the toast and preset text elements and artwork instead of it going back to the full quick scene. Like we
 can most geometry normally."
 
-- [ ] Entering Edit while expanded keeps the expanded view (no collapse) and makes the overlays the editable items:
+- [x] Entering Edit while expanded keeps the expanded view (no collapse) and makes the overlays the editable items:
   the preset toast, the now-playing text block, the artwork and (when shown) the media controls. The Visualizer itself
   stays full-display; ordinary widgets stay suspended.
-- [ ] Same gestures, chrome and snapping as ordinary widget geometry (the existing Edit owner, glyphs and guides); no
+- [x] Same gestures, chrome and snapping as ordinary widget geometry (the existing Edit owner, glyphs and guides); no
   second editor, no second commit path. Drag moves, handles resize (text scales its font, artwork its size), snapping
   to the display's safe area, corners and the other overlays.
-- [ ] Geometry is the overlays' own canonical setting (spec system, defaults, reset), stored relative to the expanded
+- [x] Geometry is the overlays' own canonical setting (spec system, defaults, reset), stored relative to the expanded
   display's safe area so it reflows across displays of different size/DPR. The Fullscreen Mode corner choice is the
   anchor the Edit position is relative to; changing the corner in Settings keeps the offset sensible (or resets it,
   decided in the slice and documented).
-- [ ] Draft semantics: Edit edits a draft; Save commits, Cancel restores the pre-Edit overlay geometry exactly; an
+- [x] Draft semantics: Edit edits a draft; Save commits, Cancel restores the pre-Edit overlay geometry exactly; an
   unsaved draft is never silently saved or discarded (the session's existing prompt).
-- [ ] While Fullscreen Edit is open the overlays are shown (as if Always Show) so they can be grabbed; on exit they
+- [x] While Fullscreen Edit is open the overlays are shown (as if Always Show) so they can be grabbed; on exit they
   return to their authored visibility with a fade.
-- [ ] Tests: a parity map in the spirit of the Edit/Arrange parity harness (the same gesture through the Edit owner
+- [x] Tests: a parity map in the spirit of the Edit/Arrange parity harness (the same gesture through the Edit owner
   on a copy, then cancel, compared with the committed result); the ordinary layout and CUSTOM slots byte-identical
   after a Fullscreen Edit Save and Cancel; entering Edit while expanded does not emit the collapse transaction; no
   hit/z conflict with the collapse glyph, OSD and camera/preset controls.
+- [ ] **Gate 3c:** the lead's audit; the operator's look at Fullscreen Edit on the real display (the frames, the feel
+  of a drag and a corner drag, Settings held by an unsaved draft).
+
+**M3c as built (8 Nov, implementing agent; the source is the authority where this plan was silent):**
+
+- *Reducer.* `EditEntered` on a resting EXPANDED view keeps it EXPANDED with `edit_fullscreen` (no `BeginExit`; the
+  intent is untouched); `eligible` holds under it. Under Fullscreen Edit nothing ends Edit implicitly: a collapse
+  press is held for the Edit session's resolution (`RequestEditResolution`; the coordinator declines it, so the draft
+  and Edit stay, as an expand press under an ordinary Edit always did; a press still held when the user's own
+  Save/Cancel ends Edit is the user's collapse then), an incapable mode request and a transfer are refused (a
+  capable mode and the double-click cycle stay expanded), and the one forced end, an incapable activation (no user
+  path reaches it), ends the session first (`EndFullscreenEdit`: Cancel, nothing saved) and collapses. Edit begun
+  while an enter, exit or transfer runs is an ordinary Edit that collapses at its commit edge, as before. Stale
+  generation, duplicate glyph, Edit Cancel and topology loss keep their scenarios
+  (`tests/test_visualizer_expansion_reducer.py`; only the superseded collapse-on-Edit traces were replaced).
+- *One session, one Save.* The display manager's Edit entry asks the coordinator first; Fullscreen Edit opens the
+  `QuickCustomLayoutOwner`'s one session (`start_fullscreen`) on the expanded display's overlays only:
+  `fullscreen_overlay.preset`, `.now_playing` (the text block, with its Media Controls when shown) and `.artwork`. The
+  same retained Edit layer, frames, corner handles, wheel, Restore Size, guides, Ctrl+Z, Enter/Esc, background
+  double-click and context menu; the frames offer no close (the overlays have no enabled state). Save writes exactly
+  the placement members into `widgets.spotify_visualizer.fullscreen_overlays`; no ordinary widget, Visualizer item or
+  other display is in the session, so CUSTOM, the ordinary layout and the layout slots stay byte-identical. The
+  context menu's Save now takes the one Save route (Enter's): it had bypassed the takeover's Edit exit.
+- *Geometry* (`rendering/quick/fullscreen_overlay_edit.py`). Each item's payload is its draft placement; its frame is
+  read back from the live QML after every projection (the scene controller's `expanded_overlay_edit_geometry`) and
+  whenever the overlays report a geometry change while editing (a track, the stacking), so a frame is always what is
+  drawn. Moves snap with the ordinary rule (`resolve_snap_local_rect_for_edit`) inside the safe area (its edges, so
+  its corners, and its centre) and to the other overlay (edges, centre, the 30 px gutter); every guide is drawn on
+  the Edit layer (the guide underlay lies under the expanded card). Stored offsets are the ones the overlay really
+  took (clamps included). Corner drags scale by the dragged corner's distance from the opposite one and keep that
+  corner; the wheel (5 % per notch) and Restore Size (the canonical scale) keep the frame's top centre.
+- *Artwork (decided).* Now Playing's artwork has its own size factor, `now_playing.artwork_scale` (canonical default,
+  clamped like `scale`), on top of the text-derived size; it stays beside its text, so dragging the artwork or the
+  text moves Now Playing as one (its undo step is Now Playing's), and the artwork grows away from the overlay's anchor
+  corner. Media Controls belong to the text block (they scale with the text).
+- *Corner change in Settings (decided).* `rebase_offset_for_corner` (the one owner): per axis, the offset is kept when
+  it still points into the display from the new corner (right of a left corner, left of a right one, below a top
+  corner, above a bottom one), so the overlay stays in bounds the same distance in from the new anchor's edge; an axis
+  that would push the overlay out past the new anchor's edge resets to zero. The Fullscreen Mode page uses it.
+- *Other displays (decided).* They keep running as they are, without Edit chrome: Fullscreen Edit edits only the
+  overlays (§0.8); their ordinary layout is edited from an ordinary Edit after collapsing. One Save/Cancel therefore
+  never touches them, which makes the byte-identity structural rather than a check.
+- *Exits (decided).* An unsaved draft is never discarded or saved implicitly; nothing ends it but the user's own Save
+  or Cancel (there is no runtime prompt to reuse: the session's user-choice path is Enter/Esc, the background
+  double-click and the menu). The collapse glyph is withdrawn under Edit, as in every Edit, and a stale press is
+  declined (above). Settings is held while the draft is pending: the menu entry is disabled (the menus refresh when
+  the draft's state flips) and the route refuses; with a clean draft it opens as before (ending Edit loses nothing).
+  The user's monitor change (a Visualizer transfer) is refused while expanded and under Fullscreen Edit. A physical
+  topology change replaces the generation under the existing barriers, which retires the Edit owner like every Edit
+  (nothing written; the overlays keep their committed value). Layout slot save and load are refused under
+  Fullscreen Edit (a slot holds the ordinary layout; its save would save the draft, its load would discard it).
+- *Visibility.* While editing both overlays reveal and hold (as Always Show) with quiet placeholders where there is
+  no preset name or track yet ("Preset Name", "Track Title", "Artist"); their size and stacking follow at once (no
+  easing to lag a frame); the OSD does not push them aside. When Edit ends they return to their authored visibility:
+  Always Show (with content) stays, anything else fades out with its own fade.
+- *Clear of the card's controls.* An overlay reaching into the column of the card's right-hand controls, from any
+  corner, keeps clear of them vertically (the collapse glyph, its tip and the 3D hint above; Reset Camera, the preset
+  steps and their tips below). The column is measured from the card's size and the tips' text only (never hover or
+  admission), so nothing moves at runtime; at zero offset every placement is M3b's.
+- *Evidence.* `tests/test_visualizer_expansion_fullscreen_edit.py` (hidden production scene, the real owner, model
+  and gestures, a real `SettingsManager`): the parity map (one gesture script on a draft, Cancel exactly, the same
+  script, Save commits what the draft showed), byte-identical store after a Fullscreen-only Save and Cancel, the
+  display manager's real Edit entry (no collapse call, the ordinary layout never quiesced, the Visualizer kept drawn
+  under publications), the menu's Save ending Edit for the takeover, Settings held by a draft, visibility and fades,
+  frames following content, the control column, guides on the Edit layer; plus reducer, coordinator, settings and
+  pill bars. Fourteen M3c mutations (and five reducer ones, four schema ones) each turned a bar red. Stills
+  (Extruded Bubble, PERSONALSET 859804, 1600 x 900) were handed to the lead outside the repository: the chrome, a
+  mid-drag guide, a resized Now Playing, stacked Cards, after Cancel.
+- *Also on this branch (operator, 8 Nov):* playback resuming (the Media model's paused -> playing edge) reveals Now
+  Playing like a track change, keeping its content; Always Show is untouched; a pause is no event. And a bar that the
+  display-wide card keeps the framed camera's controls (Reset Camera, the preset steps, the 3D hint) under the card's
+  admission; the hover Edit lane (Restore Widget Size, Close, the transfer arrows) stays withdrawn while expanded (M2),
+  which is what reads as a missing "rotate glyph": its return is the operator's call (§3).
 
 **Milestone 4 | Wallpaper transition policy and GPU savings**
 

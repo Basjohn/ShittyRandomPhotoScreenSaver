@@ -366,6 +366,51 @@ def test_a_track_change_reveals_now_playing_and_its_artwork_is_identity_fenced(d
     _settle(display, lambda: not _shown(display, name))
 
 
+@pytest.mark.qt
+def test_playback_resuming_reveals_now_playing_like_a_track_change(display):
+    """Operator, 8 Nov: "we're not fading in the fullscreen visualizer overlay on pause -> play and we really
+    should." Paused -> playing is an event (Now Playing fades in and out in its bounded window); a pause, or a playing
+    state published again, is not; the same track's content is kept (never swapped)."""
+    media = _Media(playbackState="playing")
+    _draw(display, media=media)
+    _open(display)
+    name = "expandedOverlayNowPlaying"
+    _settle(display, lambda: _shown(display, name))
+    _settle(display, lambda: not _shown(display, name))          # the entering reveal retired
+
+    media.update(playbackState="paused")                          # pausing is not an event
+    _run(display, 300)
+    assert not _shown(display, name)
+    media.update(playbackState="playing")                         # resuming is
+    _settle(display, lambda: float(_slot(display, name).property("presence")) >= 1.0)
+    assert _slot(display, name).property("contentTitle") == "Track One"
+    _settle(display, lambda: not _shown(display, name))          # within the same bounded window
+
+    media.update(playbackState="playing", canNext=False)          # playing -> playing: no event
+    _run(display, 300)
+    assert not _shown(display, name)
+
+
+@pytest.mark.qt
+def test_playback_resuming_leaves_always_show_as_it_is(display):
+    media = _Media(playbackState="paused")
+    _draw(display, media=media, config=_config(now_playing={"always_show": True}))
+    _open(display)
+    name = "expandedOverlayNowPlaying"
+    _settle(display, lambda: float(_slot(display, name).property("presence")) >= 1.0)
+    _run(display, 200)
+    lowest = [1.0, 1.0]
+
+    def sample():
+        slot = _slot(display, name)
+        lowest[0] = min(lowest[0], float(slot.property("presence")))
+        lowest[1] = min(lowest[1], float(slot.property("contentOpacity")))
+
+    media.update(playbackState="playing")
+    _run(display, 500, sample)
+    assert lowest == [1.0, 1.0]                                    # no dip, no content crossfade
+
+
 # --------------------------------------------------------------------------------------------- Always Show
 
 

@@ -242,6 +242,9 @@ Item {
             // an absent child presentation before their own gesture can begin.
             readonly property bool hasPresentationItem:
                 presentationItem !== null && presentationItem !== undefined
+            // Fullscreen Edit (M3c): a full-display overlay's frame (the preset toast, Now Playing's text, its
+            // artwork). It moves and scales like any frame; it cannot be closed (the overlays have no enabled state).
+            readonly property bool fullscreenOverlay: widgetId.indexOf("fullscreen_overlay.") === 0
             Component.onCompleted: customLayoutOverlay.deliverPendingChildLock(editFrame)
             onHasPresentationItemChanged: customLayoutOverlay.deliverPendingChildLock(editFrame)
             readonly property var contentEnvelope: {
@@ -664,6 +667,7 @@ Item {
                 // independent of family header/refresh layout. Keep it above
                 // widget content so an underlying refresh/click target can never
                 // receive the same press.
+                visible: !editFrame.fullscreenOverlay
                 x: Math.max(1.0, editFrame.width - width - 10.0)
                 y: Math.max(1.0, Math.min(10.0, editFrame.height - height - 1.0))
                 z: 120

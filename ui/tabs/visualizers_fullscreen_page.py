@@ -3,8 +3,9 @@
 One page, placed first after Setup, for the overlays the Expanded Visualizer shows on the full display: the preset's
 name and Now Playing (Artist, Song and Artwork). Every value is ``widgets.spotify_visualizer.fullscreen_overlays``
 (``core.settings.fullscreen_overlays``: one canonical owner, persisted with the Visualizer section, reset and imported
-with it); this page holds no other state. Placement offsets and scale (Fullscreen Edit, M3c) have no control here:
-they are kept as loaded and written back unchanged.
+with it); this page holds no other state. Placement offsets and scales (Fullscreen Edit, M3c) have no control here:
+they are kept as loaded and written back unchanged, except that a new Corner rebases the overlay's offset by the one
+owner's rule (``rebase_offset_for_corner``).
 
 Layout follows the Settings bucket pattern: one bucket per overlay plus Text, closed by default, one open at a time
 (the Visualizer pages' remembered leaf), a one-sentence intro, details in tooltips.
@@ -23,6 +24,7 @@ from core.settings.fullscreen_overlays import (
     FONT_SIZE_MAX,
     FONT_SIZE_MIN,
     normalize_fullscreen_overlays,
+    rebase_offset_for_corner,
 )
 from ui.tabs import shared_styles
 from ui.tabs.media.builder_scaffold import build_collapsible_bucket
@@ -128,7 +130,7 @@ class FullscreenModePage(QWidget):
         combo.setToolTip("Which corner of the display it sits in. Two overlays in one corner stack, the newer "
                          "one nearer the edge.")
         combo.currentIndexChanged.connect(
-            lambda _index, box=combo, name=overlay: self._set_value((name, "corner"), str(box.currentData())))
+            lambda _index, box=combo, name=overlay: self._set_corner(name, str(box.currentData())))
         row.addWidget(combo)
         row.addStretch()
         return combo
@@ -146,6 +148,15 @@ class FullscreenModePage(QWidget):
         family = font.family().strip()
         if family:
             self._set_value(("font_family",), family)
+
+    def _set_corner(self, overlay: str, corner: str) -> None:
+        """A new anchor corner rebases the overlay's Fullscreen Edit offset (the one owner's rule): kept on each axis
+        that still points into the display from the new corner, reset where it would push the overlay out."""
+
+        if self._loading or self._values[overlay].get("corner") == corner:
+            return
+        self._values[overlay] = rebase_offset_for_corner(self._values[overlay], corner)
+        self._changed()
 
     def _set_value(self, path: tuple[str, ...], value: Any) -> None:
         if self._loading:
