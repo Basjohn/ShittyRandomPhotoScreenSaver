@@ -10,8 +10,15 @@ Each overlay's placement is its anchor corner plus an offset and a scale relativ
 (``offset_x``/``offset_y`` are fractions of the safe area's width/height in screen axes, ``scale`` multiplies the
 overlay's size; zero offset and unit scale are the defaults). Now Playing's artwork has its own size factor
 (``now_playing.artwork_scale``, on top of the overlay's scale; the artwork stays beside its text). Fullscreen Edit (M3c)
-edits exactly these placement values: the offsets and the two scales. The corner is Settings' (the anchor); changing it
-rebases the offset (:func:`rebase_offset_for_corner`).
+edits exactly these placement values: the offsets, the scales and the single-axis extents below. The corner is Settings'
+(the anchor); changing it rebases the offset (:func:`rebase_offset_for_corner`).
+
+Single-axis extents (Fullscreen Edit's side handles, the counterpart of ordinary Edit's ``content_extent``): each
+overlay's text box has ``text_width`` / ``text_height`` in ems of the overlay's own font size, so the box keeps its shape
+when ``scale`` or the font size changes (as ordinary Edit's uniform scale keeps the content box); ``0`` is the natural
+(content) size, today's look. A set width elides the text; a set height gives it more lines (it wraps, then elides).
+Now Playing's artwork has ``artwork_width`` / ``artwork_height``, factors of its square size (``1`` = square), the image
+cropped like ordinary Edit's freeform artwork frame.
 
 Pure and Qt-free: the settings model, Settings and the display runtime all read it.
 """
@@ -32,11 +39,15 @@ CORNERS = ("top_left", "top_right", "bottom_left", "bottom_right")
 FONT_SIZE_MIN, FONT_SIZE_MAX = 12, 72
 OFFSET_MIN, OFFSET_MAX = -1.0, 1.0
 SCALE_MIN, SCALE_MAX = 0.5, 3.0
-#: The size factors (each clamped to SCALE_MIN..SCALE_MAX).
-SCALE_KEYS = ("scale", "artwork_scale")
+#: The size factors (each clamped to SCALE_MIN..SCALE_MAX): the uniform scales and the artwork's width/height factors.
+SCALE_KEYS = ("scale", "artwork_scale", "artwork_width", "artwork_height")
+#: The text box's single-axis extents, in ems of the overlay's font size; 0 is the natural (content) size.
+TEXT_EXTENT_KEYS = ("text_width", "text_height")
+TEXT_EXTENT_MAX = 60.0
 #: The placement members Fullscreen Edit writes, per overlay (the corner is Settings').
-PLACEMENT_KEYS = {"preset": ("offset_x", "offset_y", "scale"),
-                  "now_playing": ("offset_x", "offset_y", "scale", "artwork_scale")}
+PLACEMENT_KEYS = {"preset": ("offset_x", "offset_y", "scale", "text_width", "text_height"),
+                  "now_playing": ("offset_x", "offset_y", "scale", "text_width", "text_height",
+                                  "artwork_scale", "artwork_width", "artwork_height")}
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off"})
@@ -111,6 +122,8 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
                 target[key] = _number(item, float(default), OFFSET_MIN, OFFSET_MAX)
             elif key in SCALE_KEYS:
                 target[key] = _number(item, float(default), SCALE_MIN, SCALE_MAX)
+            elif key in TEXT_EXTENT_KEYS:
+                target[key] = _number(item, float(default), 0.0, TEXT_EXTENT_MAX)
     return result
 
 
@@ -155,6 +168,8 @@ __all__ = [
     "SCALE_KEYS",
     "SCALE_MAX",
     "SCALE_MIN",
+    "TEXT_EXTENT_KEYS",
+    "TEXT_EXTENT_MAX",
     "canonical_fullscreen_overlays",
     "normalize_fullscreen_overlays",
     "rebase_offset_for_corner",

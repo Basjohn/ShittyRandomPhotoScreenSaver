@@ -19,7 +19,8 @@ Item {
 
     // The overlay stage (ExpandedVisualizerOverlays.qml): safe area, reserves, chrome, OSD test.
     property Item stage: null
-    // This overlay's options: corner, alwaysShow, card, offsetX, offsetY, scale (Settings' canonical values).
+    // This overlay's options: corner, alwaysShow, card, offsetX, offsetY, scale, textWidth, textHeight (Settings'
+    // canonical values).
     property var options: ({})
     property string defaultCorner: "top_left"
     property int fadeInMs: 800
@@ -56,6 +57,24 @@ Item {
     // The widest an overlay grows: under half the safe area, so a left and a right overlay never meet and a left one
     // never reaches the right-hand controls.
     readonly property real maxContentWidth: stage ? Math.max(48.0, stage.safeWidth * 0.45 - 2.0 * padding) : 48.0
+
+    // Fullscreen Edit's single-axis extents (its side handles; ordinary Edit's content box): the text box's width and
+    // height in ems of this overlay's font, so the box keeps its shape under the uniform scale and the font size. Zero
+    // (the default) is the natural size; a set extent replaces it on its own axis only and the content reflows into
+    // it (the caller elides, wraps and floors it). A set box may use the whole safe area (the 45 % cap above is only
+    // how far the natural size grows by itself).
+    readonly property real setTextWidth: {
+        const value = Number(options.textWidth)
+        return isFinite(value) && value > 0 ? value * fontSize : 0.0
+    }
+    readonly property real setTextHeight: {
+        const value = Number(options.textHeight)
+        return isFinite(value) && value > 0 ? value * fontSize : 0.0
+    }
+    readonly property real maxBoxWidth: stage ? Math.max(1.0, stage.safeWidth - 2.0 * padding) : 1.0
+    readonly property real maxBoxHeight: stage ? Math.max(1.0, stage.safeHeight - 2.0 * padding) : 1.0
+    // The narrowest a set text width draws (a word's start and its ellipsis).
+    readonly property real minimumTextWidth: Math.round(fontSize * 2.5)
 
     // ---------------------------------------------------------------------------------------------- placement
     // The frame follows the content's size; on a visible card it eases to a new size behind a content swap.

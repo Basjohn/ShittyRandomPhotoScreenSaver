@@ -159,6 +159,22 @@ class _Fullscreen:
         self.model.resizeItem(row, handle, x + dx / 2, y + dy / 2, False)
         self.model.resizeItem(row, handle, x + dx, y + dy, True)
 
+    def side(self, part: str, handle: str, delta: int, *, release: bool = True) -> None:
+        """Drag one side handle (``left``/``right``/``top``/``bottom``) or a two-axis diagonal (``content_*``) by
+        ``delta`` along its axis (both axes for a diagonal), pressing on the frame's edge as the Edit layer does."""
+        row = self.row(part)
+        rect = self._local(self.item(part).current_global_rect)
+        corner = handle.removeprefix("content_")
+        x = rect.x() if corner.endswith("left") else (rect.x() + rect.width() if corner.endswith("right")
+                                                       else rect.center().x())
+        y = rect.y() if corner.startswith("top") else (rect.y() + rect.height() if corner.startswith("bottom")
+                                                        else rect.center().y())
+        dx = delta if handle in ("left", "right") or handle.startswith("content_") else 0
+        dy = delta if handle in ("top", "bottom") or handle.startswith("content_") else 0
+        assert self.model.beginResize(row, handle, x, y)
+        self.model.resizeItem(row, handle, x + dx / 2, y + dy / 2, False)
+        self.model.resizeItem(row, handle, x + dx, y + dy, release)
+
     def frames(self) -> dict[str, tuple[int, int, int, int]]:
         return {part: self.item(part).current_global_rect.getRect() for part in PARTS}
 
@@ -178,7 +194,8 @@ class _Fullscreen:
 
 def _gesture(edit: _Fullscreen) -> None:
     """One script exercising every Fullscreen Edit gesture: move, wheel, corner drags (text and artwork), the artwork
-    moving Now Playing, and Restore Size."""
+    moving Now Playing, side handles (width only, height only) and a two-axis diagonal on every part, and Restore
+    Size."""
     edit.drag("preset", 180, 96)
     edit.wheel("now_playing", 2)
     edit.corner("artwork", "top_right", 36, -36)
@@ -187,6 +204,12 @@ def _gesture(edit: _Fullscreen) -> None:
     edit.wheel("preset", -1)
     edit.model.restoreSize(edit.row("preset"))
     edit.drag("preset", -24, 30)
+    edit.side("preset", "right", -70)
+    edit.side("preset", "bottom", 64)
+    edit.side("now_playing", "right", 140)
+    edit.side("now_playing", "top", -50)
+    edit.side("artwork", "right", 44)
+    edit.side("artwork", "content_bottom_right", -20)
 
 
 def _visual_items(item) -> list:
@@ -223,6 +246,9 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
         assert f"customLayoutEditFrame-fullscreen_overlay.{part}" in frames
         assert not frames[f"customLayoutClose-fullscreen_overlay.{part}"].isVisible()
         assert frames[f"customLayoutResize-fullscreen_overlay.{part}-bottom_right"].isVisible()
+        # ... and the same single-axis side strips as ordinary content-extent widgets.
+        for edge in ("left", "right", "top", "bottom"):
+            assert frames[f"customLayoutViewportEdge-fullscreen_overlay.{part}-{edge}"].isVisible(), (part, edge)
     before_config = dict(display.scene._visualizer_overlay_config)
     before = edit.frames()
     assert before == edit.drawn()
@@ -233,10 +259,15 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
     draft_frames, draft_config = edit.frames(), dict(display.scene._visualizer_overlay_config)
     assert draft_frames == edit.drawn()                      # every frame is what the overlays draw
     assert draft_value != seeded and draft_frames != before   # the script really edited the draft
-    for overlay in ("preset", "now_playing"):
-        assert {k: v for k, v in draft_value[overlay].items() if k not in ("offset_x", "offset_y", "scale",
-                                                                            "artwork_scale")} == {
-            k: v for k, v in seeded[overlay].items() if k not in ("offset_x", "offset_y", "scale", "artwork_scale")}
+    from core.settings.fullscreen_overlays import PLACEMENT_KEYS
+
+    for overlay, keys in PLACEMENT_KEYS.items():
+        assert {k: v for k, v in draft_value[overlay].items() if k not in keys} == {
+            k: v for k, v in seeded[overlay].items() if k not in keys}
+        # The side handles really set every extent the script touched (each axis on its own).
+        assert all(draft_value[overlay][key] != seeded[overlay][key] for key in ("text_width", "text_height"))
+    assert all(draft_value["now_playing"][key] != seeded["now_playing"][key]
+               for key in ("artwork_width", "artwork_height"))
     assert edit.owner.fullscreen_draft_pending and edit.flips == [True]
 
     assert edit.owner.cancel()
@@ -546,6 +577,165 @@ def test_overlays_moved_into_the_control_column_keep_clear_of_the_cards_controls
     for overlay in ("preset", "now_playing"):
         slot = geometry["slots"][overlay]
         assert offsets_for_position(slot["pos"], slot["anchored"], (geometry["safe_width"], geometry["safe_height"]))             == (draft[overlay]["offset_x"], draft[overlay]["offset_y"]), overlay
+    edit.owner.cancel()
+
+
+# ------------------------------------------------------------------- single-axis sizing (ordinary side handles)
+
+
+def _centred(edit: _Fullscreen) -> None:
+    """Both overlays away from the safe area's edges, so every edge has room to move."""
+    edit.drag("preset", 300, 200)
+    edit.drag("now_playing", 320, -220)
+
+
+SIDES = {"right": 90, "left": -90, "top": -60, "bottom": 60}
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("part", PARTS)
+@pytest.mark.parametrize("handle", tuple(SIDES))
+def test_a_side_handle_changes_only_its_own_axis(display, tmp_path, part, handle):
+    """Ordinary Edit's single-axis content-extent semantics: a side strip changes one dimension and one extent member;
+    the other dimension and member stay exactly; on the text parts the opposite edge stays where it was (the artwork
+    grows from its place beside the text, as its corner drag does)."""
+    from rendering.quick.fullscreen_overlay_edit import EXTENT_KEYS, SCALE_KEY
+
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(), config=_projection(_seed(settings)))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    before = QRect(edit.item(part).current_global_rect)
+    payload = dict(edit.item(part).current_size_payload)
+
+    edit.side(part, handle, SIDES[handle])
+    _run(display, 60)
+    after = edit.item(part).current_global_rect
+    horizontal = handle in ("left", "right")
+    grown, kept = ((after.width(), before.width()), (after.height(), before.height())) if horizontal else (
+        (after.height(), before.height()), (after.width(), before.width()))
+    assert grown[0] >= grown[1] + abs(SIDES[handle]) // 2, (before, after)     # its axis followed the drag
+    assert kept[0] == kept[1], (before, after)                                   # the other axis did not move
+    if part != "artwork":
+        fixed = {"right": before.left() == after.left() and before.top() == after.top(),
+                 "left": before.right() == after.right() and before.top() == after.top(),
+                 "top": before.bottom() == after.bottom() and before.left() == after.left(),
+                 "bottom": before.top() == after.top() and before.left() == after.left()}
+        assert fixed[handle], (before, after)
+    changed, untouched = EXTENT_KEYS[part] if horizontal else EXTENT_KEYS[part][::-1]
+    now = edit.item(part).current_size_payload
+    assert now[changed] != payload[changed]
+    assert now[untouched] == payload[untouched] and now[SCALE_KEY[part]] == payload[SCALE_KEY[part]]
+    assert edit.frames() == edit.drawn()
+    edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_a_set_extent_reflows_the_text_and_crops_the_artwork(display, tmp_path):
+    """A narrower text box elides; a taller one gives the text more lines (it wraps); a non-square artwork frame
+    crops the image into it (the ordinary freeform artwork frame)."""
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(title="A Longer Track Title"),
+          preset="A Longer Preset Name", config=_projection(_seed(settings)))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    layer = _root(display)
+
+    def main(name: str):
+        holder = layer.findChild(QQuickItem, name)
+        return next(child for child in _visual_items(holder) if child.objectName() == "shadowedTextMain")
+
+    preset, title = main("expandedOverlayPresetText"), main("expandedOverlayTitle")
+    assert not preset.property("truncated") and int(preset.property("lineCount")) == 1
+    edit.side("preset", "right", -WIDTH)                       # as narrow as it draws: it elides
+    _run(display, 60)
+    assert preset.property("truncated") and int(preset.property("lineCount")) == 1
+    edit.side("preset", "bottom", 120)                         # taller: the name wraps onto more lines
+    _run(display, 60)
+    assert int(preset.property("lineCount")) >= 2
+
+    assert int(title.property("lineCount")) == 1
+    edit.side("now_playing", "right", -WIDTH)
+    _run(display, 60)
+    assert title.property("truncated")
+    artwork_before = QRect(edit.item("artwork").current_global_rect)
+    edit.side("now_playing", "top", -140)                       # the title gets the extra lines, the artwork stays
+    _run(display, 60)
+    assert int(title.property("lineCount")) >= 2
+    assert edit.item("artwork").current_global_rect.size() == artwork_before.size()
+
+    edit.side("artwork", "right", 80)
+    _run(display, 60)
+    art = edit.item("artwork").current_global_rect
+    assert art.width() > art.height()
+    image = layer.findChild(QQuickItem, "expandedOverlayArtworkImage")
+    assert int(image.property("fillMode")) == 2                 # Image.PreserveAspectCrop: never distorted
+    assert edit.frames() == edit.drawn()
+    edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_a_side_change_undoes_exactly_and_restore_size_returns_the_natural_box(display, tmp_path):
+    from core.settings.fullscreen_overlays import canonical_fullscreen_overlays
+    from rendering.quick.fullscreen_overlay_edit import EXTENT_KEYS
+
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(), config=_projection(_seed(settings)))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    before = (edit.frames(), {part: dict(edit.item(part).current_size_payload) for part in PARTS})
+    edit.side("now_playing", "left", -80)
+    _run(display, 60)
+    assert edit.frames() != before[0]
+    assert edit.owner.undo_last_change()                        # Ctrl+Z: one step, exactly back
+    _run(display, 60)
+    assert (edit.frames(), {part: dict(edit.item(part).current_size_payload) for part in PARTS}) == before
+
+    canonical = canonical_fullscreen_overlays()
+    for part, handle in (("preset", "right"), ("preset", "bottom"), ("artwork", "bottom")):
+        edit.side(part, handle, 60)
+    for part in ("preset", "artwork"):
+        assert edit.model.restoreSize(edit.row(part))
+        overlay = "preset" if part == "preset" else "now_playing"
+        for key in EXTENT_KEYS[part]:
+            assert edit.item(part).current_size_payload[key] == canonical[overlay][key], (part, key)
+    _run(display, 60)
+    assert edit.frames()["preset"][2:] == before[0]["preset"][2:]
+    assert edit.frames()["artwork"][2:] == before[0]["artwork"][2:]
+    edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_a_uniform_scale_keeps_the_box_its_extents_are_font_relative(display, tmp_path):
+    """Ordinary Edit's uniform scale keeps the content box; here the box is in ems, so the wheel grows it whole."""
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(), config=_projection(_seed(settings)))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    edit.side("preset", "right", 120)
+    edit.side("preset", "bottom", 70)
+    payload = dict(edit.item("preset").current_size_payload)
+    _, _, width, height = edit.frames()["preset"]
+    edit.wheel("preset", 4)
+    _run(display, 60)
+    grown = edit.item("preset").current_size_payload
+    assert (grown["text_width"], grown["text_height"]) == (payload["text_width"], payload["text_height"])
+    assert grown["scale"] > payload["scale"]
+    _, _, new_width, new_height = edit.frames()["preset"]
+    assert new_width > width and new_height > height
+    assert new_width / new_height == pytest.approx(width / height, rel=0.03)
     edit.owner.cancel()
 
 

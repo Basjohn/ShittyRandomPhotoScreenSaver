@@ -1362,8 +1362,9 @@ class QuickSceneController(QObject):
         """Fullscreen Edit: the full-display overlays' live geometry, in the Edit layer's local coordinates.
 
         Read on demand at Edit edges (never cached, never per frame): the stage (the overlays' item over the expanded
-        card) and its safe area, each overlay's rectangle, its stage position and its corner anchor (``anchoredX`` /
-        ``anchoredY``: where it sits at a zero offset, its stacking included), and the Edit parts' rectangles: the
+        card) and its safe area, each overlay's rectangle, its stage position, its corner anchor (``anchoredX`` /
+        ``anchoredY``: where it sits at a zero offset, its stacking included), its font size and card padding, and the
+        Edit parts' rectangles: the
         preset toast, Now Playing's text block (with its Media Controls when shown) and its artwork. None while the
         overlays are not drawn.
         """
@@ -1391,6 +1392,9 @@ class QuickSceneController(QObject):
                 "rect": rect(slot),
                 "pos": (float(slot.x()), float(slot.y())),
                 "anchored": (float(slot.property("anchoredX")), float(slot.property("anchoredY"))),
+                # The em of the overlay's text-box extents and its card padding (Fullscreen Edit's side handles).
+                "font_size": float(slot.property("fontSize")),
+                "padding": float(slot.property("padding")),
             }
         text = stage.findChild(QQuickItem, "expandedOverlayNowPlayingText")
         artwork = stage.findChild(QQuickItem, "expandedOverlayArtwork")
