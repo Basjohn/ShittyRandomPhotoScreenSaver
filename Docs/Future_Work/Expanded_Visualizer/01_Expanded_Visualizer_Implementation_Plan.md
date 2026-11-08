@@ -720,8 +720,8 @@ can most geometry normally."
   capable mode and the double-click cycle stay expanded), and the one forced end, an incapable activation (no user
   path reaches it), ends the session first (`EndFullscreenEdit`: Cancel, nothing saved) and collapses. Edit begun
   while an enter, exit or transfer runs is an ordinary Edit that collapses at its commit edge, as before. Stale
-  generation, duplicate glyph, Edit Cancel and topology loss keep their scenarios (`tests/test_visualizer_expansion_
-  reducer.py`; only the superseded collapse-on-Edit traces were replaced).
+  generation, duplicate glyph, Edit Cancel and topology loss keep their scenarios
+  (`tests/test_visualizer_expansion_reducer.py`; only the superseded collapse-on-Edit traces were replaced).
 - *One session, one Save.* The display manager's Edit entry asks the coordinator first; Fullscreen Edit opens the
   `QuickCustomLayoutOwner`'s one session (`start_fullscreen`) on the expanded display's overlays only:
   `fullscreen_overlay.preset`, `.now_playing` (the text block, with its Media Controls when shown) and `.artwork`. The
@@ -773,8 +773,8 @@ can most geometry normally."
   under publications), the menu's Save ending Edit for the takeover, Settings held by a draft, visibility and fades,
   frames following content, the control column, guides on the Edit layer; plus reducer, coordinator, settings and
   pill bars. Fourteen M3c mutations (and five reducer ones, four schema ones) each turned a bar red. Stills
-  (Extruded Bubble, PERSONALSET 859804, 1600 x 900): `D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer\
-  20261108_m3c\` (chrome, mid-drag guide, resized Now Playing, stacked Cards, after Cancel).
+  (Extruded Bubble, PERSONALSET 859804, 1600 x 900) were handed to the lead outside the repository: the chrome, a
+  mid-drag guide, a resized Now Playing, stacked Cards, after Cancel.
 - *Also on this branch (operator, 8 Nov):* playback resuming (the Media model's paused -> playing edge) reveals Now
   Playing like a track change, keeping its content; Always Show is untouched; a pause is no event. And a bar that the
   display-wide card keeps the framed camera's controls (Reset Camera, the preset steps, the 3D hint) under the card's
