@@ -111,7 +111,8 @@ those values per tick, so they define the equivalence.
 3. **Gain:** GIL share and frame age before/after in ONE game60 run of at most 10 minutes, only after the operator's
    yes (lead only); `--usage`/PERF instrumentation, compared against the stored baselines.
 4. **Dormancy and lifecycle:** overhead baseline identical with the Visualizer off; no process, mapping or handle growth
-   over 20 Settings open/close and 20 mode switches; worker retired with its generation.
+   over 20 Settings open/close and 20 mode switches; worker retired with its generation. **Passed 8 Nov** (the Gate 4
+   record under work order 6; it found and fixed R-178 first).
 
 ## Measured (8 Nov, work orders 1-2 landed)
 
@@ -1372,12 +1373,12 @@ switch never remaps.
      - **Left for step 6 / gate 3:** gate 3's game60 run (lead, operator's yes); the operator's frozen check above
        (now also confirming the frozen worker loads no Qt GUI stack: A10-M1 is proven on the source spawn path and
        on the entry module run as `__parents_main__`, not on a build; timed as ready plus the first configure, A11-L1);
-       the production worker's RSS and threads inside a session; 5.3's operator device checks, the real-device reopen
+       the production worker's RSS and threads inside a session (from source: the Gate 4 record under 6); 5.3's
+       operator device checks, the real-device reopen
        timing and what its record leaves (5.3 above, A11-L5/L6); the reply handlers outside the one-frame gate (the configure's reply,
        161-209 ms); the render-thread decode and completion cost with a real window; gate 4's 20 Settings open/close
-       and 20 mode switches with no process, mapping or handle growth (the lifetime now retires the worker at each
-       Settings open; to measure); `BaseWorker`'s 100 ms queue wait (10 wakes/s in an idle or parked worker, every
-       role). Carried from 5.5: an established session's hung-worker bound is the production heartbeat's (~17 s, the
+       and 20 mode switches (done 8 Nov: the Gate 4 record under 6, which found and fixed R-178); `BaseWorker`'s
+       100 ms queue wait (10 wakes/s in an idle or parked worker, every role). Carried from 5.5: an established session's hung-worker bound is the production heartbeat's (~17 s, the
        held frame frozen meanwhile), and recovery onto a fresh worker after a production-timed hang is unmeasured (since
        5.7 the heartbeat retires and the owner's next link starts the fresh worker, so the race the 5.5 record named is
        gone, but the timing is not measured).
@@ -1386,6 +1387,99 @@ switch never remaps.
    not a C layout; P3 gets per-mode fixed layouts under new `payload_schema` values, and the native reader validates
    each slot's own identity (ABI 2: per slot, under the slot's seqlock); the header holds the configure-time identity
    and decides nothing.
+   - **Gate 4 record (8 Nov): passed** (dormancy and lifecycle; source `e713dd74`, the fix below). Every scenario ran
+     with the engine-worker admission on and the same procedure off as the control.
+     - *Method:* the invisible MC saver (`tools/visualizer_live_check.py`: recorded music `anything_mixed2`,
+       `--load none`, `--usage` as always), Spectrum P1 for the Settings and Visualizer-off runs, the production cycle
+       gesture through all nine enabled modes for the switch runs. Added for this gate (`tests/test_live_check_resources.py`):
+       `--app-arg=--viz-engine-worker` (the worker plays the clip's first 20 s, looped, on its own audio clock through
+       the link's recorded-capture control, never the device), `--mode-switch` (`tools/live_check_mode_switch.py`: the
+       double-click cycle, one switch at a time, completion where production persists it) and `--resource-readings`
+       (`tools/live_check_resources.py`: read from the parent, never inside the saver: psutil per process, handles by
+       object type, pagefile-backed section views, the session's named `srpss_viz_` mappings; every second, and 5 s
+       after each reveal or completed switch, so a lifecycle spike is never a reading; slope per cycle and a growth
+       verdict). `--roundtrip-memory` now also classifies at each completed switch. Conditions: other processes used
+       ~20-27% of the CPU (median) and the GPU was ~40-50% busy throughout (other sessions); every comparison is
+       ON against OFF under the same conditions.
+     - *Found first and fixed (R-178, `e713dd74`):* with the admission on, the first Settings round trip timed the
+       destruction barrier out (8.3 s) and the saver exited (code 1): `retire()` left the controller's layout-metrics
+       observer, a bound method of the owner, so owner -> controller -> observer -> owner kept the owner alive. Any
+       display reload under the admission (Settings, a CUSTOM commit, a monitor change) did the same. Every earlier
+       worker-path test retired the owner through a rig, never the engine's barrier.
+     - *20 Settings round trips (every 22 s, readings 1-20; per-cycle tables in the evidence):*
+
+       | Reading | Admission on | Off (control) |
+       |---|---|---|
+       | Processes (main + the supervisor's workers) | 4 at every reading | 3 at every reading |
+       | Engine worker | exactly 1 per reading, 20 distinct PIDs; never 2 at any 1 s sample | none |
+       | Named `srpss_viz_` mappings | 1 at every reading, never 2 at any sample | 0 |
+       | Frame-sized views, main / worker | 1 / 1 | 0 |
+       | Section handles, main / worker | 383 / 1, flat | 382, flat |
+       | Handles, main | 1500-1523, +0.17 ± 0.26 a trip (flat) | 1499-1537, +0.51 ± 0.33 (flat) |
+       | Handles, worker | 200-202 | - |
+       | Threads, main / worker | 46-52 (-0.07 a trip) / 10 | 49-55 (0.00) |
+       | RSS / private, main | +4.2 ± 0.5 / +7.0 ± 0.3 MB a trip | +3.2 ± 0.5 / +6.1 ± 0.2 MB a trip |
+       | RSS / private, worker | 74.2-75.3 / 58.1-59.5 MB, flat | - |
+
+       All 20 round trips completed on both (`settings` barriers 404-484 ms on, 404-699 ms off; every reveal
+       re-frozen, 21 GC freezes for 21 reveals).
+     - *20 mode switches (every 12 s; the cycle of all nine modes, two laps and two):*
+
+       | Reading | Admission on | Off (control) |
+       |---|---|---|
+       | Processes | 4 | 3 |
+       | Engine worker | one PID through all 20 switches | none |
+       | Named mappings / frame-sized views | 1 / 1 (the session's own; a switch never remaps) | 0 |
+       | Section handles, main / worker | 383 / 1, flat | 382, flat |
+       | Handles, main | 1522-1535: File +21 on each mode's first visit (lap 1, 418 -> 439), then flat; one pool thread's Event, IoCompletion and Thread later | 1507-1531: File +21 the same way (412 -> 433), then flat |
+       | Handles / threads, worker | 201-203 / 10, then 7 from Extruded Spectrum on | - |
+       | Private, main (same mode, first -> last lap) | median -37 MB (flat) | median +371 MB (in process; below) |
+       | RSS, main (same mode, first -> last lap) | median +78 MB | median +42.5 MB |
+       | Private, worker | 58 MB -> 105-115 MB after the first Extruded Bubble / Waveform Ribbon, then flat lap to lap (Oscilloscope 112.4 -> 113.8, Bubble 107.5 -> 107.3) | - |
+
+       Main RSS (the working set) rises over the laps on both paths while the worker path's main private bytes stay
+       flat: no commit grows on the worker path. Every switch completed, in 0.85-2.1 s on both.
+     - *The worker is retired with its generation:* in all 20 round trips the supervisor's `Stopped visualizer worker`
+       and the lifetime's `Engine worker retired ... (pid=N)` come before `Entering settings dialog exec`, and the next
+       PID's start after `Settings dialog destroyed` (Settings open retires it; Settings close respawns it; the
+       Visualizer is configured on the fresh worker 3-4 s after the dialog closes, 1 s log stamps). The 1 s samples
+       show 1.2-2.5 s with no engine worker per round trip and a retired PID never again. The retired session's mapping
+       is gone in each gap (three samples show the next session's mapping, created at its configure just before its
+       spawn); main's Section handles stay 383, so nothing of an old session is held. A mode switch touches neither the
+       process nor the mapping. The worker stops with the image workers at exit.
+     - *Visualizer off (Settings round trips at 30, 55, 80 s):* identical. On / off: processes 3 / 3 at every reading,
+       no engine worker and no mapping on either (no `[ENGINE_WORKER]` or visualizer-worker log line with the admission
+       on), main handles 1474, 1501, 1490, 1492 / 1471, 1506, 1489, 1491, threads 48, 49, 45, 45 / 48, 50, 45, 45,
+       Section handles 382 / 382; `--usage` medians: processes 3 / 3, threads 51 / 49, handles 1988.5 / 1984.
+     - *Overhead baseline (`tools/overhead_baseline.py`, 1920x1080, ON = the admission activated in the measuring
+       process):* ON vs OFF, all 38 cases have identical GL and Python call counts, control-relative GPU within 1.5%
+       (median) / 5.4% (p90), "no regressions". Against the 7 Nov pre-P2 reference (`2026-11-07_4bb2b775.json`) with the
+       Visualizer off (transitions, surfaces, node path): no rise (Burn 420 -> 407 Python calls, 0b3048b6). Visualizer
+       cases: Waveform Ribbon +16 Python calls (6987 -> 7003, Waveform feature work, already open in `Current_Plan.md`)
+       and GPU flags for Extruded Bubble and Neon Lake under very different conditions (other processes 3% -> 21%).
+     - *Memory, classified as R-175:* the Settings slope is R-175's open shared-path residual, not the worker. With the
+       admission on, a census at each reveal (`--roundtrip-memory census,collect`, 8 round trips) finds no worker-path
+       object accumulating (no `EngineWorkerLink`, `PacketMailbox`, `SharedMemory`, `mmap` or pipe `Connection` in the
+       per-trip type deltas), no retired display-generation object alive, and a collection that frees 62 objects and
+       0 MB; each trip adds ~1,710 tuples and ~1,710 weakrefs to the tracked heap, as R-175's own in-process census after
+       its fix (~1,790 each). The on/off slope gap (+0.9 MB private, +1.0 MB RSS a trip) is inside the run-to-run spread
+       R-175 recorded for the same mode (Spectrum P1 +6.5 / +9.1 MB a trip).
+     - *Not the worker's, found by the control (recorded in `Current_Plan.md`):* in process, cycling modes grows main's
+       private bytes about 150-250 MB a lap of nine switches and keeps growing lap to lap. Classified: not Python (a
+       collection at each switch frees under 1 MB; tracked objects plateau after the first lap), not the heaps (heap,
+       heap_large and arenas +30 / +45 / +17 MB over a lap); `private_other` (VirtualAlloc outside the heaps, mostly not
+       resident) 629 -> 1376 MB by Waveform Ribbon and 940 MB back at Bubble on lap 2 (601 on lap 1). On the worker path
+       main's private bytes stay flat and the worker plateaus.
+     - Evidence: `.artifacts/evidence/architecture/native_core_p2/20261108_gate4_dormancy/` (`per_cycle_tables.md`, one
+       folder per run with `resource_readings.json`, `resource_samples.jsonl`, `resource_summary.json`, the drivers'
+       state and the saver's logs; `console/`; `overhead_flag_off.json` / `_on.json`; frame traces deleted, profile
+       copies deleted by the tool).
+     - **Left for gate 3:** the game60 run (lead, operator's yes). Before it, the live check's age chain on the worker
+       path: the main process's frame trace has no publish events for worker frames (revisions/s 0, publish -> swap and
+       the logical tick's GIL share empty), so gate 3's frame-age comparison needs the worker's publish time in the trace
+       (each slot carries its frame's produced time). The production worker in a session, from source: 74-75 MB RSS,
+       58-59 MB private and 10 threads with Spectrum, 90-130 MB RSS and 7-10 threads across the modes (the frozen
+       build's figures stay the operator's check). Everything 5.7 left above except gate 4.
 
 ## Risks
 

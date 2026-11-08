@@ -2400,6 +2400,11 @@ class QuickDisplayVisualizerOwner:
         # object, so detach this edge regardless of whether logical cadence ran.
         self._controller.logical_mailbox.set_wake_callback(None)
         self._controller.render_bridge.set_sync_admission(None)
+        # On the engine-worker path the controller holds this owner's layout-metrics observer (a bound method), so
+        # owner -> controller -> observer -> owner is a cycle: the destruction barrier, which judges the retiring
+        # generation's owners by reference counting, never saw this owner released and timed out (R-178). In process
+        # no observer is installed (a no-op).
+        self._controller.set_layout_metrics_observer(None)
         wake = self._publication_wake
         if wake is not None:
             wake.close()
