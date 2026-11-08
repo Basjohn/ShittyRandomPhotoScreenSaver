@@ -4,6 +4,8 @@ P2 of the [Graphics Backend Decision](Graphics_Backend_Decision_2026-11-05.md) a
 logical tick leaves the main process, so the GUI and render threads stop competing with it for the GIL. P1 (the native
 toolchain) is [GO with conditions](Native_Core_P1_Spike.md); P2 needs none of P1's downloads and does not wait for them.
 P3 (the native render core) reads P2's packets straight from shared memory, so P2 fixes the packet ABI P3 builds on.
+Audited 8 Nov: [Native_Core_P2_Audit.md](Native_Core_P2_Audit.md) (two open critical findings in the cross-process
+wake and the seqlock reader, the gates' coverage, the main-process cost of the snapshot path, work order 5's gaps).
 
 ## What runs where today (source audit, main e885f896 + 7 Nov)
 
@@ -45,7 +47,8 @@ creates, holds and unlinks; Windows drops a mapping with its last handle), opene
 header (64 bytes, little-endian, fixed):
   u32 magic 'SRVZ'   u16 abi_version   u16 header_bytes
   u32 runtime_generation   u32 engine_generation   u32 activation_id
-  u32 slot_count (3)   u32 slot_bytes   u64 latest_sequence   u8 mode_code   pad
+  u32 slot_count (3)   u32 slot_bytes   u32 mode_code
+  u64 latest_sequence (writer)   u64 consumed_sequence (reader-owned acknowledgement)   pad to 64
 slot[i] (slot_bytes each):
   u64 sequence_begin   (seqlock: odd while the writer fills the slot)
   u32 payload_bytes    u32 payload_schema (per mode, versioned)
@@ -119,8 +122,11 @@ shipped clip round-trips to the identical `repr` and re-encodes to the identical
 | Waveform Ribbon | 342 KiB | .34 ms | .26 ms (p90 .34) |
 | Extruded Bubble | 610-617 KiB | .50 ms | .34 ms (p90 .39) |
 
-So the main process pays at most about .4 ms and one slot copy per presented frame, against the whole tick it stops
-running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch never remaps.
+So the main process pays at most about .4 ms and one slot copy per presented frame for the *frame read*; with live
+inputs as engine snapshots it also pays the capture (.20-.25 ms p50) and pickle (.06-.09 ms) per tick, which for
+Spectrum, Oscilloscope, Sphere and Extruded Spectrum (ticks of .33-.45 ms) is more than the tick it stops running
+(audit, H1: measure per mode before work order 5). 1 MiB slots (3 MiB per generation) hold every mode, so a mode
+switch never remaps.
 
 ## Work order
 
@@ -151,7 +157,9 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
    priority; report under `.artifacts/evidence/architecture/native_core_p2/`). **Result (8 Nov, 20 s per recording):**
    all 160 replayable (recording, mode) pairs identical, 291,024 frames, 19 recordings x 9 modes; Waveform Ribbon is
    skipped on the 11 recordings without native PCM (it replays only from PCM, in process too). Report:
-   `.artifacts/evidence/architecture/native_core_p2/20261108_worker_gate/report.json`.
+   `.artifacts/evidence/architecture/native_core_p2/20261108_worker_gate/report.json`. Note (audit, M4): that
+   report predates the skip; it records those 11 rows as `error` and `"mismatches": 11` (the run exited 1). The
+   160 replayable pairs are identical in it; re-run with the current script to make the file match the claim.
    **Live inputs: the lossless engine snapshot (built 8 Nov):** `FeatureFrame` is the replay contract, not the live
    one: the recorder's capture (`tools/visualizer_replay/record.py` `_frame`) clamps lanes to 0..1, resamples bars and
    waveform to fixed counts and consumes scheduler events. `core/visualizer_engine/engine_snapshot.py` instead:
@@ -202,16 +210,25 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
   restarted workers) and numbers from `namespace << 32`; the main process's own counter stays far below, and
   namespace 0 keeps the in-process numbering for the identity gates. Production wiring must pass a fresh namespace on
   every `VIS_CONFIGURE` (`tests/test_visualizer_engine_worker.py`).
-- **The GUI wake (8 Nov, resolved):** in process the mailbox wakes the GUI on its empty -> populated edge. Across
+- **The GUI wake (8 Nov, built; OPEN, audit C1):** across processes the writer decides the edge from
+  `consumed_sequence`, which the reader writes only after decoding, so a publish that lands between the reader's
+  accept and its acknowledgement is taken as "still unread" and never woken; the owner then never reads again
+  (reproduced). Fix before work order 5 (a byte per publish with reader-side coalescing, or acknowledge at accept and
+  re-check after every take). As built: in process the mailbox wakes the GUI on its empty -> populated edge. Across
   processes the writer sends one byte down a `multiprocessing.Pipe` on exactly that edge (handed to the worker in
   `VIS_CONFIGURE` as `wake`); the reader's `listen_for_wakes` thread blocks on the pipe and runs the same wake callback
   (the owner's thread-safe emitter). Never a poll; closing the mailbox ends the thread
   (`tests/test_visualizer_engine_worker.py`: one byte per edge; three worker frames taken by wake across processes).
 - **Hidden GUI-thread reads inside the tick:** every attribute the tick reads from the owner/widget must become a
   control input. The audit for step 4 lists them from `logical_tick`'s reads; a missed one shows up as an identity
-  failure, not silently.
+  failure only where the tick lets the read's error propagate. Where the tick wraps an engine read in
+  `except Exception` the miss is silent: `get_authoritative_frame_commit_seq` (the warm re-entry fence) is read
+  that way and is not captured, so the fence disarms on the worker (audit, H3). The read audit must cover the paused,
+  resume, re-entry and mode-switch paths, which no gate clip exercises yet.
 - **Two copies of state during a switch:** the main process must never keep a stale tick-side copy; one owner of each
   piece of state, the worker for logical state.
-- **Memory:** a second Python with numpy (tens of MB); recorded in the dormancy/usage receipts.
+- **Memory:** a second Python with numpy, QtCore and (until the presentation-config reads move) QtGui: measured 8 Nov
+  64 MiB RSS idle, 84 MiB with a Spectrum session, 129 MiB with Extruded Bubble; recorded in the dormancy/usage
+  receipts.
 - **Latency:** at most one tick of extra control latency (applied at the next boundary) and one memcpy per frame on the
   read; frame age is measured at gate 3.
