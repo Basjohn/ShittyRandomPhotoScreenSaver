@@ -669,6 +669,7 @@ class _ManualSupervisor:
     def __init__(self) -> None:
         self.callbacks: dict = {}
         self.sent: list = []
+        self.payloads: list = []
 
     def register_worker_factory(self, *_args) -> None:
         return None
@@ -688,6 +689,7 @@ class _ManualSupervisor:
 
     def send_message(self, _worker_type, msg_type, payload, correlation_id=None):
         self.sent.append((msg_type, correlation_id))
+        self.payloads.append(payload)
         return correlation_id
 
     def abandon_response(self, _worker_type, correlation_id, *, reason="") -> int:

@@ -488,11 +488,14 @@ class EngineWorkerLink:
             return False
         snapshot, presentation = source()
         sent = self._presentation_sent
+        # By value (A8-L6): ``sent`` holds detached copies, so an in-place edit of the state's list or dict differs.
         changed = {attr: value for attr, value in presentation.items() if attr not in sent or sent[attr] != value}
         if snapshot == self._view_sent and not changed:
             return False
         from core.process.types import MessageType
+        from widgets.spotify_visualizer.logical_edges import detach_presentation_value
 
+        changed = {attr: detach_presentation_value(value) for attr, value in changed.items()}
         extent, rotations, override_extent, override_rotations = snapshot
         self._view_sent = snapshot
         sent.update(changed)

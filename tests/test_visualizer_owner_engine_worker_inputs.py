@@ -199,6 +199,49 @@ def test_fullscreen_edit_envelopes_on_the_worker(qt_app, pcm, monkeypatch, pre_f
         stand_in.close()
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_an_in_place_edit_of_a_nested_presentation_input_is_forwarded(qt_app, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-L6: the presentation inputs are compared with the last send by value. Waveform Ribbon's
+    # palette (a dict of lists) edited in place on the main side differs from what the session holds, so it is
+    # forwarded, as a copy that shares nothing mutable with the state. Negative control (values held by reference, as
+    # the pre-fix snapshot held the palette): the edited value compares equal to "sent" and never leaves.
+    import types
+
+    from core.process.types import WorkerResponse
+    from tests.test_visualizer_owner_engine_worker_liveness import _ManualSupervisor
+    from widgets.spotify_visualizer import logical_edges
+    from widgets.spotify_visualizer.engine_worker_link import EngineWorkerLink
+
+    if pre_fix:
+        monkeypatch.setattr(logical_edges, "detach_presentation_value", lambda value: value)
+    state = types.SimpleNamespace(_waveform_ribbon_palette={"strand": [10, 20, 30, 255], "rim": [1, 2, 3, 4]})
+    supervisor = _ManualSupervisor()
+    link = EngineWorkerLink(supervisor, on_lost=lambda _link, _reason: None)
+
+    def answer() -> None:
+        message, correlation = supervisor.sent[-1]
+        supervisor.callbacks[correlation](WorkerResponse(msg_type=message, seq_no=0, correlation_id=correlation,
+                                                         success=True))
+        gate._event_loop_for(qt_app, 5.0, until=lambda: not link.busy)
+
+    try:
+        link.set_view_source(lambda: (((640.0, 360.0), {}, None, None),
+                                      logical_edges.presentation_inputs_snapshot(state, "waveform_ribbon")))
+        assert link.send_view()
+        answer()
+        state._waveform_ribbon_palette["strand"][0] = 99                     # edited in place
+        forwarded = link.send_view()
+        assert forwarded is not pre_fix
+        if forwarded:
+            palette = supervisor.payloads[-1]["presentation"]["_waveform_ribbon_palette"]
+            assert palette == state._waveform_ribbon_palette
+            assert palette is not state._waveform_ribbon_palette
+            assert palette["strand"] is not state._waveform_ribbon_palette["strand"]
+    finally:
+        link.close()
+
+
 def test_the_qt_free_presentation_colours_freeze_as_qcolor_did():
     # 5.4 (QtCore-only worker): the presentation config's colours are the tuples a QColor froze to in the frame
     # (``render_state.freeze_render_value``: ``getRgb()``), the border opacity included (Qt rounds it through a 16-bit
