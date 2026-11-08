@@ -546,6 +546,30 @@ switch never remaps.
    sender after configure; the label-namespace counter's owner; the presentation-config reads moved to logical config
    (QtCore only); the worker in the dormancy receipt; frozen spawn (operator); frame age defined from the capture
    timestamp on both paths (M3).
+   **Work order 5 slices (lead, 8 Nov; in order, each audited before the next):** under P2b the main process sends
+   only control edges (no per-frame inputs), so audit H2's latest-wins input mapping is not needed: the control
+   queue carries edges, frames come back through the ABI and the wake.
+   - 5.1 Worker-paced ticks: the worker runs the logical runtime's cadence itself (the in-process cadence owner,
+     moved, not copied); frames reach the owner through the existing mailbox reader and wake; a stalled owner never
+     blocks the worker (latest wins in the ABI already).
+   - 5.2 The owner on the worker: one code path in `quick_display_visualizer_owner.py` that sends the
+     `logical_edges` edges to the worker instead of running them, admitted by a code-level admission in
+     `core/diagnostics/experiment_flags.py` (never an environment flag) until gate 3 accepts it; the in-process path
+     stays the default and the fallback.
+   - 5.3 The live device in the worker: capture opens there; Media's playback truth stays the one owner of
+     "playing" (sent as an edge); audio device changes, COM initialisation on the worker's capture lane, capture
+     failure reported as a crash.
+   - 5.4 Settings: a resolved-settings delta applied to the existing session at a tick boundary (no rebuild per
+     slider step); the presentation-config reads moved to logical config so the worker imports QtCore only.
+   - 5.5 Fail-closed: `session_closed` and heartbeat loss fade the Visualizer (never vanish) and reconfigure once;
+     the label-namespace counter owned by the main process for the app's life; the wake sender closed after
+     configure; a full wake pipe never blocks the tick.
+   - 5.6 Cleanup: delete `engine_snapshot.py` and the `snapshot` input; Bubble's spawn on its own generator so no
+     gate needs a process-wide seed.
+   - 5.7 Dormancy and diagnostics: the worker exists only while a Visualizer is active and parks with the display;
+     the usage sampler and logs include it; the frozen (Nuitka) spawn reaches `visualizer_worker_main` (operator
+     check).
+
 6. Measurement (gate 3), then decide P2b. P3 note (audit H5): the tagged codec is P2's Python-to-Python transport,
    not a C layout; P3 gets per-mode fixed layouts under new `payload_schema` values, and the native reader validates
    each slot's own identity (ABI 2: per slot, under the slot's seqlock); the header holds the configure-time identity
