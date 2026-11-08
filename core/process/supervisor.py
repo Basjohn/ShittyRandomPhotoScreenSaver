@@ -1531,7 +1531,12 @@ class ProcessSupervisor:
         """Check if worker is enabled in settings."""
         if not self._settings_manager:
             return True  # Default to enabled if no settings
-        
+        if worker_type == WorkerType.VISUALIZER:
+            # The engine worker has no Settings switch of its own: the Visualizer's own enable decides whether an
+            # owner exists, and the code-level admission (``experiment_flags.visualizer_engine_worker_admitted``)
+            # whether that owner starts this worker (native core P2b, work order 5 slice 5.2).
+            return True
+
         key = (
             "workers.image.enabled"
             if worker_type == WorkerType.IMAGE_PREFETCH

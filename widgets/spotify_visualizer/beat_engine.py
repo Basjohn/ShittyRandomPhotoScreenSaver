@@ -289,6 +289,12 @@ class _SpotifyBeatEngine(QObject):
         """
         return self._audio_worker.fence_capture_transactions(callback)
 
+    def is_capture_running(self) -> bool:
+        """Whether the audio worker's capture is open (``SpotifyVisualizerAudioWorker.is_running``). The engine
+        worker's device session reads it on the capture lane after an open (work order 5 slice 5.3); nothing reads it
+        per frame."""
+        return self._audio_worker.is_running()
+
     def capture_publications(self) -> int:
         """How many capture blocks the audio worker's capture callback has published into the engine's current audio
         buffer (replaced at each activation boundary). The paced rig counts the blocks the engine actually accepted

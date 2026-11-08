@@ -77,8 +77,10 @@ class PacketMailbox(LatestStateMailbox):
         # ``multiprocessing.Pipe``); the reader's ``listen_for_wakes`` turns it back into the wake callback, and the
         # owner's emitter coalesces repeats (``quick_presentation_sync``).
         self._wake_sender = wake_sender
+        self._wake_lock = threading.Lock()          # a sender close (``close_wake_sender``) never races a send
         self._wake_thread: threading.Thread | None = None
         self._wake_receiver: Any = None
+        self._last_taken: LogicalPublication | None = None   # reader side: the newest publication handed out
         if (role == "writer") != (attach is not None):
             raise ValueError("a writer attaches to the owner's mapping by name; readers and loopbacks create it")
         if attach is None:
@@ -153,10 +155,27 @@ class PacketMailbox(LatestStateMailbox):
                                         activation_id=activation_id, mode_code=mode_code(mode))
 
     def _send_wake(self) -> None:
-        try:
-            self._wake_sender.send_bytes(b"w")
-        except (OSError, ValueError):
-            pass                                    # the owner has gone; its reader no longer needs waking
+        with self._wake_lock:
+            sender = self._wake_sender
+            if sender is None:
+                return
+            try:
+                sender.send_bytes(b"w")
+            except (OSError, ValueError):
+                pass                                # the owner has gone; its reader no longer needs waking
+
+    def close_wake_sender(self) -> None:
+        """Writer side: close this end of the wake pipe now (idempotent). With no other writer end open the
+        reader's listener sees the end of the pipe (``listen_for_wakes``' ``on_closed``): a session that fails
+        outside a control message (its capture device failed to open, work order 5 slice 5.3) reports itself to the
+        owner this way, without a message of its own. Publishing goes on into the mapping; nobody is woken."""
+        with self._wake_lock:
+            sender, self._wake_sender = self._wake_sender, None
+        if sender is not None:
+            try:
+                sender.close()
+            except OSError:
+                pass
 
     # ---------------------------------------------------------------------------------------------- consumer
 
@@ -179,7 +198,15 @@ class PacketMailbox(LatestStateMailbox):
         if publication is not None:
             self._reader.acknowledge(self._peeked_sequence)
             self._peeked = None
+            self._last_taken = publication
         return publication
+
+    @property
+    def last_taken(self) -> LogicalPublication | None:
+        """Reader side: the newest publication a take handed out (the owner holds it while a failed session is
+        replaced, work order 5 slice 5.2), or None."""
+        with self._lock:
+            return self._last_taken
 
     def peek(self) -> Optional[LogicalPublication]:
         with self._lock:
@@ -208,11 +235,16 @@ class PacketMailbox(LatestStateMailbox):
         if callback is not None and pending:
             callback()
 
-    def listen_for_wakes(self, receiver: Any) -> None:
+    def listen_for_wakes(self, receiver: Any, *, on_closed: Optional[Callable[[], None]] = None) -> None:
         """Reader side: a daemon thread blocks on ``receiver`` (the pipe's other end) and runs the wake callback for
-        each byte. It blocks, never polls; closing the mailbox closes the pipe and ends it."""
+        each byte. It blocks, never polls; closing the mailbox closes the pipe and ends it. ``on_closed`` runs once
+        (on the listener thread) when the pipe ends while this mailbox is still open: every writer end is closed, so
+        the session that held it ended (closed after a failure, or its process died; work order 5 slice 5.2). The
+        reader must have closed its own copy of the writer end for that edge to exist."""
         if self._reader is None or self._wake_thread is not None:
             raise RuntimeError("only a reader listens for wakes, once")
+        if on_closed is not None and not callable(on_closed):
+            raise TypeError("on_closed must be callable or None")
         self._wake_receiver = receiver
 
         def listen() -> None:
@@ -220,6 +252,10 @@ class PacketMailbox(LatestStateMailbox):
                 try:
                     receiver.recv_bytes()
                 except (EOFError, OSError, ValueError):
+                    with self._lock:
+                        closed = self._closed
+                    if on_closed is not None and not closed:
+                        on_closed()
                     return
                 with self._lock:
                     callback = self._wake_callback
@@ -256,7 +292,9 @@ class PacketMailbox(LatestStateMailbox):
             if self._closed:
                 return
             self._closed = True
-            for end in (self._wake_receiver, self._wake_sender):
+            with self._wake_lock:
+                sender, self._wake_sender = self._wake_sender, None
+            for end in (self._wake_receiver, sender):
                 if end is not None:
                     try:
                         end.close()

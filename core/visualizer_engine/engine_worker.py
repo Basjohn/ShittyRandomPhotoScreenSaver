@@ -19,7 +19,12 @@ acknowledgements, park, crash fail-closed) is work order 5; its first slice (5.1
 live session ticks on its own clock, the logical runtime's own cadence (``VisualizerLogicalRuntime``, started through
 ``logical_edges.start_logical_cadence`` as the owner starts it), fed a recorded PCM stream paced on the audio clock at
 the cadence's edges (``recorded_capture.PacedPcmSource``), and its frames reach the reader through the same mailbox
-and wake (``tests/test_visualizer_engine_paced.py``). Imports load QtCore only; a configuration loads QtGui
+and wake (``tests/test_visualizer_engine_paced.py``). Slice 5.2 runs the production owner on it
+(``widgets/spotify_visualizer/engine_worker_link.py``): the session is configured with the host binding's own resolved
+activation (``activation``: settings model, resolved activation, technical cache, logical and presentation kwargs),
+started, played, parked and switched by the owner's control edges, and in production (no ``pcm``) its engine opens the
+real loopback device through the normal capture path on its own capture lane (slice 5.3's core); a capture that fails to
+open closes the session's wake pipe, which the owner treats as a worker failure. Imports load QtCore only; a configuration loads QtGui
 (``QColor`` in the presentation config the tick still reads: no QGuiApplication, no QtQuick; A5-L2); work order 5
 slice 5.4 moves those reads to the logical config.
 """
@@ -62,12 +67,19 @@ class EngineSession:
     #: runtime the owner runs in process (``logical_edges.start_logical_cadence``: ``VisualizerLogicalRuntime``, one
     #: non-Qt thread, missed deadlines skipped, parked with the display), started by ``start``; audio comes from
     #: ``pcm`` (a recorded mono stream at ``pcm_rate``) handed to the capture callback on the audio clock at each
-    #: cadence edge (``recorded_capture.PacedPcmSource``); frames go out through the mailbox and wake as always, and a
-    #: reader that stalls only coalesces (latest wins in the ABI). The authored clock is the process's own.
+    #: cadence edge (``recorded_capture.PacedPcmSource``), or, with no ``pcm`` (production, work order 5 slice 5.3),
+    #: from the loopback device the engine's audio worker opens through the normal capture path on its capture lane;
+    #: frames go out through the mailbox and wake as always, and a reader that stalls only coalesces (latest wins in
+    #: the ABI). The authored clock is the process's own.
     CADENCES = ("input", "worker")
 
     #: How long a live session waits for its own capture to open or its analysis to settle before failing closed.
     LIVE_EDGE_TIMEOUT_S = 30.0
+
+    # Defaults (a recorded session configured from the offline request); ``_construct`` owns the instance values.
+    _activation: Any = None
+    _device = False
+    _capture_failed = False
 
     def __init__(self, **kwargs: Any) -> None:
         # A session that fails while being built releases what it entered (the pinned authored clock, the attached
@@ -84,7 +96,7 @@ class EngineSession:
                  bar_count: int = 32, label_namespace: int = 0, wake: Any = None, inputs: str = "feature",
                  initial_snapshot: Any = None, seed: int | None = None, order: str = "production",
                  cadence: str = "input", pcm: Any = None, pcm_rate: int | None = None,
-                 interval_s: float | None = None) -> None:
+                 interval_s: float | None = None, activation: Any = None) -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.engine_snapshot import SnapshotBeatEngine
         from core.visualizer_engine.packet_mailbox import PacketMailbox
@@ -102,13 +114,21 @@ class EngineSession:
             raise ValueError(f"unknown live commit order {order!r}")
         if cadence not in self.CADENCES:
             raise ValueError(f"unknown cadence {cadence!r}")
-        if (cadence == "worker") != (pcm is not None) or (
-                cadence == "worker" and (inputs != "live" or order != "free" or not pcm_rate)):
-            raise ValueError("a worker-paced session is a live session in free order fed a recorded PCM stream")
+        if (cadence == "worker" and (inputs != "live" or order != "free")) or (
+                pcm is not None and (cadence != "worker" or not pcm_rate)):
+            raise ValueError("a worker-paced session is a live session in free order fed a recorded PCM stream or "
+                             "the device")
         self.inputs = inputs
         self.order = order
         self.cadence = cadence
         self._paced = cadence == "worker"
+        # Production (work order 5 slice 5.3): a worker-paced session with no recorded stream opens the loopback
+        # device through the audio worker's normal capture path (no capture factory installed, no refusal).
+        self._device = self._paced and pcm is None
+        self._capture_failed = False
+        # The host binding's own resolved activation (slice 5.2, checkpoint audit 6 A6-L4): settings model, resolved
+        # activation, technical cache, logical and presentation kwargs. None: the offline request (the gates).
+        self._activation = dict(activation) if activation is not None else None
         self._stack = contextlib.ExitStack()
         # The session's authored clock follows its inputs' own timestamps (each input carries the time it was
         # produced), so the worker ticks the same frames whatever its scheduling. Live (snapshot) sessions pin only
@@ -165,7 +185,7 @@ class EngineSession:
             if self._paced:
                 from core.visualizer_engine.recorded_capture import PacedPcmSource
 
-                self._source = PacedPcmSource(pcm, int(pcm_rate))
+                self._source = PacedPcmSource(pcm, int(pcm_rate)) if pcm is not None else None
                 self._interval_s = interval_s
                 self._cadence_record: dict | None = None
                 self._cadence_started_ts = 0.0        # the current runtime's start (perf_counter)
@@ -214,7 +234,8 @@ class EngineSession:
         from widgets.spotify_visualizer.technical_config import resolve_technical_config
 
         controller, engine = self._controller, self._engine
-        request = offline_activation_request(controller.mode_id, preset, None, settings)
+        request = (self._activation if self._activation is not None
+                   else offline_activation_request(controller.mode_id, preset, None, settings))
         configure_logical_controller(
             controller,
             activation={key: request[key] for key in ("settings_model", "resolved_activation", "technical_cache")},
@@ -236,7 +257,8 @@ class EngineSession:
         # is installed (the factory, installed below, is always the source when present), so it is defence in depth
         # for this session's own engine; another engine in the same process is not refused (checkpoint audit 5,
         # A5-L6; the worker hosts one engine).
-        self._engine.refuse_capture_devices()
+        if not self._device:
+            self._engine.refuse_capture_devices()
         manager = ThreadManager()
         self._stack.callback(manager.shutdown, wait=True, timeout=self.LIVE_EDGE_TIMEOUT_S)
         return manager
@@ -247,7 +269,9 @@ class EngineSession:
         from widgets.spotify_visualizer.tick_pipeline import declare_mode_engine_demands
 
         engine = self._engine
-        engine.set_capture_backend_factory(self._open_capture)
+        if not self._device:
+            # A recorded source; the production session leaves the factory unset (the device path).
+            engine.set_capture_backend_factory(self._open_capture)
         engine.set_analysis_settled_observer(self._settled.set)
         if self.order == "production":
             engine.set_analysis_admission_gate(self._admit_analysis)
@@ -264,6 +288,41 @@ class EngineSession:
     def device_refused(self) -> bool:
         """Whether this session's engine refuses an audio device (the gates assert it in the worker)."""
         return bool(getattr(self._engine, "capture_devices_refused", False))
+
+    @property
+    def identity(self) -> tuple[int, int]:
+        """The engine's current (generation, activation id): the owner binds render admission for it (the configure
+        and an applied mode request reply with it)."""
+        return int(self._engine.get_generation_id()), int(self._engine.get_activation_id())
+
+    @property
+    def capture_failed(self) -> bool:
+        return self._capture_failed
+
+    def _watch_device_capture(self) -> None:
+        """The device session's capture check (work order 5 slice 5.3): never a wait on the device (a driver can take
+        its time to open, as in process, where the GUI never waits on it either). A check is queued behind every
+        capture transaction admitted so far on the capture lane (where the device opens, COM included); if capture
+        should be open by then and is not, the open failed, and the session reports it."""
+        engine = self._engine
+
+        def check() -> None:
+            should_run = self._live_started and self._display_on and self._controller.playing
+            if should_run and not self._capture_failed and not engine.is_capture_running():
+                self._report_capture_failure()
+
+        engine.fence_capture_transactions(check)
+
+    def _report_capture_failure(self) -> None:
+        """The device did not open: logged once, and the session's wake pipe closed, so the owner's listener sees the
+        session end and treats it as a worker failure (fade, reconfigure once). The session itself is closed by the
+        owner's next configure (or stop) on the worker's message loop, never from the capture lane."""
+        import logging
+
+        self._capture_failed = True
+        logging.getLogger(__name__).error(
+            "[SPOTIFY_VIS][ENGINE_WORKER] The loopback device did not open; the session reports a capture failure")
+        self.mailbox.close_wake_sender()
 
     def _admit_analysis(self) -> None:
         """The compute lane's admission gate (production order): an analysis waits until the tick has read."""
@@ -301,6 +360,9 @@ class EngineSession:
         completion edge: bounded, fail closed; never a sleep or poll), then check capture is open iff it should be."""
         import threading
 
+        if self._device:
+            self._watch_device_capture()
+            return
         done = threading.Event()
         if self._engine.fence_capture_transactions(done.set) and not done.wait(self.LIVE_EDGE_TIMEOUT_S):
             raise RuntimeError("the live engine's capture lane never settled")
@@ -333,19 +395,20 @@ class EngineSession:
     # ------------------------------------------------------------------------------- worker-paced (slice 5.1)
 
     def start(self, playing: bool) -> None:
-        """A worker-paced session's start (``VIS_START``): the host binding's play edge and the owner's ``start``,
-        which starts the session's own cadence. Input-paced sessions start at their first input."""
-        if not self._live or not self._paced:
-            raise ValueError("only a worker-paced session is started explicitly (input-paced ones start at an input)")
+        """A live session's explicit start (``VIS_START``): the host binding's play edge and the owner's ``start``,
+        which starts a worker-paced session's own cadence. An input-paced session not started explicitly starts at its
+        first input (the gates); the production owner's identity gate starts it explicitly, as the owner does."""
+        if not self._live:
+            raise ValueError("only a live session is started explicitly")
         if self._live_started:
             raise RuntimeError("the session has already started")
         self._start_playback(playing)
 
     def set_playing(self, playing: bool) -> None:
-        """Media's play edge on a worker-paced session (``VIS_SET_PLAYING``), applied at once as the owner applies it
-        on the GUI thread while its cadence runs (an input-paced session takes play edges from its inputs)."""
-        if not self._live or not self._paced:
-            raise ValueError("play edges reach an input-paced session through its inputs")
+        """Media's play edge (``VIS_SET_PLAYING``), applied at once as the owner applies it on the GUI thread. An
+        input-paced session also takes play edges from its inputs (an input whose state already holds adds none)."""
+        if not self._live:
+            raise ValueError("play edges are a live-session control")
         if bool(playing) != bool(self._controller.playing):
             self._set_playing(playing)
 
@@ -374,7 +437,7 @@ class EngineSession:
         from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
         backend, controller = self._backend, self._controller
-        if backend is not None:
+        if backend is not None and self._source is not None:
             if backend.sample_rate != self._source.sample_rate:
                 raise ValueError(f"recorded rate {self._source.sample_rate} != capture rate {backend.sample_rate}")
             running = backend.is_running() and controller.playing
@@ -414,11 +477,15 @@ class EngineSession:
         report: dict = {"revision": self.mailbox.revision}
         if self._paced:
             commits = int(self._engine.get_authoritative_frame_commit_seq()) - int(self._commits_at_start or 0)
-            report.update(cadence=self._cadence_record, cadence_s=self._cadence_s, audio=self._source.describe(),
-                          capture=self.capture_counts,
-                          engine={"offered_blocks": self._offered_blocks, "accepted_blocks": self._accepted_blocks,
-                                  "accepted_s": self._accepted_samples / self._source.sample_rate,
-                                  "analysis_commits": commits})
+            report.update(cadence=self._cadence_record, cadence_s=self._cadence_s, capture=self.capture_counts)
+            if self._source is None:              # the device: what its callback published, and the commits
+                report.update(audio=None, engine={"capture_publications": int(self._engine.capture_publications()),
+                                                  "analysis_commits": commits, "capture_failed": self._capture_failed})
+            else:
+                report.update(audio=self._source.describe(),
+                              engine={"offered_blocks": self._offered_blocks, "accepted_blocks": self._accepted_blocks,
+                                      "accepted_s": self._accepted_samples / self._source.sample_rate,
+                                      "analysis_commits": commits})
         return report
 
     def _on_engine_acquired(self) -> None:
@@ -458,18 +525,23 @@ class EngineSession:
         self._settle_capture()
         return True
 
-    def request_mode(self, mode: str, *, preset: int = 0, settings: Any = None) -> None:
+    def request_mode(self, mode: str, *, preset: int = 0, settings: Any = None, activation: Any = None,
+                     at_once: bool = False) -> tuple[int, int] | None:
         """An in-session activation, applied at the next tick boundary (the newest request wins): the owner's
         activation commit (``logical_edges.commit_logical_activation``) on the existing engine and controller, never a
         rebuild. Another mode is a mode activation; the current mode with its ``preset`` / ``settings`` is the
-        owner's same-mode preset activation (A4-M3: never dropped)."""
+        owner's same-mode preset activation (A4-M3: never dropped). ``activation``: the owner's own resolved inputs
+        for the target (work order 5 slice 5.2; None: the offline request for ``preset`` / ``settings``). Applied at
+        once on a worker-paced session or with ``at_once`` (the owner's request between two inputs: the same tick
+        boundary); then the committed (generation, activation id), else None."""
         self.validate_mode_request(mode)
-        self._pending_mode = (str(mode), int(preset), settings)
-        if self._paced:
+        self._pending_mode = (str(mode), int(preset), settings, None if activation is None else dict(activation))
+        if self._paced or at_once:
             # The owner's activation stops its runtime (the tick boundary), commits and restarts it: at once, as the
             # owner does on the GUI thread. A failure here may have half-applied (the runtime stopped, the engine
             # transaction, the capture settle), so ``VIS_SET_MODE`` closes the session (A6-M2).
-            self._apply_pending_mode()
+            return self._apply_pending_mode()
+        return None
 
     def validate_mode_request(self, mode: str) -> None:
         """Refuse a mode request before anything is applied (the session stays as it was)."""
@@ -481,18 +553,18 @@ class EngineSession:
         get_visualizer_mode_descriptor(mode)
         mode_code(mode)                                   # a mode the header cannot name fails here, not mid-tick
 
-    def _apply_pending_mode(self) -> None:
+    def _apply_pending_mode(self) -> tuple[int, int] | None:
         from widgets.spotify_visualizer.feature_replay import offline_activation_request
         from widgets.spotify_visualizer.logical_edges import commit_logical_activation
 
         if self._pending_mode is None:
-            return
-        mode, preset, settings = self._pending_mode
+            return None
+        mode, preset, settings, activation = self._pending_mode
         self._pending_mode = None
         controller = self._controller
+        request = activation if activation is not None else offline_activation_request(mode, preset, None, settings)
         generation, activation_id = commit_logical_activation(
-            controller, kind="preset" if mode == self.mode else "mode", target=mode,
-            **offline_activation_request(mode, preset, None, settings),
+            controller, kind="preset" if mode == self.mode else "mode", target=mode, **request,
         )
         # Render admission for the committed identity (the owner binds it into its scene).
         controller.begin_render_activation(engine_generation=generation, activation_id=activation_id)
@@ -501,6 +573,7 @@ class EngineSession:
             self._start_cadence()            # the owner restarts its runtime after the bind
         # The target's block size may differ: capture restarts on its lane before the next block.
         self._settle_capture()
+        return int(generation), int(activation_id)
 
     def _tick_live(self, feature: Any) -> None:
         """At the tick boundary: a pending mode switch, then the input's playback edge. Playing: push the input's new
@@ -626,7 +699,9 @@ class VisualizerEngineWorker(BaseWorker):
                 payload = dict(msg.payload)
                 self._session = EngineSession(**payload)
                 qt = sorted(name for name in sys.modules if name.startswith("PySide6.Qt"))
-                return self._reply(msg, qt_modules=qt, device_refused=self._session.device_refused)
+                generation, activation_id = self._session.identity
+                return self._reply(msg, qt_modules=qt, device_refused=self._session.device_refused,
+                                   engine_generation=generation, activation_id=activation_id)
             if msg.msg_type == MessageType.VIS_INPUT:
                 if self._session is None:
                     return self._reply(msg, success=False, error="no engine session is configured")
@@ -667,12 +742,14 @@ class VisualizerEngineWorker(BaseWorker):
                     session = self._session
                     session.validate_mode_request(mode)
                     try:
-                        session.request_mode(mode, **payload)
+                        committed = session.request_mode(mode, **payload)
                     except (Exception, SnapshotContractError) as exc:
                         self._close_session()
                         return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}",
                                            session_closed=True)
-                    return self._reply(msg)
+                    if committed is None:
+                        return self._reply(msg)
+                    return self._reply(msg, engine_generation=committed[0], activation_id=committed[1])
                 try:
                     changed = self._session.set_display_power(bool(msg.payload["on"]))
                 except (Exception, SnapshotContractError) as exc:
