@@ -425,18 +425,30 @@ class EngineWorkerLink:
         reply = response.payload or {}
         if "bar_count" in reply:
             self.bar_count = int(reply["bar_count"])     # the session's bar count (its mode's technical config)
-        if "capture_failed" in reply:
-            self._note_device_report(reply)
+        self._note_device_state_in(reply)
         if on_reply is not None:
             on_reply(reply)
+
+    def _note_device_state_in(self, reply: Mapping[str, Any]) -> None:
+        """Log the device state wherever the reply carries it (checkpoint audit 11, A11-L5): an edge's reply at its top
+        level, ``VIS_STOP``'s report under ``report["engine"]`` (``EngineSession.finish``). The owner's ``retire``
+        never receives the stop's reply (sent, never awaited, and the link closes at once), so only a stop that waits
+        for its report (``stop``: tests and tools) reaches this with it."""
+        if "capture_failed" in reply:
+            self._note_device_report(reply)
+            return
+        report = reply.get("report")
+        engine = report.get("engine") if isinstance(report, Mapping) else None
+        if isinstance(engine, Mapping) and "capture_failed" in engine:
+            self._note_device_report(engine)
 
     def _note_device_report(self, reply: Mapping[str, Any]) -> None:
         """The session's device state as a reply carries it (``EngineSession.device_report``, work order 5 slice 5.3),
         logged here when it changed: the worker process's own log lines never reach the main log, so this is where a
         device that did not open, the session's reopen of a device that stopped delivering, and the device delivering
-        again become visible (at the reply of the next edge after them, and in ``VIS_STOP``'s report). The owner does
-        nothing else with it: a device problem is never the session's end (as in process, the Visualizer shows the
-        engine's idle frames until audio comes back)."""
+        again become visible (at the reply of the next edge after them; ``VIS_STOP``'s report only when the stop is
+        awaited, ``_note_device_state_in``). The owner does nothing else with it: a device problem is never the
+        session's end (as in process, the Visualizer shows the engine's idle frames until audio comes back)."""
         failed = bool(reply["capture_failed"])
         reopens = int(reply.get("capture_reopens", self.capture_reopens))
         resumed = int(reply.get("capture_resumed", self.capture_resumed))
@@ -646,6 +658,7 @@ class EngineWorkerLink:
         except EngineWorkerFailure as exc:
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Stop: %s", exc)
             return None
+        self._note_device_state_in(response.payload or {})     # a reopen after the last edge (A11-L5)
         return (response.payload or {}).get("report")
 
     def retire(self) -> None:

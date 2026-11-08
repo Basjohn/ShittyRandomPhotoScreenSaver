@@ -440,3 +440,39 @@ def test_the_link_logs_the_sessions_device_state_when_a_reply_changes_it(qt_app,
         assert [record.levelno for record in caplog.records].count(logging.WARNING) == 1
     finally:
         link.close()
+
+
+@pytest.mark.qt
+def test_the_link_logs_the_device_state_nested_in_the_stops_report(qt_app, caplog):
+    # Checkpoint audit 11, A11-L5: ``VIS_STOP``'s reply carries the device state nested under ``report["engine"]``
+    # (``EngineSession.finish``), not at the top level, so a reopen after the session's last edge was read nowhere. The
+    # link now logs it from whatever shape a reply it receives has: an awaited stop's report, and a stop reply that
+    # comes back as an event. Negative control (the top-level check only): no record for either.
+    from types import SimpleNamespace
+
+    from core.process.types import MessageType
+    from widgets.spotify_visualizer.engine_worker_link import EngineWorkerLink
+
+    def stop_reply(reopens, resumed):
+        report = {"revision": 9, "failed": None, "engine": {
+            "capture_publications": 12, "analysis_commits": 7,
+            "capture_failed": False, "capture_reopens": reopens, "capture_resumed": resumed}}
+        return SimpleNamespace(success=True, error=None, payload={"report": report, "qt_modules": []})
+
+    class _Supervisor:
+        def send_request_and_await_response(self, _worker_type, message, _payload, *, timeout_ms=0):
+            assert message == MessageType.VIS_STOP
+            return stop_reply(1, 0)
+
+    link = EngineWorkerLink(_Supervisor(), on_lost=lambda *_args: None)
+    try:
+        with caplog.at_level(logging.INFO, logger="widgets.spotify_visualizer.engine_worker_link"):
+            report = link.stop()
+            assert report is not None and report["engine"]["capture_reopens"] == 1
+            assert link.capture_reopens == 1 and len(caplog.records) == 1
+            link._stopping = False
+            link._pending[5] = (MessageType.VIS_STOP, {}, "c5", None, None)
+            link._deliver_reply(5, "c5", stop_reply(1, 1))
+            assert link.capture_resumed == 1 and len(caplog.records) == 2
+    finally:
+        link.close()
