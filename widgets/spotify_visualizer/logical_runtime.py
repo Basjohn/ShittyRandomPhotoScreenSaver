@@ -472,12 +472,7 @@ class VisualizerLogicalRuntime:
         parked.
         """
 
-        with self._state_lock:
-            if not self._park_requested:
-                self._park_requested = True
-                self._parked_ack.clear()
-                self._run_event.clear()
-        self._wake_event.set()
+        self.request_park()
         thread = self._thread
         if thread is None or not thread.is_alive():
             return True
@@ -491,6 +486,18 @@ class VisualizerLogicalRuntime:
                 self._generation,
             )
         return parked
+
+    def request_park(self) -> None:
+        """Ask the loop to park at its next turn, without waiting for it: callable from the runtime's own step (an
+        engine-worker session that fails itself closed parks its cadence this way, native core P2b slice 5.7).
+        `park()` is this request followed by the wait for the parked acknowledgement."""
+
+        with self._state_lock:
+            if not self._park_requested:
+                self._park_requested = True
+                self._parked_ack.clear()
+                self._run_event.clear()
+        self._wake_event.set()
 
     def unpark(self) -> bool:
         """Resume stepping on a fresh deadline sequence. Returns whether it was parked."""

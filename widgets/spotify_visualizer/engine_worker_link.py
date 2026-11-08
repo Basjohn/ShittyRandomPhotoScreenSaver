@@ -21,17 +21,20 @@ on the GUI thread (``on_reply``); an edge that needs a reply's identity (the con
 activation's committed identity) proceeds on that event. A request that could not be sent, a failed reply, or a
 correlation the supervisor cancels (the worker restarted or died: the listener hands back ``None``) is a failure,
 always delivered as an event, never inside the caller (no re-entrant failure path, A7-L2). The first configure never
-waits for the worker's spawn: a worker that is not running is (re)started on a ``ThreadManager`` IO task (a dead one is
-stopped first, which retires its stale response listener), the requests sent meanwhile wait in the link's outbox, in
-order, and leave when the spawn reports back (an event). The framed view (``VIS_SET_VIEW``) is latest-wins state: at
+waits for the worker's spawn: a worker that is not running is (re)started on a ``ThreadManager`` IO task (the supervisor
+retires what a dead one left behind, its stale response listener included, slice 5.7), the requests sent meanwhile wait
+in the link's outbox, in order, and leave when the spawn reports back (an event). The link is the role's one starter;
+the supervisor's heartbeat only retires a dead or hung worker, and the worker process lives while a link holds a lease
+on it (``engine_worker_lifetime``, slice 5.7). The framed view (``VIS_SET_VIEW``) is latest-wins state: at
 most one in flight, writes inside one GUI turn coalesce into one send (a queued flush), and the newest view leaves when
 the previous one is answered.
 
 **Liveness.** A dead worker is seen by an event: the session's wake pipe ends (the worker held the only writer end), and
 the supervisor cancels the outstanding correlations when it retires the process. A hung-but-alive worker (no reply, the
-process alive) is the supervisor's heartbeat's: missed heartbeats restart the worker (bounded: ``HealthStatus
-.MISSED_HEARTBEAT_THRESHOLD`` intervals, then the stop's graceful bound and termination), which ends the pipe and cancels
-the correlations, so the owner's failure path runs; nothing on the GUI thread waits meanwhile.
+process alive) is the supervisor's heartbeat's: missed heartbeats retire the worker (bounded: ``HealthStatus
+.MISSED_HEARTBEAT_THRESHOLD`` intervals, then the stop's graceful bound and termination; since slice 5.7 never a restart,
+which the owner's reconfigure makes through its next link), which ends the pipe and cancels the correlations, so the
+owner's failure path runs; nothing on the GUI thread waits meanwhile.
 
 What the link owns, once:
 
@@ -122,6 +125,9 @@ def reset_run_state_for_testing() -> None:
     global _run_disabled_reason
     with _run_lock:
         _run_disabled_reason = None
+    from widgets.spotify_visualizer import engine_worker_lifetime
+
+    engine_worker_lifetime.reset_for_testing()
 
 
 _test_session_overrides: dict | None = None
@@ -229,6 +235,7 @@ class EngineWorkerLink:
         self._view_sent: Any = None
         self._view_in_flight = False
         self._view_scheduled = False
+        self._lease: int | None = None            # the session's lease on the worker process (slice 5.7)
 
     @property
     def mailbox(self) -> Any:
@@ -263,25 +270,39 @@ class EngineWorkerLink:
         requests wait in the outbox until it reports back."""
         from core.visualizer_engine.engine_worker import visualizer_worker_main
 
+        from widgets.spotify_visualizer import engine_worker_lifetime
+
         supervisor, worker_type = self._supervisor, self._worker_type()
         supervisor.register_worker_factory(worker_type, visualizer_worker_main)
-        if supervisor.is_running(worker_type):
+        # A worker being retired (its last lease went before this link's) is not reused: a fresh one is started after it.
+        if supervisor.is_running(worker_type) and not engine_worker_lifetime.retiring():
             return True
         self._outbox = []
         self._spawn()
         return False
 
     def _spawn(self) -> None:
-        """(Re)start the worker off this thread; the outbox leaves when it reports back (an event). A dead worker is
-        stopped first: that retires its response listener, which would otherwise keep blocking on the dead process's
-        queue."""
+        """(Re)start the worker off this thread; the outbox leaves when it reports back (an event). The link is the one
+        starter of its role (slice 5.7): the supervisor's heartbeat only retires a dead or hung worker, a start retires
+        what a dead one left behind (its response listener included) in the supervisor itself, and the start waits for
+        a retirement in flight (``engine_worker_lifetime``), so it never stops or reuses a worker on its way out.
+
+        The task belongs to this link (checkpoint audit 9, A9-L2): it stops nothing, starts nothing once its link has
+        closed (the first configure's deadline retired it mid-spawn), and a worker it started for a link that closed
+        meanwhile is retired at once when no other link leased it, instead of idling until the supervisor's shutdown."""
+        from widgets.spotify_visualizer import engine_worker_lifetime
+
         supervisor, worker_type = self._supervisor, self._worker_type()
 
         def spawn() -> None:
             error = ""
             try:
-                supervisor.stop(worker_type, timeout=1.0)        # a dead worker's queues and listener, if any
-                if not supervisor.start(worker_type):
+                with engine_worker_lifetime.serialised_start():
+                    started = False if self._closed else supervisor.start(worker_type)
+                if self._closed:
+                    engine_worker_lifetime.retire_if_unused(supervisor)
+                    return
+                if not started:
                     error = "the engine worker process did not start"
             except Exception as exc:  # reported to the owner as a failure, never lost on the IO thread
                 error = f"the engine worker process did not start: {type(exc).__name__}: {exc}"
@@ -417,6 +438,11 @@ class EngineWorkerLink:
         self.mapping_name = mailbox.mapping_name
         try:
             mailbox.listen_for_wakes(receiver, on_closed=self._session_ended)
+            # The session's lease on the worker process (slice 5.7), before looking for a running worker: released
+            # at ``close``; the last release retires the worker (``engine_worker_lifetime``).
+            from widgets.spotify_visualizer import engine_worker_lifetime
+
+            self._lease = engine_worker_lifetime.lease(self._supervisor, self._thread_manager)
             self._ensure_worker()
 
             def configured(reply: dict) -> None:
@@ -612,6 +638,11 @@ class EngineWorkerLink:
         if mailbox is not None:
             mailbox.close()
         self._events.deleteLater()
+        lease, self._lease = self._lease, None
+        if lease is not None:
+            from widgets.spotify_visualizer import engine_worker_lifetime
+
+            engine_worker_lifetime.release(lease)
 
     # -------------------------------------------------------------------------------------- session's end
 

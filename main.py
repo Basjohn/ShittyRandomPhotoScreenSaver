@@ -724,6 +724,8 @@ def run_screensaver(
                     supervisor = getattr(engine, "_process_supervisor", None)
                     if supervisor is not None:
                         fields.update(supervisor.get_image_worker_usage_snapshot())
+                        # The engine worker's PID (no OS query): the sampler labels its CPU/RSS/threads (slice 5.7).
+                        fields.update(supervisor.get_visualizer_worker_usage_snapshot())
                     return fields
 
                 engine._usage_telemetry = UsageTelemetryService(

@@ -73,10 +73,19 @@ class EngineSession:
     #: How long a live session waits for its own capture to open or its analysis to settle before failing closed.
     LIVE_EDGE_TIMEOUT_S = 30.0
 
+    #: A worker-paced session whose steps keep failing fails closed (work order 5 slice 5.7, A6-M3's open half): after
+    #: this many consecutive failed steps (about 0.67 s at the 90 Hz cadence; a step that succeeds resets the count), it
+    #: parks its cadence, ends its wake pipe (the owner sees the session's end as an event and recovers: hold, fade,
+    #: reconfigure once) and answers any later edge with ``session_closed``. A transient failure is still the runtime's
+    #: retry, as in process. A count of steps, never a timer.
+    FAILED_STEPS_BEFORE_CLOSE = 60
+
     # Defaults (a recorded session configured from the offline request); ``_construct`` owns the instance values.
     _activation: Any = None
     _device = False
     _capture_failed = False
+    _failed: str | None = None
+    _failed_steps = 0
 
     def __init__(self, **kwargs: Any) -> None:
         # A session that fails while being built releases what it entered (the pinned authored clock, the attached
@@ -439,11 +448,41 @@ class EngineSession:
         which commits on the compute lane while the tick reads the previous commit, as live). The blocks the audio
         worker's callback actually published into the engine are counted (A6-M1).
 
-        A step that raises is the cadence owner's, exactly as in process (checkpoint audit 6, A6-M3): nothing here
-        catches it, so ``VisualizerLogicalRuntime`` logs it (once per run of failures), counts it in its
-        ``step_failures`` and the next step retries. In process there is no fail-closed bound on repeated step
-        failures either; a session whose steps keep failing publishes nothing new, which the owner's heartbeat and
-        fade (slice 5.5) handle."""
+        A step that raises is the cadence owner's, exactly as in process (checkpoint audit 6, A6-M3): it propagates,
+        so ``VisualizerLogicalRuntime`` logs it (once per run of failures), counts it in its ``step_failures`` and the
+        next step retries. Here it is also counted as a run: ``FAILED_STEPS_BEFORE_CLOSE`` consecutive failures fail
+        the session closed (slice 5.7: ``_fail_closed``), since a session that keeps failing publishes nothing and
+        would leave the Visualizer frozen on its last frame."""
+        if self._failed is not None:
+            return                       # failed closed: the cadence parks at its next turn
+        try:
+            self._paced_step_body(now)
+        except Exception as exc:
+            self._failed_steps += 1
+            if self._failed_steps >= self.FAILED_STEPS_BEFORE_CLOSE:
+                self._fail_closed(f"{self._failed_steps} consecutive steps failed (last: {type(exc).__name__}: {exc})")
+            raise
+        self._failed_steps = 0
+
+    @property
+    def failed(self) -> str | None:
+        """Why the session failed closed on its own (``_fail_closed``), or None."""
+        return self._failed
+
+    def _fail_closed(self, reason: str) -> None:
+        """The cadence thread: the session's steps keep failing. Park the cadence (requested, never awaited: this runs
+        inside its own step) and end the wake pipe, so the owner sees the session's end as an event (its listener's
+        ``on_closed``) and recovers; any later edge is answered with ``session_closed`` (``VisualizerEngineWorker``)."""
+        import logging
+
+        self._failed = str(reason)
+        logging.getLogger(__name__).error("[SPOTIFY_VIS][ENGINE_WORKER] The session failed closed: %s", reason)
+        runtime = self._controller.logical_runtime
+        if runtime is not None:
+            runtime.request_park()
+        self.mailbox.close_wake_sender()
+
+    def _paced_step_body(self, now: float) -> None:
         from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
         backend, controller = self._backend, self._controller
@@ -484,7 +523,7 @@ class EngineSession:
         commits since the cadence first started; A6-M1)."""
         if self._paced:
             self._stop_cadence()
-        report: dict = {"revision": self.mailbox.revision}
+        report: dict = {"revision": self.mailbox.revision, "failed": self._failed}
         if self._paced:
             commits = int(self._engine.get_authoritative_frame_commit_seq()) - int(self._commits_at_start or 0)
             report.update(cadence=self._cadence_record, cadence_s=self._cadence_s, capture=self.capture_counts)
@@ -726,6 +765,13 @@ class VisualizerEngineWorker(BaseWorker):
 
     def handle_message(self, msg: WorkerMessage) -> Optional[WorkerResponse]:
         try:
+            session = self._session
+            if (session is not None and session.failed is not None
+                    and msg.msg_type not in (MessageType.VIS_CONFIGURE, MessageType.VIS_STOP)):
+                # The session failed closed on its own (its steps kept failing, slice 5.7): no edge drives it again.
+                self._close_session()
+                return self._reply(msg, success=False, error=f"the session failed closed: {session.failed}",
+                                   session_closed=True)
             if msg.msg_type == MessageType.VIS_CONFIGURE:
                 self._close_session()
                 payload = dict(msg.payload)

@@ -67,6 +67,12 @@ class ProcessSupervisor:
     POLL_TIMEOUT_MS = 10       # Non-blocking poll timeout
     WORKER_READY_TIMEOUT_S = 10.0  # Longest wait for a spawned child's ready signal
     _RESPONSE_LISTENER_STOP = "__SRPSS_RESPONSE_LISTENER_STOP__"
+    #: Roles whose (re)starts belong to their client, never to the heartbeat (native core P2b, work order 5 slice
+    #: 5.7). The engine worker's client (``engine_worker_link``) starts it on its owner's demand and owns its recovery
+    #: (fade, reconfigure once); the heartbeat only retires a dead or hung process of such a role (which ends the
+    #: session's pipe and cancels its correlations, so the client sees the failure as an event). A heartbeat restart
+    #: racing the client's own start could otherwise stop the fresh worker the client had just started.
+    CLIENT_RESTARTED_ROLES = frozenset({WorkerType.VISUALIZER})
     
     def __init__(
         self,
@@ -202,6 +208,7 @@ class ProcessSupervisor:
         # the spawn and the ready wait, so it is never taken by availability
         # queries, messaging or telemetry (those use ``_lock`` alone).
         with self._lifecycle_locks[worker_type]:
+            self._retire_dead_role(worker_type)
             started = self._start_role(worker_type)
             if self._shutdown and worker_type in self._workers:
                 # shutdown() began while this start was waiting for ready; it
@@ -327,6 +334,52 @@ class ProcessSupervisor:
             with self._lock:
                 self._transitioning.discard(worker_type)
 
+    def _retire_dead_role(self, worker_type: WorkerType) -> None:
+        """Before a start (the role's lifecycle lock held): retire what a dead process left behind, its response
+        listener included (native core P2b, work order 5 slice 5.7). ``_start_role`` replaces the role's queues; the old
+        listener, still blocked on the dead process's queue, would otherwise count as the role's active listener, and a
+        callback registered for the fresh worker would wait on a listener that never reads the fresh queue. Until 5.7
+        the engine worker's link stopped the role itself before every start."""
+        with self._lock:
+            process = self._workers.get(worker_type)
+            dead = process is not None and not process.is_alive()
+            orphaned_listener = process is None and worker_type in self._response_listener_threads
+        if not dead and not orphaned_listener:
+            return
+        logger.info("Retiring the dead %s worker before its start", worker_type.value)
+        self._stop_response_listener(worker_type, reason="worker_died")
+        if dead:
+            self._stop_role(worker_type, 0.0)
+
+    def _stop_if_current(self, worker_type: WorkerType, process: Any, timeout: float) -> bool:
+        """Stop ``process`` only while it is still the role's process (checked and stopped under the role's lifecycle
+        lock, so a start cannot land in between): a decision taken about one process never stops its successor. Whether
+        it was stopped."""
+        with self._lifecycle_locks[worker_type]:
+            with self._lock:
+                if self._workers.get(worker_type) is not process:
+                    return False
+            self._stop_response_listener(worker_type, reason="worker_stopping")
+            self._stop_role(worker_type, timeout)
+            return True
+
+    def _retire_judged_process(self, worker_type: WorkerType, process: Any) -> bool:
+        """The heartbeat's action for a client-restarted role (``CLIENT_RESTARTED_ROLES``): retire the dead or hung
+        process it judged, never start one (the client restarts it on its owner's demand). Fenced by the process's
+        identity, so a fresh worker the client started meanwhile is left alone."""
+        retired = self._stop_if_current(worker_type, process, 5.0)
+        if retired:
+            logger.warning(
+                "Retired the %s worker (dead or unresponsive); its client restarts it on demand",
+                worker_type.value,
+            )
+        else:
+            logger.info(
+                "The %s worker the heartbeat judged was already replaced; the fresh worker is left running",
+                worker_type.value,
+            )
+        return retired
+
     def stop(self, worker_type: WorkerType, timeout: float = 5.0) -> bool:
         """
         Stop a worker process gracefully.
@@ -432,16 +485,28 @@ class ProcessSupervisor:
             with self._lock:
                 self._transitioning.discard(worker_type)
 
-    def restart(self, worker_type: WorkerType) -> bool:
+    def restart(self, worker_type: WorkerType, *, judged: Any = None) -> bool:
         """
         Restart a worker process with backoff.
-        
+
         Args:
             worker_type: Type of worker to restart
-            
+            judged: The process the caller judged (the heartbeat's decision): the
+                restart stops only that process, so a successor started meanwhile
+                is never stopped (slice 5.7). None: whatever runs now.
+
         Returns:
             True if worker restarted successfully
         """
+        if judged is not None:
+            with self._lock:
+                replaced = self._workers.get(worker_type) is not judged
+            if replaced:
+                logger.info(
+                    "Skipping the %s worker restart: the judged process was already replaced",
+                    worker_type.value,
+                )
+                return self.is_running(worker_type)
         with self._lock:
             health = self._health[worker_type]
             
@@ -465,8 +530,11 @@ class ProcessSupervisor:
             )
         
         # Stop then start (outside lock to avoid deadlock)
-        self.stop(worker_type)
-        
+        if judged is None:
+            self.stop(worker_type)
+        elif not self._stop_if_current(worker_type, judged, 5.0):
+            return self.is_running(worker_type)
+
         # Apply backoff delay
         time.sleep(backoff_ms / 1000.0)
         
@@ -889,6 +957,15 @@ class ProcessSupervisor:
         }
         snapshot.update(self._shared_memory_accounting.snapshot())
         return snapshot
+
+    def get_visualizer_worker_usage_snapshot(self) -> dict[str, Any]:
+        """The engine worker's PID while it runs (None otherwise), for the usage sampler's labelled per-process
+        breakdown (native core P2b slice 5.7). Supervisor state only, no OS query: the sampler reads the process's CPU,
+        memory and threads in its own per-process pass."""
+        with self._lock:
+            process = self._workers.get(WorkerType.VISUALIZER)
+            pid = process.pid if process is not None and WorkerType.VISUALIZER not in self._transitioning else None
+        return {"visualizer_worker_pid": pid}
 
     def consume_shared_memory_response(
         self,
@@ -1653,7 +1730,7 @@ class ProcessSupervisor:
                     )
                     self._health[worker_type].state = WorkerState.ERROR
                     self._health[worker_type].error_message = "Process died"
-                    workers_to_restart.append(worker_type)
+                    workers_to_restart.append((worker_type, process))
                     continue
                 
                 # Send heartbeat
@@ -1675,13 +1752,21 @@ class ProcessSupervisor:
                             health.missed_heartbeats,
                         )
                     
-                    if health.should_restart():
-                        workers_to_restart.append(worker_type)
-        
-        # Restart unhealthy workers (outside lock)
-        for worker_type in workers_to_restart:
+                    if worker_type in self.CLIENT_RESTARTED_ROLES:
+                        # Retired, never restarted: no restart limit applies to a retirement.
+                        if health.missed_heartbeats >= HealthStatus.MISSED_HEARTBEAT_THRESHOLD:
+                            workers_to_restart.append((worker_type, process))
+                    elif health.should_restart():
+                        workers_to_restart.append((worker_type, process))
+
+        # Act on the processes judged above (outside lock), each fenced by its identity: a role restarted or replaced
+        # meanwhile is left alone. A client-restarted role is only retired (``CLIENT_RESTARTED_ROLES``).
+        for worker_type, process in workers_to_restart:
             try:
-                self.restart(worker_type)
+                if worker_type in self.CLIENT_RESTARTED_ROLES:
+                    self._retire_judged_process(worker_type, process)
+                else:
+                    self.restart(worker_type, judged=process)
             except Exception as e:
                 logger.exception("Failed to restart %s worker: %s", worker_type.value, e)
     

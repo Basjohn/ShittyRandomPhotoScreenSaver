@@ -585,3 +585,59 @@ def test_collector_names_processes_entering_and_leaving_the_tree(caplog):
         collector.collect()
     removed = [r.getMessage() for r in caplog.records if "topology removed" in r.getMessage()]
     assert len(removed) == 1 and f"pid={os.getpid()}" in removed[0]
+
+
+def test_collector_labels_a_named_child_from_its_own_per_process_pass_and_refreshes_only_for_a_new_one():
+    # Native core P2b slice 5.7: the engine worker's CPU/RSS/threads come from the sample's existing per-process pass
+    # (no extra OS call). A named child the cached tree does not know yet makes the next sample a topology refresh;
+    # with no child named (at rest) or a known one, the slow refresh cadence is unchanged.
+    import os
+    proc = _CountingProc()
+    tree = {proc.pid: 23}
+    refreshes = []
+
+    def topology(pid):
+        refreshes.append(pid)
+        return dict(tree)
+
+    collector = ProcessUsageCollector(proc, heavy_refresh_samples=8, topology_snapshot_provider=topology)
+    collector.collect()
+    collector.expect_pids((None,))
+    collector.collect()
+    assert len(refreshes) == 1                                   # at rest: nothing named, no refresh
+    child = os.getpid()                                          # a real process stands in for the spawned worker
+    tree[child] = 31
+    collector.expect_pids((child,))
+    collector.collect()
+    assert len(refreshes) == 2 and collector.last_sample_was_heavy
+    labelled = collector.last_process_breakdown[child]
+    assert labelled["threads"] == 31 and labelled["rss_mb"] > 0.0 and labelled["cpu_pct"] >= 0.0
+    collector.expect_pids((child,))
+    collector.collect()
+    assert len(refreshes) == 2                                   # known: the cadence is unchanged
+    assert collector.last_process_breakdown[child]["threads"] == 31          # carried forward like threads_app
+
+
+def test_usage_service_logs_the_engine_workers_labelled_breakdown(caplog):
+    class _Labelled(_ProcessCollector):
+        def __init__(self):
+            super().__init__()
+            self.expected = []
+            self.last_process_breakdown = {101: {"cpu_pct": 12.5, "rss_mb": 84.0, "threads": 21}}
+
+        def expect_pids(self, pids):
+            self.expected.append(tuple(pids))
+
+    for pid, expected in ((101, ("visualizer_worker_pid=101", "visualizer_worker_cpu_pct=12.5",
+                                 "visualizer_worker_rss_mb=84.0", "visualizer_worker_threads=21")),
+                          (None, ("visualizer_worker_pid=na", "visualizer_worker_cpu_pct=na"))):
+        caplog.clear()
+        process = _Labelled()
+        service = UsageTelemetryService(_Manager(), process_collector=process, gpu_collector=_GpuCollector(),
+                                        resource_snapshot_provider=lambda pid=pid: {"visualizer_worker_pid": pid})
+        with caplog.at_level(logging.INFO, logger="core.performance.usage_sampler"):
+            assert service.start() is True
+        sample = next(record.message for record in caplog.records if "[USAGE] sample " in record.message)
+        assert all(field in sample for field in expected), sample
+        assert process.expected == ([(pid,)] if pid is not None else [])
+        service.stop()
