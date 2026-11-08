@@ -61,6 +61,9 @@ from rendering.gl_programs.spectrum_options import (
 )
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from core.constants.neon_lake_world import TILT_RANGE as NEON_TILT_RANGE, TURN_RANGE as NEON_TURN_RANGE
+# The Field of View sliders admit exactly their framed camera spec's lens range (one owner per mode).
+from core.settings.extruded_bubble_camera import SPEC as EB_CAMERA_SPEC
+from core.settings.neon_lake_camera import SPEC as NEON_CAMERA_SPEC
 from core.settings.visualizer_settings_contract import SPHERE_FINISH_VALUES
 
 
@@ -1105,7 +1108,7 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_drop_speed", "Falloff:", 0.5, 3.0,
                "How quickly the frequency response falls after the music softens.", bucket="response", source=True),
         Custom("smoothing", "response", keys=("shockwave_grid_visual_smoothing_enabled", "shockwave_grid_visual_smoothing", "shockwave_grid_solid_bar_hysteresis_enabled")),
-        Slider("shockwave_grid_camera_fov", "Camera Field of View:", 20.0, 62.0,
+        Slider("shockwave_grid_camera_fov", "Camera Field of View:", *NEON_CAMERA_SPEC.fov_range,
                scale=1, integer=True, suffix="\u00b0", decimals=0, bucket="camera",
                tooltip="Change the vertical viewing angle without moving the camera. Narrow angles frame distant "
                        "land like a long lens; W/A/S/D fly, Q/E turn, Shift+W/S look up or down, R returns home."),
@@ -1878,7 +1881,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
                tooltip='Choose which ordinary bubbles can participate in collision behavior: All, Big, Small, or Off.'),
         SceneCameraPosition("extruded_bubble_camera_position", "Camera Position:", bucket="camera",
                tooltip='Move the real camera eye inside the populated tank without changing FOV. The same water-clearance bounds apply here and during travel. WASD travels relative to view; Shift+WASD rotates; Q/E yaw; R resets. [NEEDS AUDIT] Confirm native drag feel and compositor presentation.'),
-        Slider("extruded_bubble_camera_fov", "Camera Field of View:", 35.0, 62.0,
+        Slider("extruded_bubble_camera_fov", "Camera Field of View:", *EB_CAMERA_SPEC.fov_range,
                scale=1, integer=True, suffix="°", decimals=0, bucket="camera",
                tooltip='Change the vertical viewing angle independently of camera travel and zoom/dolly. Narrower angles usually reduce peripheral perspective stretch.'),
         Toggle("extruded_bubble_auto_rotate", "", "Auto Rotate", bucket="camera",

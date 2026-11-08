@@ -23,7 +23,14 @@ from dataclasses import dataclass
 Vec3 = tuple[float, float, float]
 Floor = Callable[[float, float], float]
 CAMERA_SUFFIXES = ('turn', 'tilt', 'scene_scale', 'scene_pan_x', 'scene_pan_y', 'camera_fov', 'camera_position')
-FOV_RANGE = (35.0, 62.0)
+# The standard (Extruded Bubble's) lens range; a spec may declare its own. 20 degrees is the long-lens end
+# (operator 2026-11-08: narrower, more telephoto, less perspective).
+FOV_RANGE = (20.0, 62.0)
+# The widest horizontal view any framed card shows (operator 2026-11-08). The lens keeps the vertical field of view;
+# a card whose aspect (and edge-resize aperture) would push the horizontal view wider has its vertical view reduced
+# until the horizontal view is exactly this, so edge content is never stretched into ellipses. Below it, nothing changes.
+FRAMED_MAX_HORIZONTAL_FOV_DEG = 90.0
+_MAX_TAN_X = math.tan(math.radians(FRAMED_MAX_HORIZONTAL_FOV_DEG) / 2.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,7 +173,10 @@ def tan_half_fov(fov_y_degrees: float, fov_range: tuple[float, float] = FOV_RANG
 
 def camera_baseline(spec: FramedCameraSpec, turn: float, tilt: float, scale: float = 1., pan_x: float = 0.,
                     pan_y: float = 0., fov_y_degrees: float = 45., ceiling: float | None = None, *, axes=None):
-    """Orbit/pan reference before the independent position offset; never a second eye."""
+    """Orbit/pan reference before the independent position offset; never a second eye.
+
+    Pan is pose, not projection: its world length is calibrated on the authored lens, never on a card's projected
+    (aperture- or horizontal-cap-limited) view, so the eye stays independent of the card it is drawn on."""
     if spec.grounded_orbit is not None:
         base=grounded_orbit_eye(spec,spec.orbit_distance/max(float(scale),1e-3),turn)
         basis=camera_axes(spec,turn,tilt,eye=base)
@@ -248,11 +258,29 @@ def resolve_camera_frame(spec: FramedCameraSpec, values: Mapping[str, object]):
 
 def viewport_tangents(fov_y_degrees: float, aspect: float, aperture_scale: float = 1.,
                       fov_range: tuple[float, float] = FOV_RANGE) -> tuple[float, float]:
-    """Centred aperture through the authored lens; aspect always matches the real target."""
+    """Centred aperture through the authored lens; aspect always matches the real target.
+
+    The one lens every framed consumer projects with (renderers, Studio, edit envelopes, the Expanded Visualizer,
+    ``project_point``). The horizontal view is capped at ``FRAMED_MAX_HORIZONTAL_FOV_DEG``: past it the vertical
+    tangent is solved from the capped horizontal one, so the target's pixel aspect still holds exactly."""
     if not math.isfinite(aspect) or aspect <= 0 or not math.isfinite(aperture_scale) or aperture_scale <= 0:
         raise ValueError('Framed aperture dimensions must be finite and positive')
     tan_y = tan_half_fov(fov_y_degrees, fov_range) * aperture_scale
-    return tan_y * aspect, tan_y
+    tan_x = tan_y * aspect
+    if tan_x > _MAX_TAN_X:
+        return _MAX_TAN_X, _MAX_TAN_X / aspect
+    return tan_x, tan_y
+
+
+def effective_aperture_scale(fov_y_degrees: float, aspect: float, aperture_scale: float = 1.,
+                             fov_range: tuple[float, float] = FOV_RANGE) -> float:
+    """The aperture the projected lens really has: ``aperture_scale`` itself below the horizontal cap, and the capped
+    vertical tangent over the authored one above it. Pixel-scale consumers (EB's near-field blur reference height)
+    divide by this so they follow the very lens ``viewport_tangents`` projects with."""
+    tan_x, tan_y = viewport_tangents(fov_y_degrees, aspect, aperture_scale, fov_range)
+    if tan_x < _MAX_TAN_X:
+        return float(aperture_scale)
+    return tan_y / tan_half_fov(fov_y_degrees, fov_range)
 
 
 def perspective_matrix(tan: tuple[float, float], near: float, far: float):
@@ -272,7 +300,7 @@ def view_matrices(spec: FramedCameraSpec, turn: float, tilt: float, aspect: floa
 
 
 def project_point(spec: FramedCameraSpec, point, eye, turn: float, tilt: float, aspect: float,
-                  fov_y_degrees: float, *, axes=None) -> tuple[float, float, float] | None:
+                  fov_y_degrees: float, *, axes=None, aperture_scale: float = 1.) -> tuple[float, float, float] | None:
     """Normalized device x, y (y up) and view depth of a world point; None behind the eye."""
     axes = camera_axes(spec, turn, tilt,eye=eye) if axes is None else axes
     right, up, back = axes[:3], axes[3:6], axes[6:9]
@@ -280,7 +308,7 @@ def project_point(spec: FramedCameraSpec, point, eye, turn: float, tilt: float, 
     depth = -sum(a * b for a, b in zip(rel, back))
     if depth <= 1e-6:
         return None
-    tan_y = tan_half_fov(fov_y_degrees, spec.fov_range)
-    x = sum(a * b for a, b in zip(rel, right)) / (depth * tan_y * aspect)
+    tan_x, tan_y = viewport_tangents(fov_y_degrees, aspect, aperture_scale, spec.fov_range)
+    x = sum(a * b for a, b in zip(rel, right)) / (depth * tan_x)
     y = sum(a * b for a, b in zip(rel, up)) / (depth * tan_y)
     return x, y, depth

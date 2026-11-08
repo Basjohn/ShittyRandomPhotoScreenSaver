@@ -763,6 +763,14 @@ projects with that eye; Neon Lake's `BasinView` is the raster example, EB's ray-
 Specs: `core/settings/extruded_bubble_camera.py`, `core/settings/neon_lake_camera.py`. Settings: one Camera
 Position editor (`ui/tabs/media/framed_camera_editor.py` over `SceneVolumeMapper.setCameraModel(spec)`) for every
 framed mode; a spec may add scene guides through `editor_references_hook`.
+**Lens.** Camera Field of View is the vertical angle at the canonical card; edge resizing scales it by the card's
+aperture (`framed_aperture_scale`: viewport extent height over the canonical 280). `viewport_tangents` is the one
+lens every consumer projects with, and it caps the horizontal view at `FRAMED_MAX_HORIZONTAL_FOV_DEG` (90°, operator
+8 Nov 2026): a card whose aspect and aperture would show more has its vertical view reduced until the horizontal view
+is exactly 90°; below the cap nothing changes. `effective_aperture_scale` is the aperture that lens really has (EB's
+near-field blur reference height uses it). Scene Pan keeps the authored lens, so the eye never depends on the card.
+The lens range is the spec's `fov_range` (the standard `FOV_RANGE` is 20-62°; Neon declares 20-62°, Waveform its own
+long-lens 2-35°); each mode's Field of View slider is built from it.
 Waveform opts into the optional `GroundedOrbitSpec`: one fixed-height admitted eye, a bounded front annulus and
 focus-preserving left/right orbit. W/S changes physical radius; A/D orbits rather than strafing out of the scene.
 Tilt changes the physical focus within the body; its near-level endpoint uses the admitted radius and retains visible

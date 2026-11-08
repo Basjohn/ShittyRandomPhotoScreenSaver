@@ -93,6 +93,15 @@ def _near_spread(height: int) -> float:
     return _NEAR_SPREAD * height / 941.0
 
 
+def _optical_height(parameters, presentation, width: int, height: int) -> float:
+    """Pixel height of the authored (canonical) aperture: the card height over the aperture the projected lens really
+    has (``effective_aperture_scale``: the edge-resize aperture, narrowed only past the framed horizontal cap)."""
+    from core.settings.framed_camera import effective_aperture_scale
+    aperture = effective_aperture_scale(float(parameter(parameters, "extruded_bubble_camera_fov")), width / height,
+                                        framed_aperture_scale(presentation))
+    return height / aperture
+
+
 def chain_drive(state) -> float:
     """Where the Bead Chains Range sits: the simulation's slow, rate-capped chain drive (never the beat follower here)."""
     return float(state.chain_drive)
@@ -364,7 +373,7 @@ class QuickExtrudedBubbleRenderer:
         if not self._probe_for(parameters).warm():
             return False
         if not self._near.warm(width, height,
-                               _near_spread(height / framed_aperture_scale(frame.snapshot.presentation))):
+                               _near_spread(_optical_height(parameters, frame.snapshot.presentation, width, height))):
             return False
         return self._target.warm((width, height), samples, overlay=True, bloom=True, depth_texture=True,
                                  background=True, oit=True, hdr=True)
@@ -381,8 +390,8 @@ class QuickExtrudedBubbleRenderer:
         x, y, width, height = item_pixel_rect(frame)
         if width <= 0 or height <= 0:
             return
-        optical_height = height / framed_aperture_scale(presentation)
         parameters = state.parameters
+        optical_height = _optical_height(parameters, presentation, width, height)
         if parameters != self._knobs_for:
             self._knobs, self._knobs_for = scene_knobs(parameters), parameters
         knobs = self._knobs
