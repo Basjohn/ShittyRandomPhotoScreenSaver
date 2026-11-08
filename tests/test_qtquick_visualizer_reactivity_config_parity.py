@@ -457,3 +457,26 @@ def test_cold_play_ramp_is_one_second_but_warm_resume_stays_unramped(monkeypatch
     engine.set_playback_state(True)
     assert engine._play_ramp_start_ts == 0.0
     assert engine._get_play_ramp_factor() == pytest.approx(1.0)
+
+
+def test_the_ramp_flag_is_a_pure_read_of_the_ramp_clock(monkeypatch) -> None:
+    # Extruded Bubble's "still ramping" source flag answers from the ramp's own clock, not from the latch a ramped
+    # getter clears on expiry: an engine snapshot captures every getter, so no read may depend on which ran first.
+    engine = _SpotifyBeatEngine.__new__(_SpotifyBeatEngine)
+    engine._is_spotify_playing = False
+    engine._last_playback_state_ts = 0.0
+    engine._capture_keepalive_deadline = 0.0
+    engine._ref_count = 0
+    engine._play_ramp_start_ts = 0.0
+    engine._play_ramp_duration = _PLAY_RAMP_DURATION_S
+    engine.ensure_started = lambda: None
+    engine._schedule_worker_stop_after_grace = lambda: None
+    now = {"value": 100.0}
+    monkeypatch.setattr("core.authored_clock.authored_clock_source", lambda: now["value"])
+
+    engine.set_playback_state(True)
+    now["value"] = 100.5
+    assert engine.is_reactivity_play_ramping()
+    now["value"] = 101.0                                   # expired, and no ramped getter has cleared the latch
+    assert not engine.is_reactivity_play_ramping()
+    assert engine._play_ramp_start_ts == pytest.approx(100.0)   # the read changed nothing

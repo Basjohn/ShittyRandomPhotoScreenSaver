@@ -24,9 +24,9 @@ RECORDINGS = ROOT / "logs" / "visualizer_recordings"
 GENERATION = 7
 
 
-def _modes() -> tuple[str, ...]:
+def _modes() -> tuple:
     from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
-    return tuple(d.mode_id for d in iter_all_visualizer_mode_descriptors())
+    return tuple(iter_all_visualizer_mode_descriptors())
 
 
 def _head(clip, seconds: float):
@@ -103,7 +103,7 @@ def main(argv=None) -> int:
     if not supervisor.start(WorkerType.VISUALIZER):
         print("[GATE] the engine worker did not start", file=sys.stderr)
         return 2
-    report = {"seconds": args.seconds, "recordings": {}, "mismatches": 0, "frames": 0}
+    report = {"seconds": args.seconds, "recordings": {}, "mismatches": 0, "frames": 0, "pairs": 0}
     started = time.time()
     try:
         try:
@@ -118,7 +118,14 @@ def main(argv=None) -> int:
             frames = _head(clip, args.seconds)
             del clip
             rows = {}
-            for mode in _modes():
+            has_pcm = all(frame.capture_history is not None for frame in frames)
+            for descriptor in _modes():
+                mode = descriptor.mode_id
+                if descriptor.raw_musical_signals and not has_pcm:
+                    # Waveform Ribbon replays only from native PCM, in process as in the worker.
+                    rows[mode] = {"skipped": "no native PCM"}
+                    print(f"[GATE] {path.stem} {mode}: skipped (no native PCM)", flush=True)
+                    continue
                 try:
                     expected = _in_process(frames, mode)
                     actual = _worker(supervisor, frames, mode)
@@ -126,6 +133,7 @@ def main(argv=None) -> int:
                     same = first is None and len(expected) == len(actual)
                     rows[mode] = {"frames": len(expected), "identical": same, "first_mismatch": first}
                     report["frames"] += len(expected)
+                    report["pairs"] += 1
                     report["mismatches"] += 0 if same else 1
                 except Exception as exc:                       # a failure is a gate result, not a crash
                     rows[mode] = {"error": f"{type(exc).__name__}: {exc}"}
@@ -138,7 +146,8 @@ def main(argv=None) -> int:
         app.processEvents()
     report["elapsed_s"] = round(time.time() - started, 1)
     Path(args.out).write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(f"[GATE] {report['frames']} frames, {report['mismatches']} mismatching (recording, mode) pairs, "
+    print(f"[GATE] {report['pairs']} (recording, mode) pairs, {report['frames']} frames, "
+          f"{report['mismatches']} mismatching, "
           f"{report['elapsed_s']} s", flush=True)
     return 0 if report["mismatches"] == 0 else 1
 

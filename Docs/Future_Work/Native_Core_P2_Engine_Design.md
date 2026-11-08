@@ -148,26 +148,40 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
    Neon Lake's terrain baker imported a Settings widget for a pure helper (now `utils/curve_nodes.py`). The runtime
    generation is a control input (every frame carries it). Gate on every recording: `tools/visualizer_replay/
    engine_worker_gate.py` (each recording's first seconds x every mode, in-process vs worker, at below-normal
-   priority; report under `.artifacts/evidence/architecture/native_core_p2/`).
-   **Live inputs (decided 8 Nov, not built):** `FeatureFrame` is the replay contract, not the live one. The recorder's
-   capture (`tools/visualizer_replay/record.py` `_frame`) clamps lanes to 0..1, resamples bars and waveform to fixed
-   counts and consumes scheduler events, so a forwarded `FeatureFrame` would not reproduce the in-process live tick.
-   P2a forwards a lossless engine snapshot instead: per tick, exactly the values the tick reads from the beat engine
-   (the getters `ReplayBeatEngine` overrides: pre-AGC / bubble / EB body / Waveform body / transient / live bands,
-   musical level, intensity, onset events after a serial, analysis spectrum, typed scheduler events, waveform and
-   capture history when demanded, playback state), unclamped and unresampled, with the worker's engine answering
-   from it. Its gate: the live engine's getter values equal the worker engine's for the same snapshot, then the
-   frames equal the in-process tick on recorded PCM through production DSP (`ProductionLaneEngine`).
-   Measured read surface (`tools/visualizer_replay/engine_read_audit.py`, 8 Nov): every mode calls
-   `get_generation_id`, `get_activation_id`, `get_energy_bands`, `get_smoothed_bars`, `get_transient_energy_bands`,
-   `get_floor_snapshot`, `get_waveform_count`, `get_latest_authoritative_frame`, `get_latest_generation_with_frame` /
-   `_with_waveform`; per mode `get_pre_agc_energy_bands`, `get_bubble_energy_bands`, `get_extruded_bubble_body_bands`,
-   `get_waveform_ribbon_body_bands`, `get_live_pre_agc_energy_bands`, `get_musical_level`, `get_musical_intensity`,
-   `get_onset_events`, `get_pre_agc_analysis_spectrum`, `get_event_scheduler`, `get_waveform`,
-   `get_waveform_history(_rate)`, `is_reactivity_play_ramping`. Two edges change the design: the tick itself calls
-   `engine.tick()` (bar smoothing, play ramp), so the main process steps the engine at the tick's time and snapshots
-   right after; and the tick writes back `set_waveform_history_demand` / `set_idle_waveform_demand`, which become
-   worker -> main control messages (latest wins).
+   priority; report under `.artifacts/evidence/architecture/native_core_p2/`). **Result (8 Nov, 20 s per recording):**
+   all 160 replayable (recording, mode) pairs identical, 291,024 frames, 19 recordings x 9 modes; Waveform Ribbon is
+   skipped on the 11 recordings without native PCM (it replays only from PCM, in process too). Report:
+   `.artifacts/evidence/architecture/native_core_p2/20261108_worker_gate/report.json`.
+   **Live inputs: the lossless engine snapshot (built 8 Nov):** `FeatureFrame` is the replay contract, not the live
+   one: the recorder's capture (`tools/visualizer_replay/record.py` `_frame`) clamps lanes to 0..1, resamples bars and
+   waveform to fixed counts and consumes scheduler events. `core/visualizer_engine/engine_snapshot.py` instead:
+   - The main process keeps the beat engine. Per tick, `EngineSnapshotSource.capture` steps it (`engine.tick()`, which
+     the tick itself calls first) and captures every value the tick can read, unclamped and unresampled
+     (`CAPTURED_GETTERS`, the read surface `tools/visualizer_replay/engine_read_audit.py` measured: every mode calls the
+     generation/activation ids, energy bands, smoothed bars, transient bands, floor snapshot, waveform count, latest
+     authoritative frame and generation-with-frame/-waveform; per mode the pre-AGC / bubble / EB body / Waveform body /
+     live bands, musical level and intensity, onsets, analysis spectrum, scheduler, waveform, capture history and its
+     rate, the ramp flag), plus every onset and, in order, every feed to and reset of the engine's event scheduler
+     since the previous snapshot (tapped from the compute pool under a lock).
+   - The worker's `SnapshotBeatEngine` answers from the newest snapshot and replays the feeds into its own scheduler.
+     The scheduler's debounce depends only on what it was fed, so the tick consumes the same events from it,
+     consume-once, as in process. DSP configuration is the main process's: the worker's setters are no-ops; a read no
+     snapshot carries raises (never an absent capability).
+   - Capture is side-effect free. `is_reactivity_play_ramping` is a pure read of the ramp clock (the latch a ramped
+     getter clears on expiry no longer decides it; its one reader, Extruded Bubble, reads a ramped getter first, so in
+     process nothing changes). The analysis spectrum is peeked (`peek_pre_agc_analysis_spectrum`); the tick's read of
+     it requests the next one, the one write that depends on the tick, and returns as `EngineDemands` for the main
+     process to apply before its next step (`request_pre_agc_analysis_spectrum`).
+   - The waveform history and idle waveform demands are a rule of the mode (`consumes_waveform_samples`), declared by
+     the tick before it steps; the main process declares them from the same rule before each step, and the worker's
+     declarations must agree (a disagreement raises).
+   - `EngineSession(inputs="snapshot", initial_snapshot=...)` ticks snapshots (`tick_snapshot` -> revision and demands;
+     `VIS_INPUT {"snapshot": ...}` across processes); `inputs="lanes"` is the in-process reference on production DSP
+     (`ProductionLaneEngine`).
+   Gate (`tests/test_visualizer_engine_snapshot.py`): the snapshot path ticks frames identical to the in-process tick
+   on production DSP for all nine modes, in process and in a `WorkerType.VISUALIZER` process. Mutations caught: no
+   scheduler replay (Bubble), no onsets (Extruded Bubble), no spectrum (Sphere), the main side declaring no samples
+   (Oscilloscope).
 5. Lifecycle: generation start/retire, park, crash fail-closed, frozen spawn check (operator), dormancy baseline.
 6. Measurement (gate 3), then decide P2b.
 

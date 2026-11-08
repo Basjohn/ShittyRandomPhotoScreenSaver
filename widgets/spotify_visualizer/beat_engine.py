@@ -669,8 +669,14 @@ class _SpotifyBeatEngine(QObject):
 
         Exposed only as source metadata so EB does not treat the intentional
         gain ramp in Bubble's already-ramped bands as a sequence of musical hits.
+
+        A pure read of the ramp's own clock: the latch ``_get_play_ramp_factor`` clears on expiry never decides it,
+        so the answer does not depend on which ramped getter ran first (an engine snapshot captures them all,
+        ``core/visualizer_engine/engine_snapshot.py``). Its one reader, Extruded Bubble's capture, reads its body
+        bands (a ramped getter) first, so in process the answer is unchanged.
         """
-        return self._play_ramp_start_ts > 0.0
+        start = self._play_ramp_start_ts
+        return start > 0.0 and authored_now() - start < self._play_ramp_duration
 
     def _get_play_ramp_factor(self) -> float:
         """Return 0.0→1.0 fade factor during AGC warmup after play detection."""
@@ -1487,6 +1493,15 @@ class _SpotifyBeatEngine(QObject):
         """
         self._pre_agc_analysis_spectrum_requested = True
         return self._pre_agc_analysis_spectrum
+
+    def peek_pre_agc_analysis_spectrum(self) -> tuple[float, ...]:
+        """The published analysis spectrum without requesting the next one (an engine snapshot reads it; the
+        tick's own read, ``get_pre_agc_analysis_spectrum``, is what requests publication)."""
+        return self._pre_agc_analysis_spectrum
+
+    def request_pre_agc_analysis_spectrum(self) -> None:
+        """Request the next commit's spectrum, as the tick's read does (forwarded from an engine worker's tick)."""
+        self._pre_agc_analysis_spectrum_requested = True
 
     def get_live_pre_agc_energy_bands(self) -> EnergyBands:
         """Return unsmoothed post-floor, pre-AGC live energy for causal controls.

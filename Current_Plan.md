@@ -134,10 +134,14 @@ after the operator's yes on a question card; agents never run load (invisible ch
      the exact frame codec (work orders 1-2; every mode's production frames round-trip byte-identically; main-thread
      decode at most ~.4 ms per frame) and the in-process loopback (3: `PacketMailbox`, the logical mailbox over the
      ABI; the production owner delivers identical frames for every mode through it; the tick side imports QtCore
-     only) and the worker's first slice (4: `WorkerType.VISUALIZER` under `ProcessSupervisor`; fed recorded post-DSP
-     inputs it ticks frames identical to the in-process owner for all nine modes). Next in 4: live inputs from the main
-     beat engine and the gate on every recording; then 5 (lifecycle, wake, park, crash fail-closed, label namespace,
-     the tick's presentation-config reads moved to logical config).
+     only) and the worker (4: `WorkerType.VISUALIZER` under `ProcessSupervisor`; fed recorded post-DSP inputs it ticks
+     frames identical to the in-process owner for all nine modes, and on every recording: 160/160 replayable pairs,
+     291k frames; live inputs are the lossless engine snapshot, `core/visualizer_engine/engine_snapshot.py`, whose
+     frames equal the in-process tick on production DSP for all nine modes, in process and across processes; the
+     cross-process wake and per-session label namespaces are built). Next: 5 (production wiring behind the owner:
+     a fresh label namespace per `VIS_CONFIGURE`, latest-wins snapshots without acknowledgements, the spectrum demand
+     back-edge, park, crash fail-closed, dormancy; the tick's presentation-config reads moved to logical config so the
+     worker imports QtCore only), then 6 (measurement, gate 3).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 

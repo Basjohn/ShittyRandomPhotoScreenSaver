@@ -16,7 +16,8 @@ import importlib, json, sys
 names = ["widgets.spotify_visualizer.logical_runtime", "widgets.spotify_visualizer.tick_pipeline",
          "widgets.spotify_visualizer.render_state", "core.visualizer_engine.frame_codec",
          "core.visualizer_engine.packet_abi", "core.visualizer_engine.packet_mailbox",
-         "core.visualizer_engine.engine_worker", "widgets.spotify_visualizer.feature_replay",
+         "core.visualizer_engine.engine_worker", "core.visualizer_engine.engine_snapshot",
+         "widgets.spotify_visualizer.feature_replay", "widgets.spotify_visualizer.transient_bus",
          "widgets.spotify_visualizer.runtime_controller"]
 runtimes = sorted(p.stem for p in __import__("pathlib").Path("widgets/spotify_visualizer").glob("*_frame_runtime.py"))
 names += ["widgets.spotify_visualizer." + stem for stem in runtimes]
