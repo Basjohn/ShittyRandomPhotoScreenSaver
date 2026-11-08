@@ -113,6 +113,7 @@ class QuickDisplayVisualizerOwner:
     _expanded_overlays_drawn = False
     # Engine-worker path defaults (in process); __init__ reads the admission and the worker path owns the values.
     _engine_worker_admitted = False
+    _retiring = False            # set first by retire(), joined or not (A9-L1)
     _worker: Any = None
     _worker_identity: "tuple[int, int] | None" = None
     _worker_failures = 0
@@ -1757,7 +1758,10 @@ class QuickDisplayVisualizerOwner:
         """The first configure's reply never came: this activation runs in process (not counted for the run), as a
         first configure that failed does. Inert once it was answered or the session was replaced or left."""
         link = self._worker
-        if self._retired or link is None or link.configured or int(link.label_namespace) != int(namespace):
+        # ``_retiring`` (A9-L1): a retire whose logical join failed returns before ``_retired`` with its routes already
+        # detached; its first configure's deadline must not fall back and start a runtime on that half-retired owner.
+        if (self._retired or self._retiring or link is None or link.configured
+                or int(link.label_namespace) != int(namespace)):
             return
         logger.error("[SPOTIFY_VIS][ENGINE_WORKER] The first configure was not answered in %d ms; this activation "
                      "runs in process mode=%s", _ACTIVATION_TRANSACTION_DEADLINE_MS, self._controller.mode_id)
@@ -2334,7 +2338,11 @@ class QuickDisplayVisualizerOwner:
         frame's fade and the reveal, under a second deadline. Second (now in process): a reveal that never came, or a
         held frame nothing paced any more, escalates to the generation-fenced reconstruction, exactly as an in-process
         activation's deadline does (``_on_transition_deadline``; A8-M2): the display's reload retires this owner (its
-        hidden runtime with it) and the rebuilt one fades in. Never left hidden with its runtime running."""
+        hidden runtime with it) and the rebuilt one fades in, as in process. As in process, the reconstruction is
+        neither capped nor guaranteed: a reload the engine refuses (Settings owns runtime recreation, a recreation is
+        pending, a stale request) leaves this owner in ``failed`` at fade 0 with its runtime running, and an
+        activation that never reveals reloads about every deadline (checkpoint audit 9, A9-L3; a general follow-up in
+        ``Current_Plan.md``, not an engine-worker one)."""
         if self._retired or self._transition_request_serial != serial or not self._display_power_on:
             return
         phase = self._mode_transition_phase
@@ -2360,6 +2368,7 @@ class QuickDisplayVisualizerOwner:
     def retire(self) -> bool:
         if self._retired:
             return False
+        self._retiring = True       # the first configure's deadline is inert from here, joined or not (A9-L1)
         # Disarm the queued one-shot before touching Qt/engine retirement roots;
         # even a failed logical join must not make a stale transition callback
         # re-enter this partially detached generation.

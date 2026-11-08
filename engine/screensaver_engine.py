@@ -364,7 +364,9 @@ class ScreensaverEngine(QObject):
         self._process_supervisor: Optional[ProcessSupervisor] = None
         self._workers_waiting_for_display = False
         self._image_sources_waiting_for_display = False
-        
+        # The Visualizer's engine worker held across a display reload (engine_lifecycle; --viz-engine-worker only).
+        self._engine_worker_reload_hold: int | None = None
+
         logger.info("ScreensaverEngine created")
     
     # -------------------------------------------------------------------------
@@ -1227,15 +1229,18 @@ class ScreensaverEngine(QObject):
                 ),
             )
             
+            # Wire up ProcessSupervisor to displays for worker integration. Before the displays initialise: the
+            # Visualizer owner is admitted synchronously inside ``initialize_displays`` and reads the supervisor at its
+            # configure, so wired afterwards the first owner never had it (native core P2b slice 5.7: on the
+            # engine-worker path it ran in process, logged once; in process the controller only stores it).
+            if self._process_supervisor:
+                self.display_manager.set_process_supervisor(self._process_supervisor)
+                logger.debug("ProcessSupervisor wired to display manager")
+
             # Initialize displays
             display_count = self.display_manager.initialize_displays()
             logger.info(f"Display initialized with {display_count} screens")
-            
-            # Wire up ProcessSupervisor to displays for worker integration
-            if self._process_supervisor and display_count > 0:
-                self.display_manager.set_process_supervisor(self._process_supervisor)
-                logger.debug("ProcessSupervisor wired to display manager")
-            
+
             # Set flag on success
             if display_count > 0 or self._display_selection_suspended():
                 if display_count > 0 and self._image_sources_waiting_for_display:

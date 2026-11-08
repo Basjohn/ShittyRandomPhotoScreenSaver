@@ -61,6 +61,37 @@ def stop_qtimer_safe(
 
 
 # ------------------------------------------------------------------
+# The engine worker across a display reload (native core P2b slice 5.7)
+# ------------------------------------------------------------------
+
+def hold_engine_worker_for_reload(engine: ScreensaverEngine, reason: str) -> None:
+    """A display reload (a CUSTOM layout commit, a monitor topology change) keeps the Visualizer's engine worker running
+    from the old generation's teardown until its replacement is constructed, so the rebuilt owner adopts it instead of
+    spawning a fresh one (``widgets.spotify_visualizer.engine_worker_lifetime``). Only on the engine-worker path
+    (``--viz-engine-worker``): off, nothing is imported or held. A hold left by an earlier reload is ended first."""
+    end_engine_worker_reload_hold(engine)
+    from core.diagnostics.experiment_flags import visualizer_engine_worker_admitted
+
+    if not visualizer_engine_worker_admitted():
+        return
+    from widgets.spotify_visualizer import engine_worker_lifetime
+
+    if reason in engine_worker_lifetime.RELOAD_REASONS:
+        engine._engine_worker_reload_hold = engine_worker_lifetime.hold_for_reload(reason)
+
+
+def end_engine_worker_reload_hold(engine: ScreensaverEngine) -> None:
+    """The reload's replacement was constructed (or will not be): the worker lives on only if its owner leased it."""
+    token = getattr(engine, "_engine_worker_reload_hold", None)
+    if not isinstance(token, int):
+        return
+    engine._engine_worker_reload_hold = None
+    from widgets.spotify_visualizer import engine_worker_lifetime
+
+    engine_worker_lifetime.end_hold(token)
+
+
+# ------------------------------------------------------------------
 # Display runtime teardown
 # ------------------------------------------------------------------
 
@@ -624,6 +655,13 @@ def stop(
         if engine._rotation_timer:
             stop_qtimer_safe(engine, engine._rotation_timer, description="Engine rotation timer")
             engine._rotation_timer = None
+
+        # The Visualizer's engine worker survives a display reload (held until the replacement is constructed), never
+        # Settings or the exit (slice 5.7; a no-op off the engine-worker path).
+        if exit_app:
+            end_engine_worker_reload_hold(engine)
+        else:
+            hold_engine_worker_for_reload(engine, lifecycle_reason)
 
         # A pause is a full runtime boundary: no display, widget, timer, or GL
         # object survives into Settings/CUSTOM reconfiguration.

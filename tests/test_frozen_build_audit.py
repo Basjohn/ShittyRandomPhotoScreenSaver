@@ -12,6 +12,8 @@ from tools.frozen_build_audit import included_modules, main, source_fingerprint,
 REQUIRED = {
     "rendering.quick.context_menu", "core.sources.image_bans",
     "engine.display_manager", "engine.screensaver_engine", "engine.image_queue",
+    # The engine worker's spawn target, imported by name in the frozen child (native core P2b slice 5.7).
+    "core.visualizer_engine.engine_worker",
 }
 
 

@@ -714,12 +714,14 @@ def _construct_and_start_replacement_runtime(
     path owns construction, the first image and the hang window around them.
     """
 
+    from engine.engine_lifecycle import end_engine_worker_reload_hold
     from engine.runtime_destruction import qt_replacement_may_run
 
     if not qt_replacement_may_run(engine):
         logger.info(
             "[LIFECYCLE] Replacement runtime construction discarded during terminal shutdown"
         )
+        end_engine_worker_reload_hold(engine)
         return False
     engine._runtime_lifecycle_event = event
 
@@ -770,6 +772,9 @@ def _construct_and_start_replacement_runtime(
         constructed = True
         return True
     finally:
+        # The replacement's Visualizer owner (if any, on the engine worker) has leased the held worker by now; the
+        # reload's hold ends here, so a replacement without one retires the worker (slice 5.7).
+        end_engine_worker_reload_hold(engine)
         if not constructed:
             engine._replacement_watchdog_label = None
             _disarm_hang(label)

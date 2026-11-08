@@ -1138,6 +1138,25 @@ High-value permanent guards include:
   mode's runtime kept); the Fullscreen Edit envelopes on the worker (Sphere's from the newest frame, the bar count the
   session's); the Qt-free presentation colours equal to what a `QColor` froze to. The fresh-spawn probe in
   `tests/test_visualizer_engine_worker.py` asserts QtCore only after every mode's activation;
+  `tests/test_visualizer_engine_worker_lifetime.py` (slice 5.7 and checkpoint audit 9's A9-L1/A9-L2, each with its
+  negative control): starting a dead role retires its stale response listener in the supervisor (without it the fresh
+  reply never arrives); the heartbeat only retires the engine worker it judged, fenced by identity, never starts it
+  (an unfenced restart stops the client's fresh worker), and retires a hung one past the restart window; the
+  supervisor names the worker's PID without an OS query; a worker-paced session whose steps keep failing fails closed
+  (its wake pipe ends, its cadence parks, a later edge gets `session_closed`; unbounded it keeps stepping); the
+  lifetime policy (the last lease retires the worker at the end of its GUI turn, a lease in the same turn keeps it, a
+  reload hold keeps it across turns until the replacement leases it, a retirement task that finds a new lease leaves
+  the worker, a link's start waits for a retirement in flight); a stale spawn task touches nothing (the pre-5.7 task
+  stopped the later link's worker) and a spawn that finishes after its link closed retires what it started; the
+  engine's reload hold (CUSTOM commit and monitor topology hold, Settings and the exit never; nothing off the
+  admission); the supervisor wired before the displays admit the Visualizer; the first configure's deadline inert on a
+  half-retired owner (the pre-fix fence falls back and starts a runtime); and, on a real worker process with the REAL
+  owner, the worker spawned by its first owner and retired (the process reaped) with its last.
+  `tests/test_visualizer_engine_frozen_spawn.py`: the worker factory pickles by name, and a spawn from a parent whose
+  `__main__` is `main.py` (the child runs `main.py`'s module level first, as the Nuitka child runs it as
+  `__parents_main__`) reaches `visualizer_worker_main`'s message loop (the frozen run itself is the operator's).
+  `tests/test_usage_sampler.py` also pins the engine worker's labelled `--usage` breakdown (from the sample's own
+  per-process pass; a topology refresh only when a named child is new);
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 
 The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.

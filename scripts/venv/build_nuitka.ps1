@@ -403,6 +403,7 @@ $argsList = @(
     "--include-package=ui.tabs",
     "--include-package=ui.studio",
     "--include-package=widgets.spotify_visualizer",
+    "--include-package=core.visualizer_engine",
     "--include-package=rendering.gl_programs",
     "--include-package=OpenGL",
     "--include-package=pyaudiowpatch",

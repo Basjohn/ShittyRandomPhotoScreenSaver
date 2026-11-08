@@ -111,6 +111,12 @@ class ProcessUsageCollector:
         # Force a heavy refresh (topology + thread count) on the first collect.
         self._samples_since_heavy = self._heavy_refresh_samples
         self._last_threads_app = 0
+        # Per-process thread counts from the last heavy refresh (Toolhelp's map, or the psutil fallback's
+        # num_threads), carried forward like ``threads_app``; and the last sample's per-process values, read in the
+        # sample's own per-process pass (no extra OS call): the labelled breakdown of a named child (slice 5.7: the
+        # Visualizer's engine worker).
+        self._threads_by_pid: dict[int, int] = {}
+        self.last_process_breakdown: dict[int, dict[str, float | int | None]] = {}
         self.last_sample_was_heavy = False
         self.last_topology_source = "uninitialized"
         self._topology_fallback_logged = False
@@ -144,6 +150,19 @@ class ProcessUsageCollector:
             return
         self._excluded_pids.add(value)
         self._processes.pop(value, None)
+
+    def expect_pids(self, pids: Iterable[int | None]) -> None:
+        """Named children the next sample must see (slice 5.7: the engine worker's PID from its supervisor): one not
+        yet in the cached tree makes the next sample a topology refresh, so a child spawned between the slow refreshes
+        is measured from the next sample instead of up to ``heavy_refresh_samples`` later. Nothing changes while every
+        named child is known (at rest: none is named)."""
+        for pid in pids:
+            if pid is None:
+                continue
+            value = int(pid)
+            if value > 0 and value not in self._processes and value not in self._excluded_pids:
+                self._samples_since_heavy = self._heavy_refresh_samples
+                return
 
     @staticmethod
     def _log_topology_change(change: str, process: psutil.Process, threads: int | None) -> None:
@@ -209,7 +228,8 @@ class ProcessUsageCollector:
                     for pid, process in self._processes.items()
                     if pid in live_pids and pid not in self._excluded_pids
                 }
-                threads_app = sum(discovered.get(pid, 0) for pid in live_pids)
+                self._threads_by_pid = {pid: discovered.get(pid, 0) for pid in live_pids}
+                threads_app = sum(self._threads_by_pid.values())
                 return live, threads_app, "toolhelp"
             except Exception:
                 if not self._topology_fallback_logged:
@@ -280,6 +300,9 @@ class ProcessUsageCollector:
         io_write = 0
         io_available = True
         live_pids: list[int] = []
+        breakdown: dict[int, dict[str, float | int | None]] = {}
+        if heavy_sample and topology_threads is None:
+            self._threads_by_pid = {}
 
         for process in processes:
             try:
@@ -291,6 +314,7 @@ class ProcessUsageCollector:
 
             app_cpu += cpu
             rss = int(getattr(memory, "rss", 0) or 0)
+            breakdown[process.pid] = {"cpu_pct": cpu, "rss_mb": _mb(rss)}
             rss_app += rss
             vms_app += int(getattr(memory, "vms", 0) or 0)
             if process.pid == self._main.pid:
@@ -322,9 +346,13 @@ class ProcessUsageCollector:
             # path is retained as a fallback/non-Windows implementation.
             if heavy_sample and topology_threads is None:
                 try:
-                    threads_app += int(process.num_threads())
+                    process_threads = int(process.num_threads())
                 except (psutil.Error, OSError, AttributeError):
                     pass
+                else:
+                    threads_app += process_threads
+                    self._threads_by_pid[process.pid] = process_threads
+            breakdown[process.pid]["threads"] = self._threads_by_pid.get(process.pid)
 
             try:
                 proc_handles = int(process.num_handles())
@@ -352,6 +380,7 @@ class ProcessUsageCollector:
         else:
             threads_app = self._last_threads_app
 
+        self.last_process_breakdown = breakdown
         system_cpu = max(0.0, float(psutil.cpu_percent(interval=None)))
         snapshot = ProcessUsageSnapshot(
             pids=tuple(sorted(live_pids)),
@@ -782,10 +811,18 @@ class UsageTelemetryService:
     ) -> None:
         started = time.perf_counter()
         try:
+            # The owners' accounting first (it names the engine worker's PID, slice 5.7), so a worker spawned since
+            # the last topology refresh is in this sample's tree; then the per-process pass, which measures it.
+            resources = self._resource_snapshot()
+            visualizer_pid = resources.get("visualizer_worker_pid")
+            expect_pids = getattr(self._process_collector, "expect_pids", None)
+            if visualizer_pid is not None and callable(expect_pids):
+                expect_pids((visualizer_pid,))
             process = self._process_collector.collect()
             gpu = self._gpu_collector.collect(process.pids)
             threads = self._thread_snapshot()
-            resources = self._resource_snapshot()
+            breakdown = getattr(self._process_collector, "last_process_breakdown", None) or {}
+            visualizer = breakdown.get(int(visualizer_pid), {}) if visualizer_pid is not None else {}
             self._latest_lifecycle_snapshot = {
                 "sequence": sequence,
                 "sampled_monotonic": time.monotonic(),
@@ -839,7 +876,10 @@ class UsageTelemetryService:
                 "image_worker_pid=%s image_worker_rss_mb=%s "
                 "image_worker_vms_mb=%s "
                 "image_prefetch_worker_pid=%s image_prefetch_worker_rss_mb=%s "
-                "image_prefetch_worker_vms_mb=%s shm_segments_created=%s "
+                "image_prefetch_worker_vms_mb=%s "
+                "visualizer_worker_pid=%s visualizer_worker_cpu_pct=%s "
+                "visualizer_worker_rss_mb=%s visualizer_worker_threads=%s "
+                "shm_segments_created=%s "
                 "shm_segments_live=%s shm_live_bytes=%s "
                 "shm_segments_consumed=%s shm_segments_reclaimed_late=%s "
                 "shm_close_failures=%s shm_unlink_failures=%s "
@@ -914,6 +954,10 @@ class UsageTelemetryService:
                 _fmt(resources.get("image_prefetch_worker_pid")),
                 _fmt(resources.get("image_prefetch_worker_rss_mb")),
                 _fmt(resources.get("image_prefetch_worker_vms_mb")),
+                _fmt(visualizer_pid),
+                _fmt(visualizer.get("cpu_pct")),
+                _fmt(visualizer.get("rss_mb")),
+                _fmt(visualizer.get("threads")),
                 _fmt(resources.get("segments_created")),
                 _fmt(resources.get("segments_live")),
                 _fmt(resources.get("live_bytes")),

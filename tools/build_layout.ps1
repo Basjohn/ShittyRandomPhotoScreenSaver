@@ -969,6 +969,7 @@ function Assert-SRPSSOnefileQuickPayloadContract {
         '--include-data-dir=ui/studio/qml=ui/studio/qml',
         '--include-package=rendering.quick',
         '--include-package=widgets.spotify_visualizer',
+        '--include-package=core.visualizer_engine',
         '--include-package=rendering.gl_programs',
         '--include-package=OpenGL',
         '--include-package=pyaudiowpatch',

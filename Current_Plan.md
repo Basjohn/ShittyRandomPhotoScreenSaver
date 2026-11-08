@@ -188,8 +188,20 @@ after the operator's yes on a question card; agents never run load (invisible ch
      work on the worker, and every activation in the worker loads QtCore only; the view gate is identical for the
      five 3D modes with a photograph, an orbit and a preset's Auto Rotate. 5.6 built 8 Nov: the snapshot layer is
      deleted and Bubble's spawn draws from its simulation's own generator (seeded per controller by gates and
-     replays, never the process RNG; identical frames to the process-RNG version seeded alike). Next: 5.3's rest
-     (device changes), 5.7 (dormancy, diagnostics, frozen spawn), then 6 (gate 3).
+     replays, never the process RNG; identical frames to the process-RNG version seeded alike). 5.7 built 8 Nov with
+     checkpoint audit 9's A9-L1..L3: the worker process lives while an owner leases it (retired at the end of the GUI
+     turn that released the last lease; held across a CUSTOM commit or a monitor change until the replacement adopts
+     it; parked it costs ~0 CPU), the link is the role's one starter (the heartbeat only retires, fenced by identity),
+     a session whose steps keep failing fails closed into the recovery, the supervisor reaches the display manager
+     before the Visualizer is admitted, `--usage` labels the worker's CPU/RSS/threads, and every build family
+     compiles the worker's package. Next: 5.3's rest (device changes), then 6 (gate 3). Operator checks for 6: a frozen
+     build with `--viz-engine-worker` (the Visualizer on the worker) and its cold spawn against the first configure's
+     6 s bound. Open for 6 (design doc, 5.7's "Left"): the production worker process runs `main.py`'s module level
+     before its target (QtGui/QtWidgets/QtQuick loaded in every worker role); gate 4's open/close and switch counts.
+     General follow-up (checkpoint audit 9, A9-L3; not a P2b item): a reconstruction that never reveals reloads about
+     every 6 s with no cap, and a refused reload leaves the owner `failed` at fade 0 with its runtime running (both as
+     in process): decide a per-run reconstruction cap, or a `failed` owner that stops its runtime when its reload is
+     refused.
      Side finding (5.6): `test_bubble_reactivity.py::test_group_drift_aligns_non_swirl_bubble_motion[random-x]`
      holds for only ~61% of Random Group Drift draws (2,000 seeds; Diagonal for all); it had passed on the process-RNG
      state earlier tests left behind and is seeded now. Open for Bubble's owner: what Random Group Drift should
