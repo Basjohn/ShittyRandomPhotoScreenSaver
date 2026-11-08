@@ -604,6 +604,20 @@ Each foundation slice adds what it learned here.
 - Raster passes with a physical camera: homogeneous clip from view depth (numerator linear in view position), the
   sky ray from the same right/up/back and tan, and one per-frame CPU view object (`BasinView`) that every CPU
   projection (shafts, beat stars, edit envelope) uses — never a second CPU camera.
+- Diagnose a "wide-angle" complaint from the lens the card really draws, never from the settings file alone
+  (2026-11-08). EB shares the `planar` CUSTOM profile; a stale `3d:extruded_bubble` entry (1488x467) looked like the
+  cause, but the saver drew the planar 592x592 card whose viewport extent was 2077.7 tall: edge-resize aperture
+  7.42, a 144-degree lens. Reproduce the operator's screenshot offscreen with the real record (replay with its
+  `viewport_extent`, draw at its card size) and bisect geometry against settings before touching either.
+- The lens has one owner: `viewport_tangents`. It caps the horizontal view at `FRAMED_MAX_HORIZONTAL_FOV_DEG` and
+  solves the vertical tangent from it, so every projection consumer (renderers, Studio handles, edit envelopes,
+  Expanded Visualizer, `project_point`) gets the cap with no copy. Pixel-scale consumers that divided by the
+  aperture (EB's near-field blur reference height) divide by `effective_aperture_scale` instead, which is the
+  aperture itself below the cap, so below-cap cards stay pixel-identical (proved before/after). Pan stays on the
+  authored lens: it is pose, and the eye must never depend on the card.
+- A spec's `fov_range` is the only lens range: the Settings slider is built from it, and the Studio wheel, preset
+  repair and admission read that slider. A literal range on the slider (EB's old 35-62) silently drifts from the
+  camera math.
 
 **Ember Grain and the deep red ocean preset (EB, 2026-11-06)**
 - An option layered onto an existing shader expression leaves that expression verbatim and adds only the

@@ -80,8 +80,8 @@ def orbit_view(turn: float, tilt: float, field=(0.0, 0.0, 1800.0, 1000.0), *, sc
     from core.settings.neon_lake_camera import SPEC
     axes = fc.camera_axes(SPEC, turn, tilt)
     eye, _offset = fc.resolve_camera_position(SPEC, turn, tilt, scale, pan[0], pan[1], fov, position, axes=axes)
-    tan_y = fc.tan_half_fov(fov, SPEC.fov_range)
-    return BasinView(eye, axes[:3], axes[3:6], axes[6:9], (tan_y * field[2] / field[3], tan_y), tuple(field))
+    tan = fc.viewport_tangents(fov, field[2] / field[3], 1., SPEC.fov_range)
+    return BasinView(eye, axes[:3], axes[3:6], axes[6:9], tan, tuple(field))
 
 
 def basin_view(parameters, field, *, aperture_scale: float = 1.) -> BasinView:

@@ -301,6 +301,16 @@ answers.
 - **§4 Theme materials (8 Nov):** eyes on the Settings window under the new Frosted / Mica / Smoked themes (41
   pairs, all 7 light themes reworked) and on the light themes' forged corners over a dark desktop.
 - **§4 Extruded Bubble Deep Red Ocean (Preset 9):** eyes on the second pass.
+- **Framed aperture on a shrunk planar card (8 Nov, decision):** the saver's "wide-angle" EB card is the Standard
+  profile's shared `planar` CUSTOM entry: a 592x592 card over a 2077.7x2077.7 viewport extent (0.285 px per world
+  unit), so the approved edge-resize aperture is 2077.7/280 = 7.42 and the 45° lens became 144°. The record is
+  schema-valid (finite, positive, one consistent px-per-world), so no repair rejects it, and it was not edited. The
+  90° horizontal cap now bounds it to 90° x 90° (`.artifacts/evidence/architecture/framed_camera/20261108_hfov_cap/`,
+  `saver_card_diagnosis.png`), still about twice the authored 45°. Likely writer: a Visualizer's uniform-scale floor
+  (0.4) is relative to each Edit session's start because its size payload persists no scale scalar, so px-per-world
+  can compound below 0.4 across sessions and later edge resizes grow the extent at that scale (unproven: the logs
+  only reach back to 19:45 on 8 Nov, already at 0.285). Decide: bound the framed aperture (or the vertical view)
+  too, make the Visualizer uniform-scale floor absolute in px-per-world, or both.
 - **§7.1 Waveform:** Preset 4 trade-offs of the fixed-scale v7 (sign off or ask for the tag's exact dynamics);
   Preset 7 and the Reaction Modes; Breathing; four-ribbon Preset 3; Particles; Strands; Colour/floor/mist; Fixed
   response; Floor Give; Pulse Rim; swell visibility; Travel Direction; Unified atmosphere.

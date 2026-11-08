@@ -2,9 +2,20 @@
 import math
 import pytest
 
+from core.settings.framed_camera import FOV_RANGE, FRAMED_MAX_HORIZONTAL_FOV_DEG, tan_half_fov
+from core.settings.neon_lake_camera import SPEC as NEON_SPEC
 from rendering.gl_programs.extruded_bubble_scene import physical_camera
 from rendering.gl_programs.neon_lake_basin_program import basin_view
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
+
+
+def _hfov(tan_x):
+    return math.degrees(2*math.atan(tan_x))
+
+
+def _past_cap(fov,aspect,aperture,fov_range=FOV_RANGE):
+    """Whether the authored lens on this card would be wider than the framed horizontal cap."""
+    return _hfov(tan_half_fov(fov,fov_range)*aperture*aspect)>FRAMED_MAX_HORIZONTAL_FOV_DEG
 
 
 @pytest.mark.parametrize('size', ((630,420),(1260,420),(315,420),(630,840),(630,210),(240,960),(960,240)))
@@ -18,16 +29,24 @@ def test_edge_resize_keeps_eye_pixel_aspect_and_focal_scale(size):
     assert view[3][0]/view[3][1]==pytest.approx(aspect)
     fx,fy=width/(2*view[3][0]),height/(2*view[3][1])
     assert fx==pytest.approx(fy)
-    assert fy==pytest.approx(420/(2*math.tan(math.radians(52)/2)))
+    if _past_cap(52,aspect,aperture):
+        # Past the framed horizontal cap the view stops widening: the same world is magnified uniformly instead.
+        assert _hfov(view[3][0])==pytest.approx(FRAMED_MAX_HORIZONTAL_FOV_DEG)
+        assert fy>420/(2*math.tan(math.radians(52)/2))
+    else:
+        assert fy==pytest.approx(420/(2*math.tan(math.radians(52)/2)))
     params=frozen_visualizer_settings('shockwave_grid')
     original=basin_view(params,(0,0,630,420))
     resized=basin_view(params,(0,0,width,height),aperture_scale=aperture)
     assert resized.eye==original.eye
     assert (resized.right,resized.up,resized.back)==(original.right,original.up,original.back)
+    # Landmarks keep their place about the card centre; past the cap they are magnified by the lens's focal change.
+    magnify=(height/resized.tan[1])/(420/original.tan[1])
+    assert (magnify>1.+1e-9)==_past_cap(float(params['shockwave_grid_camera_fov']),aspect,aperture,NEON_SPEC.fov_range)
     for point in ((0,0,-1),(.6,.2,-2),(-.7,.3,-.8)):
         ox,oy=original.item_point(point);rx,ry=resized.item_point(point)
-        assert rx-width/2==pytest.approx(ox-315)
-        assert ry-height/2==pytest.approx(oy-210)
+        assert rx-width/2==pytest.approx((ox-315)*magnify)
+        assert ry-height/2==pytest.approx((oy-210)*magnify)
 
 
 def test_uniform_presentation_scale_does_not_change_aperture():
@@ -108,7 +127,14 @@ def test_actual_custom_side_gestures_reveal_fixed_world(mode,initial_size):
     assert owner.update_resize(item,'right',start+QPoint(width,0),True)
     observations.append(observe())
     assert observations[1]==pytest.approx(observations[0])
-    assert observations[2]==pytest.approx(observations[0])
+    rect=item.current_global_rect
+    if mode=='extruded_bubble' and _past_cap(52,rect.width()/rect.height(),
+                                             item.current_viewport_extent[1]/280.):
+        # The wider card passes the framed horizontal cap: the lens stops widening and magnifies uniformly.
+        assert observations[2][0]==pytest.approx(observations[2][1])
+        assert observations[2][1]>observations[0][1]
+    else:
+        assert observations[2]==pytest.approx(observations[0])
 
 
 def test_unframed_3d_keeps_its_existing_stage_resize_semantics():

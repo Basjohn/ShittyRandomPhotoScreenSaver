@@ -16,7 +16,7 @@ import math
 
 import pytest
 
-from core.settings.framed_camera import viewport_tangents
+from core.settings.framed_camera import FRAMED_MAX_HORIZONTAL_FOV_DEG, tan_half_fov, viewport_tangents
 from core.settings.visualizer_mode_registry import (
     VisualizerClipPolicy,
     VisualizerShellPolicy,
@@ -166,9 +166,16 @@ def test_the_framed_camera_keeps_its_lens_and_sees_the_whole_card_world(display)
         assert after == before
     else:
         assert after > before
-    tan_x, tan_y = viewport_tangents(45.0, expanded.viewport_extent[0] / expanded.viewport_extent[1], after)
+    aspect = expanded.viewport_extent[0] / expanded.viewport_extent[1]
+    tan_x, tan_y = viewport_tangents(45.0, aspect, after)
     card_x, card_y = viewport_tangents(45.0, ordinary.viewport_extent[0] / ordinary.viewport_extent[1], before)
-    assert tan_x >= card_x - 1e-12 and tan_y >= card_y - 1e-12        # never crops the card's view
+    max_tan_x = math.tan(math.radians(FRAMED_MAX_HORIZONTAL_FOV_DEG) / 2.0)
+    if tan_half_fov(45.0) * after * aspect > max_tan_x:
+        # The framed horizontal cap binds on a display this wide: exactly the capped view, at the content's aspect.
+        assert tan_x == pytest.approx(max_tan_x) and tan_y == pytest.approx(max_tan_x / aspect)
+        assert tan_x >= card_x - 1e-12
+    else:
+        assert tan_x >= card_x - 1e-12 and tan_y >= card_y - 1e-12    # never crops the card's view
 
 
 def test_the_ordinary_record_is_never_mutated():
