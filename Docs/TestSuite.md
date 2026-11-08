@@ -1027,11 +1027,22 @@ High-value permanent guards include:
   audio worker, capture lane and compute pool, fed the shipped clip's PCM through the capture callback
   (`RecordedCaptureBackend` via the audio worker's source seam; a device open fails the test), ticks identical frames
   in process and in a `WorkerType.VISUALIZER` process for every mode; the recorded stream rebuilds every capture
-  history; each tick reads the asynchronous commit of its own block (the engine's analysis-settled edge, committed on
-  the lane's thread); paused inputs fail closed until 4b. The fresh-spawn probe in
+  history; each tick reads the asynchronous commit of its own block (`order="settled"`, the portability order: the
+  engine's analysis-settled edge, committed on the lane's thread). `tests/test_visualizer_engine_live_off_steady.py`
+  (P2b slice 2, 4b) runs the rig in production commit order (the tick's own step submits, the tick reads the previous
+  commit, held at the compute lane's admission gate; an adversarial 50 ms schedule fails it without the gate) through
+  warm and cold pause/resume, display-power re-entry and in-session mode switches (`VIS_SET_MODE`), identical frames
+  and slot heads in process and in the worker; the fence never admits the retained frame on resume or unpark (control:
+  arm disabled); a cold pause stops capture and the resume reopens it; a switch is in place (same engine, capture,
+  mailbox); each slot's identity and flags read back with plain `struct` (ABI 2); spectrum readers publish on the first
+  commit after an activation (control: demand disabled); a recorded session refuses a device in any process; the warm
+  resume's capture restart is frame-neutral; a free-running worker never strands or tears a frame; a paused input with
+  new capture fails closed. `tests/test_visualizer_engine_packet_abi.py` pins per-slot identity and one code per
+  registered mode (`MODE_CODES`). The fresh-spawn probe in
   `tests/test_visualizer_engine_worker.py` ticks one live input per mode and pins QtCore/QtGui only (it caught the
-  Spectrum DSP importing the Settings shape editor). Whole-clip gate and cost: `tools/visualizer_replay/
-  live_engine_gate.py`, `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
+  Spectrum DSP importing the Settings shape editor). Whole-clip gate (scenarios steady / pause_warm / pause_cold /
+  reentry / switch, `--order`, `--stress`) and cost: `tools/visualizer_replay/live_engine_gate.py`,
+  `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 
 The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.

@@ -406,9 +406,7 @@ def deterministic_clock():
         random.setstate(saved_random)
 
 
-def configure_offline_controller(controller, mode, preset: int = 0, overrides=None, settings=None):
-    """``settings``: a complete resolved settings mapping (or ``mode -> mapping``) used instead of the curated
-    ``preset``; tests pass frozen copies so authored presets never decide them (Current_Plan N2)."""
+def _offline_model(mode, preset, overrides, settings):
     activation = None
     if settings is None:
         activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": preset})
@@ -420,6 +418,66 @@ def configure_offline_controller(controller, mode, preset: int = 0, overrides=No
     )
     if overrides:
         model = replace(model, **dict(overrides))
+    return model, activation
+
+
+def switch_offline_controller_mode(controller, mode, preset: int = 0, overrides=None, settings=None) -> tuple[int, int]:
+    """Switch a configured controller to ``mode`` in place, as the Quick owner commits a mode activation on the
+    logical side (``QuickDisplayVisualizerOwner._activate_pending_mode`` with its ``_apply_configuration``): one
+    engine activation transaction around the controller's mode, the target's settings, technical config and engine
+    kwargs, the target's logical mode state, the warm re-entry fence and the engine's compute/smoothing/floor reset;
+    then the fresh-frame fence on the committed generation and activation, and render admission for them. The
+    engine, its capture, the mailbox and the runtime generation stay (never a rebuild). Presentation-only steps
+    (Edit profile, backdrop, render bridge, crossfade) stay the owner's. Returns the committed (generation,
+    activation)."""
+    from importlib import import_module
+
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    from widgets.spotify_visualizer.tick_pipeline import arm_reentry_fresh_frame_fence
+
+    engine = controller.engine
+    model, activation = _offline_model(mode, preset, overrides, settings)
+    state = controller.logical_tick_state
+    engine.begin_activation_transaction()
+    try:
+        controller.set_mode(mode)
+        controller.settings_model = model
+        if activation is not None:
+            controller.record_resolved_activation(activation)
+        controller.technical_config_cache = build_technical_cache(None, model)
+        install_default_logical_tick_state(state, bar_count=controller.bar_count)
+        install_default_presentation_state(controller.presentation_state)
+        values = resolve_mode_source_config(mode, asdict(model))
+        apply_logical_vis_mode_kwargs(state, values)
+        apply_presentation_vis_mode_kwargs(controller.presentation_state, values)
+        controller.enabled = True
+        apply_engine_vis_mode_kwargs(engine, values)
+        apply_controller_technical_config(controller, resolve_technical_config(controller.technical_config_cache,
+                                                                               mode), reason="offline_mode_change")
+        descriptor = get_visualizer_mode_descriptor(mode)
+        runtime_class = getattr(import_module(descriptor.frame_runtime_module), descriptor.frame_runtime_class)
+        controller.resolve_logical_mode_state(mode, runtime_class)
+        state._mode_teardown_block_until_ready = False
+        state._mode_transition_ready = True
+        arm_reentry_fresh_frame_fence(state, engine)
+        engine.cancel_pending_compute_tasks()
+        engine.reset_smoothing_state()
+        engine.reset_floor_state()
+    finally:
+        engine.end_activation_transaction(reason=f"offline_mode_change:{mode}")
+    generation, activation_id = int(engine.get_generation_id()), int(engine.get_activation_id())
+    state._pending_engine_generation = generation
+    state._pending_engine_activation_id = activation_id
+    state._waiting_for_fresh_engine_frame = True
+    state._waiting_for_fresh_frame = True
+    controller.begin_render_activation(engine_generation=generation, activation_id=activation_id)
+    return generation, activation_id
+
+
+def configure_offline_controller(controller, mode, preset: int = 0, overrides=None, settings=None):
+    """``settings``: a complete resolved settings mapping (or ``mode -> mapping``) used instead of the curated
+    ``preset``; tests pass frozen copies so authored presets never decide them (Current_Plan N2)."""
+    model, activation = _offline_model(mode, preset, overrides, settings)
     controller.set_mode(mode)
     controller.settings_model = model
     if activation is not None:

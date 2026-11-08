@@ -58,6 +58,11 @@ class MessageType(Enum):
     VIS_CONFIGURE = "vis_configure"
     VIS_INPUT = "vis_input"
     VIS_STOP = "vis_stop"
+    # Control edges on the existing session (P2b slice 2): an in-session mode switch applied at the next tick
+    # boundary ({"mode", optional "preset"/"settings"}; the newest request wins), and display power park/unpark
+    # ({"on": bool}).
+    VIS_SET_MODE = "vis_set_mode"
+    VIS_SET_DISPLAY_POWER = "vis_set_display_power"
     
     # Error messages
     ERROR = "error"

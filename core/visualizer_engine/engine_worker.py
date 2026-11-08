@@ -37,9 +37,18 @@ class EngineSession:
     #: (``engine_snapshot``), through ``SnapshotBeatEngine``; requires ``initial_snapshot``. ``live`` (P2b): the
     #: production ``_SpotifyBeatEngine`` with its real audio worker, capture lane and compute pool on the session's
     #: own ``ThreadManager``, fed each ``FeatureFrame``'s native PCM through the capture callback
-    #: (``recorded_capture.RecordedCaptureBackend``, no device); the tick reads the asynchronous commit of the block
-    #: it was fed (``_tick_live``).
+    #: (``recorded_capture.RecordedCaptureBackend``; a device is refused for the session's life); ``order`` decides
+    #: when the asynchronous commit lands relative to the tick (``ORDERS``).
     INPUTS = ("feature", "lanes", "live", "snapshot")
+
+    #: Live sessions' commit order. ``production`` (the reference for the off-steady-state gates; checkpoint audit
+    #: 3, A3-H1): the tick's own engine step consumes the newest block and submits its analysis, the tick reads the
+    #: previous commit, as live (``tick_pipeline.consume_engine_bars``); the analysis is held at the compute lane's
+    #: admission gate until the tick returns, then the session waits for it to commit, so the next tick reads it,
+    #: deterministically. ``settled`` (slice 1, the portability gate): the session steps first and the tick reads
+    #: the commit of the block it was fed. ``free``: production order with no hold and no wait (stress only: the
+    #: commit races the tick, frames are not reproducible).
+    ORDERS = ("production", "settled", "free")
 
     #: How long a live session waits for its own capture to open or its analysis to settle before failing closed.
     LIVE_EDGE_TIMEOUT_S = 30.0
@@ -57,7 +66,7 @@ class EngineSession:
 
     def _construct(self, *, mapping: str, mode: str, runtime_generation: int, preset: int = 0, settings: Any = None,
                  bar_count: int = 32, label_namespace: int = 0, wake: Any = None, inputs: str = "feature",
-                 initial_snapshot: Any = None, seed: int | None = None) -> None:
+                 initial_snapshot: Any = None, seed: int | None = None, order: str = "production") -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.engine_snapshot import SnapshotBeatEngine
         from core.visualizer_engine.packet_mailbox import PacketMailbox
@@ -71,7 +80,10 @@ class EngineSession:
             raise ValueError(f"label namespace out of range: {label_namespace}")
         if inputs not in self.INPUTS or (inputs == "snapshot") != (initial_snapshot is not None):
             raise ValueError(f"inputs {inputs!r} with{'' if initial_snapshot is not None else 'out'} an initial snapshot")
+        if order not in self.ORDERS:
+            raise ValueError(f"unknown live commit order {order!r}")
         self.inputs = inputs
+        self.order = order
         self._stack = contextlib.ExitStack()
         # The session's authored clock follows its inputs' own timestamps (each input carries the time it was
         # produced), so the worker ticks the same frames whatever its scheduling. Live (snapshot) sessions pin only
@@ -113,10 +125,15 @@ class EngineSession:
 
             engine = _SpotifyBeatEngine(bar_count)
             self._backend = None
-            self._capture_opened = threading.Event()
+            self._backends: list = []                  # every recorded source capture opened (the gates report them)
             self._settled = threading.Event()
+            self._admission = threading.Event()        # the compute lane's admission gate (production order)
+            self._admission.set()
+            self._admission_failed = False
             self._stream = CaptureHistoryStream()
-            self._capture_open = False
+            self._live_started = False         # the owner's ``start`` runs at the first input (its clock)
+            self._display_on = True            # display power: a parked session does not tick
+            self._pending_mode: tuple | None = None   # the newest mode request, applied at the next tick boundary
         else:
             engine = (ProductionLaneEngine if inputs == "lanes" else ReplayBeatEngine)(bar_count)
         # The main process's runtime generation (a control input: every frame carries it).
@@ -129,8 +146,14 @@ class EngineSession:
         # reads into the logical config so the worker imports QtCore only (P2 design, Risks).
         configure_offline_controller(controller, mode, preset, None, settings)
         self._engine, self._controller = engine, controller
+        self.mode = mode
         if self._live:
             self._start_live_engine(mode)
+        # The header's configure-time identity, before any frame (audit H5); every slot carries its own frame's
+        # identity under its seqlock (A3-M4), so an in-place mode switch never relabels a slot.
+        self.mailbox.write_identity(runtime_generation=int(runtime_generation),
+                                    engine_generation=int(engine.get_generation_id()),
+                                    activation_id=int(engine.get_activation_id()), mode=mode)
         # A raw-musical mode replays production DSP on the input's PCM; ``ProductionLaneEngine`` does that itself.
         raw = get_visualizer_mode_descriptor(mode).raw_musical_signals
         self._reanalysis = PcmReanalysis() if raw and inputs == "feature" else None
@@ -139,56 +162,211 @@ class EngineSession:
         """As the owner's ``start`` does (configured first): the engine on its own ``ThreadManager`` (the capture
         lane and the compute pool), its reference held; capture opens at the first input's play edge."""
         from core.threading.manager import ThreadManager
-        from widgets.spotify_visualizer import mode_capabilities
+        from widgets.spotify_visualizer import audio_worker
+        from widgets.spotify_visualizer.tick_pipeline import declare_mode_engine_demands
 
         engine = self._engine
+        # A recorded-PCM session never opens a device, in whichever process it runs (checkpoint audit 3, A3-L1: a
+        # test's monkeypatch reaches only its own process): the audio worker's device factory refuses for the
+        # session's life (entered first, restored last). The recorded backend comes through the factory seam.
+        self._stack.enter_context(_devices_refused(audio_worker))
         manager = ThreadManager()
         self._stack.callback(manager.shutdown, wait=True, timeout=self.LIVE_EDGE_TIMEOUT_S)
         engine.set_capture_backend_factory(self._open_capture)
         engine.set_analysis_settled_observer(self._settled.set)
+        if self.order == "production":
+            engine.set_analysis_admission_gate(self._admit_analysis)
         engine.set_thread_manager(manager)
         # Closed before the manager shuts down (LIFO): capture fenced and released on its lane, the compute lane
         # stopped, then the manager joins both.
         self._stack.callback(engine.force_stop)
         engine.acquire()
-        # The mode's sample demands are rules of the mode, which the tick declares before every engine step; capture
-        # needs them before the first block arrives (the history accumulates in the capture callback).
-        draws_samples = mode_capabilities.consumes_waveform_samples(mode)
-        engine.set_idle_waveform_demand(draws_samples)
-        engine.set_waveform_history_demand(draws_samples)
+        # The mode's demands are rules of the mode, which the tick declares before every engine step; capture needs
+        # them before the first block arrives (the history accumulates in the capture callback).
+        declare_mode_engine_demands(engine, mode)
+
+    @property
+    def device_refused(self) -> bool:
+        """Whether this process's audio worker refuses a device now (the gates assert it in the worker)."""
+        from widgets.spotify_visualizer import audio_worker
+
+        return getattr(audio_worker.create_audio_capture, "refuses_devices", False)
+
+    def _admit_analysis(self) -> None:
+        """The compute lane's admission gate (production order): an analysis waits until the tick has read."""
+        if not self._admission.wait(self.LIVE_EDGE_TIMEOUT_S):
+            self._admission_failed = True
 
     def _open_capture(self, config: Any) -> Any:
         """The audio worker's capture source (its factory seam): a recorded backend, opened on the capture lane."""
         from core.visualizer_engine.recorded_capture import RecordedCaptureBackend
 
-        self._backend = RecordedCaptureBackend(config, on_started=lambda _backend: self._capture_opened.set())
+        self._backend = RecordedCaptureBackend(config)
+        self._backends.append(self._backend)
         return self._backend
 
-    def _tick_live(self, feature: Any) -> None:
-        """Push the input's new PCM through the capture callback, step the engine (it consumes the newest block and
-        submits it to the compute lane), wait for that analysis to commit (the engine's settled edge), then tick."""
-        if not feature.playing:
-            # Pause/resume reopens capture asynchronously on its lane; the 4b gates add it with their own edge.
-            raise ValueError("live sessions tick playing inputs only (pause/resume is work order 4b)")
-        engine = self._engine
-        if not self._capture_open:
-            # The play edge, as the owner's ``set_playing`` at start: the held reference admits capture, the capture
-            # lane opens the recorded backend through the factory seam.
-            engine.set_playback_state(True)
+    @property
+    def capture_counts(self) -> tuple[int, int]:
+        """(opens, restarts) of the recorded capture source so far (reported by the gates, never gated)."""
+        return len(self._backends), sum(backend.restarts for backend in self._backends)
+
+    # ------------------------------------------------------------------------------------- live control edges
+    # Each mirrors the production owner's engine calls (``quick_display_visualizer_owner.py``) on the logical side;
+    # capture (re)opens and closes asynchronously on its lane, so every edge ends on the lane's completion edge.
+
+    def _settle_capture(self) -> None:
+        """Wait until every capture start/stop/restart admitted so far has run on the capture lane (the lane's own
+        completion edge: bounded, fail closed; never a sleep or poll), then check capture is open iff it should be."""
+        import threading
+
+        done = threading.Event()
+        if self._engine.fence_capture_transactions(done.set) and not done.wait(self.LIVE_EDGE_TIMEOUT_S):
+            raise RuntimeError("the live engine's capture lane never settled")
+        backend = self._backend
+        should_run = self._live_started and self._display_on and self._controller.playing
+        if should_run and (backend is None or not backend.is_running()):
+            raise RuntimeError("the live engine's capture never opened")
+
+    def _start_playback(self, playing: bool) -> None:
+        """The owner's ``start`` (``start`` ~1774-1783) at the first input: Media's state committed to the engine
+        (``set_playing`` with no edge), then the cold capture admission when playing."""
+        controller, engine = self._controller, self._engine
+        controller.playing = bool(playing)
+        engine.set_playback_state(bool(playing))
+        if playing:
             engine.ensure_started()
-            if not self._capture_opened.wait(self.LIVE_EDGE_TIMEOUT_S):
-                raise RuntimeError("the live engine's capture never opened")
-            self._capture_open = True
+        self._live_started = True
+        self._settle_capture()
+
+    def _set_playing(self, active: bool) -> None:
+        """A playback edge, as the owner's ``set_playing`` (~594-617): on resume ``wake`` (restarts a stale capture,
+        starts a stopped one), the engine's playback state (pause schedules the warm-capture stop after its grace;
+        play restarts the reactivity ramp unless capture stayed warm), and on resume the warm re-entry fence armed
+        on the engine's commit sequence (``tick_pipeline.arm_reentry_fresh_frame_fence``)."""
+        from widgets.spotify_visualizer.tick_pipeline import arm_reentry_fresh_frame_fence
+
+        controller, engine = self._controller, self._engine
+        active, previous = bool(active), bool(controller.playing)
+        controller.playing = active
+        if active and not previous:
+            engine.wake()
+        engine.set_playback_state(active)
+        if active and not previous:
+            arm_reentry_fresh_frame_fence(controller.logical_tick_state, engine)
+        self._settle_capture()
+
+    def set_display_power(self, on: bool) -> bool:
+        """Display power (park/unpark), as the owner's ``set_display_power`` (~239-285) on the logical side: park
+        releases the engine's capture reference (capture stops) and no input ticks while parked; unpark re-acquires
+        it, reopens capture when playing, arms the warm re-entry fence and rebases the logical clocks. The owner's
+        reader-side mailbox clear stays the main process's. Whether anything changed."""
+        from widgets.spotify_visualizer.tick_pipeline import (
+            arm_reentry_fresh_frame_fence,
+            rebase_logical_clocks_after_park,
+        )
+
+        if not self._live:
+            raise ValueError("display power is a live-session control")
+        on = bool(on)
+        if on == self._display_on:
+            return False
+        self._display_on = on
+        controller, engine = self._controller, self._engine
+        if not on:
+            engine.release()
+        else:
+            engine.acquire()
+            if self._live_started:
+                if controller.playing:
+                    engine.ensure_started()
+                state = controller.logical_tick_state
+                arm_reentry_fresh_frame_fence(state, engine)
+                rebase_logical_clocks_after_park(state, controller.logical_mode_states_snapshot())
+        self._settle_capture()
+        return True
+
+    def request_mode(self, mode: str, *, preset: int = 0, settings: Any = None) -> None:
+        """An in-session mode switch, applied at the next tick boundary (the newest request wins): the owner's
+        activation commit on the existing engine and controller (``feature_replay.switch_offline_controller_mode``),
+        never a rebuild."""
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        from core.visualizer_engine.packet_abi import mode_code
+
+        if not self._live:
+            raise ValueError("an in-session mode switch is a live-session control")
+        get_visualizer_mode_descriptor(mode)
+        mode_code(mode)                                   # a mode the header cannot name fails here, not mid-tick
+        self._pending_mode = (str(mode), int(preset), settings)
+
+    def _apply_pending_mode(self) -> None:
+        from widgets.spotify_visualizer.feature_replay import switch_offline_controller_mode
+
+        if self._pending_mode is None:
+            return
+        mode, preset, settings = self._pending_mode
+        self._pending_mode = None
+        if mode == self.mode:
+            return
+        switch_offline_controller_mode(self._controller, mode, preset, None, settings)
+        self.mode = mode
+        # The target's block size may differ: capture restarts on its lane before the next block.
+        self._settle_capture()
+
+    def _tick_live(self, feature: Any) -> None:
+        """At the tick boundary: a pending mode switch, then the input's playback edge. Playing: push the input's new
+        PCM through the capture callback, step the engine (it consumes the newest block and submits it to the
+        compute lane) and wait for that analysis to commit (the engine's settled edge) before the tick. Paused: the
+        tick's own engine step runs the paused path (idle waveform/bars, the warm-capture grace)."""
+        if not self._display_on:
+            raise RuntimeError("a parked session does not tick (its cadence is parked)")
+        engine = self._engine
+        self._apply_pending_mode()
+        if not self._live_started:
+            self._start_playback(feature.playing)
+        elif bool(feature.playing) != bool(self._controller.playing):
+            self._set_playing(feature.playing)
         backend = self._backend
         history = feature.capture_history
+        if not feature.playing:
+            # The recorder records no new publication while paused (the paused engine consumes no capture); a
+            # paused input that carries one is outside the rig's contract.
+            if history is not None and self._stream.blocks(history, feature.timestamp_us, 1):
+                raise ValueError("a paused input carries a new capture publication")
+            return
         if history is not None and history.sample_rate != backend.sample_rate:
             raise ValueError(f"recorded rate {history.sample_rate} != capture rate {backend.sample_rate}")
         for block in self._stream.blocks(history, feature.timestamp_us, backend.block_size):
             backend.push(block)
-        self._settled.clear()
-        engine.tick()
-        if engine.has_analysis_in_flight() and not self._settled.wait(self.LIVE_EDGE_TIMEOUT_S):
+        if self.order == "settled":
+            from widgets.spotify_visualizer.tick_pipeline import declare_mode_engine_demands
+
+            # The step the tick would take, taken first (with the tick's own demand declarations) so the tick reads
+            # the commit of the block it was fed; the tick's step then finds no new block.
+            declare_mode_engine_demands(engine, self.mode)
+            self._settled.clear()
+            engine.tick()
+            self._wait_settled()
+
+    def _wait_settled(self) -> None:
+        if self._engine.has_analysis_in_flight() and not self._settled.wait(self.LIVE_EDGE_TIMEOUT_S):
             raise RuntimeError("the live engine's analysis never settled")
+
+    def _logical_tick_live(self) -> Any:
+        """The tick, in the session's commit order (``ORDERS``)."""
+        from widgets.spotify_visualizer.tick_pipeline import logical_tick
+
+        if self.order != "production":
+            return logical_tick(self._controller.logical_tick_state)
+        self._settled.clear()
+        self._admission.clear()
+        try:
+            frame = logical_tick(self._controller.logical_tick_state)
+        finally:
+            self._admission.set()
+        self._wait_settled()
+        if self._admission_failed:
+            raise RuntimeError("an analysis waited too long at the admission gate")
+        return frame
 
     @property
     def clock(self) -> list:
@@ -215,21 +393,38 @@ class EngineSession:
         if self.inputs == "snapshot":
             raise ValueError("this session ticks engine snapshots")
         self._clock[0] = feature.timestamp_us / 1_000_000.0
-        self._controller.playing = feature.playing
         if self._live:
-            self._tick_live(feature)
-        else:
-            self._engine.set_playback_state(feature.playing)
-            if not self._engine.accept_feature_frame(feature):
-                raise ValueError("the engine rejected a post-DSP input")
-            if self._reanalysis is not None:
-                self._reanalysis.accept(self._engine, feature)
+            self._tick_live(feature)      # playback edges are the owner's, applied at the boundary
+            if self._logical_tick_live() is None:
+                raise RuntimeError("the tick produced no logical frame")
+            return self.mailbox.revision
+        self._controller.playing = feature.playing
+        self._engine.set_playback_state(feature.playing)
+        if not self._engine.accept_feature_frame(feature):
+            raise ValueError("the engine rejected a post-DSP input")
+        if self._reanalysis is not None:
+            self._reanalysis.accept(self._engine, feature)
         if logical_tick(self._controller.logical_tick_state) is None:
             raise RuntimeError("the tick produced no logical frame")
         return self.mailbox.revision
 
     def close(self) -> None:
         self._stack.close()
+
+
+@contextlib.contextmanager
+def _devices_refused(audio_worker: Any):
+    """The audio worker's device factory raises while the context is open (restored on exit)."""
+    def refuse(_config: Any = None) -> Any:
+        raise RuntimeError("a recorded-PCM engine session never opens an audio device")
+
+    refuse.refuses_devices = True
+    saved = audio_worker.create_audio_capture
+    audio_worker.create_audio_capture = refuse
+    try:
+        yield
+    finally:
+        audio_worker.create_audio_capture = saved
 
 
 class VisualizerEngineWorker(BaseWorker):
@@ -255,7 +450,7 @@ class VisualizerEngineWorker(BaseWorker):
                 payload = dict(msg.payload)
                 self._session = EngineSession(**payload)
                 qt = sorted(name for name in sys.modules if name.startswith("PySide6.Qt"))
-                return self._reply(msg, qt_modules=qt)
+                return self._reply(msg, qt_modules=qt, device_refused=self._session.device_refused)
             if msg.msg_type == MessageType.VIS_INPUT:
                 if self._session is None:
                     return self._reply(msg, success=False, error="no engine session is configured")
@@ -270,6 +465,21 @@ class VisualizerEngineWorker(BaseWorker):
                     self._close_session()
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
                 return self._reply(msg, revision=revision)
+            if msg.msg_type in (MessageType.VIS_SET_MODE, MessageType.VIS_SET_DISPLAY_POWER):
+                if self._session is None:
+                    return self._reply(msg, success=False, error="no engine session is configured")
+                if msg.msg_type == MessageType.VIS_SET_MODE:
+                    # Validated now, applied at the session's next tick boundary (the newest request wins).
+                    payload = dict(msg.payload)
+                    self._session.request_mode(payload.pop("mode"), **payload)
+                    return self._reply(msg)
+                try:
+                    changed = self._session.set_display_power(bool(msg.payload["on"]))
+                except (Exception, SnapshotContractError) as exc:
+                    # The edge may have half-applied (capture reference, fence): fail closed, as a tick does.
+                    self._close_session()
+                    return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
+                return self._reply(msg, changed=changed)
             if msg.msg_type == MessageType.VIS_STOP:
                 self._close_session()
                 return self._reply(msg)

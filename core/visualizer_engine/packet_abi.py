@@ -17,8 +17,9 @@ slot i at HEADER_BYTES + i * slot_bytes:
     0  u64 sequence_begin        (seqlock: odd while the writer fills the slot)
     8  u32 payload_bytes         12 u32 payload_schema (the mode codec's own version)
    16  f64 logical_timestamp     24 f64 source_timestamp (NaN: none)
-   32  u32 flags                 36 u32 protected_edge_mask
-   48  payload ...               (at most slot_bytes - SLOT_OVERHEAD bytes)
+   32  u32 flags (FLAG_*)        36 u32 protected_edge_mask
+   40  u32 runtime_generation    44 u32 engine_generation    48 u32 activation_id   52 u32 mode_code
+   64  payload ...               (at most slot_bytes - SLOT_OVERHEAD bytes)
   slot_bytes - 8  u64 sequence_end  (equal to sequence_begin, and even, once the slot is whole)
 
 Sequences start at 2 and grow by 2 per frame; a slot whose begin is odd, or whose begin and end differ, is torn and
@@ -31,6 +32,15 @@ accepts only if both equal ``latest`` and are even, so a write that starts while
 the final ``sequence_begin``. CPython stores to the mapping in program order and x86 keeps store order; the P3 C
 reader acquire-loads ``latest_sequence`` and ``sequence_end``, copies, then loads ``sequence_begin`` after a load
 fence.
+
+Identity (ABI 2, native core P2b slice 2; audits H5 and A3-M4): every slot carries the identity of the frame in it
+(runtime generation, engine generation, activation id, ``mode_code`` from ``MODE_CODES``, 0: none) in its head, so
+the slot's seqlock covers it: an in-place mode switch commits a new engine generation, activation and mode, and a
+native reader validates each slot it accepts against what it expects, without Python. The header's identity fields
+are the configure-time identity (written once by the session before any frame: which runtime generation and mode the
+mapping was configured for); they are not updated in place and never decide a slot. Identity values are u32; -1
+("none") is stored as 0xFFFFFFFF. ``flags`` carry the publication's ``FLAG_*`` bits on every slot. ABI 1 had no slot
+identity (payload at 48); ABI 2 moved the payload to 64.
 """
 from __future__ import annotations
 
@@ -40,20 +50,52 @@ from dataclasses import dataclass
 from multiprocessing.shared_memory import SharedMemory
 
 MAGIC = b"SRVZ"
-ABI_VERSION = 1
+ABI_VERSION = 2
 HEADER_BYTES = 64
 SLOT_COUNT = 3
-SLOT_PAYLOAD_OFFSET = 48
+SLOT_PAYLOAD_OFFSET = 64
 SLOT_OVERHEAD = SLOT_PAYLOAD_OFFSET+8      # header fields before the payload and sequence_end after it
 FRAME_MAPPING_PREFIX = "srpss_viz_"
 FIRST_SEQUENCE = 2
 
 FLAG_CHANGED, FLAG_PRESENT_FRAME, FLAG_MODE_REVEAL_READY, FLAG_PLAYING = 1, 2, 4, 8
 
+#: The header's ``mode_code``: one stable number per canonical mode id, append-only (a code is never reused or
+#: renumbered; a new mode takes the next one). 0 means no mode. C readers carry the same table.
+MODE_CODES = {
+    "spectrum": 1,
+    "oscilloscope": 2,
+    "bubble": 3,
+    "devcurve": 4,
+    "sphere": 5,
+    "extruded_spectrum": 6,
+    "shockwave_grid": 7,
+    "extruded_bubble": 8,
+    "waveform_ribbon": 9,
+}
+
+
+def mode_code(mode_id: str | None) -> int:
+    """The header code of ``mode_id`` (0 for none); an unknown mode fails closed (``KeyError``)."""
+    if not mode_id:
+        return 0
+    return MODE_CODES[str(mode_id)]
+
+
 _HEADER = struct.Struct("<4sHHIIIIIIQQ")          # through consumed_sequence (48 bytes, padded to 64)
-_SLOT_HEAD = struct.Struct("<QIIddII")            # through protected_edge_mask (40 bytes, payload at 48)
+_SLOT_HEAD = struct.Struct("<QIIddIIIIII")        # through the slot identity (56 bytes, payload at 64)
 _U64 = struct.Struct("<Q")
+_IDENTITY = struct.Struct("<III")                 # runtime_generation, engine_generation, activation_id at 8
+_U32 = struct.Struct("<I")
+_IDENTITY_OFFSET, _MODE_CODE_OFFSET = 8, 28
 _LATEST_OFFSET, _CONSUMED_OFFSET = 32, 40
+
+
+def _u32(value: int) -> int:
+    value = int(value)
+    if value < -1 or value > 0xFFFFFFFF:
+        raise ValueError(f"header identity {value} does not fit a u32")
+    return value & 0xFFFFFFFF
 assert _HEADER.size <= HEADER_BYTES and _SLOT_HEAD.size <= SLOT_PAYLOAD_OFFSET
 
 
@@ -72,6 +114,10 @@ class FramePacket:
     flags: int
     protected_edge_mask: int
     payload: bytes
+    runtime_generation: int = 0          # the slot's identity (u32 as stored; 0xFFFFFFFF: -1)
+    engine_generation: int = 0
+    activation_id: int = 0
+    mode_code: int = 0
 
 
 def mapping_bytes(slot_bytes: int) -> int:
@@ -129,7 +175,9 @@ class FramePacketWriter:
         self._edges: list[tuple[int, int]] = []    # (sequence, edges) published after the reader's last consume
 
     def publish(self, payload: bytes, *, payload_schema: int, logical_timestamp: float,
-                source_timestamp: float | None = None, flags: int = 0, protected_edges: int = 0) -> int:
+                source_timestamp: float | None = None, flags: int = 0, protected_edges: int = 0,
+                runtime_generation: int = 0, engine_generation: int = 0, activation_id: int = 0,
+                mode_code: int = 0) -> int:
         payload = bytes(payload)
         if len(payload) > self.capacity:
             raise ValueError(f"frame payload of {len(payload)} bytes exceeds the slot's {self.capacity}")
@@ -144,7 +192,8 @@ class FramePacketWriter:
         view = self._view
         # sequence_begin odd first (in the same store as the slot head): torn until sequence_end matches.
         _SLOT_HEAD.pack_into(view, base, sequence-1, len(payload), int(payload_schema), float(logical_timestamp),
-                             math.nan if source_timestamp is None else float(source_timestamp), int(flags), mask)
+                             math.nan if source_timestamp is None else float(source_timestamp), int(flags), mask,
+                             _u32(runtime_generation), _u32(engine_generation), _u32(activation_id), _u32(mode_code))
         view[base+SLOT_PAYLOAD_OFFSET:base+SLOT_PAYLOAD_OFFSET+len(payload)] = payload
         _U64.pack_into(view, base, sequence)
         _U64.pack_into(view, base+self._slot_bytes-8, sequence)
@@ -153,6 +202,13 @@ class FramePacketWriter:
         if protected_edges:
             self._edges.append((sequence, int(protected_edges)))
         return sequence
+
+    def write_identity(self, *, runtime_generation: int, engine_generation: int, activation_id: int,
+                       mode_code: int) -> None:
+        """The header's configure-time identity (module docstring): written once, before any frame."""
+        _IDENTITY.pack_into(self._view, _IDENTITY_OFFSET, _u32(runtime_generation), _u32(engine_generation),
+                            _u32(activation_id))
+        _U32.pack_into(self._view, _MODE_CODE_OFFSET, _u32(mode_code))
 
     @property
     def consumed_sequence(self) -> int:
@@ -170,10 +226,14 @@ class FramePacketReader:
         self._view = memoryview(buffer)
         fields = _validate(self._view)
         self._slot_bytes = fields[7]
-        self.identity = (fields[3], fields[4], fields[5])     # runtime/engine generation, activation id
+        self.identity = (fields[3], fields[4], fields[5])     # at attach: runtime/engine generation, activation id
         self.mode_code = fields[8]
         self.accepted = 0
         self.torn_reads = 0
+
+    def read_identity(self) -> tuple[int, int, int, int]:
+        """The header's configure-time identity: (runtime generation, engine generation, activation id, mode code)."""
+        return (*_IDENTITY.unpack_from(self._view, _IDENTITY_OFFSET), _U32.unpack_from(self._view, _MODE_CODE_OFFSET)[0])
 
     def read_latest(self) -> FramePacket | None:
         """The newest whole frame newer than the last accepted one, or None (nothing new, or torn: keep the previous
@@ -191,13 +251,14 @@ class FramePacketReader:
             end = _U64.unpack_from(view, base+self._slot_bytes-8)[0]
             if end != latest:
                 break
-            head, size, schema, logical, source, flags, edges = _SLOT_HEAD.unpack_from(view, base)
+            head, size, schema, logical, source, flags, edges, *identity = _SLOT_HEAD.unpack_from(view, base)
             payload = bytes(view[base+SLOT_PAYLOAD_OFFSET:base+SLOT_PAYLOAD_OFFSET+min(size, self._slot_bytes-SLOT_OVERHEAD)])
             begin = _U64.unpack_from(view, base)[0]
             if head != latest or begin != latest or latest % 2 or size > self._slot_bytes-SLOT_OVERHEAD:
                 break
             self.accepted = latest
-            return FramePacket(latest, schema, logical, None if math.isnan(source) else source, flags, edges, payload)
+            return FramePacket(latest, schema, logical, None if math.isnan(source) else source, flags, edges, payload,
+                               *identity)
         self.torn_reads += 1
         return None
 

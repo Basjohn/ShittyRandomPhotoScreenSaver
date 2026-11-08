@@ -5,7 +5,9 @@ capture lane and compute pool (its own ``ThreadManager``), fed each recorded fra
 capture callback by ``RecordedCaptureBackend`` (installed through the audio worker's one source seam; no device). Per
 input the session pushes the new blocks, steps the engine (which submits the newest block to the compute lane) and
 waits for the engine's analysis-settled edge before the tick, so the asynchronous commit path runs and the frames are
-deterministic. The gate: the same frames in process and in a ``WorkerType.VISUALIZER`` process, for every mode."""
+deterministic (``order="settled"``, the portability order; slice 2's off-steady-state gates use the production order,
+``tests/test_visualizer_engine_live_off_steady.py``). The gate: the same frames in process and in a
+``WorkerType.VISUALIZER`` process, for every mode."""
 import numpy as np
 import pytest
 
@@ -38,7 +40,7 @@ def _live_session(reader, mode):
     from widgets.spotify_visualizer.feature_replay import REPLAY_SEED
 
     return EngineSession(mapping=reader.mapping_name, mode=mode, runtime_generation=GENERATION, inputs="live",
-                         seed=REPLAY_SEED)
+                         seed=REPLAY_SEED, order="settled")
 
 
 def test_the_recorded_stream_rebuilds_every_capture_history_in_device_blocks():
@@ -152,7 +154,7 @@ def test_the_worker_process_ticks_the_live_engines_frames_for_every_mode(qt_app)
                 configured = supervisor.send_request_and_await_response(
                     WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE,
                     {"mapping": reader.mapping_name, "mode": mode, "runtime_generation": GENERATION, "inputs": "live",
-                     "seed": REPLAY_SEED},
+                     "seed": REPLAY_SEED, "order": "settled"},
                     timeout_ms=60_000)
                 assert configured is not None and configured.success, (mode, configured and configured.error)
                 seen = []
@@ -170,22 +172,3 @@ def test_the_worker_process_ticks_the_live_engines_frames_for_every_mode(qt_app)
     finally:
         supervisor.shutdown()
     assert not supervisor.is_running(WorkerType.VISUALIZER)
-
-
-@pytest.mark.qt
-def test_a_live_session_fails_closed_on_a_paused_input(qt_app):
-    # Pause/resume reopens capture asynchronously; until the 4b gates own that edge a paused input is refused.
-    import dataclasses
-
-    import tools.expanded_visualizer_evidence as evidence
-
-    frames = evidence.shipped_clip(0.1).frames
-    reader = PacketMailbox(role="reader")
-    session = _live_session(reader, "spectrum")
-    try:
-        session.tick(frames[0])
-        with pytest.raises(ValueError):
-            session.tick(dataclasses.replace(frames[1], playing=False))
-    finally:
-        session.close()
-        reader.close()

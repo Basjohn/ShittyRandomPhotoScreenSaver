@@ -401,6 +401,20 @@ class SpotifyVisualizerAudioWorker(QObject):
                 raise RuntimeError("cannot replace an active audio capture owner")
             self._capture_lane = lane
 
+    def fence_capture_transactions(self, callback) -> bool:
+        """Run ``callback`` on the capture lane after every capture transaction admitted before this call.
+
+        The lane is serial and a start, stop or restart is admitted (one drain packet, or folded into the running
+        one) before its caller returns, so ``callback`` is the completion edge of all of them: an offline rig
+        (``core.visualizer_engine.engine_worker``) waits on it instead of sleeping or polling. False when there is
+        no lane (nothing can be in flight). Nothing in production calls it.
+        """
+        with self._capture_lock:
+            lane = self._capture_lane
+        if lane is None or bool(getattr(lane, "is_stopped", False)):
+            return False
+        return bool(lane.submit(callback))
+
     def has_capture_owner_work(self) -> bool:
         """Whether native capture still owns or is retiring a lane transaction."""
         with self._capture_lock:

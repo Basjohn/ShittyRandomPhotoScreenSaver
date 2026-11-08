@@ -205,9 +205,14 @@ def test_sphere_capture_uses_raw_analysis_spectrum_and_live_pre_agc_energy() -> 
     assert "get_pre_agc_energy_bands" not in source
     assert "analysis_spectrum = tuple" in source
     assert "_display_bars" not in source
-    # Publication is lazy: accepted modes do not allocate a tuple every FFT frame.
+    # Publication is lazy: accepted modes do not allocate a tuple every FFT frame. It runs only when a read
+    # requested it or the mode rule demands it (the spectrum readers, declared before every step: A3-M1).
     assert "_pre_agc_analysis_spectrum_requested" in engine_source
-    assert "if not self._pre_agc_analysis_spectrum_requested" in engine_source
+    assert ("if not (self._pre_agc_analysis_spectrum_requested or self._analysis_spectrum_demanded)"
+            in engine_source)
+    from widgets.spotify_visualizer import mode_capabilities
+    assert mode_capabilities.reads_analysis_spectrum("sphere")
+    assert not mode_capabilities.reads_analysis_spectrum("spectrum")
     assert 'raw_spectrum = getattr(worker_state, "_freq_values", None)' in engine_source
     assert "get_live_pre_agc_energy_bands" in engine_source
 

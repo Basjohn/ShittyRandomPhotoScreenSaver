@@ -136,6 +136,10 @@ class _SpotifyBeatEngine(QObject):
 
     #: The analysis-settled edge (``set_analysis_settled_observer``): None in production.
     _analysis_settled_observer: Optional[Any] = None
+    #: The analysis admission gate (``set_analysis_admission_gate``): None in production.
+    _analysis_admission_gate: Optional[Any] = None
+    #: The mode reads the analysis spectrum (``set_analysis_spectrum_demand``): every commit publishes it.
+    _analysis_spectrum_demanded: bool = False
 
     def __init__(self, bar_count: int) -> None:
         super().__init__()
@@ -271,6 +275,13 @@ class _SpotifyBeatEngine(QObject):
         """
         self._audio_worker.set_capture_backend_factory(factory)
 
+    def fence_capture_transactions(self, callback) -> bool:
+        """``callback`` on the capture lane after every capture start/stop/restart admitted so far (False: no lane).
+
+        See ``SpotifyVisualizerAudioWorker.fence_capture_transactions``; the completion edge offline rigs wait on.
+        """
+        return self._audio_worker.fence_capture_transactions(callback)
+
     def set_analysis_settled_observer(self, observer: Optional[Any]) -> None:
         """Install ``observer()``: called on the compute lane each time an analysis result has been committed (or
         rejected) and the engine's one analysis slot is free with nothing pending (``has_analysis_in_flight`` False).
@@ -280,6 +291,16 @@ class _SpotifyBeatEngine(QObject):
         None (production) costs one attribute read per analysis.
         """
         self._analysis_settled_observer = observer
+
+    def set_analysis_admission_gate(self, gate: Optional[Any]) -> None:
+        """Install ``gate()``: called on the compute lane before each analysis runs; it may block.
+
+        The live-engine rig's production order (``core.visualizer_engine.engine_worker``) closes it around the tick,
+        so the analysis the tick's own step submits commits after the tick, as it does live (the tick reads the
+        previous commit, ``tick_pipeline.consume_engine_bars``), deterministically instead of racing the read
+        (checkpoint audit 3, A3-H1). None (production) costs one attribute read per analysis.
+        """
+        self._analysis_admission_gate = gate
 
     def has_analysis_in_flight(self) -> bool:
         """Whether an analysis is running on the compute lane or a source frame waits for it."""
@@ -877,6 +898,9 @@ class _SpotifyBeatEngine(QObject):
 
     def _run_analysis_request(self, request: _AnalysisRequest) -> _AnalysisResult | None:
         """FFT + smoothing on the long-lived serial analysis lane."""
+        gate = self._analysis_admission_gate
+        if gate is not None:
+            gate()
         if (
             request.gate_token != self._compute_gate_token
             or request.activation_id != self._activation_id
@@ -1118,7 +1142,7 @@ class _SpotifyBeatEngine(QObject):
         spectrum.  The request bit keeps this allocation dormant for accepted
         visualizers and other modes.
         """
-        if not self._pre_agc_analysis_spectrum_requested:
+        if not (self._pre_agc_analysis_spectrum_requested or self._analysis_spectrum_demanded):
             return
         raw_spectrum = getattr(worker_state, "_freq_values", None)
         if raw_spectrum is None:
@@ -1525,6 +1549,12 @@ class _SpotifyBeatEngine(QObject):
         """The published analysis spectrum without requesting the next one (an engine snapshot reads it; the
         tick's own read, ``get_pre_agc_analysis_spectrum``, is what requests publication)."""
         return self._pre_agc_analysis_spectrum
+
+    def set_analysis_spectrum_demand(self, demanded: bool) -> None:
+        """Declare whether the active mode reads the analysis spectrum (a mode rule the tick declares before every
+        step, ``tick_pipeline.declare_mode_engine_demands``): while demanded every commit publishes it, including
+        the first after an activation, before any read has requested it (checkpoint audit 3, A3-M1)."""
+        self._analysis_spectrum_demanded = bool(demanded)
 
     def request_pre_agc_analysis_spectrum(self) -> None:
         """Request the next commit's spectrum, as the tick's read does (forwarded from an engine worker's tick)."""
