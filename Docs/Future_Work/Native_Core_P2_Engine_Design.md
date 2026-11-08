@@ -282,6 +282,28 @@ switch never remaps.
        scheduler and recorded waveform are the known differences). The live engine is the reference from here on;
        the lanes engine stays the Studios' replay.
      - *Cost:* 4c, "Live engine measured".
+4V. **Built for the Vulkan core (operator, 8 Nov: "make sure you're still making the native core with Vulkan and
+   what it brings us in mind").** P3 is a C++ render core behind the existing `QSGRenderNode`, on Qt Quick's Vulkan RHI
+   (`Graphics_Backend_Decision_2026-11-05.md`; P1 proved QRhi on Vulkan in and outside Quick's frame). What it brings,
+   and what every P2b slice must keep possible:
+   - **A render thread that never runs Python** (the measured live problem: render-thread starvation behind
+     GIL-held Python). P2b removes the tick and DSP from the main process; P3 removes the draw. Nothing P2b adds may
+     put Python back on the render thread for good: today's decode at sync (audit A2-H3) is P2's interim cost and
+     disappears when the core reads packets itself.
+   - **Zero-Python uploads:** the core copies a frame slot from shared memory straight into a host-visible Vulkan /
+     QRhi buffer (std430-compatible blocks, 16-byte aligned: the ABI already aligns payloads). So the P3-facing
+     payload is per mode and fixed-layout (`payload_schema` per mode, audit H5), with the writer filling the header
+     identity (runtime/engine generation, activation, mode code) and flags on configure and per publish, so the core
+     can validate a slot without Python. The tagged codec stays the Python-to-Python transport until a mode's core
+     port lands; Spectrum (P3's first port) gets its fixed layout first, defined from its `SpectrumFrame` fields, as
+     part of P3's first slice, never as a second codec for the same consumer.
+   - **Async compute and the 8 GLSL compute shaders:** shaders stay QRhi-portable (GLSL 460 that `qsb` compiles to
+     SPIR-V; port-readiness rule 5), so Vulkan compute queues can take them; no new GL-only extension use in modes
+     the core will port.
+   - **DLSS / FSR (Streamline / FidelityFX) integrate at the core's Vulkan device**, per mode and only where the content
+     survives temporal upscaling (the 5 Nov decision's caveats stand); nothing to build in P2.
+   - **The Vulkan flip** needs a `QVulkanInstance` PySide6 cannot create: the native module attaches it (P1). The worker
+     process (P2b) never touches the GPU, so the flip is purely the main process's render side.
 4b. Live-engine and off-steady-state gates (audit H3): a gate whose reference is the live `_SpotifyBeatEngine` fed
    PCM through the real audio worker (offline, blocks pushed into the capture callback, so asynchronous commits are in
    play); gate clips with pause/resume, a warm re-entry (fence armed) and an in-session mode switch; the read audit
