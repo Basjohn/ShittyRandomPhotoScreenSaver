@@ -49,6 +49,10 @@ POLL_SECONDS = 15.0
 RUN_APPEAR_SECONDS = 120.0
 FAILED_LOG_LINES = 200
 STAGING_DIR = Path("build") / "github_remote"
+# The worker's reports in the manifest and the artifact: checkout-relative ``logs/<report>`` keys (the workflow
+# uploads ``logs/``). Locally they are copied into the application's log folder (``log_dir``).
+REPORTS_DIR = "logs"
+REPORTS_PREFIX = f"{REPORTS_DIR}/"
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _APP_VERSION = re.compile(r"""^APP_VERSION\s*(?::\s*str\s*)?=\s*["']([^"']+)["']""", re.MULTILINE)
@@ -195,9 +199,9 @@ def build_manifest(
         if f"release/{relative}" not in files:
             raise RemoteBuildError(f"the worker published no release/{relative}")
     for name in evidence_files(target.key, token):
-        report = root / "logs" / name
+        report = root / REPORTS_DIR / name
         if report.is_file():
-            files[f"logs/{name}"] = _file_entry(report)
+            files[REPORTS_PREFIX + name] = _file_entry(report)
     return {
         "schema": MANIFEST_SCHEMA,
         "target": target.key,
@@ -246,7 +250,7 @@ def _same_version(pe_version: str, app_version: str) -> bool:
 
 def _safe_relative(relative: str, target: RemoteTarget) -> None:
     parts = Path(relative).parts
-    allowed = relative.startswith("logs/") or any(
+    allowed = relative.startswith(REPORTS_PREFIX) or any(
         relative.startswith(f"release/{directory}/") for directory in target.payload_dirs
     )
     if not allowed or ".." in parts or Path(relative).is_absolute():
@@ -700,7 +704,7 @@ def _retrieve(repo_root, cli, key, run_id, url, commit, version, token, log_dir,
         emit("status", key, "Publishing")
         published = publish_payload(staging, release_dir, key)
         for relative in manifest["files"]:
-            if relative.startswith("logs/"):
+            if relative.startswith(REPORTS_PREFIX):
                 shutil.copy2(staging / relative, log_dir / Path(relative).name)
         log.write("Published " + ", ".join(str(path) for path in published))
     except RemoteCancelled:

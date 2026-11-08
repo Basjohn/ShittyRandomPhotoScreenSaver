@@ -37,6 +37,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools import artifact_paths  # noqa: E402
+
 GENERATION = 7
 #: The GIL switch interval the held-share estimate runs at (see ``_counter_share``).
 FINE_SWITCH_S = 2e-5
@@ -321,7 +323,7 @@ def _system() -> dict:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--seconds", type=float, default=20.0)
     parser.add_argument("--modes", nargs="*")
     parser.add_argument("--sections", nargs="*", default=["live", "take", "gil"])

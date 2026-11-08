@@ -27,6 +27,30 @@ from pathlib import Path
 from typing import Any
 
 GENERATION = 9001
+HERE = Path(__file__).resolve().parents[2]
+
+
+def checked_out(value: str, root: str) -> Path:
+    """``--out`` through THIS tree's evidence layout owner (``tools/artifact_paths.py``), before the tree under test
+    is imported. When ``--root`` names another checkout, every module the check loaded from this tree (the owner,
+    the mode registry it reads) is forgotten again, so the tree under test imports its own."""
+    saved = list(sys.path)
+    if str(HERE) not in sys.path:
+        sys.path.insert(0, str(HERE))
+    try:
+        from tools import artifact_paths
+
+        return artifact_paths.checked_output(value)
+    finally:
+        sys.path[:] = saved
+        if Path(root).resolve() != HERE:
+            for name, module in list(sys.modules.items()):
+                if name in ("__main__", __name__):
+                    continue
+                # ``tools`` is a namespace package: no ``__file__``, only ``__path__``.
+                origins = [getattr(module, "__file__", None), *(getattr(module, "__path__", None) or ())]
+                if any(origin and Path(origin).resolve().is_relative_to(HERE) for origin in origins):
+                    del sys.modules[name]
 
 
 class _Runtime:
@@ -219,6 +243,10 @@ def main(argv=None) -> int:
     parser.add_argument("--seconds", type=float, default=1.5)
     args = parser.parse_args(argv)
     root = str(Path(args.root).resolve())
+    try:
+        out = checked_out(args.out, root)
+    except ValueError as exc:                   # ArtifactPathError
+        parser.error(str(exc))
     sys.path[:] = [root] + [entry for entry in sys.path
                             if Path(entry or ".").resolve() != Path(__file__).resolve().parent]
     try:
@@ -239,7 +267,6 @@ def main(argv=None) -> int:
         report["modes"][mode] = {"frames": len(digests), "digests": digests,
                                  "series": hashlib.sha256("".join(digests).encode()).hexdigest()}
         print(f"[OWNER] {mode:18s} {len(digests)} frames {report['modes'][mode]['series'][:16]}", flush=True)
-    out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=1), encoding="utf-8")
     return 0

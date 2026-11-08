@@ -40,6 +40,8 @@ NOT_EVIDENCE = {
     "tools/regen_qrc.py": "product QRC resource packs in ui/resources",
     "tools/linux_build.py": "release build output (release/linux)",
     "tools/build_runner.py": "release builds and the build log under logs/",
+    "tools/github_remote_build.py": "GitHub Remote release builds (release/, logs/) and the runner's build manifest "
+                                    "in its workspace root, which the workflow uploads",
     "tools/freeze_visualizer_settings.py": "a committed settings fixture",
     "tools/onboarding_preview_foundry.py": "product onboarding preview assets",
     "tools/onboarding_sheet_previews.py": "product onboarding sheet assets",

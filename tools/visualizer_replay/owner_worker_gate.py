@@ -51,6 +51,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools import artifact_paths  # noqa: E402
+
 GENERATION = 9001
 #: The identity script's partner per mode (the switch target): a sample drawer into Bubble's spawn, spectrum readers
 #: into and out of the 3D modes, Spectrum <-> Extruded Bubble (the live gate's pairs, extended to every mode).
@@ -226,7 +228,7 @@ class OwnerRig:
         for y in range(height):
             for x in range(width):
                 pixels += bytes((x * 4 % 256, y * 6 % 256, (x + y) % 256, 255))
-        image = PresentationImage(identity="owner-rig-photo", source_path="owner-rig-photo.png",
+        image = PresentationImage(identity="owner-rig-photo", source_path="__owner_rig_photo__",
                                   logical_size=(float(width), float(height)), device_pixel_ratio=1.0,
                                   pixel_size=(width, height), row_stride=width * 4, rgba8=bytes(pixels))
         scene = owner.presentation_runtime.scene_controller
@@ -684,7 +686,7 @@ def live_run(mode: str, *, worker: bool, supervisor: Any, pcm: Any, seconds: flo
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--modes", nargs="*")
     parser.add_argument("--seconds", type=float, default=5.5)
     parser.add_argument("--realtime", type=float, default=3.0)

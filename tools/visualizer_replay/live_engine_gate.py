@@ -54,6 +54,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools import artifact_paths  # noqa: E402
+
 GENERATION = 9001
 SCENARIOS = ("steady", "pause_warm", "pause_cold", "reentry", "switch")
 #: (mode, partner) pairs for the in-session switch scenario (Spectrum <-> Extruded Bubble both ways; a sample-drawing
@@ -486,7 +488,7 @@ def _versus_lanes(live, lanes, live_digests, lane_digests) -> dict:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--seconds", type=float, default=60.0)
     parser.add_argument("--modes", nargs="*")
     parser.add_argument("--clips", nargs="*")

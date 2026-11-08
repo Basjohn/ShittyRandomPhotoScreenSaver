@@ -4,9 +4,9 @@ The native render core (P3) runs on Qt Quick's Vulkan RHI, where shaders must be
 outside a block, explicit set/binding). Today's compute shaders are OpenGL GLSL 460 strings in Python modules. This
 tool finds every module-level string that is a compute shader (``#version`` + ``local_size_x``), compiles each with
 PySide6's ``qsb`` (SPIR-V), and reports which compile and the first error of each that does not. Read-only: writes
-only to ``--out``.
+only to ``--out``, inside the evidence layout (``tools/artifact_paths.py``).
 
-    python tools/vulkan_shader_readiness.py --out D:/Temp/Scratch/SRPSS/vulkan_readiness
+    python tools/vulkan_shader_readiness.py --out .artifacts/evidence/architecture/vulkan_readiness/<YYYYMMDD>_<label>
 """
 from __future__ import annotations
 
@@ -20,6 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from tools import artifact_paths  # noqa: E402
 
 MODULES = (
     "rendering.gl_programs.fog_volume", "rendering.gl_programs.waveform_atmosphere",
@@ -46,7 +48,7 @@ def _compute_sources(module_name: str) -> dict[str, str]:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     args = parser.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
