@@ -685,6 +685,50 @@ def test_a_set_extent_reflows_the_text_and_crops_the_artwork(display, tmp_path):
 
 
 @pytest.mark.qt
+@pytest.mark.parametrize("controls", [False, True])
+def test_the_artist_line_follows_the_text_box_in_the_draft_and_after_save(display, tmp_path, controls):
+    """Operator, 8 Nov (live): the X/Y side handles on Now Playing did not move the artist line with the box (the
+    rows stayed bunched in its middle: a stale gap above and below). Every box the side handles make draws the title
+    at the box's top and the last row (the artist, or the Media Controls) at its bottom, the artist always below the
+    title and never overlapping it; Save keeps exactly what the draft showed."""
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(title="A Considerably Longer Track Title", artist="Some Artist With A Long Name"),
+          config=_projection(_seed(settings, now_playing={"media_controls": controls, "always_show": True})))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    root = _root(display)
+    names = ("expandedOverlayNowPlayingText", "expandedOverlayTitle", "expandedOverlayArtist",
+             "expandedOverlayMediaControls")
+
+    def rows() -> dict[str, QRectF]:
+        _run(display, 60)
+        return {name: _rect(root.findChild(QQuickItem, name), root) for name in names}
+
+    def check(label: str) -> dict[str, QRectF]:
+        drawn = rows()
+        box, title, artist = (drawn[name] for name in names[:3])
+        last = drawn["expandedOverlayMediaControls"] if controls else artist
+        assert abs(title.top() - box.top()) <= 1.0, label
+        assert abs(last.bottom() - box.bottom()) <= 1.0, (label, last.bottom(), box.bottom())
+        assert artist.top() >= title.bottom() - 0.5, label                 # below the title, never over it
+        if controls:
+            assert drawn["expandedOverlayMediaControls"].top() >= artist.bottom() - 0.5, label
+        return drawn
+
+    for handle, delta in (("bottom", 90), ("right", -120), ("top", -60), ("right", 260), ("bottom", -50)):
+        edit.side("now_playing", handle, delta)
+        check(f"{handle} {delta}")
+    draft = check("draft")
+    assert edit.owner.save()
+    _run(display, 300)
+    saved = rows()
+    assert {name: saved[name].getRect() for name in names} == {name: draft[name].getRect() for name in names}
+
+
+@pytest.mark.qt
 def test_a_side_change_undoes_exactly_and_restore_size_returns_the_natural_box(display, tmp_path):
     from core.settings.fullscreen_overlays import canonical_fullscreen_overlays
     from rendering.quick.fullscreen_overlay_edit import EXTENT_KEYS

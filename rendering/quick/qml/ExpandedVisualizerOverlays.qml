@@ -438,11 +438,22 @@ Item {
             onWidthChanged: overlays.noteEditGeometry()
             onHeightChanged: overlays.noteEditGeometry()
 
-            Column {
+            // The rows at their natural spacing; a set box height (Fullscreen Edit's side handles) gives the title the
+            // extra lines that fit and spreads what is left between the rows (title to artist, artist to the Media
+            // Controls), so the artist and the controls follow the box's edge as the title does: the block fills its
+            // box, never a stale gap above and below it (Media's own content extent likewise widens its metadata
+            // spacing with the box's height).
+            Item {
                 id: textColumn
                 y: (parent.height - height) / 2.0
                 width: textBlock.width
-                spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
+                readonly property real spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
+                readonly property real naturalHeight: titleText.height + spacing + artistText.height
+                    + (controls.visible ? 2.0 * spacing + controlsSpacer.height + controls.height : 0.0)
+                readonly property real slack: nowPlayingSlot.boxHeight > 0.0
+                    ? Math.max(0.0, nowPlayingSlot.boxHeight - naturalHeight) : 0.0
+                readonly property real gapExtra: slack / (controls.visible ? 2.0 : 1.0)
+                height: naturalHeight + slack
 
                 ShadowedText {
                     id: titleText
@@ -466,6 +477,7 @@ Item {
                 ShadowedText {
                     id: artistText
                     objectName: "expandedOverlayArtist"
+                    y: titleText.height + textColumn.spacing + textColumn.gapExtra
                     width: textColumn.width
                     text: nowPlayingSlot.contentArtist
                     font.family: overlays.fontFamily
@@ -483,6 +495,7 @@ Item {
                 // MediaTransportBar, its look from the Media model), on the Media card's own transport owner.
                 Item {
                     id: controlsSpacer
+                    y: artistText.y + artistText.height + textColumn.spacing
                     width: textColumn.width
                     height: Math.round(nowPlayingSlot.fontSize * 0.25)
                     visible: controls.visible
@@ -493,6 +506,7 @@ Item {
                     readonly property var model: overlays.mediaModel
                     visible: nowPlayingSlot.controlsShown
                     x: nowPlayingSlot.rightSide ? textColumn.width - width : 0.0
+                    y: controlsSpacer.y + controlsSpacer.height + textColumn.spacing + textColumn.gapExtra
                     width: nowPlayingSlot.controlsWidth
                     height: nowPlayingSlot.controlsHeight
                     // The card's bar, scaled as one: its outline, radius and shadow by the same factor as its height.
