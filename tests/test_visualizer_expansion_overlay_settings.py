@@ -19,6 +19,8 @@ import pytest
 from core.settings.default_contract import MC_PROFILE, NORMAL_PROFILE, require_canonical_default
 from core.settings.defaults import get_default_settings
 from core.settings.fullscreen_overlays import (
+    PLACEMENT_KEYS,
+    rebase_offset_for_corner,
     CORNERS,
     FONT_SIZE_MAX,
     FONT_SIZE_MIN,
@@ -64,6 +66,8 @@ def _flipped() -> dict:
         options["offset_x"] = 0.25 if options["offset_x"] != 0.25 else -0.25
         options["offset_y"] = -0.125 if options["offset_y"] != -0.125 else 0.125
         options["scale"] = 1.5 if options["scale"] != 1.5 else 0.75
+        if "artwork_scale" in options:
+            options["artwork_scale"] = 1.75 if options["artwork_scale"] != 1.75 else 0.625
     return value
 
 
@@ -89,6 +93,12 @@ def test_canonical_default_has_the_schema_every_consumer_reads(profile):
         assert isinstance(options["always_show"], bool) and isinstance(options["card"], bool)
     assert isinstance(value["now_playing"]["media_controls"], bool)
     assert "media_controls" not in value["preset"]
+    # Now Playing's artwork has its own size factor (M3c); the preset toast has no artwork.
+    assert isinstance(value["now_playing"]["artwork_scale"], float)
+    assert "artwork_scale" not in value["preset"]
+    # Fullscreen Edit writes exactly the placement members, which every overlay's canonical value declares.
+    for overlay, keys in PLACEMENT_KEYS.items():
+        assert set(keys) <= set(value[overlay])
     # The canonical value is already normal (a reset writes exactly it).
     assert normalize_fullscreen_overlays(value) == value
     assert get_default_settings(profile)["widgets"]["spotify_visualizer"][KEY] == value
@@ -134,6 +144,10 @@ def test_malformed_members_fall_back_member_by_member_and_numbers_clamp():
     spelled = normalize_fullscreen_overlays({"preset": {"always_show": "on", "card": "off"}})["preset"]
     assert (spelled["always_show"], spelled["card"]) == (True, False)
     assert normalize_fullscreen_overlays({"preset": {"scale": SCALE_MIN / 10}})["preset"]["scale"] == SCALE_MIN
+    for raw, expected in ((SCALE_MAX * 10, SCALE_MAX), (SCALE_MIN / 10, SCALE_MIN), ("big", None)):
+        result = normalize_fullscreen_overlays({"now_playing": {"artwork_scale": raw}})["now_playing"]
+        default = canonical_fullscreen_overlays()["now_playing"]["artwork_scale"]
+        assert result["artwork_scale"] == (default if expected is None else expected)
 
 
 # ------------------------------------------------------------------------------- model and section ownership
@@ -239,3 +253,38 @@ def test_the_qml_projection_carries_every_option():
             options["offset_x"], options["offset_y"], options["scale"])
     assert projected["nowPlaying"]["mediaControls"] is value["now_playing"]["media_controls"]
     assert "mediaControls" not in projected["preset"]
+    assert projected["nowPlaying"]["artworkScale"] == value["now_playing"]["artwork_scale"]
+    assert "artworkScale" not in projected["preset"]
+
+
+# ------------------------------------------------------------- a new corner rebases the offset (M3c decision)
+
+
+def _inward(corner: str) -> tuple[float, float]:
+    return (1.0 if corner.endswith("_left") else -1.0, 1.0 if corner.startswith("top_") else -1.0)
+
+
+@pytest.mark.parametrize("source", CORNERS)
+@pytest.mark.parametrize("target", CORNERS)
+def test_a_new_corner_keeps_an_offset_that_stays_in_bounds_and_resets_one_that_would_not(source, target):
+    """Settings' Corner rebases Fullscreen Edit's offset: per axis, kept when it still points into the display from
+    the new corner, reset to zero when it would push the overlay out past the new anchor's edge."""
+
+    for offset_x in (-0.4, -0.05, 0.0, 0.05, 0.4):
+        for offset_y in (-0.3, 0.0, 0.3):
+            options = dict(canonical_fullscreen_overlays()["now_playing"], corner=source, offset_x=offset_x,
+                           offset_y=offset_y, scale=1.25, artwork_scale=0.75)
+            result = rebase_offset_for_corner(options, target)
+            inward_x, inward_y = _inward(target)
+            assert result["corner"] == target
+            assert result["offset_x"] == (offset_x if offset_x * inward_x >= 0.0 else 0.0)
+            assert result["offset_y"] == (offset_y if offset_y * inward_y >= 0.0 else 0.0)
+            # A kept offset lands the overlay inside the safe area from its new anchor (a toy overlay a fifth of it).
+            size = 0.2
+            for kept, inward in ((result["offset_x"], inward_x), (result["offset_y"], inward_y)):
+                anchor = 0.0 if inward > 0 else 1.0 - size
+                assert 0.0 <= anchor + kept <= 1.0 - size + 1e-9 or abs(kept) > 1.0 - size
+            # Everything but the anchor and its offset is untouched.
+            assert {k: v for k, v in result.items() if k not in ("corner", "offset_x", "offset_y")} == {
+                k: v for k, v in options.items() if k not in ("corner", "offset_x", "offset_y")}
+    assert rebase_offset_for_corner({"corner": source, "offset_x": 0.1}, "middle")["corner"] == source

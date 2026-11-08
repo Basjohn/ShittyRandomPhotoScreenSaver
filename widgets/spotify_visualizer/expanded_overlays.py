@@ -38,6 +38,8 @@ def resolve_expanded_overlay_config(section: Mapping[str, Any] | None) -> dict[s
         }
         if "media_controls" in options:
             projected["mediaControls"] = bool(options["media_controls"])
+        if "artwork_scale" in options:
+            projected["artworkScale"] = float(options["artwork_scale"])
         return projected
 
     return {

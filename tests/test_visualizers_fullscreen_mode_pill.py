@@ -23,6 +23,7 @@ from core.settings.fullscreen_overlays import (
     FULLSCREEN_OVERLAYS_KEY,
     OVERLAY_IDS,
     canonical_fullscreen_overlays,
+    rebase_offset_for_corner,
 )
 from core.settings.settings_manager import SettingsManager
 from core.settings.visualizer_mode_registry import build_visualizer_mode_activation, iter_visualizer_mode_descriptors
@@ -94,10 +95,12 @@ def test_the_pill_is_first_after_setup_and_before_every_mode_pill(manager):
 
 def test_every_control_writes_the_one_canonical_value_and_keeps_what_it_does_not_show(manager):
     canonical = canonical_fullscreen_overlays()
-    # Fullscreen Edit's placement (M3c) is stored but not shown here: a test-owned value it must keep.
+    # Fullscreen Edit's placement (M3c) is stored but not shown here: a test-owned value it must keep, except that
+    # a new Corner rebases the offset by the one owner's rule.
     seeded = deepcopy(canonical)
     for overlay in OVERLAY_IDS:
         seeded[overlay].update(offset_x=0.125, offset_y=-0.25, scale=1.25)
+    seeded["now_playing"]["artwork_scale"] = 1.5
     manager.set(FULLSCREEN_OVERLAYS_KEY, seeded)
     dialog, tab = _dialog(manager)
     page = tab._fullscreen_page
@@ -124,12 +127,15 @@ def test_every_control_writes_the_one_canonical_value_and_keeps_what_it_does_not
     page.font_size.setValue(page.font_size.value() + 1)
     _flush(tab)
     assert _stored(manager)["font_size"] == canonical["font_size"] + 1
-    # Nothing the page does not show was touched.
+    # Nothing the page does not show was touched, except the offset the new corner rebased.
     stored = _stored(manager)
     assert stored["font_family"] == canonical["font_family"]
     for overlay in OVERLAY_IDS:
-        assert (stored[overlay]["offset_x"], stored[overlay]["offset_y"], stored[overlay]["scale"]) == (
-            0.125, -0.25, 1.25)
+        rebased = rebase_offset_for_corner(seeded[overlay], stored[overlay]["corner"])
+        assert (stored[overlay]["offset_x"], stored[overlay]["offset_y"]) == (rebased["offset_x"],
+                                                                              rebased["offset_y"])
+        assert stored[overlay]["scale"] == 1.25
+    assert stored["now_playing"]["artwork_scale"] == 1.5
     _destroy(dialog)
 
 
