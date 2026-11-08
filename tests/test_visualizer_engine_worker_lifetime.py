@@ -172,6 +172,94 @@ def test_a_heartbeat_retirement_never_stops_the_fresh_worker_its_client_started(
         supervisor.shutdown(timeout=1.0)
 
 
+def _fake_time(sleeps: list):
+    """The supervisor module's clock with ``sleep`` recorded instead of slept (the restart's backoff)."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(time=time.time, monotonic=time.monotonic, perf_counter=time.perf_counter,
+                           sleep=sleeps.append)
+
+
+@pytest.mark.parametrize("role", (WorkerType.IMAGE, WorkerType.IMAGE_PREFETCH))
+def test_the_heartbeat_restarts_a_dead_image_worker_once_after_its_backoff(monkeypatch, role):
+    # Checkpoint audit 10, A10-L3: the image roles keep the heartbeat's restart (only the engine worker's belongs to
+    # its client), fenced by the judged process's identity since 5.7. A dead image worker: one stop of the dead entry,
+    # the backoff, one start; one restart counted; the role running its fresh process.
+    import core.process.supervisor as supervisor_module
+
+    supervisor = ProcessSupervisor()
+    try:
+        dead = _install(supervisor, role)
+        dead.alive = False
+        sleeps: list = []
+        starts: list = []
+        monkeypatch.setattr(supervisor_module, "time", _fake_time(sleeps))
+
+        def start_role(worker_type):
+            starts.append(worker_type)
+            _install(supervisor, worker_type)
+            return True
+
+        monkeypatch.setattr(supervisor, "_start_role", start_role)
+        supervisor._heartbeat_check()
+        assert starts == [role] and len(sleeps) == 1 and sleeps[0] > 0.0
+        health = supervisor.get_health(role)
+        assert health.restart_count == 1 and health.state == WorkerState.RUNNING
+        assert supervisor._workers[role] is not dead and supervisor._workers[role].alive
+    finally:
+        supervisor.shutdown(timeout=1.0)
+
+
+def test_a_heartbeat_restart_of_an_image_worker_replaced_meanwhile_does_nothing_and_charges_nothing(monkeypatch):
+    # A10-L3: the heartbeat judged the image worker dead; a foreground ``start(IMAGE)`` (holding the role's lifecycle
+    # lock) replaces it before the restart acts. The restart stops nothing, starts nothing, and since it restarted
+    # nothing it uses none of the role's MAX_RESTARTS_PER_WINDOW. Negative control (the pre-fix restart: an unlocked
+    # identity check, then ``record_restart``, then the fenced stop): the skip still charged one restart.
+    import core.process.supervisor as supervisor_module
+
+    role = WorkerType.IMAGE
+    supervisor = ProcessSupervisor()
+    try:
+        judged = _install(supervisor, role)
+        judged.alive = False
+        supervisor._health[role].state = WorkerState.ERROR          # as the heartbeat judged it ("Process died")
+        sleeps: list = []
+        starts: list = []
+        monkeypatch.setattr(supervisor_module, "time", _fake_time(sleeps))
+        monkeypatch.setattr(supervisor, "start", lambda worker_type: starts.append(worker_type) or True)
+        real_lock = supervisor._lifecycle_locks[role]
+        waiting = threading.Event()
+
+        class _Signalling:
+            """The role's lifecycle lock, announcing the restart's attempt to take it."""
+
+            def __enter__(self):
+                waiting.set()
+                return real_lock.__enter__()
+
+            def __exit__(self, *exc):
+                return real_lock.__exit__(*exc)
+
+        supervisor._lifecycle_locks[role] = _Signalling()
+        result: list = []
+        real_lock.acquire()                           # the foreground start, mid-flight
+        try:
+            restart = threading.Thread(target=lambda: result.append(supervisor.restart(role, judged=judged)))
+            restart.start()
+            assert waiting.wait(5.0)
+            supervisor._stop_role(role, 0.0)          # what the start does: the dead entry, then its fresh process
+            fresh = _install(supervisor, role)
+        finally:
+            real_lock.release()
+        restart.join(5.0)
+        assert result == [True]
+        assert supervisor._workers[role] is fresh and fresh.alive and not fresh.stopped
+        assert starts == [] and sleeps == []
+        assert supervisor.get_health(role).restart_count == 0
+    finally:
+        supervisor.shutdown(timeout=1.0)
+
+
 def test_a_hung_engine_worker_is_retired_not_restarted_and_without_a_restart_limit():
     # A hung engine worker (no heartbeat ack) is retired once the misses reach the threshold, whatever the restart
     # window says (a retirement is not a restart); the image roles keep their restart policy.
