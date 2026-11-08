@@ -1228,3 +1228,208 @@ one asymmetry is park (A6-L8), and it goes the other way: the worker keeps edges
 - How often A6-L1's race fires in real runs; shown only by forcing the interleaving.
 - The 9-mode paced worker test and the whole gate (only 2 modes, 2 s, were run); the wider owner focused files.
 - The Windows pipe buffer capacity behind the backpressure estimate.
+
+## Checkpoint audit 7 (8 Nov): the owner on the worker (5.2)
+
+Scope: e948c937, c92722f7, fabd7c2c, f16ae4f6, 0ea1c2b3, f5d01ea8, 772a9a6e (work order 5 slice 5.2 and 5.3's core:
+the production owner on the engine worker behind `--viz-engine-worker`, default off). Read: the diffs; the 5.2 record
+and what is left (design doc); `quick_display_visualizer_owner.py` (worker path, recovery, the in-process commit for
+comparison), `engine_worker_link.py`, `visualizer_host_binding.py`, `runtime_controller.py` (layout-metrics observer),
+`engine_worker.py` (production session, device check, `VIS_SET_VIEW`), `packet_mailbox.py`, `supervisor.py`
+(`_is_worker_enabled`, `await_response`), `frame_codec.py`, the captures that read presentation state
+(`sphere_capture.py`, `waveform_ribbon_capture.py`, `config_applier.py`, `logical_frame_capture.py`),
+`edit_content_envelope.py`, the tests, `owner_worker_gate.py` and its evidence JSON. Ran: the owner-worker and
+frame-codec test files without the two 9-mode parametrised gates (27 passed, 27 s). Probes (in
+`D:\Temp\Scratch\SRPSS\native_audit7`, deleted): (a) import the owner, binding and runtime controller and list
+worker modules in `sys.modules`; (b) a real `WorkerType.VISUALIZER` worker killed 0.5 s into an `await_response` on
+an unanswered correlation id.
+
+### Medium
+
+**A7-M1. The reflected wallpaper never reaches the worker. Sphere's Mirror Cubes and Extruded Spectrum's face
+mirror lose their reflection with the flag on. This is not in the 5.4 inventory, and the gate cannot see it.**
+- Claim: 5.2 record, "the main side configures only presentation"; 5.4's list of view inputs to forward (Edit orbit,
+  Waveform view, Expanded, Sphere parameters).
+- Evidence: the owner makes the backdrop on the main controller's presentation state only
+  (`quick_display_visualizer_owner.py:376-406`). The logical capture, which runs in the tick (on the worker), puts the
+  worker's own `pres._backdrop` into the frame: `sphere_capture.py:15-27`, `config_applier.py:327-328` via
+  `logical_frame_capture.py:319`. Nothing sends an image to the session, and the codec has no backdrop type
+  (`frame_codec.py` `_TYPES`). The modes that reflect are `visualizer_mode_registry.py:316` (Sphere, `sphere_mirror`)
+  and `:363` (Extruded Spectrum, `extruded_spectrum_face_mirror`). The gate's host has no photograph
+  (`owner_production_replay._Host`), so `_backdrop` is None on both sides and the identity gate is blind to it.
+- Failure scenario: with a mirror setting above zero on a reflections tier, the worker path draws Sphere and Extruded
+  Spectrum with no wallpaper in the reflection, and the crossfade to each new photograph is lost. The identity gate
+  stays green.
+- Fix: add the backdrop to 5.4's inventory. Either move the backdrop into presentation (the renderer reads it from
+  the presentation record, not the logical frame), or pass it by reference (photo identity plus a shared-memory
+  image), never through the frame codec. Gate it with a rig host that has a photograph and a reflecting preset.
+
+**A7-M2. With the flag on, the user sees a 3D view that ignores Edit orbit and auto-rotate on a preset, and broken
+Fullscreen Edit envelopes. These are the documented 5.4 items, and some of the envelope breakage is wider than
+recorded.**
+- Evidence: the captures evaluate the view orbit against the worker's presentation state. Sphere's turn and tilt come
+  from `sphere_capture.py:18-19`. Extruded Spectrum, Extruded Bubble and Neon Lake use `apply_view_orbit_motion` in
+  `config_applier.py`. Waveform Ribbon's camera, `zoom_hold` and `view_span` come from `waveform_ribbon_capture.py:52-60`.
+  The owner arms auto-rotate and rebases orbit motion on the main presentation state only
+  (`quick_display_visualizer_owner.py:1838-1841`). Fullscreen Edit's Sphere envelope reads the main tick state's
+  `_sphere_parameters` (`edit_content_envelope.py:394`), which never exists on the worker path, so it returns None.
+  Not recorded: Extruded Spectrum's envelope reads `controller.bar_count` (`edit_content_envelope.py:384`), and the
+  worker path never updates the main controller's `bar_count` after the first configure. A mode switch's technical
+  config changes it only in the session.
+- Failure scenario: in Edit, dragging or key-orbiting a 3D mode does not move the drawn pose (the frame carries the
+  worker's pose). A preset's immediate auto-rotate arms on the wrong state. Waveform Ribbon's zoom hold under an
+  operated camera does not engage. The Sphere and Extruded Spectrum Fullscreen Edit envelopes are missing or sized
+  for the wrong bar count.
+- Fix (5.4): forward the presentation-owned view state as `VIS_SET_VIEW` does the layout metrics (latest wins), or
+  move pose evaluation out of the logical capture into presentation. Keep the main controller's `bar_count` (or have
+  the envelope read the frame's `common.bar_count`). Add an identity-gate variant that orbits during the run.
+
+**A7-M3. The recovery has no bound. "Fade, never vanish" holds only while the replacement publishes.**
+- Claim: 5.2 record, "holds the last presented frame, fades it out ... paced by the replacement's own publications";
+  left for 5.5: "a fade with no replacement frames to pace it (the held frame stays, frozen)".
+- Evidence:
+  - No deadline is armed for `recovering`. Only `_request_visualizer_activation` arms one
+    (`quick_display_visualizer_owner.py:1442`). `_sync_recovery` returns at once when nothing is published (`:2007-2009`).
+  - The reveal after recovery (`_bind_replacement(reveal=True)`) enters `waiting_target` with no deadline either.
+    Mode and preset requests are refused while the phase is not idle (`:1426`).
+  - `_fall_back_in_process` (`:1910-1963`) is not guarded. An exception from `configure_logical_controller`, the start
+    or the park escapes from `_worker_edge`'s except clause into whoever called the edge: Media's `set_playing`,
+    `set_display_power`, or the queued `_SessionEnd` slot. The owner is then left with no worker, an empty fresh
+    `LatestStateMailbox`, the phase unchanged, and no recovery begun.
+  - A deadline already armed by a crossfade in flight (6 s, same serial) can fire while the phase is `recovering` or
+    in the recovery's `waiting_target`. It then signals `deadline:recovering` and a full reconstruction. Not exercised
+    by any test.
+- Failure scenario:
+  - (i) The worker reconfigures but its device never delivers and the session is parked or stalled, so nothing paces
+    the fade. The last frame stays frozen at full opacity indefinitely, and Settings cannot switch mode or preset.
+  - (ii) The second failure falls back in process with a dead device. The fade completes on idle publications, then
+    `waiting_target` waits for a fresh engine frame that never comes. The Visualizer stays hidden for good and is
+    never reconstructed. It faded rather than vanished, but it is gone permanently with no bounded recovery, which is
+    worse than in process, where the activation deadline reconstructs.
+  - (iii) The fallback raises: the frame freezes and the exception lands in Media's handler.
+- Fix: arm the generation-fenced transaction deadline (`ThreadManager.single_shot`, the existing pattern) at
+  `_begin_worker_recovery` and at `_bind_replacement(reveal=True)`. On expiry, fade the held frame out by the
+  transition clock and signal `_signal_transition_failure("deadline:recovering")`. Wrap the fallback in try/except
+  and route a failure to `_signal_transition_failure`. Bump `_transition_request_serial` when a recovery begins, so a
+  stale crossfade deadline cannot fire into it. Add tests: a replacement that never publishes, a fallback that raises,
+  and a failure during `waiting_target`.
+
+**A7-M4. Every control edge blocks the GUI thread. A hung worker freezes the GUI for tens of seconds, and a chain of
+failures for minutes. Acceptable only while the flag is off by default.**
+- Evidence:
+  - The bounds are `CONFIGURE_TIMEOUT_MS = 60_000`, `EDGE_TIMEOUT_MS = 30_000` and `STOP_TIMEOUT_MS = 10_000`
+    (`engine_worker_link.py:49-53`). `await_response` sleeps on a condition (`supervisor.py:670-682`).
+  - The first build also waits for the spawn and its ready signal (`WORKER_READY_TIMEOUT_S = 10`, `supervisor.py:68`).
+  - Probe (b): a worker killed mid-wait releases the waiter at the supervisor's next health pass (killed at 0.5 s,
+    `await_response` returned None at 3.05 s). So a death costs about 3 s, not the full timeout.
+  - A worker that is alive but not answering holds the GUI until the edge timeout, or until the heartbeat restart
+    (5 missed at 3 s each, so 15 s or more; inferred, not measured).
+  - Failure chain: the edge (30 s), stop (2 s), reconfigure (spawn up to 10 s plus configure up to 60 s), then
+    `set_view`, display power and start (30 s each), stop (2 s). That is 2-3 minutes in the worst case. Retirement
+    adds `link.stop()` (10 s).
+  - `VIS_SET_VIEW` is sent synchronously whenever the layout metrics change, which during a CUSTOM edge drag means
+    one round trip per pointer event (`set_custom_viewport_override` -> observer -> `_forward_view`, `:1730-1747`).
+- Assessment: acceptable behind the off-by-default code-level admission. It must not become the default until 5.5
+  lands.
+- 5.5 must:
+  - Make edges asynchronous: send and continue, with the reply delivered through a queued signal. Playing, view and
+    display power should be latest-wins state edges that are never awaited.
+  - Detect a dead worker from the process sentinel or the wake pipe's end, not from a reply timeout.
+  - Never block the GUI on configure or reconfigure: keep the card hidden or holding while the session builds.
+  - Use sub-second bounds for any wait that remains.
+  - Gate the GUI hitch per edge, including the first build and a recovery, with a hung-worker and a killed-worker
+    test.
+
+### Low
+
+- **A7-L1. A failed worker-path mode commit pops the outgoing frame back to full opacity.** The failure branch sets
+  `_mode_transition_fade = 1.0` (`quick_display_visualizer_owner.py:1829`) before calling `_on_engine_worker_failed`
+  (`:1831`). That function's `_hold_for_recovery` records `fade_from` from that field (`:1908`), so the outgoing frame,
+  already faded to 0 by the completed fade-out, is re-presented at 1.0 and then fades out again: a visible flash.
+  Fix: take the hold before resetting the fade, or hold at the fade actually drawn (0, so the recovery goes straight
+  to the hidden reveal).
+- **A7-L2. A failure re-entered during a reconfigure can bind the dead session's identity.**
+  `_adopt_engine_worker_session` ends in `_forward_view` (`:1728`). If the replacement's `VIS_SET_VIEW` fails, a
+  nested `_on_engine_worker_failed` counts the second failure and falls back in process, binding the in-process
+  identity. The outer frame (`:1891-1896`) then continues. When the owner is not started, `_begin_worker_recovery`
+  receives the dead replacement's `identity`: it either overwrites `recovery["identity"]` (`:1973-1975`) or rebinds at
+  once, so the in-process frames fail render admission and the card stays hidden. The window is narrow (a failure
+  before `start`). Fix: after the adopt, `if self._worker is not replacement: return` (and likewise after each edge).
+- **A7-L3. A failure while parked re-presents a pre-park frame at unpark.** The held frame is the last one taken
+  before the park. The replacement is parked (`:1892`) and publishes nothing until unpark, and the first publication
+  after that paces a re-presentation of the hours-old held frame from `fade_from`. This weakens A6-L8 (it fades, but
+  it is shown). Fix: when the displays are off, drop the held frame and bind the replacement hidden.
+- **A7-L4. A capture device that fails to open counts as a worker failure.** Two such failures (each a visible fade
+  cycle) disable the worker for the run (`engine_worker.py:302-327`, then `disable_worker_for_run`). The in-process
+  fallback opens the same device. A transient unavailability, such as the endpoint not ready at startup, ends the
+  worker for the run. Fix (5.3/5.5): report a capture failure as its own state that keeps the session, and retry on a
+  device change or resume rather than counting it towards disabling the run.
+- **A7-L5. Diagnostics on the worker path.** `set_playing` skips the `VIS_PLAYBACK_EDGE` T1/T2 records (`:494-500`).
+  `_set_display_power_on_worker` logs "parked" or "resumed" even when the edge failed (`:1764-1769`). Fold into 5.7.
+- **A7-L6. The paused-switch reveal predicate is substituted but not proven.** On the worker, `waiting_target` uses
+  `present_frame` on a current-identity frame (`:1771-1782`). In process it uses the tick's
+  `_waiting_for_fresh_engine_frame`, a different predicate. The identity script switches only while playing
+  (`owner_worker_gate.py:75-93`), so the paused case (a non-Spectrum target revealing paused idle) is unproven: it
+  could reveal earlier or later than in process. Fix: add a paused switch to the identity script.
+- **A7-L7. The flaky-test fix has no established root cause.** 772a9a6e widens the wait from 1 s to a bound of 15 s
+  with `until`. A multi-second presentation stall of the wake path would now pass. The other evidence shows no
+  starvation: the realtime run presented 62-66 of 280-283 against a 40 ms stall, about the 1/(40 ms + sync) ceiling,
+  and the no-stall cost run presented 269-271 of 271-279. So suite backlog is the likely cause. Fix: record the time
+  from the first publication to 30 presentations, assert it is below about 1 s, and print it on failure.
+- **A7-L8. The cost table compares relocation, not saving.**
+  - Only the main process is counted. `worker_pid` is recorded, but the worker's CPU (tick, DSP, encode) is not
+    reported, so "saves .6-3.7 ms" is work moved to another process, not removed.
+  - Process and thread CPU on Windows are quantised at 15.625 ms. Every `main_cpu_s` is an exact multiple (0.625 =
+    40, 0.25 = 16, 0.2031 = 13 quanta). Over about 275 steps that is about ±0.06 ms per step per active thread, so the
+    worker-side values (0.67-1.23 ms) carry roughly ±10-20%, from one 3 s run per mode.
+  - The work differs: in process the run counts the paced feeder, the capture callbacks, DSP, the tick and
+    presentation. On the worker it counts presentation and the wake listener only. The in-process cadence also ran at
+    88.75-89.25 Hz against 90.0-90.3 Hz on the worker.
+  - The rise in `sync_present` is not pure decode. Each worker-path presentation also takes `layout_metrics_snapshot`
+    (lock plus dict copies) in `sync_present`'s `finally`, and in `waiting_target` a `peek()` decode precedes the
+    `take()` decode.
+  - Fix for gate 3: system-wide CPU (both processes), three or more repeats with spread, and a profile split of
+    `sync_present` (decode, snapshot, commit).
+  - The Vulkan core's zero-Python read would remove the decode part only.
+
+### Identity gate (question 5)
+
+The reference is the same real owner, built by the binding's `construct`, on the live `_SpotifyBeatEngine` with the
+same recorded PCM. The worker side crosses a process boundary and the codec, so equality is not by construction. Its
+in-process side is not the owner's own cadence: the rig steps the owner's installed step in the session's production
+order, re-implemented in the tool (`owner_worker_gate.py:319-334`). It uses engine seams that production leaves None
+(`beat_engine.py:139-140`). Both sides also seed the RNG and the namespace counter alike (documented, 5.6). That is
+the right comparison for a deterministic gate, but it proves code-path identity under the session's order, not
+equality with the in-process app's free-running timing. It only digests logical frames, so presentation-state inputs
+are outside it (A7-M1, A7-M2). The flaky-test fix hides no starvation the evidence shows (A7-L7).
+
+### Verified sound
+
+- **Admission off means production is unchanged.**
+  - Probe (a): importing the owner, binding and runtime controller loads none of `engine_worker_link`,
+    `engine_worker`, `packet_mailbox` or `frame_codec`. So the codec change cannot affect the off path.
+  - The off-path additions are: `self._worker is not None` checks; `engine_identity()`, which makes the same two engine
+    reads the binding made; `_layout_metrics_written` (one attribute read, observer None); the `recovering` branch,
+    unreachable off; and a try/finally flag in `sync_present`, set only on the worker. The admission read is one
+    import per construction.
+  - The supervisor's `VISUALIZER` enable bypass matters only when a factory is registered, which only the link does.
+- **Media stays the one owner of "playing".** The main controller's `playing` is set by Media's edge and forwarded
+  once started (`:494-500`). `start` carries it, and the recovery's start and the fallback's `apply_playback_edge` carry
+  the current value.
+- The layout metrics are written only on the GUI thread. The render-thread admission does not commit metrics, so
+  the observer's blocking `VIS_SET_VIEW` never runs on the render thread.
+- The park reader clear follows the reply (test with negative controls). The label namespace counter is one
+  process-wide counter. The main side's wake sender is closed after configure.
+- The device check is fenced behind the capture lane's drain loop, so an open still in flight is not misreported as a
+  failure.
+- `RibbonStrays` was appended at the end of the codec's type table and round-trips (test).
+
+### Not verified
+
+- The two 9-mode parametrised gates (identity and realtime) and the full gate tool; the evidence JSON was read, not
+  reproduced.
+- How long a hung-but-alive worker blocks the GUI (heartbeat restart timing), and whether the restart releases a
+  waiter as a death does.
+- The render thread's sync-time take and decode cost with a window; physical device behaviour; device changes.
+- Whether an armed crossfade deadline actually fires into a recovery in practice (A7-M3), and the paused-switch
+  predicate (A7-L6).
