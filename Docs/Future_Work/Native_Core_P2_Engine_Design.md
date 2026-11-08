@@ -55,9 +55,17 @@ slot[i] (slot_bytes each):
   f64 logical_timestamp   f64 source_timestamp (NaN = none)
   u32 flags (changed, present_frame, mode_reveal_ready, playing)
   u32 protected_edge_mask   (coalesced edge kinds since the last sync consume)
-  payload ...           (fixed-width fields, then float32/u8 blocks at 16-byte alignment)
+  u32 runtime_generation   u32 engine_generation   u32 activation_id   u32 mode_code   (ABI 2: the slot's identity)
+  payload ...  (at 64: fixed-width fields, then float32/u8 blocks at 16-byte alignment)
   u64 sequence_end     (equal to sequence_begin when the slot is whole)
 ```
+
+**ABI 2 (P2b slice 2, 8 Nov; audits H5 and A3-M4):** an in-place mode switch changes engine generation, activation
+and mode while the mapping stays, and the header is not under any seqlock, so each slot carries its frame's identity
+in its head (covered by the slot's seqlock; payload moved from 48 to 64) and a native reader validates every slot it
+accepts without Python. The header's identity fields are the configure-time identity (written once by the session
+before any frame) and never decide a slot. `mode_code` is `packet_abi.MODE_CODES` (append-only, 0 = none). The
+writer fills `flags` and `source_timestamp` from the publication on every publish.
 
 - **Writer (worker):** picks the slot that is neither the newest nor being read, bumps `sequence_begin` to odd,
   writes, sets `sequence_end`, publishes `latest_sequence`. Never blocks on the reader.
@@ -261,8 +269,8 @@ switch never remaps.
        newest block and submits it to the compute lane), waits on that edge (bounded, fail closed; never a sleep or
        poll), then ticks: the asynchronous commit path runs on its own thread and the frames are deterministic. The
        tick's own `engine.tick()` then finds no new block (a no-op step on the same clock).
-     - *Not yet:* a paused input raises (pause/resume reopens capture asynchronously on its lane; 4b adds that edge
-       with its clips); the rig pins the authored clock and passes the replay seed as the other gates do (A2-M2).
+     - *Not yet (slice 1):* a paused input raised (slice 2 adds pause/resume with its capture-lane edge); the rig pins
+       the authored clock and passes the replay seed as the other gates do (A2-M2).
      - *Found and fixed:* the Spectrum DSP (`bar_computation.fft_to_bars`) imported its curve helper from the Settings
        shape editor, loading QtWidgets into any process that analyses (now `utils/curve_nodes`; the fresh-spawn probe
        ticks one live input per mode and pins QtCore/QtGui).
@@ -282,6 +290,76 @@ switch never remaps.
        scheduler and recorded waveform are the known differences). The live engine is the reference from here on;
        the lanes engine stays the Studios' replay.
      - *Cost:* 4c, "Live engine measured".
+   - **Slice 2 built (8 Nov): off the steady state, and checkpoint audit 3's rig items** (4b, audit H3; A3-M4, A3-H1,
+     A3-M1, A3-L1, A3-L2). Every control edge mirrors the production owner's engine calls on the logical side and
+     ends on a real completion edge (never a sleep or poll):
+     - *Capture-lane completion edge:* `SpotifyVisualizerAudioWorker.fence_capture_transactions(callback)` (delegated
+       by the engine; nothing in production calls it) submits `callback` behind every capture start/stop/restart
+       admitted so far on the serial capture lane; `EngineSession._settle_capture` waits on it after every edge and
+       fails closed if capture is not open when it should be. `RecordedCaptureBackend` re-negotiates on restart.
+     - *Pause/resume:* paused inputs tick the engine's paused path (`_update_idle_waveform` /
+       `_mark_idle_waveform_generation`, `_prime_idle_bars`, the warm-capture grace and its expiry, which stops
+       capture on the authored clock; the idle self-animating reveal in the tick). The play edge is the owner's
+       `set_playing` (~594-617): `wake` (restarts a stale capture, starts a stopped one), `set_playback_state` (ramp
+       restart unless capture stayed warm; pause schedules the keepalive stop), and on resume
+       `arm_reentry_fresh_frame_fence` on the engine's commit sequence; the first input runs the owner's `start`
+       (~1774-1783). A paused input carrying a new capture publication fails closed. Gate clips:
+       `recorded_capture.synthesise_pause` (paused ticks and two resume ticks carry the last playing frame's capture
+       history, as the recorder would record them; the rest of the clip follows shifted: playback resumes where it
+       paused).
+     - *Warm re-entry:* resume (above) and display power, `EngineSession.set_display_power` / `VIS_SET_DISPLAY_POWER`
+       (the owner's `set_display_power` ~239-285 on the logical side: park releases the capture reference and no
+       input ticks while parked; unpark re-acquires, reopens capture when playing, arms the fence and rebases the
+       logical clocks; the owner's reader-side mailbox clear stays the main process's). The re-entry ticks that carry
+       no new capture are held (`present_frame` false, the watermark the retained frame's commit sequence); the tick
+       after the first post-re-entry commit is presented; with the arm disabled the retained frame is presented at
+       once (`tests/test_visualizer_engine_live_off_steady.py`).
+     - *In-session mode switch:* `EngineSession.request_mode` / `VIS_SET_MODE` (`{"mode", "preset"?, "settings"?}`,
+       validated on receipt, applied at the next tick boundary, the newest request wins):
+       `feature_replay.switch_offline_controller_mode`, the owner's `_activate_pending_mode` with its
+       `_apply_configuration` on the existing controller and engine (one activation transaction around mode,
+       settings, technical config, engine kwargs, the target's logical mode state, the fence, the compute /
+       smoothing / floor reset; then the fresh-frame fence on the committed generation and activation and render
+       admission). Same engine, capture source and mailbox; a block-size change restarts capture on its lane first.
+     - *Production commit order (A3-H1):* `EngineSession(order=...)`. `production` (default; the reference for these
+       gates): the tick's own engine step consumes the newest block and submits its analysis, and the tick reads the
+       previous commit, as live; the analysis is held at `_SpotifyBeatEngine.set_analysis_admission_gate` (called on
+       the compute lane before each analysis; None in production, one attribute read) until the tick returns, then
+       the session waits for it to settle. An adversarial schedule (each step gives its analysis 50 ms to commit
+       before the read) fails without the gate. `settled` (slice 1) stays the portability gate; `free` (no hold, no
+       wait) is the stress order.
+     - *Slot identity and flags, ABI 2 (H5, A3-M4):* see "The frame packet ABI" above; read back with plain `struct`
+       in the tests (header, every slot's flags and identity equal to the frame it holds, changing across a switch,
+       the header staying the configure-time identity).
+     - *Spectrum at activation (A3-M1):* `tick_pipeline.declare_mode_engine_demands` declares the mode rules before
+       every engine step (idle waveform, history, and now `set_analysis_spectrum_demand` from
+       `mode_capabilities.reads_analysis_spectrum`); while demanded every commit publishes the spectrum, so the first
+       commit after configure or a switch (whose reset clears the per-read request) publishes one. Same tick path in
+       process and in the worker; the snapshot engine takes it as a no-op setter. Control: the demand disabled, the
+       first commit publishes nothing.
+     - *Device refusal in any process (A3-L1):* a recorded-PCM session replaces the audio worker's device factory with
+       a refusal for its life (entered first, restored last); the worker's configure reply reports `device_refused`
+       and every gate asserts it.
+     - *Block size and the stale restart (A3-L2):* the recorded backend reports 0 on Auto, as pyaudiowpatch and
+       sounddevice do (it delivers a 10 ms period). `wake`'s stale check reads the wall clock (0.5 s), so whether a
+       warm resume restarts capture depends on how long the rig took: the gate's warm resumes restarted in 9 of 27
+       runs in process. Forced both ways on Oscilloscope (history-drawing) the restart runs on the lane before the
+       next block and the frames are identical (test), so the gate does not depend on it; it does not make every
+       warm resume take the restart path.
+     - *Gate:* `tests/test_visualizer_engine_live_off_steady.py` (mutation-checked: removing the paused path, either
+       fence arm, the switch, the slot identity, the flags, the device refusal, the admission hold, the paused-input
+       check, the play edges or the capture-lane wait each fails its test). Whole clips:
+       `tools/visualizer_replay/live_engine_gate.py` (scenarios `steady`, `pause_warm` 2 s, `pause_cold` 7 s past the
+       6 s grace, `reentry` 1 s park, `switch` per pair with a paused switch-back; `--stress`). **Result (8 Nov,
+       production order):** all three shipped clips whole, 126 pairs (steady, both pauses and re-entry x nine modes;
+       switch x six pairs incl. Spectrum <-> Extruded Bubble both ways), 170,622 frames, frames and slot heads
+       0 mismatching; stress (free order, reader on its wake thread) 27/27 clean, every frame taken, 0 torn; 21 min at
+       below-normal priority (`.artifacts/evidence/architecture/native_core_p2/20261108_live_gate_slice2/
+       live_gate.json`). Portability (settled order, the four off-steady scenarios): 99 pairs, 138,978 frames,
+       0 mismatching, 15 min (`.../20261108_live_gate_slice2_settled/live_gate.json`). The stress run is synchronous
+       per input (the worker does not pace itself until work order 5).
+     - *Left for work order 5:* production wiring of these controls (the worker's own cadence, latest-wins
+       application, the main-side mailbox clear on park, fail-closed fades), and Bubble's own generator (A2-M2).
 4V. **Built for the Vulkan core (operator, 8 Nov: "make sure you're still making the native core with Vulkan and
    what it brings us in mind").** P3 is a C++ render core behind the existing `QSGRenderNode`, on Qt Quick's Vulkan RHI
    (`Graphics_Backend_Decision_2026-11-05.md`; P1 proved QRhi on Vulkan in and outside Quick's frame). What it brings,
@@ -294,7 +372,8 @@ switch never remaps.
      QRhi buffer (std430-compatible blocks, 16-byte aligned: the ABI already aligns payloads). So the P3-facing
      payload is per mode and fixed-layout (`payload_schema` per mode, audit H5), with the writer filling the header
      identity (runtime/engine generation, activation, mode code) and flags on configure and per publish, so the core
-     can validate a slot without Python. The tagged codec stays the Python-to-Python transport until a mode's core
+     can validate a slot without Python. **Built (slice 2, ABI 2):** the identity is per slot under its seqlock
+     (A3-M4), flags and source timestamp per publish, the header the configure-time identity. The tagged codec stays the Python-to-Python transport until a mode's core
      port lands; Spectrum (P3's first port) gets its fixed layout first, defined from its `SpectrumFrame` fields, as
      part of P3's first slice, never as a second codec for the same consumer.
    - **Async compute and the 8 GLSL compute shaders:** shaders stay QRhi-portable (GLSL 460 that `qsb` compiles to
@@ -308,6 +387,9 @@ switch never remaps.
    PCM through the real audio worker (offline, blocks pushed into the capture callback, so asynchronous commits are in
    play); gate clips with pause/resume, a warm re-entry (fence armed) and an in-session mode switch; the read audit
    run on those paths. Scheduler state at session start and an engine-owned feed observer instead of the tap (M1).
+   **Status (8 Nov):** [x] live-engine reference (P2b slice 1); [x] pause/resume, [x] warm re-entry (fence armed on
+   resume and on display-power unpark), [x] in-session mode switch (P2b slice 2, 4P). Not done, and moot once P2b
+   lands (the snapshot layer is deleted with them): the snapshot read audit on those paths and M1's scheduler tap.
 4c. Main-process cost (audit H1), before 5: per mode, the main process's GIL time per tick in process vs. the
    snapshot path (step + capture + pickle + decode, no acknowledgement). The audit measured capture .20-.25 ms, pickle
    .07 and decode .08-.54 per tick, against in-process ticks of .33-.45 ms for Spectrum, Oscilloscope, Sphere and
@@ -393,8 +475,8 @@ switch never remaps.
      runs at sync on the render thread (A2-H3), so where the decode runs is part of work order 5.
 5. Production wiring and lifecycle. Must specify (audit H2, M5): a main -> worker latest-wins snapshot mapping (the
    ABI with roles swapped, a wake byte to the worker; the supervisor's FIFO request queue carries edges only); an
-   in-place `set_mode` and a resolved-settings delta applied to the existing session at a tick boundary (a rebuild per
-   slider step would reset the mode); playing / framed-view / park controls (the main process's capture is the
+   in-place `set_mode` (built at the session, P2b slice 2: `VIS_SET_MODE`) and a resolved-settings delta applied to
+   the existing session at a tick boundary (a rebuild per slider step would reset the mode); playing / framed-view / park controls (the main process's capture is the
    cadence); fail-closed handling of `session_closed` and of heartbeat loss, with a fade; the owner closing its wake
    sender after configure; the label-namespace counter's owner; the presentation-config reads moved to logical config
    (QtCore only); the worker in the dormancy receipt; frozen spawn (operator); frame age defined from the capture
