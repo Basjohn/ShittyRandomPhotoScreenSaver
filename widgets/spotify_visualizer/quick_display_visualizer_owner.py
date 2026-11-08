@@ -2185,7 +2185,10 @@ class QuickDisplayVisualizerOwner:
             return
         if recovery["reveal"]:
             self._bind_replacement(recovery["identity"], now, reveal=True)
-            self._arm_recovery_deadline()            # the reveal is bounded too
+            # The reveal has its own deadline (A8-M1): the serial moves on, so the failure's shot is inert and a slow
+            # but healthy replacement gets the whole window from here, not what is left of the failure's.
+            self._transition_request_serial += 1
+            self._arm_recovery_deadline()
         else:
             self._bind_replacement(recovery["identity"], now, reveal=False)
             self._mode_transition_phase = "idle"
@@ -2265,9 +2268,10 @@ class QuickDisplayVisualizerOwner:
     def _on_recovery_deadline(self, serial: int) -> None:
         """The recovery did not complete in time. First: the replacement never published (or never revealed), so the
         owner falls back in process once (counted for the run); the in-process runtime's publications pace the held
-        frame's fade and the reveal, under a second deadline. Second: a reveal that still never came leaves the
-        Visualizer faded out, the reason logged, and requests admitted again (it reappears with the next activation);
-        a held frame nothing paced any more escalates to the generation-fenced reconstruction (as in process)."""
+        frame's fade and the reveal, under a second deadline. Second (now in process): a reveal that never came, or a
+        held frame nothing paced any more, escalates to the generation-fenced reconstruction, exactly as an in-process
+        activation's deadline does (``_on_transition_deadline``; A8-M2): the display's reload retires this owner (its
+        hidden runtime with it) and the rebuilt one fades in. Never left hidden with its runtime running."""
         if self._retired or self._transition_request_serial != serial or not self._display_power_on:
             return
         phase = self._mode_transition_phase
@@ -2283,16 +2287,12 @@ class QuickDisplayVisualizerOwner:
                 self._arm_recovery_deadline()
             return
         self._recovery_stage = 0
+        self._worker_recovery = None
+        self._preparing_activation = None
         if phase == "waiting_target":
             logger.error("[SPOTIFY_VIS][ENGINE_WORKER] The recovered Visualizer never revealed (no presentable frame "
-                         "in %d ms); it stays faded out until the next activation mode=%s",
-                         _ACTIVATION_TRANSACTION_DEADLINE_MS, self._controller.mode_id)
-            self._mode_transition_phase = "idle"
-            self._mode_transition_fade = 0.0
-            self._preparing_activation = None
-            return
-        self._worker_recovery = None
-        self._signal_transition_failure("deadline:recovering")
+                         "in %d ms) mode=%s", _ACTIVATION_TRANSACTION_DEADLINE_MS, self._controller.mode_id)
+        self._signal_transition_failure("deadline:" + phase)
 
     def retire(self) -> bool:
         if self._retired:

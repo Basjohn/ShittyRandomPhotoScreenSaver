@@ -341,6 +341,124 @@ def test_a_crossfade_deadline_armed_before_a_failure_cannot_fire_into_its_recove
         stand_in.close()
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_slow_but_healthy_replacement_gets_its_own_reveal_deadline(qt_app, pcm, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-M1: the replacement's session build is slow (a cold spawn and build measured ~4 s) and its
+    # first presentable frame comes 1 s after its reveal starts (a prepared reveal waiting for its warm frames):
+    # healthy, but past the deadline armed at the failure. The reveal has its own deadline, so the replacement is
+    # revealed on the worker. Negative control (the pre-fix reveal re-armed with the failure's serial): the failure's
+    # shot fires into the reveal, the healthy replacement is retired and the worker is off for the run.
+    from core.visualizer_engine.engine_worker import EngineSession
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    owner_class = owner_module.QuickDisplayVisualizerOwner
+    monkeypatch.setattr(owner_module, "_ACTIVATION_TRANSACTION_DEADLINE_MS", 1500)
+    if pre_fix:
+        def old_finish(self, now):
+            recovery, self._worker_recovery = self._worker_recovery, None
+            if recovery is None:
+                return
+            if recovery["reveal"]:
+                self._bind_replacement(recovery["identity"], now, reveal=True)
+                self._arm_recovery_deadline()                          # the failure's serial: its shot stays live
+            else:
+                self._bind_replacement(recovery["identity"], now, reveal=False)
+                self._mode_transition_phase = "idle"
+                self._recovery_stage = 0
+
+        monkeypatch.setattr(owner_class, "_finish_worker_recovery", old_finish)
+    stand_in, rig, owner = _stand_in_rig(pcm)
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            _pump(rig, 1.6)
+            first = owner._worker
+            build = EngineSession.__init__
+
+            def slow_build(self, *args, **kwargs):
+                time.sleep(0.5)
+                build(self, *args, **kwargs)
+
+            reveal: dict = {}
+            waiting = owner_class._worker_waiting_for_fresh_frame
+
+            def warm_frames_first(self):
+                if self._worker is not first:
+                    since = reveal.setdefault("since", time.perf_counter())
+                    if time.perf_counter() - since < 1.0:
+                        return True
+                return waiting(self)
+
+            monkeypatch.setattr(EngineSession, "__init__", slow_build)
+            monkeypatch.setattr(owner_class, "_worker_waiting_for_fresh_frame", warm_frames_first)
+            _fail_session_behind_the_owners_back(stand_in)
+            _pump(rig, 6.0, until=lambda: "since" in reveal and owner._mode_transition_phase == "idle")
+            assert owner._mode_transition_phase == "idle"
+        if pre_fix:
+            assert owner._worker is None and engine_worker_link.worker_disabled_for_run()
+            return
+        assert owner._worker is not None and owner._worker is not first
+        assert not engine_worker_link.worker_disabled_for_run() and owner._mode_transition_fade == 1.0
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_recovery_that_never_reveals_escalates_to_the_reconstruction_as_in_process(qt_app, pcm, monkeypatch,
+                                                                                    pre_fix):
+    # Checkpoint audit 8, A8-M2: the replacement never reveals (its reveal never completes: a prepared reveal that
+    # never finishes), so the first expiry falls back in process; the in-process activation never reveals either. The
+    # second expiry escalates to the generation-fenced reconstruction, exactly as an in-process activation's
+    # waiting_target deadline does ("deadline:waiting_target": the display's reload retires this owner, its hidden
+    # runtime with it, and the rebuilt one fades in). Negative control (the pre-fix second expiry): the owner goes idle
+    # at fade 0 while its in-process runtime keeps publishing invisible frames, and nothing brings it back.
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    owner_class = owner_module.QuickDisplayVisualizerOwner
+    monkeypatch.setattr(owner_module, "_ACTIVATION_TRANSACTION_DEADLINE_MS", 500)
+    if pre_fix:
+        expiry = owner_class._on_recovery_deadline
+
+        def old_second_expiry(self, serial):
+            if (not self._retired and serial == self._transition_request_serial and self._display_power_on
+                    and self._recovery_stage and self._worker is None
+                    and self._mode_transition_phase == "waiting_target"):
+                self._recovery_stage = 0
+                self._mode_transition_phase = "idle"
+                self._mode_transition_fade = 0.0
+                self._preparing_activation = None
+                return
+            expiry(self, serial)
+
+        monkeypatch.setattr(owner_class, "_on_recovery_deadline", old_second_expiry)
+    stand_in, rig, owner = _stand_in_rig(pcm)
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            _pump(rig, 1.6)
+            failures: list = []
+            owner._transition_failure_callback = failures.append
+            monkeypatch.setattr(owner_class, "_target_renderer_preparing", lambda self, now: True)
+            _fail_session_behind_the_owners_back(stand_in)
+            _pump(rig, 5.0, until=lambda: failures or (owner._worker is None and owner._recovery_stage == 0
+                                                       and owner._mode_transition_phase == "idle"))
+            assert owner._worker is None and engine_worker_link.worker_disabled_for_run()   # the first expiry
+            if pre_fix:
+                assert not failures and owner._mode_transition_phase == "idle"
+                assert owner._mode_transition_fade == 0.0
+                presented = len(rig.published)
+                _pump(rig, 0.5)
+                assert len(rig.published) > presented + 10              # invisible frames, nothing brings it back
+                return
+            assert failures == ["deadline:waiting_target"] and owner._mode_transition_phase == "failed"
+    finally:
+        rig.close()
+        stand_in.close()
+
+
 # ----------------------------------------------------------------------------------------------- the lows
 
 
