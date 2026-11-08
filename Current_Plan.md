@@ -1370,6 +1370,13 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     is destroyed. The watch now stays armed until Settings' first Paint after the first input and logs `qt_exposed`.
     **Open until a field log** shows a paint right after the reveal and `first Paint after the first input` within a
     frame or two.
+- [~] **Camera reset on every edit and the exit double flicker fixed (operator 8 Nov), awaiting the operator's look.**
+  Camera: on a curated preset (Include current camera view on, the default) each commit re-hydrated the framed camera
+  editor and dropped the orbit committed into the draft, so the preview snapped back to the preset's view (Neon Lake,
+  Extruded Bubble, Waveform Ribbon). Exit: Settings was raised and activated over the still-shown modal Studio, Qt
+  handed its activation back to the Studio, then the Studio hid: Settings now appears beneath the Studio and comes
+  forward once it is gone (`Docs/Reference/Visualizer_Studio.md` §4 "One transition out"). Operator to check on screen:
+  orbit, then drag sliders (the view stays); close the Studio by every path (one clean change to Settings, no swap).
 - [ ] **Per-session memory growth in the Studio (side defect, 6 Nov; the clip caches ruled out 7 Nov).** Process
   memory grows about 2-3 MB per offscreen Extruded Bubble session (private bytes and USS, 16 sessions), the same with
   and without the controller-leak fix (`test_closed_studio_sessions_are_released_and_live_counts_stay_flat`). The

@@ -251,6 +251,12 @@ class StudioWindowSurface(QObject):
         self.window.raise_()
         self.window.requestActivate()
 
+    def covering_window(self):
+        """The Studio's top-level window while it is on screen, else None. At an exit Settings is revealed beneath it
+        and comes forward once it is gone (``WindowPresence.reveal``)."""
+        window = self.window
+        return window if not self._retired and window.isVisible() else None
+
     def request_frame(self) -> None:
         if not self._retired:
             self.window.update()
@@ -374,6 +380,10 @@ class OffscreenStudioSurface(QObject):
             self.pump()
 
     def raise_(self) -> None:
+        return None
+
+    def covering_window(self):
+        """Nothing of this surface is ever on screen."""
         return None
 
     @property

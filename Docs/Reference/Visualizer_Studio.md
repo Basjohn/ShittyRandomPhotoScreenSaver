@@ -418,7 +418,13 @@ control.
   The mode's shared families that
   Settings keeps outside the mode body (bar Fill / Border / Border Opacity, the per-mode rainbow toggle and speed)
   are loaded into their owning Settings widgets first, so the tab's own save collects them. The Studio never writes
-  the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority.
+  the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority
+  (`framed_camera_editor.hold_aim`): every commit loads the whole value map, which re-hydrates that pose as if it were
+  saved, so the store keeps the values' orbit aimed whenever the edit moved it or it differs from the saved view. An
+  orbit committed into a held draft therefore survives every later edit; before 8 Nov each edit read the preset's view
+  back and the preview camera snapped to it ("studios reset the camera every slider change";
+  `tests/test_studio_camera_survives_edits.py`). The preview view (`_pose`: dolly, pan, and the orbit while it is not
+  committed) is the controller's and changes only by navigation, a camera row, Reset, or a preset or mode switch.
 - **Preset menu.** The header's preset picker offers Settings' own preset-row actions: Move To Custom (on a curated
   preset), Save Preset As… (on Custom, Settings' own file dialog) and, for authoring the curated presets themselves,
   **Save To <Preset>**. This replaced Settings' Edit Preset (the preset file opened in the OS editor), deleted on
@@ -448,6 +454,15 @@ control.
   retired, and again (idempotently) in a `finally`, so neither a failing nor a hanging teardown step can leave
   Settings concealed; a mode switch retires without revealing because the next session follows. Open failures show a
   "Studio Unavailable" popup over Settings.
+- **One transition out (8 Nov).** While the Studio window is still on screen (`surface.covering_window()`), the reveal
+  shows Settings *beneath* it: natively without activation (`SW_SHOWNOACTIVATE`), z-ordered directly under the Studio
+  window, re-exposed and repainted while covered. Settings comes forward (`WindowPresence.bring_forward`: native
+  front, Qt raise and activate, one more repaint) only when the Studio window is destroyed, after its queued hide; at
+  once when the window's retirement fails or there is no window. The former reveal raised and activated Settings over
+  the still-shown application-modal window: Qt handed the blocked Settings' activation back to the modal Studio
+  (`QWindowsContext::handleFocusEvent`), so the windows swapped twice (the operator's "double flicker"; the 8 Nov
+  field log shows the Studio still foreground and active right after a reveal that ran `SetForegroundWindow` on
+  Settings). `tests/test_studio_exit_single_transition.py` records the sequence on the real SettingsDialog.
 - **Reveal re-exposes (layered window).** Settings is frameless and translucent, so Qt presents it as a layered window,
   which never receives `WM_PAINT`; Qt exposes it only from a show it initiated, and `WindowPresence` shows it natively.
   Without help the revealed window stays *not exposed* to Qt: it accepts input but never repaints (the 6 Nov "frozen and

@@ -11,6 +11,14 @@ QWindow also ends ``exec()``), so the window stays shown but invisible: zero
 window opacity (every Wayland compositor and composited X11) plus a move off
 screen (non-composited X11). ``reveal`` restores opacity and geometry.
 
+Leaving a Studio is one transition: Settings is shown again *beneath* the Studio window, without activation, and is
+painted there while still covered; it comes forward only once the Studio window is gone (``bring_forward``). Showing,
+raising and activating Settings while the application-modal Studio window was still on screen was the exit's double
+flicker (operator, 8 Nov): Settings jumped above the Studio, Qt handed the blocked Settings' activation straight back
+to the modal Studio (``QWindowsContext::handleFocusEvent``), which jumped back above it, and the Studio's queued hide
+then revealed Settings a second time. The field log shows it: right after a reveal that ran ``SetForegroundWindow`` on
+Settings, the native foreground and active window was still the Studio.
+
 A native show must also be followed by a native *re-expose*. Settings is a frameless translucent window, which Qt
 presents as a layered window; a layered window never receives ``WM_PAINT``, and Qt announces its exposure only from
 a show it initiated. Qt does see the native hide (the QWindow becomes not exposed) but not the native show, so without
@@ -28,11 +36,15 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 _SW_HIDE = 0
+_SW_SHOWNOACTIVATE = 4
 _SW_SHOW = 5
 _OFF_SCREEN = -30000
 _RDW_INVALIDATE = 0x0001
 _RDW_ALLCHILDREN = 0x0080
 _RDW_UPDATENOW = 0x0100
+_SWP_NOSIZE = 0x0001
+_SWP_NOMOVE = 0x0002
+_SWP_NOACTIVATE = 0x0010
 
 
 def _native_show(widget, command: int) -> bool:
@@ -62,6 +74,38 @@ def _native_restore(widget) -> tuple[bool, bool]:
     user32.BringWindowToTop(hwnd)
     user32.SetForegroundWindow(hwnd)
     return bool(user32.IsWindowVisible(hwnd)), bool(user32.IsWindowEnabled(hwnd))
+
+
+def _native_show_beneath(widget, above) -> tuple[bool, bool]:
+    """Show and re-enable the window natively WITHOUT activating it, directly beneath the window ``above`` (the Studio,
+    still on screen) in z-order; (visible, enabled) as Windows reports them. No activation moves and nothing comes
+    forward: ``above`` keeps covering it until it goes (see the module note)."""
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    hwnd = int(widget.winId())
+    if not hwnd:
+        return False, False
+    user32.ShowWindow(hwnd, _SW_SHOWNOACTIVATE)
+    if not user32.IsWindowEnabled(hwnd) and widget.isEnabled():
+        user32.EnableWindow(hwnd, True)
+    anchor = int(above.winId()) if above is not None else 0
+    if anchor:
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                        ctypes.c_int, wintypes.UINT]
+        user32.SetWindowPos.restype = wintypes.BOOL
+        user32.SetWindowPos(hwnd, anchor, 0, 0, 0, 0, _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOACTIVATE)
+    return bool(user32.IsWindowVisible(hwnd)), bool(user32.IsWindowEnabled(hwnd))
+
+
+def _native_front(widget) -> None:
+    """Bring the window forward and make it the foreground window natively (the Studio window is gone by then)."""
+    import ctypes
+    user32 = ctypes.windll.user32
+    hwnd = int(widget.winId())
+    if hwnd:
+        user32.BringWindowToTop(hwnd)
+        user32.SetForegroundWindow(hwnd)
 
 
 def _native_reexpose(widget) -> None:
@@ -288,6 +332,7 @@ class WindowPresence:
         self._view = None
         self.reveal_count = 0
         self.watch: RevealWatch | None = None     # the one-shot input record of the last reveal
+        self._forward_pending = False             # revealed beneath a Studio window: comes forward once it is gone
 
     @property
     def widget(self):
@@ -307,14 +352,19 @@ class WindowPresence:
         self.concealed = True
         logger.info("[STUDIO] Settings concealed (native=%s)", self._natively_hidden)
 
-    def reveal(self) -> None:
+    def reveal(self, *, beneath=None) -> None:
         """Show the same window again, refreshed from canonical state, at its prior place and view.
+
+        ``beneath``: the Studio's window, still on screen (it goes after the reveal). Settings is then shown without
+        activation directly beneath it and painted there, and comes forward only in ``bring_forward``, once that
+        window is gone: one transition out (see the module note). Without it, Settings comes forward at once.
 
         Idempotent; every step after the native show is best-effort, so a failing refresh or view restore
         can never keep Settings hidden."""
         if not self.concealed:
             return
         self.concealed = False
+        self._forward_pending = beneath is not None
         widget = self._widget
         try:
             import shiboken6
@@ -332,10 +382,10 @@ class WindowPresence:
         if self._natively_hidden:
             self._natively_hidden = False
             try:
-                native = _native_restore(widget)
+                native = _native_restore(widget) if beneath is None else _native_show_beneath(widget, beneath)
             except Exception:
                 logger.exception("[STUDIO] Native Settings restore failed; falling back to ShowWindow")
-                _native_show(widget, _SW_SHOW)
+                _native_show(widget, _SW_SHOW if beneath is None else _SW_SHOWNOACTIVATE)
             try:
                 _native_reexpose(widget)
             except Exception:
@@ -352,17 +402,44 @@ class WindowPresence:
                 logger.exception("[STUDIO] Settings view restore failed")
         if not widget.isEnabled():
             widget.setEnabled(True)
-        if widget.isVisible():
+        if beneath is None and widget.isVisible():
             widget.raise_()
             widget.activateWindow()
         self.reveal_count += 1
         window = widget.windowHandle()
-        logger.info("[STUDIO] Settings revealed (qt visible=%s enabled=%s exposed=%s native=%s)",
-                    widget.isVisible(), widget.isEnabled(), window.isExposed() if window is not None else None, native)
+        logger.info("[STUDIO] Settings revealed (qt visible=%s enabled=%s exposed=%s native=%s %s)",
+                    widget.isVisible(), widget.isEnabled(), window.isExposed() if window is not None else None, native,
+                    "beneath the Studio window" if beneath is not None else "in front")
         try:
             self.watch = RevealWatch(widget)              # armed first, so it sees the reveal's own repaint
         except Exception:
             logger.exception("[STUDIO] Reveal input watch unavailable")
+        self.repaint_revealed()
+
+    def bring_forward(self) -> None:
+        """The Studio window is gone: a Settings revealed beneath it comes to the front, active, and repaints once more
+        (``repaint_revealed``). After a reveal that already brought it forward, only the repaint; never while
+        concealed (a mode switch keeps Settings concealed for the next Studio)."""
+        if self.concealed:
+            return
+        widget = self._widget
+        try:
+            import shiboken6
+            if widget is None or not shiboken6.isValid(widget):
+                return
+        except ImportError:
+            pass
+        if self._forward_pending:
+            self._forward_pending = False
+            try:
+                if widget.isVisible():
+                    if sys.platform == "win32":
+                        _native_front(widget)
+                    widget.raise_()
+                    widget.activateWindow()
+                logger.info("[STUDIO] Settings brought forward after the Studio window")
+            except Exception:
+                logger.exception("[STUDIO] Bringing Settings forward failed")
         self.repaint_revealed()
 
     def repaint_revealed(self) -> None:
