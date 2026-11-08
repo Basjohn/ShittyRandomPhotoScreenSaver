@@ -98,7 +98,7 @@ class EngineSession:
         from core.visualizer_engine.packet_mailbox import PacketMailbox
         from widgets.spotify_visualizer import extruded_bubble_drift_log
         from widgets.spotify_visualizer.feature_replay import (
-            PcmReanalysis, ProductionLaneEngine, ReplayBeatEngine, deterministic_clock,
+            REPLAY_SEED, PcmReanalysis, ProductionLaneEngine, ReplayBeatEngine, deterministic_clock,
         )
         from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
 
@@ -128,25 +128,23 @@ class EngineSession:
         self._stack = contextlib.ExitStack()
         # The session's authored clock follows its inputs' own timestamps (each input carries the time it was
         # produced), so the worker ticks the same frames whatever its scheduling. Live sessions pin only
-        # the authored clock: ``time.*`` and ``random`` stay the process's own (audit H6), so a tick that read a wall
-        # clock or the RNG would fail the identity gates instead of being pinned equal. Recorded-input sessions are
-        # replays and keep the replay harness's full pin.
+        # the authored clock: ``time.*`` stays the process's own (audit H6), so a tick that read a wall clock would
+        # fail the identity gates instead of being pinned equal. Recorded-input sessions are replays and keep the
+        # replay harness's clock pin. No session seeds the process RNG (work order 5 slice 5.6): Bubble's spawn
+        # draws from its simulation's own generator, which ``seed`` (a control input) seeds through the controller
+        # (``seed_mode_generators``); production passes none (OS entropy, as in process), the identity gates pass
+        # the replay seed, and recorded-input sessions are seeded with it by default, as every offline replay is. A
+        # new process-RNG draw in the tick is therefore unseeded and fails the gates (checkpoint audit 2, A2-M2).
         if inputs == "live":
             from core.authored_clock import pinned_authored_clock
 
             self._clock = [0.0]
             if not self._paced:                # a worker-paced session runs on the process's own clocks
                 self._stack.enter_context(pinned_authored_clock(lambda: self._clock[0]))
-            # Bubble's spawn draws from the process RNG, by design random (as in process). ``seed`` (a control
-            # input) lets the identity gates compare against a seeded replay; production passes none. With the seed
-            # passed, the gates cannot tell a new global-RNG read in the tick from Bubble's (checkpoint audit 2,
-            # A2-M2): giving Bubble its own generator is a P2b item.
-            if seed is not None:
-                import random
-
-                random.seed(int(seed))
         else:
             self._clock = self._stack.enter_context(deterministic_clock())
+            if seed is None:
+                seed = REPLAY_SEED
         # Extruded Bubble's drift-family revisions are the renderer's geometry cache identity, so no two sessions may
         # reuse one: the main process gives every session its own ``label_namespace`` (>= 1, never repeated), and its
         # revisions start at ``namespace << 32`` (the main process's own counter stays far below). Namespace 0 numbers
@@ -196,6 +194,8 @@ class EngineSession:
         controller = VisualizerRuntimeController(runtime_generation=int(runtime_generation), initial_mode=mode,
                                                  engine_factory=lambda _count: engine)
         controller.engine = engine
+        if seed is not None:
+            controller.seed_mode_generators(int(seed))   # before the configuration builds the mode's state
         controller.replace_logical_mailbox(self.mailbox)
         self._engine, self._controller = engine, controller
         self.mode = mode

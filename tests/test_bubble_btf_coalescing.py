@@ -33,7 +33,6 @@ and the coalescing rule (not the tests) would need per-kind history.
 
 from __future__ import annotations
 
-import random
 from types import SimpleNamespace
 
 import pytest
@@ -279,8 +278,7 @@ def test_real_bubble_event_consequence_forward_carries_into_next_result(event_ki
     """
 
     def run(fire_event_at_a: bool):
-        random.seed(99)
-        runtime = BubbleFrameRuntime()  # real BubbleSimulation (default factory)
+        runtime = BubbleFrameRuntime(seed=99)  # real BubbleSimulation (default factory), its own generator
         frame_a = _advance_real(
             runtime,
             fire={event_kind: True} if fire_event_at_a else {},
@@ -314,8 +312,7 @@ def test_real_bubble_event_consequence_forward_carries_into_next_result(event_ki
 def test_real_bubble_keeps_one_authored_step_per_integration():
     """No second logical clock / no batching: one advance -> one integration."""
 
-    random.seed(99)
-    runtime = BubbleFrameRuntime()
+    runtime = BubbleFrameRuntime(seed=99)
     _advance_real(runtime, fire={"vocal_swell": True}, authored_ts=5.0, edge_token=1)
     first_time = runtime.simulation._time
     _advance_real(runtime, fire={}, authored_ts=5.011, edge_token=2)

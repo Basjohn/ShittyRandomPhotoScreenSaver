@@ -46,6 +46,13 @@ LogicalStep = Callable[[float], None]
 ModeStateFactory = Callable[[], Any]
 
 
+def _seed_mode_state(state: Any, seed: int) -> None:
+    """Seed one mode state's own generator, if it has one (only Bubble's frame runtime draws at random)."""
+    seed_generator = getattr(state, "seed_generator", None)
+    if callable(seed_generator):
+        seed_generator(seed)
+
+
 class VisualizerRuntimeController:
     """Own non-pixel visualizer identity, source, and logical lifecycle.
 
@@ -59,6 +66,8 @@ class VisualizerRuntimeController:
     _logical_parked = False
     # The layout-metrics observer (``set_layout_metrics_observer``): None in process.
     _layout_metrics_observer: Callable[[], None] | None = None
+    # The mode generators' seed (``seed_mode_generators``): None in production (OS entropy).
+    _mode_generator_seed: int | None = None
 
     def __init__(
         self,
@@ -651,8 +660,24 @@ class VisualizerRuntimeController:
             state = self._logical_mode_states.get(canonical)
             if state is None:
                 state = factory()
+                if self._mode_generator_seed is not None:
+                    _seed_mode_state(state, self._mode_generator_seed)
                 self._logical_mode_states[canonical] = state
             return state
+
+    def seed_mode_generators(self, seed: int | None) -> None:
+        """Seed the mode states' own random generators (Bubble's spawn), now and for every state built later.
+
+        Gates and replays only (the identity gates' replay seed, the Studios' evaluator seed); production never calls
+        it, so each generator seeds from OS entropy as the process RNG does. Per controller, never process-wide
+        (native core P2b slice 5.6, checkpoint audit 2 A2-M2): a draw from the process RNG in the tick is not seeded,
+        so a gate comparing two paths sees it diverge. ``None`` stops seeding states built later."""
+        with self._lock:
+            self._mode_generator_seed = None if seed is None else int(seed)
+            states = tuple(self._logical_mode_states.values())
+        if seed is not None:
+            for state in states:
+                _seed_mode_state(state, int(seed))
 
     def logical_mode_states_snapshot(self) -> tuple[Any, ...]:
         """The live plain mode states (display-power clock rebase walks these)."""

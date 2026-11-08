@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.util
 import math
-import random
 import sys
 import types
 import unittest
@@ -85,8 +84,8 @@ class BubbleViewportScalingTests(unittest.TestCase):
     # offset from the world centre and compare pixel results.
     _SHAPES = ((420.0, 280.0), (840.0, 280.0), (420.0, 560.0), (840.0, 560.0), (724.0, 816.0))
 
-    def _world(self, extent):
-        sim = self.bubble.BubbleSimulation()
+    def _world(self, extent, seed=None):
+        sim = self.bubble.BubbleSimulation(seed=seed)
         sim._apply_viewport_domain(extent)
         return sim, 0.5 * sim._domain_w, 0.5 * sim._domain_h
 
@@ -176,8 +175,7 @@ class BubbleViewportScalingTests(unittest.TestCase):
     def test_swirl_birth_offset_is_pixel_invariant(self):
         offsets = []
         for extent in self._SHAPES:
-            random.seed(1847)
-            sim, cx, cy = self._world(extent)
+            sim, cx, cy = self._world(extent, seed=1847)
             sim._spawn_bubble(False, "none", 1.0, "swirl_ccw")
             bubble = sim._bubbles[0]
             head = self._px(sim, extent, bubble.x, bubble.y)

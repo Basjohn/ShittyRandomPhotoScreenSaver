@@ -7,7 +7,8 @@ beat engine, logical tick and mode runtimes with no audio capture, window or wor
 * ``PcmReanalysis``: recompute production body-band DSP from each frame's recorded native PCM.
 * ``ProductionLaneEngine``: every lane a mode reads answered by the production getters from that reanalysis, so the
   Audio Analysis controls (Sensitivity, the floors, Gain, Block Size...) act as they do live.
-* ``deterministic_clock``: process clocks and RNG pinned for byte-reproducible replay.
+* ``deterministic_clock``: process clocks pinned for byte-reproducible replay (the mode generators are seeded per
+  controller, ``REPLAY_SEED``; the process RNG is never seeded).
 * ``configure_offline_controller``: configure a ``VisualizerRuntimeController`` for an offline replay of a mode, from
   a curated preset or a complete resolved settings mapping (the replay's configure: playing from the first frame,
   render admission open at once; the product's own configure is ``logical_edges.configure_logical_controller``).
@@ -33,7 +34,6 @@ PCM reanalysis:
 """
 from __future__ import annotations
 
-import random
 import time
 from contextlib import contextmanager
 from dataclasses import asdict, replace
@@ -378,21 +378,22 @@ class PcmReanalysis:
         self.frames += 1
 
 
-#: The replay harness's RNG seed (``deterministic_clock``); identity gates pass it to live engine sessions.
+#: The replays' mode-generator seed (Bubble's spawn): ``configure_offline_controller`` seeds the controller's mode
+#: generators with it (``VisualizerRuntimeController.seed_mode_generators``), recorded-input engine sessions too, and
+#: the identity gates pass it to live sessions. Never the process RNG's seed (work order 5 slice 5.6).
 REPLAY_SEED = 1729
 
 
 @contextmanager
 def deterministic_clock():
     """Pin the Visualizer's authored clock (``logical_runtime.authored_now``) and ``time.time``/``time.monotonic`` to
-    one settable clock and seed ``random`` (restored on exit). Recordings carry their own frame timestamps; the
-    replay sets this clock from them, so a recording made on either clock replays the same way."""
+    one settable clock (restored on exit). Recordings carry their own frame timestamps; the replay sets this clock
+    from them, so a recording made on either clock replays the same way. The process RNG is left alone: the one mode
+    that draws at random (Bubble's spawn) has its own generator, seeded per controller (``REPLAY_SEED``)."""
     from core.authored_clock import pinned_authored_clock
 
     now = [0.0]
-    saved_random = random.getstate()
     saved_time, saved_monotonic = time.time, time.monotonic
-    random.seed(REPLAY_SEED)
     time.time = lambda: now[0]
     time.monotonic = lambda: now[0]
     try:
@@ -400,7 +401,6 @@ def deterministic_clock():
             yield now
     finally:
         time.time, time.monotonic = saved_time, saved_monotonic
-        random.setstate(saved_random)
 
 
 def _offline_model(mode, preset, overrides, settings):
@@ -435,7 +435,8 @@ def offline_activation_request(mode, preset: int = 0, overrides=None, settings=N
     }
 
 
-def configure_offline_controller(controller, mode, preset: int = 0, overrides=None, settings=None):
+def configure_offline_controller(controller, mode, preset: int = 0, overrides=None, settings=None,
+                                 seed: int | None = REPLAY_SEED):
     """The offline replays' configure (Studios, replay tools, the evidence owner replay): no owner, no bind, no start
     sequence, so it sets the mode, opens render admission at once and treats the controller as playing with the fence
     clear. Not the product's configure: the owner and the engine worker's session configure through
@@ -446,7 +447,11 @@ def configure_offline_controller(controller, mode, preset: int = 0, overrides=No
     checkpoint audit 6, A6-L5); the engine-worker identity gates compare against it.
 
     ``settings``: a complete resolved settings mapping (or ``mode -> mapping``) used instead of the curated
-    ``preset``; tests pass frozen copies so authored presets never decide them (Current_Plan N2)."""
+    ``preset``; tests pass frozen copies so authored presets never decide them (Current_Plan N2). ``seed``: the mode
+    generators' seed (Bubble's spawn; ``REPLAY_SEED`` unless the caller names another, None leaves them on OS
+    entropy as production), so an offline replay is reproducible without seeding the process RNG."""
+    if seed is not None:
+        controller.seed_mode_generators(seed)
     model, activation = _offline_model(mode, preset, overrides, settings)
     controller.set_mode(mode)
     controller.settings_model = model

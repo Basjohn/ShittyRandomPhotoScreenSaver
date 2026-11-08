@@ -123,6 +123,44 @@ def test_each_tick_reads_the_asynchronous_commit_of_its_own_block(qt_app, monkey
 
 
 @pytest.mark.qt
+def test_the_seed_reaches_bubble_and_a_process_rng_draw_in_the_tick_diverges(qt_app, monkeypatch):
+    # Work order 5 slice 5.6 (checkpoint audit 2, A2-M2): the session's ``seed`` seeds Bubble's own generator through
+    # its controller, never the process RNG, so two sessions with the seed tick identical frames, while a tick that
+    # drew from the process RNG (here: Bubble's simulation handed the ``random`` module itself) is not seeded by any
+    # session and the same comparison fails (with the old process-wide seed it passed).
+    import random
+
+    import tools.expanded_visualizer_evidence as evidence
+    from widgets.spotify_visualizer import bubble_simulation
+
+    frames = evidence.shipped_clip(0.6).frames
+
+    def digests():
+        reader = PacketMailbox(role="reader")
+        session = _live_session(reader, "bubble")
+        try:
+            seen = []
+            for feature in frames:
+                session.tick(feature)
+                seen.append(evidence.frame_digest(reader.take().state))
+            return seen
+        finally:
+            session.close()
+            reader.close()
+
+    first = digests()
+    assert len(first) > 40 and digests() == first
+    real_init = bubble_simulation.BubbleSimulation.__init__
+
+    def process_rng(self, seed=None):
+        real_init(self, seed)
+        self._rng = random                                    # the module: the process RNG's draws
+
+    monkeypatch.setattr(bubble_simulation.BubbleSimulation, "__init__", process_rng)
+    assert digests() != digests()
+
+
+@pytest.mark.qt
 def test_a_tick_that_raises_closes_the_live_session(qt_app, monkeypatch):
     # Fail closed (audit M2; ported from the deleted snapshot input's gate, work order 5 slice 5.6): a tick that raised
     # left its controller half-updated, so the worker ends the session and says so; the next input is refused instead

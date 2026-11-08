@@ -92,8 +92,13 @@ class BubbleFrameRuntime:
     def __init__(
         self,
         simulation_factory: SimulationFactory | None = None,
+        *,
+        seed: int | None = None,
     ) -> None:
         self._simulation_factory = simulation_factory
+        # The production simulation's own generator seed (None: OS entropy, as production). Gates and replays set it
+        # here or through ``seed_generator`` (the runtime controller's ``seed_mode_generators``).
+        self._seed = seed
         self._lock = threading.RLock()
         self._simulation: Any = None
         self._ambient: Any = None
@@ -112,6 +117,15 @@ class BubbleFrameRuntime:
     def latest(self) -> BubbleResolvedFrame:
         with self._lock:
             return self._latest
+
+    def seed_generator(self, seed: int | None) -> None:
+        """Seed the simulation's own spawn generator: the next draw is the seed's first (gates and replays only;
+        production never calls it). Before the simulation exists the seed is kept for its construction."""
+        with self._lock:
+            self._seed = seed
+            reseed = getattr(self._simulation, "seed_generator", None)
+            if callable(reseed):
+                reseed(seed)
 
     def reset(self) -> None:
         with self._lock:
@@ -142,8 +156,9 @@ class BubbleFrameRuntime:
                     BubbleSimulation,
                 )
 
-                factory = BubbleSimulation
-            self._simulation = factory()
+                self._simulation = BubbleSimulation(seed=self._seed)
+            else:
+                self._simulation = factory()
         return self._simulation
 
     def advance(
