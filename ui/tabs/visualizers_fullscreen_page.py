@@ -85,6 +85,10 @@ class FullscreenModePage(QWidget):
         self.now_playing_always_show = self._check(
             now_playing_layout, "Always Show", "now_playing", "always_show",
             "Keep the track on screen; a new track fades in its place.")
+        self.now_playing_hover_reveal = self._check(
+            now_playing_layout, "Show On Hover", "now_playing", "hover_reveal",
+            "Once the track has faded, pointing at where it sits fades it back in; it fades again after the pointer "
+            "leaves.")
         self.now_playing_media_controls = self._check(
             now_playing_layout, "Media Controls", "now_playing", "media_controls",
             "Previous, play/pause and next beside the track. They control the Media widget's player and need "
@@ -185,6 +189,7 @@ class FullscreenModePage(QWidget):
                 (self.preset_always_show, "preset", "always_show"),
                 (self.preset_card, "preset", "card"),
                 (self.now_playing_always_show, "now_playing", "always_show"),
+                (self.now_playing_hover_reveal, "now_playing", "hover_reveal"),
                 (self.now_playing_media_controls, "now_playing", "media_controls"),
                 (self.now_playing_card, "now_playing", "card"),
             ):

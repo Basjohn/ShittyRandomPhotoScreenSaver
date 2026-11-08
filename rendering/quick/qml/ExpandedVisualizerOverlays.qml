@@ -16,7 +16,8 @@ import QtQuick.Effects
 //
 // Events: entering the full display (once the startup reveal has opened), a preset announcement, a change of the
 // track's identity, and playback resuming (paused -> playing: Now Playing shows again, as on a track change; operator,
-// 8 Nov). Nothing else reveals an overlay; nothing runs at rest.
+// 8 Nov), and with Now Playing's Show On Hover the pointer arriving where it is placed (a HoverHandler edge; it holds
+// while the pointer rests and fades after it leaves). Nothing else reveals an overlay; nothing runs at rest.
 //
 // Fullscreen Edit (M3c): while ``editing`` (the Edit session is open on this display's overlays) both overlays show
 // and hold, with a quiet placeholder where there is no preset name or track yet, so each can be grabbed; their
@@ -549,5 +550,38 @@ Item {
                 }
             }
         }
+    }
+
+    // ------------------------------------------------------------------------------- Show On Hover (Now Playing)
+    // Operator, 8 Nov: "the media section should optionally refade in if hovered over where it was positioned.
+    // Without timers or polling." With the option on, the pointer arriving where Now Playing is placed (its slot's
+    // rectangle, kept while it is faded out) fades it back in and holds it; leaving starts the reveal's own hold and
+    // fade-out. Driven by this HoverHandler's hovered edges only: no Timer, no polling, nothing per frame. The region
+    // is an empty item above the slots: its handler is passive (blocking: false) and nothing here takes a press, so
+    // clicks, the wheel, the Media Controls' own hover and every gesture reach what lies under it. Off (the
+    // default), while Fullscreen Edit is open (Edit holds the overlays itself) or with no track, it does nothing.
+    readonly property bool nowPlayingHoverReveal: nowPlayingOptions.hoverReveal === true
+    Item {
+        id: nowPlayingHoverRegion
+        objectName: "expandedOverlayNowPlayingHoverRegion"
+        x: nowPlayingSlot.x
+        y: nowPlayingSlot.y
+        width: nowPlayingSlot.width
+        height: nowPlayingSlot.height
+        z: 2
+        HoverHandler {
+            id: nowPlayingHover
+            objectName: "expandedOverlayNowPlayingHover"
+            enabled: overlays.nowPlayingHoverReveal && !overlays.editing
+            blocking: false
+        }
+    }
+    readonly property bool nowPlayingHoverActive: nowPlayingHover.hovered && nowPlayingHoverReveal && !editing
+        && entered && liveTrackKey.length > 0
+    onNowPlayingHoverActiveChanged: {
+        if (nowPlayingHoverActive)
+            nowPlayingSlot.hoverEnter()
+        else
+            nowPlayingSlot.hoverExit(liveTrackKey.length > 0)
     }
 }
