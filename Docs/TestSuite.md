@@ -1103,11 +1103,21 @@ High-value permanent guards include:
   a fresh label namespace per configure; a worker that cannot configure or start leaving that activation in process; a
   lost session's held frame fading out on the replacement's frames, reconfigured once, a second loss in process for the
   run; the production session opening the device through the normal capture path on its capture lane, and a device
-  that does not open ending the session for its owner. The edge-order tests run the same `VisualizerEngineWorker` in
+  that does not open keeping the session and being retried at the next capture edge (A7-L4). The edge-order tests run the same `VisualizerEngineWorker` in
   this process behind a supervisor stand-in. Mutations each failing their test: the admission ignored, an engine kept in
   the main process, no recovery fade, no second-failure rule, a failed start kept, the device unchecked or refused, the
   offline activation, no view forwarding. Whole-gate run (identity, real time and the main process's cost on vs off,
   per mode): `tools/visualizer_replay/owner_worker_gate.py` (below-normal priority; never in the suite);
+  `tests/test_visualizer_owner_engine_worker_liveness.py` (slice 5.5 and checkpoint audit 7's failure items): no
+  control edge waits on the worker (against a suspended, hung worker each edge returns within one frame, and the
+  supervisor's heartbeat, sped up for the test, ends it and the owner recovers on a fresh worker); a killed worker seen
+  by its pipe's end (the replacement's configure resent once to the restarted worker); a full wake pipe never blocks
+  the writer; a replacement that never publishes bounded by the recovery deadline (falls back in process once); a
+  fallback that raises contained; a crossfade deadline fenced out of a recovery; A7-L1 (no flash of the faded-out
+  frame), A7-L2 (an early replacement failure leaves the in-process identity bound), A7-L3 (no pre-park frame at the
+  unpark), A7-L5 (play-edge T1/T2 records, "parked" only on success) and A7-L6 (a paused switch reveals on the same
+  frame as in process, frames identical). Each test carries or was shown with its negative control (the design doc's
+  5.5 record lists them);
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 
 The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.

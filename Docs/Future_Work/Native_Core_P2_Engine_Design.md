@@ -756,8 +756,9 @@ switch never remaps.
        refuses nothing, so its engine opens the loopback device through the audio worker's normal path
        (`create_audio_capture`) on its own capture lane, where COM initialisation stays (test: the device constructor
        runs on `affinity_io_lane:audio_capture`, no factory installed). The session never waits on the device (as in
-       process); a check queued behind every capture transaction on the lane reports an open that failed by closing
-       the session's wake pipe, which the owner's listener sees as the session's end: a worker failure (test). Tests
+       process); a check queued behind every capture transaction on the lane reports an open that failed (since 5.5,
+       A7-L4: a device failure that keeps the session and is retried at the next capture edge, no longer the session's
+       end; test). Tests
        never open a device: `recorded_capture_for_testing` adds a recorded-PCM source (and its cadence) to the
        configure, and the session refuses the device for its life.
      - *Failure (interim, 5.5 completes it):* a worker that fails to configure (no supervisor, no process, a failed
@@ -828,11 +829,82 @@ switch never remaps.
      the label-namespace counter owned by the main process for the app's life; the wake sender closed after
      configure; a full wake pipe never blocks the tick. **Done in 5.2:** the namespace counter's owner
      (`engine_worker_link`), the main side's wake sender closed after configure (its end is the session's end),
-     `session_closed` / the pipe's end -> hold, fade, reconfigure once, then in process for the run. **Left:** heartbeat
-     loss of a hung worker (today only an edge's timeout reaches the failure path), a fade with no replacement frames to
-     pace it, the wake pipe's backpressure (`send_bytes` can still block a writer whose reader stopped draining), and
-     asynchronous control edges (each edge waits for its reply on the GUI thread, bounded; the first construct also
-     waits for the worker's spawn and ready signal, and a recovery for a reconfigure).
+     `session_closed` / the pipe's end -> hold, fade, reconfigure once, then in process for the run.
+     **Built (8 Nov, with checkpoint audit 7's failure items A7-M3, A7-M4, A7-L1..L6):**
+     - *No GUI-thread wait (A7-M4).* Every control edge is sent and never awaited (`engine_worker_link`): the link
+       registers each correlation with the supervisor's one blocking response listener (`register_response_callback`:
+       no poll, no per-request thread) and the reply comes back as a queued Qt signal, applied on the GUI thread; a
+       request that could not be sent, a failed reply, or a correlation the supervisor cancels (it retired the worker)
+       is a failure, always delivered as an event, never inside the edge that caused it (no re-entrant failure path:
+       A7-L2, plus a guard after the replacement's adopt). Edges that need a reply's identity proceed on its event: the
+       configure's reply binds render admission (`bind` defers only that part; `sync_present` and the render-thread
+       admission present nothing until it), the hidden activation's `VIS_SET_MODE` reply binds the target and
+       configures its presentation (the target stays hidden in `waiting_target` meanwhile; a failure while it is in
+       flight restores the outgoing Edit and layout profiles and is the session's failure). The first configure never
+       waits for the spawn: a worker that is not running is (re)started on a `ThreadManager` IO task (a dead one is
+       stopped first, which retires its stale response listener), the requests sent meanwhile wait in the link's
+       outbox, in order. Found on the way: a session killed between the heartbeat's passes leaves the supervisor's
+       worker "running" for a moment, so the replacement's configure can be queued to the dead process and then
+       cancelled by the heartbeat's restart; the link sends an unanswered configure (and everything queued behind it)
+       once more to the restarted worker (the probe's kill showed it, and the killed-worker test fails without it).
+       `VIS_SET_VIEW` is latest-wins state: writes inside one GUI turn coalesce into one queued send, at most one is in
+       flight, and the newest view follows its reply (a hidden activation sends it at once, before `VIS_SET_MODE`).
+       The owner's stop is sent, never awaited (`retire`), addressed to its session's mapping so a stop that lands
+       after another session was configured is a no-op there. `stop` and `feed_for_testing` still wait (tests, tools).
+     - *Liveness.* A dead worker is seen by an event: the session's wake pipe ends (the worker held the only writer
+       end) and the supervisor cancels the outstanding correlations when it retires the process. A hung-but-alive worker
+       is the supervisor's heartbeat's (reused, nothing new): missed heartbeats restart it (bounded:
+       `MISSED_HEARTBEAT_THRESHOLD` intervals, then the stop's graceful bound and termination), which ends the pipe and
+       cancels the correlations; nothing on the GUI thread waits meanwhile.
+     - *A full wake pipe never blocks the tick:* `packet_mailbox.send_wake_byte_without_blocking` (Windows: one
+       overlapped write, cancelled when it would wait; POSIX: a non-blocking framed write), the byte dropped and counted
+       (`wakes_dropped`): a full pipe means the reader already has wakes pending (it coalesces; latest wins). A pipe
+       holds 65,536 one-byte wakes; `send_bytes` blocked the writer there (the test's negative control).
+     - *Bounded recovery (A7-M3).* A recovery always enters `recovering` at the failure (the held frame, or nothing
+       held, waiting for the replacement's identity), bumps the request serial (a crossfade deadline armed earlier is
+       inert in it) and arms the transaction deadline's one-shot (`_on_recovery_deadline`, generation-fenced; never
+       armed while the displays are off: the unpark arms it), again at its reveal. First expiry, still on the worker:
+       fall back in process once (counted for the run); the in-process runtime's publications pace the held frame's
+       fade and the reveal, under a second deadline. Second expiry: a reveal that never came leaves the Visualizer faded
+       out, logged, and requests admitted (a later crossfade fades out from the drawn fade, `_fade_out_from`: 1.0 in
+       process, so in-process frames are unchanged); a held frame nothing paces any more escalates to the
+       generation-fenced reconstruction. The fallback is contained (`_fall_back_in_process` catches and escalates once;
+       nothing reaches Media's or display power's handlers).
+     - *Lows.* A7-L1: the failure path never resets the drawn fade (the hold takes the fade actually drawn: 0 after a
+       completed fade-out). A7-L3: no frame is held while the displays are off, and a park during a recovery drops its
+       held frame, so the replacement reveals from hidden at the unpark. A7-L4: a device that does not open is a device
+       failure, not a worker failure: the session keeps running (idle frames, as in process), logs it once per run of
+       failures, reports `capture_failed` in its replies, and the next edge that opens capture retries the device; a
+       later open clears it. A7-L5: Media's play edge on the worker records its `[VIS_PLAYBACK_EDGE]` T1 (sent) and T2
+       (the reply) under the reactivity diagnostics; "parked"/"resumed" is logged on the reply. A7-L6: a paused switch
+       (Oscilloscope -> Bubble, Spectrum -> Sphere) reveals on the same frame with identical frames on both paths
+       (`owner_worker_gate.identity_script_paused_switch`; the rig records the phase and fade of every publication).
+       A closed reader mailbox now reads as empty (a retire after a failed fallback raised on its released view).
+     - *GUI-thread stall, measured (`D:` probe on the real owner and process, below-normal priority; evidence
+       `.artifacts/evidence/architecture/native_core_p2/20261108_p2b_55_gui_stall/`):* before -> after, the worst single
+       GUI-thread call: the first configure 1,780 ms -> 86 ms (38 ms link setup with the cold import of the worker
+       modules, 47 ms the presentation side; the 0.5 s spawn and 1-2 s session build moved off the thread); the
+       configure's reply 161-209 ms (the render-source bind, which in process is `bind`'s 229 ms); Media's play edge
+       0.6 -> 0.1 ms; display power 1.7 -> 0.15 ms; a view drag step 1.3 -> 0.1 ms; the mode commit 27 ms (inside
+       `sync_present`) -> 0.9 ms plus the reply's 7.5-13 ms presentation configure; a killed worker mid-edge 2,639 ms
+       (the edge) + 1,715 ms (the reconfigure) -> 0.1 ms + 3 ms; a hung worker 21,873 ms (the edge, until the
+       heartbeat's restart released it) -> 0.2 ms for three edges, the failure path reached 16.8 s later by the
+       heartbeat (production interval). Gate: no control edge over one frame (1/60 s); held in
+       `tests/test_visualizer_owner_engine_worker_liveness.py` against a suspended worker.
+     - *Tests* (`tests/test_visualizer_owner_engine_worker_liveness.py`, each with its negative control shown): the
+       full wake pipe (the blocking send never returns); edges against a hung worker (the waiting edge stalls 30 s) and
+       the heartbeat ending it, recovered on a fresh worker; a killed worker (without the configure's resend the
+       replacement fails and the owner ends in process); a replacement that never publishes (no deadline: frozen in
+       `recovering`); a fallback that raises (unguarded: it escapes Media's play edge); a stale crossfade deadline (no
+       fence: `deadline:recovering`); A7-L1 (the reset fade flashes), A7-L2 (synchronous failure delivery without the
+       guard ends `failed`), A7-L3 (the old hold re-presents the pre-park frame), A7-L5 (logging before the reply logs
+       a failed park), A7-L6 (a reveal predicate that waits for a playing frame differs). A7-L4:
+       `tests/test_visualizer_owner_engine_worker.py` (the old report closes the pipe).
+     - **Left for 5.6-5.7:** the supervisor starts a dead role without retiring its stale response listener (the link
+       stops it first; the supervisor itself is unchanged); a heartbeat restart racing the link's own restart can still
+       kill the fresh worker (the resend covers one; a second is a failure, fail closed); the hung-worker bound is the
+       production heartbeat's (~17 s measured) with the held frame frozen meanwhile; a session whose steps keep failing
+       (the runtime retries, A6-M3) still publishes nothing and is not detected; device changes (5.3).
    - 5.6 Cleanup: delete `engine_snapshot.py` and the `snapshot` input; Bubble's spawn on its own generator so no
      gate needs a process-wide seed.
    - 5.7 Dormancy and diagnostics: the worker exists only while a Visualizer is active and parks with the display;

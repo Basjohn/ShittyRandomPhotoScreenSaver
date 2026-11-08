@@ -120,9 +120,14 @@ class QuickDisplayVisualizerOwner:
     _recovery_held: "tuple[Any, float] | None" = None
     _activation_inputs: "dict[str, Any] | None" = None
     _configure_services: Mapping[str, Any] = {}
-    _view_sent: Any = None
     _view_dirty = False
     _in_sync_present = False
+    _worker_commit: "dict[str, Any] | None" = None
+    _bind_deferred = False
+    _recovery_stage = 0
+    _worker_playback_edges = 0
+    # The fade a crossfade's fade-out starts from (1.0 in process; a recovery that ended faded out leaves 0).
+    _fade_out_from = 1.0
 
     def __init__(
         self,
@@ -242,6 +247,12 @@ class QuickDisplayVisualizerOwner:
         self._recovery_held: tuple[Any, float] | None = None
         self._activation_inputs: dict[str, Any] | None = None
         self._configure_services: dict[str, Any] = {}
+        # Slice 5.5: a hidden activation's commit in flight (its reply binds the target), a first bind waiting for the
+        # configure's reply, and the recovery's deadline stage (0 none, 1 the replacement, 2 after the fallback).
+        self._worker_commit: dict[str, Any] | None = None
+        self._bind_deferred = False
+        self._recovery_stage = 0
+        self._fade_out_from = 1.0
 
     @property
     def controller(self) -> Any:
@@ -275,6 +286,13 @@ class QuickDisplayVisualizerOwner:
         controller = self._controller
         self._display_power_on = on
         self._project_expanded_overlays()
+        if self._recovery_stage:
+            # An engine-worker recovery in flight (on the worker, or after its fallback in process): no held frame
+            # survives a park (A7-L3); the unpark re-arms its deadline.
+            if not on:
+                self._drop_recovery_hold()
+            else:
+                self._rearm_recovery_deadline()
         if self._worker is not None:
             return self._set_display_power_on_worker(on)
         if not on:
@@ -407,20 +425,27 @@ class QuickDisplayVisualizerOwner:
 
     def engine_identity(self) -> tuple[int, int]:
         """The (engine generation, activation id) the host binding binds render admission for: the controller's
-        engine's in process, the configured session's on the engine worker (which keeps no engine here)."""
-        if self._worker is not None and self._worker_identity is not None:
-            return self._worker_identity
+        engine's in process, the configured session's on the engine worker (which keeps no engine here; (-1, -1) until
+        the configure's reply, which binds it: ``bind`` defers the render binding until then)."""
+        if self._worker is not None:
+            return self._worker_identity if self._worker_identity is not None else (-1, -1)
         engine = self._controller.engine
         return int(engine.get_generation_id()), int(engine.get_activation_id())
 
     def bind(self, *, engine_generation: int, activation_id: int) -> Any:
         if self._retired:
             raise RuntimeError("cannot bind a retired visualizer owner")
-        self._render_identity = self._runtime.bind_visualizer_render_source(
-            self._controller,
-            engine_generation=int(engine_generation),
-            activation_id=int(activation_id),
-        )
+        if self._worker is not None and self._worker_identity is None:
+            # The engine worker's configure is unanswered (never awaited, slice 5.5): its reply binds render admission
+            # for the session's identity (``_on_worker_configured``); everything else binds now.
+            self._bind_deferred = True
+            self._render_identity = None
+        else:
+            self._render_identity = self._runtime.bind_visualizer_render_source(
+                self._controller,
+                engine_generation=int(engine_generation),
+                activation_id=int(activation_id),
+            )
         self._runtime.bind_visualizer_viewport_config(
             self._controller.set_custom_viewport_override
         )
@@ -456,6 +481,8 @@ class QuickDisplayVisualizerOwner:
         sync = self._sync
         if self._retired or sync is None or self._mode_transition_phase != "idle":
             return False
+        if self._worker is not None and self._worker_identity is None:
+            return False                              # the engine worker's identity is not bound yet
         return sync.admit_latest_at_sync()
 
     def _request_retained_present(self) -> None:
@@ -496,7 +523,7 @@ class QuickDisplayVisualizerOwner:
             # takes Media's state with its start, as the host binding's play edge before ``start``).
             controller.playing = active
             if self._started and active != previous:
-                self._worker_edge(lambda link: link.set_playing(active))
+                self._worker_set_playing(active, observed_ts)
             return
         edge_ts = float(observed_ts if observed_ts is not None else authored_now())
         edge_seq = 0
@@ -1192,7 +1219,7 @@ class QuickDisplayVisualizerOwner:
             self._pending_mode_activation = None
             self._mode_transition_phase = "idle"
             self._mode_transition_started_at = 0.0
-            self._mode_transition_fade = 1.0
+            self._mode_transition_fade = self._fade_out_from
             try:
                 self._reapply_route()
                 self._request_retained_present()
@@ -1227,6 +1254,8 @@ class QuickDisplayVisualizerOwner:
             return False
         phase = self._mode_transition_phase
         if phase == "idle":
+            if self._worker is not None and self._worker_identity is None:
+                return False                          # the engine worker's identity is not bound yet (its reply is)
             return self._sync.sync_latest()
         if phase == "failed":
             # One fenced reconstruction request already owns recovery. Never
@@ -1240,7 +1269,7 @@ class QuickDisplayVisualizerOwner:
         duration = self._transition_half_duration_s
         progress = 1.0 if duration <= 0.0 else min(1.0, elapsed / duration)
         if phase == "fading_out":
-            self._mode_transition_fade = 1.0 - progress
+            self._mode_transition_fade = self._fade_out_from * (1.0 - progress)
             published = self._sync.sync_latest()
             # Do not replace the source until the retained item has consumed an
             # outgoing snapshot at zero content opacity. This keeps identity and
@@ -1287,6 +1316,7 @@ class QuickDisplayVisualizerOwner:
                 self._mode_transition_phase = "idle"
                 self._mode_transition_started_at = 0.0
                 self._mode_transition_fade = 1.0
+                self._recovery_stage = 0              # an engine-worker recovery's reveal completed
                 callback = None if pending is None else pending.get("on_complete")
                 if callable(callback):
                     try:
@@ -1435,9 +1465,11 @@ class QuickDisplayVisualizerOwner:
             "presentation_kwargs": dict(presentation_kwargs),
             "on_complete": on_complete,
         }
+        # The fade-out starts from the fade drawn now (1.0 in process; an engine-worker recovery that ended faded
+        # out leaves 0, so the request never flashes the hidden frame back in).
+        self._fade_out_from = float(self._mode_transition_fade)
         self._mode_transition_phase = "fading_out"
         self._mode_transition_started_at = float(self._transition_clock())
-        self._mode_transition_fade = 1.0
         self._transition_request_serial += 1
         self._transition_recovery_issued = False
         try:
@@ -1447,7 +1479,7 @@ class QuickDisplayVisualizerOwner:
             # infinite hidden transition. Leave the previous source untouched.
             self._pending_mode_activation = None
             self._mode_transition_phase = "idle"
-            self._mode_transition_fade = 1.0
+            self._mode_transition_fade = self._fade_out_from
             logger.exception("[SPOTIFY_VIS] Rejected transition without a bounded recovery guard")
             return False
         logger.info(
@@ -1634,11 +1666,13 @@ class QuickDisplayVisualizerOwner:
         if self._worker is not None:
             self._activation_fade_started_at = float(self._transition_clock())
             self._started = True
+            link = self._worker
             try:
-                self._worker.start(bool(controller.playing))
+                # Sent, never awaited; a failed start leaves this activation in process (logged once, an event).
+                link.start(bool(controller.playing),
+                           on_failed=lambda failure, _link=link: self._on_worker_start_failed(_link, failure))
             except Exception as exc:
-                # The worker failed to start: this activation runs in process (logged once).
-                self._fall_back_in_process(f"start failed: {exc}", count_for_run=False)
+                self._on_worker_start_failed(link, exc)
             return
         engine = prepare_engine_start(controller)
 
@@ -1669,10 +1703,16 @@ class QuickDisplayVisualizerOwner:
                 self._engine_acquired = False
             raise
 
-    # ------------------------------------------------- the engine worker (native core P2b, work order 5 slice 5.2)
+    # ------------------------------------------- the engine worker (native core P2b, work order 5 slices 5.2 and 5.5)
+    # Every control edge below is sent and never awaited (``engine_worker_link``: replies and failures arrive as queued
+    # events on this GUI thread). An edge that needs a reply's identity proceeds on that event: the configure's engine
+    # identity binds render admission (``_on_worker_configured``), a hidden activation's committed identity binds the
+    # target (``_on_worker_committed``). Failures always arrive as events (never inside the edge that caused them), so
+    # the failure path never re-enters an edge in flight (A7-L2).
 
     def _configure_on_engine_worker(self, inputs: dict[str, Any], *, playing: bool) -> bool:
-        """Configure the first activation on the engine worker; False (logged once) leaves it in process."""
+        """Configure the first activation on the engine worker (sent, never awaited: the worker's spawn included);
+        False (logged once) leaves it in process."""
         from widgets.spotify_visualizer import engine_worker_link as link_module
 
         controller = self._controller
@@ -1682,7 +1722,7 @@ class QuickDisplayVisualizerOwner:
                         controller.mode_id)
             return False
         try:
-            link, identity = self._open_engine_worker_session(inputs, supervisor)
+            link = self._open_engine_worker_session(inputs, supervisor)
         except Exception as exc:
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Configure failed (%s); this activation runs in process "
                            "mode=%s", exc, controller.mode_id)
@@ -1691,27 +1731,27 @@ class QuickDisplayVisualizerOwner:
             controller, activation=inputs, playing=playing, refresh_presentation=self._refresh_backdrop,
             **self._configure_services,
         )
-        self._adopt_engine_worker_session(link, identity, inputs)
-        logger.info("[SPOTIFY_VIS][ENGINE_WORKER] Visualizer configured on the engine worker mode=%s namespace=%d "
-                    "engine=%s/%s", controller.mode_id, link.label_namespace, identity[0], identity[1])
+        self._adopt_engine_worker_session(link, inputs)
+        logger.info("[SPOTIFY_VIS][ENGINE_WORKER] Visualizer configuring on the engine worker mode=%s namespace=%d",
+                    controller.mode_id, link.label_namespace)
         return True
 
-    def _open_engine_worker_session(self, inputs: dict[str, Any], supervisor: Any) -> tuple[Any, tuple[int, int]]:
-        """A configured session for the controller's current mode and ``inputs`` (closed again if it fails)."""
+    def _open_engine_worker_session(self, inputs: dict[str, Any], supervisor: Any) -> Any:
+        """A session for the controller's current mode and ``inputs``: its configure sent (closed again if sending
+        fails); the reply binds its identity (``_on_worker_configured``)."""
         from widgets.spotify_visualizer.engine_worker_link import EngineWorkerLink
 
         controller = self._controller
-        link = EngineWorkerLink(supervisor, on_lost=self._on_engine_worker_lost)
-        try:
-            identity = link.configure(runtime_generation=controller.runtime_generation, mode=controller.mode_id,
-                                      bar_count=controller.bar_count, activation=inputs)
-        except BaseException:
-            link.close()
-            raise
-        return link, identity
+        link = EngineWorkerLink(supervisor, on_lost=self._on_engine_worker_lost,
+                                thread_manager=self._configure_services.get("thread_manager"))
+        link.configure(runtime_generation=controller.runtime_generation, mode=controller.mode_id,
+                       bar_count=controller.bar_count, activation=inputs,
+                       on_configured=lambda identity, _link=link: self._on_worker_configured(_link, identity))
+        return link
 
-    def _adopt_engine_worker_session(self, link: Any, identity: tuple[int, int], inputs: dict[str, Any]) -> None:
-        """The session's reader becomes the controller's logical mailbox (with the owner's wake, once bound)."""
+    def _adopt_engine_worker_session(self, link: Any, inputs: dict[str, Any]) -> None:
+        """The session's reader becomes the controller's logical mailbox (with the owner's wake, once bound); its
+        identity is unknown until the configure's reply."""
         controller = self._controller
         link.mailbox.set_trace_screen_index(int(self._presentation_runtime.screen_index))
         controller.replace_logical_mailbox(link.mailbox)
@@ -1719,58 +1759,108 @@ class QuickDisplayVisualizerOwner:
         if wake is not None:
             link.mailbox.set_wake_callback(wake.request)
         self._worker = link
-        self._worker_identity = (int(identity[0]), int(identity[1]))
+        self._worker_identity = None
         self._activation_inputs = dict(inputs)
-        # The framed view the tick reads follows the main controller's layout metrics (latest wins).
+        # The framed view the tick reads follows the main controller's layout metrics (latest wins, never awaited).
+        link.set_view_source(lambda: controller.layout_metrics_snapshot)
         controller.set_layout_metrics_observer(self._on_layout_metrics_written)
-        self._view_sent = None
-        self._view_dirty = True
-        self._forward_view()
+        self._view_dirty = False
+        link.send_view()
+
+    def _on_worker_configured(self, link: Any, identity: tuple[int, int]) -> None:
+        """GUI thread, the configure's reply: the session's engine identity. A first bind deferred for it binds now;
+        a recovery takes it for its reveal; otherwise (a failed phase) the replacement is bound as it is."""
+        if link is not self._worker or self._retired:
+            return
+        identity = (int(identity[0]), int(identity[1]))
+        self._worker_identity = identity
+        logger.info("[SPOTIFY_VIS][ENGINE_WORKER] Visualizer configured on the engine worker mode=%s namespace=%d "
+                    "engine=%s/%s", self._controller.mode_id, link.label_namespace, identity[0], identity[1])
+        now = float(self._transition_clock())
+        recovery = self._worker_recovery
+        if recovery is not None:
+            recovery["identity"] = identity
+            if recovery["done"]:
+                self._finish_worker_recovery(now)
+        elif self._bind_deferred:
+            self._bind_deferred = False
+            self._render_identity = self._runtime.bind_visualizer_render_source(
+                self._controller, engine_generation=identity[0], activation_id=identity[1])
+        elif self._bound:
+            self._bind_replacement(identity, now, reveal=False)
+        if self._publication_wake is not None:
+            self._publication_wake.request()          # a frame that arrived before the identity is presented now
 
     def _on_layout_metrics_written(self) -> None:
-        """The controller's layout-metrics observer (engine worker only): forwarded at once, or, inside a
+        """The controller's layout-metrics observer (engine worker only): one queued send per GUI turn, or, inside a
         presentation (which commits them on every publication), once at its end."""
-        self._view_dirty = True
-        if not self._in_sync_present:
-            self._forward_view()
+        if self._in_sync_present:
+            self._view_dirty = True
+            return
+        link = self._worker
+        if link is not None:
+            link.view_changed()
 
     def _forward_view(self) -> None:
-        """Send the layout metrics to the session when they changed since the last send (``VIS_SET_VIEW``)."""
-        if not self._view_dirty or self._worker is None:
+        """At the end of a presentation: the layout metrics it committed reach the session before its next step."""
+        if not self._view_dirty:
             return
         self._view_dirty = False
-        snapshot = self._controller.layout_metrics_snapshot
-        if snapshot == self._view_sent:
-            return
-        self._view_sent = snapshot
-        self._worker_edge(lambda link: link.set_view(snapshot))
-
-    def _worker_edge(self, send: Callable[[Any], None]) -> bool:
-        """Send one control edge to the session; a failure is the worker failure path (False)."""
         link = self._worker
-        try:
-            send(link)
-        except Exception as exc:
-            if link is self._worker:
-                self._on_engine_worker_failed(str(exc))
-            return False
-        return True
+        if link is not None:
+            link.send_view()
 
     def _set_display_power_on_worker(self, on: bool) -> bool:
-        """Display power on the engine worker: the session parks (cadence, capture) or resumes warm; after the park
-        reply, which follows the worker's last pre-park publish, the reader drops its unread frame, never before it
-        (checkpoint audit 6, A6-L8), so no pre-park frame is presented hours later."""
+        """Display power on the engine worker (sent, never awaited): the session parks (cadence, capture) or resumes
+        warm. The park's reply follows the worker's last pre-park publish, so the reader drops its unread frame then,
+        never before it (checkpoint audit 6, A6-L8), and no pre-park frame is presented hours later. Logged on the
+        reply (A7-L5). (A recovery's held frame and deadline at a park / unpark: ``set_display_power``.)"""
         controller = self._controller
         link = self._worker
-        if self._worker_edge(lambda current: current.set_display_power(on)) and not on and link is self._worker:
-            controller.logical_mailbox.clear()
-        logger.info("[SPOTIFY_VIS][DISPLAY_POWER] Visualizer %s mode=%s (engine worker)",
-                    "resumed" if on else "parked", controller.mode_id)
+
+        def applied(_reply: dict, _link: Any = link) -> None:
+            if _link is not self._worker:
+                return
+            if not on:
+                controller.logical_mailbox.clear()
+            logger.info("[SPOTIFY_VIS][DISPLAY_POWER] Visualizer %s mode=%s (engine worker)",
+                        "resumed" if on else "parked", controller.mode_id)
+
+        try:
+            link.set_display_power(on, on_reply=applied)
+        except Exception as exc:
+            self._on_engine_worker_failed(f"display power: {exc}")
         return True
+
+    def _worker_set_playing(self, active: bool, observed_ts: float | None) -> None:
+        """Media's play edge to the session (sent, never awaited). With the reactivity diagnostics on, the edge's T1
+        is the send and its T2 the worker's reply (A7-L5; the tick-side records are the worker's)."""
+        link = self._worker
+        edge_seq = 0
+        sent_ts = float(observed_ts if observed_ts is not None else authored_now())
+        if is_viz_diagnostics_enabled():
+            self._worker_playback_edges += 1
+            edge_seq = self._worker_playback_edges
+            logger.debug("[VIS_PLAYBACK_EDGE] stage=T1 edge=%d mode=%s playing=%s ts=%.6f (engine worker)",
+                         edge_seq, self._controller.mode_id, active, sent_ts)
+
+        def applied(_reply: dict) -> None:
+            if edge_seq > 0:
+                logger.debug("[VIS_PLAYBACK_EDGE] stage=T2 edge=%d mode=%s playing=%s dt_ms=%.1f (engine worker)",
+                             edge_seq, self._controller.mode_id, active,
+                             max(0.0, (authored_now() - sent_ts) * 1000.0))
+
+        try:
+            link.set_playing(active, on_reply=applied)
+        except Exception as exc:
+            self._on_engine_worker_failed(f"play edge: {exc}")
 
     def _worker_waiting_for_fresh_frame(self) -> bool:
         """``waiting_target`` on the engine worker: the session's tick state is the worker's, so the target's
-        newest frame says it (a current-identity frame the tick marked presentable)."""
+        newest frame says it (a current-identity frame the tick marked presentable). Always waiting while the target's
+        identity is not bound yet (a hidden activation's commit or a replacement's configure unanswered)."""
+        if self._worker_commit is not None or self._worker_identity is None:
+            return True
         publication = self._controller.logical_mailbox.peek()
         if publication is None:
             return True
@@ -1783,15 +1873,11 @@ class QuickDisplayVisualizerOwner:
 
     def _activate_pending_mode_on_worker(self, now: float, pending: dict[str, Any], *, kind: str, target: str,
                                          outgoing_mode: str, edit_profile_switched: bool) -> None:
-        """The hidden activation commit on the engine worker (``VIS_SET_MODE``, applied at once in the session: the
-        owner's ``commit_logical_activation`` there), then the main side's presentation of the target. A same-mode
-        preset or settings change is a whole re-activation of the session (interim: slice 5.4 applies a resolved
-        settings delta at a tick boundary instead)."""
-        from core.settings.visualizer_mode_registry import (
-            get_visualizer_layout_profile,
-            get_visualizer_mode_descriptor,
-        )
-        from widgets.spotify_visualizer.engine_worker_link import configure_presentation_side
+        """The hidden activation commit on the engine worker: ``VIS_SET_MODE`` sent (applied at once in the session:
+        the owner's ``commit_logical_activation`` there), the target kept hidden; the reply's committed identity binds
+        the target and configures its presentation (``_on_worker_committed``). A same-mode preset or settings change is
+        a whole re-activation of the session (interim: slice 5.4 applies a resolved settings delta instead)."""
+        from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
 
         controller = self._controller
         inputs = {key: pending[key] for key in ("settings_model", "resolved_activation", "technical_cache",
@@ -1799,37 +1885,40 @@ class QuickDisplayVisualizerOwner:
         link = self._worker
         profile_changed = kind == "mode" and (get_visualizer_layout_profile(target)
                                               != get_visualizer_layout_profile(outgoing_mode))
+        commit = {"link": link, "kind": kind, "target": target, "outgoing": outgoing_mode, "inputs": inputs,
+                  "profile_changed": profile_changed, "edit_profile_switched": edit_profile_switched}
+        self._worker_commit = commit
+        self._waiting_target_since = now
+        self._mode_transition_phase = "waiting_target"
+        self._mode_transition_started_at = 0.0
+        self._mode_transition_fade = 0.0
         if profile_changed:
             # The hidden transaction's profile switch, before the session commits the target: its configuration and
-            # first tick read the target's committed layout metrics, as in process.
+            # first tick read the target's committed layout metrics, as in process (sent now, before VIS_SET_MODE).
             controller.render_bridge.discard_pending()
             self._activate_committed_layout_profile(target)
-            self._forward_view()
+            self._view_dirty = False
+            link.send_view(force=True)
         try:
-            if link is not self._worker:
-                raise RuntimeError("the session failed while its layout metrics were sent")
-            generation, activation_id = link.set_mode(target, inputs)
+            link.set_mode(target, inputs,
+                          on_committed=lambda identity, _commit=commit: self._on_worker_committed(_commit, identity),
+                          on_failed=lambda failure, _commit=commit: self._on_worker_commit_failed(_commit, failure))
         except Exception as exc:
-            logger.error("[SPOTIFY_VIS][ENGINE_WORKER] Hidden %s activation FAILED source=%s target=%s: %s",
-                         kind, outgoing_mode, target, exc)
-            if edit_profile_switched and self._edit_layout_profile_activator is not None:
-                try:
-                    self._edit_layout_profile_activator(outgoing_mode)
-                except Exception:
-                    logger.exception("[SPOTIFY_VIS] Could not restore the outgoing Edit profile mode=%s", outgoing_mode)
-            if profile_changed:
-                try:
-                    self._activate_committed_layout_profile(outgoing_mode)
-                except Exception:
-                    logger.exception("[SPOTIFY_VIS] Could not restore the outgoing layout profile mode=%s",
-                                     outgoing_mode)
-            self._pending_mode_activation = None
-            self._mode_transition_phase = "idle"
-            self._mode_transition_started_at = 0.0
-            self._mode_transition_fade = 1.0
-            if link is self._worker:
-                self._on_engine_worker_failed(f"activation failed: {exc}")
+            self._on_worker_commit_failed(commit, exc)
+
+    def _on_worker_committed(self, commit: dict[str, Any], identity: tuple[int, int]) -> None:
+        """GUI thread, ``VIS_SET_MODE``'s reply: the target's committed identity. The main side's presentation of the
+        target, bound for that identity; the target stays hidden until its first presentable frame (``waiting_target``)."""
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        from widgets.spotify_visualizer.engine_worker_link import configure_presentation_side
+
+        if commit is not self._worker_commit or commit["link"] is not self._worker or self._retired:
             return
+        self._worker_commit = None
+        controller = self._controller
+        kind, target, inputs = commit["kind"], commit["target"], commit["inputs"]
+        generation, activation_id = int(identity[0]), int(identity[1])
+        now = float(self._transition_clock())
         if kind == "mode":
             controller.set_mode(target)
         configure_presentation_side(controller, activation=inputs, playing=controller.playing,
@@ -1840,40 +1929,83 @@ class QuickDisplayVisualizerOwner:
             rebase_view_orbit_motion(controller.presentation_state, now)
             arm_view_auto_rotate(controller.presentation_state, target, now, immediate=True)
         self._activation_inputs = dict(inputs)
-        self._worker_identity = (int(generation), int(activation_id))
+        self._worker_identity = (generation, activation_id)
         self._render_identity = self._runtime.bind_visualizer_render_source(
             controller, engine_generation=generation, activation_id=activation_id)
         self._preparing_activation = (
             (target, activation_id) if get_visualizer_mode_descriptor(target).prepared_reveal else None
         )
         self._waiting_target_since = now
-        self._mode_transition_phase = "waiting_target"
-        self._mode_transition_started_at = 0.0
-        self._mode_transition_fade = 0.0
         logger.info("[SPOTIFY_VIS] Quick %s activation committed mode=%s generation=%s activation=%s (engine worker)",
                     kind, target, generation, activation_id)
+        if self._publication_wake is not None:
+            self._publication_wake.request()
+
+    def _on_worker_commit_failed(self, commit: dict[str, Any], failure: Exception) -> None:
+        """GUI thread: the hidden activation's commit failed (the session closed: A6-M2). The outgoing profiles are
+        restored and the session's failure path runs; the frame stays at the fade it was drawn at (A7-L1: the
+        completed fade-out drew it at 0, so nothing flashes back)."""
+        if commit is not self._worker_commit:
+            return
+        logger.error("[SPOTIFY_VIS][ENGINE_WORKER] Hidden %s activation FAILED source=%s target=%s: %s",
+                     commit["kind"], commit["outgoing"], commit["target"], failure)
+        self._abandon_worker_commit()
+        if commit["link"] is self._worker:
+            self._on_engine_worker_failed(f"activation failed: {failure}")
+
+    def _abandon_worker_commit(self) -> None:
+        """An uncommitted (or unanswered) hidden activation is dropped: the outgoing Edit and layout profiles are
+        restored and the request is gone (the outgoing activation is the one a recovery replaces)."""
+        commit, self._worker_commit = self._worker_commit, None
+        if commit is None:
+            return
+        outgoing = commit["outgoing"]
+        if commit["edit_profile_switched"] and self._edit_layout_profile_activator is not None:
+            try:
+                self._edit_layout_profile_activator(outgoing)
+            except Exception:
+                logger.exception("[SPOTIFY_VIS] Could not restore the outgoing Edit profile mode=%s", outgoing)
+        if commit["profile_changed"]:
+            try:
+                self._activate_committed_layout_profile(outgoing)
+            except Exception:
+                logger.exception("[SPOTIFY_VIS] Could not restore the outgoing layout profile mode=%s", outgoing)
+        self._pending_mode_activation = None
 
     def _on_engine_worker_lost(self, link: Any, reason: str) -> None:
-        """GUI thread (queued from the wake listener): the session's wake pipe ended."""
-        if link is self._worker:
-            self._on_engine_worker_failed(reason)
+        """GUI thread (an event): a reply failed, a correlation was cancelled, or the session's wake pipe ended. A
+        first session whose configure never succeeded leaves the activation in process (not counted for the run);
+        anything later is the session's failure path."""
+        if link is not self._worker or self._retired:
+            return
+        if not link.configured and self._worker_failures == 0:
+            logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Configure failed (%s); this activation runs in process "
+                           "mode=%s", reason, self._controller.mode_id)
+            self._fall_back_in_process(f"configure failed: {reason}", count_for_run=False)
+            return
+        self._on_engine_worker_failed(reason)
+
+    def _on_worker_start_failed(self, link: Any, failure: Exception) -> None:
+        """GUI thread: the first session's ``VIS_START`` failed; this activation runs in process (logged once, not
+        counted for the run)."""
+        if link is self._worker and not self._retired:
+            self._fall_back_in_process(f"start failed: {failure}", count_for_run=False)
 
     def _on_engine_worker_failed(self, reason: str) -> None:
-        """A session failed (a failed reply, ``session_closed``, the session's end or worker death; a capture
-        device that did not open ends the session too). The last presented frame is held and fades out (never
-        vanishes) while the replacement runs: the first failure reconfigures the worker once, a second keeps this
-        owner in process for the run. Interim (slice 5.5 completes it: heartbeat loss, a fade with no replacement
-        frames to pace it)."""
+        """A session failed (a failed reply, ``session_closed``, the session's end or worker death, a cancelled
+        correlation: the supervisor's heartbeat restarted a hung worker). The last presented frame is held and fades
+        out (never vanishes) while the replacement comes up: the first failure reconfigures the worker once, a second
+        keeps this owner in process for the run. Never waits on the worker (the old session's stop and the
+        replacement's configure are sent); bounded by the recovery deadline (``_on_recovery_deadline``)."""
         if self._retired or self._worker is None:
             return
         from widgets.spotify_visualizer import engine_worker_link as link_module
 
         link, self._worker = self._worker, None
+        self._abandon_worker_commit()
         self._hold_for_recovery(link)
-        link.stop(timeout_ms=2000)
-        link.close()
+        link.retire()
         self._worker_failures += 1
-        controller = self._controller
         if self._mode_transition_phase == "failed":
             return                                   # one fenced reconstruction request already owns recovery
         if self._mode_transition_phase == "fading_out":
@@ -1881,45 +2013,68 @@ class QuickDisplayVisualizerOwner:
             self._pending_mode_activation = None
         if self._worker_failures == 1 and not link_module.worker_disabled_for_run():
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Session failed (%s); reconfiguring once mode=%s",
-                           reason, controller.mode_id)
+                           reason, self._controller.mode_id)
             try:
-                replacement, identity = self._open_engine_worker_session(
+                self._begin_worker_recovery()
+                replacement = self._open_engine_worker_session(
                     self._activation_inputs, self._configure_services.get("process_supervisor"))
+                self._adopt_engine_worker_session(replacement, self._activation_inputs)
+                if self._worker is not replacement:
+                    return
+                if not self._display_power_on:
+                    replacement.set_display_power(False)
+                if self._started:
+                    replacement.start(bool(self._controller.playing))
             except Exception as exc:
                 self._fall_back_in_process(f"reconfigure failed: {exc}")
-                return
-            self._adopt_engine_worker_session(replacement, identity, self._activation_inputs)
-            if not self._display_power_on and not self._worker_edge(lambda current: current.set_display_power(False)):
-                return
-            if self._started and not self._worker_edge(lambda current: current.start(bool(controller.playing))):
-                return
-            self._begin_worker_recovery(identity)
             return
         self._fall_back_in_process(f"second failure: {reason}")
 
     def _hold_for_recovery(self, link: Any) -> None:
         """Keep the frame on screen (the newest one taken from the failed session, and the fade it is drawn at) for
-        the recovery's fade-out; a recovery already running keeps the frame it holds."""
-        if self._worker_recovery is not None or self._recovery_held is not None:
+        the recovery's fade-out; a recovery already running keeps the frame it holds. Nothing is held while the
+        displays are off (A7-L3: a held pre-park frame would be re-presented at the unpark)."""
+        if self._worker_recovery is not None or self._recovery_held is not None or not self._display_power_on:
             return
         mailbox = link.mailbox
         held = mailbox.last_taken if mailbox is not None else None
         if held is not None:
             self._recovery_held = (held, float(self._mode_transition_fade))
 
+    def _drop_recovery_hold(self) -> None:
+        """The displays went off during a recovery: its held frame is dropped (A7-L3), and the replacement reveals
+        from hidden after the unpark."""
+        self._recovery_held = None
+        recovery = self._worker_recovery
+        if recovery is not None and recovery["held"] is not None:
+            recovery["held"] = None
+            recovery["done"] = True
+            recovery["reveal"] = True
+            self._mode_transition_fade = 0.0
+
     def _fall_back_in_process(self, reason: str, *, count_for_run: bool = True) -> None:
-        """Leave the engine worker: the current activation configured, bound and (if started) started in process,
-        exactly as the host binding builds it. ``count_for_run``: a second failure turns the worker off for the run (a
-        failed start only leaves this activation in process)."""
+        """Leave the engine worker (contained: a fallback that raises never escapes into the edge's caller, Media's or
+        display power's handlers: A7-M3; it escalates once to the generation-fenced reconstruction instead)."""
+        try:
+            self._fall_back_in_process_unguarded(reason, count_for_run=count_for_run)
+        except Exception:
+            logger.exception("[SPOTIFY_VIS][ENGINE_WORKER] The in-process fallback failed (%s)", reason)
+            self._worker_recovery = None
+            self._signal_transition_failure("engine_worker_fallback_failed")
+
+    def _fall_back_in_process_unguarded(self, reason: str, *, count_for_run: bool = True) -> None:
+        """The current activation configured, bound and (if started) started in process, exactly as the host binding
+        builds it. ``count_for_run``: a second failure turns the worker off for the run (a failed first configure or
+        start only leaves this activation in process)."""
         from widgets.spotify_visualizer import engine_worker_link as link_module
         from widgets.spotify_visualizer.logical_runtime import LatestStateMailbox
         from widgets.spotify_visualizer.technical_config import resolve_technical_config
 
         link, self._worker = self._worker, None
+        self._abandon_worker_commit()
         if link is not None:
             self._hold_for_recovery(link)
-            link.stop(timeout_ms=2000)
-            link.close()
+            link.retire()
         if count_for_run and link_module.disable_worker_for_run(reason):
             logger.error("[SPOTIFY_VIS][ENGINE_WORKER] Off for the rest of the run: %s", reason)
         logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Running in process (%s) mode=%s", reason,
@@ -1960,30 +2115,65 @@ class QuickDisplayVisualizerOwner:
                                              engine_acquired=self._engine_acquired):
                 self._engine_acquired = False
                 self._engine_released_for_display_power = True
-        self._begin_worker_recovery(self.engine_identity())
-
-    def _begin_worker_recovery(self, identity: tuple[int, int]) -> None:
-        """Fade the held frame out on the replacement's own publications (they pace the fade and are not shown), from
-        the fade it was drawn at, then reveal the replacement as an activation does (hidden until it publishes a
-        presentable frame, then faded in). Never vanishes: with nothing held the replacement is bound at once."""
-        identity = (int(identity[0]), int(identity[1]))
-        if not self._bound:
+        identity = self.engine_identity()
+        if self._bind_deferred:
+            # The first configure never answered: bind as the host binding would have, in process.
+            self._bind_deferred = False
+            self._render_identity = self._runtime.bind_visualizer_render_source(
+                controller, engine_generation=identity[0], activation_id=identity[1])
             self._recovery_held = None
             return
         recovery = self._worker_recovery
         if recovery is not None:
-            recovery["identity"] = identity         # a second replacement goes on with the same fade
+            recovery["identity"] = identity           # the recovery goes on, revealing the in-process activation
+            if recovery["done"]:
+                self._finish_worker_recovery(float(self._transition_clock()))
             return
+        self._begin_worker_recovery()
+        if self._worker_recovery is not None:
+            self._worker_recovery["identity"] = identity
+            if self._worker_recovery["done"]:
+                self._finish_worker_recovery(float(self._transition_clock()))
+
+    def _begin_worker_recovery(self) -> None:
+        """Hold the frame and fade it out on the replacement's own publications (they pace the fade and are not shown),
+        from the fade it was drawn at, then reveal the replacement as an activation does (hidden until it publishes a
+        presentable frame, then faded in) once its identity is known (``_on_worker_configured`` or the fallback). With
+        nothing held (or the displays off) there is no fade: the replacement is bound, hidden when anything was shown
+        or an activation was in flight. Never vanishes. Bounded: the recovery deadline is armed (``_on_recovery_deadline``)
+        and the request serial is bumped, so a crossfade deadline armed earlier cannot fire into it (A7-M3)."""
         held, self._recovery_held = self._recovery_held, None
-        if held is None or self._mode_transition_phase == "failed":
-            self._bind_replacement(identity, float(self._transition_clock()),
-                                   reveal=self._mode_transition_phase not in ("idle", "failed"))
+        if not self._bound or self._mode_transition_phase == "failed":
             return
-        publication, fade_from = held
-        self._worker_recovery = {"held": publication, "revision": int(publication.revision), "started_at": None,
-                                 "fade_from": fade_from, "identity": identity}
+        recovery = self._worker_recovery
+        if recovery is not None:
+            recovery["identity"] = None              # a second replacement goes on with the same fade
+            return
+        if not self._display_power_on:
+            held = None
+        reveal = (held is not None or self._mode_transition_phase != "idle" or self._mode_transition_fade < 1.0
+                  or not self._display_power_on)
+        publication, fade_from = held if held is not None else (None, 0.0)
+        self._worker_recovery = {"held": publication, "revision": int(publication.revision) if publication else 0,
+                                 "started_at": None, "fade_from": fade_from, "identity": None, "reveal": reveal,
+                                 "done": publication is None}
         self._mode_transition_phase = "recovering"
         self._mode_transition_started_at = 0.0
+        self._transition_request_serial += 1
+        self._recovery_stage = 1
+        self._arm_recovery_deadline()
+
+    def _finish_worker_recovery(self, now: float) -> None:
+        recovery, self._worker_recovery = self._worker_recovery, None
+        if recovery is None:
+            return
+        if recovery["reveal"]:
+            self._bind_replacement(recovery["identity"], now, reveal=True)
+            self._arm_recovery_deadline()            # the reveal is bounded too
+        else:
+            self._bind_replacement(recovery["identity"], now, reveal=False)
+            self._mode_transition_phase = "idle"
+            self._recovery_stage = 0
 
     def _bind_replacement(self, identity: tuple[int, int], now: float, *, reveal: bool) -> None:
         controller = self._controller
@@ -1999,10 +2189,16 @@ class QuickDisplayVisualizerOwner:
 
     def _sync_recovery(self, now: float) -> bool:
         """``recovering``: each replacement publication paces one step of the held frame's fade-out (the replacement's
-        frame is taken, never shown); once faded out, the replacement is bound and revealed."""
+        frame is taken, never shown); once faded out (or with nothing held), the replacement is bound and revealed as
+        soon as its identity is known."""
         recovery = self._worker_recovery
         if recovery is None:
             self._mode_transition_phase = "idle"
+            return False
+        if recovery["done"]:
+            if recovery["identity"] is not None:
+                self._finish_worker_recovery(now)
+                return self._sync.sync_latest()
             return False
         publication = self._controller.logical_mailbox.take()
         if publication is None:
@@ -2026,9 +2222,61 @@ class QuickDisplayVisualizerOwner:
             commit(presentation)
             self._request_retained_present()
             return True
-        self._worker_recovery = None
-        self._bind_replacement(recovery["identity"], now, reveal=True)
+        recovery["done"] = True
+        self._mode_transition_fade = 0.0
+        if recovery["identity"] is not None:
+            self._finish_worker_recovery(now)
         return True
+
+    # The recovery's bound (A7-M3) -------------------------------------------------------------------------------
+
+    def _arm_recovery_deadline(self) -> None:
+        """One generation-fenced single-shot per recovery stage (the transaction deadline's machinery, never a poll),
+        fenced by the request serial; never armed while the displays are off (a parked replacement publishes nothing:
+        the unpark arms it)."""
+        if self._retired or not self._display_power_on:
+            return
+        from core.threading.manager import ThreadManager
+
+        ThreadManager.single_shot(_ACTIVATION_TRANSACTION_DEADLINE_MS, self._on_recovery_deadline,
+                                  self._transition_request_serial)
+
+    def _rearm_recovery_deadline(self) -> None:
+        if self._recovery_stage and self._mode_transition_phase in ("recovering", "waiting_target"):
+            self._transition_request_serial += 1
+            self._arm_recovery_deadline()
+
+    def _on_recovery_deadline(self, serial: int) -> None:
+        """The recovery did not complete in time. First: the replacement never published (or never revealed), so the
+        owner falls back in process once (counted for the run); the in-process runtime's publications pace the held
+        frame's fade and the reveal, under a second deadline. Second: a reveal that still never came leaves the
+        Visualizer faded out, the reason logged, and requests admitted again (it reappears with the next activation);
+        a held frame nothing paced any more escalates to the generation-fenced reconstruction (as in process)."""
+        if self._retired or self._transition_request_serial != serial or not self._display_power_on:
+            return
+        phase = self._mode_transition_phase
+        if not self._recovery_stage or phase not in ("recovering", "waiting_target"):
+            return
+        if self._recovery_stage == 1 and self._worker is not None:
+            self._recovery_stage = 2
+            logger.error("[SPOTIFY_VIS][ENGINE_WORKER] The replacement session did not come back in %d ms (phase=%s); "
+                         "falling back in process", _ACTIVATION_TRANSACTION_DEADLINE_MS, phase)
+            self._fall_back_in_process(f"recovery deadline ({phase})")
+            if self._mode_transition_phase in ("recovering", "waiting_target"):
+                self._transition_request_serial += 1
+                self._arm_recovery_deadline()
+            return
+        self._recovery_stage = 0
+        if phase == "waiting_target":
+            logger.error("[SPOTIFY_VIS][ENGINE_WORKER] The recovered Visualizer never revealed (no presentable frame "
+                         "in %d ms); it stays faded out until the next activation mode=%s",
+                         _ACTIVATION_TRANSACTION_DEADLINE_MS, self._controller.mode_id)
+            self._mode_transition_phase = "idle"
+            self._mode_transition_fade = 0.0
+            self._preparing_activation = None
+            return
+        self._worker_recovery = None
+        self._signal_transition_failure("deadline:recovering")
 
     def retire(self) -> bool:
         if self._retired:
@@ -2068,8 +2316,9 @@ class QuickDisplayVisualizerOwner:
             return False
         if self._worker is not None:
             link, self._worker = self._worker, None
-            link.stop()                  # the session ends in the worker (capture and its mapping view released)
-            link.close()                 # then the reader, and the main process unlinks the mapping
+            # The session's stop is sent, never awaited (it ends in the worker in order: capture and its mapping view
+            # released), then the reader closes and the main process unlinks the mapping.
+            link.retire()
         if self._engine_acquired:
             release = getattr(self._controller.engine, "release", None)
             if callable(release):
@@ -2094,6 +2343,8 @@ class QuickDisplayVisualizerOwner:
         self._preparing_activation = None
         self._worker_recovery = None
         self._recovery_held = None
+        self._worker_commit = None
+        self._recovery_stage = 0
         # A takeover fade dies with the owner; its completion is never reported to a retired generation.
         self._takeover = None
         self._expanded_display = False

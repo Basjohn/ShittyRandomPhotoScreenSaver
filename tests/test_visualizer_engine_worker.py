@@ -196,11 +196,16 @@ def test_the_worker_writer_wakes_the_owner_on_every_publish(qt_app):
         def close(self):
             pass
 
+    from core.visualizer_engine import packet_mailbox
+
     frames = evidence.shipped_clip(0.3).frames
     reader = PacketMailbox(role="reader")
     sender = Recorder()
     session = EngineSession(mapping=reader.mapping_name, mode="spectrum", runtime_generation=GENERATION)
     session.mailbox._wake_sender = sender                 # the writer end of the owner's wake pipe
+    # The recorder stands in for the pipe's non-blocking write (slice 5.5): one byte per publish.
+    saved = packet_mailbox.send_wake_byte_without_blocking
+    packet_mailbox.send_wake_byte_without_blocking = lambda conn: (conn.send_bytes(b"w"), True)[1]
     try:
         session.tick(frames[0])
         reader.peek()                                     # the owner has accepted but not yet acknowledged
@@ -210,6 +215,7 @@ def test_the_worker_writer_wakes_the_owner_on_every_publish(qt_app):
         session.tick(frames[3])
         assert sender.sent == 4
     finally:
+        packet_mailbox.send_wake_byte_without_blocking = saved
         session.close()
         reader.close()
 

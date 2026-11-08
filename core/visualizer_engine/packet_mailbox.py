@@ -15,6 +15,7 @@ engine worker (work order 4) owns the writer side; nothing here runs at rest.
 """
 from __future__ import annotations
 
+import sys
 import threading
 import uuid
 import zlib
@@ -62,6 +63,38 @@ def protected_edge_mask(state: Any) -> int:
     return mask
 
 
+def send_wake_byte_without_blocking(sender: Any) -> bool:
+    """Write one wake byte down ``sender`` (a ``multiprocessing.Pipe`` writer end) unless its pipe is full; whether it
+    was written (native core P2b slice 5.5: a full wake pipe never blocks the worker's tick).
+
+    ``Connection.send_bytes`` blocks a writer whose reader stopped draining once the pipe's buffer fills (a stalled or
+    exiting owner process), and the writer here is the worker's cadence thread. A dropped byte loses nothing: a full
+    pipe means the reader already has wakes pending, and the reader takes the newest whole frame per wake (latest wins).
+    Windows: one overlapped write (the pipe's handles are overlapped), cancelled when it would wait. POSIX: a
+    non-blocking write of the connection's framed message (at most ``PIPE_BUF`` bytes: whole or not at all)."""
+    if sys.platform == "win32":
+        import _winapi
+
+        overlapped, error = _winapi.WriteFile(sender.fileno(), b"w", overlapped=True)
+        try:
+            if error == _winapi.ERROR_IO_PENDING:
+                overlapped.cancel()
+        finally:
+            written, _error = overlapped.GetOverlappedResult(True)
+        return written == 1
+    import os
+    import struct
+
+    descriptor = sender.fileno()
+    if os.get_blocking(descriptor):
+        os.set_blocking(descriptor, False)
+    try:
+        os.write(descriptor, struct.pack("!i", 1) + b"w")
+    except BlockingIOError:
+        return False
+    return True
+
+
 class PacketMailbox(LatestStateMailbox):
     """``LatestStateMailbox`` whose single slot is the frame packet ABI's newest whole frame.
 
@@ -77,6 +110,7 @@ class PacketMailbox(LatestStateMailbox):
         # ``multiprocessing.Pipe``); the reader's ``listen_for_wakes`` turns it back into the wake callback, and the
         # owner's emitter coalesces repeats (``quick_presentation_sync``).
         self._wake_sender = wake_sender
+        self._wakes_dropped = 0                      # writer side: wake bytes a full pipe refused (never blocked)
         self._wake_lock = threading.Lock()          # a sender close (``close_wake_sender``) never races a send
         self._wake_thread: threading.Thread | None = None
         self._wake_receiver: Any = None
@@ -160,9 +194,15 @@ class PacketMailbox(LatestStateMailbox):
             if sender is None:
                 return
             try:
-                sender.send_bytes(b"w")
+                if not send_wake_byte_without_blocking(sender):
+                    self._wakes_dropped += 1        # the pipe is full: the reader has wakes pending (it coalesces)
             except (OSError, ValueError):
                 pass                                # the owner has gone; its reader no longer needs waking
+
+    @property
+    def wakes_dropped(self) -> int:
+        """Writer side: wake bytes a full pipe refused (the reader had wakes pending; nothing blocked)."""
+        return self._wakes_dropped
 
     def close_wake_sender(self) -> None:
         """Writer side: close this end of the wake pipe now (idempotent). With no other writer end open the
@@ -180,6 +220,8 @@ class PacketMailbox(LatestStateMailbox):
     # ---------------------------------------------------------------------------------------------- consumer
 
     def _read(self) -> LogicalPublication | None:
+        if self._closed:
+            return None                               # a closed reader has nothing (its views are released)
         if self._peeked is not None:
             return self._peeked
         packet = self._reader.read_latest()
@@ -228,10 +270,10 @@ class PacketMailbox(LatestStateMailbox):
             if callback is not None and not callable(callback):
                 raise TypeError("logical mailbox wake callback must be callable or None")
             self._wake_callback = callback
-            pending = self._peeked is not None or (
+            pending = not self._closed and (self._peeked is not None or (
                 self._writer is not None and self._unread is not None
                 and self._unread[3] > self._writer.consumed_sequence) or (
-                self._writer is None and self._reader is not None and self._reader.has_unread())
+                self._writer is None and self._reader is not None and self._reader.has_unread()))
         if callback is not None and pending:
             callback()
 

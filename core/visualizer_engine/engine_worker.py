@@ -24,7 +24,7 @@ and wake (``tests/test_visualizer_engine_paced.py``). Slice 5.2 runs the product
 activation (``activation``: settings model, resolved activation, technical cache, logical and presentation kwargs),
 started, played, parked and switched by the owner's control edges, and in production (no ``pcm``) its engine opens the
 real loopback device through the normal capture path on its own capture lane (slice 5.3's core); a capture that fails to
-open closes the session's wake pipe, which the owner treats as a worker failure. Imports load QtCore only; a configuration loads QtGui
+open is a device failure (slice 5.5, A7-L4): the session keeps running and retries it at the next capture edge. Imports load QtCore only; a configuration loads QtGui
 (``QColor`` in the presentation config the tick still reads: no QGuiApplication, no QtQuick; A5-L2); work order 5
 slice 5.4 moves those reads to the logical config.
 """
@@ -299,30 +299,46 @@ class EngineSession:
     def capture_failed(self) -> bool:
         return self._capture_failed
 
+    @property
+    def mapping_name(self) -> str:
+        """The frame mapping this session writes (a stop addressed to another mapping leaves it alone)."""
+        return self.mailbox.mapping_name
+
     def _watch_device_capture(self) -> None:
         """The device session's capture check (work order 5 slice 5.3): never a wait on the device (a driver can take
         its time to open, as in process, where the GUI never waits on it either). A check is queued behind every
         capture transaction admitted so far on the capture lane (where the device opens, COM included); if capture
-        should be open by then and is not, the open failed, and the session reports it."""
+        should be open by then and is not, the open failed, and the session reports it; one that is open again clears
+        the report (a later edge reopened it)."""
         engine = self._engine
 
         def check() -> None:
             should_run = self._live_started and self._display_on and self._controller.playing
-            if should_run and not self._capture_failed and not engine.is_capture_running():
-                self._report_capture_failure()
+            running = engine.is_capture_running()
+            if should_run and not running:
+                if not self._capture_failed:
+                    self._report_capture_failure()
+            elif running and self._capture_failed:
+                import logging
+
+                self._capture_failed = False
+                logging.getLogger(__name__).info("[SPOTIFY_VIS][ENGINE_WORKER] The loopback device opened again")
 
         engine.fence_capture_transactions(check)
 
     def _report_capture_failure(self) -> None:
-        """The device did not open: logged once, and the session's wake pipe closed, so the owner's listener sees the
-        session end and treats it as a worker failure (fade, reconfigure once). The session itself is closed by the
-        owner's next configure (or stop) on the worker's message loop, never from the capture lane."""
+        """The device did not open (slice 5.5, checkpoint audit 7 A7-L4): a device failure, not a worker failure. The
+        session keeps running (frames go on: the engine's idle path, as in process when the device is unavailable),
+        logs it once per run of failures and reports it in its later replies (``capture_failed``); the next edge that
+        opens capture (Media's play edge, an unpark, an activation) retries the device through the audio worker's
+        normal path. Counting it as a worker failure would fade and reconfigure onto the same device, and a second
+        transient unavailability would end the worker for the run."""
         import logging
 
         self._capture_failed = True
         logging.getLogger(__name__).error(
-            "[SPOTIFY_VIS][ENGINE_WORKER] The loopback device did not open; the session reports a capture failure")
-        self.mailbox.close_wake_sender()
+            "[SPOTIFY_VIS][ENGINE_WORKER] The loopback device did not open; the session keeps running and retries it "
+            "at the next capture edge")
 
     def _admit_analysis(self) -> None:
         """The compute lane's admission gate (production order): an analysis waits until the tick has read."""
@@ -734,7 +750,7 @@ class VisualizerEngineWorker(BaseWorker):
                     return self._reply(msg, success=False, error="no engine session is configured")
                 if msg.msg_type == MessageType.VIS_SET_VIEW:
                     self._session.set_view(**dict(msg.payload))   # state only: a refused view leaves the session
-                    return self._reply(msg)
+                    return self._reply(msg, capture_failed=self._session.capture_failed)
                 if msg.msg_type in (MessageType.VIS_START, MessageType.VIS_SET_PLAYING):
                     session = self._session
                     try:
@@ -746,7 +762,7 @@ class VisualizerEngineWorker(BaseWorker):
                         self._close_session()       # the edge may have half-applied: fail closed
                         return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}",
                                            session_closed=True)
-                    return self._reply(msg)
+                    return self._reply(msg, capture_failed=session.capture_failed)
                 if msg.msg_type == MessageType.VIS_SET_MODE:
                     # Validated now (a refused request leaves the session as it was), applied at the session's next
                     # tick boundary (the newest request wins), or at once on a worker-paced session: an apply that
@@ -764,18 +780,24 @@ class VisualizerEngineWorker(BaseWorker):
                                            session_closed=True)
                     if committed is None:
                         return self._reply(msg)
-                    return self._reply(msg, engine_generation=committed[0], activation_id=committed[1])
+                    return self._reply(msg, engine_generation=committed[0], activation_id=committed[1],
+                                       capture_failed=session.capture_failed)
                 try:
                     changed = self._session.set_display_power(bool(msg.payload["on"]))
                 except (Exception, SnapshotContractError) as exc:
                     # The edge may have half-applied (capture reference, fence): fail closed, as a tick does.
                     self._close_session()
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
-                return self._reply(msg, changed=changed)
+                return self._reply(msg, changed=changed, capture_failed=self._session.capture_failed)
             if msg.msg_type == MessageType.VIS_STOP:
                 # The session closes even when ``finish`` raises (an unjoined cadence: A6-L7), releasing capture,
-                # the compute lane and the mapping; the reply then carries the error.
+                # the compute lane and the mapping; the reply then carries the error. A stop addressed to another
+                # session's mapping (an owner's stop, never awaited, landing after another session was configured:
+                # slice 5.5) leaves the current session alone.
                 session = self._session
+                addressed = (msg.payload or {}).get("mapping")
+                if addressed is not None and (session is None or session.mapping_name != addressed):
+                    return self._reply(msg, report=None, stale=True)
                 try:
                     report = session.finish() if session is not None else None
                 except (Exception, SnapshotContractError) as exc:

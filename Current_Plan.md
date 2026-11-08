@@ -179,9 +179,13 @@ after the operator's yes on a question card; agents never run load (invisible ch
      the worker opens the loopback device itself, and the owner's frames on the worker equal its in-process frames for
      every mode through configure, play/pause, park/unpark and a mode switch (first gate-3 data point: the main
      process's CPU per step 0.7-1.2 ms on the worker vs 1.7-5.0 ms in process; the GUI's take+decode per presentation
-     rises .2-.6 ms). Next: 5.3's rest (device changes), 5.4 (settings deltas, QtCore-only worker), 5.5 (fail-closed
-     completion, asynchronous edges), 5.6 (delete the snapshot layer, Bubble's own RNG), 5.7 (dormancy, diagnostics,
-     frozen spawn), then 6 (gate 3).
+     rises .2-.6 ms). 5.5 built 8 Nov with checkpoint audit 7's failure items: no control edge waits on the worker
+     (replies are events; the spawn is off the GUI thread; a hung worker's edges cost 0.2 ms instead of 21.9 s), a dead
+     or hung worker reaches the failure path by an event (the pipe's end, the supervisor's heartbeat), the recovery is
+     bounded (one fallback in process, then faded out with requests admitted), a full wake pipe never blocks the tick,
+     a device that fails to open no longer counts as a worker failure. Next: 5.3's rest (device changes), 5.4 (settings
+     deltas, view inputs and the reflected wallpaper, QtCore-only worker), 5.6 (delete the snapshot layer, Bubble's own
+     RNG), 5.7 (dormancy, diagnostics, frozen spawn), then 6 (gate 3).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 

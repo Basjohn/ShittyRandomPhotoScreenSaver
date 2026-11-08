@@ -101,6 +101,24 @@ class _InProcessSupervisor:
         return self.worker.handle_message(WorkerMessage(msg_type=msg_type, seq_no=self._serial,
                                                         correlation_id=str(self._serial), payload=payload))
 
+    # The asynchronous surface (slice 5.5): the request is handled at once (deterministic order); its reply reaches
+    # the registered callback, which the link turns into a queued event like the real listener's.
+    def register_response_callback(self, _worker_type, correlation_id, callback) -> bool:
+        self.callbacks = getattr(self, "callbacks", {})
+        self.callbacks[correlation_id] = callback
+        return True
+
+    def send_message(self, worker_type, msg_type, payload, correlation_id=None):
+        response = self.send_request_and_await_response(worker_type, msg_type, payload)
+        callback = self.callbacks.pop(correlation_id, None)
+        if callback is not None:
+            callback(response)
+        return correlation_id
+
+    def abandon_response(self, _worker_type, correlation_id, *, reason="") -> int:
+        getattr(self, "callbacks", {}).pop(correlation_id, None)
+        return 0
+
     def close(self) -> None:
         self.worker._close_session()
 
@@ -286,11 +304,11 @@ def test_the_park_clears_the_reader_after_the_park_reply_never_before(qt_app, pc
     def clear_before(self, on):
         if not on:
             self._controller.logical_mailbox.clear()
-        self._worker_edge(lambda link: link.set_display_power(on))
+        self._worker.set_display_power(on)
         return True
 
     def never_clear(self, on):
-        self._worker_edge(lambda link: link.set_display_power(on))
+        self._worker.set_display_power(on)
         return True
 
     unread = {}
@@ -301,7 +319,10 @@ def test_the_park_clears_the_reader_after_the_park_reply_never_before(qt_app, pc
         try:
             with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
                 owner = rig.build()
+            # No presentation while the reply is awaited (it would take the frame and hide what each variant left).
+            owner.controller.logical_mailbox.set_wake_callback(None)
             assert owner.set_display_power(False)
+            rig.settle()                                 # the park's reply (an event: the owner never waits)
             unread[name] = owner.controller.logical_mailbox.peek()
         finally:
             rig.close()
@@ -358,15 +379,17 @@ def test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller(qt_
         try:
             with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
                 owner = rig.build()
-            if not forward:
-                owner._forward_view = lambda: None
             main, session = owner.controller, stand_in.worker._session._controller
+            if not forward:
+                main.set_layout_metrics_observer(None)
             seen = []
             main.set_custom_viewport_override((800.0, 400.0), {"spectrum": 1})
+            rig.settle()                                 # sent at the end of the GUI turn, never awaited
             seen.append(session.layout_metrics_snapshot == main.layout_metrics_snapshot)
             seen.append(session.presentation_viewport_extent == main.presentation_viewport_extent == (400.0, 800.0))
             main.set_custom_viewport_override(None)
             main.commit_content_rotation_map({"spectrum": 2})
+            rig.settle()
             seen.append(session.layout_metrics_snapshot == main.layout_metrics_snapshot)
             return seen
         finally:
@@ -575,14 +598,44 @@ def test_the_production_session_opens_the_device_through_the_normal_capture_path
 
 
 @pytest.mark.qt
-def test_a_device_that_does_not_open_ends_the_session_for_its_owner(qt_app, monkeypatch):
-    def device(_config=None):
-        raise OSError("no loopback device")
+def test_a_device_that_does_not_open_keeps_the_session_and_is_retried_at_the_next_capture_edge(qt_app, monkeypatch):
+    # A7-L4: a device failure is not a worker failure. The session keeps running (its wake pipe stays open: no
+    # session end for the owner, no fade, nothing counted towards ending the worker for the run), reports the failure
+    # in its replies and retries the device at the next edge that opens capture (here Media's pause and play).
+    # Negative control (the pre-fix report): the wake pipe closed, so the owner saw the session end.
+    from core.process.types import MessageType, WorkerMessage
+    from core.visualizer_engine.engine_worker import VisualizerEngineWorker
+    from core.visualizer_engine.recorded_capture import RecordedCaptureBackend
+
+    attempts = []
+
+    def device(config=None):
+        attempts.append(config)
+        if len(attempts) == 1:
+            raise OSError("no loopback device")
+        return RecordedCaptureBackend(config)
 
     session, reader, ended = _device_session(monkeypatch, device)
+    worker = VisualizerEngineWorker(None, None)
+    worker._session = session
     try:
+        engine = session._engine
         session.start(True)                        # never waits on the device (as in process)
-        assert ended.wait(10.0) and session.capture_failed
+        for _check in range(2):                    # the open, then the session's check behind it
+            done = threading.Event()
+            assert engine.fence_capture_transactions(done.set) and done.wait(10.0)
+        assert session.capture_failed and not ended.is_set() and not engine.is_capture_running()
+        reply = worker.handle_message(WorkerMessage(msg_type=MessageType.VIS_SET_VIEW, seq_no=1, correlation_id="1",
+                                                    payload={"extent": (400.0, 300.0), "rotations": {}}))
+        assert reply.success and reply.payload["capture_failed"] is True
+        session.set_playing(False)
+        session.set_playing(True)                  # the next capture edge retries the device
+        for _check in range(2):
+            done = threading.Event()
+            assert engine.fence_capture_transactions(done.set) and done.wait(10.0)
+        assert len(attempts) == 2 and engine.is_capture_running() and not session.capture_failed
+        assert not ended.wait(0.2)                 # the session never ended for its owner
     finally:
+        worker._session = None
         session.close()
         reader.close()

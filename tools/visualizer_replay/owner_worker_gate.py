@@ -91,6 +91,18 @@ def identity_script(clip_frames, mode: str) -> list[tuple[str, Any]]:
     return script
 
 
+def identity_script_paused_switch(clip_frames, target: str) -> list[tuple[str, Any]]:
+    """Checkpoint audit 7 A7-L6: a mode switch requested while Media is paused (play 1 s, pause 2.5 s with the switch
+    0.4 s into it, then play), so the target's reveal predicate runs paused: in process the tick state's fresh-frame
+    fence, on the worker the target's newest presentable frame. ``target`` is the switch's target."""
+    from core.visualizer_engine.recorded_capture import synthesise_pause
+
+    frames = list(synthesise_pause(clip_frames, at_s=1.0, pause_s=2.5))
+    switch = _after(frames, 1.4)
+    return ([("input", frame) for frame in frames[:switch]] + [("mode", target)]
+            + [("input", frame) for frame in frames[switch:]])
+
+
 # ------------------------------------------------------------------------------------------------- the owner rig
 
 
@@ -140,6 +152,7 @@ class OwnerRig:
         self.owner: Any = None
         self.digests: list[str] = []
         self.published: list[Any] = []
+        self.phases: list[tuple[str, float]] = []      # the owner's phase and content fade at each publication
         self.widgets = {
             "family_activation": {"media": True, "visualizers": True},
             "media": {"enabled": True, "position": "Top Left", "monitor": "1"},
@@ -175,8 +188,15 @@ class OwnerRig:
         return engine
 
     def settle(self) -> None:
-        """In process: wait for every capture transaction admitted so far (the session's own completion edge)."""
-        if self.worker or not self.engines:
+        """In process: wait for every capture transaction admitted so far (the session's own completion edge). On the
+        worker: run the GUI event loop until the session's link has no request in flight (the owner never waits for
+        a reply: slice 5.5; the rig settles on the replies' events, bounded)."""
+        if self.worker:
+            owner = self.owner
+            if owner is not None and owner._worker is not None:
+                _event_loop_for(self.app, 30.0, until=lambda: owner._worker is None or not owner._worker.busy)
+            return
+        if not self.engines:
             return
         done = threading.Event()
         if self.engines[-1].fence_capture_transactions(done.set) and not done.wait(30.0):
@@ -278,6 +298,8 @@ class OwnerRig:
         self._stack.callback(patcher.stop)
         self.owner = record["owner"]
         self._stack.callback(self._retire)
+        if self.worker:
+            self.settle()                               # the configure's and start's replies (never awaited)
         if self.worker and self.owner._worker is None:
             raise RuntimeError("the owner fell back in process at construction")
         if not self.worker and self.engines:
@@ -294,6 +316,7 @@ class OwnerRig:
             published = publish(logical, presentation, logical_revision=logical_revision)
             if published:
                 self.published.append(logical)
+                self.phases.append((self.owner._mode_transition_phase, round(float(presentation.content_fade), 6)))
             return published
 
         controller.publish_render_snapshot = recording
@@ -393,6 +416,7 @@ def identity_run(mode: str, script, *, worker: bool, supervisor: Any = None, nam
             report.update(inputs=inputs, final_mode=controller.mode_id, phase=owner._mode_transition_phase,
                           on_worker=bool(owner._worker is not None) if worker else None)
             report["digests"] = [evidence.frame_digest(logical) for logical in rig.published]
+            report["phases"] = list(rig.phases)
     finally:
         rig.close()
         extruded_bubble_drift_log._REVISIONS = saved_revisions
