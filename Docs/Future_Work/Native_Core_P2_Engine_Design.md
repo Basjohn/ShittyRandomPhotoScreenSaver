@@ -304,8 +304,13 @@ switch never remaps.
    - **The 8 GLSL compute shaders:** shaders stay QRhi-portable (GLSL 460 that `qsb` compiles to SPIR-V), so the
      core can run them through QRhi's compute passes; no new GL-only extension use in modes the core will port.
      QRhi exposes no separate async compute queue (the core would need raw Vulkan through the native handles for
-     that), and the 5 Nov decision rates async compute "not our bottleneck" (audit A3-M5). Port-readiness rule 5 is
-     not yet met: no test compiles the existing compute shaders with `qsb` (open item).
+     that), and the 5 Nov decision rates async compute "not our bottleneck" (audit A3-M5). Port-readiness rule 5,
+     measured 8 Nov (`tools/vulkan_shader_readiness.py`): **0 of 18** compute shader sources compile to SPIR-V, all
+     for one reason: loose `uniform`s outside a block ("non-opaque uniforms outside a block ... not allowed when using
+     GLSL for Vulkan"). The fix is mechanical and works on both backends (GL 4.6 takes std140 uniform blocks too):
+     move each program's uniforms into one block and upload it as a UBO instead of `glUniform*`. It touches accepted
+     modes' uniform code, so it is done per mode as P3 ports it (Spectrum first), each with that mode's pixel gates.
+     From now on, new compute shaders declare their uniforms in a block (Vulkan-ready from the start).
    - **DLSS / FSR (Streamline / FidelityFX) integrate at the core's Vulkan device**, per mode and only where the content
      survives temporal upscaling (the 5 Nov decision's caveats stand); nothing to build in P2.
    - **The Vulkan flip** needs a `QVulkanInstance` PySide6 cannot create: the native module attaches it (P1). The worker
