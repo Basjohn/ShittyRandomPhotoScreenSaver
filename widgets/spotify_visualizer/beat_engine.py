@@ -298,8 +298,27 @@ class _SpotifyBeatEngine(QObject):
     def capture_publications(self) -> int:
         """How many capture blocks the audio worker's capture callback has published into the engine's current audio
         buffer (replaced at each activation boundary). The paced rig counts the blocks the engine actually accepted
-        with it (checkpoint audit 6, A6-M1); nothing reads it per frame."""
+        with it (checkpoint audit 6, A6-M1), and the engine worker's device session reads it once per cadence step (its
+        delivery watch, work order 5 slice 5.3); nothing in process reads it."""
         return self._audio_buffer.published
+
+    def restart_stale_capture(self) -> Optional[bool]:
+        """``wake``'s stale-capture restart without Media's edge (work order 5 slice 5.3): when the open capture has gone
+        quiet (``SpotifyVisualizerAudioWorker.is_capture_stale``: no publication for its stale threshold, or none within
+        the first-callback grace), it restarts on the capture lane (a device stream reopens on the current default
+        output) and the smoothing clock restarts as ``wake`` restarts it, so the first analysis after the gap is
+        smoothed, not snapped. None when the capture is not stale; otherwise whether the lane admitted the restart (the
+        admission, not the native outcome). The engine worker's device session calls it when its capture publishes
+        nothing while Media plays; nothing in process calls it (in process only Media's play edge wakes a stale
+        capture)."""
+        worker = self._audio_worker
+        if not worker.is_capture_stale():
+            return None
+        logger.info("[SPOTIFY_VIS] Audio capture stale while playing, restarting...")
+        if not worker.restart_capture():
+            return False
+        self._last_smooth_ts = authored_now()
+        return True
 
     def set_analysis_settled_observer(self, observer: Optional[Any]) -> None:
         """Install ``observer()``: called on the compute lane each time an analysis result has been committed (or

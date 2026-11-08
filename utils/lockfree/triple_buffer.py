@@ -38,7 +38,8 @@ class TripleBuffer(Generic[T]):
     @property
     def published(self) -> int:
         """How many values have been published (the newest publication's sequence; 0: none). A read for rigs and
-        gates; nothing reads it per frame."""
+        gates, and one attribute read per cadence step in the engine worker's device session (its delivery watch); the
+        in-process path never reads it."""
         latest = self._latest
         return 0 if latest is None else latest[0]
 

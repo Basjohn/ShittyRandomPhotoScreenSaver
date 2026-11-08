@@ -45,7 +45,10 @@ What the link owns, once:
   (the configure's reply), so the pipe ends exactly when the session does (closed after a failure, or its process
   died); the listener reports that once, through a queued signal, to the owner's GUI thread (``on_lost``). A capture
   device that fails to open is not the session's end (A7-L4): the session keeps running, reports it in later replies
-  (``capture_failed``) and retries the device on the next edge that opens capture.
+  (``capture_failed``) and retries the device on the next edge that opens capture. Nor is a device that stops
+  delivering while Media plays (slice 5.3): the session reopens it once on the current default output and reports its
+  reopens in later replies; the link logs the device state when a reply changes it (the worker logs nowhere the main
+  log can see).
 - **The run's failure record** (``worker_disabled_for_run``): after a session failed twice for an owner (the reconfigure
   included), the engine worker stays off for the rest of the run, and every later owner runs in process.
 
@@ -224,6 +227,8 @@ class EngineWorkerLink:
         self.configured = False                   # the configure's reply arrived
         self.bar_count: int | None = None         # the session's bar count, from its configure and commit replies
         self.capture_failed = False               # the newest reply said the session's device did not open (A7-L4)
+        self.capture_reopens = 0                  # the session's reopens of a silent device, and those that delivered
+        self.capture_resumed = 0                  # again (slice 5.3), as the newest reply carried them
         self._events = _LinkEvents(self)
         self._emit_lock = threading.Lock()        # a late emit from another thread never races ``close``
         self._tokens = itertools.count(1)
@@ -398,9 +403,30 @@ class EngineWorkerLink:
         if "bar_count" in reply:
             self.bar_count = int(reply["bar_count"])     # the session's bar count (its mode's technical config)
         if "capture_failed" in reply:
-            self.capture_failed = bool(reply["capture_failed"])
+            self._note_device_report(reply)
         if on_reply is not None:
             on_reply(reply)
+
+    def _note_device_report(self, reply: Mapping[str, Any]) -> None:
+        """The session's device state as a reply carries it (``EngineSession.device_report``, work order 5 slice 5.3),
+        logged here when it changed: the worker process's own log lines never reach the main log, so this is where a
+        device that did not open, the session's reopen of a device that stopped delivering, and the device delivering
+        again become visible (at the reply of the next edge after them, and in ``VIS_STOP``'s report). The owner does
+        nothing else with it: a device problem is never the session's end (as in process, the Visualizer shows the
+        engine's idle frames until audio comes back)."""
+        failed = bool(reply["capture_failed"])
+        reopens = int(reply.get("capture_reopens", self.capture_reopens))
+        resumed = int(reply.get("capture_resumed", self.capture_resumed))
+        if reopens != self.capture_reopens or resumed != self.capture_resumed:
+            logger.info("[SPOTIFY_VIS][ENGINE_WORKER] The engine worker reopened its loopback device after it stopped "
+                        "delivering while playing: %d reopen(s) this session, %d delivering again", reopens, resumed)
+        if failed != self.capture_failed:
+            if failed:
+                logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] The engine worker's loopback device is not open; the "
+                               "session keeps running and retries it at the next capture edge")
+            else:
+                logger.info("[SPOTIFY_VIS][ENGINE_WORKER] The engine worker's loopback device is open again")
+        self.capture_failed, self.capture_reopens, self.capture_resumed = failed, reopens, resumed
 
     def _report_lost(self, failure: Exception) -> None:
         self._deliver_end(str(failure))
