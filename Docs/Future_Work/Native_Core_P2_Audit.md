@@ -1048,3 +1048,183 @@ way.**
 - Cross-process behaviour of the writer clear and the identity filter against a real main-process reader, since no
   production reader exists yet.
 - The owner's 35 focused files (668) cited by the slice; only the 8 files above were re-run. The whole-clip gates.
+
+## Checkpoint audit 6 (8 Nov): configure shared, worker-paced ticks (5.1)
+
+Scope: 32f28d4f (audit-5 follow-ups) and d056e8b5 (work order 5 slice 5.1). Diffed the owner, the host binding and
+`logical_edges.py` against `32f28d4f^` line by line; read `engine_worker.py`, `recorded_capture.py`,
+`logical_runtime.py`, `packet_mailbox.py` / `packet_abi.py`, the parity and paced tests and the `--paced` gate. Ran:
+the parity test, `test_visualizer_engine_paced.py` and `test_visualizer_engine_packet_mailbox.py` (42 passed, 46 s);
+`live_engine_gate.py --paced --paced-seconds 2 --modes spectrum bubble` (both OK: 181/182 frames at 89.9/90.1 Hz, 0
+skipped, taken 44/45, 0 torn, audio 2.000/2.000 and 2.011/2.011 s). Probes (deleted): (a) `PacedPcmSource` with a
+cadence step landing inside `RecordedCaptureBackend.start` between the callback install and `on_started`; (b) the
+in-process paced gate with `RecordedCaptureBackend.offer` replaced by a stub that never calls the capture callback.
+
+### Medium
+
+**A6-M1. The paced gate's "audio on the clock" check is the source's own arithmetic. It passes with no audio reaching
+the engine.**
+- Claim: the 5.1 record says "the audio delivered >= 97% of the paced audio time"; gate docstring "the audio delivered
+  is the audio clock's".
+- Evidence: `live_engine_gate.py:345` compares `delivered_s` with `paced_s`, and both come from
+  `PacedPcmSource.describe()`. `delivered_samples` counts what `due()` handed out (`recorded_capture.py:208-212`).
+  `_paced_step` ignores `offer()`'s return value (`engine_worker.py:367-368`), so blocks offered while capture is
+  closed still count as delivered. Probe (b): with `offer` stubbed to drop every block (562 offers, none reached the
+  callback), `paced_in_process(..., "spectrum")` returned `paced_ok=True`, `delivered_over_paced=0.9988`. Nothing in
+  the verdict reads the engine side: no capture-callback count, no analysis commits, no non-silent bars.
+- Failure scenario: a broken capture path in the worker (wrong channel layout, a callback that drops blocks, capture
+  never reopening after a switch) passes the paced gate on every mode. The gate shows the frames arrive on time, not
+  that they react to the audio.
+- Fix: count the blocks `offer` actually delivered and gate on that. Also gate on engine-side evidence: the audio
+  worker's callback count or the analysis commit count over the run, plus non-zero energy in a reasonable share of
+  frames. Add a negative control that drops every offer.
+
+**A6-M2. A paced mode switch that fails is not fail-closed.**
+- Claim: 5.1 record, "a mode or preset request applies at once as the owner's activation does"; and the worker's rule
+  that an edge which may have half-applied closes the session (`engine_worker.py:621, 634`).
+- Evidence: for a paced session `request_mode` calls `_apply_pending_mode()` synchronously (`engine_worker.py:444-447`),
+  so the commit, bind, cadence restart and `_settle_capture` all run inside the `VIS_SET_MODE` handler. That handler
+  has no try/close (`engine_worker.py:625-629`). An exception reaches the generic handler (`:643`), which replies with
+  an error but no `session_closed` and leaves the session open. In input-paced sessions the same apply ran inside
+  `VIS_INPUT`'s try, which does close the session (`:606`). `_paced_failure` stays None, so `finish` reports no failure.
+- Failure scenario: an activation that raises after `commit_logical_activation` has stopped the runtime (any
+  transaction step, `LogicalRuntimeNotJoined`, the capture settle timing out) leaves a session with no cadence and the
+  engine reference still held (capture open), which still claims to be live. The main process has no `session_closed`
+  to act on (5.5's fade/reconfigure will key off it), and `VIS_START` refuses because `_live_started` is True.
+- Fix: give `VIS_SET_MODE` the same try/`_close_session`/`session_closed` as `VIS_START` / `VIS_SET_PLAYING` /
+  display power. Add a paced test that makes a switch's transaction raise and asserts `session_closed`.
+
+**A6-M3. A failed paced step freezes the session for good, with no log. In process the cadence keeps stepping.**
+- Claim: 5.1 record, "a step that raised fails the session closed ... reporting it to the owner unprompted ... are
+  5.5".
+- Evidence: `_paced_step` catches the exception itself (`engine_worker.py:369-372`), so `VisualizerLogicalRuntime`'s
+  own failure path (log once, count, keep stepping, `logical_runtime.py:583-593`) never sees it. The step only sets
+  `_paced_failure`, without logging. `_paced_failed` (an Event) is set but nothing reads it. The test pins
+  `step_failures == 0` (`test_visualizer_engine_paced.py`, failing-step test). In process, the owner's step uses the
+  runtime's default handling, so one transient tick exception is logged and the next step retries.
+- Failure scenario: under 5.2's admission, a single transient tick exception in the worker leaves the Visualizer on
+  its last frame indefinitely. Nothing is logged in either process, and the failure only surfaces in `VIS_STOP`'s
+  reply. The worker also keeps waking at 90 Hz to return at once (the second deferred item).
+- Assessment for 5.5 vs 5.2: the full fade and reconfigure can wait for 5.5, since 5.2 is behind a code-level admission
+  with in-process as the default. But 5.2 changes what the product does on a step failure, so before 5.2 decide and
+  document one of two contracts: (i) the worker retries like the in-process runtime, or (ii) the session closes and
+  says so. Under (ii), add at least a `logger.exception` in the worker and an unprompted notice (or a reply field the
+  owner polls at its next edge; not a timer). Also stop the cadence: request a park without waiting, since `park()`
+  from inside the step would wait out its own timeout. Then 5.2 never ships a silent freeze, even behind its admission.
+
+### Low
+
+- **A6-L1. Unpark can burst the whole parked gap (a narrow race with no cap).** `RecordedCaptureBackend.start` installs
+  `_callback` before calling `on_started` (`recorded_capture.py:105-108`). `unpark_logical_side` unparks the cadence
+  right after re-acquiring the engine, while capture reopens on its own lane. A first unparked step that lands between
+  those two statements sees `is_running()` True and `_rebase` still False, so `due` hands over `elapsed = now - _last`
+  where `_last` is the last pre-park edge. Probe (a): a 60 s park gave 2,812 blocks (59.99 s) in one edge. `due` has no
+  upper bound: an overnight park would allocate gigabytes on the cadence thread. The park test passes because the lane
+  usually wins the race. Fix: call `on_started` before installing the callback (or have `rebase` take effect when
+  `running` turns True), and cap the catch-up at a device's queue depth (a few blocks). Gate-rig code only, but it is
+  the source every 5.x paced gate uses.
+- **A6-L2. The paced source models an ideal device phase.** Blocks are delivered synchronously on the cadence thread
+  just before each tick (`engine_worker.py:367-369`). So the tick always sees the freshest block, the capture callback
+  never runs concurrently with the tick, and its cost is charged to the step. The live product has a device thread on
+  its own 10 ms period, with jitter between device and tick and callback/tick lock interaction. The gate cannot see
+  any of that. This is acceptable for 5.1 (5.3 brings the real device), but the record should say "phase-locked to the
+  tick", not "as a device's queued callbacks".
+- **A6-L3. "Deadline timestamp" is the wake time.** The runtime passes `now` (the `perf_counter` read before the
+  step), not `next_deadline` (`logical_runtime.py:566, 584`). That is the better choice for an audio clock, since a late
+  step really gets the late audio. But `PacedPcmSource`'s docstring, the module docstring and the 5.1 record all say
+  "the step's deadline timestamp", which is wrong. Fix the wording.
+- **A6-L4. The parity test's owner side is a hand copy of the host binding's composition.** `_OwnerHost.configure`
+  (`test_visualizer_logical_edges_parity.py:173-187`) builds the `activation=` dict itself, binds through
+  `bind_visualizer_render_source` instead of `owner.bind`, and runs `set_playing` then `start` by hand.
+  `test_visualizer_host_binding.py:53` swallows the `configure` kwargs. No test checks that the binding passes
+  `activation=` with its model, activation and cache. `configure_logical_controller`'s `activation=None` default
+  ("keeps what the controller holds") would turn dropping it into a silent production regression: the controller keeps
+  `settings_model=None` and an empty technical cache, while the parity test stays green. Also outside the comparison:
+  the binding's real inputs. Production `presentation_kwargs` add `scene3d_detail` (`display_manager.py:2079`), while
+  the session gets `offline_activation_request`'s copy of the model values (`feature_replay.py:438`). The owner's
+  `_start_logical_runtime` is stubbed and the session runs with `_paced=False` (`:159, :216`), so 5.1's
+  `start_logical_cadence` placement (start and post-switch restart) is not compared either. Fix: make `activation`
+  required on the owner's `configure`, and assert the binding passes it (record kwargs in the fake owner). Add a paced
+  variant of the session host with a recording `start_logical_runtime`, and let the owner host record its real
+  `_start_logical_runtime` through `start_logical_cadence`. For 5.2, the worker must receive the binding's
+  `presentation_kwargs`, not an offline request.
+- **A6-L5. No test compares production frames before and after 32f28d4f.** The identity gate
+  (`test_visualizer_engine_worker.py:23`) compares the session, which uses `configure_logical_controller`, against
+  `owner_replay`. `owner_replay` configures with `configure_offline_controller` (`expanded_visualizer_evidence.py:154`)
+  and never calls `owner.configure`, so neither side is the product's configure-and-start path. "Frames unchanged" for
+  the product rests on reading the code, not on a digest. The reading holds (see below), so this is a proof gap, not a
+  regression. The `configure_offline_controller` docstring ("the frames it ticks equal the owner's") overstates what
+  that test shows.
+- **A6-L6. The paced gate's thresholds are loose, and its checks are partly implied by its setup.** The rate check
+  accepts 54 Hz (`rate_hz >= 0.6 * authored_hz`, `live_engine_gate.py:343`), so a cadence regression to 60 Hz passes;
+  the evidence shows 89.5-90.1. "Coalescing observed" (`taken < published`) is guaranteed by the reader's own 40 ms
+  stall whenever the writer is not blocked, so it is the rate check restated. It does not show latest-wins (that each
+  take got the newest slot). The park and switch tests do not assert the cadence rate after the event, and `steps`
+  counts only the last runtime, so `published == steps` cannot hold after a switch.
+- **A6-L7. `VIS_STOP` leaves the session open if `finish` raises.** `finish()` runs before `_close_session()` inside
+  the generic try (`engine_worker.py:638-643`). An unjoined cadence ("did not join") replies with an error and keeps
+  the session, with capture and the compute lane, until the next configure or worker cleanup. Fix: close in a
+  `finally`.
+- **A6-L8. The worker's park keeps the pre-park unread frame and its edges (a 5.2 obligation).** In process the
+  owner's park clears its reader mailbox, so the unread frame and its protected edges are dropped
+  (`park_logical_side(clear_reader=...)`). The session parks with no clear, by design ("the reader-side clear stays the
+  main process's"). Until a reader acknowledges, the newest slot stays readable and the writer keeps re-carrying its
+  edges, so after unpark the first slot carries pre-park Bubble edges. 5.2 must clear the reader after the
+  `VIS_SET_DISPLAY_POWER(off)` reply (after the worker's last pre-park publish), never before it, or a frame published
+  in between survives. The 5.1 park test reads none of this.
+
+### Deferred items (question 4)
+
+- **Wake-pipe backpressure: safe until 5.5.** `send_bytes` runs outside the mailbox lock (`packet_mailbox.py:133-137,
+  155-158`), and the reader's listener is its own daemon thread that only runs the wake callback. A stalled GUI does
+  not stop it draining. The pipe fills only if the main process is suspended or the callback blocks. Condition for 5.2:
+  the owner's wake callback must not block (a queued signal, never a blocking cross-thread call), and 5.2 should test
+  that a stalled GUI thread leaves the listener draining. If it does block, the cadence thread stalls inside a step:
+  park (2 s timeout) logs and proceeds, and `VIS_STOP` fails to join (A6-L7).
+- **The failed session stepping no-ops at 90 Hz: not safe to leave unaddressed into 5.2** (A6-M3). The wake cost is
+  minor. The problem is the silent, permanent freeze and the divergence from in-process retry.
+
+### Question 5 (writer-side clear)
+
+No protected edge is lost that in-process would deliver. The writer clear runs only from `stop_logical_runtime` and
+`reset_logical_handoff` (`runtime_controller.py:755, 824, 836, 843`). In process those same calls drop the unread
+publication, and its edges with it. In the worker the newest slot stays readable with its own mask, so the worker
+delivers at least what in-process does. The only edges carried are Bubble's drift and spawn edges and the capture
+edge (`bubble_frame_runtime.py:405`, `logical_frame_capture.py:982`); reveal and teardown are not protected edges. The
+one asymmetry is park (A6-L8), and it goes the other way: the worker keeps edges in-process drops.
+
+### Verified sound
+
+- **32f28d4f changes no in-process behaviour.**
+  - `park_logical_side` / `unpark_logical_side` make the same calls in the same order: park, error log, reader clear,
+    release; resume, then unpark. The flags are set under the same conditions. The error log now comes from the
+    `logical_edges` logger, with the same text.
+  - `release_engine_started_parked` keeps the old condition, and the flags are set even when `release` is not
+    callable, as before.
+  - `start_logical_cadence` is the old `_start_logical_runtime` body: the same import warm, the same interval formula,
+    and a step bound to the state at start time.
+  - `configure` now records the activation's inputs inside the owner, after the binding has evaluated its arguments.
+    None of those arguments read the controller (`display_manager.py:2071-2079`).
+  - The technical cache is now `dict(...)` rather than the same object. The binding never mutates it afterwards, and
+    `technical_config` is passed explicitly.
+  - The `activate_committed_profile` label is back after `discard_pending` (`quick_display_visualizer_owner.py:1433-1434`),
+    as before the shared module.
+  - The activation path still configures through `_apply_configuration`.
+- **The cadence owner is shared, not copied.** Both hosts start `VisualizerLogicalRuntime` through
+  `start_logical_cadence`. Only the step differs: the session's adds the audio due and its own failure capture
+  (A6-M3).
+- **`PacedPcmSource` has no thread, timer or poll.** It runs only inside the runtime's step. Late steps do get several
+  blocks (the evidence shows `most_blocks_per_edge` of 2-10). Nothing is delivered while capture is closed or Media is
+  paused, and the playhead holds. A warm-capture resume gets one interval.
+- **The cross-process run is genuine.** The gate's reader is in another process (`WorkerType.VISUALIZER`), wakes on
+  the pipe and stalls on its own thread. `perf_counter` (QPC) is system-wide, so comparing the elapsed time with the
+  paced seconds is valid. Reproduced: 2 modes OK.
+- **The writer-side clear** matches in-process (question 5).
+
+### Not verified
+
+- Whether A6-M2's half-applied paced switch can arise from the shipped modes: the probe did not inject a switch
+  failure.
+- How often A6-L1's race fires in real runs; shown only by forcing the interleaving.
+- The 9-mode paced worker test and the whole gate (only 2 modes, 2 s, were run); the wider owner focused files.
+- The Windows pipe buffer capacity behind the backpressure estimate.
