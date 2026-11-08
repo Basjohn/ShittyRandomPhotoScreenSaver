@@ -69,3 +69,52 @@ def test_every_ribbon_style_dataclass_round_trips():
     for cls in styles:
         value = cls()
         assert repr(frame_codec.decode(frame_codec.encode(value))) == repr(value), cls
+
+
+def _codec_garbage(calls) -> list:
+    """The codec's own objects that ``calls`` left for the cyclic collector (with automatic collection off)."""
+    import gc
+
+    gc.collect()
+    gc.disable()
+    gc.set_debug(gc.DEBUG_SAVEALL)
+    try:
+        calls()
+        gc.collect()
+        return [obj for obj in gc.garbage
+                if getattr(obj, "__module__", None) == frame_codec.__name__ and callable(obj)]
+    finally:
+        gc.set_debug(0)
+        gc.garbage.clear()
+        gc.enable()
+
+
+def test_encoding_and_decoding_leave_nothing_for_the_cyclic_collector():
+    # R-179: ``encode``'s recursive ``put`` and ``decode``'s recursive ``take`` were closures that referred to themselves
+    # through their own cell, so every call left a cycle holding its buffers (the encoded payload being built, or the
+    # memoryview over the decoded payload) until the next cyclic collection. The engine worker encodes every frame and
+    # the GUI thread decodes it: Waveform Ribbon's worker grew ~32 MB/s between collections (a 60-100 MB sawtooth; the
+    # frozen check's 277-286 MB). Negative control: before the fix each call left its closure (``put`` / ``take``)
+    # here; the refusal paths (a value outside the domain, trailing bytes) too.
+    from widgets.spotify_visualizer.render_state import VisualizerEnergyState, freeze_render_fields
+
+    value = freeze_render_fields({"energy": VisualizerEnergyState(bass=0.1, mid=0.2, high=0.3, overall=0.4),
+                                  "wave": tuple(float(index) for index in range(4096)),
+                                  "nested": (1, "x", (True, None, b"\x00"))})
+    payload = frame_codec.encode(value)              # the type tables are built once, outside the measured calls
+
+    def round_trips() -> None:
+        for _ in range(10):
+            assert repr(frame_codec.decode(frame_codec.encode(value))) == repr(value)
+
+    def refusals() -> None:
+        for call, argument in ((frame_codec.encode, (1.0, [2.0])), (frame_codec.decode, payload + b"\x00")):
+            try:
+                call(argument)
+            except frame_codec.FrameCodecError:
+                pass
+            else:
+                raise AssertionError(f"{call.__name__} accepted {argument!r:.40}")
+
+    assert _codec_garbage(round_trips) == []
+    assert _codec_garbage(refusals) == []
