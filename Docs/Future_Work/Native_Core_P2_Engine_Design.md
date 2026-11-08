@@ -733,7 +733,8 @@ switch never remaps.
      draining (the wake-pipe backpressure note); a worker step failure is the runtime's retry, as in process (A6-M3).
      **Built (8 Nov), with the core of 5.3:**
      - *Admission:* `experiment_flags.visualizer_engine_worker_admitted` (argv `--viz-engine-worker`, default off, never
-       an environment variable), read once per owner construction (`QuickDisplayVisualizerOwner.__init__`). Off: no
+       an environment variable; superseded 8 Nov: the worker is the default on Windows and `--viz-in-process` the
+       control, step 6's "Default" record), read once per owner construction (`QuickDisplayVisualizerOwner.__init__`). Off: no
        link, no worker process, no worker-path import (`engine_worker_link` is imported only on the worker path); every
        edge runs in process as before (owner, binding and sync suites and the production-path frame test green; the
        one off-path additions are per-edge `self._worker is not None` checks, the binding reading
@@ -1608,6 +1609,58 @@ switch never remaps.
        completes with a fade-in, and a second run of the same build links nothing cold.
      - Evidence: `.artifacts/evidence/architecture/native_core_p2/20261108_frozen_diagnostic_check2/` (the operator's
        logs and `process_samples.json`); the source reproduction's numbers are in R-180.
+   - **Default (8 Nov, operator's decision): the engine worker is the Visualizer's default path on Windows.** "I see no
+     reason for it to not be the default it is clearly superior", on gates 3 and 4 (under game60 Waveform Ribbon's main
+     GIL share 0.85 -> 0.08, frames/s 28 -> 47; no growth over 20 Settings and 20 mode switches) and the frozen checks.
+     - *The path, decided:* `ExperimentFlags.visualizer_engine_worker` is a choice, not an admission: None (no token)
+       follows `visualizer_engine_worker_platform_default()` (`core.platform_paths.IS_WINDOWS`, read at call time),
+       `--viz-in-process` chooses in process (it wins when both are given) and `--viz-engine-worker` the worker;
+       `visualizer_engine_worker_admitted()` resolves it, still read once per owner construction. Why an argv opt-out
+       rather than removing the choice and keeping in process only as the fallback: the in-process path is the gates'
+       control (gate 3's A/B, the live check's ON/OFF runs, 5.3's in-process device control) and the operator's
+       diagnostic, and a fallback-only path could be reached only by failing the worker. Why `--viz-engine-worker`
+       stays: it is the one way to run the worker where it is not the default (Linux, to prove it) and keeps the
+       existing commands and frozen-check scripts valid. Both are diagnostic argv tokens in `experiment_flags` (no
+       environment flag, no Settings switch). The fallback is unchanged: a worker that cannot run (no supervisor, a
+       failed configure or start, the first configure unanswered) leaves that activation in process; a lost session
+       is replaced once; `MAX_RECOVERIES_PER_RUN` caps the run.
+     - *Platform scope:* Windows only. Linux keeps in process, logged once as `[PLATFORM]` (the owner's
+       `_note_in_process_path`; `--viz-in-process` logs its own line): the worker's spawn under Linux's start method
+       (forkserver on Python 3.14), the POSIX wake pipe and mapping lifetime and `parec` capture in the worker
+       (`utils/audio_capture_pulse.py`, the stale-capture reopen) are unproven there; open in `Linux_Plan.md` Phase 4.
+       Pinned: `tests/test_platform_selection.py` (Windows: the worker; the in-process token wins),
+       `tests/test_linux_runtime_branches.py` (Linux: in process; `--viz-engine-worker` still chooses the worker).
+     - *Production wiring:* unchanged from 5.7: the engine creates the `ProcessSupervisor` in `_init_core_systems`
+       and hands it to the display manager before the displays admit the Visualizer
+       (`test_the_engine_wires_the_supervisor_before_the_displays_admit_the_visualizer`); the reload hold
+       (`engine_lifecycle.hold_engine_worker_for_reload`) now holds by default on Windows; every build family compiles
+       `core/visualizer_engine` (5.7). Nothing else consulted the old default: the Settings previews, the Studio, the
+       onboarding preview foundry and `tools/expanded_visualizer_evidence.py` build controllers or owners without the
+       owner's `configure` activation path (in process by construction), and the Expanded Visualizer route is
+       presentation-side on both paths.
+     - *Where the old default was assumed, now stated:* `tools/visualizer_replay/owner_production_replay.py` states in
+       process (`_in_process_path`; a `--root` tree from before the flip keeps its own); `owner_worker_gate.OwnerRig`
+       states every path (`worker=True/False`, `None` the default left unoverridden and checked against what the owner
+       read) and `identity_gate(default_path=True)` refuses a default that resolved in process;
+       `tools/visualizer_live_check.py` reads the path as the saver resolves its tokens (`engine_worker_path`): a run
+       with no token measures the worker (the recorded clip goes to the worker's capture, the frame take is wrapped),
+       `--app-arg=--viz-in-process` is the in-process control (`--app-arg=--viz-engine-worker` still names the worker).
+       Tests: a scratch probe over the 70 test files that build an owner through the binding or the display manager
+       found the owners that reached the worker configure: five with no process supervisor (they had fallen back in
+       process with a "Configure failed" warning) now state in process with the `visualizer_in_process` fixture
+       (`tests/conftest.py`): `test_qtquick_h_cutover.py` (two; one patches the shared engine and the tick),
+       `test_visualizer_custom_geometry_profiles.py` (startup hydration before the first in-process publish),
+       `test_s_hotkey_workflow.py::test_display_initialized_flag_lifecycle`,
+       `test_engine_cleanup_joins_runtime_threads.py` (the in-process logical runtime is the thread it guards). The
+       engine tests with a real supervisor (`test_no_display_shown_failed_start.py`, two in `test_s_hotkey_workflow.py`)
+       now run the default path (a real worker, not playing, no device) and pass unchanged.
+       `tests/test_visualizer_owner_production_path.py` covers both paths: the in-process fallback against the offline
+       replay (as before, stated), and the default path on a real worker presenting the in-process owner's frames, per
+       mode, never falling back.
+     - **Left (open items):** Linux (above); the operator's 5.3 device checks and the real-device reopen timing (5.3
+       record), which now judge the default path; the open 5.3 in-process parity item (a mid-song default-output switch
+       leaves the in-process Visualizer at rest until the next play edge) now concerns only the fallback and the
+       control; the Opus audit of all of P2 (running 8 Nov). P2 is otherwise done; next is P3.
 
 ## Risks
 

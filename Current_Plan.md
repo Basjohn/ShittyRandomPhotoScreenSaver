@@ -152,68 +152,18 @@ after the operator's yes on a question card; agents never run load (invisible ch
      thread. Part B (a C++ `QSGRenderNode` + QML type on a separate render thread) verified 8 Nov on all four
      backends. The Nuitka standalone probe passed 8 Nov on every part and backend, pixel-identical to the unfrozen
      runs (P1 doc). P1 has no open condition left besides the MSVC-runtime build guard for the production core.
-   - P2: an out-of-process visualizer engine for every mode (byte-identical packets; the logical tick leaves the main
-     process's GIL). Designed 7 Nov (`Docs/Future_Work/Native_Core_P2_Engine_Design.md`): P2a moves the tick and mode
-     runtimes into one `WorkerType.VISUALIZER` per generation (capture and DSP stay until measured), frames cross a
-     versioned C-readable seqlock triple buffer in shared memory that P3 reads directly. Landed: the packet ABI and
-     the exact frame codec (work orders 1-2; every mode's production frames round-trip byte-identically; main-thread
-     decode at most ~.4 ms per frame) and the in-process loopback (3: `PacketMailbox`, the logical mailbox over the
-     ABI; the production owner delivers identical frames for every mode through it; the tick side imports QtCore
-     only) and the worker (4: `WorkerType.VISUALIZER` under `ProcessSupervisor`; fed recorded post-DSP inputs it ticks
-     frames identical to the in-process owner for all nine modes, and on every recording: 160/160 replayable pairs,
-     291k frames; P2a's live input, the lossless engine snapshot, was deleted in 5.6 once P2b's live input replaced
-     it; the cross-process wake and per-session label namespaces are built). Independent Fable audit, 8 Nov
-     (`Docs/Future_Work/Native_Core_P2_Audit.md`): its two critical findings (a lost cross-process wake that froze the
-     display; the seqlock reader accepting torn slots) and H3a/H4/H6/M2 are fixed with failing-first tests. Next, in
-     order (design doc work orders): 4c measured 8 Nov: the snapshot path saves nothing for Spectrum, Oscilloscope,
-     Sphere, Extruded Spectrum and Neon Lake (its capture + pickle + take cost about their whole tick) and ~1.0-1.3 ms
-     for the four heavy modes, while moving DSP too would save ~.7-2.2 ms for every mode, so **P2b goes first**: the
-     worker owns audio capture, DSP and the tick, the snapshot layer is deleted. Built 8 Nov: P2b slice 1 (the live
-     engine on recorded PCM through its own capture callback, identical in process and in the worker) and slice 2
-     (pause/resume, warm re-entry and in-session mode switch in production read order, 126 pairs, 0 mismatching;
-     `VIS_SET_MODE` / `VIS_SET_DISPLAY_POWER`; per-slot identity under the seqlock, ABI 2), each audited. The Vulkan
-     core's needs are in the design doc (4V); compute shaders are SPIR-V-gated by test. Work order 5 (production
-     wiring): 5.1 (the worker paces its own ticks) and 5.2 with 5.3's core built 8 Nov: the production owner runs its
-     Visualizer on the worker behind the code-level admission `--viz-engine-worker` (default off; off is today's path),
-     the worker opens the loopback device itself, and the owner's frames on the worker equal its in-process frames for
-     every mode through configure, play/pause, park/unpark and a mode switch (first gate-3 data point: the main
-     process's CPU per step 0.7-1.2 ms on the worker vs 1.7-5.0 ms in process; the GUI's take+decode per presentation
-     rises .2-.6 ms). 5.5 built 8 Nov with checkpoint audit 7's failure items: no control edge waits on the worker
-     (replies are events; the spawn is off the GUI thread; a hung worker's edges cost 0.2 ms instead of 21.9 s), a dead
-     or hung worker reaches the failure path by an event (the pipe's end, the supervisor's heartbeat), the recovery is
-     bounded (one fallback in process, then faded out with requests admitted), a full wake pipe never blocks the tick,
-     a device that fails to open no longer counts as a worker failure. 5.4 built 8 Nov with audit 7's A7-M1/A7-M2: the
-     presentation inputs the capture reads (view records, the mode's presentation-only controls) reach the worker with
-     the framed view, the reflected wallpaper completes the frames on the main side, the Fullscreen Edit envelopes
-     work on the worker, and every activation in the worker loads QtCore only; the view gate is identical for the
-     five 3D modes with a photograph, an orbit and a preset's Auto Rotate. 5.6 built 8 Nov: the snapshot layer is
-     deleted and Bubble's spawn draws from its simulation's own generator (seeded per controller by gates and
-     replays, never the process RNG; identical frames to the process-RNG version seeded alike). 5.7 built 8 Nov with
-     checkpoint audit 9's A9-L1..L3: the worker process lives while an owner leases it (retired at the end of the GUI
-     turn that released the last lease; held across a CUSTOM commit or a monitor change until the replacement adopts
-     it; parked it costs ~0 CPU), the link is the role's one starter (the heartbeat only retires, fenced by identity),
-     a session whose steps keep failing fails closed into the recovery, the supervisor reaches the display manager
-     before the Visualizer is admitted, `--usage` labels the worker's CPU/RSS/threads, and every build family
-     compiles the worker's package. Checkpoint audit 10's findings are fixed (8 Nov): every worker role (image workers
-     included) skips `main.py`'s application imports, so an idle, unconfigured spawn from the production entry is
-     ready in 0.29 s with 32 MB RSS (was 1.6 s / 112 MB, Qt GUI stack loaded); in use the engine worker saves about
-     0.7 s to its first configure (about 0.6 s of the imports moved into it: 1.69-1.72 s against 1.03-1.16 s) and
-     about 40 MB in a session, while the image workers keep nearly all of it (their first Qt-path decode adds QtCore
-     and QtGui, ~0.1 s / ~12 MB). Checkpoint audit 11's findings are fixed (8 Nov): at most three engine-worker
-     recoveries per run, then in process for the run. 5.3's rest built 8 Nov: on the worker, a capture that publishes nothing for 180
-     cadence steps (~2 s) while Media plays (a default-output switch the player follows, an unplugged or stale device)
-     is reopened once on the current default output through the audio worker's own stale-capture restart; digital
-     silence and a pause never count; a reopen that fails is a device failure, never a worker failure; the main log
-     shows the device state at the next edge's reply (never a reopen after the session's last edge: the owner's
-     retire does not await `VIS_STOP`'s report). Gate 4 (dormancy and lifecycle) passed 8 Nov (design doc, Gate 4
-     record): 20 Settings round trips and 20 mode switches with no process, mapping, handle or thread growth, the worker
-     retired at each Settings open and respawned at its close, the Visualizer-off run and the overhead baseline
-     identical with the admission on and off; it first found and fixed R-178 (every display reload under the
-     admission timed its destruction barrier out and the saver exited). Next: 6 (gate 3): the game60 run in process
-     and on the worker (lead, operator's yes). Its live check is ready (8 Nov, design doc step 6 "Gate 3
-     preparation"): each slot carries its publish time (`publish_ns`, ABI 2 bytes 56-63, `perf_counter_ns`), stamped
-     only while `--frame-trace` is admitted, and the main trace records each frame it takes at that time, so both
-     paths report the same age chain; the tick and GIL are labelled by process.
+   - P2: DONE apart from the open items below. The out-of-process visualizer engine
+     (`Docs/Future_Work/Native_Core_P2_Engine_Design.md`): on Windows the Visualizer's capture, DSP and tick run in one
+     `WorkerType.VISUALIZER` process by DEFAULT since 8 Nov (operator: "I see no reason for it to not be the default it
+     is clearly superior"; design doc, step 6 "Default"), frames cross a versioned C-readable seqlock mailbox in shared
+     memory that P3 reads directly, and in process is the bounded fallback (a worker that cannot run or keeps failing;
+     at most three recoveries a run) and the `--viz-in-process` diagnostic control; Linux stays in process until
+     proven (`Linux_Plan.md` Phase 4). Gate 3 measured (game60: Waveform Ribbon's main GIL share 0.85 -> 0.08,
+     frames/s 28 -> 47) and gate 4 passed (no growth over 20 Settings and 20 mode switches); work orders 1-5 and the
+     checkpoint audits' findings are recorded in the design doc and `Docs/Future_Work/Native_Core_P2_Audit.md`. An Opus
+     audit of all of P2 is running (8 Nov); its findings land here. Open:
+     Linux: the worker's spawn, wake pipe/mapping lifetime and `parec` capture there (`Linux_Plan.md` Phase 4), then
+     its default.
      The first frozen check ran 8 Nov (lead, build of `5fb8dab7`; design doc, step 6 "Frozen check"): first configure
      1.62 s inside the 6 s bound, a Waveform Ribbon switch committed on the worker; it found Nuitka's PySide6 icon hook
      loading QtGui and QtWidgets in every worker (R-176's frozen half, fixed by a build plugin plus a frozen-audit
@@ -232,13 +182,14 @@ after the operator's yes on a question card; agents never run load (invisible ch
      linked these sources with this driver) or no cold-link line and no clock gap (one that has, a source run
      included); never `MODE_ACTIVATION_FAIL` or a `visualizer_activation_failed` reload. A second run of the same
      build must show no cold link at all.
-     Operator checks for 6: the 5.3 device checks on a real device (design doc, 5.3 record: default switch, a pinned player, a
+     Operator checks (now of the default path): the 5.3 device checks on a real device (design doc, 5.3 record: default switch, a pinned player, a
      USB/Bluetooth unplug, the only output unplugged, the in-process control, Media playing with nothing rendered
      here (Spotify Connect or casting, a player pinned elsewhere from the start, network buffering: one PortAudio
      re-init per silent run and per capture edge), and a second app on the old default hiding a switch). Known
      limit: a reopen's cost on a real device is unmeasured (whether PyAudioWPatch holds the GIL in
      `Pa_Terminate`/`Pa_Initialize`); time it in the worker with the cadence's step dt across it.
-     Side finding (gate 4's in-process control, 8 Nov; not the worker path): cycling modes in process grows the main
+     Side finding (gate 4's in-process control, 8 Nov; not the worker path, so since the default flip only the fallback
+     and `--viz-in-process`): cycling modes in process grows the main
      process's private bytes about 150-250 MB a lap of nine switches, lap after lap (20 switches: same mode, first ->
      last lap, median +371 MB; RSS only +42). Not Python (a collection at each switch frees under 1 MB; tracked objects
      plateau after the first lap), not the heaps (+30 / +45 / +17 MB heap / heap_large / arenas a lap): the native map's
@@ -252,7 +203,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
      switch, an unplugged device or a stale stream leaves the Visualizer at rest until Media's next pause and play,
      display park or an activation (the loopback stays on the dead endpoint). The worker's delivery watch
      (`EngineSession._watch_device_delivery` with `restart_stale_capture`) could run in the owner's in-process cadence
-     step too; it would change the default path's capture behaviour, so it waits for the physical check.
+     step too; it would change the in-process path's capture behaviour (since the default flip the fallback, the
+     `--viz-in-process` control and Linux), so it waits for the physical check.
      Side finding (audit 10 fixes): the negative-control half of
      `test_visualizer_owner_engine_worker.py::test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`
      (`run(False)`) failed once in a combined run of the four owner suites and passed alone and in its own file (not
@@ -266,11 +218,12 @@ after the operator's yes on a question card; agents never run load (invisible ch
      holds for only ~61% of Random Group Drift draws (2,000 seeds; Diagonal for all); it had passed on the process-RNG
      state earlier tests left behind and is seeded now. Open for Bubble's owner: what Random Group Drift should
      guarantee (an aligned axis, or none), then assert that; no retune under Bubble Temporal Fidelity without it.
-   - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
+   - P3 (NEXT): the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and
+     the rest; it reads P2's frame mailbox straight from shared memory (the ABI in the P2 design doc).
    - P4: mixed-resolution soft layers in the core.
 
    Triggers 2 (render-thread starvation) and nearly 1 (EB at display size over 8 ms) are met. Expanded Visualizer
-   M2-M5 continue meanwhile; M6 (4K acceptance) waits for P2 and the first P3 ports.
+   M2-M5 continue meanwhile; M6 (4K acceptance) waits for the first P3 ports (P2 is the default).
 
 9. **SMP & Full Display:** Expanded Visualizer first
    (`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`, EB only; its §0 holds the

@@ -51,6 +51,13 @@ Hard: one accelerated runtime surface per selected display; standalone `QQuickWi
 Quick scene graph; Settings may remain QWidget; business/runtime ownership remains Python; transition+visualizer GL
 remains inline in the one Quick scene; no permanent old/software presenter fallback.
 
+Visualizer process model (native core P2, default since 8 Nov 2026): on Windows the Visualizer's audio capture, DSP and
+logical tick run in one engine worker process (`WorkerType.VISUALIZER`, leased by the display's Visualizer owner and
+retired with it); the main process sends control edges and presents the worker's frames from shared memory, so the
+tick no longer holds the main process's GIL. In process is the bounded fallback when the worker cannot run or keeps
+failing, and the `--viz-in-process` diagnostic control; Linux stays in process until the worker is proven there.
+Contract: `Docs/Contracts.md` "Process path".
+
 The dependency floor is PySide6/Qt 6.11.2. Production requests OpenGL 4.6 Core and uses GLSL 460 core;
 OpenGL is the sole production graphics API. The existing render-context initialization boundary records actual
 GL/GLSL, vendor, renderer and required capabilities, and rejects unsupported contexts. Validation is scoped to

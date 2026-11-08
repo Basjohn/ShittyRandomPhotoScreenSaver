@@ -70,6 +70,14 @@ data locations, product builds (including from Windows) and the Linux test route
 ### Phase 4: Linux backends
 
 - [x] MPRIS media controller; parec monitor capture; pactl system/app volume.
+- [ ] **Visualizer engine worker (native core P2).** The worker is the Windows default since 8 Nov; Linux keeps the
+  Visualizer in process (`experiment_flags.visualizer_engine_worker_platform_default`, `[PLATFORM]` log once;
+  `tests/test_linux_runtime_branches.py`). To default it here, prove on a real Linux machine with
+  `--viz-engine-worker`: the worker's spawn under Linux's `multiprocessing` start method (forkserver on Python 3.14:
+  the parent's main module preloads as `core/spawn_child.py` describes; the worker must import QtCore only), the
+  POSIX wake pipe and shared-memory mapping lifetime, and the `parec` capture in the worker (does a Pulse monitor
+  stream go quiet or keep delivering on a sink change, for the session's stale-capture reopen). Then flip the default
+  and its Linux test.
 
 ### Phase 5: build and desktop integration
 
