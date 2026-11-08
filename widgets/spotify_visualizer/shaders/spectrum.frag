@@ -375,22 +375,58 @@ vec4 spectrum_bar_surface(vec4 c, float lx, float bw, float y, float fx, float s
     return c;
 }
 
-// Ghost Colour Bar Fill: the ghost is a fading copy of its own bar's surface at this pixel. Inside the bar's border
+// The Bar Fill ghost's blur: the bar's surface averaged over a box ``blur`` tall (item px) and half as wide, centred
+// on this pixel. GHOST_TAPS_X x GHOST_TAPS_Y samples, each box-filtered over its own share of the box (every pattern,
+// flag sheet and gloss filters over the pixel footprint g_px_x / g_px_y, widened here), so stripes, stars and
+// pattern edges dissolve into the bar's own colours. Only Bar Fill ghost pixels pay for it.
+const int GHOST_TAPS_X = 2;
+const int GHOST_TAPS_Y = 4;
+
+vec4 spectrum_blurred_surface(vec4 surface, float lx, float bw, float y, float fx, float scale, float blur) {
+    float keep_x = g_px_x;
+    float keep_y = g_px_y;
+    float span_x = 0.5 * blur;
+    g_px_x = max(keep_x, span_x / float(GHOST_TAPS_X));
+    g_px_y = max(keep_y, blur / float(GHOST_TAPS_Y));
+    vec4 sum = vec4(0.0);
+    for (int i = 0; i < GHOST_TAPS_X; ++i) {
+        float ox = ((float(i) + 0.5) / float(GHOST_TAPS_X) - 0.5) * span_x;
+        for (int j = 0; j < GHOST_TAPS_Y; ++j) {
+            float oy = ((float(j) + 0.5) / float(GHOST_TAPS_Y) - 0.5) * blur;
+            sum += spectrum_bar_surface(surface, lx + ox, bw, y + oy, fx + ox, scale);
+        }
+    }
+    g_px_x = keep_x;
+    g_px_y = keep_y;
+    return sum / float(GHOST_TAPS_X * GHOST_TAPS_Y);
+}
+
+// Ghost Colour Bar Fill: the ghost is a soft, blurred, fading trail of its own bar's surface. Inside the bar's border
 // it shows the fill (``fill`` already carries the Fill Gradient at this height; Rainbow Fill, a pattern or flag sheet
-// and gloss follow); on the bar's side border (and, in Segments, each segment's border ring) it shows the border
-// colour at the border's own opacity, so a transparent or dark outline stays one on the ghost. The ghost never
-// takes the bar's top stroke: nothing draws a line over its fading top. Rainbow Ghost, when on, colours it instead.
+// and gloss follow), blurred more as it rises (``t``: 0 at the bar top, 1 at the peak); on the bar's side border
+// (and, in Segments, each segment's border ring) it shows the border colour at the border's own opacity, so a
+// transparent or dark outline stays one on the ghost. Its body is more transparent than a plain ghost and fades out
+// sooner toward its top (operator, 8 Nov 2026: Bar Fill ghosts were "too solid and not blurred" beside Preset 1's).
+// The ghost never takes the bar's top stroke: nothing draws a line over its fading top. Rainbow Ghost, when on,
+// colours it instead.
 vec4 spectrum_ghost_fill(vec4 ghost, vec4 fill, bool on_border, int bidx, float lx, float bw, float y, float fx,
-                         float scale) {
+                         float scale, float t) {
     if (u_rainbow_ghost == 1 || u_ghost_fill_mix <= 0.0) return ghost;
     float k = clamp(u_ghost_fill_mix, 0.0, 1.0);
+    float rise = clamp(t, 0.0, 1.0);
+    float body = mix(1.0, 0.85 * (1.0 - 0.45 * smoothstep(0.0, 1.0, rise)), k);
     if (on_border) {
         vec4 edge = (u_rainbow_border == 1) ? apply_spectrum_rainbow(u_border_color, bidx) : u_border_color;
-        return vec4(mix(ghost.rgb, edge.rgb, k), ghost.a * mix(1.0, clamp(u_border_color.a, 0.0, 1.0), k));
+        return vec4(mix(ghost.rgb, edge.rgb, k), ghost.a * mix(1.0, clamp(u_border_color.a, 0.0, 1.0), k) * body);
     }
     vec4 surface = (u_rainbow_fill == 1) ? apply_spectrum_rainbow(fill, bidx) : fill;
-    surface = spectrum_bar_surface(surface, lx, bw, y, fx, scale);
-    return vec4(mix(ghost.rgb, surface.rgb, k), ghost.a);
+    float blur = k * mix(0.08, 0.2, smoothstep(0.0, 0.35, rise)) * g_field_h;
+    surface = spectrum_blurred_surface(surface, lx, bw, y, fx, scale, blur);
+    // A light surface (white stripes, a white field) reads far brighter than a saturated hue at the same opacity, so
+    // it is made more transparent toward the brightness of a hue ghost like Preset 1's.
+    float luma = dot(surface.rgb, vec3(0.2126, 0.7152, 0.0722));
+    body *= mix(1.0, clamp(0.55 / max(luma, 1e-3), 0.6, 1.0), k);
+    return vec4(mix(ghost.rgb, surface.rgb, k), ghost.a * body);
 }
 
 // Peak cap coverage: a band ``thickness`` tall a small gap above ``top``, box-filtered over the pixel so a
@@ -598,6 +634,14 @@ void main() {
 
         // Border radius: each shape (bar / ghost) gets its own independent
         // rounding so all tops look consistent regardless of relative heights.
+        // A Bar Fill ghost begins at the bar's fill top and wraps it: it fills the bar's rounded top corners and its
+        // own bottom stays square, so the two roundings never pinch the junction into a dark gap row. ``fill_k`` is
+        // the Bar Fill fade envelope, ``lift`` ramps the ghost in as its peak lifts off the bar (no pop).
+        float fill_k = (u_rainbow_ghost != 1) ? clamp(u_ghost_fill_mix, 0.0, 1.0) : 0.0;
+        bool fill_ghost_above = fill_k > 0.0 && active_height >= authored_scale && peak_height > active_height;
+        float lift = clamp((peak_height - active_height) / max(authored_scale, 1.0), 0.0, 1.0);
+        float corner_ghost = 0.0;   // > 0: a bar top corner outside its arc, shown as the ghost's start
+        float ghost_cover = 1.0;    // the ghost's own bottom corners fade out of their rounding with fill_k
         float br_max = min(u_border_radius, bar_width * 0.5);
         if (br_max > 0.5 * authored_scale) {
             float bx_f = bar_local_x;
@@ -608,15 +652,20 @@ void main() {
                 float br_bar = (active_height < br_max * 2.0)
                     ? min(br_max, active_height * 0.5) : br_max;
                 if (br_bar > 0.5 * authored_scale && by_f > active_height - br_bar) {
+                    bool outside = false;
                     if (bx_f < br_bar) {
                         float dx = br_bar - bx_f;
                         float dy = by_f - (active_height - br_bar);
-                        if (dx * dx + dy * dy > br_bar * br_bar) discard;
+                        outside = outside || (dx * dx + dy * dy > br_bar * br_bar);
                     }
                     if (bx_f > bar_width - br_bar) {
                         float dx = bx_f - (bar_width - br_bar);
                         float dy = by_f - (active_height - br_bar);
-                        if (dx * dx + dy * dy > br_bar * br_bar) discard;
+                        outside = outside || (dx * dx + dy * dy > br_bar * br_bar);
+                    }
+                    if (outside) {
+                        if (!fill_ghost_above) discard;
+                        corner_ghost = fill_k * lift;
                     }
                 }
             }
@@ -645,12 +694,18 @@ void main() {
                         if (bx_f < br_bot) {
                             float dx = br_bot - bx_f;
                             float dy = (active_height + br_bot) - by_f;
-                            if (dx * dx + dy * dy > br_bot * br_bot) discard;
+                            if (dx * dx + dy * dy > br_bot * br_bot) {
+                                if (fill_k <= 0.0) discard;
+                                ghost_cover = fill_k;
+                            }
                         }
                         if (bx_f > bar_width - br_bot) {
                             float dx = bx_f - (bar_width - br_bot);
                             float dy = (active_height + br_bot) - by_f;
-                            if (dx * dx + dy * dy > br_bot * br_bot) discard;
+                            if (dx * dx + dy * dy > br_bot * br_bot) {
+                                if (fill_k <= 0.0) discard;
+                                ghost_cover = fill_k;
+                            }
                         }
                     }
                 }
@@ -668,9 +723,18 @@ void main() {
 
         vec4 sp_color;
         bool sp_is_border = false;
-        if (is_ghost) {
+        // A Bar Fill ghost begins at the bar's fill top: the bar's top stroke lies over the ghost's start (the border
+        // composited over it), so a transparent or translucent top border never opens a dark seam between the lit
+        // fill and its ghost. ``band_ghost`` is that stroke's share of the ghost (0 with no Bar Fill ghost above).
+        float band_ghost = 0.0;
+        if (is_bar && corner_ghost <= 0.0 && fill_ghost_above && bw_px > 2.0 * authored_scale
+                && !(bx <= authored_scale || bx >= bw_px - authored_scale) && y_rel >= authored_scale
+                && y_rel >= active_height - max(authored_scale, 1.0)) {
+            band_ghost = fill_k * lift;
+        }
+        if (is_ghost || band_ghost > 0.0 || corner_ghost > 0.0) {
             float ghost_alpha = clamp(u_ghost_alpha, 0.0, 1.0);
-            if (ghost_alpha <= 0.0) {
+            if (ghost_alpha <= 0.0 && is_ghost) {
                 discard;
             }
             // Smooth fade from bar top to peak top
@@ -683,9 +747,18 @@ void main() {
             bool ghost_side = (bw_px <= 2.0 * authored_scale) || bx <= authored_scale
                 || bx >= bw_px - authored_scale;
             vec4 ghost_base = spectrum_ghost_tip(spectrum_ghost_fill(spectrum_ghost_colour(bar_index, u_fade), fill,
-                ghost_side, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale), t);
-            ghost_base.a *= ghost_alpha * ghost_factor;
+                ghost_side, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale, t), t);
+            ghost_base.a *= ghost_alpha * ghost_factor * ghost_cover;
             sp_color = ghost_base;
+            if (corner_ghost > 0.0) {
+                sp_color.a *= corner_ghost;
+            } else if (!is_ghost) {
+                // The bar's top stroke over the ghost's start (straight alpha, as the render host blends).
+                vec4 edge = (u_rainbow_border == 1) ? apply_spectrum_rainbow(border, bar_index) : border;
+                float under = ghost_base.a * band_ghost * (1.0 - edge.a);
+                float out_a = edge.a + under;
+                sp_color = vec4((edge.rgb * edge.a + ghost_base.rgb * under) / max(out_a, 1e-5), out_a);
+            }
             sp_is_border = true;
         } else {
             // Border on left/right edges and top edge of the bar
@@ -715,7 +788,7 @@ void main() {
         }
         // The independent ghost colour is complete. Do not reapply Rainbow
         // Borders to it (double-hue shift) or recolour its authored opacity.
-        bool sp_apply_rainbow = !is_ghost && (sp_is_border
+        bool sp_apply_rainbow = !is_ghost && band_ghost <= 0.0 && corner_ghost <= 0.0 && (sp_is_border
             ? (u_rainbow_border == 1)
             : (u_rainbow_fill == 1));
         fragColor = sp_apply_rainbow ? apply_spectrum_rainbow(sp_color, bar_index) : sp_color;
@@ -875,7 +948,7 @@ void main() {
         }
 
         vec4 ghost = spectrum_ghost_tip(spectrum_ghost_fill(spectrum_ghost_colour(bar_index, u_fade), fill,
-            on_border, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale), ghost_t);
+            on_border, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale, ghost_t), ghost_t);
         ghost.a *= ghost_alpha * ghost_factor;
         out_color = ghost;
         seg_is_border = true;

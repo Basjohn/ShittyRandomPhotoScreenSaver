@@ -182,7 +182,7 @@ def render(qt_app):
         return out
 
     def draw(overrides: dict | None = None, *, ghosting: bool = True, solid: bool = True, bars=BARS, peaks=PEAKS,
-             raw_parameters: dict | None = None):
+             raw_parameters: dict | None = None, border=BORDER, radius: float = 0.0):
         settings = {"spectrum_rainbow_enabled": False, "spectrum_unique_colors": False,
                     "spectrum_rainbow_ghost": False, "spectrum_glow_enabled": False,
                     "spectrum_ghost_alpha": 0.9, "spectrum_border_radius": 0.0, **(overrides or {})}
@@ -193,7 +193,7 @@ def render(qt_app):
             source_activation_id=7, mode_id="spectrum", playing=True, logical_timestamp=1.0,
             source_timestamp=1.0, changed=True, present_frame=True, mode_reveal_ready=True,
             common=VisualizerCommonState(bars=tuple(bars), bar_count=len(bars), style=freeze_render_fields({
-                "fill_color": FILL, "border_color": BORDER, "single_piece": solid, "border_radius": 0.0})),
+                "fill_color": FILL, "border_color": border, "single_piece": solid, "border_radius": radius})),
             mode_state=SpectrumFrame(peaks=tuple(peaks), ghost_bars=tuple(peaks),
                                      parameters=freeze_render_fields(params)))
         snapshot = compose_visualizer_render_snapshot(logical, presentation, logical_revision=1)
@@ -579,34 +579,130 @@ def test_bar_fill_has_its_own_fade_envelope():
 
 @pytest.mark.qt
 @pytest.mark.parametrize("solid", (True, False), ids=("bars", "segments"))
-def test_a_bar_fill_ghost_is_a_faded_copy_of_its_own_bar(render, solid):
-    """Ghost Colour Bar Fill: wherever a ghost is drawn, its straight colour is the colour the same bar shows at that
-    pixel when it really reaches that height (fill gradient and pattern included); on the bar's border it is the
-    border colour. Negative control: the Bar Colour source paints the border colour over the fill and fails the
-    same comparison."""
+def test_a_bar_fill_ghost_is_a_blurred_trail_of_its_own_bar(render, solid):
+    """Ghost Colour Bar Fill: wherever a ghost is drawn, its straight colour is the bar's own surface around that
+    pixel, blurred: it lies within the colours the same bar shows nearby when it really reaches that height (fill
+    gradient and pattern included) and close to their local mean; on the bar's border it is the border colour.
+    Negative control: the Bar Colour source paints the border colour over the fill and fails the same comparison."""
     import numpy as np
     look = {"spectrum_fill_gradient": True, "spectrum_fill_tip_color": [0, 255, 0, 255],
             "spectrum_pattern": "Dots", "spectrum_pattern_color": [255, 255, 255, 255],
             "spectrum_pattern_strength": 1.0}
-    tall = render(look, bars=PEAKS, peaks=PEAKS, ghosting=False, solid=solid)
+    tall = render(look, bars=PEAKS, peaks=PEAKS, ghosting=False, solid=solid)[..., :3]
     tall_plain = render(bars=PEAKS, peaks=PEAKS, ghosting=False, solid=solid)
+    fill = _is(tall_plain, FILL)
     ghost = _changed(render(look, solid=solid), render(look, ghosting=False, solid=solid))
+    reach_y, reach_x = HEIGHT // 9, HEIGHT // 18           # past the blur's half extent (0.1 / 0.05 of the field)
 
     def compare(source):
         drawn = render(dict(look, spectrum_ghost_color_source=source), solid=solid)
         image = _unpremultiplied(drawn)
-        readable = ghost & (drawn[..., 3] > 100)
-        inside = readable & _is(tall_plain, FILL)
+        readable = ghost & (drawn[..., 3] > 60)
+        outside, off_mean = [], []
+        rows, cols = np.nonzero(readable & fill)
+        for r, c in list(zip(rows, cols))[::7]:
+            window = (slice(max(0, r - reach_y), r + reach_y + 1), slice(max(0, c - reach_x), c + reach_x + 1))
+            near = tall[window][fill[window]]
+            low, high = near.min(axis=0), near.max(axis=0)
+            outside.append(np.maximum(low - image[r, c], image[r, c] - high).max())
+            off_mean.append(np.abs(image[r, c] - near.mean(axis=0)).max())
         edge = readable & _is(tall_plain, BORDER)
-        return (np.abs(image[inside] - tall[inside][:, :3]).max(axis=1),
-                np.abs(image[edge] - np.array(BORDER[:3])).max(axis=1), tall[inside][:, :3])
+        return (np.array(outside), np.array(off_mean),
+                np.abs(image[edge] - np.array(BORDER[:3])).max(axis=1), tall[rows, cols])
 
-    error, edge_error, expected = compare("Bar Fill")
-    assert error.size > 300 and error.max() <= 4
+    outside, off_mean, edge_error, expected = compare("Bar Fill")
+    assert outside.size > 50 and outside.max() <= 6
+    assert np.median(off_mean) <= 40
     assert len(np.unique(expected // 48, axis=0)) > 2                   # gradient and dots really vary under it
     assert edge_error.size == 0 or edge_error.max() <= 4
-    control, _edge, _expected = compare("Bar Colour")
+    control, _mean, _edge, _expected = compare("Bar Colour")
     assert (control > 40).mean() > 0.9
+
+
+@pytest.mark.qt
+def test_a_bar_fill_ghost_blurs_its_bars_pattern(render):
+    """The operator (8 Nov 2026): Bar Fill ghosts were "too solid and not blurred". Down each ghost column its
+    straight colour changes slowly: its high-frequency energy across Horizontal Bands' sharp white/blue boundaries is
+    far below the bar's own over the same rows. Negative control: the bar itself at that height (what the old crisp
+    ghost copied pixel for pixel) carries the bands' full energy."""
+    import numpy as np
+    look = {"spectrum_pattern": "Horizontal Bands", "spectrum_pattern_color": [255, 255, 255, 255],
+            "spectrum_pattern_strength": 1.0, "spectrum_ghost_color_source": "Bar Fill"}
+    tall = render(look, bars=PEAKS, peaks=PEAKS, ghosting=False).astype(float)[..., :3]
+    drawn = render(look)
+    ghost = _changed(drawn, render(look, ghosting=False)) & (drawn[..., 3] > 30)
+    image = _unpremultiplied(drawn)
+    fill = _is(render(bars=PEAKS, peaks=PEAKS, ghosting=False), FILL)
+    ghost_energy, bar_energy = [], []
+    for column in np.unique(np.nonzero(ghost & fill)[1]):
+        rows = np.nonzero(ghost[:, column] & fill[:, column])[0]
+        if rows.size < 30:
+            continue
+        rows = rows[3:-3]
+        ghost_energy.append(np.abs(np.diff(image[rows, column], axis=0)).sum(axis=1).mean())
+        bar_energy.append(np.abs(np.diff(tall[rows, column], axis=0)).sum(axis=1).mean())
+    assert len(ghost_energy) > 100
+    assert np.mean(bar_energy) > 20                                     # the bands really are sharp in the bar
+    assert np.mean(ghost_energy) < 0.25 * np.mean(bar_energy)
+
+
+@pytest.mark.qt
+def test_a_bar_fill_ghost_is_softer_than_a_plain_ghost(render):
+    """A Bar Fill ghost is more transparent than a Bar Colour ghost at every pixel and fades out sooner toward its
+    top (a light surface reads far brighter than a hue at the same opacity). Negative control: the Bar Colour
+    ghost against itself shows no such gap."""
+    import numpy as np
+    light = {"spectrum_pattern": "Horizontal Bands", "spectrum_pattern_color": [255, 255, 255, 255],
+             "spectrum_pattern_strength": 1.0}
+    plain = render(dict(light, spectrum_ghost_color_source="Bar Colour"))
+    soft = render(dict(light, spectrum_ghost_color_source="Bar Fill"))
+    ghost = _changed(plain, render(light, ghosting=False)) & _is(render(bars=PEAKS, peaks=PEAKS, ghosting=False), FILL)
+    assert ghost.sum() > 1000
+    assert (soft[..., 3][ghost] <= plain[..., 3][ghost] + 1).all()
+    rows, cols = np.nonzero(ghost)
+    top = np.zeros_like(ghost)
+    for column in np.unique(cols):
+        column_rows = rows[cols == column]
+        top[column_rows[column_rows < np.quantile(column_rows, 0.3)], column] = True
+    assert soft[..., 3][top].mean() < 0.6 * plain[..., 3][top].mean()
+    again = render(dict(light, spectrum_ghost_color_source="Bar Colour"))
+    assert not again[..., 3][top].mean() < 0.6 * plain[..., 3][top].mean()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("radius", (0.0, 12.0), ids=("square", "rounded"))
+def test_a_bar_fill_ghost_meets_its_bar_without_a_dark_seam(render, radius):
+    """Over a bar whose border is transparent (the flag presets), a Bar Fill ghost begins at the bar's fill top: the
+    rows where the lit fill meets its ghost are never darker than both of their neighbours, square or rounded (the
+    bar's transparent top stroke, and two roundings pinching each other, used to open a 1 px dark seam there).
+    Negative control: a Bar Colour ghost over the same bars keeps that seam."""
+    import numpy as np
+    clear = (255, 0, 0, 0)
+    backdrop = np.array([18.0, 18.0, 22.0])
+
+    def seams(source):
+        settings = {"spectrum_ghost_color_source": source, "spectrum_border_radius": radius}
+        drawn = render(settings, border=clear, radius=radius).astype(float)
+        bare = render(settings, border=clear, radius=radius, ghosting=False)
+        shown = drawn[..., :3] + backdrop * (1.0 - drawn[..., 3:4] / 255.0)        # premultiplied over the card
+        luma = shown.max(axis=2)                                                   # HSV value: blue reads too
+        dark = checked = 0
+        for column in np.unique(np.nonzero(bare[..., 3] > 0)[1]):
+            lit = np.nonzero(bare[:, column, 3] > 0)[0]
+            top = lit.min()                                                 # the bar's highest lit row
+            if top < 8 or drawn[top - 6, column, 3] == 0:
+                continue                                                    # no ghost above this column
+            checked += 1
+            for row in range(top - 4, top + 2):
+                if luma[row, column] < min(luma[row - 1, column], luma[row + 1, column]) - 3:
+                    dark += 1
+                    break
+        return dark, checked
+
+    dark, checked = seams("Bar Fill")
+    assert checked > 100 and dark == 0
+    control, control_checked = seams("Bar Colour")
+    assert control > 0.5 * control_checked
 
 
 @pytest.mark.qt

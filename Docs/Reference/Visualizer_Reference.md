@@ -158,11 +158,20 @@ Rules:
   passes through yellow, not olive; a grey, white or black end takes the other end's hue. Rim glow reaches at most
   30% of a bar's width in from each side, so on 37 narrow bars it stays a rim instead of recolouring the bar
   (`tests/test_spectrum_decor.py`, each with a negative control against the old rule).
-- Ghost Colour **Bar Fill** makes a ghost a fading copy of its own bar: inside the bar's border it shows the colour
-  the bar's fill shows at that pixel (Fill Gradient at that height, Rainbow Fill, a pattern or flag sheet, gloss); on
-  the bar's side border (each segment's ring in Segments) the border colour at the border's own opacity. It never
-  takes the bar's top stroke, so nothing lines a ghost's top. A ghost's opacity falls toward its top; only Peak Caps
-  draw over it (`tests/test_spectrum_decor.py`, with negative controls).
+- Ghost Colour **Bar Fill** makes a ghost a soft, blurred, translucent trail of its own bar: inside the bar's border
+  it shows the bar's own surface (Fill Gradient at that height, Rainbow Fill, a pattern or flag sheet, gloss)
+  averaged over a box that grows from 0.08 to 0.2 of the field's height as the ghost rises (half as wide; 2 x 4
+  taps, each box-filtered over its share), so stripes, stars and pattern edges dissolve into the bar's colours; on
+  the bar's side border (each segment's ring in Segments) the border colour at the border's own opacity. Its body is
+  more transparent than a plain ghost (0.85 at the bar, falling to about half that at the peak, on top of the usual
+  fade) and a light surface is made more transparent still, toward the brightness of a hue ghost like Preset 1's
+  (operator, 8 Nov 2026: Bar Fill ghosts were "too solid and not blurred"). It never takes the bar's top stroke, so
+  nothing lines a ghost's top. In solid bars it begins at the bar's fill top: the bar's top stroke is drawn over the
+  ghost's start (a transparent top border shows the ghost, never a dark 1 px seam), it fills the bar's rounded top
+  corners and its own bottom stays square, so two roundings never pinch the junction into a dark row; each ramps in
+  as the peak lifts off the bar. An opaque border keeps its top stroke (an authored outline). Bar Colour, Custom and
+  Rainbow ghosts are unchanged. A ghost's opacity falls toward its top; only Peak Caps draw over it
+  (`tests/test_spectrum_decor.py`, with negative controls).
 - Curated ghosts (operator, 8 Nov 2026, twice: caps alone "only draw the line, not the ghost effect"; then flat
   ghosts under caps had "a solid top edge line" and "no blend"). Every curated preset ghosts the way Preset 1 does:
   a trail continuing the bar's own colours, fading out, with no cap line. Preset 1 does it with Rainbow Ghost over
