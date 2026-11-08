@@ -43,25 +43,67 @@ _WINDOWS_ONLY_MARKERS = ("winrt", "pyaudiowpatch", "--msvc", "--onefile", "--win
 _DRIVER_OWNED = ("--jobs=", "--standalone")
 
 
+_HERE_STRING_OPENER = re.compile(r"[ \t]*\r?\n")
+
+
 def _strip_ps1_comments(text: str) -> str:
-    """PowerShell source without its comments (``<# ... #>`` blocks and ``#`` to the end of a line outside quotes).
+    """PowerShell source without its comments (``<# ... #>`` blocks and ``#`` to the end of a line), outside strings.
 
     The quoted-value extraction below pairs quotes, so an apostrophe or quote inside a comment (``Nuitka's``) would
     shift every later pair and silently drop every declaration after it (8 Nov 2026: 0 of the Windows declarations
-    reached the Linux build, presets included, and its install.sh failed)."""
-    text = re.sub(r"<#.*?#>", "", text, flags=re.DOTALL)
-    lines = []
-    for line in text.splitlines():
-        quote = None
-        cut = len(line)
-        for index, char in enumerate(line):
-            if quote is None and char == "#":
-                cut = index
-                break
-            if char in "'\"":
-                quote = None if quote == char else (char if quote is None else quote)
-        lines.append(line[:cut])
-    return "\n".join(lines)
+    reached the Linux build, presets included, and its install.sh failed).
+
+    Strings are read as PowerShell reads them (checkpoint audit 11, A11-L8), so nothing inside one starts a comment
+    or ends the string early: single-quoted (``''`` is an escaped quote), double-quoted (a backtick escapes the next
+    character, ``""`` is an escaped quote), and here-strings (``@'`` / ``@"`` ending a line, to ``'@`` / ``"@`` at the
+    start of a line), which are kept verbatim. Outside strings a backtick escapes the next character (`` `# `` starts
+    no comment). Not modelled: a double quote inside a ``$( )`` subexpression of a double-quoted string, and a ``#``
+    inside an unquoted bareword (``a#b`` is no comment in PowerShell, but is cut here); the declarations are quoted,
+    and ``tests/test_build_linux_declarations.py``'s every-literal check is the guard for anything else."""
+    out: list[str] = []
+    index, length = 0, len(text)
+    while index < length:
+        char = text[index]
+        if text.startswith("<#", index):
+            end = text.find("#>", index + 2)
+            index = length if end < 0 else end + 2
+            continue
+        if char == "#":
+            end = text.find("\n", index)
+            index = length if end < 0 else end            # the line break stays
+            continue
+        if char == "`":
+            out.append(text[index:index + 2])
+            index += 2
+            continue
+        if char == "@" and text[index + 1:index + 2] in ("'", '"'):
+            opener = _HERE_STRING_OPENER.match(text, index + 2)
+            if opener is not None:
+                closer = re.compile("^" + re.escape(text[index + 1]) + "@", re.MULTILINE).search(text, opener.end())
+                end = length if closer is None else closer.end()
+                out.append(text[index:end])
+                index = end
+                continue
+        if char in ("'", '"'):
+            end = index + 1
+            while end < length:
+                inner = text[end]
+                if char == '"' and inner == "`":
+                    end += 2
+                    continue
+                if inner == char:
+                    if text[end + 1:end + 2] == char:     # doubled: an escaped quote
+                        end += 2
+                        continue
+                    end += 1
+                    break
+                end += 1
+            out.append(text[index:end])
+            index = end
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
 
 
 def _ps1_quoted(block: str) -> list[str]:
