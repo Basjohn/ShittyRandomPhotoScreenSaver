@@ -516,3 +516,188 @@ constructor leaks its pins.**
 - Live DSP cost per capture callback on the real compute pool (needs 4b's harness), and its true GIL share.
 - Whether NumPy's FFT path releases the GIL in this build.
 - The worker-process snapshot gate (`test_the_worker_process_ticks_identical_frames_from_snapshots`) was not run.
+
+## Checkpoint audit 3 (8 Nov): P2b slice 1 and the Vulkan section
+
+Scope: 33d76196, 4e9fb516, bc215476, 24282839 (merged at 67ff1f42) and 3698eb67 (4V). Ran:
+`test_visualizer_engine_live.py` + `test_visualizer_engine_import_weight.py` (6 passed), and throwaway probes on the
+live rig (in process only): a field-by-field diff of live vs `ProductionLaneEngine` frames on whole clips, the same
+with the spectrum requested before the first commit, a request/publish trace for Sphere, and the rig replayed in
+production read order. The whole-clip gate and the cost tool were not re-run. Nothing in this checkpoint changes
+production behaviour (see Verified sound); the findings are about what the rig and the numbers prove.
+
+### High
+
+**A3-H1. The rig's tick reads the commit of its own block; production's tick reads the previous one. "The live
+engine is the reference from here on" names a zero-latency ordering production never has.**
+- Claim: design doc 4P slice 1, "the tick reads the asynchronous commit of the block it was fed ... the frames are
+  deterministic"; "Live engine vs `ProductionLaneEngine`: no lag on any mode"; "The live engine is the reference from
+  here on".
+- Evidence: `_tick_live` pushes, calls `engine.tick()` (submit), *waits for the settled edge*, then the logical tick
+  runs and its own `engine.tick()` is a no-op (`engine_worker.py:167-191`). Production's tick calls `engine.tick()`
+  (`tick_pipeline.py:991`), which only submits to the compute lane (`beat_engine.py:1386-1398`), and reads the bars
+  immediately after; the lane commits later on its own thread. Probe: the same clip with the rig's read order changed
+  to production's (push, logical tick, then wait for that commit before the next input) differs from the rig on
+  363/364 Spectrum frames (frame 0: no commit at all, `source_timestamp` None; every later frame reads the previous
+  commit).
+- What the in-process vs worker gate cannot catch, since both sides run the same rig with the same waits: it proves
+  the code is portable (imports, input pickling, no wall-clock reads in the frame path, same RNG draws), not how the
+  engine behaves asynchronously. Never exercised: a tick reading before the commit; a source block replaced while an
+  analysis is in flight (`_replace_pending_analysis_frame`, `beat_engine.py:804`: the rig never has a pending source);
+  a tick reading a commit that is half written (`_commit_analysis_frame`, `:1135-1180`, stores bars, smoothed bars,
+  energy and stamps one by one, unlocked against the tick thread); callbacks interleaved with the tick; and the
+  latest-wins transport (every input is acknowledged before the next, so no frame is ever superseded or coalesced).
+- Failure scenario: the P2b worker free-runs (no settled wait). Any later gate that compares its frames to "the
+  reference" sees a one-commit offset on every mode and either fails or gets a tolerance that hides real regressions.
+  Statements about lag ("no lag" vs the lanes engine) describe the rig, not the product.
+- Fix: say in 4P that the rig is an idealised zero-latency order. Add a production-order rig mode (step, tick, then
+  wait for the commit before the next input; still deterministic) and make *that* the P2b reference. Add a
+  free-running stress run with invariants instead of digests (commit sequence never goes backwards; bars, energy and
+  commit stamp read in one tick come from the same commit) to cover the asynchrony.
+
+### Medium
+
+**A3-M1. The live-vs-lanes differences are isolated: none of them is in the mode state that the doc names, except one
+startup effect that production has too.**
+- Claim: 4P, "Bubble differs on every frame and Oscilloscope from frame 1 ... Spline Curve, Extruded Bubble and
+  Waveform Ribbon match for long stretches (185-882 frames per clip) and then part: in their mode state, not the
+  common lanes (cause not isolated)"; "Sphere differs from frame 1 (the live engine publishes the analysis spectrum one
+  commit after the tick requests it; the lanes engine every frame, H4)".
+- Evidence (field-by-field diff over the whole of growing_pains, 1,148 frames):
+  - Spline Curve, Extruded Bubble, Waveform Ribbon: the only field that differs is the frame's `source_timestamp`, on
+    266 frames: the ticks with no new capture publication (24% of the recorded ticks repeat a serial). The live engine
+    keeps the previous commit's stamp; the lanes engine stamps every frame. They differ from frame 1 on, interleaved;
+    `equal_frames` (882/185/406) is a count, not a leading stretch, and the mode state never parts.
+  - Bubble: `common.waveform_count` 128 vs 256 on every frame (the live engine pads its 128-sample block and reports
+    128, `beat_engine.py:1366-1374`; the lanes engine serves 256 from history), plus the same `source_timestamp`. Its
+    mode state is equal.
+  - Sphere (tracer, sections, particle cohorts) and Oscilloscope (`tone`): with the pre-AGC spectrum requested before
+    the first commit, both become equal to the lanes engine except `source_timestamp`. So their whole divergence is
+    the first commit of the activation, which publishes no spectrum because nothing has requested one yet (trace:
+    commit 1 `requested=False`; from commit 2 on, each tick reads its own commit's spectrum). Not a steady
+    one-commit lag. The stateful integrators carry that one missed frame for the whole clip.
+- Failure scenario: none for the P2b gates (both sides run the same engine). In production, every activation of
+  Sphere, Oscilloscope and Neon Lake with reaction on starts one commit (about 11 ms) late on the spectrum. Small, but
+  real, and the doc's "cause not isolated" invites someone to chase a mode-state bug that is not there.
+- Fix: correct the 4P paragraph. Declare the spectrum demand from the mode rule (`reads_analysis_spectrum`) at
+  activation, as `_start_live_engine` already does for the waveform demands (`engine_worker.py:156-158`), and in the
+  production owner, so the first commit publishes. Decide whether a held tick should carry the previous commit's
+  `source_timestamp` (live) or its own (lanes); the live behaviour is the honest one.
+
+**A3-M2. The rig sets the analysis cadence by the recording's publications, not by the device's blocks, so the live
+DSP per tick is about 25% low.**
+- Claim: 4c "Live engine measured": ".76 per tick on the recorded cadence (~69 analyses per second): ~.4-.6 ms of
+  DSP per tick, ~35-55 ms of GIL per second of audio"; "For the other six the live DSP ... matches 4c's one-pass
+  column, so their 4c 'P2b saves' stand".
+- Evidence: the rig pushes a whole publication's samples in one burst per input (`engine_worker.py:186-187`), so the
+  engine gets at most one new block per input. In all three shipped clips 75.6-76.8% of the ticks carry a new serial
+  (90.5 Hz ticks). On a device, the blocks in use (128/256/512 samples = 2.7/5.3/10.7 ms) arrive faster than the
+  11 ms tick, so nearly every tick finds a new block: about 1.0 analysis per tick, not .76.
+- Failure scenario: the DSP column, the GIL per second and gate 3's analysis-latency baseline are about 25% below
+  production. P2b's savings are understated (the direction is safe), but the corrected ~.8 ms for Spectrum, Extruded
+  Spectrum and Neon Lake and "the other six stand" come from this rig, not from production.
+- Fix: in the cost tool, schedule the pushed blocks on the authored clock at `block_size / rate` intervals across
+  the tick (cutting each publication's samples as a device would deliver them), or report analyses per second at the
+  device cadence next to the recorded one.
+
+**A3-M3. The cost table's "P2b saves" mixes a loaded run with a take measured against an idle writer, and leaves
+out what P2b adds.**
+- Evidence: the live column comes from a run the doc says read 30-60% high. The take is timed right after the
+  worker acknowledges VIS_INPUT (`live_engine_cost.py:166-177`), so the writer is idle: no concurrent publish, no
+  seqlock retry, no cache-line contention, all of which a free-running P2b worker brings. "The reader copies a slot
+  another process just wrote" is offered as the reason the take is .13-.75 ms against 4c's .07-.37, but the same run
+  was under load, so that reason is unproven. "~.8 ms stands" adds this run's DSP and take to 4c's tick: the
+  cross-run mixing the paragraph itself warns against. Not subtracted: the main process's wake listener (one pipe read,
+  GIL acquisition, mailbox lock and wake request per worker frame, A2-M5), the control edges, and the decode's sync
+  latency on the render thread (A2-H3). The load record is two 1-s samples; `system_after` is labelled "sampled for
+  1 s before the run" (`live_engine_cost.py:316-317`).
+- Failure scenario: the table is quoted as "P2b saves 1.0-3.3 ms per tick" when the defensible claim is a range
+  whose top end is inflated and whose cost side is incomplete.
+- Fix: time the in-process and worker takes in one run, interleaved; time the take against a free-running worker;
+  add the listener thread's per-frame time; fix the label; and have the table say "P2b removes" (the live total) and
+  "P2b adds" (take + listener + edges) as separate columns.
+
+**A3-M4. Vulkan: the identity the core would check is mapping-wide and outside the seqlock; P2b's in-place
+mode/activation changes need it per slot.**
+- Claim: 4V, "the writer filling the header identity (runtime/engine generation, activation, mode code) and flags on
+  configure and per publish, so the core can validate a slot without Python".
+- Evidence: `runtime_generation`, `engine_generation`, `activation_id` and `mode_code` live in the 64-byte mapping
+  header (`packet_abi.py:10-13`), written once by `initialise` (`:88-97`). The seqlock covers slots only
+  (`:17-22, 146-151`). The slot head has no activation or mode field (`_SLOT_HEAD "<QIIddII"`, 40 bytes, payload at
+  48: 8 bytes spare). Work order 5 changes mode and activation in place at a tick boundary (no new mapping), so
+  per-publish header writes would race a reader that is validating the slot it just copied.
+- Failure scenario: the C core accepts a whole slot from activation N while the header already says N+1 (or the other
+  way round), and uploads one frame of a different mode's payload layout, or a retiring frame shows after a switch.
+- Fix: before P2b fixes the ABI for production, move `activation_id` and `mode_code` (and the engine generation if it
+  can change without a remap) into the slot head inside the seqlock (the 8 spare bytes at offset 40 fit two u32), and
+  keep the header for per-mapping constants only. Bump `ABI_VERSION`.
+
+**A3-M5. 4V overstates what P2b + P3 make Python-free and what QRhi gives for compute.**
+- Evidence: (1) "P2b removes the tick and DSP from the main process; P3 removes the draw": the P1 spike's Risk 1
+  (`Native_Core_P1_Spike.md`, "Risks for P2 and P3", 1) lists Python on the render thread beyond the visualizer's draw:
+  `updatePaintNode` of the background item, the surface backdrop and the Studio viewport during sync, the visualizer
+  retirement `beforeRendering` one-shot, frame-trace hooks, and PySide's first virtual call per method. The thread is
+  Python-free only when every item in the window is. The P2b decode at sync (A2-H3) is called interim, with no exit
+  condition before P3. (2) "Async compute ... so Vulkan compute queues can take them": QRhi records compute passes
+  into the same command buffer as the frame (no separate queue). Async compute needs native Vulkan through the RHI
+  native handles, which P1 Risk 2 says breaks single-core neutrality. The Decision lists async compute as "Not our
+  bottleneck" and as a trigger only (`Graphics_Backend_Decision_2026-11-05.md:37, 67`). (3) "GLSL 460 that `qsb`
+  compiles to SPIR-V (port-readiness rule 5)": P1 compiled the spike's GLSL 440 shaders. No test compiles the 8
+  production compute shaders to SPIR-V (no `qsb`/SPIR-V test under `tests/`), and rule 5 says reviews enforce 1-4
+  until such a test exists. Rule 1 binds new programs only, so "stay QRhi-portable" is unproven for the existing ones.
+- Failure scenario: P3 planning counts on a render thread that is GIL-free after the visualizer port and on async
+  compute from QRhi; neither holds without more work.
+- Fix: reword 4V: render-thread Python ends when every item is native (P1 Risk 1's list); async compute only through
+  native handles, per the Decision's trigger 3; add the `qsb` SPIR-V compile test (rule 5) for the 8 compute shaders
+  now, since `qsb.exe` already ships with PySide6.
+
+### Low
+
+- **A3-L1. "A device open fails the tests" holds in process only.** The fixture patches `create_audio_capture` in
+  the pytest process (`tests/test_visualizer_engine_live.py:26-34`); the spawned worker is not patched, so a worker
+  session that bypassed the factory would open the real loopback before failing on `_backend` None or the 30 s capture
+  edge. Fix: have `_open_capture`'s backend be the only one `_tick_live` accepts (check
+  `engine._audio_worker._backend is self._backend` after the open edge) and refuse `inputs="live"` without the factory.
+- **A3-L2. Recorded-backend fidelity gaps that 4b will hit.** `RecordedCaptureBackend` fixes its block size at
+  construction (`recorded_capture.py:79-80`); a config-epoch restart (Block Size change, `audio_worker.py:893-896`)
+  keeps the old size, where device backends renegotiate at start (`utils/audio_capture.py:374, 595`). On Auto it
+  reports 480 where WASAPI reports 0 (`_effective_block_size` differs). Capture health and staleness use the real
+  `time.monotonic` (`audio_worker.py:975-989`) while the rig runs on the authored clock, so a resume after a long
+  authored pause is never stale in the rig and 4b will not exercise `wake()`'s restart (`beat_engine.py:1935-1938`).
+  Fix: rebuild the block size in `start`, mirror Auto's 0, and drive the worker's monotonic reads from the session
+  clock in 4b (or a seam for them).
+- **A3-L3. The GIL-share numbers are more precise than the method.** The analyses (.315/.322) and rfft n=480 (.324)
+  read *below* the GIL-held calibration (.493) and are clamped to 1.0; the released calibration reads 1.17 (above
+  1). The noise is about ±20% of the span. "It releases more at 1 Mi points" is contradicted by the report (.78 held
+  vs .75 at 1,024). The GIL probe feeds both modes 480-sample blocks (`live_engine_cost.py:276`; Bubble's is 128).
+  The conclusion (the analysis is essentially GIL-bound) is plausible. Fix: state it as a bound, not a share.
+- **A3-L4. The paused refusal is acceptable for slice 1, but the reference has no idle path.** The shipped clips
+  have no paused frames, so the idle waveform, idle bars, keepalive expiry and warm-grace drain
+  (`beat_engine.py:1319-1334`) that a P2b worker runs at every pause are outside "the rig every P2b gate uses". 4b
+  owns them; until then no gate result covers a paused worker.
+- **A3-L5. Seam nits.** `self._capture_backend_factory or create_audio_capture` (`audio_worker.py:858`) falls back to
+  the device for a falsy factory; use `is None`. The docstring says "installed once", but the code allows
+  replacement whenever capture is idle; say "while idle".
+
+### Verified sound
+
+- Production is unchanged. The observer is a class attribute (None). Production pays one attribute load and an
+  `is not None` per analysis, in the `finally` after the slot release (`beat_engine.py:1032-1034`).
+  `has_analysis_in_flight` is evaluated only when an observer is installed, and its unlocked read then races nothing
+  (the rig's tick thread is blocked in `wait`). The factory is resolved under the capture lock in each drain iteration
+  as `factory or create_audio_capture` (`audio_worker.py:858, 878`), so the module global is still looked up when
+  capture opens and existing monkeypatching of `audio_worker.create_audio_capture` still works (the live fixture
+  relies on it). The refusal conditions are the same as `set_capture_lane`'s.
+- The settled edge loses no wake. `clear` comes before the step, the commit comes before the observer, and in-flight
+  is checked after the step. Callbacks pushed before adoption are admitted by `_capture_start_pending`
+  (`audio_worker.py:728-730`), so the first push does not race the capture lane.
+- The import fix: `utils.curve_nodes.interpolate_nodes(_mirrored)` is the function the editor re-exports
+  (`ui/tabs/media/spectrum_shape_editor.py:99`).
+- The gate report matches the doc (27 pairs, 31,644 frames, 0 mismatching).
+
+### Not verified
+
+- The whole-clip gate and `live_engine_cost.py` were not re-run. The free-running asynchronous behaviour (A3-H1) was
+  reasoned from the code and one ordered probe, not measured.
+- Whether any renderer reads Bubble's `common.waveform_count`. Whether `qsb` compiles the existing compute shaders.
+  The Vulkan flip on a real window (P1: operator-only).
