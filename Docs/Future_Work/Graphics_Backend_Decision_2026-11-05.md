@@ -57,6 +57,39 @@ compositor owner (Spec: one retained `QQuickWindow` per display) while `QSGRende
 integrate. A native core also removes the GIL from the render thread, the one live-performance problem we have actually
 measured, which no API change made from Python can fix.
 
+**QRhi by default, raw Vulkan per pass where measured; OpenGL selectable, Vulkan the default** (operator, 8 Nov: "as
+long as it is a genuine significant improvement we still win"; "we keep OpenGL selectable since it's cheap but Vulkan
+the default"). Binding for P3:
+- **Why QRhi, not raw Vulkan, as the core's base API.** Qt Quick on Vulkan owns the device, queue, swapchain, render
+  pass and frames in flight, and our items draw inside that frame: through QRhi, Qt tracks barriers, resource lifetime
+  across frames in flight and render-pass compatibility, which raw Vulkan inside Qt's frame would re-implement against
+  Qt's internals (the likeliest place for a port to go wrong). QRhi is what makes one core run on Vulkan, D3D12 and
+  OpenGL, so the GL fallback costs no second renderer, and what lets QRhi-native nodes run beside today's Python GL
+  nodes in the GL window while modes port one at a time. Its CPU overhead is a thin recording layer, negligible at our
+  scale (a handful of passes per frame).
+- **The API is not where GIL contention comes from.** QRhi is C++ inside Qt: a native node calling it never touches
+  the GIL, exactly like raw Vulkan (P1: a native render thread kept running while a Python thread held the GIL). The GIL
+  matters only where Python runs: the logical tick (P2) and Python on the render thread (P3 removes it either way).
+- **QRhi's limits and the escape hatch.** QRhi has no async compute queue (4V), and no bindless/descriptor indexing,
+  mesh shaders, ray tracing or arbitrary Vulkan extensions. A pass that measurably needs one records raw Vulkan inside
+  Qt's own command buffer through `QRhiCommandBuffer::beginExternal()`/`endExternal()` and the native device/texture
+  handles (also the DLSS/FSR route). Such a pass is Vulkan-only: on OpenGL it is unavailable or takes its QRhi form.
+  Never raw Vulkan by default, never a capability given up when a measurement asks for it.
+- **API stability.** QRhi is public with limited compatibility guarantees: a PySide6/Qt upgrade can change it, so each
+  upgrade rebuilds and re-runs the core's parity gates (the core is built against PySide6's exact Qt, as in P1).
+- **Backend selection.** After the flip (P3 step 6) the backend stays a setting: Vulkan the default once it matches
+  OpenGL's pixels, OpenGL (Qt's GL RHI backend running the same core) kept selectable as the fallback for driver
+  bugs, VMs and software-rendered Linux. Its cost is the per-backend test matrix; Vulkan-only features are simply off
+  on OpenGL. Keeping today's raw Python-GL renderer alongside the core is not planned (that is the double maintenance
+  P3 removes).
+- **The one coupling left inside Qt Quick, and its escalation.** Every Qt Quick frame passes a short sync with the GUI
+  thread (raw Vulkan inside Qt Quick has the same): a GUI thread stuck in a long Python slot, or Python anywhere in the
+  sync/render path, delays the frame. P3 keeps the whole sync and render path Python-free (4V), and P2 keeps the GUI
+  thread idle. If gate 3 or P3 measurements still show late syncs, the escalation is a core that owns the swapchain
+  and frame pacing on its own native thread, with Qt Quick rendering only the UI layer into a texture
+  (`QQuickRenderControl`) for the core to composite: the Visualizer then never waits for the GUI thread. Only when a
+  measurement demands it; it is a larger change to the window owner.
+
 ## Triggers that start the native Vulkan render core (any one, measured, recorded in `Current_Plan.md`)
 
 1. **GPU budget:** an accepted 3D mode at Full Display 4K under `tools/visualizer_live_check.py --load game60` exceeds its
