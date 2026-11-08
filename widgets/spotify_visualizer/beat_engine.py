@@ -529,6 +529,7 @@ class _SpotifyBeatEngine(QObject):
         self._energy_bands = EnergyBands()
         self._pre_agc_analysis_spectrum = ()
         self._pre_agc_analysis_spectrum_requested = False
+        self._analysis_spectrum_demanded = False
         self._advance_activation_generation(reason="bar_count=%d" % new_count)
     
     def reset_smoothing_state(self) -> None:
@@ -545,6 +546,7 @@ class _SpotifyBeatEngine(QObject):
         self._energy_bands = EnergyBands()
         self._pre_agc_analysis_spectrum = ()
         self._pre_agc_analysis_spectrum_requested = False
+        self._analysis_spectrum_demanded = False
         self._waveform = [0.0] * 256
         self._waveform_count = 0
         self._waveform_history = None
@@ -782,6 +784,7 @@ class _SpotifyBeatEngine(QObject):
         self._smoothed_bars = [0.0] * self._bar_count
         self._pre_agc_analysis_spectrum = ()
         self._pre_agc_analysis_spectrum_requested = False
+        self._analysis_spectrum_demanded = False
         self._last_audio_ts = 0.0
         self._waveform = [0.0] * 256
         self._waveform_count = 0
@@ -1142,7 +1145,7 @@ class _SpotifyBeatEngine(QObject):
         spectrum.  The request bit keeps this allocation dormant for accepted
         visualizers and other modes.
         """
-        if not (self._pre_agc_analysis_spectrum_requested or self._analysis_spectrum_demanded):
+        if not self._pre_agc_analysis_spectrum_requested:
             return
         raw_spectrum = getattr(worker_state, "_freq_values", None)
         if raw_spectrum is None:
@@ -1552,9 +1555,15 @@ class _SpotifyBeatEngine(QObject):
 
     def set_analysis_spectrum_demand(self, demanded: bool) -> None:
         """Declare whether the active mode reads the analysis spectrum (a mode rule the tick declares before every
-        step, ``tick_pipeline.declare_mode_engine_demands``): while demanded every commit publishes it, including
-        the first after an activation, before any read has requested it (checkpoint audit 3, A3-M1)."""
-        self._analysis_spectrum_demanded = bool(demanded)
+        step, ``tick_pipeline.declare_mode_engine_demands``). The rising edge requests one spectrum, so the first commit
+        after an activation (whose reset clears both the request and this declaration) publishes one before any read
+        has asked (checkpoint audit 3, A3-M1). After that the tick's own reads request each publication, exactly as
+        before: a standing every-commit publication changed Sphere's frames for the whole session and kept Neon Lake
+        (reaction off) copying a spectrum nobody reads (checkpoint audit 4, A4-M1)."""
+        demanded = bool(demanded)
+        if demanded and not self._analysis_spectrum_demanded:
+            self._pre_agc_analysis_spectrum_requested = True
+        self._analysis_spectrum_demanded = demanded
 
     def request_pre_agc_analysis_spectrum(self) -> None:
         """Request the next commit's spectrum, as the tick's read does (forwarded from an engine worker's tick)."""
