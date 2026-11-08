@@ -1037,8 +1037,17 @@ High-value permanent guards include:
   mailbox); each slot's identity and flags read back with plain `struct` (ABI 2); spectrum readers publish on the first
   commit after an activation (control: demand disabled); a recorded session refuses a device in any process; the warm
   resume's capture restart is frame-neutral; a free-running worker never strands or tears a frame; a paused input with
-  new capture fails closed. `tests/test_visualizer_engine_packet_abi.py` pins per-slot identity and one code per
-  registered mode (`MODE_CODES`). The fresh-spawn probe in
+  new capture fails closed; checkpoint audit 4's follow-ups: a same-mode `VIS_SET_MODE` is the owner's preset activation
+  (A4-M3), an admission failure publishes nothing of that tick (A4-L6), the device refusal is per engine (two sessions
+  closed out of order leave the module's device factory and other workers untouched, A4-L3) and an installed capture
+  source is used whatever its truth value (A3-L5). `tests/test_visualizer_engine_packet_abi.py` pins per-slot identity
+  and one code per registered mode (`MODE_CODES`, append-only: the ABI 2 table is a pinned prefix, A4-L2); a protected
+  edge never crosses into another activation's slot (A4-M4, control within one activation); the odd `sequence_begin`
+  is its own store before the rest of the slot head (A4-L1). `tests/test_visualizer_logical_edges_parity.py` (A4-H1):
+  the production owner and the engine session call one module for activation and the engine edges
+  (`widgets/spotify_visualizer/logical_edges.py`); the same edge scripts through both on recording engines give
+  identical engine/controller call logs and fence state, and a drifted hand copy on the session's side fails it.
+  The fresh-spawn probe in
   `tests/test_visualizer_engine_worker.py` ticks one live input per mode and pins QtCore/QtGui only (it caught the
   Spectrum DSP importing the Settings shape editor). Whole-clip gate (scenarios steady / pause_warm / pause_cold /
   reentry / switch, `--order`, `--stress`) and cost: `tools/visualizer_replay/live_engine_gate.py`,

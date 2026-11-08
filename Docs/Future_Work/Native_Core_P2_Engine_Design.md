@@ -291,8 +291,9 @@ switch never remaps.
        the lanes engine stays the Studios' replay.
      - *Cost:* 4c, "Live engine measured".
    - **Slice 2 built (8 Nov): off the steady state, and checkpoint audit 3's rig items** (4b, audit H3; A3-M4, A3-H1,
-     A3-M1, A3-L1, A3-L2). Every control edge mirrors the production owner's engine calls on the logical side and
-     ends on a real completion edge (never a sleep or poll):
+     A3-M1, A3-L1, A3-L2). Every control edge runs the production owner's engine calls on the logical side (as built,
+     hand copies of them; the owner's own code since the follow-ups below, A4-H1) and ends on a real completion edge
+     (never a sleep or poll):
      - *Capture-lane completion edge:* `SpotifyVisualizerAudioWorker.fence_capture_transactions(callback)` (delegated
        by the engine; nothing in production calls it) submits `callback` behind every capture start/stop/restart
        admitted so far on the serial capture lane; `EngineSession._settle_capture` waits on it after every edge and
@@ -315,12 +316,13 @@ switch never remaps.
        after the first post-re-entry commit is presented; with the arm disabled the retained frame is presented at
        once (`tests/test_visualizer_engine_live_off_steady.py`).
      - *In-session mode switch:* `EngineSession.request_mode` / `VIS_SET_MODE` (`{"mode", "preset"?, "settings"?}`,
-       validated on receipt, applied at the next tick boundary, the newest request wins):
-       `feature_replay.switch_offline_controller_mode`, the owner's `_activate_pending_mode` with its
-       `_apply_configuration` on the existing controller and engine (one activation transaction around mode,
-       settings, technical config, engine kwargs, the target's logical mode state, the fence, the compute /
-       smoothing / floor reset; then the fresh-frame fence on the committed generation and activation and render
-       admission). Same engine, capture source and mailbox; a block-size change restarts capture on its lane first.
+       validated on receipt, applied at the next tick boundary, the newest request wins): the owner's activation
+       commit on the existing controller and engine (one activation transaction around mode, settings, technical
+       config, engine kwargs, the target's logical mode state, the fence, the compute / smoothing / floor reset; then
+       the fresh-frame fence on the committed generation and activation and render admission). Same engine, capture
+       source and mailbox; a block-size change restarts capture on its lane first. (Built as a hand copy,
+       `feature_replay.switch_offline_controller_mode`; since the slice 2 follow-ups below it is the owner's own code,
+       `logical_edges.commit_logical_activation`.)
      - *Production commit order (A3-H1):* `EngineSession(order=...)`. `production` (default; the reference for these
        gates): the tick's own engine step consumes the newest block and submits its analysis, and the tick reads the
        previous commit, as live; the analysis is held at `_SpotifyBeatEngine.set_analysis_admission_gate` (called on
@@ -337,9 +339,9 @@ switch never remaps.
        commit after configure or a switch (whose reset clears the per-read request) publishes one. Same tick path in
        process and in the worker; the snapshot engine takes it as a no-op setter. Control: the demand disabled, the
        first commit publishes nothing.
-     - *Device refusal in any process (A3-L1):* a recorded-PCM session replaces the audio worker's device factory with
-       a refusal for its life (entered first, restored last); the worker's configure reply reports `device_refused`
-       and every gate asserts it.
+     - *Device refusal in any process (A3-L1):* a recorded-PCM session refuses the device for its life; the worker's
+       configure reply reports `device_refused` and every gate asserts it. (Built as a process-wide swap of
+       `audio_worker.create_audio_capture`; per engine since the follow-ups below, A4-L3.)
      - *Block size and the stale restart (A3-L2):* the recorded backend reports 0 on Auto, as pyaudiowpatch and
        sounddevice do (it delivers a 10 ms period). `wake`'s stale check reads the wall clock (0.5 s), so whether a
        warm resume restarts capture depends on how long the rig took: the gate's warm resumes restarted in 9 of 27
@@ -360,6 +362,58 @@ switch never remaps.
        per input (the worker does not pace itself until work order 5).
      - *Left for work order 5:* production wiring of these controls (the worker's own cadence, latest-wins
        application, the main-side mailbox clear on park, fail-closed fades), and Bubble's own generator (A2-M2).
+   - **Slice 2 follow-ups (8 Nov): checkpoint audit 4's open findings** (`Native_Core_P2_Audit.md`, "Checkpoint audit
+     4"; A4-M1 landed first on main, e66644c1; A4-M5's evidence copied to the cited paths):
+     - *A4-H1, one owner for activation and the engine edges:* `widgets/spotify_visualizer/logical_edges.py` (QtCore at
+       most; in the import-weight probe) holds the sequences once and both hosts call them:
+       `apply_logical_configuration` (the owner's `_apply_configuration`, its backdrop passed in as the presentation
+       step), `commit_logical_activation` (the owner's `_activate_pending_mode` from the outgoing runtime's stop through
+       the engine transaction, a preset's view motion and the reset to the pending identity; the owner passes its Edit
+       profile switch, its own configure entry and its failure recovery, which runs inside the failed transaction as
+       before), `apply_playback_edge` (`set_playing`), `prepare_engine_start` / `admit_engine_start` (`start`),
+       `release_engine_for_park` / `resume_engine_after_park` (`set_display_power`). The owner keeps its Edit profile,
+       backdrop, scene binding, crossfade, cadence park and reader-side mailbox; the session keeps its capture-lane
+       completion edge. `feature_replay.switch_offline_controller_mode` is deleted (`offline_activation_request` builds
+       only the activation's inputs) and the session's `_start_playback`, `_set_playing`, `set_display_power` and
+       mode switch are calls into the module. What the copy had diverged on now follows the owner: the activation stops
+       the outgoing runtime (`stop_logical_runtime`: render admission closed, the writer's unread record and every
+       logical mode state dropped, so a switch back starts the mode fresh, as production; `PacketMailbox.clear` is
+       writer-safe), unpark re-acquires only what park released, `start`'s engine reference and `ThreadManager` binding
+       are taken at the first input (the owner's `start`), separate logical / presentation kwargs. A test-side copy of
+       the activation (`test_visualizer_audio_source_freshness._production_hot_swap`) now calls the commit too.
+       Gate: `tests/test_visualizer_logical_edges_parity.py` drives two edge scripts (start, pause/resume, park/unpark
+       playing and paused, mode switch, same-mode preset, switch back; parked before start, started paused) through the
+       owner's methods and the session's on two recording engines and controllers configured alike and compares the
+       engine and controller call logs and the fence state step by step; negative controls: the pre-change session
+       fails it (`set_thread_manager` / `acquire` at the first input, `stop_logical_runtime` at a switch) and a
+       drifted hand copy of the session's play edge fails it.
+     - *A4-M3:* a `VIS_SET_MODE` for the current mode is the owner's same-mode preset activation (new settings and
+       engine activation; never acknowledged and dropped). Test in `test_visualizer_engine_live_off_steady.py` (the
+       pre-change session fails it: activation unchanged).
+     - *A4-M4:* `FramePacketWriter` keeps each pending edge's slot identity and carries it only into later slots of the
+       same identity, so a new activation's slot never carries an old activation's edge. Test with a switch between an
+       edge and its consume, control within one activation (`test_visualizer_engine_packet_abi.py`; the pre-change
+       writer fails it).
+     - *A4-L1:* the odd `sequence_begin` is its own aligned 8-byte store before the rest of the slot head (identity
+       included); the module docstring states the store order the P3 C reader relies on. Store-order test (the
+       pre-change single pack fails it); the C2 interleaving tests stay green.
+     - *A4-L2:* `MODE_CODES` append-only is enforced: the table as of ABI 2 is a pinned prefix in the test (an ABI
+       constant), later codes only appended above it (renumbered, removed, reordered or reused codes fail it).
+     - *A4-L3 and A3-L5:* the device refusal is per engine (`SpotifyVisualizerAudioWorker.refuse_devices`, delegated as
+       `_SpotifyBeatEngine.refuse_capture_devices`: with no capture factory installed the worker's device path raises)
+       instead of swapping `audio_worker.create_audio_capture`, so sessions closing in any order leave the module and
+       every other worker untouched; the capture factory lookup is `is None`, never `or` (a falsy source object is
+       used). Tests: two sessions closed out of order, the module untouched and a non-session worker keeping the
+       device path (the pre-change swap fails it); a falsy installed source.
+     - *A4-L6:* the doc leftovers (4V and work order 6's P3 note) now name the per-slot identity. A production-order
+       admission failure refuses the tick's frame before it reaches the mapping (`PacketMailbox.set_publish_guard`,
+       writer side, None outside a session); test with the failure recorded mid-tick (the pre-change session publishes
+       the frame first).
+     - Ran: the parity test, the owner's focused tests (35 files, 668 passed; `test_defaults_schema_authority`'s
+       source-text check of the configuration seed now reads `logical_edges.py`), `test_visualizer_engine_*` (live,
+       live off-steady, worker, packet ABI / mailbox, snapshot, codec, import weight). Not re-run: the whole-clip
+       gates (the activation now drops logical mode states as production does, so a switch-back's frames differ from
+       the slice 2 report; both sides of the in-process vs worker comparison run the same code).
 4V. **Built for the Vulkan core (operator, 8 Nov: "make sure you're still making the native core with Vulkan and
    what it brings us in mind").** P3 is a C++ render core behind the existing `QSGRenderNode`, on Qt Quick's Vulkan RHI
    (`Graphics_Backend_Decision_2026-11-05.md`; P1 proved QRhi on Vulkan in and outside Quick's frame). What it brings,
@@ -372,8 +426,8 @@ switch never remaps.
      itself.
    - **Zero-Python uploads:** the core copies a frame slot from shared memory straight into a host-visible Vulkan /
      QRhi buffer (std430-compatible blocks, 16-byte aligned: the ABI already aligns payloads). So the P3-facing
-     payload is per mode and fixed-layout (`payload_schema` per mode, audit H5), with the writer filling the header
-     identity and flags per publish, so the core can validate a slot without Python. The per-frame identity
+     payload is per mode and fixed-layout (`payload_schema` per mode, audit H5), with the writer filling each slot's
+     own identity and flags per publish, so the core can validate a slot without Python. The per-frame identity
      (activation, mode code) lives in each slot's head under the slot's seqlock, not only in the mapping header,
      which the seqlock does not cover (audit A3-M4: with an in-place mode switch a header read could pair a frame with
      the wrong identity). **Built (slice 2, ABI 2):** the identity is per slot under its seqlock, flags and source
@@ -493,8 +547,9 @@ switch never remaps.
    (QtCore only); the worker in the dormancy receipt; frozen spawn (operator); frame age defined from the capture
    timestamp on both paths (M3).
 6. Measurement (gate 3), then decide P2b. P3 note (audit H5): the tagged codec is P2's Python-to-Python transport,
-   not a C layout; P3 gets per-mode fixed layouts under new `payload_schema` values, with the header identity written
-   on configure.
+   not a C layout; P3 gets per-mode fixed layouts under new `payload_schema` values, and the native reader validates
+   each slot's own identity (ABI 2: per slot, under the slot's seqlock); the header holds the configure-time identity
+   and decides nothing.
 
 ## Risks
 
