@@ -35,7 +35,28 @@ _ticks: list[float] = []
 _restarts: list = []
 _waveform_signals: list = []
 _waveform_configuration: dict = {}
+_waveform_receipt: dict = {}
 _takes: list[float] = []
+
+
+def note_waveform_frame(receipt: dict, logical) -> bool:
+    """Count one rendered Waveform frame (``VisualizerLogicalFrame``) whose body was live and drew on audio: playing,
+    its source identity its own (``WaveformRibbonFrameRuntime.advance``'s ``live``, read from the frame's identity
+    fields, which the capture fills from the same context) and a ready body whose ``passage`` is above zero. Passage is
+    the body's own published level: 0 until audible bands or intensity reach it while live (silence, a stale source or
+    a paused body leave it 0), and the frame carries it bit-exact from whichever process ran the body. So on the engine
+    worker path, where the main process never sees the body's inputs, this is the receipt that the recorded PCM reached
+    the worker's Waveform body. Whether the frame counted."""
+    state = logical.mode_state
+    identity = (logical.engine_generation, logical.activation_id)
+    if not (logical.playing and (logical.source_generation, logical.source_activation_id) == identity
+            and min(logical.runtime_generation, *identity) >= 0 and state.ready and state.passage > 0.):
+        return False
+    receipt["rendered_frames"] = receipt.get("rendered_frames", 0) + 1
+    receipt.setdefault("first_identity", [logical.runtime_generation, *identity])
+    receipt["passage_max"] = max(receipt.get("passage_max", 0.), float(state.passage))
+    receipt["burst_serial"] = max(receipt.get("burst_serial", 0), int(state.particle_serial))
+    return True
 
 
 def _install_frame_take() -> None:
@@ -157,6 +178,7 @@ def _summary() -> dict:
                                  "p90": round(takes[int(0.9 * (len(takes) - 1))], 3), "takes": len(_takes)}
     if _waveform_signals:summary['waveform_signals']=_waveform_signals
     if _waveform_configuration:summary['waveform_configuration']=_waveform_configuration
+    if _waveform_receipt:summary['waveform_frame_receipt']=dict(_waveform_receipt)
     return summary
 
 
@@ -205,6 +227,7 @@ def _install_waveform() -> None:
         try:return render(self,frame)
         finally:
             _waveform_configuration.update(dict(frame.snapshot.logical.mode_state.parameters))
+            note_waveform_frame(_waveform_receipt,frame.snapshot.logical)   # both paths: main renders every frame
             _local.frame['waveform_render']=(time.perf_counter()-start)*1000.
             _frames.append(_local.frame);_local.frame=None
     QuickWaveformRibbonRenderer.render=framed

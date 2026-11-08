@@ -52,7 +52,9 @@ meets it before the operator does.
   it), and the tick and GIL are labelled by process (``tick_and_gil``): ``tick_process``, ``tick_to_publish_ms`` and
   ``tick_gil_share`` (both paths, from the trace), ``main_gil_share`` (in process the logical tick's, on the worker
   path the frame take's) and ``worker_tick_ms`` / ``worker_gil_share`` (the worker's own process). A worker run with
-  no publish records fails.
+  no publish records fails. A Waveform run with a ``--clip`` fails unless the recording reached the live body
+  (``waveform_pcm_receipt``): in process from the body's input rows, on the worker path from the frames main rendered
+  (a live body with passage above zero; ``waveform_frame_receipt``).
 
 Runs take ``--seconds`` plus ~30 s (profile copy, load calibration, startup, teardown). Stop strays by exact PID.
 """
@@ -236,6 +238,40 @@ def tick_and_gil(summary: dict, *, worker_path: bool) -> dict:
     return {"tick_process": "main", "tick_gil_share": tick_share,
             "main_gil_holder": "logical tick (_publish_logical_state: capture, publish, wake)",
             "main_gil_share": summary.get("logical_gil_share"), "worker_tick_ms": None, "worker_gil_share": None}
+
+
+def waveform_pcm_receipt(phases: dict, *, recorded: bool, worker_path: bool) -> dict:
+    """Fail closed unless the recorded PCM reached the live Waveform body, on whichever process ran it.
+
+    In process the main side sees the body's own inputs (``eb_live_phases``' ``waveform_signals``: rows from
+    ``WaveformRibbonFrameRuntime.advance``), and one row must carry bands above zero while playing with the body's own
+    source identity. On the engine-worker path the body runs in the worker and main records no input rows; the receipt
+    is then the frames main rendered (``waveform_frame_receipt``, ``eb_live_phases.note_waveform_frame``): at least one
+    from a live body (playing, its source identity its own) whose published passage is above zero, which only audible
+    input reaching that body moves (the worker plays the recording and refuses the device for its life). Input rows on
+    the worker path mean the body ran in main (the run left the worker), so they fail too. No evidence on either path
+    is an error. Without a recording (``--clip none``) nothing is required."""
+    signals = phases.get("waveform_signals", [])
+    receipt = phases.get("waveform_frame_receipt") or {}
+    result = {"waveform_pcm_evidence": None, "waveform_signal_samples": len(signals),
+              "waveform_burst_serial": max((row["bursts"] for row in signals), default=receipt.get("burst_serial", 0)),
+              "waveform_frame_receipt": receipt or None}
+    if not recorded:
+        return result
+    if worker_path:
+        if signals:
+            raise RuntimeError("Engine-worker run: the Waveform body ran in the main process "
+                               f"({len(signals)} input rows); the run left the worker")
+        if not receipt.get("rendered_frames"):
+            raise RuntimeError("Recorded PCM never reached the engine worker's Waveform body "
+                               "(no rendered frame from a live body with audible input)")
+        result["waveform_pcm_evidence"] = "rendered worker frames (live body, passage > 0)"
+        return result
+    if not any(max(row["bands"]) > 0. and row["playing"] and row["source_identity"] == row["identity"][1:]
+               for row in signals):
+        raise RuntimeError("Recorded PCM never reached the live Waveform body")
+    result["waveform_pcm_evidence"] = "body input rows (bands > 0, playing, own source)"
+    return result
 
 
 def hud_ages(perf_log: Path, mode: str) -> dict | None:
@@ -908,12 +944,7 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
                       if key not in actual or actual[key]!=value}
             if mismatch:raise RuntimeError(f'Runtime overrides did not reach Waveform: {mismatch}')
             summary['actual_waveform_configuration']=actual
-            signals=phases.get('waveform_signals',[])
-            if clip is not None and not any(max(row['bands'])>0. and row['playing']
-                    and row['source_identity']==row['identity'][1:] for row in signals):
-                raise RuntimeError('Recorded PCM never reached the live Waveform body')
-            summary['waveform_signal_samples']=len(signals)
-            summary['waveform_burst_serial']=max((row['bursts'] for row in signals),default=0)
+            summary.update(waveform_pcm_receipt(phases, recorded=clip is not None, worker_path=worker_path))
         tick = phases.get("logical_publish")
         summary["logical_tick_ms"] = tick
         if tick:
