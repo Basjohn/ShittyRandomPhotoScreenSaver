@@ -264,7 +264,7 @@ class FullscreenOverlayEdit:
         Visualizer frame offers Rotate Widget Content, and so does the expanded card. It is never moved or sized
         (the expanded card is a viewport, not a layout): it is not resizable, has no Restore Size, no content axes,
         and its QML frame takes no press, so the background stays Edit's (its double-click Saves). Its frame is the
-        card above the card's own lower-right controls, so the glyph's lower-right slot sits clear of them.
+        whole card, so the glyph continues the card's own bottom-right glyph row (one line with Reset Camera).
         """
 
         snapshot = self._geometry()
@@ -296,9 +296,9 @@ class FullscreenOverlayEdit:
     def _admit_card(self, session: CustomLayoutSession, snapshot: Mapping[str, Any],
                     card: tuple[tuple[float, float], Mapping[str, int]]) -> None:
         extent, rotations = card
-        x, y, width, height = snapshot["stage"]
-        reserve = max(0.0, min(float(height) / 2.0, float(snapshot.get("bottom_right_reserve", 0.0))))
-        rect = _qrect((x, y, width, height - reserve), self._origin)
+        # The whole card: its Rotate Widget Content continues the card's own bottom-right glyph row (the frame's
+        # Edit row reads the card's row geometry, so the frame must be the card).
+        rect = _qrect(tuple(snapshot["stage"]), self._origin)
         payload: dict[str, Any] = {}
         normalized = normalize_content_rotation_by_mode(rotations)
         if normalized:

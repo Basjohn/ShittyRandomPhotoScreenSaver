@@ -2,17 +2,18 @@
 
 The real hidden Quick display unit and Visualizer presentation (``tests/test_framed_scene_input.card``); nothing is
 shown. The glyph is offered only when the takeover coordinator publishes it, draws the direction it will act in,
-reports one semantic press through the scene controller, keeps clear of the control hint, and the Edit glyphs
-(which edit the ordinary card) are withdrawn while the view is display-wide. Its double-click consumption is in
+reports one semantic press through the scene controller, sits at the far corner of the card's bottom-right glyph row
+(the upper-right corner is the control hint's), and the Edit glyphs (which edit the ordinary card) are withdrawn while
+the view is display-wide. Its double-click consumption is in
 ``test_visualizer_in_card_control_double_click.py``.
 """
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
 from PySide6.QtQuick import QQuickItem
 
-from tests.test_framed_scene_input import NONE, card as production_card, mouse  # noqa: F401
+from tests.test_framed_scene_input import NONE, card as production_card, mouse, polish_glyph_row  # noqa: F401
 
 LEFT = Qt.MouseButton.LeftButton
 
@@ -35,6 +36,7 @@ def glyph_card(production_card):
 def _glyph(card):
     glyph = _find(card.scene._visualizer_root, "visualizerExpandGlyph")
     assert glyph is not None
+    polish_glyph_row(card)
     return glyph
 
 
@@ -85,20 +87,31 @@ def test_one_press_reports_the_direction_the_glyph_shows(glyph_card, expanded):
 
 
 @pytest.mark.qt
-def test_the_glyph_sits_in_the_upper_right_safe_zone_clear_of_the_hint(glyph_card):
+def test_the_glyph_closes_the_bottom_right_row_and_leaves_the_upper_right_to_the_hint(glyph_card):
+    """Operator, 8 Nov: the expand glyph joins the bottom-right glyph row, at its far corner (after Reset Camera and
+    the preset steps); the 3D control hint keeps the upper-right corner whether or not the glyph is offered."""
     card = glyph_card
     root = card.scene._visualizer_root
+    root.setProperty("cameraResetAvailable", True)
     card.scene.set_visualizer_expand_glyph(True, False)
     glyph = _glyph(card)
-    assert glyph.x() + glyph.width() <= root.width() and glyph.y() < root.height() / 4
-    assert glyph.x() > root.width() / 2
+
+    def rect(item):
+        return item.mapRectToItem(root, QRectF(0.0, 0.0, item.width(), item.height()))
+
+    reset, steps = _find(root, "visualizerCameraResetGlyph"), _find(root, "visualizerPresetControls")
+    expand = rect(glyph)
+    assert expand.right() <= root.width() and expand.bottom() <= root.height()
+    assert expand.top() > root.height() / 2 and expand.left() > root.width() / 2      # the bottom-right corner
+    for other in (rect(reset), rect(steps)):
+        assert abs(other.bottom() - expand.bottom()) < 0.5                             # one baseline
+        assert other.right() <= expand.left()                                          # left of it, no overlap
+    assert rect(steps).right() <= rect(reset).left()
     hint = _find(root, "visualizerControlHint")
     root.setProperty("controlHintsAvailable", True)
-    # The hint's right edge stays left of the glyph whenever both are present (safe zone, plan 01 §B1)...
-    assert hint.x() + hint.width() <= glyph.x() + 1e-6
-    # ...and returns to the corner when no glyph is offered.
+    corner = rect(hint).right()
     card.scene.set_visualizer_expand_glyph(False, False)
-    assert hint.x() + hint.width() > glyph.x()
+    assert rect(hint).right() == corner and rect(hint).bottom() < expand.top()        # the hint never moves for it
 
 
 @pytest.mark.qt
@@ -115,13 +128,16 @@ def test_the_camera_controls_stay_offered_and_working_while_display_wide(glyph_c
     card.scene.visualizer_camera_reset_requested.connect(lambda *_args: resets.append(1))
     for expanded in (False, True):
         card.scene.set_visualizer_expand_glyph(True, expanded)
+        polish_glyph_row(card)
         reset = _find(root, "visualizerCameraResetGlyph")
         steps = _find(root, "visualizerPresetControls")
         assert reset.isVisible() and steps.isVisible(), expanded
         assert bool(root.property("controlHintEligible")), expanded
         glyph = _glyph(card)
+        collapse = glyph.mapRectToItem(root, QRectF(0.0, 0.0, glyph.width(), glyph.height()))
         for control in (reset, steps):
-            assert control.x() + control.width() <= glyph.x() or control.y() >= glyph.y() + glyph.height()
+            assert not control.mapRectToItem(root, QRectF(0.0, 0.0, control.width(), control.height())).intersects(
+                collapse)
         _click(card, _hovered(reset))
         assert len(resets) == (2 if expanded else 1), expanded
         root.setProperty("widgetGlowAdmitted", False)       # the same input admission as on the card

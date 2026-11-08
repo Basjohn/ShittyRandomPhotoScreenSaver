@@ -246,9 +246,18 @@ Item {
             // artwork). It moves and scales like any frame; it cannot be closed (the overlays have no enabled state).
             readonly property bool fullscreenOverlay: widgetId.indexOf("fullscreen_overlay.") === 0
             // Fullscreen Edit's expanded Visualizer card: it offers only Rotate Widget Content (revealed on hover in
-            // its usual lower-right slot, as on the ordinary Visualizer frame). The card is never moved or sized, so
-            // its frame draws no outline and takes no press: the background stays Edit's (double-click Saves).
+            // the card's bottom-right glyph row, as on the ordinary Visualizer frame). The card is never moved or
+            // sized, so its frame draws no outline and takes no press: the background stays Edit's (double-click Saves).
             readonly property bool fullscreenCard: widgetId === "fullscreen_overlay.visualizer"
+            // The Visualizer card's bottom-right glyph row (VisualizerPresentation.qml glyphRow; operator, 8 Nov: the
+            // rotate glyph on the same line as the card's bottom-right glyphs). On a Visualizer frame (ordinary or
+            // the expanded card) Edit's own controls of that corner (the preset steps, Rotate Widget Content) continue
+            // the card's row from its one geometry source: its inset, glyph size, spacing and fit scale, immediately
+            // left of the members the card itself offers (Reset Camera; the expand glyph is withdrawn under Edit).
+            // Every other frame keeps its own lower-right slot.
+            readonly property var cardGlyphRow: (widgetId === "spotify_visualizer" || fullscreenCard)
+                && contentEnvelopeItem && contentEnvelopeItem.glyphRowInset !== undefined
+                ? contentEnvelopeItem : null
             Component.onCompleted: customLayoutOverlay.deliverPendingChildLock(editFrame)
             onHasPresentationItemChanged: customLayoutOverlay.deliverPendingChildLock(editFrame)
             readonly property var contentEnvelope: {
@@ -725,65 +734,119 @@ Item {
                 }
             }
 
+            // Edit's bottom-right glyph row: the preset steps (Visualizer only), then
+            // Rotate Widget Content. On a Visualizer frame it continues the card's
+            // own bottom-right row (cardGlyphRow: same inset, glyph size, spacing and
+            // fit scale, ending one spacing left of the card's offered members), so
+            // the whole corner reads as one line; elsewhere it is the frame's
+            // lower-right slot as before. Members skip while not offered (no gaps).
             Row {
-                id: presetControls
-                objectName: "customLayoutPresetControls-" + editFrame.widgetId
-                visible: editFrame.widgetId === "spotify_visualizer" && Boolean(editFrame.contentEnvelopeItem)
-                x: Math.max(1, editFrame.width - width - 10 - (rotateContentControl.visible || (editFrame.contentEnvelopeItem && editFrame.contentEnvelopeItem.cameraResetAvailable) ? 32 : 0))
-                y: Math.max(1, editFrame.height - height - 10)
-                spacing: 6
+                id: editGlyphRow
+                objectName: "customLayoutGlyphRow-" + editFrame.widgetId
+                readonly property var card: editFrame.cardGlyphRow
+                readonly property real inset: card ? card.glyphRowInset : 10.0
+                readonly property real glyphSize: card ? card.glyphSize : 22.0
+                // The card's offered members and one spacing before them.
+                readonly property real cardReach: card && card.glyphRowCardWidth > 0
+                    ? card.glyphRowCardWidth + spacing * scale : 0.0
+                spacing: card ? card.glyphSpacing : 6.0
+                scale: card ? card.glyphRowScale : 1.0
+                transformOrigin: Item.BottomRight
+                x: Math.max(1.0 - width * (1.0 - scale), editFrame.width - inset - cardReach - width)
+                y: Math.max(1.0 - glyphSize * (1.0 - scale), editFrame.height - inset - glyphSize)
                 z: 120
-                opacity: editFrame.parentGlyphControlsOpacity
-                enabled: !editFrame.parentGlyphControlsHidden && opacity > 0.05
-                Repeater {
-                    model: [-1, 1]
-                    delegate: Rectangle {
-                        required property int modelData
-                        objectName: (modelData < 0 ? "customLayoutPreviousPreset-" : "customLayoutNextPreset-") + editFrame.widgetId
-                        width: 22
-                        height: 22
-                        radius: width / 2
-                        antialiasing: true
-                        color: customLayoutOverlay.closeButtonColor
-                        border.width: 1
-                        border.color: customLayoutOverlay.closeButtonBorderColor
-                        Canvas {
-                            anchors.centerIn: parent
-                            width: 20
-                            height: 20
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                ctx.clearRect(0, 0, width, height)
-                                ctx.save()
-                                if (modelData < 0) { ctx.translate(20, 0); ctx.scale(-1, 1) }
-                                ctx.strokeStyle = String(customLayoutOverlay.closeButtonGlyphColor)
-                                ctx.lineWidth = 1.8
-                                ctx.lineCap = "round"
-                                ctx.lineJoin = "round"
-                                ctx.beginPath()
-                                ctx.moveTo(4, 10)
-                                ctx.lineTo(16, 10)
-                                ctx.moveTo(11, 5)
-                                ctx.lineTo(16, 10)
-                                ctx.lineTo(11, 15)
-                                ctx.stroke()
-                                ctx.restore()
+
+                Row {
+                    id: presetControls
+                    objectName: "customLayoutPresetControls-" + editFrame.widgetId
+                    visible: editFrame.widgetId === "spotify_visualizer" && Boolean(editFrame.contentEnvelopeItem)
+                    spacing: editGlyphRow.spacing
+                    opacity: editFrame.parentGlyphControlsOpacity
+                    enabled: !editFrame.parentGlyphControlsHidden && opacity > 0.05
+                    Repeater {
+                        model: [-1, 1]
+                        delegate: Rectangle {
+                            required property int modelData
+                            objectName: (modelData < 0 ? "customLayoutPreviousPreset-" : "customLayoutNextPreset-") + editFrame.widgetId
+                            width: editGlyphRow.glyphSize
+                            height: editGlyphRow.glyphSize
+                            radius: width / 2
+                            antialiasing: true
+                            color: customLayoutOverlay.closeButtonColor
+                            border.width: 1
+                            border.color: customLayoutOverlay.closeButtonBorderColor
+                            Canvas {
+                                anchors.centerIn: parent
+                                width: 20
+                                height: 20
+                                onPaint: {
+                                    const ctx = getContext("2d")
+                                    ctx.clearRect(0, 0, width, height)
+                                    ctx.save()
+                                    if (modelData < 0) { ctx.translate(20, 0); ctx.scale(-1, 1) }
+                                    ctx.strokeStyle = String(customLayoutOverlay.closeButtonGlyphColor)
+                                    ctx.lineWidth = 1.8
+                                    ctx.lineCap = "round"
+                                    ctx.lineJoin = "round"
+                                    ctx.beginPath()
+                                    ctx.moveTo(4, 10)
+                                    ctx.lineTo(16, 10)
+                                    ctx.moveTo(11, 5)
+                                    ctx.lineTo(16, 10)
+                                    ctx.lineTo(11, 15)
+                                    ctx.stroke()
+                                    ctx.restore()
+                                }
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                propagateComposedEvents: false
+                                onEntered: editFrame.showGlyphTip(parent, modelData < 0 ? "PREVIOUS PRESET" : "NEXT PRESET")
+                                onExited: editFrame.hideGlyphTip(parent)
+                                onPressed: function(mouse) { mouse.accepted = true }
+                                onClicked: function(mouse) {
+                                    mouse.accepted = true
+                                    if (editFrame.contentEnvelopeItem)
+                                        editFrame.contentEnvelopeItem.presetStepRequested(modelData)
+                                }
                             }
                         }
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            propagateComposedEvents: false
-                            onEntered: editFrame.showGlyphTip(parent, modelData < 0 ? "PREVIOUS PRESET" : "NEXT PRESET")
-                            onExited: editFrame.hideGlyphTip(parent)
-                            onPressed: function(mouse) { mouse.accepted = true }
-                            onClicked: function(mouse) {
-                                mouse.accepted = true
-                                if (editFrame.contentEnvelopeItem)
-                                    editFrame.contentEnvelopeItem.presetStepRequested(modelData)
-                            }
-                        }
+                    }
+                }
+
+                Rectangle {
+                    id: rotateContentControl
+                    objectName: "customLayoutRotateContent-" + editFrame.widgetId
+                    visible: editFrame.contentRotationCapable
+                    // The row keeps the turn action in the lower-right edit-chrome
+                    // slot, inset from the viewport edge/corner resize handles so
+                    // the two gestures never compete for the same pointer region.
+                    width: editGlyphRow.glyphSize
+                    height: editGlyphRow.glyphSize
+                    radius: width / 2
+                    antialiasing: true
+                    opacity: editFrame.parentGlyphControlsOpacity
+                    enabled: !editFrame.parentGlyphControlsHidden && opacity > 0.05
+                    color: customLayoutOverlay.closeButtonColor
+                    border.width: 1
+                    border.color: customLayoutOverlay.closeButtonBorderColor
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "↻"
+                        color: customLayoutOverlay.closeButtonGlyphColor
+                        font.pixelSize: Math.round(rotateContentControl.width * 0.68)
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: customLayoutOverlay.sessionModel.rotateContent(editFrame.index)
                     }
                 }
             }
@@ -864,43 +927,6 @@ Item {
                     color: "#f6f6f8"
                     font.pixelSize: 11
                     font.weight: Font.Medium
-                }
-            }
-
-            Rectangle {
-                id: rotateContentControl
-                objectName: "customLayoutRotateContent-" + editFrame.widgetId
-                visible: editFrame.contentRotationCapable
-                width: 22
-                height: 22
-                radius: width / 2
-                // Keep the turn action in the lower-right edit-chrome slot,
-                // inset from the viewport edge/corner resize handles so the
-                // two gestures never compete for the same pointer region.
-                x: Math.max(1.0, editFrame.width - width - 10.0)
-                y: Math.max(1.0, editFrame.height - height - 10.0)
-                z: 40
-                antialiasing: true
-                opacity: editFrame.parentGlyphControlsOpacity
-                enabled: !editFrame.parentGlyphControlsHidden && opacity > 0.05
-                color: customLayoutOverlay.closeButtonColor
-                border.width: 1
-                border.color: customLayoutOverlay.closeButtonBorderColor
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "↻"
-                    color: customLayoutOverlay.closeButtonGlyphColor
-                    font.pixelSize: 15
-                    font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: customLayoutOverlay.sessionModel.rotateContent(editFrame.index)
                 }
             }
 
@@ -3767,11 +3793,13 @@ Item {
                                 const control = controls[i]
                                 if (!control || !control.visible)
                                     continue
+                                const rect = control.mapToItem(
+                                    editFrame, 0, 0, control.width, control.height)
                                 if (customLayoutOverlay.rectanglesOverlap(
                                             candidate.x, candidate.y,
                                             candidate.width, candidate.height,
-                                            control.x, control.y,
-                                            control.width, control.height))
+                                            rect.x, rect.y,
+                                            rect.width, rect.height))
                                     return false
                             }
                             const childLayer = childRoleLoader.item

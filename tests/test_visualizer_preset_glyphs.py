@@ -61,7 +61,8 @@ def test_preset_glyphs_click_both_directions_and_delay_tooltips(qt_app, qtbot, e
         QTest.mouseMove(window, QPoint(300, 200))
         previous, following = button(-1), button(1)
         qtbot.waitUntil(lambda: previous.isEnabled() and previous.isVisible(), timeout=2500)
-        assert previous.width() == following.width() == (22 if editing else 26)
+        # Edit's steps continue the card's bottom-right glyph row: the card's glyph size in both.
+        assert previous.width() == following.width() == root.property("glyphSize")
         assert previous.mapToScene(previous.boundingRect().center()).x() < following.mapToScene(following.boundingRect().center()).x()
         for direction in (-1, 1):
             control = button(direction)

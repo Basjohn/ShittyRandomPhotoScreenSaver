@@ -131,7 +131,8 @@ not a different renderer.
 - **3D modes:** the shared framed camera (`core/settings/framed_camera.py`) resolves its frustum from the expanded
   aspect; authored poses, preset starting views and saved camera values are unchanged; W/A/S/D, drag orbit, inertia
   and wrap behave exactly as at the card (AC-11 decides the contract for modes without a framed spec before they opt
-  in). Control hints and Reset Camera sit in the same safe zone as the collapse glyph (§B1).
+  in). Control hints keep the upper-right corner; Reset Camera shares the bottom-right glyph row with the collapse
+  glyph (§B1, "One bottom-right glyph row" under Milestone 2).
 - **Input:** double-click cycles the mode, middle-click cycles the preset, the collapse glyph consumes its own presses
   (including the second press of a double-click, as the queued Reset Camera fix requires), for 2D and 3D alike.
 - **Audio:** one engine, one tick, one cadence; expansion changes no DSP, floor, smoothing or ramp.
@@ -523,10 +524,35 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   Edit start -> `EditEntered` before capture (immediate collapse), Save/Cancel -> `EditExited`; an ordinary CUSTOM
   transfer -> one ordinary transfer transaction. While the view is (or is becoming) display-wide, direct Alt
   gestures, the Edit hover glyphs and display transfers are refused (expanded transfer is M5).
-- *Glyph.* `VisualizerPresentation.qml` `visualizerExpandGlyph`: vector arrow (↗, turned to ↙ when expanded), upper
-  right inside the card, Reset Camera's admission and hover fade, a delayed "FULL DISPLAY" / "EXIT FULL DISPLAY"
-  tip, consumes its own presses including a double-click's second; the control hint moves left of it; the Edit
-  hover glyphs are withdrawn while expanded. The coordinator publishes it (`set_visualizer_expand_glyph`).
+- *Glyph.* `VisualizerPresentation.qml` `visualizerExpandGlyph`: vector arrow (↗, turned to ↙ when expanded), at
+  the far corner of the card's bottom-right glyph row (below), Reset Camera's admission and hover fade, a delayed
+  "FULL DISPLAY" / "EXIT FULL DISPLAY" tip above the row, right-aligned on the glyph, consumes its own presses
+  including a double-click's second; the Edit hover glyphs are withdrawn while expanded. The coordinator publishes it
+  (`set_visualizer_expand_glyph`). (Until 8 Nov it sat in the upper-right corner with the control hint moved left of
+  it; the hint now keeps that corner alone.)
+- *One bottom-right glyph row (operator, 8 Nov: "The rotate glyph should be on the same line as the bottom right
+  glyphs, heck let's put expansion there too to be neater and do the same thing for the normal visualizer";
+  decided).* One `Row` (`glyphRow`, `visualizerGlyphRow`) anchored at the card's bottom-right inset
+  (max(12, border + 6), the 3D hint's inset) places the corner's controls on the ordinary and the display-wide card
+  alike. Order, left to right: the preset steps, Rotate Widget Content (Edit's, below), Reset Camera, expand /
+  collapse at the far corner (the card's exit stays where the pointer finds it; rotate and Reset Camera, both
+  camera/content turns, sit side by side; the steps stay leftmost as before). Each member sits in a layout slot
+  that carries its availability (`volumeWheelEnabled` for the steps, `cameraResetAvailable`, `expandGlyphAvailable`);
+  the glyph inside carries the shared admission (`widgetGlowAdmitted`, the card shown), so the row skips what is not
+  offered (no gaps), admission never moves a member, and hover only fades (each glyph's fade, tip and press rules are
+  unchanged). Admission is not on the row itself: a `Row` hears a member's visibility only through effective-
+  visibility edges, which an invisible row never delivers, so its width went stale while not admitted. The card
+  publishes the row's one geometry (`glyphSize`, `glyphSpacing`, `glyphRowInset`, `glyphRowScale`, `glyphRowRight`,
+  `glyphRowBottom`, `glyphRowTop`, `glyphRowCardWidth`); a card too narrow or short for the widest row (five members)
+  scales the whole row about its bottom-right corner instead of overflowing. In Edit, `CustomLayoutOverlay.qml`
+  `editGlyphRow` (Edit's preset steps, then Rotate Widget Content) continues the row on a Visualizer frame (ordinary,
+  and Fullscreen Edit's expanded card, whose frame is now the whole card): the card's inset, size, spacing and scale,
+  ending one spacing left of the members the card offers (Reset Camera; the expand glyph is withdrawn under Edit);
+  other frames keep their own lower-right slot. The rotate route, undo and Save/Cancel are Edit's, unchanged. Edit
+  chrome (corner squares, side strips, close, display hops, the wedge, Restore Size, the child lock) stays clear of the
+  row. Evidence: `tests/test_visualizer_glyph_row.py`; stills outside the repository
+  (`D:\Temp\Scratch\SRPSS\evidence\visualizer\20261108_glyph_row\`: the ordinary card hovered, ordinary Edit
+  with rotate, the expanded card hovered, Fullscreen Edit with rotate, a narrow card).
 - *V key (operator, 8 Nov).* V while the saver runs is a press of this glyph: `RuntimeInputOwner` emits
   `visualizer_expand_toggle_requested` once per physical press (no repeat, nothing under the context menu, consumed
   and refused in Edit), and `DisplayManager._toggle_quick_visualizer_expansion_from_key` passes the generation gate,
@@ -687,9 +713,9 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   the model's only while the latched identity is the live one (never another track's art under the text). No track
   fades Now Playing out. When a fade ends nothing runs and the item is invisible.
 - *Placement.* The safe area is the card inset by its border plus max(24, 2.5% of the shorter side). Right-hand
-  corners also keep clear of the card's controls (top: the collapse glyph, its tip and the 3D hint; bottom: Reset
-  Camera, the preset steps and their tip). An overlay is at most 45% of the safe width (text elides), so a left one
-  never reaches the right-hand controls. Two in one corner stack, the newer (by appearance, not by content swap)
+  corners also keep clear of the card's controls (top: the 3D hint; bottom: the glyph row (the preset steps, Rotate
+  Widget Content, Reset Camera, the collapse glyph) and their tips; 8 Nov, the collapse glyph moved into the row).
+  An overlay is at most 45% of the safe width (text elides), so a left one never reaches the right-hand controls. Two in one corner stack, the newer (by appearance, not by content swap)
   nearer the edge; an appearing overlay waits while a showing peer makes room, and the older glides back when the
   newer has gone. A showing OSD over an overlay keeps priority: the overlay fades aside (and takes no input) until
   the OSD hides.
@@ -803,9 +829,9 @@ can most geometry normally."
   quarter-turn of the content, CUSTOM layout state per mode) for a mode that can turn its content (Spectrum,
   Oscilloscope, Bubble, Spline Curve; never a framed 3D mode). Fullscreen Edit now admits the expanded card as one
   more session item, `fullscreen_overlay.visualizer`, when the live mode can turn (first in the session, so its frame
-  lies under the overlays'): the same frame glyph (revealed on hover in its lower-right slot, the card's frame
-  stopping above the card's own lower-right controls), the same `rotateContent` route and owner method
-  (`rotate_visualizer_content`, one undo step per turn). The card is never moved or sized (a viewport, not a layout):
+  lies under the overlays'): the same frame glyph (revealed on hover in the card's bottom-right glyph row, the
+  card's frame being the whole card; until 8 Nov it stopped above the card's controls), the same `rotateContent`
+  route and owner method (`rotate_visualizer_content`, one undo step per turn). The card is never moved or sized (a viewport, not a layout):
   not resizable, no Restore Size, no content axes, and its QML frame draws no outline and takes no press, so the
   background stays Edit's (its double-click Saves). Preview: a turned card publishes the committed world with the
   draft map through the scene's one viewport/orientation seam (the controller's `set_custom_viewport_override`, as
@@ -851,9 +877,10 @@ can most geometry normally."
   easing to lag a frame); the OSD does not push them aside. When Edit ends they return to their authored visibility:
   Always Show (with content) stays, anything else fades out with its own fade.
 - *Clear of the card's controls.* An overlay reaching into the column of the card's right-hand controls, from any
-  corner, keeps clear of them vertically (the collapse glyph, its tip and the 3D hint above; Reset Camera, the preset
-  steps and their tips below). The column is measured from the card's size and the tips' text only (never hover or
-  admission), so nothing moves at runtime; at zero offset every placement is M3b's.
+  corner, keeps clear of them vertically (the 3D hint above; the glyph row, Rotate Widget Content included, and its
+  tips below). The column is measured from the card's size, the widest row and the tips' text only (never hover,
+  admission or Edit), so nothing moves at runtime or on entering Fullscreen Edit; at zero offset every placement is
+  M3b's.
 - *Evidence.* `tests/test_visualizer_expansion_fullscreen_edit.py` (hidden production scene, the real owner, model
   and gestures, a real `SettingsManager`): the parity map (one gesture script on a draft, Cancel exactly, the same
   script, Save commits what the draft showed), byte-identical store after a Fullscreen-only Save and Cancel, the
