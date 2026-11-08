@@ -97,11 +97,17 @@ after the operator's yes on a question card; agents never run load (invisible ch
      with a customizable font; later, cheap bright-area detection to switch the text to black. No volume rail.
      Options: any corner per overlay, Always Show, Media Controls with the now-playing (default off), an optional card
      border + theme surface (default off); all in a new Visualizers pill "Fullscreen Mode", first after Setup.
-   - Fullscreen Edit (operator, 8 Nov; plan 01 M3c): built 8 Nov on an agent branch, awaiting the lead's audit and
-     the operator's look. Edit entered while expanded stays expanded and edits only the overlays (the toast, Now
-     Playing's text and its artwork, sized apart) through the one Edit session; Save writes only their value, other
-     displays keep running without Edit chrome, and an unsaved draft holds Settings. Also there: Now Playing reveals
-     when playback resumes (paused -> playing).
+   - Fullscreen Edit (operator, 8 Nov; plan 01 M3c): merged 8 Nov (with single-axis handles and Rotate Widget
+     Content). Edit entered while expanded stays expanded and edits the overlays (the toast, Now Playing's text and its
+     artwork, sized apart) through the one Edit session; Save writes their value (and the Visualizer's turn to CUSTOM),
+     other displays keep running without Edit chrome, and an unsaved draft holds Settings. Also there: Now Playing
+     reveals when playback resumes (paused -> playing).
+     **Open defects (operator, 8 Nov, live):** (1) the X/Y (single-axis) contracts on Now Playing do not adjust the
+     artist line's spacing: the artist metadata does not follow a width/height change of the text box; (2) the
+     metadata text cannot be moved at all (Now Playing's text block does not drag); (3) the Volume OSD
+     (`rendering/quick/widgets/system_audio_osd.py`, its foreground lane handed to the overlays in `DisplayScene.qml`
+     ~297) is shown in Fullscreen Edit but cannot be moved or sized there. All three are assigned to the
+     Fullscreen Edit follow-up agent; tests must drive the real Edit path and fail without each fix.
    - M4 (plan 01 `02_E0_Covered_Display_Admission.md`): built 8 Nov, a covered display that already shows an image
      is left out of image batches at admission (no queue advance, decode, upload, transition or material refresh; the
      batch still closes; every display covered = edges are no-ops). Open: the GPU/render-thread measurement with
