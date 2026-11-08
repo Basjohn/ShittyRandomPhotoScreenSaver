@@ -620,6 +620,100 @@ def test_the_worker_path_logs_playback_edges_and_logs_a_park_only_once_applied(q
 
 
 @pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_park_reply_that_lands_after_the_unpark_never_clears_the_reader(qt_app, pcm, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-L3: OFF then ON are both sent before the OFF reply is handled (the GUI thread was busy),
+    # so the worker may already have published post-unpark frames. Only the newest edge's reply acts: the reader is
+    # never cleared while the displays are on. Negative control (the pre-fix reply, fenced by the link only): the OFF
+    # reply clears the reader with the displays back on, dropping a fresh post-unpark frame.
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    if pre_fix:
+        def old_edge(self, on):
+            controller, link = self._controller, self._worker
+
+            def applied(_reply, _link=link):
+                if _link is not self._worker:
+                    return
+                if not on:
+                    controller.logical_mailbox.clear()
+
+            link.set_display_power(on, on_reply=applied)
+            return True
+
+        monkeypatch.setattr(owner_module.QuickDisplayVisualizerOwner, "_set_display_power_on_worker", old_edge)
+    stand_in, rig, owner = _stand_in_rig(pcm)
+    try:
+        _pump(rig, 0.3)
+        mailbox = owner.controller.logical_mailbox
+        clear = mailbox.clear
+        cleared_while_on: list = []
+
+        def recording_clear():
+            cleared_while_on.append(owner.display_power_on)
+            clear()
+
+        mailbox.clear = recording_clear
+        assert owner.set_display_power(False) and owner.set_display_power(True)   # both sent before either reply
+        rig.settle()
+        assert cleared_while_on == ([True] if pre_fix else []), cleared_while_on
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+class _HungSupervisor(_InProcessSupervisor):
+    """A worker that answers nothing from its first configure on (hung inside it: a device open, a stuck build; or
+    a spawn task queued behind a busy IO pool)."""
+
+    def send_message(self, worker_type, msg_type, payload, correlation_id=None):
+        self.sent.append((msg_type, dict(payload)))
+        return correlation_id
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("bounded", (True, False))
+def test_a_first_configure_that_is_never_answered_is_bounded(qt_app, pcm, monkeypatch, bounded):
+    # Checkpoint audit 8, A8-L5: the first configure has its own deadline (the recovery's one-shot): unanswered, the
+    # activation runs in process (not counted for the run), its in-process identity bound and its runtime running.
+    # Negative control (no deadline: the pre-fix owner, which waited for the heartbeat, twice, or for ever): the owner
+    # stays on the unanswering worker with its render binding deferred, nothing presented.
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    monkeypatch.setattr(owner_module, "_ACTIVATION_TRANSACTION_DEADLINE_MS", 500)
+    if not bounded:
+        monkeypatch.setattr(owner_module.QuickDisplayVisualizerOwner, "_arm_first_configure_deadline",
+                            lambda self, link: None)
+    # The rig settles on the configure's reply; this worker never gives one, so it settles for a bounded 1.5 s.
+    monkeypatch.setattr(gate.OwnerRig, "settle", lambda self: gate._event_loop_for(
+        self.app, 1.5, until=lambda: self.owner is not None and self.owner._worker is None))
+    stand_in = _HungSupervisor()
+    rig = gate.OwnerRig("spectrum", worker=True, supervisor=stand_in, cadence="thread")
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            if bounded:
+                with pytest.raises(RuntimeError, match="fell back in process"):
+                    rig.build()
+            else:
+                rig.build()
+        owner = rig.owner
+        if not bounded:
+            assert owner._worker is not None and not owner._worker.configured
+            assert owner._bind_deferred and owner.render_identity is None
+            return
+        assert owner._worker is None and not engine_worker_link.worker_disabled_for_run()
+        engine = owner.controller.engine
+        identity = owner.render_identity
+        assert (identity.engine_generation, identity.activation_id) == (engine.get_generation_id(),
+                                                                        engine.get_activation_id())
+        assert owner.controller.logical_runtime is not None and owner.controller.logical_runtime.is_running()
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize("mode,target", (("oscilloscope", "bubble"), ("spectrum", "sphere")))
 def test_a_paused_switch_on_the_worker_reveals_as_in_process(qt_app, mode, target):
     # A7-L6: a mode switch while Media is paused: the worker path's reveal predicate (the target's newest presentable

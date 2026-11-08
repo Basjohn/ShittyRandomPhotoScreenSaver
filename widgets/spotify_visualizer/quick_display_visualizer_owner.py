@@ -126,6 +126,7 @@ class QuickDisplayVisualizerOwner:
     _bind_deferred = False
     _recovery_stage = 0
     _worker_playback_edges = 0
+    _display_power_edges = 0
     # The fade a crossfade's fade-out starts from (1.0 in process; a recovery that ended faded out leaves 0).
     _fade_out_from = 1.0
 
@@ -253,6 +254,8 @@ class QuickDisplayVisualizerOwner:
         self._bind_deferred = False
         self._recovery_stage = 0
         self._fade_out_from = 1.0
+        # Audit 8: the display-power edges sent to the worker (only the newest one's reply acts, A8-L3).
+        self._display_power_edges = 0
 
     @property
     def controller(self) -> Any:
@@ -1732,9 +1735,31 @@ class QuickDisplayVisualizerOwner:
             **self._configure_services,
         )
         self._adopt_engine_worker_session(link, inputs)
+        self._arm_first_configure_deadline(link)
         logger.info("[SPOTIFY_VIS][ENGINE_WORKER] Visualizer configuring on the engine worker mode=%s namespace=%d",
                     controller.mode_id, link.label_namespace)
         return True
+
+    def _arm_first_configure_deadline(self, link: Any) -> None:
+        """The first configure is bounded on its own (A8-L5): the recovery deadline's one-shot (the transaction
+        deadline's machinery, generation-fenced, never a poll), fenced by the session's label namespace (unique per
+        configure). A configure stuck in the worker (a device open, a build) or a spawn queued behind a busy IO pool
+        no longer waits for the heartbeat (twice, with the resend) or for ever."""
+        from core.threading.manager import ThreadManager
+
+        ThreadManager.single_shot(_ACTIVATION_TRANSACTION_DEADLINE_MS, self._on_first_configure_deadline,
+                                  int(link.label_namespace))
+
+    def _on_first_configure_deadline(self, namespace: int) -> None:
+        """The first configure's reply never came: this activation runs in process (not counted for the run), as a
+        first configure that failed does. Inert once it was answered or the session was replaced or left."""
+        link = self._worker
+        if self._retired or link is None or link.configured or int(link.label_namespace) != int(namespace):
+            return
+        logger.error("[SPOTIFY_VIS][ENGINE_WORKER] The first configure was not answered in %d ms; this activation "
+                     "runs in process mode=%s", _ACTIVATION_TRANSACTION_DEADLINE_MS, self._controller.mode_id)
+        self._fall_back_in_process(f"configure unanswered in {_ACTIVATION_TRANSACTION_DEADLINE_MS} ms",
+                                   count_for_run=False)
 
     def _open_engine_worker_session(self, inputs: dict[str, Any], supervisor: Any) -> Any:
         """A session for the controller's current mode and ``inputs``: its configure sent (closed again if sending
@@ -1828,13 +1853,17 @@ class QuickDisplayVisualizerOwner:
         """Display power on the engine worker (sent, never awaited): the session parks (cadence, capture) or resumes
         warm. The park's reply follows the worker's last pre-park publish, so the reader drops its unread frame then,
         never before it (checkpoint audit 6, A6-L8), and no pre-park frame is presented hours later. Logged on the
-        reply (A7-L5). (A recovery's held frame and deadline at a park / unpark: ``set_display_power``.)"""
+        reply (A7-L5). Only the newest edge's reply acts (A8-L3): after OFF then ON, the OFF reply finds the displays
+        back on and must not drop a post-unpark frame. (A recovery's held frame and deadline at a park / unpark:
+        ``set_display_power``.)"""
         controller = self._controller
         link = self._worker
+        self._display_power_edges += 1
+        edge = self._display_power_edges
 
-        def applied(_reply: dict, _link: Any = link) -> None:
-            if _link is not self._worker:
-                return
+        def applied(_reply: dict, _link: Any = link, _edge: int = edge) -> None:
+            if _link is not self._worker or _edge != self._display_power_edges:
+                return                                # a newer display-power edge was sent: its reply settles it
             if not on:
                 controller.logical_mailbox.clear()
             logger.info("[SPOTIFY_VIS][DISPLAY_POWER] Visualizer %s mode=%s (engine worker)",
