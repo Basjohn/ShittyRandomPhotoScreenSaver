@@ -357,6 +357,30 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._capture_applied_config_epoch = 0
         self._capture_started_monotonic = 0.0
         self._capture_last_callback_monotonic = 0.0
+        # The one injection seam for where capture comes from (``set_capture_backend_factory``):
+        # None is the device (``create_audio_capture``, looked up when capture opens).
+        self._capture_backend_factory = None
+
+    def set_capture_backend_factory(self, factory) -> None:
+        """Install the factory the capture lane opens its backend with (``factory(config) -> backend``).
+
+        None (the default, production) opens the device through ``create_audio_capture``. A recorded
+        source (``core.visualizer_engine.recorded_capture.RecordedCaptureBackend``: offline PCM pushed
+        through this worker's own capture callback, no device) is installed here, once, before capture
+        opens: replacing the source of a live owner would let two streams feed one capture generation.
+        """
+        with self._capture_lock:
+            if factory is self._capture_backend_factory:
+                return
+            if (
+                self._running
+                or self._capture_start_pending
+                or self._capture_stop_pending
+                or self._capture_owner_scheduled
+                or self._backend is not None
+            ):
+                raise RuntimeError("cannot replace the capture source of an active audio capture owner")
+            self._capture_backend_factory = factory
 
     def set_capture_lane(self, lane) -> None:
         """Install the one engine-owned serial native-capture lane.
@@ -831,6 +855,7 @@ class SpotifyVisualizerAudioWorker(QObject):
                     return
                 config_epoch = self._capture_config_epoch
                 preferred = int(self._preferred_block_size or 0)
+                factory = self._capture_backend_factory or create_audio_capture
 
             if action == "stop":
                 # Keep the pointer until release succeeds. A failed native close
@@ -850,7 +875,7 @@ class SpotifyVisualizerAudioWorker(QObject):
                     config = AudioCaptureConfig(
                         sample_rate=48000, channels=2, block_size=preferred
                     )
-                    backend = create_audio_capture(config)
+                    backend = factory(config)
                     if backend is None:
                         logger.error("[SPOTIFY_VIS] No audio capture backend available")
                         succeeded = False
