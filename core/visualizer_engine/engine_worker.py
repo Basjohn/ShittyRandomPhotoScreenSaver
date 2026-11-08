@@ -568,6 +568,17 @@ class EngineSession:
         for presentation readers such as Fullscreen Edit's envelope, A7-M2)."""
         return int(self._controller.bar_count)
 
+    @property
+    def view_records(self) -> dict:
+        """The session's view records (``logical_edges.VIEW_RECORD_ATTRS``: held-key orbit, framed flight, drag
+        inertia, Auto Rotate), as its activation commit left them: a preset's commit rebases the motion and arms Auto
+        Rotate here, once, and the owner's main side adopts these instead of arming again (checkpoint audit 8,
+        A8-L2)."""
+        from widgets.spotify_visualizer.logical_edges import VIEW_RECORD_ATTRS
+
+        state = self._controller.presentation_state
+        return {attr: getattr(state, attr, None) for attr in VIEW_RECORD_ATTRS}
+
     def request_mode(self, mode: str, *, preset: int = 0, settings: Any = None, activation: Any = None,
                      at_once: bool = False) -> tuple[int, int] | None:
         """An in-session activation, applied at the next tick boundary (the newest request wins): the owner's
@@ -797,7 +808,7 @@ class VisualizerEngineWorker(BaseWorker):
                     if committed is None:
                         return self._reply(msg)
                     return self._reply(msg, engine_generation=committed[0], activation_id=committed[1],
-                                       bar_count=session.bar_count,
+                                       bar_count=session.bar_count, view_records=session.view_records,
                                        capture_failed=session.capture_failed)
                 try:
                     changed = self._session.set_display_power(bool(msg.payload["on"]))

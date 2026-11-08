@@ -156,7 +156,7 @@ class _LinkEvents(QObject):
     correlation), the session's end (the wake listener), the worker's spawn (an IO task), and the view flush (one per GUI
     turn). It reaches its link weakly and is disarmed when the link closes, so a late delivery is a no-op."""
 
-    replied = Signal(object, object)          # token, the WorkerResponse (None: cancelled; _NOT_SENT: not sent)
+    replied = Signal(object, object, object)  # token, correlation, the WorkerResponse (None: cancelled; _NOT_SENT)
     ended = Signal(str)
     spawned = Signal(str)                     # "" started, else why not
     view = Signal()
@@ -173,10 +173,10 @@ class _LinkEvents(QObject):
     def _target(self) -> "EngineWorkerLink | None":
         return self._link() if self._armed else None
 
-    def _on_replied(self, token: Any, response: Any) -> None:
+    def _on_replied(self, token: Any, correlation: Any, response: Any) -> None:
         link = self._target()
         if link is not None:
-            link._deliver_reply(token, response)
+            link._deliver_reply(token, correlation, response)
 
     def _on_ended(self, reason: str) -> None:
         link = self._target()
@@ -315,7 +315,7 @@ class EngineWorkerLink:
         if error:
             for token, message, payload, _on_reply, on_failed in outbox:
                 self._pending[token] = (message, payload, "", None, on_failed)
-                self._deliver_reply(token, _NOT_SENT, reason=error)
+                self._deliver_reply(token, "", _NOT_SENT, reason=error)
             return
         for token, message, payload, on_reply, on_failed in outbox:
             self._dispatch(token, message, payload, on_reply, on_failed)
@@ -338,8 +338,8 @@ class EngineWorkerLink:
         correlation = uuid.uuid4().hex
         self._pending[token] = (message, payload, correlation, on_reply, on_failed)
 
-        def replied(response: Any, _token: int = token) -> None:     # the supervisor's listener thread
-            self._emit("replied", _token, response)
+        def replied(response: Any, _token: int = token, _correlation: str = correlation) -> None:   # listener thread
+            self._emit("replied", _token, _correlation, response)
 
         sent = False
         try:
@@ -349,11 +349,14 @@ class EngineWorkerLink:
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] %s could not be sent: %s", message.value, exc)
         if not sent:
             supervisor.abandon_response(worker_type, correlation, reason="not_sent")
-            self._emit("replied", token, _NOT_SENT)
+            self._emit("replied", token, correlation, _NOT_SENT)
 
-    def _deliver_reply(self, token: Any, response: Any, *, reason: str | None = None) -> None:
+    def _deliver_reply(self, token: Any, correlation: Any, response: Any, *, reason: str | None = None) -> None:
+        """A reply (or cancellation) for ``token``, matched by its correlation (A8-L4): a late event for a correlation
+        the link abandoned (``_respawn_unconfigured`` re-dispatched the token under a new one) is dropped, never taken
+        as the new request's answer."""
         entry = self._pending.get(token)
-        if entry is None or self._closed:
+        if entry is None or self._closed or entry[2] != correlation:
             return
         if response is None and not self.configured and not self._respawned:
             self._respawn_unconfigured()
@@ -485,11 +488,14 @@ class EngineWorkerLink:
             return False
         snapshot, presentation = source()
         sent = self._presentation_sent
+        # By value (A8-L6): ``sent`` holds detached copies, so an in-place edit of the state's list or dict differs.
         changed = {attr: value for attr, value in presentation.items() if attr not in sent or sent[attr] != value}
         if snapshot == self._view_sent and not changed:
             return False
         from core.process.types import MessageType
+        from widgets.spotify_visualizer.logical_edges import detach_presentation_value
 
+        changed = {attr: detach_presentation_value(value) for attr, value in changed.items()}
         extent, rotations, override_extent, override_rotations = snapshot
         self._view_sent = snapshot
         sent.update(changed)
@@ -501,21 +507,31 @@ class EngineWorkerLink:
         self._send(MessageType.VIS_SET_VIEW, payload, on_reply=self._view_answered)
         return True
 
+    def adopt_presentation_inputs(self, values: Mapping[str, Any]) -> None:
+        """Presentation inputs the session itself wrote (a preset commit's view records, A8-L2), which the main side
+        adopts: recorded as held by the session, so they are not sent back."""
+        from widgets.spotify_visualizer.logical_edges import detach_presentation_value
+
+        self._presentation_sent.update({attr: detach_presentation_value(value) for attr, value in values.items()})
+
     def _view_answered(self, _reply: dict) -> None:
         self._view_in_flight = False
         self.send_view()                              # the newest view, if it moved on meanwhile
 
     # -------------------------------------------------------------------------------------------------------------
 
-    def set_mode(self, mode: str, activation: Mapping[str, Any], *, on_committed: Callable[[tuple[int, int]], None],
+    def set_mode(self, mode: str, activation: Mapping[str, Any], *,
+                 on_committed: Callable[[tuple[int, int], dict], None],
                  on_failed: Callable[[EngineWorkerFailure], None]) -> None:
         """``VIS_SET_MODE`` applied at once (the owner's hidden activation commit, in the worker): another mode, or the
         same mode as a preset / settings re-activation. The reply calls ``on_committed`` with the committed (generation,
-        activation id); a failure calls ``on_failed`` (the session closes on a failed apply, A6-M2)."""
+        activation id) and the session's view records as the commit left them (A8-L2: the owner adopts them, see
+        ``adopt_presentation_inputs``); a failure calls ``on_failed`` (the session closes on a failed apply, A6-M2)."""
         from core.process.types import MessageType
 
         def committed(reply: dict) -> None:
-            on_committed((int(reply["engine_generation"]), int(reply["activation_id"])))
+            on_committed((int(reply["engine_generation"]), int(reply["activation_id"])),
+                         dict(reply.get("view_records") or {}))
 
         self._send(MessageType.VIS_SET_MODE, {
             "mode": str(mode), "activation": {key: activation[key] for key in ACTIVATION_KEYS}, "at_once": True},

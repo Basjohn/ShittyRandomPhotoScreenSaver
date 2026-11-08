@@ -581,14 +581,31 @@ def presentation_input_attrs(mode_id: str) -> tuple[str, ...]:
 
 def presentation_inputs_snapshot(presentation_state: Any, mode_id: str) -> dict[str, Any]:
     """The values of ``presentation_input_attrs(mode_id)`` the engine worker's tick needs (the main side's, forwarded
-    latest-wins with the framed view): plain data only (a Qt value stays on the presentation side; a list is copied)."""
+    latest-wins with the framed view): plain data only (a Qt value stays on the presentation side). The values are
+    the state's own, read every presentation and compared by value with the last send; only a changed one is copied,
+    by ``detach_presentation_value``, into the send and the record of what the session holds (checkpoint audit 8,
+    A8-L6)."""
     values: dict[str, Any] = {}
     for attr in presentation_input_attrs(mode_id):
         value = getattr(presentation_state, attr, None)
         if type(value).__module__.startswith("PySide6"):
             continue
-        values[attr] = list(value) if isinstance(value, list) else value
+        values[attr] = value
     return values
+
+
+def detach_presentation_value(value: Any) -> Any:
+    """``value`` with every nested list and dict copied (the same types), so the copy shares nothing mutable with the
+    presentation state: an in-place edit of the state's value then compares unequal to the copy and is forwarded
+    (A8-L6: Waveform Ribbon's palette is a dict of lists). Immutable values come back as they are."""
+    kind = type(value)
+    if kind is list:
+        return [detach_presentation_value(item) for item in value]
+    if kind is dict:
+        return {key: detach_presentation_value(item) for key, item in value.items()}
+    if kind is tuple and any(type(item) in (list, dict, tuple) for item in value):
+        return tuple(detach_presentation_value(item) for item in value)
+    return value
 
 
 def apply_presentation_inputs(presentation_state: Any, values: Mapping[str, Any]) -> None:
@@ -610,6 +627,7 @@ __all__ = [
     "CONFIGURE_REASON",
     "VIEW_RECORD_ATTRS",
     "apply_presentation_inputs",
+    "detach_presentation_value",
     "presentation_input_attrs",
     "presentation_inputs_snapshot",
     "DEFAULT_LOGICAL_HZ",

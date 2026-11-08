@@ -93,10 +93,6 @@ def test_the_reflected_wallpaper_completes_the_worker_frames(qt_app, pcm, monkey
     # A7-M1: the wallpaper is presentation data and stays on the main side; each frame taken from the worker carries
     # the owner's own (the renderer reads it from the frame's parameters, as in process). Negative control: frames as
     # decoded carry none (the worker never has a photograph).
-    from widgets.spotify_visualizer import backdrop
-
-    if not completed:
-        monkeypatch.setattr(backdrop, "complete_frame_backdrop", lambda state, _presentation: state)
     stand_in, rig, owner = _stand_in_rig(pcm, "sphere")
     try:
         if not completed:
@@ -110,6 +106,68 @@ def test_the_reflected_wallpaper_completes_the_worker_frames(qt_app, pcm, monkey
         carried = [logical.mode_state.parameters["backdrop"] for logical in recent]
         identities = [None if value is None else value["identity"] for value in carried]
         assert all(identity == wallpaper.identity for identity in identities) is completed, identities
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("mode", gate.REFLECTING_MODES)
+def test_the_frame_completion_refreezes_nothing_per_frame_and_leaves_with_its_owner(qt_app, pcm, monkeypatch, mode):
+    # Checkpoint audit 8, A8-L1: completing a reflecting frame with the wallpaper replaces its two entries only: no
+    # parameter map is frozen per frame (the wallpaper is frozen once), and the completed frame equals freezing the
+    # whole map afresh (the pre-fix completion, which did that on every frame on the render thread). The frozen
+    # wallpaper is the owner's and leaves with it: after the retire nothing in the completion or the backdrop module
+    # keeps it (the pre-fix module-level cache kept the last one for the process's life).
+    import dataclasses
+
+    from widgets.spotify_visualizer import backdrop, render_state
+
+    freezes = {"inside": False, "maps": 0, "frames": 0}
+    freeze = render_state.freeze_render_fields
+
+    def counting(values=None):
+        if freezes["inside"]:
+            freezes["maps"] += 1
+        return freeze(values)
+
+    monkeypatch.setattr(render_state, "freeze_render_fields", counting)
+    stand_in, rig, owner = _stand_in_rig(pcm, mode)
+    try:
+        rig.reflect()
+        owner.forward_presentation_inputs()
+        mailbox = owner._worker.mailbox
+        completion = mailbox._frame_completion
+        pairs: list = []
+
+        def measured(state):
+            freezes["inside"] = True
+            try:
+                completed = completion(state)
+            finally:
+                freezes["inside"] = False
+            freezes["frames"] += 1
+            pairs.append((state, completed))
+            return completed
+
+        mailbox.set_frame_completion(measured)
+        _pump(rig, 0.8)
+        mailbox.set_frame_completion(completion)
+        assert freezes["frames"] >= 10 and freezes["maps"] <= 1, freezes      # the wallpaper's own freeze, once
+        presentation = owner.controller.presentation_state
+        state, completed = pairs[-1]
+        whole = render_state.freeze_render_fields({**dict(state.mode_state.parameters),
+                                                   "backdrop": render_state.freeze_render_value(presentation._backdrop),
+                                                   "backdrop_blend_s": presentation._backdrop_blend_s})
+        afresh = dataclasses.replace(state, mode_state=dataclasses.replace(state.mode_state, parameters=whole))
+        assert completed == afresh
+        wallpaper = presentation._backdrop
+        assert completed.mode_state.parameters["backdrop"]["identity"] == wallpaper.identity
+        owner.retire()
+        assert owner._frame_completion is None and completion._wallpaper is None and completion._frozen is None
+        held = [value for value in vars(backdrop).values()
+                if value is wallpaper or (isinstance(value, list) and any(item is wallpaper for item in value))]
+        assert not held
     finally:
         rig.close()
         stand_in.close()
@@ -174,9 +232,9 @@ def test_fullscreen_edit_envelopes_on_the_worker(qt_app, pcm, monkeypatch, pre_f
         if pre_fix:
             committed = owner_module.QuickDisplayVisualizerOwner._on_worker_committed
 
-            def stale(self, commit, identity):
+            def stale(self, commit, identity, *records):
                 count = self._controller.bar_count
-                committed(self, commit, identity)
+                committed(self, commit, identity, *records)
                 self._controller.bar_count = count
 
             monkeypatch.setattr(owner_module.QuickDisplayVisualizerOwner, "_on_worker_committed", stale)
@@ -197,6 +255,109 @@ def test_fullscreen_edit_envelopes_on_the_worker(qt_app, pcm, monkeypatch, pre_f
     finally:
         rig.close()
         stand_in.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_presets_auto_rotate_is_armed_once_by_the_session(qt_app, pcm, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-L2: a same-mode preset with Auto Rotate on. The session's commit arms it once (as the
+    # in-process commit does); the main side adopts that record and sends nothing back, so the session's swivel keeps
+    # the start its commit gave it. Negative control (the pre-fix main side, arming again at the reply): two immediate
+    # armings, and the main side's later record replaces the session's, stepping the turn back by the reply's latency.
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+    from widgets.spotify_visualizer import view_orbit
+    from widgets.spotify_visualizer.config_applier import presentation_setting_range
+
+    mode = "shockwave_grid"
+    armed: list = []
+    arm = view_orbit.arm_view_auto_rotate
+
+    def recording(host, mode_id, now, *, immediate):
+        record = arm(host, mode_id, now, immediate=immediate)
+        if immediate and record is not None:
+            armed.append(record)
+        return record
+
+    monkeypatch.setattr(view_orbit, "arm_view_auto_rotate", recording)
+    if pre_fix:
+        committed = owner_module.QuickDisplayVisualizerOwner._on_worker_committed
+
+        def arm_again_at_the_reply(self, commit, identity, *records):
+            committed(self, commit, identity, *records)
+            if commit["kind"] == "preset":
+                now = float(self._transition_clock())
+                view_orbit.rebase_view_orbit_motion(self._controller.presentation_state, now)
+                view_orbit.arm_view_auto_rotate(self._controller.presentation_state, commit["target"], now,
+                                                immediate=True)
+
+        monkeypatch.setattr(owner_module.QuickDisplayVisualizerOwner, "_on_worker_committed", arm_again_at_the_reply)
+    enable, after_key, speed_key = get_visualizer_mode_descriptor(mode).view_auto_rotate_settings
+    stand_in, rig, owner = _stand_in_rig(pcm, mode)
+    try:
+        _pump(rig, 0.4)
+        inputs = gate.activation_inputs(rig.widgets, mode)
+        kwargs = dict(inputs["presentation_kwargs"])
+        kwargs[enable] = True                                  # Auto Rotate on for this preset (a test-owned input)
+        for key in (after_key, speed_key):
+            if not float(kwargs.get(key) or 0.0) > 0.0:
+                low, high = presentation_setting_range(key)
+                kwargs[key] = low + 0.5 * (high - low)
+        inputs["presentation_kwargs"] = kwargs
+        assert owner.request_preset_change(mode, **inputs)
+        _pump(rig, 3.0, until=lambda: owner._mode_transition_phase == "idle" and not owner._worker.busy)
+        _pump(rig, 0.3)
+        session = stand_in.worker._session._controller.presentation_state._view_orbit_auto_rotate
+        main = owner.controller.presentation_state._view_orbit_auto_rotate
+        assert len(armed) == (2 if pre_fix else 1), armed
+        assert session is not None and main == session
+        assert (session == armed[0]) is not pre_fix, (session, armed)
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_an_in_place_edit_of_a_nested_presentation_input_is_forwarded(qt_app, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-L6: the presentation inputs are compared with the last send by value. Waveform Ribbon's
+    # palette (a dict of lists) edited in place on the main side differs from what the session holds, so it is
+    # forwarded, as a copy that shares nothing mutable with the state. Negative control (values held by reference, as
+    # the pre-fix snapshot held the palette): the edited value compares equal to "sent" and never leaves.
+    import types
+
+    from core.process.types import WorkerResponse
+    from tests.test_visualizer_owner_engine_worker_liveness import _ManualSupervisor
+    from widgets.spotify_visualizer import logical_edges
+    from widgets.spotify_visualizer.engine_worker_link import EngineWorkerLink
+
+    if pre_fix:
+        monkeypatch.setattr(logical_edges, "detach_presentation_value", lambda value: value)
+    state = types.SimpleNamespace(_waveform_ribbon_palette={"strand": [10, 20, 30, 255], "rim": [1, 2, 3, 4]})
+    supervisor = _ManualSupervisor()
+    link = EngineWorkerLink(supervisor, on_lost=lambda _link, _reason: None)
+
+    def answer() -> None:
+        message, correlation = supervisor.sent[-1]
+        supervisor.callbacks[correlation](WorkerResponse(msg_type=message, seq_no=0, correlation_id=correlation,
+                                                         success=True))
+        gate._event_loop_for(qt_app, 5.0, until=lambda: not link.busy)
+
+    try:
+        link.set_view_source(lambda: (((640.0, 360.0), {}, None, None),
+                                      logical_edges.presentation_inputs_snapshot(state, "waveform_ribbon")))
+        assert link.send_view()
+        answer()
+        state._waveform_ribbon_palette["strand"][0] = 99                     # edited in place
+        forwarded = link.send_view()
+        assert forwarded is not pre_fix
+        if forwarded:
+            palette = supervisor.payloads[-1]["presentation"]["_waveform_ribbon_palette"]
+            assert palette == state._waveform_ribbon_palette
+            assert palette is not state._waveform_ribbon_palette
+            assert palette["strand"] is not state._waveform_ribbon_palette["strand"]
+    finally:
+        link.close()
 
 
 def test_the_qt_free_presentation_colours_freeze_as_qcolor_did():

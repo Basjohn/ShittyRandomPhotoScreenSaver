@@ -341,6 +341,124 @@ def test_a_crossfade_deadline_armed_before_a_failure_cannot_fire_into_its_recove
         stand_in.close()
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_slow_but_healthy_replacement_gets_its_own_reveal_deadline(qt_app, pcm, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-M1: the replacement's session build is slow (a cold spawn and build measured ~4 s) and its
+    # first presentable frame comes 1 s after its reveal starts (a prepared reveal waiting for its warm frames):
+    # healthy, but past the deadline armed at the failure. The reveal has its own deadline, so the replacement is
+    # revealed on the worker. Negative control (the pre-fix reveal re-armed with the failure's serial): the failure's
+    # shot fires into the reveal, the healthy replacement is retired and the worker is off for the run.
+    from core.visualizer_engine.engine_worker import EngineSession
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    owner_class = owner_module.QuickDisplayVisualizerOwner
+    monkeypatch.setattr(owner_module, "_ACTIVATION_TRANSACTION_DEADLINE_MS", 1500)
+    if pre_fix:
+        def old_finish(self, now):
+            recovery, self._worker_recovery = self._worker_recovery, None
+            if recovery is None:
+                return
+            if recovery["reveal"]:
+                self._bind_replacement(recovery["identity"], now, reveal=True)
+                self._arm_recovery_deadline()                          # the failure's serial: its shot stays live
+            else:
+                self._bind_replacement(recovery["identity"], now, reveal=False)
+                self._mode_transition_phase = "idle"
+                self._recovery_stage = 0
+
+        monkeypatch.setattr(owner_class, "_finish_worker_recovery", old_finish)
+    stand_in, rig, owner = _stand_in_rig(pcm)
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            _pump(rig, 1.6)
+            first = owner._worker
+            build = EngineSession.__init__
+
+            def slow_build(self, *args, **kwargs):
+                time.sleep(0.5)
+                build(self, *args, **kwargs)
+
+            reveal: dict = {}
+            waiting = owner_class._worker_waiting_for_fresh_frame
+
+            def warm_frames_first(self):
+                if self._worker is not first:
+                    since = reveal.setdefault("since", time.perf_counter())
+                    if time.perf_counter() - since < 1.0:
+                        return True
+                return waiting(self)
+
+            monkeypatch.setattr(EngineSession, "__init__", slow_build)
+            monkeypatch.setattr(owner_class, "_worker_waiting_for_fresh_frame", warm_frames_first)
+            _fail_session_behind_the_owners_back(stand_in)
+            _pump(rig, 6.0, until=lambda: "since" in reveal and owner._mode_transition_phase == "idle")
+            assert owner._mode_transition_phase == "idle"
+        if pre_fix:
+            assert owner._worker is None and engine_worker_link.worker_disabled_for_run()
+            return
+        assert owner._worker is not None and owner._worker is not first
+        assert not engine_worker_link.worker_disabled_for_run() and owner._mode_transition_fade == 1.0
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_recovery_that_never_reveals_escalates_to_the_reconstruction_as_in_process(qt_app, pcm, monkeypatch,
+                                                                                    pre_fix):
+    # Checkpoint audit 8, A8-M2: the replacement never reveals (its reveal never completes: a prepared reveal that
+    # never finishes), so the first expiry falls back in process; the in-process activation never reveals either. The
+    # second expiry escalates to the generation-fenced reconstruction, exactly as an in-process activation's
+    # waiting_target deadline does ("deadline:waiting_target": the display's reload retires this owner, its hidden
+    # runtime with it, and the rebuilt one fades in). Negative control (the pre-fix second expiry): the owner goes idle
+    # at fade 0 while its in-process runtime keeps publishing invisible frames, and nothing brings it back.
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    owner_class = owner_module.QuickDisplayVisualizerOwner
+    monkeypatch.setattr(owner_module, "_ACTIVATION_TRANSACTION_DEADLINE_MS", 500)
+    if pre_fix:
+        expiry = owner_class._on_recovery_deadline
+
+        def old_second_expiry(self, serial):
+            if (not self._retired and serial == self._transition_request_serial and self._display_power_on
+                    and self._recovery_stage and self._worker is None
+                    and self._mode_transition_phase == "waiting_target"):
+                self._recovery_stage = 0
+                self._mode_transition_phase = "idle"
+                self._mode_transition_fade = 0.0
+                self._preparing_activation = None
+                return
+            expiry(self, serial)
+
+        monkeypatch.setattr(owner_class, "_on_recovery_deadline", old_second_expiry)
+    stand_in, rig, owner = _stand_in_rig(pcm)
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            _pump(rig, 1.6)
+            failures: list = []
+            owner._transition_failure_callback = failures.append
+            monkeypatch.setattr(owner_class, "_target_renderer_preparing", lambda self, now: True)
+            _fail_session_behind_the_owners_back(stand_in)
+            _pump(rig, 5.0, until=lambda: failures or (owner._worker is None and owner._recovery_stage == 0
+                                                       and owner._mode_transition_phase == "idle"))
+            assert owner._worker is None and engine_worker_link.worker_disabled_for_run()   # the first expiry
+            if pre_fix:
+                assert not failures and owner._mode_transition_phase == "idle"
+                assert owner._mode_transition_fade == 0.0
+                presented = len(rig.published)
+                _pump(rig, 0.5)
+                assert len(rig.published) > presented + 10              # invisible frames, nothing brings it back
+                return
+            assert failures == ["deadline:waiting_target"] and owner._mode_transition_phase == "failed"
+    finally:
+        rig.close()
+        stand_in.close()
+
+
 # ----------------------------------------------------------------------------------------------- the lows
 
 
@@ -496,6 +614,178 @@ def test_the_worker_path_logs_playback_edges_and_logs_a_park_only_once_applied(q
         owner.set_display_power(False)
         rig.settle()
         assert not any("Visualizer parked" in message for _level, message in log.records), log.records
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_park_reply_that_lands_after_the_unpark_never_clears_the_reader(qt_app, pcm, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-L3: OFF then ON are both sent before the OFF reply is handled (the GUI thread was busy),
+    # so the worker may already have published post-unpark frames. Only the newest edge's reply acts: the reader is
+    # never cleared while the displays are on. Negative control (the pre-fix reply, fenced by the link only): the OFF
+    # reply clears the reader with the displays back on, dropping a fresh post-unpark frame.
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    if pre_fix:
+        def old_edge(self, on):
+            controller, link = self._controller, self._worker
+
+            def applied(_reply, _link=link):
+                if _link is not self._worker:
+                    return
+                if not on:
+                    controller.logical_mailbox.clear()
+
+            link.set_display_power(on, on_reply=applied)
+            return True
+
+        monkeypatch.setattr(owner_module.QuickDisplayVisualizerOwner, "_set_display_power_on_worker", old_edge)
+    stand_in, rig, owner = _stand_in_rig(pcm)
+    try:
+        _pump(rig, 0.3)
+        mailbox = owner.controller.logical_mailbox
+        clear = mailbox.clear
+        cleared_while_on: list = []
+
+        def recording_clear():
+            cleared_while_on.append(owner.display_power_on)
+            clear()
+
+        mailbox.clear = recording_clear
+        assert owner.set_display_power(False) and owner.set_display_power(True)   # both sent before either reply
+        rig.settle()
+        assert cleared_while_on == ([True] if pre_fix else []), cleared_while_on
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+class _ManualSupervisor:
+    """The supervisor's asynchronous request surface with every reply in the test's hands (no worker). An abandoned
+    correlation's callback stays with the test: a late emit from a listener already running it."""
+
+    def __init__(self) -> None:
+        self.callbacks: dict = {}
+        self.sent: list = []
+        self.payloads: list = []
+
+    def register_worker_factory(self, *_args) -> None:
+        return None
+
+    def is_running(self, _worker_type) -> bool:
+        return True
+
+    def stop(self, _worker_type, timeout=None) -> bool:
+        return True
+
+    def start(self, _worker_type) -> bool:
+        return True
+
+    def register_response_callback(self, _worker_type, correlation_id, callback) -> bool:
+        self.callbacks[correlation_id] = callback
+        return True
+
+    def send_message(self, _worker_type, msg_type, payload, correlation_id=None):
+        self.sent.append((msg_type, correlation_id))
+        self.payloads.append(payload)
+        return correlation_id
+
+    def abandon_response(self, _worker_type, correlation_id, *, reason="") -> int:
+        return 0
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_late_reply_for_an_abandoned_correlation_never_answers_its_resend(qt_app, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-L4: the supervisor retires the worker before the configure is answered; the link sends
+    # the configure again under a new correlation. A late answer for the abandoned correlation (a listener already
+    # running its callback when it was abandoned) is dropped: only the resend's reply configures the link. Negative
+    # control (the pre-fix match by token): the stale answer configures it, and the resend's real reply is dropped.
+    from core.process.types import MessageType, WorkerResponse
+    from widgets.spotify_visualizer.engine_worker_link import ACTIVATION_KEYS, EngineWorkerLink
+
+    if pre_fix:
+        deliver = EngineWorkerLink._deliver_reply
+
+        def by_token(self, token, correlation, response, **kwargs):
+            entry = self._pending.get(token)
+            return deliver(self, token, entry[2] if entry is not None else correlation, response, **kwargs)
+
+        monkeypatch.setattr(EngineWorkerLink, "_deliver_reply", by_token)
+
+    def reply(correlation: str, identity: tuple[int, int]) -> WorkerResponse:
+        return WorkerResponse(msg_type=MessageType.VIS_CONFIGURE, seq_no=0, correlation_id=correlation, success=True,
+                              payload={"engine_generation": identity[0], "activation_id": identity[1]})
+
+    supervisor = _ManualSupervisor()
+    configured: list = []
+    link = EngineWorkerLink(supervisor, on_lost=lambda _link, _reason: None)
+    try:
+        link.configure(runtime_generation=1, mode="spectrum", bar_count=32,
+                       activation={key: None for key in ACTIVATION_KEYS}, on_configured=configured.append)
+        (_message, abandoned), = supervisor.sent
+        late = supervisor.callbacks[abandoned]
+        late(None)                                                # cancelled: the worker was retired
+        gate._event_loop_for(qt_app, 5.0, until=lambda: len(supervisor.sent) == 2)
+        (_message, resent) = supervisor.sent[1]
+        assert resent != abandoned
+        late(reply(abandoned, (7, 7)))                            # the abandoned correlation answers late
+        qt_app.processEvents()
+        supervisor.callbacks[resent](reply(resent, (8, 8)))
+        gate._event_loop_for(qt_app, 5.0, until=lambda: bool(configured) and not link.busy)
+        assert configured == ([(7, 7)] if pre_fix else [(8, 8)]), configured
+    finally:
+        link.close()
+
+
+class _HungSupervisor(_InProcessSupervisor):
+    """A worker that answers nothing from its first configure on (hung inside it: a device open, a stuck build; or
+    a spawn task queued behind a busy IO pool)."""
+
+    def send_message(self, worker_type, msg_type, payload, correlation_id=None):
+        self.sent.append((msg_type, dict(payload)))
+        return correlation_id
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("bounded", (True, False))
+def test_a_first_configure_that_is_never_answered_is_bounded(qt_app, pcm, monkeypatch, bounded):
+    # Checkpoint audit 8, A8-L5: the first configure has its own deadline (the recovery's one-shot): unanswered, the
+    # activation runs in process (not counted for the run), its in-process identity bound and its runtime running.
+    # Negative control (no deadline: the pre-fix owner, which waited for the heartbeat, twice, or for ever): the owner
+    # stays on the unanswering worker with its render binding deferred, nothing presented.
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    monkeypatch.setattr(owner_module, "_ACTIVATION_TRANSACTION_DEADLINE_MS", 500)
+    if not bounded:
+        monkeypatch.setattr(owner_module.QuickDisplayVisualizerOwner, "_arm_first_configure_deadline",
+                            lambda self, link: None)
+    # The rig settles on the configure's reply; this worker never gives one, so it settles for a bounded 1.5 s.
+    monkeypatch.setattr(gate.OwnerRig, "settle", lambda self: gate._event_loop_for(
+        self.app, 1.5, until=lambda: self.owner is not None and self.owner._worker is None))
+    stand_in = _HungSupervisor()
+    rig = gate.OwnerRig("spectrum", worker=True, supervisor=stand_in, cadence="thread")
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            if bounded:
+                with pytest.raises(RuntimeError, match="fell back in process"):
+                    rig.build()
+            else:
+                rig.build()
+        owner = rig.owner
+        if not bounded:
+            assert owner._worker is not None and not owner._worker.configured
+            assert owner._bind_deferred and owner.render_identity is None
+            return
+        assert owner._worker is None and not engine_worker_link.worker_disabled_for_run()
+        engine = owner.controller.engine
+        identity = owner.render_identity
+        assert (identity.engine_generation, identity.activation_id) == (engine.get_generation_id(),
+                                                                        engine.get_activation_id())
+        assert owner.controller.logical_runtime is not None and owner.controller.logical_runtime.is_running()
     finally:
         rig.close()
         stand_in.close()
