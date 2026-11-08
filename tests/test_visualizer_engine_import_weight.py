@@ -18,7 +18,11 @@ names = ["widgets.spotify_visualizer.logical_runtime", "widgets.spotify_visualiz
          "core.visualizer_engine.packet_abi", "core.visualizer_engine.packet_mailbox",
          "core.visualizer_engine.engine_worker", "core.visualizer_engine.engine_snapshot",
          "widgets.spotify_visualizer.feature_replay", "widgets.spotify_visualizer.transient_bus",
-         "widgets.spotify_visualizer.runtime_controller"]
+         "widgets.spotify_visualizer.runtime_controller",
+         # P2b: the live engine, its audio worker and ThreadManager, and the recorded capture source.
+         "widgets.spotify_visualizer.beat_engine", "widgets.spotify_visualizer.audio_worker",
+         "widgets.spotify_visualizer.bar_computation", "core.threading.manager",
+         "core.visualizer_engine.recorded_capture"]
 runtimes = sorted(p.stem for p in __import__("pathlib").Path("widgets/spotify_visualizer").glob("*_frame_runtime.py"))
 names += ["widgets.spotify_visualizer." + stem for stem in runtimes]
 for name in names:

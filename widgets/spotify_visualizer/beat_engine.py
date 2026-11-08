@@ -133,7 +133,10 @@ class _SpotifyBeatEngine(QObject):
     Smoothing is performed here (on COMPUTE pool callback) rather than in the
     UI thread tick, reducing UI thread load significantly.
     """
-    
+
+    #: The analysis-settled edge (``set_analysis_settled_observer``): None in production.
+    _analysis_settled_observer: Optional[Any] = None
+
     def __init__(self, bar_count: int) -> None:
         super().__init__()
         self._bar_count = max(1, int(bar_count))
@@ -260,6 +263,27 @@ class _SpotifyBeatEngine(QObject):
             self._thread_manager = thread_manager
         if thread_manager is not None:
             self._ensure_analysis_lane()
+
+    def set_capture_backend_factory(self, factory) -> None:
+        """Where capture comes from: the audio worker's one source seam (None: the device).
+
+        See ``SpotifyVisualizerAudioWorker.set_capture_backend_factory``; installed before capture opens.
+        """
+        self._audio_worker.set_capture_backend_factory(factory)
+
+    def set_analysis_settled_observer(self, observer: Optional[Any]) -> None:
+        """Install ``observer()``: called on the compute lane each time an analysis result has been committed (or
+        rejected) and the engine's one analysis slot is free with nothing pending (``has_analysis_in_flight`` False).
+
+        The live-engine rig (``core.visualizer_engine.engine_worker``, ``inputs="live"``) waits on this edge so its
+        tick reads the commit of the block it pushed: the asynchronous commit path runs, the result is deterministic.
+        None (production) costs one attribute read per analysis.
+        """
+        self._analysis_settled_observer = observer
+
+    def has_analysis_in_flight(self) -> bool:
+        """Whether an analysis is running on the compute lane or a source frame waits for it."""
+        return bool(self._compute_task_active or self._pending_analysis_samples is not None)
 
     def _ensure_capture_lane(self):
         lane = self._capture_lane
@@ -1005,6 +1029,9 @@ class _SpotifyBeatEngine(QObject):
                     releasing_active_slot=True,
                     releasing_slot_token=payload.slot_token,
                 )
+            observer = self._analysis_settled_observer
+            if observer is not None and not self.has_analysis_in_flight():
+                observer()
 
     def _schedule_compute_bars_task(
         self, samples: object, *, capture_ts: float = 0.0

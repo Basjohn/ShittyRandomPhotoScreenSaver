@@ -23,8 +23,7 @@ from typing import Any, Callable
 import numpy as np
 
 from utils.audio_capture import AudioCaptureBackend, AudioCaptureConfig
-
-_ALIGN = 16          # samples matched exactly to place a history against the stream so far
+from core.visualizer_engine.recorded_capture import appended_sample_count as _new_samples
 
 
 def recorded_pcm(path: Path, *, start: float = 0.0, seconds: float | None = None) -> tuple[np.ndarray, int]:
@@ -53,25 +52,6 @@ def recorded_pcm(path: Path, *, start: float = 0.0, seconds: float | None = None
     if not pieces:
         raise ValueError(f"{path} holds no native capture history")
     return np.concatenate(pieces), rate
-
-
-def _new_samples(previous: np.ndarray, current: np.ndarray, expected: int) -> int:
-    """How many samples ``current`` adds after ``previous`` (exact alignment; the time step breaks ties)."""
-    tail = previous[-_ALIGN:]
-    if len(current) < _ALIGN or len(tail) < _ALIGN:
-        return len(current)
-    windows = np.lib.stride_tricks.sliding_window_view(current, _ALIGN)
-    starts = np.flatnonzero((windows == tail).all(axis=1))
-    if not len(starts):
-        return len(current)                       # no overlap: a gap in the recording, keep the whole history
-    added = len(current) - (starts + _ALIGN)
-    if len(added) > 1:
-        # A repeating or silent passage aligns in several places: keep those whose whole overlap matches.
-        whole = [k for k in added
-                 if np.array_equal(current[max(0, len(current) - k - len(previous)):len(current) - k],
-                                   previous[-min(len(previous), len(current) - k):])]
-        added = np.array(whole or added)
-    return int(added[np.argmin(np.abs(added - expected))])
 
 
 class RecordedLoopback(AudioCaptureBackend):

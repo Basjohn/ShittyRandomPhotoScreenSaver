@@ -239,6 +239,49 @@ switch never remaps.
      process-wide seed (A2-M2); the main-process listener thread's wake cost counted in gate 3.
    - **Deleted when P2b lands:** `core/visualizer_engine/engine_snapshot.py`, the `snapshot` session input and its
      tests and tools (`engine_main_cost.py` stays as the record of the decision).
+   - **Slice 1 built (8 Nov): the live engine on recorded PCM, in process and in the worker** (the rig every P2b gate
+     uses; gate (2)'s steady-state half). `EngineSession(inputs="live")` builds the production `_SpotifyBeatEngine`
+     with its real `SpotifyVisualizerAudioWorker` on the session's own `ThreadManager` (the capture affinity lane and
+     the compute lane: QtCore only), configured as every session is, then as the owner's `start` does: thread
+     manager, `acquire`, the mode's sample demands (mode rules, declared before the first block); capture opens at
+     the first input's play edge (`set_playback_state(True)` + `ensure_started`, the ramp starts on that input's clock).
+     - *Source seam:* `SpotifyVisualizerAudioWorker.set_capture_backend_factory` (`audio_worker.py:364`; delegated
+       by `_SpotifyBeatEngine.set_capture_backend_factory`): None (production) opens the device through
+       `create_audio_capture`, looked up when capture opens; a factory is installed once, before capture opens
+       (refused while capture is active). The capture lane's drain calls it (`audio_worker.py:858, 878`).
+       `core/visualizer_engine/recorded_capture.py`: `RecordedCaptureBackend` (no device, no thread; `start` keeps
+       the worker's callback, `push(block)` delivers one block through it as identical stereo channels) and
+       `CaptureHistoryStream` (each `FeatureFrame`'s capture history back into the samples its publication added,
+       by exact alignment, cut into device blocks of the negotiated size, the newest whole). The live-audio tool
+       shares its alignment helper.
+     - *Commit edge:* `_SpotifyBeatEngine.set_analysis_settled_observer` (None in production: one attribute read per
+       analysis) is called on the compute lane at the end of `_accept_analysis_lane_result` (`beat_engine.py:1032`)
+       once the result is committed or rejected and the slot is free with nothing pending
+       (`has_analysis_in_flight`). Per input the session pushes the new blocks, steps the engine (it consumes the
+       newest block and submits it to the compute lane), waits on that edge (bounded, fail closed; never a sleep or
+       poll), then ticks: the asynchronous commit path runs on its own thread and the frames are deterministic. The
+       tick's own `engine.tick()` then finds no new block (a no-op step on the same clock).
+     - *Not yet:* a paused input raises (pause/resume reopens capture asynchronously on its lane; 4b adds that edge
+       with its clips); the rig pins the authored clock and passes the replay seed as the other gates do (A2-M2).
+     - *Found and fixed:* the Spectrum DSP (`bar_computation.fft_to_bars`) imported its curve helper from the Settings
+       shape editor, loading QtWidgets into any process that analyses (now `utils/curve_nodes`; the fresh-spawn probe
+       ticks one live input per mode and pins QtCore/QtGui).
+     - *Gate:* `tests/test_visualizer_engine_live.py` (every mode, 1 s of the shipped clip, in process == worker; the
+       recorded stream rebuilds every history; each tick reads the commit of its own block, committed off-thread; a
+       device open fails the tests). Whole clips: `tools/visualizer_replay/live_engine_gate.py`. **Result (8 Nov):**
+       all three shipped clips whole x nine modes, 27 pairs, 31,644 frames, 0 mismatching, 5 min at below-normal
+       priority (`.artifacts/evidence/architecture/native_core_p2/20261108_live_gate/live_gate.json`).
+     - *Live engine vs `ProductionLaneEngine` (reported, not gated; same report):* no lag on any mode (the overall
+       energy aligns best at 0 ticks) and means within .002. Spectrum, Extruded Spectrum and Neon Lake differ from
+       the first frame (bars .006-.009 mean absolute): the lanes engine analyses each new block twice for shaped modes
+       (A2-H2) and serves the recorded raw bars elsewhere. Sphere differs from frame 1 (the live engine publishes the
+       analysis spectrum one commit after the tick requests it; the lanes engine every frame, H4). Bubble differs on
+       every frame and Oscilloscope from frame 1 with identical or near-identical common energy, and Spline Curve,
+       Extruded Bubble and Waveform Ribbon match for long stretches (185-882 frames per clip) and then part: in their
+       mode state, not the common lanes (cause not isolated; the lanes engine's renumbered onsets, its replayed
+       scheduler and recorded waveform are the known differences). The live engine is the reference from here on;
+       the lanes engine stays the Studios' replay.
+     - *Cost:* 4c, "Live engine measured".
 4b. Live-engine and off-steady-state gates (audit H3): a gate whose reference is the live `_SpotifyBeatEngine` fed
    PCM through the real audio worker (offline, blocks pushed into the capture callback, so asynchronous commits are in
    play); gate clips with pause/resume, a warm re-entry (fence armed) and an in-session mode switch; the read audit
@@ -282,6 +325,50 @@ switch never remaps.
    P2b the frame take's decode (.07-.37 ms) runs on the render thread while the GUI thread waits
    (`quick_presentation_sync.py:308-311`): it is added sync latency, not only main-process time. The decision stands:
    P2b removes more main-process work than P2a for every mode after the corrections.
+   **Live engine measured (8 Nov, P2b slice 1):** `tools/visualizer_replay/live_engine_cost.py` on the live-engine rig
+   (4P, slice 1): the production engine fed both shipped clips whole (2,310 ticks per mode) through the capture
+   callback, every piece timed in process: the callbacks of the tick (mono mix, history, publish), the engine step, the
+   compute lane's own execution + commit-callback time per analysis (its diagnostics), the tick. The P2b take is timed
+   in the main process with the session in a real `WorkerType.VISUALIZER` process, so no worker tick or its garbage
+   runs in the timed process (A2-M4). Report: `.artifacts/evidence/architecture/native_core_p2/20261108_live_cost/
+   live_cost.json`, at below-normal priority, system CPU 7% before and 20% after (other agents' work); ticks read
+   ~30-60% above 4c's run (Spectrum .41 vs .31, Bubble 2.79 vs 1.78), so compare within a column. p50, ms:
+
+   | Mode | callbacks/tick x per callback | step | analysis (.76 per tick) | tick | live total p50 (p90) | P2b take (worker process) | P2b saves |
+   |---|---|---|---|---|---|---|---|
+   | Spectrum | 4.12 x .019 | .027 | .63 | .41 | 1.17 (1.46) | .15 | ~1.02 |
+   | Oscilloscope | 2.20 x .042 | .035 | .51 | .68 | 1.33 (1.62) | .13 | ~1.20 |
+   | Bubble | 4.12 x .026 | .029 | .64 | 2.79 | 3.16 (4.07) | .25 | ~2.91 |
+   | Spline Curve | 2.20 x .034 | .032 | .55 | 2.51 | 2.98 (3.71) | .21 | ~2.77 |
+   | Sphere | 1.12 x .042 | .031 | .54 | .48 | 1.09 (1.35) | .17 | ~.92 |
+   | Extruded Spectrum | 4.12 x .029 | .034 | .77 | .57 | 1.44 (1.81) | .13 | ~1.31 |
+   | Neon Lake | 2.20 x .033 | .030 | .69 | .86 | 1.58 (2.16) | .43 | ~1.15 |
+   | Extruded Bubble | 1.12 x .045 | .039 | .56 | 3.52 | 4.01 (4.98) | .75 | ~3.26 |
+   | Waveform Ribbon | 2.20 x .037 | .040 | .63 | 2.97 | 3.66 (4.63) | .53 | ~3.13 |
+
+   - **DSP per capture callback:** a callback costs .02-.045 ms (blocks per tick follow the mode's resolved Block
+     Size, about 128 / 256 / 512 samples here); the analysis runs once per *consumed* block, not per callback (the capture triple buffer
+     keeps the newest block; the 90 Hz tick consumes it), .51-.77 ms each, at .76 per tick on the recorded cadence
+     (~69 analyses per second): ~.4-.6 ms of DSP per tick, ~35-55 ms of GIL per second of audio. With one analysis
+     per new block the live DSP per tick (callbacks + step + .76 analyses) is .58 (Spectrum), .74 (Extruded Spectrum)
+     and .63 (Neon Lake); on 4c's tick and take that is P2b ~.74 / ~.91 / ~.68 ms, so the corrected ~.8 ms stands
+     (this run's busier ticks give 1.0-1.3). For the other six the live DSP (.47-.60) matches 4c's one-pass column
+     (.46-.60), so their 4c "P2b saves" stand.
+   - **GIL share:** the production analysis (`compute_bars_from_samples`, Spectrum and Bubble configurations) holds the
+     GIL for essentially all its wall time: against a pure-Python counter at a fine switch interval it leaves the
+     counter the same share a pure-Python loop does (calibrated against a sleep). NumPy's `rfft` at capture sizes
+     (480: never releases; 1,024 / 2,048: ~75% held) releases the GIL only around the kernel, which is small next to
+     the Python-side work; it releases more at 1 Mi points. So DSP wall time is GIL time: neither a floor nor an
+     overstatement. At the default 5 ms switch interval there is a convoy: the Spectrum analysis (brief releases) runs
+     at 11-16% of its solo rate against one CPU-bound Python thread (each release costs up to an interval to win the
+     GIL back), while Bubble's (no release) starves the other thread. In process today the analysis therefore waits on
+     the GUI, render and tick threads; under P2b it contends with the worker's tick only. Gate 3 measures analysis
+     latency (capture to commit) alongside GIL time.
+   - **GC overlap:** 1-24 of 2,310 ticks per mode overlapped a collection; p50 without them is the same within .01 ms;
+     Extruded Bubble's collections total 282 ms (its p90 carries them).
+   - **The take with the worker out of process** is .13-.75 ms p50 (Extruded Bubble .75, Waveform Ribbon .53, Neon Lake
+     .43), above 4c's in-process take (.07-.37): the reader copies a slot another process just wrote. Under P2b this
+     runs at sync on the render thread (A2-H3), so where the decode runs is part of work order 5.
 5. Production wiring and lifecycle. Must specify (audit H2, M5): a main -> worker latest-wins snapshot mapping (the
    ABI with roles swapped, a wake byte to the worker; the supervisor's FIFO request queue carries edges only); an
    in-place `set_mode` and a resolved-settings delta applied to the existing session at a tick boundary (a rebuild per

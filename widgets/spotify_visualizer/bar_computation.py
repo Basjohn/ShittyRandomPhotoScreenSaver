@@ -330,9 +330,8 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             raise RuntimeError("Spectrum shape nodes are unresolved")
 
         # Build per-bar profile from user-drawn shape nodes
-        from ui.tabs.media.spectrum_shape_editor import (
-            interpolate_nodes, interpolate_nodes_mirrored,
-        )
+        # The pure curve helper, never the Settings widget module (it loads QtWidgets into the engine worker).
+        from utils.curve_nodes import interpolate_nodes, interpolate_nodes_mirrored
         if mirrored:
             profile_list = interpolate_nodes_mirrored(shape_nodes, bands)
         else:
