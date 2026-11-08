@@ -210,6 +210,30 @@ switch never remaps.
    Extruded Spectrum: P2a only gains for Bubble, Spline Curve, Waveform Ribbon, Extruded Bubble and Neon Lake. Decide
    on these numbers whether P2a's production wiring proceeds (capturing only what the mode reads) or P2b (the worker
    owns capture and DSP; the snapshot layer is deleted) goes first.
+   **Measured and decided (8 Nov): P2b first.** `tools/visualizer_replay/engine_main_cost.py` (every mode, 20 s of both
+   shipped clips through production DSP, ~3,600 ticks per mode; report
+   `.artifacts/evidence/architecture/native_core_p2/20261108_main_cost/main_cost.json`; three agents ran focused work
+   at the same time, so absolute numbers carry noise, the per-mode comparison does not). p50 per tick, ms:
+
+   | Mode | in-process tick | P2a main side (capture + pickle + take) | P2a saves | DSP | P2b saves (tick + DSP - take) |
+   |---|---|---|---|---|---|
+   | Spectrum | .31 | .40 | -.09 | 1.14 | ~1.34 |
+   | Oscilloscope | .42 | .38 | +.04 | .46 | ~.81 |
+   | Bubble | 1.78 | .46 | +1.32 | .60 | ~2.20 |
+   | Spline Curve | 1.69 | .46 | +1.23 | .51 | ~2.03 |
+   | Sphere | .30 | .41 | -.12 | .50 | ~.68 |
+   | Extruded Spectrum | .30 | .38 | -.08 | 1.08 | ~1.29 |
+   | Neon Lake | .48 | .54 | -.07 | 1.08 | ~1.30 |
+   | Extruded Bubble | 1.79 | .66 | +1.13 | .46 | ~1.88 |
+   | Waveform Ribbon | 1.59 | .56 | +1.03 | .48 | ~1.79 |
+
+   Capture is ~.21 ms whatever the mode (22 deep-copied getters); a per-mode capture set (only what the tick read, 10-15
+   values) would recover ~.1 ms, so the five cheap modes stay at break-even under P2a. DSP here is one analysis block
+   per frame; live it runs per capture callback on the compute pool (same GIL), so P2b's gain is a floor. P2b removes
+   the whole snapshot layer (capture, scheduler tap, the main side of the mode rules) and with it audit H1, H2 and M1;
+   the main process keeps only control edges and the frame take. P2a's built pieces stay until P2b's worker owns the
+   engine: the ABI, codec, mailbox, wake and worker session are P2b's too; `engine_snapshot.py` and the `snapshot`
+   session input are deleted when P2b lands.
 5. Production wiring and lifecycle. Must specify (audit H2, M5): a main -> worker latest-wins snapshot mapping (the
    ABI with roles swapped, a wake byte to the worker; the supervisor's FIFO request queue carries edges only); an
    in-place `set_mode` and a resolved-settings delta applied to the existing session at a tick boundary (a rebuild per

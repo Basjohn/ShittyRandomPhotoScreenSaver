@@ -143,10 +143,13 @@ after the operator's yes on a question card; agents never run load (invisible ch
      cross-process wake and per-session label namespaces are built). Independent Fable audit, 8 Nov
      (`Docs/Future_Work/Native_Core_P2_Audit.md`): its two critical findings (a lost cross-process wake that froze the
      display; the seqlock reader accepting torn slots) and H3a/H4/H6/M2 are fixed with failing-first tests. Next, in
-     order (design doc work orders): 4b live-engine and pause/resume/re-entry/mode-switch gates; 4c the main
-     process's per-mode cost of the snapshot path, which decides whether P2a's wiring or P2b (the worker owns capture
-     and DSP) goes first; then 5 (production wiring with a latest-wins main -> worker snapshot mapping, in-place
-     mode and settings deltas, park, fail-closed, QtCore-only worker), then 6 (measurement, gate 3).
+     order (design doc work orders): 4c measured 8 Nov: the snapshot path saves nothing for Spectrum, Oscilloscope,
+     Sphere, Extruded Spectrum and Neon Lake (its capture + pickle + take cost about their whole tick) and ~1.0-1.3 ms
+     for the four heavy modes, while moving DSP too would save ~.7-2.2 ms for every mode, so **P2b goes first**: the
+     worker owns audio capture, DSP and the tick, the snapshot layer is deleted. Next: the P2b work order (capture
+     and DSP in the worker, control edges only from the main process), the 4b gates against the live engine in the
+     worker, then 5 (production wiring: in-place mode and settings deltas, park, fail-closed, QtCore-only worker)
+     and 6 (gate 3).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 
