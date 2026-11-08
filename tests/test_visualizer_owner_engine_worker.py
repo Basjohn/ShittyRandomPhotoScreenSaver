@@ -504,6 +504,8 @@ def test_a_lost_session_fades_the_held_frame_out_reconfigures_and_a_loss_before_
     from core.process.types import MessageType, WorkerType
     from widgets.spotify_visualizer import engine_worker_link
 
+    # Three recoveries are begun below (the run's recovery limit is the other test's, A11-M1).
+    assert engine_worker_link.MAX_RECOVERIES_PER_RUN >= 3
     rig = gate.OwnerRig("spectrum", worker=True, supervisor=supervisor, cadence="thread", paced=None)
     try:
         with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
@@ -573,6 +575,50 @@ def test_a_lost_session_fades_the_held_frame_out_reconfigures_and_a_loss_before_
             assert str(engine_worker_link._run_disabled_reason).startswith("second failure")   # not the deadline
             assert owner.controller.engine is not None and owner.controller.logical_runtime.is_running()
             assert len(rig.published) > presented + 20                               # in process, presenting
+    finally:
+        rig.close()
+
+
+@pytest.mark.qt
+def test_a_failure_that_recurs_after_every_completed_recovery_ends_in_process_at_the_runs_recovery_limit(
+        qt_app, supervisor, pcm):
+    # Checkpoint audit 11, A11-M1: the session fails again after every completed recovery (stopped behind the owner's
+    # back once each replacement is revealed). Each genuinely recovered session still starts the failure count again
+    # (A10-L4), but every recovery takes one of the run's ``MAX_RECOVERIES_PER_RUN``; the failure after the last one
+    # leaves the worker for the run (held frame faded, the in-process activation revealed and presenting) instead of
+    # cycling fade-out / rebuild / fade-in for the whole run. Negative control (no limit, the A10-L4 owner): that
+    # failure recovers on the worker once more.
+    from core.process.types import MessageType, WorkerType
+    from widgets.spotify_visualizer import engine_worker_link
+
+    def end_the_session():
+        stopped = supervisor.send_request_and_await_response(WorkerType.VISUALIZER, MessageType.VIS_STOP, {},
+                                                             timeout_ms=10_000)
+        assert stopped is not None and stopped.success
+
+    rig = gate.OwnerRig("spectrum", worker=True, supervisor=supervisor, cadence="thread", paced=None)
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            owner = rig.build()
+            _pump(rig, 1.6)                              # past the activation fade-in
+            for _recovery in range(engine_worker_link.MAX_RECOVERIES_PER_RUN):
+                failed = owner._worker
+                assert failed is not None
+                end_the_session()
+                _pump(rig, 3.0, until=lambda: owner._worker not in (None, failed)
+                      and owner._mode_transition_phase == "idle")
+                assert owner._worker not in (None, failed) and owner._mode_transition_phase == "idle"
+                assert owner._worker_failures == 0 and not engine_worker_link.worker_disabled_for_run()
+            end_the_session()
+            _pump(rig, 1.0, until=lambda: owner._worker is None)
+            presented = len(rig.published)
+            _pump(rig, 1.5)
+            _pump(rig, 2.0, until=lambda: owner._mode_transition_phase == "idle")
+            assert owner._worker is None and engine_worker_link.worker_disabled_for_run()
+            assert str(engine_worker_link._run_disabled_reason).startswith("recovery limit")
+            assert owner.controller.engine is not None and owner.controller.logical_runtime.is_running()
+            assert len(rig.published) > presented + 20                               # in process, presenting
+            assert owner._mode_transition_phase == "idle" and owner._mode_transition_fade == 1.0   # revealed
     finally:
         rig.close()
 
