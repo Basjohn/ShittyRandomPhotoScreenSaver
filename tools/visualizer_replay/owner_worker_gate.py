@@ -416,14 +416,21 @@ def identity_gate(mode: str, clip_frames, supervisor: Any) -> dict:
 
 
 def _event_loop_for(app, seconds: float, until=None) -> None:
-    """Run the GUI event loop for ``seconds`` (or until ``until()`` after a wake): the test's own bounded wait."""
+    """Run the GUI event loop for ``seconds`` (or until ``until()``): the rig's own bounded wait, in short slices so
+    ``until`` is checked and a nested loop that an earlier caller left quitting cannot end the wait early."""
     from PySide6.QtCore import QEventLoop, QTimer
 
-    loop = QEventLoop()
-    QTimer.singleShot(int(seconds * 1000), loop.quit)
-    if until is not None and until():
-        return
-    loop.exec()
+    deadline = time.perf_counter() + float(seconds)
+    while True:
+        app.processEvents()
+        if until is not None and until():
+            return
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0.0:
+            return
+        loop = QEventLoop()
+        QTimer.singleShot(max(1, int(min(remaining, 0.05) * 1000)), loop.quit)
+        loop.exec()
 
 
 def _newest_published(mailbox) -> int:

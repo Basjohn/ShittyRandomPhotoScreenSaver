@@ -161,11 +161,11 @@ def test_admission_off_builds_the_in_process_owner_and_never_reaches_the_worker(
 def test_on_the_worker_the_main_process_keeps_no_engine_and_runs_no_tick(qt_app, supervisor, pcm, monkeypatch):
     from widgets.spotify_visualizer import engine_worker_link, tick_pipeline
 
-    ticks = [0]
+    ticks = []
     tick = tick_pipeline.logical_tick
 
     def counting(state):
-        ticks[0] += 1
+        ticks.append(state)
         return tick(state)
 
     monkeypatch.setattr(tick_pipeline, "logical_tick", counting)
@@ -177,9 +177,15 @@ def test_on_the_worker_the_main_process_keeps_no_engine_and_runs_no_tick(qt_app,
         controller = owner.controller
         sync = owner._publication_wake._callback
         owner._publication_wake._callback = lambda: presented.append(sync())
-        _pump(rig, 1.0)
+        # Until the owner presented a run of the worker's frames (bounded): a long suite can leave the GUI's event
+        # queue busy with earlier tests' teardown, which this test does not time.
+        _pump(rig, 15.0, until=lambda: sum(bool(p) for p in presented) > 30)
+        ticks = [state for state in ticks if state is controller.logical_tick_state]   # this owner's only
         assert owner._worker is not None and controller.engine is None and controller.logical_runtime is None
-        assert ticks[0] == 0 and sum(bool(p) for p in presented) > 30
+        assert not ticks and sum(bool(p) for p in presented) > 30, (
+            len(presented), gate._newest_published(owner._worker.mailbox), owner._mode_transition_phase,
+            owner._worker_identity, controller.render_identity, owner._publication_wake.pending,
+            owner._publication_wake._closed)
         assert rig.engines == []                       # the controller's engine factory was never asked
         assert owner.render_identity == controller.render_identity
         assert controller.logical_mailbox is owner._worker.mailbox and owner._worker.label_namespace >= 1
