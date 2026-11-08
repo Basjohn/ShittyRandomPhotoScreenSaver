@@ -1666,3 +1666,165 @@ Focused runs after the fixes: the three engine-worker owner files 69 passed; the
 edge, retirement and logical-ownership suites, the logical-edges parity, engine-worker and packet-mailbox suites 92
 passed. With `--viz-engine-worker` off nothing on these paths runs (all changes are on the worker path or its
 link), and the production-path frame test is unchanged.
+
+## Checkpoint audit 9 (8 Nov): audit 8 fixes and 5.6
+
+Scope: 8584a653 (audit 8 fixes: A8-M1, A8-M2, A8-L1 to A8-L6) and 8f364264 (5.6: the snapshot layer deleted, Bubble's
+own generator), read as `git diff 4df640b7..8f364264` (code hunks; doc hunks only to check claims). Read: the audit 8
+section and its resolution, the 5.6 record and "Left for 5.6-5.7" (design doc), `Current_Plan.md`'s 5.6 side finding,
+`TestSuite.md` and the change checklist's RNG lines; the current owner recovery and first-configure code, the link,
+`backdrop.py`, `logical_edges.py`, `bubble_simulation.py`, `bubble_frame_runtime.py`, `runtime_controller.py`,
+`engine_worker.py`, the Studio adapter and recorded-input extract, the replay tools, the reload handler
+(`engine_handlers.on_custom_layout_reload_requested`) and the generation teardown. Ran (foreground):
+`test_bubble_own_generator.py`, `test_bubble_reactivity.py`, `test_bubble_studio.py`, `test_bubble_viewport_reflow.py`
+(138 passed, 18 s); `test_visualizer_owner_engine_worker_liveness.py`, `test_visualizer_owner_engine_worker_inputs.py`
+(43 passed, 147 s); `engine_main_cost --help` (loads). Probes (`D:\Temp\Scratch\SRPSS\native_audit9`, deleted; no
+window, no device): (a) the 4df640b7 `bubble_simulation.py` seeded through the process RNG against this one seeded
+alike, 9 stream x 9 drift directions x the three pop modes, Group Drift on (off for drift "none"), bounce 50/50, 40
+small and 8 big bubbles, 400 ticks with a periodic hot bass: 243 configurations, 0 divergent snapshots; (b) the Group
+Drift alignment case over seeds 0-1999.
+
+No high or medium findings.
+
+### Low
+
+**A9-L1. The first configure's deadline is fenced by the session's namespace and `_retired`, but not by the request
+serial that `retire()` moves first. A retire whose logical join fails leaves the deadline live on a half-retired
+owner.**
+- Evidence: `_on_first_configure_deadline` (`quick_display_visualizer_owner.py:1756-1765`) checks `_retired`,
+  `link.configured` and the namespace. `retire()` (`:2366`) bumps `_transition_request_serial` to disarm "any queued
+  one-shot", then returns False before `_retired = True` when `stop_logical_runtime()` does not join (`:2393-2395`).
+  The wake callback, sync admission and publication wake are already detached, and `_worker` and `_started` are still
+  set. Every other owner deadline (`_on_transition_deadline`, `_on_recovery_deadline`) is fenced by that serial, so
+  this is the only one that survives the early return. The generation teardown cancels the generation's single-shots
+  (`engine_lifecycle.py:174-186`), so the deadline survives only a retire outside a generation teardown (Visualizer
+  off, or an owner rebuilt within the same generation) whose join failed.
+- Failure scenario: the configure is still unanswered when the retire's join fails. At 6 s the deadline runs
+  `_fall_back_in_process`. That configures the controller and starts a logical runtime (`_started` is still True) on
+  an owner whose routes were detached.
+- Fix: also fence on the serial (pass `(namespace, self._transition_request_serial)` and compare both), or check a
+  retiring flag that `retire()` sets first. Test: a retire whose join fails, with the configure unanswered. Advance
+  past the deadline and assert no fallback or logical start. For the negative control, use today's fence.
+
+**A9-L2. L5 turns every slow cold spawn into a link retired mid-spawn. That case was already recorded for 5.7, but
+it now happens deterministically past 6 s.**
+- Evidence: when the deadline fires while `_outbox is not None` (the spawn has not reported yet), `link.retire()`
+  (`engine_worker_link.py:585`) sends no `VIS_STOP` because there is no session. `close()` disarms the events. The IO
+  task still runs `supervisor.stop` + `supervisor.start` (`:280-288`) and leaves an idle worker process (audit 8
+  verified-sound item, "owned by the supervisor until shutdown"). The IO pool has two workers
+  (`core/threading/manager.py:633`). A later link's spawn could therefore run in parallel with this stale task, and the
+  stale task's unconditional `supervisor.stop` could kill the later link's freshly started worker. That later link
+  then pays its one resend (`_respawn_unconfigured`). This needs a new owner within the stale task's window, so it is
+  rare. When the configure was dispatched (`_outbox is None`), the stray session is handled correctly: the stop is
+  queued behind the configure, addressed to its mapping, and the late reply's correlation is abandoned and its events
+  disarmed (`_on_worker_configured` also fences by link).
+- Is 6 s safe? The measured spawn plus build is 0.5-4 s on the dev box (`build_with_spawn_ms` 3,988). Six seconds
+  leaves 1.5x on that measured maximum. A frozen (Nuitka) cold boot with on-access scanning is unmeasured (5.7's
+  operator check). Overrunning the deadline is graceful: this activation runs in process, it is not counted for the
+  run, and the next owner retries the worker. So the bound is safe in outcome. Whether it is right in frequency is
+  not known until the frozen spawn is timed.
+- Fix (5.7): give the stale spawn task an identity. Skip `stop`/`start` when its link is closed, or have the
+  supervisor's stop compare a start token. Time the frozen cold spawn against 6 s and record it.
+
+**A9-L3. A8-M2 can now enter an unbounded 6 s reload cycle. That matches in-process behaviour, but neither record says
+so.**
+- Evidence: the second expiry goes to `_signal_transition_failure` (`:2352-2358`). Every path to it, except one,
+  disables the worker for the run first: stage 1 with a live worker falls back counted (`:2343-2347`), and a recovery
+  that began in a counted fallback (second failure, failed reconfigure) is disabled too. The one exception is
+  `_on_worker_start_failed` (`:2066-2070`, `count_for_run=False`): it begins a bound recovery in process. If that
+  in-process activation never reveals, the reconstruction's new owner tries the worker again, its start fails again,
+  and so on, with one reload about every 6 s. The same loop already exists purely in process (`_on_transition_deadline`
+  has no retry cap, and nor does `on_custom_layout_reload_requested`). So this is not worker-specific, and no worker
+  failure loops on its own. Separately, the reload request is ignored while Settings owns runtime recreation, while a
+  recreation is pending, or when the request is stale (`engine_handlers.py:785-800`). The owner then sits in `failed`
+  at fade 0 with its runtime running, which is the A8-M2 state the new docstring (`:2337`) rules out ("Never left
+  hidden with its runtime running").
+- Fix: soften the docstring and the resolution line to "as in process". Record the uncapped reconstruction as a
+  general follow-up, not a P2b item: a per-run reconstruction cap, or a `failed` owner that stops its logical runtime
+  when its reload is refused.
+
+**A9-L4. The seeded Group Drift case now pins one passing draw. It is a snapshot, not an invariant.**
+- Evidence: probe (b): Random Group Drift on the x axis satisfies the case's assertion for 61.3% of seeds 0-1999, and
+  Diagonal for 100%. That reproduces the record's ~61%. Seed 2 is one passing draw
+  (`test_bubble_reactivity.py:1302`). The record and `Current_Plan.md` state this and leave the guarantee to Bubble's
+  owner, so the seeding is honest. Still, the `[random-x]` case asserts nothing about Random drift that holds in
+  production.
+- Fix: as recorded. Decide what Random Group Drift guarantees and assert that. Until then, add a comment in the test
+  saying the `random` case is a regression snapshot.
+
+### Question 1 (Bubble, production behaviour)
+
+- Every draw moved. No module-RNG draw is left in Bubble's code paths: a search of `widgets/spotify_visualizer` and
+  `core/visualizer_engine` for `random.<draw>(` / `np.random` finds none. `bubble_ambient.py` and Extruded Bubble's
+  wake/simulation use their own fixed-seed or runtime-seeded `random.Random`. 57 call sites are confirmed: 15 `rng.`
+  in the spawn helpers and 42 `self._rng.`, against 57 module draws at 4df640b7. Probe (a): 243 configurations, every
+  snapshot equal over 400 ticks, so no draw was added, dropped or reordered on those paths. The record's 144x720 run
+  covers Group Drift off too.
+- Production seeding: `random.Random(None)` seeds from `os.urandom` (not time), exactly like the module's own
+  instance, so two simulations built in the same instant do not share a stream. Gates seed every state with the same
+  value, which is intended. `BubbleFrameRuntime.reset` rebuilding with a stored seed restarts the stream only when a
+  gate set one.
+- Nothing else depended on Bubble consuming the module RNG. The remaining product draws from the module RNG (image
+  selection, transitions' auxiliary picks, RSS shuffle, feed jitter, batch seed) are unseeded in production. Their
+  distribution does not depend on how many draws Bubble interleaved. No tool or test pins a digest that depended on
+  `deterministic_clock` seeding the process RNG: every Bubble replay tool goes through `driver._configure` =
+  `configure_offline_controller(seed=REPLAY_SEED)`. `gc_gen2_attribution_harness.py` builds an unseeded
+  `BubbleFrameRuntime`, but it is a profiler and needs no reproducibility. The Studio evaluator's seeding moved from
+  `_reset_history` to `_start`. Every rewind path (`select`, extent change, seek back, signature change) goes through
+  `_start`, so replays stay exact.
+
+### Question 2 (deleted surface)
+
+No caller remains. Searching `*.py` outside `.venv`/`release`/`.artifacts`/`logs` for `engine_snapshot`,
+`EngineSnapshot`, `peek_pre_agc_analysis_spectrum`, `request_pre_agc_analysis_spectrum`, `reads_analysis_spectrum`,
+`_ANALYSIS_SPECTRUM_READERS`, `tick_snapshot`, `initial_snapshot` and `inputs="snapshot"` finds only Docs. Tools,
+tests, Studio and QML have none. `EngineSession.INPUTS` is `("feature", "lanes", "live")`, and an unknown input raises.
+The worker's handlers catching `Exception` lose nothing, since `SnapshotContractError` was the only `BaseException`.
+
+### Verified sound
+
+- **A8-M1.** `_finish_worker_recovery` bumps the serial before re-arming (`:2253`). The failure's shot is inert. A
+  stage-1 expiry that falls back and then finishes arms twice, and the first is fenced by the second bump (`:2349`).
+  This is harmless.
+- **A8-M2, the loop question.** No worker-specific loop exists (A9-L3 covers the general one). The worker is disabled
+  before the reconstruction on every counted path. The `failed` phase presents nothing (`:1266-1269`), so the card
+  stays faded at 0. It fades out and later fades in, and never vanishes.
+- **A8-L1.** `FrameBackdropCompletion` builds frames equal to a full freeze. `FrozenFields` keeps sorted names, the
+  two replaced entries keep their positions, and the values are `freeze_render_value` of the same inputs. No frame or
+  mode-state `__post_init__` derives a field (they only normalise and validate), so `_with_field` copying the decoded
+  fields is faithful. The release is reached on retire (`:2401`), on fallback (`:2156`) and on a replaced session
+  (`:1801`). The one path that skips it, `_on_engine_worker_failed` returning in `failed` (`:2087-2088`), keeps the
+  wallpaper only until that owner's retire.
+- **A8-L2.** The view records are frozen dataclasses (`view_orbit.py:51-125`), so the identity test
+  `current[attr] is before[attr]` reliably detects a GUI replacement. Both processes' clocks are `time.perf_counter`
+  (QPC, system-wide), so the worker's arming time is valid on the main side. An unadopted (GUI-newer) record still
+  differs from `_presentation_sent` and is forwarded.
+- **A8-L3.** Only the newest edge's reply clears and logs. OFF, ON, OFF clears on the last reply. A reply from an
+  older link is fenced by the link.
+- **A8-L4.** Every emit carries its correlation, including the not-sent case and the spawn-error path (`""`
+  registered and delivered alike). A respawned token's stale correlation finds a mismatching entry and is dropped.
+- **A8-L5.** The deadline is generation-tagged (bound method). It is inert after an answer, a replacement link or a
+  retire, except A9-L1. A late reply after the fallback is dropped: the link is closed and its events disarmed, and
+  `_on_worker_configured` fences by link. A dispatched configure's session is stopped by the queued `VIS_STOP`.
+- **A8-L6.** Only changed values are detached, and both the send and `sent` hold copies. The state's objects never
+  cross into the (asynchronously pickling) send.
+- **5.6 records.** "57 call sites", "Extruded Bubble seeded by its runtime, ambient and wake fixed-seed", "production
+  never seeds" (`test_the_product_path_never_seeds`), the ~61% figure and the `engine_main_cost` half-deletion all
+  check out.
+
+### Records overstated
+
+- The A8-M2 docstring and resolution say "never left hidden with its runtime running". That is true only when the
+  reload is admitted (A9-L3).
+- A8-L5 says "fenced by its label namespace". It is not fenced by the retire serial (A9-L1).
+- `Visualizer_Change_Checklist.md:133`, "a process-RNG draw on the tick ... fails them": only the gates that compare
+  two runs fail, and only when the draw reaches a frame. Single-run tests do not.
+
+### Not verified
+
+- A frozen (Nuitka) cold spawn against the 6 s first-configure bound (5.7, operator).
+- The stale spawn task racing a later link's spawn on the two-worker IO pool (A9-L2). This is by reading, not
+  exercised.
+- The record's session-path digests and live gate (evidence JSON not reproduced). Probe (a) covers only the
+  simulation.
+- Behaviour of the first-configure timer across system sleep.
