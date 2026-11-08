@@ -28,7 +28,7 @@ class EngineSession:
     """One activation's tick host: inputs in, frames into the shared mapping ``mapping`` (attached as writer)."""
 
     def __init__(self, *, mapping: str, mode: str, runtime_generation: int, preset: int = 0, settings: Any = None,
-                 bar_count: int = 32) -> None:
+                 bar_count: int = 32, label_namespace: int = 0) -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.packet_mailbox import PacketMailbox
         from widgets.spotify_visualizer import extruded_bubble_drift_log
@@ -37,12 +37,17 @@ class EngineSession:
         )
         from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
 
+        if not 0 <= int(label_namespace) < (1 << 30):
+            raise ValueError(f"label namespace out of range: {label_namespace}")
         self._stack = contextlib.ExitStack()
         # The session's authored clock follows its inputs' own timestamps (each input carries the time it was
         # produced), so the worker ticks the same frames whatever its scheduling.
         self._clock = self._stack.enter_context(deterministic_clock())
-        # Extruded Bubble's drift families are numbered per activation here, as a fresh in-process replay numbers them.
-        extruded_bubble_drift_log._REVISIONS = itertools.count(1)
+        # Extruded Bubble's drift-family revisions are the renderer's geometry cache identity, so no two sessions may
+        # reuse one: the main process gives every session its own ``label_namespace`` (>= 1, never repeated), and its
+        # revisions start at ``namespace << 32`` (the main process's own counter stays far below). Namespace 0 numbers
+        # from 1, as a fresh in-process replay does (the identity gates).
+        extruded_bubble_drift_log._REVISIONS = itertools.count((int(label_namespace) << 32) + 1)
         self.mailbox = PacketMailbox(role="writer", attach=mapping)
         self._stack.callback(self.mailbox.close)
         engine = ReplayBeatEngine(bar_count)

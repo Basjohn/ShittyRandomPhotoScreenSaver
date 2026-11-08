@@ -122,6 +122,35 @@ def test_the_worker_loads_no_gui_stack_in_a_production_spawn(tmp_path):
         assert isinstance(modules, list) and set(modules) <= {"PySide6.QtCore", "PySide6.QtGui"}, (mode, modules)
 
 
+@pytest.mark.qt
+def test_sessions_never_reuse_a_drift_family_label(qt_app):
+    # Extruded Bubble's drift revisions are the renderer's geometry cache identity: two sessions (a mode switch, a
+    # restarted worker) with their own namespaces never share one, so a stale geometry can never be reused.
+    import tools.expanded_visualizer_evidence as evidence
+
+    clip = evidence.shipped_clip(1.0)
+    seen = {}
+    for namespace in (3, 4):
+        reader = PacketMailbox(role="reader")
+        session = EngineSession(mapping=reader.mapping_name, mode="extruded_bubble", runtime_generation=GENERATION,
+                                label_namespace=namespace)
+        revisions = set()
+        try:
+            for feature in clip.frames:
+                session.tick(feature)
+                frame = reader.take().state
+                for family in getattr(frame.mode_state, "drift_families", ()) or ():
+                    revisions.add(int(family.revision))
+        finally:
+            session.close()
+            reader.close()
+        assert revisions and all(revision >> 32 == namespace for revision in revisions), (namespace, revisions)
+        seen[namespace] = revisions
+    assert not seen[3] & seen[4]
+    with pytest.raises(ValueError):
+        EngineSession(mapping="unused", mode="spectrum", runtime_generation=1, label_namespace=-1)
+
+
 def test_a_writer_attaches_only_to_an_owned_mapping():
     with pytest.raises(ValueError):
         PacketMailbox(role="writer")

@@ -162,9 +162,12 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
   colours and the Oscilloscope/Bubble spec parameters from the presentation state, so the worker configures both
   sides and loads QtGui for `QColor` (never Quick, QML or Widgets; pinned by a fresh-spawn test). Move those reads into
   the logical config before production wiring, so the worker imports QtCore only.
-- **Process-unique labels across worker generations (8 Nov):** Extruded Bubble numbers its drift families from a
-  process-wide counter that the renderer uses as a cache identity. A restarted or re-generated worker starts again at 1,
-  so labels must be namespaced by worker generation before production wiring (a stale GPU cache hit otherwise).
+- **Process-unique labels across worker generations (8 Nov, resolved):** Extruded Bubble numbers its drift families
+  from a process-wide counter that the renderer uses as a geometry cache identity. Every `EngineSession` takes a
+  `label_namespace` from the main process (>= 1 in production, a monotonic counter never repeated across sessions or
+  restarted workers) and numbers from `namespace << 32`; the main process's own counter stays far below, and
+  namespace 0 keeps the in-process numbering for the identity gates. Production wiring must pass a fresh namespace on
+  every `VIS_CONFIGURE` (`tests/test_visualizer_engine_worker.py`).
 - **The GUI wake (8 Nov):** in process the mailbox wakes the GUI on its empty -> populated edge; across processes the
   main side needs that edge too (a pipe or event signalled by the worker, read on the GUI thread), never a poll.
 - **Hidden GUI-thread reads inside the tick:** every attribute the tick reads from the owner/widget must become a
