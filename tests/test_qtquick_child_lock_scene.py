@@ -393,6 +393,43 @@ def test_the_hover_glyphs_lock_opens_edit_with_the_children_exposed(display, fam
     _assert_exposed(display, model, family, presentations[family])
 
 
+@pytest.mark.qt
+def test_a_lock_click_that_locks_an_unselected_frame_keeps_the_selection_and_its_held_gesture(display):
+    """Checkpoint audit 11, A11-L7: the Clock was left unlocked and the Media card is selected (its child gesture held).
+    Hovering the Clock and clicking its lock only locks it: the selection stays on the Media card, whose gesture is not
+    cancelled, and the Clock's parent glyphs are not revealed by a selection. Only a click that opens a lock focuses
+    its parent (the tests above). Negative control (selecting on every click): the selection moved to the Clock and
+    the Media card's held gesture was cancelled."""
+    _families(display)
+    model = _bind(display, _session())
+    assert model.selectItem(_row(model, "clock"))
+    _run(display, 300)
+    frame = _edit_item(display, "customLayoutEditFrame-clock")
+    lock = _edit_item(display, "customLayoutChildEditLock-clock")
+    assert frame is not None and lock is not None
+    none = Qt.MouseButton.NoButton
+    _send(display, QEvent.Type.MouseMove, _centre(frame), none, none)
+    _settle(display, lambda: lock.isEnabled() and lock.opacity() > 0.5)
+    _click_lock(display, lock)
+    assert frame.property("childEditingLocked") is False             # left unlocked ...
+    assert model.selectItem(_row(model, "media"))                     # ... while the Media card is edited
+    _run(display, 300)
+    media = _edit_item(display, "customLayoutEditFrame-media")
+    assert media is not None and media.property("selectedForChildEdit") is True
+    assert frame.property("selectedForChildEdit") is False and frame.property("childEditingLocked") is False
+    cancelled = []
+    model._child_gesture_cancel_handler = lambda item: cancelled.append(item.model_identity)
+
+    _send(display, QEvent.Type.MouseMove, _centre(frame), none, none)
+    _settle(display, lambda: lock.isEnabled() and lock.opacity() > 0.5)
+    _click_lock(display, lock)
+    _run(display, 50)
+    assert frame.property("childEditingLocked") is True
+    assert frame.property("selectedForChildEdit") is False, "a locking click moved the selection"
+    assert media.property("selectedForChildEdit") is True
+    assert "media" not in cancelled, "a locking click cancelled the selected frame's held child gesture"
+
+
 # ---------------------------------------------------------------------------------------------------
 # The column rails (Reddit/Gmail's three semantic column grips) follow the lock like the child layer:
 # loaded for the selected parent locked or not, fading in on unlock and out on lock (fade, never vanish),

@@ -491,6 +491,10 @@ class BuildProcessOwner:
     Windows builds enter a kill-on-close Job Object immediately after launch, so
     compiler/linker/installer descendants share the root lifecycle.  POSIX is
     retained only for the bounded test seam, through an isolated process group.
+
+    One active process per owner. A job that runs on its own thread beside the
+    pipeline's (the GitHub Remote tab's Linux build) takes a ``dependent`` owner:
+    its own process tree, cancelled with this one.
     """
 
     def __init__(
@@ -509,6 +513,24 @@ class BuildProcessOwner:
         self._active: _ActiveBuildProcess | None = None
         self._cancel_requested = False
         self._closed = False
+        self._dependents: list[BuildProcessOwner] = []
+
+    def dependent(self) -> "BuildProcessOwner":
+        """A second owner with this one's launch seams, for a job on its own thread beside this owner's processes.
+        Its cancel follows this owner's: a cancel or shutdown here cancels it (at once when this owner is already
+        cancelled). Its own cancel or shutdown leaves this owner alone."""
+        child = BuildProcessOwner(
+            popen_factory=self._popen_factory,
+            windows=self._windows,
+            job_factory=self._job_factory,
+            resume_windows_process=self._resume_windows_process,
+        )
+        with self._lock:
+            if not self._cancel_requested:
+                self._dependents.append(child)
+                return child
+        child.cancel()
+        return child
 
     @property
     def cancellation_requested(self) -> bool:
@@ -574,17 +596,18 @@ class BuildProcessOwner:
     def cancel(self) -> bool:
         with self._lock:
             self._cancel_requested = True
+            dependents = tuple(self._dependents)
             active = self._active
-            if active is None:
-                return False
-            if active.aborted:
-                return False
-            active.aborted = True
-            # Job termination and Job close must share this lifecycle boundary:
-            # a concurrent completion may otherwise close the native handle
-            # while this cancellation is still using it.
-            self._terminate(active)
-        return True
+            terminated = active is not None and not active.aborted
+            if terminated:
+                active.aborted = True
+                # Job termination and Job close must share this lifecycle boundary:
+                # a concurrent completion may otherwise close the native handle
+                # while this cancellation is still using it.
+                self._terminate(active)
+        for dependent in dependents:       # outside this owner's lock: each takes its own
+            dependent.cancel()
+        return terminated
 
     def shutdown(self) -> bool:
         with self._lock:
@@ -788,7 +811,8 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
     and the installers stay local and are the venv mode's own jobs. Installers are opt-in here and package only
     builds downloaded and validated in the same run (``github_installer_refusal``). The optional Linux build is the
     other tabs' own job (a GitHub Ubuntu runner, followed by ``scripts/linux/build_from_windows.ps1``), here on the
-    commit the pre-flight fixed (``_job_arguments``) and run while the Windows builds are on GitHub."""
+    commit the pre-flight fixed (``_job_arguments``), on its own thread from the pipeline's start, beside the Windows
+    runs (``BuildRunnerApp._github_pipeline_worker``)."""
     by_key = {job.key: job for job in jobs_for_mode("venv", repo_root)}
     workflow = repo_root / ".github" / "workflows" / "windows-build.yml"
     return (
@@ -812,33 +836,103 @@ def _job_arguments(job: Job, preflight: PreflightResult) -> list[str]:
 
 
 _LINUX_RUN_ID = re.compile(r"\[LINUX-BUILD\] Following run (\d+)")
-_LINUX_TAG = re.compile(r"\[LINUX-BUILD\] Pushing temporary tag (linux-build/\S+)")
+_LINUX_TAG = re.compile(r"\[LINUX-BUILD\] Pushing temporary tag (linux-build/\S+)(?: at \S+ \(([0-9a-f]{7,40})\))?")
+_LINUX_TOKEN = re.compile(r"\(run token (srpss-[0-9A-Za-z-]+)\)")
+_LINUX_DISPATCH = re.compile(r"\[LINUX-BUILD\] Dispatching \S+ on \S+ at ([0-9a-f]{40})")
+_LINUX_STARTED = re.compile(r"^Started: (\S+)$", re.MULTILINE)
+_LINUX_WORKFLOW = "linux-build.yml"
+
+
+def _job_started_utc(text: str) -> datetime | None:
+    """The job's local start (``run_job``'s header) in UTC, less the script's own 5 s margin."""
+    from datetime import timedelta, timezone
+
+    match = _LINUX_STARTED.search(text)
+    try:
+        started = datetime.fromisoformat(match.group(1)) if match else None
+    except ValueError:
+        return None
+    if started is None:
+        return None
+    return started.astimezone(timezone.utc) - timedelta(seconds=5)
 
 
 def _stop_linux_github_run(log_path: Path) -> str:
     """After an operator stop of the Linux job: its worker was killed before its own cleanup, so cancel the GitHub run
-    it followed and delete a temporary tag it pushed (both named in its log). Plain bounded calls: the process owner
-    is cancelled by now. Returns what was done, for the job's detail."""
+    it started and delete a temporary tag it pushed (named in its log). The run is the one it followed; before that
+    line (a stop during the dispatch or the run lookup, A11-L4) it is found as the script itself finds it: a dispatch
+    with a run token (the Remote tab) by the token in the run's display title, a plain dispatch (the other tabs) as
+    the newest unfinished dispatch run of its commit created since the job started, and a tag's push run by the tag
+    (GitHub names a tag push run's head branch after the tag). Plain bounded calls: the process owner is cancelled by
+    now. Returns what was done, for the job's detail."""
     try:
         text = log_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""
-    steps = []
-    run = _LINUX_RUN_ID.search(text)
-    if run:
-        steps.append((f"GitHub run {run.group(1)} cancelled", ["gh", "run", "cancel", run.group(1)]))
-    tag = _LINUX_TAG.search(text)
-    if tag:
-        steps.append((f"temporary tag {tag.group(1)} deleted", ["git", "push", "origin", f":refs/tags/{tag.group(1)}"]))
     from tools import github_remote_build as remote
 
-    notes = []
-    for done_note, args in steps:
+    def call(args: list[str]) -> subprocess.CompletedProcess | None:
         try:
-            done = subprocess.run(args, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=60,
-                                  env=remote.cli_environment(), **_windows_subprocess_kwargs()).returncode == 0
+            return subprocess.run(args, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=60,
+                                  env=remote.cli_environment(), **_windows_subprocess_kwargs())
         except (OSError, subprocess.TimeoutExpired):
-            done = False
+            return None
+
+    def listed_runs(args: list[str]) -> list[dict] | None:
+        completed = call(["gh", "run", "list", "--workflow", _LINUX_WORKFLOW, *args])
+        if completed is None or completed.returncode:
+            return None
+        try:
+            runs = json.loads(completed.stdout or "[]")
+        except ValueError:
+            return None
+        return runs if isinstance(runs, list) else None
+
+    notes: list[str] = []
+    run = _LINUX_RUN_ID.search(text)
+    token = _LINUX_TOKEN.search(text)
+    dispatch = _LINUX_DISPATCH.search(text)
+    tag = _LINUX_TAG.search(text)
+    run_ids: list[str] = []
+    if run:
+        run_ids.append(run.group(1))
+    elif token:
+        runs = listed_runs(["--event", "workflow_dispatch", "--limit", "30", "--json", "databaseId,displayTitle"])
+        found = [str(item.get("databaseId")) for item in runs or () if token.group(1) in str(item.get("displayTitle"))]
+        if found:
+            run_ids.append(found[0])
+        else:
+            notes.append(f"its run (token {token.group(1)}) was not found to cancel; check the Actions tab")
+    elif dispatch:
+        since = _job_started_utc(text)
+        runs = listed_runs(["--event", "workflow_dispatch", "--commit", dispatch.group(1), "--limit", "5",
+                            "--json", "databaseId,createdAt,status"])
+        found = []
+        for item in runs or ():
+            try:
+                created = datetime.fromisoformat(str(item.get("createdAt", "")).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if since is not None and created >= since and item.get("status") != "completed":
+                found.append((created, str(item.get("databaseId"))))
+        if found:
+            run_ids.append(max(found)[1])
+        else:
+            notes.append(f"its run (commit {dispatch.group(1)[:12]}) was not found to cancel; check the Actions tab")
+    elif tag:
+        commit = ["--commit", tag.group(2)] if tag.group(2) and len(tag.group(2)) == 40 else []
+        runs = listed_runs(["--event", "push", *commit, "--limit", "20", "--json", "databaseId,headBranch"])
+        found = [str(item.get("databaseId")) for item in runs or () if item.get("headBranch") == tag.group(1)]
+        if found:
+            run_ids.append(found[0])
+        else:
+            notes.append(f"the push run of {tag.group(1)} was not found to cancel; check the Actions tab")
+    steps = [(f"GitHub run {run_id} cancelled", ["gh", "run", "cancel", run_id]) for run_id in run_ids]
+    if tag:
+        steps.append((f"temporary tag {tag.group(1)} deleted", ["git", "push", "origin", f":refs/tags/{tag.group(1)}"]))
+    for done_note, args in steps:
+        completed = call(args)
+        done = completed is not None and completed.returncode == 0
         notes.append(done_note if done else f"cleanup failed, run: {' '.join(args)}")
     return "; ".join(notes)
 
@@ -2875,12 +2969,21 @@ class BuildRunnerApp:
         process_owner: BuildProcessOwner,
     ) -> None:
         """GitHub Remote: dispatch the selected products together, build the Reddit Helper locally while GitHub
-        works, retrieve and validate each download, then compile the opted-in installers for validated builds."""
+        works, retrieve and validate each download, then compile the opted-in installers for validated builds.
+
+        The optional Linux build (its own GitHub run, followed by its worker for 30-60 min) runs from the start on its
+        own thread with a ``dependent`` process owner, so it never holds up the Windows runs' polling, retrieval,
+        publishing or failure reports, nor the installers (checkpoint audit 11, A11-L2). The pipeline's cancel reaches
+        it through that owner (its worker is ended and ``run_job`` cancels its GitHub run); the pipeline reports
+        ``pipeline_done`` only after it has ended."""
         from tools import github_remote_build as remote
 
         by_key = {job.key: job for job in jobs}
         local_results: dict[str, JobResult] = {}
+        linux_results: dict[str, JobResult] = {}
         remote_results: dict = {}
+        linux_thread: threading.Thread | None = None
+        done: tuple | None = None
         try:
             commit = preflight.remote_commit
             if commit is None:
@@ -2891,9 +2994,10 @@ class BuildRunnerApp:
             remote_keys = [job.key for job in jobs if job.kind == "github" and job.key in selected]
             helper_status = helper_build_status("github")
 
-            def run_local(job: Job) -> None:
+            def run_local(job: Job, owner: BuildProcessOwner = process_owner,
+                          results: dict[str, JobResult] = local_results) -> None:
                 self._events.put(("job_running", job.key))
-                result = run_job(job, preflight, process_owner=process_owner)
+                result = run_job(job, preflight, process_owner=owner)
                 if result.returncode == 0 and job.key == "reddit_helper":
                     if not record_helper_build(
                         "github", helper_status.fingerprint, artifact=job.expected_artifact, state_path=HELPER_STATE_PATH,
@@ -2902,16 +3006,32 @@ class BuildRunnerApp:
                             1, "Build succeeded, but helper fingerprint could not be recorded",
                             result.log_path, result.output_path,
                         )
-                local_results[job.key] = result
+                results[job.key] = result
                 self._events.put(("job_done", job.key, result))
 
+            if "linux" in selected and "linux" in by_key:
+                linux_owner = process_owner.dependent()
+                linux_job = by_key["linux"]
+
+                def run_linux() -> None:
+                    try:
+                        run_local(linux_job, linux_owner, linux_results)
+                    except Exception as exc:          # never leave its row running
+                        result = JobResult(1, f"Linux job failed: {exc}", LOG_DIR, linux_job.output_dir)
+                        linux_results[linux_job.key] = result
+                        self._events.put(("job_done", linux_job.key, result))
+                    finally:
+                        linux_owner.shutdown()
+
+                linux_thread = threading.Thread(target=run_linux, name="foundry-linux-build", daemon=True)
+                linux_thread.start()
+
             def local_helper() -> None:
-                # While the Windows runs build on GitHub: the Reddit Helper locally, then the optional Linux build
-                # (its own GitHub run, followed by its worker), so all GitHub runs build at the same time.
-                for key in ("reddit_helper", "linux"):
-                    if key in selected and key in by_key and key not in local_results:
-                        if not process_owner.cancellation_requested:
-                            run_local(by_key[key])
+                # While the Windows runs build on GitHub: the Reddit Helper locally.
+                key = "reddit_helper"
+                if key in selected and key in by_key and key not in local_results:
+                    if not process_owner.cancellation_requested:
+                        run_local(by_key[key])
 
             def emit(kind: str, key: str, payload: object) -> None:
                 event = {"status": "job_status", "link": "job_link", "done": "job_done"}[kind]
@@ -2947,8 +3067,11 @@ class BuildRunnerApp:
                     self._events.put(("job_done", key, result))
                     continue
                 run_local(job)
+            if linux_thread is not None:
+                linux_thread.join()                 # the Linux build follows its own run; nothing else waits on it
             aborted = process_owner.cancellation_requested
-            all_ok = all(result.returncode == 0 for result in (*remote_results.values(), *local_results.values()))
+            all_ok = all(result.returncode == 0 for result in (
+                *remote_results.values(), *local_results.values(), *linux_results.values()))
             if aborted:
                 message = "Pipeline aborted by operator. Active GitHub runs were cancelled."
             else:
@@ -2957,13 +3080,19 @@ class BuildRunnerApp:
                     if all_ok
                     else "Pipeline completed with one or more failures."
                 )
-            self._events.put(("pipeline_done", all_ok and not aborted, message, aborted))
+            done = ("pipeline_done", all_ok and not aborted, message, aborted)
         except BuildPipelineCancelled:
-            self._events.put(("pipeline_done", False, "Pipeline aborted by operator.", True))
+            done = ("pipeline_done", False, "Pipeline aborted by operator.", True)
         except Exception as exc:
-            self._events.put(("pipeline_done", False, f"Pipeline failed: {exc}", False))
+            done = ("pipeline_done", False, f"Pipeline failed: {exc}", False)
         finally:
+            # Also cancels a Linux job still running after a failure (its owner is a dependent), which then cancels
+            # its GitHub run; the pipeline is done only once it has ended.
             process_owner.shutdown()
+            if linux_thread is not None:
+                linux_thread.join()
+            if done is not None:
+                self._events.put(done)
 
     def _poll_events(self) -> None:
         if self._destroyed:

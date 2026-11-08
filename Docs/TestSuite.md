@@ -309,12 +309,19 @@ Immutable resource ownership is covered by `tests/test_qt_resource_assets.py` (Q
 registration), `tests/test_widget_theme_link_and_asset_contract.py` (immutable resources versus editable themes),
 and the retained widget/About tests. `tests/test_qrc_regeneration.py` protects selected-toolchain regeneration,
 staleness, failure and Foundry sequencing; `tests/test_build_runner_cancellation.py` protects the shared process-tree
-owner; `tests/test_github_remote_build.py` protects the GitHub Remote contract without contacting GitHub (the
+owner (and its dependent owner: a second tree beside it, cancelled with it, checkpoint audit 11 A11-L2);
+`tests/test_github_remote_build.py` protects the GitHub Remote contract without contacting GitHub (the
 workflow builds only the requested commit with the canonical workers; a download is published only when it is that
 commit's whole, unaltered build; any failure keeps the previous payload; a stop cancels the real runs; installers
 package only validated builds whose inputs equal the built commit; the optional Linux job builds the pinned commit
-while GitHub builds the Windows products, and a stop cancels its run); `tests/test_build_linux_declarations.py`
-(every platform) proves the Linux build reads every Windows Nuitka declaration, comments with quotes included.
+on its own thread and process owner, started before the Reddit Helper, while the Windows runs are retrieved and
+published and their installers compiled without waiting for it (the job inside `between` fails it), and one stop ends
+both (an unlinked Linux owner runs on); a stop cancels the Linux run even before the worker followed it, by its run
+token, its commit and start time, or its tag (the audited reader cancels none); only a `-Commit` dispatch sends the
+workflow's inputs, text-checked (A11-L2/L3/L4)); `tests/test_build_linux_declarations.py`
+(every platform) proves the Linux build reads every Windows Nuitka declaration, comments with quotes included, and
+that the comment stripper reads backtick escapes, doubled quotes and here-strings as PowerShell does (A11-L8; the
+audited stripper misreads 6 of its 12 lines).
 These are source/resource proofs; fresh frozen size and installed rendering remain operator-build evidence.
 `tests/test_clock_timezone_resolution.py` exercises the actual Clock resolver for local/UTC/explicit offsets,
 named DST and non-DST zones, persisted aliases, and the Troll/Casablanca cases that require the retained database.
@@ -617,7 +624,7 @@ Required properties:
 
 Primary suites include `test_qtquick_resize_normalization.py`, `test_widget_auto_shrink.py`, `test_qtquick_family_size_policy.py`, `test_qtquick_geometry_resolver.py`, `test_qtquick_custom_layout_owner.py`, `test_qtquick_custom_layout_overlay.py` and capture/geometry tests.
 
-**Current Edit acceptance:** `test_qtquick_custom_layout_owner.py` exercises three completed-action undo, flips, wheel then reset; `test_qtquick_input_controller.py` exercises keyboard admission only in Edit without stealing non-Edit plain `Z`; `test_qtquick_child_lock_scene.py` checks keyboard and glyph signals against one retained lock frame, and (hidden production scene, real Clock and Media, real pointer events) that opening a lock exposes the children at once without a parent edit (operator, 8 Nov): the Edit frame's hover-revealed lock focuses its parent when another widget is selected, the children fade in (never pop) whether or not the parent was selected, sit where a no-net parent nudge puts them, and fade out on lock; the hover glyph's route (select, then the lock request before the frames exist) exposes them too. Negative control on the pre-fix overlay: the four Edit-frame cases red (parent not focused; selected parent's children popped in), the hover-glyph route green (it selects first). Its Reddit case (no runtime service, sockets refused) checks the three column rails fade in on a lock click and out on the next (input off at once), and that a grip held across the L-route lock is cancelled with no swap and no Undo while the same drag unlocked swaps; red on the old lock-gated loader (rails popped in). `test_qtquick_reddit_presentation.py` checks flipped title → age value → AGO order and compact live spacing; `test_qtquick_friend_pulse_presentation.py` checks separator growth/reset and edited width-scale preservation. Confirm these in the intended Windows Qt environment plus actual pointer/Save/Cancel/Restore interactions. Source tests cannot prove QML signal delivery, pointer grabs, render alignment or full paint/geometry parity.
+**Current Edit acceptance:** `test_qtquick_custom_layout_owner.py` exercises three completed-action undo, flips, wheel then reset; `test_qtquick_input_controller.py` exercises keyboard admission only in Edit without stealing non-Edit plain `Z`; `test_qtquick_child_lock_scene.py` checks keyboard and glyph signals against one retained lock frame, and (hidden production scene, real Clock and Media, real pointer events) that opening a lock exposes the children at once without a parent edit (operator, 8 Nov): the Edit frame's hover-revealed lock focuses its parent when another widget is selected, the children fade in (never pop) whether or not the parent was selected, sit where a no-net parent nudge puts them, and fade out on lock; the hover glyph's route (select, then the lock request before the frames exist) exposes them too. Negative control on the pre-fix overlay: the four Edit-frame cases red (parent not focused; selected parent's children popped in), the hover-glyph route green (it selects first). Only a click that opens a lock selects: a locking click on an unselected frame left unlocked keeps the selection on the frame being edited and cancels none of its held child gesture (checkpoint audit 11, A11-L7; selecting on every click moves the selection). Its Reddit case (no runtime service, sockets refused) checks the three column rails fade in on a lock click and out on the next (input off at once), and that a grip held across the L-route lock is cancelled with no swap and no Undo while the same drag unlocked swaps; red on the old lock-gated loader (rails popped in). `test_qtquick_reddit_presentation.py` checks flipped title → age value → AGO order and compact live spacing; `test_qtquick_friend_pulse_presentation.py` checks separator growth/reset and edited width-scale preservation. Confirm these in the intended Windows Qt environment plus actual pointer/Save/Cancel/Restore interactions. Source tests cannot prove QML signal delivery, pointer grabs, render alignment or full paint/geometry parity.
 
 Clock face state is independent from its digital/analogue geometry variants. `test_layout_slots.py`, the real DisplayManager slot path, and Clock Settings preservation coverage must keep those authorities separate.
 
@@ -1175,7 +1182,8 @@ High-value permanent guards include:
   again); the only output unplugged is a device failure in the replies, never a step failure or a session end, retried
   at the next capture edge. Guards: a player pinned to the old output keeps its capture; digital silence and a pause
   never reopen (an energy-keyed watch without the stale gate fails it); the link logs each device-state change once
-  (the store-only link fails it). Evidence and the mutation runs: the design doc's 5.3 record;
+  (the store-only link fails it), also from the state nested under `VIS_STOP`'s `report["engine"]`, awaited or as an
+  event (A11-L5; a top-level-only reader fails it). Evidence and the mutation runs: the design doc's 5.3 record;
   `tests/test_visualizer_engine_frozen_spawn.py`: the worker factory pickles by name, and a spawn from a parent whose
   `__main__` is `main.py` (the child runs `main.py`'s module level first, as the Nuitka child runs it as
   `__parents_main__`) reaches `visualizer_worker_main`'s message loop with no QtGui, QtWidgets, QtQuick or QtQml
@@ -1189,7 +1197,10 @@ High-value permanent guards include:
   out of `cpu_app_pct`: A10-L2, the pre-fix collector refreshed on every sample and counted a 5000 % figure);
   `tests/test_visualizer_owner_engine_worker.py`'s lost-session test also holds A10-L4: a recovery whose reveal
   completed starts the failure count again (a later loss recovers), and a loss before a recovery's reveal is the
-  second strike (in process for the run, reason "second failure"); without the reset the count stays 1;
+  second strike (in process for the run, reason "second failure"); without the reset the count stays 1. Its recovery
+  limit test holds A11-M1: a session that fails again after every completed recovery recovers (each resetting the
+  count) up to `MAX_RECOVERIES_PER_RUN`, and the failure after that is in process for the run (reason "recovery
+  limit", revealed and presenting); without the limit it recovers on the worker again;
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 
 The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.

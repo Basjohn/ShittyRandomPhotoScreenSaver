@@ -34,15 +34,21 @@ runner job), `tools/build_runner.py` (the tab). Normal and Repo Venv are unchang
    (GitHub runner)**.
 5. **START SELECTED.** Both selected products are dispatched at once and build in parallel on separate runners. Each
    row shows `Queued`, `Building`, `Downloading`, `Validating`, `Publishing`; the progress line shows the runner's
-   current step, and a **GitHub run** link opens the run in your browser. While GitHub builds, the Reddit Helper (if
-   selected) builds locally, then the Linux build (if selected) starts its own Ubuntu run on the same pinned commit
-   and downloads its tarball into `release\linux` (`Docs/Guides/Linux_Guide.md` §7).
-6. When a run succeeds its artifact is downloaded, validated and published; then the selected installers compile
-   locally. A typical run takes about as long as a local build (the runner has 4 cores); your machine stays idle.
+   current step, and a **GitHub run** link opens the run in your browser. The Linux build (if selected) starts first,
+   beside them: it dispatches its own Ubuntu run on the same pinned commit, follows it (typically 30-60 minutes) and
+   downloads its tarball into `release\linux` (`Docs/Guides/Linux_Guide.md` §7). While GitHub builds, the Reddit
+   Helper (if selected) builds locally.
+6. When a Windows run succeeds its artifact is downloaded, validated and published; then the selected installers
+   compile locally. None of this waits for the Linux run: it has its own process owner on its own thread, so a
+   Windows product is published (or its failure reported) as soon as its run ends. The pipeline reports done once the
+   Linux build has ended too. A typical run takes about as long as a local build (the runner has 4 cores); your
+   machine stays idle.
 
 **EMERGENCY STOP** (or closing the window) cancels the real GitHub runs (`gh run cancel`, the Linux run included),
-not just the local monitoring, and stops any local step. Already published products stay published; an interrupted download keeps the
-previous payload.
+not just the local monitoring, and stops any local step. The Linux job's process owner follows the pipeline's, so one
+stop ends both. A Linux job stopped before it began following its run still cancels it: the run is found by the run
+token its log names (or, for a temporary `linux-build/*` tag, by the tag, which is also deleted). Already published
+products stay published; an interrupted download keeps the previous payload.
 
 Headless (for scripts, or the lead when the operator asks for a build):
 
@@ -108,5 +114,9 @@ never packaged with another revision's assets. Commit and push them, or revert t
 - Each run reinstalls `requirements.txt` into a fresh `.venv`; Nuitka's compile cache is kept between runs.
 - No installer is compiled on GitHub. The Linux job is the other tabs' own (`Docs/Guides/Linux_Guide.md` §7); here it
   builds the pre-flight's commit, and its tarball is downloaded as is (no manifest validation like the Windows
-  products; the runner's smoke test is its gate).
+  products; the runner's smoke test is its gate). Only this tab's Linux dispatch sends the workflow's `commit` and
+  `token` inputs (`-Commit`): GitHub refuses inputs a branch's `linux-build.yml` does not declare (HTTP 422), so the
+  other tabs keep the plain dispatch and find their run by commit and start time, and an older branch still builds
+  there. On this tab a branch whose `linux-build.yml` predates the inputs fails its Linux dispatch (one cut before
+  8 Nov has no Windows workflow either).
 - Physical acceptance (installing and running the products) is still the operator's.

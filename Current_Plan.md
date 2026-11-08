@@ -195,16 +195,26 @@ after the operator's yes on a question card; agents never run load (invisible ch
      a session whose steps keep failing fails closed into the recovery, the supervisor reaches the display manager
      before the Visualizer is admitted, `--usage` labels the worker's CPU/RSS/threads, and every build family
      compiles the worker's package. Checkpoint audit 10's findings are fixed (8 Nov): every worker role (image workers
-     included) skips `main.py`'s application imports, so a spawn from the production entry is ready in 0.29 s with
-     32 MB RSS (was 1.6 s / 112 MB, Qt GUI stack loaded). 5.3's rest built 8 Nov: on the worker, a capture that publishes nothing for 180
+     included) skips `main.py`'s application imports, so an idle, unconfigured spawn from the production entry is
+     ready in 0.29 s with 32 MB RSS (was 1.6 s / 112 MB, Qt GUI stack loaded); in use the engine worker saves about
+     0.7 s to its first configure (about 0.6 s of the imports moved into it: 1.69-1.72 s against 1.03-1.16 s) and
+     about 40 MB in a session, while the image workers keep nearly all of it (their first Qt-path decode adds QtCore
+     and QtGui, ~0.1 s / ~12 MB). Checkpoint audit 11's findings are fixed (8 Nov): at most three engine-worker
+     recoveries per run, then in process for the run. 5.3's rest built 8 Nov: on the worker, a capture that publishes nothing for 180
      cadence steps (~2 s) while Media plays (a default-output switch the player follows, an unplugged or stale device)
      is reopened once on the current default output through the audio worker's own stale-capture restart; digital
      silence and a pause never count; a reopen that fails is a device failure, never a worker failure; the main log
-     shows the device state at the next edge's reply. Next: 6 (gate 3).
+     shows the device state at the next edge's reply (never a reopen after the session's last edge: the owner's
+     retire does not await `VIS_STOP`'s report). Next: 6 (gate 3).
      Operator checks for 6: a frozen build with `--viz-engine-worker` (the Visualizer on the worker), its cold
-     spawn against the first configure's 6 s bound, and the worker's RSS in `--usage`; the 5.3 device checks on a
-     real device (design doc, 5.3 record: default switch, a pinned player, a USB/Bluetooth unplug, the only output
-     unplugged, the in-process control). Open for 6: gate 4's open/close and switch counts.
+     spawn timed as ready plus the first configure against its 6 s bound, and the worker's RSS in `--usage` inside a
+     session; the 5.3 device checks on a real device (design doc, 5.3 record: default switch, a pinned player, a
+     USB/Bluetooth unplug, the only output unplugged, the in-process control, Media playing with nothing rendered
+     here (Spotify Connect or casting, a player pinned elsewhere from the start, network buffering: one PortAudio
+     re-init per silent run and per capture edge), and a second app on the old default hiding a switch). Known
+     limit: a reopen's cost on a real device is unmeasured (whether PyAudioWPatch holds the GIL in
+     `Pa_Terminate`/`Pa_Initialize`); time it in the worker with the cadence's step dt across it. Open for 6: gate 4's
+     open/close and switch counts.
      Open (5.3, in-process parity; operator's call, after the 5.3 device checks): in process, a mid-song default-output
      switch, an unplugged device or a stale stream leaves the Visualizer at rest until Media's next pause and play,
      display park or an activation (the loopback stays on the dead endpoint). The worker's delivery watch
@@ -254,7 +264,9 @@ answers.
   Runner CLI on e9bbd7a4: both remote builds downloaded, validated (manifest + PE version) and published, and both
   installers compiled locally (`release/installers/Setup_SRPSS.exe`, `Setup_SRPSS_Media_Center.exe`). The run before
   it showed the installer gate refusing a Standard installer whose presets had changed after the remote build.
-  Open: the operator installing a remote-built product.
+  Open: the operator installing a remote-built product. Since checkpoint audit 11 (8 Nov) the tab's Linux job runs
+  beside the Windows runs on its own process owner (never holding their retrieval) and a stop cancels its run even
+  before it was followed; tested with fakes only, so the next Remote run with Linux selected is its first real one.
 - **Read:** Bubble / Extruded Bubble "terrible performance" (6 Nov log 10:32-10:35) was our load (97-100% system CPU
   from the agents' game60 checks), not the product: on the quiet machine Bubble P1 ran 65.9 fps, tick 1.47 ms, GIL
   0.13, 3.9% late; Extruded Bubble 45-69 fps (`.artifacts/evidence/performance/live_check/20261106_live/`). Heavy load-generator runs are

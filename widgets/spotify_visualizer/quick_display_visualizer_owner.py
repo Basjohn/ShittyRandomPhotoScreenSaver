@@ -13,7 +13,9 @@ once per construction, default OFF), the owner runs its Visualizer on the engine
 ``WorkerType.VISUALIZER`` session, and the worker's frames reach the same presentation path through the controller's
 logical mailbox (the session's frame mapping, read side). A worker that fails to configure or start leaves that
 activation in process; a session that ends later is replaced once (the held frame fades out, the new session fades
-in), and a second failure keeps the owner in process for the run. Off, every edge runs in process exactly as before.
+in), and a second failure before that replacement is revealed, or a failure once the run's recoveries are spent
+(``engine_worker_link.MAX_RECOVERIES_PER_RUN``), keeps the owner in process for the run. Off, every edge runs in process
+exactly as before.
 """
 
 from __future__ import annotations
@@ -1328,7 +1330,9 @@ class QuickDisplayVisualizerOwner:
                     # faded in): it proved itself, so the two-strike rule starts again (checkpoint audit 10, A10-L4). A
                     # second strike is now a failure before a recovery completes; an isolated failure hours later (a
                     # fail-closed run of failed steps during a device change, a crash) recovers again instead of
-                    # leaving the worker for the run. A recovery revealed after the fallback (stage 2) runs in process.
+                    # leaving the worker for the run, up to the run's recovery limit (A11-M1: each recovery takes one
+                    # of ``engine_worker_link.MAX_RECOVERIES_PER_RUN``, so a failure that recurs after every reveal
+                    # ends in process). A recovery revealed after the fallback (stage 2) runs in process.
                     logger.info("[SPOTIFY_VIS][ENGINE_WORKER] Recovery completed; the failure count starts again "
                                 "mode=%s", self._controller.mode_id)
                     self._worker_failures = 0
@@ -2087,8 +2091,9 @@ class QuickDisplayVisualizerOwner:
         correlation: the supervisor's heartbeat restarted a hung worker). The last presented frame is held and fades
         out (never vanishes) while the replacement comes up: the first failure reconfigures the worker once, a second
         before that recovery's reveal completed keeps this owner in process for the run (a completed reveal starts the
-        count again: A10-L4). Never waits on the worker (the old session's stop and the replacement's configure are
-        sent); bounded by the recovery deadline (``_on_recovery_deadline``)."""
+        count again: A10-L4), and so does a failure once the run's recoveries are spent
+        (``engine_worker_link.MAX_RECOVERIES_PER_RUN``, A11-M1). Never waits on the worker (the old session's stop and
+        the replacement's configure are sent); bounded by the recovery deadline (``_on_recovery_deadline``)."""
         if self._retired or self._worker is None:
             return
         from widgets.spotify_visualizer import engine_worker_link as link_module
@@ -2104,6 +2109,12 @@ class QuickDisplayVisualizerOwner:
             # The request never committed: the outgoing activation is the one replaced.
             self._pending_mode_activation = None
         if self._worker_failures == 1 and not link_module.worker_disabled_for_run():
+            if not link_module.claim_recovery_for_run():
+                # The run's recoveries are spent (A11-M1): a failure that recurs after every completed reveal would
+                # otherwise fade out, rebuild and fade in for the whole run.
+                self._fall_back_in_process(
+                    f"recovery limit ({link_module.MAX_RECOVERIES_PER_RUN} recoveries this run): {reason}")
+                return
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Session failed (%s); reconfiguring once mode=%s",
                            reason, self._controller.mode_id)
             try:

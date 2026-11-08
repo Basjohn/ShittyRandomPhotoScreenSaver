@@ -61,6 +61,31 @@ def test_comments_with_quotes_never_shift_the_extraction(tmp_path) -> None:
         "--include-data-dir=presets=presets", "--include-package=sounddevice", "--include-data-files=a#b=a#b"]
 
 
+def test_powershell_escapes_and_here_strings_are_read_as_powershell_reads_them() -> None:
+    # Checkpoint audit 11, A11-L8: the stripper paired quotes and cut at any "#" outside them, so it passed today's
+    # scripts only by parity. A backtick-escaped quote, a "<# #>" inside a string and a here-string's own text are now
+    # read as PowerShell reads them: nothing inside a string is a comment, every real comment goes. Negative control
+    # (the toggle-per-quote stripper): six of the twelve lines misread (the escaped quote's string, the escaped "#",
+    # both here-strings' text and the string holding "<# #>" cut; the comment after a here-string's closer kept).
+    source = [
+        ("$a = \"x `\" # in the string\"  # a comment, isn't it", "$a = \"x `\" # in the string\"  "),
+        ("$b = 'it''s # in the string'  # a comment", "$b = 'it''s # in the string'  "),
+        ("$c = \"say \"\"hi\"\" # in\" # a comment", "$c = \"say \"\"hi\"\" # in\" "),
+        ("$d = `#not-a-comment", "$d = `#not-a-comment"),
+        ("$e = @'", "$e = @'"),
+        ("  # the here-string's own text, isn't it", "  # the here-string's own text, isn't it"),
+        ("'@  # a comment after the closer", "'@  "),
+        ("$f = @\"", "$f = @\""),
+        ("  \"quoted\" # the here-string's text", "  \"quoted\" # the here-string's text"),
+        ("\"@", "\"@"),
+        ("<# a block \"comment\" #> $g = 'after the block'  # gone", " $g = 'after the block'  "),
+        ("$h = \"<# not a block #>\"", "$h = \"<# not a block #>\""),
+    ]
+    text = "\n".join(line for line, _expected in source) + "\n"
+    stripped = linux_build._strip_ps1_comments(text).split("\n")
+    assert stripped[:len(source)] == [expected for _line, expected in source]
+
+
 def test_qt_size_exclusions_translate_to_shared_objects() -> None:
     arguments = linux_build.qt_prune_arguments()
     assert "--noinclude-data-files=PySide6/qml/QtWebEngine/**" in arguments

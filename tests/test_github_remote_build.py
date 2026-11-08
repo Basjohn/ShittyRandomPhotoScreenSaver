@@ -12,6 +12,8 @@ import queue
 import re
 import shutil
 import subprocess
+import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -509,40 +511,165 @@ def test_the_linux_build_runs_on_the_pinned_commit_while_github_builds(monkeypat
     assert build_runner._job_arguments(by_key["linux"], build_runner.PreflightResult()) == []
     assert build_runner._job_arguments(by_key["reddit_helper"], preflight) == []
 
-    order = []
 
-    def run_remote(_root, _cli, keys, _commit, _token, *, emit, between, **_kwargs):
-        order.append(("dispatch", tuple(keys)))
-        between()
-        order.append(("follow", tuple(keys)))
-        for key in keys:
-            emit("done", key, _ok(key))
-        return {key: _ok(key) for key in keys}
+def _drain(app) -> list:
+    events = []
+    while not app._events.empty():
+        events.append(app._events.get())
+    return events
 
-    def run_job(job, _preflight, *, process_owner):
-        order.append(("local", job.key))
-        return build_runner.JobResult(0, "Completed", Path("log"), job.output_dir)
 
+def _local_pipeline_fakes(monkeypatch, run_remote, run_job):
     monkeypatch.setattr(remote, "run_remote_builds", run_remote)
     monkeypatch.setattr(build_runner, "run_job", run_job)
     monkeypatch.setattr(build_runner, "record_helper_build", lambda *_a, **_k: True)
     monkeypatch.setattr(build_runner, "helper_build_status", lambda *_a, **_k: SimpleNamespace(
         needs_rebuild=False, reason="ok", fingerprint="f"))
+    monkeypatch.setattr(build_runner, "github_installer_refusal", lambda *_a, **_k: None)
+
+
+def test_the_linux_build_runs_beside_the_windows_runs_and_never_holds_their_retrieval(monkeypatch, tmp_path):
+    # Checkpoint audit 11, A11-L2: the Linux job follows its own GitHub run for 30-60 min. It starts first, on its
+    # own thread and process owner (dispatched before the Reddit Helper's local build), and the Windows runs are
+    # retrieved, validated and published and their installer compiled while it still runs; the pipeline reports done
+    # only after it. Negative control (the job inside ``between``): it starts after the helper and holds the
+    # retrieval until it ends.
+    jobs = build_runner.jobs_for_mode("github", tmp_path)
+    preflight = build_runner.PreflightResult(remote_commit=remote.PushedCommit("main", "c" * 40, "x", "c" * 40))
+    pipeline_owner = build_runner.BuildProcessOwner()
+    order, owners = [], {}
+    lock = threading.Lock()
+    linux_running, installer_compiled = threading.Event(), threading.Event()
+
+    def note(entry):
+        with lock:
+            order.append(entry)
+
+    def run_remote(_root, _cli, keys, _commit, _token, *, emit, between, **_kwargs):
+        note(("dispatch", tuple(keys)))
+        between()
+        for key in keys:
+            emit("done", key, _ok(key))            # retrieved, validated and published
+        note(("published", tuple(keys)))
+        return {key: _ok(key) for key in keys}
+
+    def run_job(job, _preflight, *, process_owner):
+        owners[job.key] = process_owner
+        if job.key == "linux":
+            note(("linux", "running"))
+            linux_running.set()
+            # Following its run: it ends after the Windows side is wholly done (bounded for the negative control).
+            note(("linux", "done" if installer_compiled.wait(5.0) else "held the Windows side"))
+        elif job.key == "reddit_helper":
+            note(("local", job.key, "Linux already running" if linux_running.wait(5.0) else "Linux not started"))
+        else:
+            note(("local", job.key))
+            installer_compiled.set()
+        return build_runner.JobResult(0, "Completed", Path("log"), job.output_dir)
+
+    _local_pipeline_fakes(monkeypatch, run_remote, run_job)
     app = SimpleNamespace(_events=queue.Queue())
     build_runner.BuildRunnerApp._github_pipeline_worker(
-        app, jobs, {"standard", "reddit_helper", "linux"}, preflight, build_runner.BuildProcessOwner())
-    assert order == [("dispatch", ("standard",)), ("local", "reddit_helper"), ("local", "linux"),
-                     ("follow", ("standard",))]
-    events = []
-    while not app._events.empty():
-        events.append(app._events.get())
-    assert events[-1][0] == "pipeline_done" and events[-1][1] is True
+        app, jobs, {"standard", "media_center", "reddit_helper", "media_center_installer", "linux"}, preflight,
+        pipeline_owner)
+    assert order.index(("linux", "running")) < order.index(("local", "reddit_helper", "Linux already running"))
+    assert [entry for entry in order if entry != ("linux", "running")] == [
+        ("dispatch", ("standard", "media_center")), ("local", "reddit_helper", "Linux already running"),
+        ("published", ("standard", "media_center")), ("local", "media_center_installer"), ("linux", "done")]
+    assert owners["reddit_helper"] is pipeline_owner and owners["linux"] is not pipeline_owner
+    events = _drain(app)
+    assert ("job_done", "linux") in [event[:2] for event in events]
+    assert events[-1][0] == "pipeline_done" and events[-1][1] is True                # after the Linux job's done
 
-    # Linux alone (no Windows product selected): it still runs.
+    # Linux alone (no Windows product selected): it still runs, and the pipeline waits for it.
     order.clear()
+    installer_compiled.set()
+    app = SimpleNamespace(_events=queue.Queue())
+    build_runner.BuildRunnerApp._github_pipeline_worker(app, jobs, {"linux"}, preflight,
+                                                        build_runner.BuildProcessOwner())
+    assert order == [("linux", "running"), ("linux", "done")]
+    assert _drain(app)[-1][:2] == ("pipeline_done", True)
+
+
+class _HeldProcess:
+    """A build process (test launch seam) that runs until its Job is terminated."""
+
+    def __init__(self) -> None:
+        self.pid = 4242
+        self.returncode = None
+        self.ended = threading.Event()
+
+    def wait(self, timeout=None):
+        self.returncode = 1 if self.ended.wait(5.0) else 0      # bounded: an unstopped one "completes" in 5 s
+        return self.returncode
+
+    def kill(self) -> None:
+        self.ended.set()
+
+
+class _HeldJob:
+    def assign(self, process) -> None:
+        self.process = process
+
+    def terminate(self) -> None:
+        self.process.ended.set()
+
+    def close(self) -> None:
+        return None
+
+
+def test_a_stop_ends_the_linux_build_and_the_windows_runs_and_compiles_no_installer(monkeypatch, tmp_path):
+    # A11-L2: one Emergency Stop (the pipeline owner's cancel) reaches the Linux job's own owner, so its worker is
+    # ended (``run_job`` then cancels its GitHub run, ``_stop_linux_github_run``), the Windows side sees the stop
+    # (``run_remote_builds`` cancels its runs on GitHub), nothing local starts after it, and the pipeline reports done
+    # only after the Linux job ended. Negative control (an unlinked Linux owner): the Linux worker runs on.
+    jobs = build_runner.jobs_for_mode("github", tmp_path)
+    preflight = build_runner.PreflightResult(remote_commit=remote.PushedCommit("main", "c" * 40, "x", "c" * 40))
+    owner = build_runner.BuildProcessOwner(popen_factory=lambda *_a, **_k: _HeldProcess(), windows=True,
+                                           job_factory=_HeldJob, resume_windows_process=lambda _pid: None)
+    order = []
+    lock = threading.Lock()
+    linux_running = threading.Event()
+
+    def note(entry):
+        with lock:
+            order.append(entry)
+
+    def run_remote(_root, _cli, keys, _commit, _token, *, emit, between, cancelled, **_kwargs):
+        note(("dispatch", tuple(keys)))
+        assert linux_running.wait(5.0)
+        owner.cancel()                               # the operator's Emergency Stop (the window's thread)
+        between()
+        assert cancelled()
+        note(("windows runs cancelled on GitHub", tuple(keys)))
+        results = {key: remote.RemoteResult(key, 130, "Aborted", Path("l"), Path("o"), aborted=True) for key in keys}
+        for key in keys:
+            emit("done", key, results[key])
+        return results
+
+    def run_job(job, _preflight, *, process_owner):
+        if job.key != "linux":
+            note(("local", job.key))
+            return build_runner.JobResult(0, "Completed", Path("log"), job.output_dir)
+        process = process_owner.start(["pwsh", "build_from_windows.ps1"])
+        linux_running.set()
+        process.wait()
+        aborted = process_owner.retire(process)
+        note(("linux", "ended by the stop" if aborted else "ran on"))
+        return build_runner.JobResult(130 if aborted else 0, "Aborted" if aborted else "Completed", Path("log"),
+                                      job.output_dir, aborted=aborted)
+
+    _local_pipeline_fakes(monkeypatch, run_remote, run_job)
+    app = SimpleNamespace(_events=queue.Queue())
     build_runner.BuildRunnerApp._github_pipeline_worker(
-        SimpleNamespace(_events=queue.Queue()), jobs, {"linux"}, preflight, build_runner.BuildProcessOwner())
-    assert order == [("local", "linux")]
+        app, jobs, {"standard", "reddit_helper", "standard_installer", "linux"}, preflight, owner)
+    assert sorted(order) == sorted([("dispatch", ("standard",)), ("windows runs cancelled on GitHub", ("standard",)),
+                                    ("linux", "ended by the stop")])
+    events = _drain(app)
+    assert ("job_cancelled", "standard_installer") in events
+    linux_done = [index for index, event in enumerate(events) if event[:2] == ("job_done", "linux")]
+    assert linux_done and events[linux_done[0]][2].aborted
+    assert events[-1][0] == "pipeline_done" and events[-1][3] is True and linux_done[0] < len(events) - 1
 
 
 def test_a_stopped_linux_job_cancels_its_github_run_and_tag(monkeypatch, tmp_path):
@@ -550,9 +677,12 @@ def test_a_stopped_linux_job_cancels_its_github_run_and_tag(monkeypatch, tmp_pat
     log.write_text("[LINUX-BUILD] Pushing temporary tag linux-build/20261108-120000 at origin/main (abc)\n"
                    "[LINUX-BUILD] Following run 4242 (typically 30-60 minutes; ...)\n", encoding="utf-8")
     calls = []
+    listed = {"value": "[]"}
 
     def fake_run(args, **_kwargs):
         calls.append(list(args))
+        if args[:3] == ["gh", "run", "list"]:
+            return subprocess.CompletedProcess(args, 0, listed["value"], "")
         return subprocess.CompletedProcess(args, 0 if args[0] == "gh" else 1, "", "")
 
     monkeypatch.setattr(build_runner.subprocess, "run", fake_run)
@@ -560,10 +690,85 @@ def test_a_stopped_linux_job_cancels_its_github_run_and_tag(monkeypatch, tmp_pat
     assert calls == [["gh", "run", "cancel", "4242"],
                      ["git", "push", "origin", ":refs/tags/linux-build/20261108-120000"]]
     assert "GitHub run 4242 cancelled" in note and "cleanup failed" in note
-    # A worker stopped before its run appeared leaves nothing to cancel.
+    # A worker stopped before it dispatched or pushed anything leaves nothing to cancel.
     (tmp_path / "early.log").write_text("[LINUX-BUILD] Dispatching linux-build.yml\n", encoding="utf-8")
     calls.clear()
     assert build_runner._stop_linux_github_run(tmp_path / "early.log") == "" and calls == []
+
+
+def test_a_linux_job_stopped_before_it_followed_its_run_still_cancels_it(monkeypatch, tmp_path):
+    # Checkpoint audit 11, A11-L4: a stop during the dispatch or the run lookup (up to 120 s) found no "Following run"
+    # line and left a 30-60 min Ubuntu run going; a Tag build's tag was deleted but its push run went on. The run is
+    # now found as the script finds it: by the logged run token in the display title (the Remote tab), as the newest
+    # unfinished dispatch of the logged commit since the job started (the other tabs), or as the tag's push run.
+    # Negative control (the pre-fix reader: only "Following run" and the tag): none of these runs is cancelled.
+    sha = "a" * 40
+    calls, listed = [], {}
+
+    def fake_run(args, **_kwargs):
+        calls.append(list(args))
+        if args[:3] == ["gh", "run", "list"]:
+            return subprocess.CompletedProcess(args, 0, json.dumps(listed["runs"]), "")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(build_runner.subprocess, "run", fake_run)
+    cancels = lambda: [args[3] for args in calls if args[:3] == ["gh", "run", "cancel"]]   # noqa: E731
+
+    log = tmp_path / "token.log"
+    log.write_text(f"[LINUX-BUILD] Dispatching linux-build.yml on main at {sha} (run token srpss-20261108-120000-123)\n"
+                   "[LINUX-BUILD] Waiting for the run to appear...\n", encoding="utf-8")
+    listed["runs"] = [{"databaseId": 7, "displayTitle": "Linux build srpss-20261108-115900-001"},
+                      {"databaseId": 8, "displayTitle": "Linux build srpss-20261108-120000-123"}]
+    note = build_runner._stop_linux_github_run(log)
+    assert cancels() == ["8"] and "GitHub run 8 cancelled" in note
+    listed["runs"] = []
+    calls.clear()
+    note = build_runner._stop_linux_github_run(log)
+    assert cancels() == [] and "not found to cancel" in note                        # said, never silent
+
+    started = datetime(2026, 11, 8, 12, 0, 0)
+    log = tmp_path / "plain.log"
+    log.write_text(f"Started: {started.isoformat(timespec='seconds')}\n{'=' * 72}\n"
+                   f"[LINUX-BUILD] Dispatching linux-build.yml on main at {sha}\n", encoding="utf-8")
+    utc = started.astimezone(timezone.utc)
+    listed["runs"] = [
+        {"databaseId": 20, "createdAt": (utc - timedelta(hours=1)).isoformat(), "status": "in_progress"},  # older
+        {"databaseId": 21, "createdAt": (utc + timedelta(seconds=9)).isoformat(), "status": "completed"},
+        {"databaseId": 22, "createdAt": (utc + timedelta(seconds=8)).isoformat(), "status": "queued"},
+    ]
+    calls.clear()
+    assert "GitHub run 22 cancelled" in build_runner._stop_linux_github_run(log) and cancels() == ["22"]
+    assert ["--commit", sha] == next(args for args in calls if args[:3] == ["gh", "run", "list"])[7:9]
+
+    log = tmp_path / "tag.log"
+    log.write_text(f"[LINUX-BUILD] Pushing temporary tag linux-build/20261108-120000 at origin/main ({sha})\n",
+                   encoding="utf-8")
+    listed["runs"] = [{"databaseId": 5, "headBranch": "linux-build/20261108-115900"},
+                      {"databaseId": 6, "headBranch": "linux-build/20261108-120000"}]
+    calls.clear()
+    note = build_runner._stop_linux_github_run(log)
+    assert cancels() == ["6"] and calls[-1] == ["git", "push", "origin", ":refs/tags/linux-build/20261108-120000"]
+    assert "GitHub run 6 cancelled" in note and "deleted" in note
+
+
+def test_the_linux_dispatch_sends_inputs_only_for_a_pinned_commit():
+    # Checkpoint audit 11, A11-L3: GitHub refuses a dispatch with inputs the ref's linux-build.yml does not declare
+    # (HTTP 422), so only the Remote tab's -Commit dispatch sends commit/token (and finds its run by the token); the
+    # other tabs' dispatch sends none and finds its run by commit and start time, as before fa62ef14. Negative
+    # control (the fa62ef14 script): one dispatch form, always with the inputs.
+    text = (ROOT / "scripts" / "linux" / "build_from_windows.ps1").read_text(encoding="utf-8")
+    dispatch = text[text.index("if ($Mode -eq 'Dispatch') {"):text.index("$runEvent = 'workflow_dispatch'")]
+    pinned, separator, plain = dispatch.partition("} else {")
+    assert separator and "if ($Commit) {" in pinned
+    calls = re.findall(r"Invoke-Checked gh @\('workflow', 'run'[^)]*\)", dispatch)
+    assert len(calls) == 2
+    assert "commit=$remoteSha" in pinned and "token=$token" in pinned and "$token = " in pinned
+    assert "'workflow', 'run', $Workflow, '--ref', $Branch)" in plain and "-f" not in plain and "$token" not in plain
+    assert text.count("$token = 'srpss-") == 1
+    lookup = text[text.index("for ($attempt"):text.index("if (-not $runId)")]
+    by_token, separator, by_time = lookup.partition("} else {")
+    assert separator and "if ($token)" in by_token and "displayTitle" in by_token
+    assert "'--commit', $remoteSha" in by_time and "createdAt" in by_time
 
 
 def test_preflight_names_the_pushed_commit_and_warns_about_local_differences(monkeypatch):

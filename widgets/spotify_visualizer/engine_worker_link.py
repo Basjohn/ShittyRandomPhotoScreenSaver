@@ -50,7 +50,8 @@ What the link owns, once:
   reopens in later replies; the link logs the device state when a reply changes it (the worker logs nowhere the main
   log can see).
 - **The run's failure record** (``worker_disabled_for_run``): after a session failed twice for an owner (the reconfigure
-  included), the engine worker stays off for the rest of the run, and every later owner runs in process.
+  included), or failed once more after the run's ``MAX_RECOVERIES_PER_RUN`` recoveries (``claim_recovery_for_run``,
+  A11-M1), the engine worker stays off for the rest of the run, and every later owner runs in process.
 
 Tests never open a device: ``recorded_capture_for_testing`` (a test-only control) adds a recorded-PCM source and its
 cadence to every configure the link sends, and the session refuses the device for its life. ``stop`` and
@@ -103,14 +104,35 @@ def next_label_namespace() -> int:
     return value
 
 
+#: The engine-worker recoveries one run allows (checkpoint audit 11, A11-M1). A recovery whose reveal completes starts
+#: the owner's two strikes again (A10-L4), so without a bound a failure that recurs some time after every reveal (a
+#: mode that fails once its history fills, a fault at a fixed point in a song, a device path that fails closed at each
+#: reopen) would fade out, rebuild a session and fade in for the whole run. A count, not a span: a failure minutes after
+#: each reveal outlives any "ran long enough" threshold, and a count needs no timer. Three: an isolated failure (a
+#: device change, a crash) still recovers on the worker a few times in a run; past that the worker path has shown it is
+#: not healthy for this run and the in-process path (the default, the known-good one) takes over.
+MAX_RECOVERIES_PER_RUN = 3
+
 _run_lock = threading.Lock()
 _run_disabled_reason: str | None = None
+_run_recoveries = 0
 
 
 def worker_disabled_for_run() -> bool:
     """Whether a second failure turned the engine worker off for the rest of the run."""
     with _run_lock:
         return _run_disabled_reason is not None
+
+
+def claim_recovery_for_run() -> bool:
+    """Take one of the run's ``MAX_RECOVERIES_PER_RUN`` recoveries; False once they are spent (the caller then leaves
+    the worker for the run)."""
+    global _run_recoveries
+    with _run_lock:
+        if _run_recoveries >= MAX_RECOVERIES_PER_RUN:
+            return False
+        _run_recoveries += 1
+        return True
 
 
 def disable_worker_for_run(reason: str) -> bool:
@@ -124,10 +146,11 @@ def disable_worker_for_run(reason: str) -> bool:
 
 
 def reset_run_state_for_testing() -> None:
-    """Tests only: forget the run's failure record."""
-    global _run_disabled_reason
+    """Tests only: forget the run's failure record and its recoveries."""
+    global _run_disabled_reason, _run_recoveries
     with _run_lock:
         _run_disabled_reason = None
+        _run_recoveries = 0
     from widgets.spotify_visualizer import engine_worker_lifetime
 
     engine_worker_lifetime.reset_for_testing()
@@ -402,18 +425,30 @@ class EngineWorkerLink:
         reply = response.payload or {}
         if "bar_count" in reply:
             self.bar_count = int(reply["bar_count"])     # the session's bar count (its mode's technical config)
-        if "capture_failed" in reply:
-            self._note_device_report(reply)
+        self._note_device_state_in(reply)
         if on_reply is not None:
             on_reply(reply)
+
+    def _note_device_state_in(self, reply: Mapping[str, Any]) -> None:
+        """Log the device state wherever the reply carries it (checkpoint audit 11, A11-L5): an edge's reply at its top
+        level, ``VIS_STOP``'s report under ``report["engine"]`` (``EngineSession.finish``). The owner's ``retire``
+        never receives the stop's reply (sent, never awaited, and the link closes at once), so only a stop that waits
+        for its report (``stop``: tests and tools) reaches this with it."""
+        if "capture_failed" in reply:
+            self._note_device_report(reply)
+            return
+        report = reply.get("report")
+        engine = report.get("engine") if isinstance(report, Mapping) else None
+        if isinstance(engine, Mapping) and "capture_failed" in engine:
+            self._note_device_report(engine)
 
     def _note_device_report(self, reply: Mapping[str, Any]) -> None:
         """The session's device state as a reply carries it (``EngineSession.device_report``, work order 5 slice 5.3),
         logged here when it changed: the worker process's own log lines never reach the main log, so this is where a
         device that did not open, the session's reopen of a device that stopped delivering, and the device delivering
-        again become visible (at the reply of the next edge after them, and in ``VIS_STOP``'s report). The owner does
-        nothing else with it: a device problem is never the session's end (as in process, the Visualizer shows the
-        engine's idle frames until audio comes back)."""
+        again become visible (at the reply of the next edge after them; ``VIS_STOP``'s report only when the stop is
+        awaited, ``_note_device_state_in``). The owner does nothing else with it: a device problem is never the
+        session's end (as in process, the Visualizer shows the engine's idle frames until audio comes back)."""
         failed = bool(reply["capture_failed"])
         reopens = int(reply.get("capture_reopens", self.capture_reopens))
         resumed = int(reply.get("capture_resumed", self.capture_resumed))
@@ -623,6 +658,7 @@ class EngineWorkerLink:
         except EngineWorkerFailure as exc:
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Stop: %s", exc)
             return None
+        self._note_device_state_in(response.payload or {})     # a reopen after the last edge (A11-L5)
         return (response.payload or {}).get("report")
 
     def retire(self) -> None:
@@ -728,8 +764,10 @@ def configure_presentation_side(
 
 __all__ = [
     "ACTIVATION_KEYS",
+    "MAX_RECOVERIES_PER_RUN",
     "EngineWorkerFailure",
     "EngineWorkerLink",
+    "claim_recovery_for_run",
     "configure_presentation_side",
     "disable_worker_for_run",
     "next_label_namespace",

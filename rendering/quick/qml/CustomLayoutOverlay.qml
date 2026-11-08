@@ -323,14 +323,18 @@ Item {
             // No saved geometry, authored rails, paint or Settings value changes.
             property bool childEditingLocked: true
             function toggleChildEditLock() {
-                if (!childEditingLocked && customLayoutOverlay.sessionModel)
+                const opening = childEditingLocked
+                if (!opening && customLayoutOverlay.sessionModel)
                     customLayoutOverlay.sessionModel.cancelChildGesture(index)
                 // Only the selected parent loads its child layer, but the lock
-                // glyph is hover-revealed on every child-capable frame. A lock
-                // click on an unselected frame therefore selects that parent
-                // first, as pressing the parent does; otherwise the opened
-                // children have no layer until the parent is edited.
-                if (!selectedForChildEdit && customLayoutOverlay.sessionModel)
+                // glyph is hover-revealed on every child-capable frame. A click
+                // that opens the lock on an unselected frame therefore selects
+                // that parent first, as pressing the parent does; otherwise the
+                // opened children have no layer until the parent is edited. A
+                // click that closes it only locks: selecting there would move the
+                // selection and cancel the selected frame's held child gesture
+                // (checkpoint audit 11, A11-L7).
+                if (opening && !selectedForChildEdit && customLayoutOverlay.sessionModel)
                     customLayoutOverlay.sessionModel.selectItem(index)
                 childEditingLocked = !childEditingLocked
             }
