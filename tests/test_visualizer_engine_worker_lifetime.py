@@ -487,7 +487,8 @@ def test_a_retirement_task_that_finds_a_new_lease_leaves_the_worker_and_a_start_
 @pytest.mark.parametrize("pre_fix", (False, True))
 def test_a_stale_spawn_task_never_touches_a_later_links_worker(qt_app, monkeypatch, pre_fix):
     # Checkpoint audit 9, A9-L2: the first configure's deadline retired a link while its spawn task was still queued
-    # (the IO pool has two threads); a later link has started a fresh worker meanwhile. The stale task stops nothing
+    # (the engine's IO pool has four threads, not two as audit 9 said: audit 10); a later link has started a fresh
+    # worker meanwhile, on another IO thread. The stale task stops nothing
     # and starts nothing. Negative control (the pre-5.7 task: stop, then start, unconditionally): the later link's
     # worker is stopped.
     from widgets.spotify_visualizer.engine_worker_link import ACTIVATION_KEYS, EngineWorkerLink

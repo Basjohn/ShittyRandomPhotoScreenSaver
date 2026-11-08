@@ -1154,12 +1154,30 @@ High-value permanent guards include:
   engine's reload hold (CUSTOM commit and monitor topology hold, Settings and the exit never; nothing off the
   admission); the supervisor wired before the displays admit the Visualizer; the first configure's deadline inert on a
   half-retired owner (the pre-fix fence falls back and starts a runtime); and, on a real worker process with the REAL
-  owner, the worker spawned by its first owner and retired (the process reaped) with its last.
+  owner, the worker spawned by its first owner and retired (the process reaped) with its last. Checkpoint audit 10
+  adds, each with its negative control: a retire whose logical join fails or raises still sends the session's
+  `VIS_STOP` and releases its lease, and a link close whose mailbox or `deleteLater` raises still releases it (A10-L1;
+  the old order leaves `leases == 1`); the heartbeat restarts a dead `IMAGE` / `IMAGE_PREFETCH` worker once after its
+  backoff, and a judged image worker a foreground start replaced while the restart waited for the lifecycle lock is
+  left alone and costs no restart (A10-L3; the old restart charged one); and an engine-level CUSTOM reload (the real
+  `engine_lifecycle.stop`, teardown, destruction barrier, `_construct_and_start_replacement_runtime` and
+  `_initialize_display`, a display-manager stand-in that admits the REAL owner through the host binding) where the
+  replacement's owner adopts the held worker: no stop, no start, one lease (A10-L5; configured on a later turn the
+  worker is retired and started again).
   `tests/test_visualizer_engine_frozen_spawn.py`: the worker factory pickles by name, and a spawn from a parent whose
   `__main__` is `main.py` (the child runs `main.py`'s module level first, as the Nuitka child runs it as
-  `__parents_main__`) reaches `visualizer_worker_main`'s message loop (the frozen run itself is the operator's).
+  `__parents_main__`) reaches `visualizer_worker_main`'s message loop with no QtGui, QtWidgets, QtQuick or QtQml
+  loaded (by `sys.modules` and by the child's mapped Qt DLLs); an image worker spawned from `main.py` or `main_mc.py`
+  maps no Qt GUI DLL; the entry modules executed as `__parents_main__` import no Qt, engine or Settings, and under any
+  other name import all of it (checkpoint audit 10, A10-M1; the pre-fix `main.py` fails 5; the frozen run itself is
+  the operator's).
   `tests/test_usage_sampler.py` also pins the engine worker's labelled `--usage` breakdown (from the sample's own
-  per-process pass; a topology refresh only when a named child is new);
+  per-process pass; a topology refresh only when a named child is new, once per distinct PID even when the refresh
+  cannot find it, forgotten once no longer named; a process the sample's own refresh added reports `na` CPU and stays
+  out of `cpu_app_pct`: A10-L2, the pre-fix collector refreshed on every sample and counted a 5000 % figure);
+  `tests/test_visualizer_owner_engine_worker.py`'s lost-session test also holds A10-L4: a recovery whose reveal
+  completed starts the failure count again (a later loss recovers), and a loss before a recovery's reveal is the
+  second strike (in process for the run, reason "second failure"); without the reset the count stays 1;
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 
 The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.

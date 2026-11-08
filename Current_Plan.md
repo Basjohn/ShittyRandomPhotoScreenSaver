@@ -194,10 +194,17 @@ after the operator's yes on a question card; agents never run load (invisible ch
      it; parked it costs ~0 CPU), the link is the role's one starter (the heartbeat only retires, fenced by identity),
      a session whose steps keep failing fails closed into the recovery, the supervisor reaches the display manager
      before the Visualizer is admitted, `--usage` labels the worker's CPU/RSS/threads, and every build family
-     compiles the worker's package. Next: 5.3's rest (device changes), then 6 (gate 3). Operator checks for 6: a frozen
-     build with `--viz-engine-worker` (the Visualizer on the worker) and its cold spawn against the first configure's
-     6 s bound. Open for 6 (design doc, 5.7's "Left"): the production worker process runs `main.py`'s module level
-     before its target (QtGui/QtWidgets/QtQuick loaded in every worker role); gate 4's open/close and switch counts.
+     compiles the worker's package. Checkpoint audit 10's findings are fixed (8 Nov): every worker role (image workers
+     included) skips `main.py`'s application imports, so a spawn from the production entry is ready in 0.29 s with
+     32 MB RSS (was 1.6 s / 112 MB, Qt GUI stack loaded). Next: 5.3's rest (device changes), then 6 (gate 3).
+     Operator checks for 6: a frozen build with `--viz-engine-worker` (the Visualizer on the worker), its cold spawn
+     against the first configure's 6 s bound, and the worker's RSS in `--usage`. Open for 6: gate 4's open/close and
+     switch counts.
+     Side finding (audit 10 fixes): the negative-control half of
+     `test_visualizer_owner_engine_worker.py::test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`
+     (`run(False)`) failed once in a combined run of the four owner suites and passed alone and in its own file (not
+     investigated; probably a presentation landing during `rig.settle()` forwards the view through `_forward_view`
+     even with the metrics observer off). Make the control independent of presentation timing.
      General follow-up (checkpoint audit 9, A9-L3; not a P2b item): a reconstruction that never reveals reloads about
      every 6 s with no cap, and a refused reload leaves the owner `failed` at fade 0 with its runtime running (both as
      in process): decide a per-run reconstruction cap, or a `failed` owner that stops its runtime when its reload is

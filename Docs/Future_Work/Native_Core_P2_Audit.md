@@ -2037,3 +2037,73 @@ replacement's lease.**
   Visualizer. In that case the worker would be retired and respawned at every sleep and wake.
 - Whether `SharedMemory.close()` can actually raise in `PacketMailbox.close()`: that depends on whether a held
   publication keeps a view into the mapping. A10-L1 is filed by reading.
+
+### Audit 10 resolution (8 Nov)
+
+Each fix has a regression test that fails with the fix reverted (the source hunk restored from the audited commit
+and the test run; the failures are quoted in each commit message). Tests: `tests/test_visualizer_engine_frozen_spawn.py`
+(A10-M1), `tests/test_visualizer_engine_worker_lifetime.py` (A10-L1, L3, L5), `tests/test_usage_sampler.py` (A10-L2),
+`tests/test_visualizer_owner_engine_worker.py` (A10-L4).
+
+- **A10-M1** fixed by 22af1f00: `main.py` (and `main_mc.py`) skip their application imports while a worker process
+  re-executes them (`core.spawn_child.importing_parents_main`: the spawn name, a frozen `__parents_main__` being
+  imported, or multiprocessing's own inheriting marker). The parent runs the same module-level statements in the
+  same order. From a `main.py` parent, three runs each: the engine worker is ready in 0.29 s with 32 MB RSS / 19 MB
+  USS and no Qt module (was 1.62 s, 112 / 83 MB, the Qt GUI stack); an image worker the same (was 1.56 s, 112 / 83 MB);
+  a `main_mc.py` parent the same. Evidence and probe scripts:
+  `.artifacts/evidence/architecture/native_core_p2/20261108_audit10_spawn_cost/`. Tests: the production-entry spawn
+  loads no QtGui/QtWidgets/QtQuick/QtQml (engine worker by `sys.modules` and mapped DLLs, image worker from `main.py`
+  and `main_mc.py` by mapped DLLs), and the entry modules run as `__parents_main__` import no Qt, engine or Settings
+  (under any other name they import all of it). Reverted: 5 fail. No build change: imports in a module-level `if`
+  are still followed by Nuitka, and the frozen audit and closeout contracts pass. The frozen cold spawn stays the
+  operator's check.
+- **A10-L1** fixed by d0ddce94: `EngineWorkerLink.close()` takes the lease out first and releases it in a `finally`;
+  `QuickDisplayVisualizerOwner.retire()` retires the link (its `VIS_STOP` sent) and releases the frame completion
+  before the logical join. Tests: `test_a_link_close_that_raises_still_releases_its_lease` (mailbox and `deleteLater`
+  raising), `test_a_retire_whose_logical_join_fails_still_stops_the_session_and_releases_its_lease` (join fails or
+  raises); A9-L1's test follows the new order (its negative control now also puts the link back). Reverted: 6 fail.
+- **A10-L2** fixed by 04eab34d: `expect_pids` forces one refresh per distinct named PID and forgets a PID once it is
+  no longer named (the service tells it once); a process added by the sample's own refresh reports `na` CPU and stays
+  out of `cpu_app_pct`. The supervisor still names the PID from its state with no OS query. Tests: a dead named PID
+  refreshed once (six times before), the first CPU `na` then measured, a 5000 % first read left out, the service's
+  one forget call. Reverted: 4 fail.
+- **A10-L3** fixed by d9727528: `restart(judged=)` checks the identity, charges the budget and stops the judged process
+  under the role's lifecycle lock (`_restart_judged`); a skipped restart charges nothing. Tests:
+  `test_the_heartbeat_restarts_a_dead_image_worker_once_after_its_backoff` (IMAGE, IMAGE_PREFETCH),
+  `test_a_heartbeat_restart_of_an_image_worker_replaced_meanwhile_does_nothing_and_charges_nothing` (the foreground
+  start holds the lifecycle lock while the restart waits on it). Reverted: `restart_count` 1.
+- **A10-L4** fixed by 0e8967fd: a recovery whose replacement completes its reveal on the worker resets
+  `_worker_failures`; the second strike is now a failure before a recovery completed. Chosen over "do not count a
+  step-failure fail-close": that needs the reason sent over the pipe, and a deterministic step failure would then
+  reconfigure about every 0.7 s until the recovery deadline. The record's "as in process" is corrected (design doc,
+  5.7 "Session (3c)"). Test: the lost-session test (a later loss after a completed recovery recovers; a loss before
+  the replacement's reveal goes in process with reason "second failure"); the A7-L1 flash test reads the reset.
+  Reverted: 3 fail.
+- **A10-L5** tested by 071635e1: `test_a_custom_reload_hands_the_running_worker_to_the_replacements_owner` drives a real
+  `ScreensaverEngine` through the CUSTOM commit (real `engine_lifecycle.stop`, teardown, destruction barrier,
+  `_construct_and_start_replacement_runtime` and `_initialize_display`) to the replacement's REAL owner, admitted by
+  a display-manager stand-in's `initialize_displays` through the host binding: no stop, no start, one lease. Negative
+  controls: configured on a later turn, the worker is stopped and started again; and, run by hand, the stop without
+  its hold gives `['stop', 'start']`.
+- **Audit 9 correction:** the engine's IO pool has four workers (`ThreadManager`'s default `ThreadPoolType.IO: 4`),
+  not two: A9-L2's "two-worker IO pool" read `create_helper_manager`'s default. The A9-L2 fix does not depend on it
+  (the race needs only two IO threads; the stale task stops nothing). The lifetime test's comment is corrected.
+
+Off the admission (`--viz-engine-worker` off): the parent's startup imports run in the same order (one stdlib module,
+`core.spawn_child`, comes first); every worker process (the image workers) skips the application imports, from
+source or frozen; the image roles' heartbeat restart charges a restart only when it restarts; under `--usage` a newly
+added child's first CPU reads `na` and is left out of that sample's total. The owner's `retire()` order and the strike
+reset change nothing in process (no link, no frame completion, no worker).
+
+Focused runs after the fixes: the production path, the owner contract, edge, retirement, logical-ownership and
+five-owner-chain suites, `test_process_supervisor.py` and `_availability`, `test_engine_lifecycle.py`,
+`test_usage_sampler.py`, the lifetime and frozen-spawn files, the frozen-audit and closeout contracts,
+`test_visualizer_engine_worker.py`, `_import_weight`, the worker parent-death and optional-startup suites and the
+engine replacement suites (hang window, Settings round trips, S hotkey, runtime destruction, display power): 251
+passed, 3 skipped. `main.py`'s own and startup suites (exit-after, fatal backstop, fresh-start logging, diagnostic
+build, CLI admissions, the Reddit helper preload, Linux branches, run lifetime, Guided Setup, onboarding resume, the MC
+entry, frame trace, native thread pools, runtime purity, environment reads, the bootstrap order, defaults authority,
+expansion capability's import graph, GUI stall sampler, ownership trace, experiment flags, switch telemetry): 226
+passed, 7 skipped. The four owner-on-the-worker files: 77 passed and one failure of a pre-existing negative control
+(`test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`, its `run(False)` half) that passed alone
+and in its own file (26 passed); recorded in `Current_Plan.md` as a side finding.
