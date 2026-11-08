@@ -31,6 +31,8 @@ _REQUIRED_MODULES = frozenset({
     "engine.screensaver_engine",
     "engine.image_queue",
     "core.sources.image_bans",
+    # The engine worker's spawn target (native core P2b slice 5.7): imported by name in the frozen child.
+    "core.visualizer_engine.engine_worker",
 })
 
 

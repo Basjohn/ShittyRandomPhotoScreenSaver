@@ -13,6 +13,8 @@ def test_build_families_explicitly_carry_current_quick_runtime_dependencies() ->
     required = (
         "--include-package=rendering.quick",
         "--include-package=widgets.spotify_visualizer",
+        # The Visualizer's engine worker (native core P2b slice 5.7): the spawned child imports its target by name.
+        "--include-package=core.visualizer_engine",
         "--include-package=rendering.gl_programs",
         "--include-package=OpenGL",
         "--include-package=pyaudiowpatch",
