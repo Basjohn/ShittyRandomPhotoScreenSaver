@@ -27,6 +27,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools import artifact_paths  # noqa: E402
+
 GENERATION = 7
 
 
@@ -77,7 +79,7 @@ def _ms(values, q):
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--seconds", type=float, default=20.0)
     parser.add_argument("--modes", nargs="*")
     args = parser.parse_args(argv)

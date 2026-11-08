@@ -41,6 +41,7 @@ if "ui" not in sys.modules:
 
 from ui.settings_theme_spec import Rgba  # noqa: E402
 from ui.theme_semantics import composite_over, contrast_ratio  # noqa: E402
+from tools import artifact_paths  # noqa: E402
 
 SMALL_TEXT = 4.5
 LARGE_TEXT = 3.0
@@ -202,7 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--themes-root", type=Path, default=_PROJECT_ROOT / "themes")
     parser.add_argument("--themes", nargs="+", metavar="NAME")
     parser.add_argument("--light", action="store_true", help="only light Settings themes (settings_theme_is_light)")
-    parser.add_argument("--json", type=Path, help="write the full per-role report here")
+    parser.add_argument("--json", type=artifact_paths.evidence_arg,
+                        help="write the full per-role report here (inside the evidence layout, tools/artifact_paths.py)")
     args = parser.parse_args(argv)
     rows = report(args.themes_root, names=args.themes, light_only=args.light)
     for row in rows:
@@ -213,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
               f"cards worst {c_worst[0] if c_worst else '-'} {c_worst[1][0] if c_worst else ''} "
               f"fails S{len(row['settings_failures'])} C{len(row['card_failures'])}")
     if args.json:
+        args.json.parent.mkdir(parents=True, exist_ok=True)
         args.json.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     return 0
 

@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools import artifact_paths  # noqa: E402
+
 RECORDINGS = ROOT / "logs" / "visualizer_recordings"
 GENERATION = 7
 
@@ -80,9 +82,10 @@ def _worker(supervisor, frames, mode: str) -> list[str]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seconds", type=float, default=30.0)
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--recording", action="append", help="limit to these recording stems")
     args = parser.parse_args(argv)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     try:
         import psutil
         psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
