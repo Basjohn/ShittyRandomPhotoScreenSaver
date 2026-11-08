@@ -158,6 +158,16 @@ running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch ne
    capture history when demanded, playback state), unclamped and unresampled, with the worker's engine answering
    from it. Its gate: the live engine's getter values equal the worker engine's for the same snapshot, then the
    frames equal the in-process tick on recorded PCM through production DSP (`ProductionLaneEngine`).
+   Measured read surface (`tools/visualizer_replay/engine_read_audit.py`, 8 Nov): every mode calls
+   `get_generation_id`, `get_activation_id`, `get_energy_bands`, `get_smoothed_bars`, `get_transient_energy_bands`,
+   `get_floor_snapshot`, `get_waveform_count`, `get_latest_authoritative_frame`, `get_latest_generation_with_frame` /
+   `_with_waveform`; per mode `get_pre_agc_energy_bands`, `get_bubble_energy_bands`, `get_extruded_bubble_body_bands`,
+   `get_waveform_ribbon_body_bands`, `get_live_pre_agc_energy_bands`, `get_musical_level`, `get_musical_intensity`,
+   `get_onset_events`, `get_pre_agc_analysis_spectrum`, `get_event_scheduler`, `get_waveform`,
+   `get_waveform_history(_rate)`, `is_reactivity_play_ramping`. Two edges change the design: the tick itself calls
+   `engine.tick()` (bar smoothing, play ramp), so the main process steps the engine at the tick's time and snapshots
+   right after; and the tick writes back `set_waveform_history_demand` / `set_idle_waveform_demand`, which become
+   worker -> main control messages (latest wins).
 5. Lifecycle: generation start/retire, park, crash fail-closed, frozen spawn check (operator), dormancy baseline.
 6. Measurement (gate 3), then decide P2b.
 
