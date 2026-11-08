@@ -76,9 +76,10 @@ class QuickVisualizerPublicationWake(QObject):
         self._wake.connect(self._deliver, Qt.ConnectionType.QueuedConnection)
 
     def request(self) -> None:
-        # The mailbox already emits only on empty -> populated, but transfer /
-        # rebind edges may request the same Qt wake again while delivery is still
-        # queued. Bound the cross-thread Qt edge itself to one pending event.
+        # The in-process mailbox emits only on empty -> populated; the engine
+        # worker's packet mailbox sends a wake per publish, and transfer / rebind
+        # edges may request the same Qt wake again while delivery is still queued.
+        # Bound the cross-thread Qt edge itself to one pending event.
         with self._pending_lock:
             if self._closed or self._pending:
                 return

@@ -58,8 +58,9 @@ class PacketMailbox(LatestStateMailbox):
                  activation_id: int = 0, mode_code: int = 0, role: Literal["both", "reader", "writer"] = "both",
                  attach: str | None = None, wake_sender: Any = None) -> None:
         super().__init__()
-        # Across processes the GUI wake is one byte down a pipe on the empty -> populated edge (the writer's side of
-        # ``multiprocessing.Pipe``); the reader's ``listen_for_wakes`` turns it back into the wake callback.
+        # Across processes the GUI wake is one byte down a pipe per publish (the writer's side of
+        # ``multiprocessing.Pipe``); the reader's ``listen_for_wakes`` turns it back into the wake callback, and the
+        # owner's emitter coalesces repeats (``quick_presentation_sync``).
         self._wake_sender = wake_sender
         self._wake_thread: threading.Thread | None = None
         self._wake_receiver: Any = None

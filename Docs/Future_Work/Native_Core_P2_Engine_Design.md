@@ -231,6 +231,12 @@ switch never remaps.
      in-process owner; (2) 4b's live-engine gate: `_SpotifyBeatEngine` with the real audio worker fed PCM blocks
      offline through the capture callback, in process vs in the worker; (3) gate 3 with the main process's GIL time
      before/after.
+   - **Also required (checkpoint audit 2, A2-M5):** Media's playback truth against the worker's own silence/ramp
+     detection (one owner of "playing"); audio device changes and COM initialisation on the worker's capture
+     thread; the usage sampler counting a long-lived child; worker logging into the app's log; where the frame
+     decode runs (render-thread latency above); wake-pipe backpressure (a full pipe must never block the worker's
+     tick: drop the byte, the reader coalesces anyway); Bubble's spawn on its own generator, so the gates need no
+     process-wide seed (A2-M2); the main-process listener thread's wake cost counted in gate 3.
    - **Deleted when P2b lands:** `core/visualizer_engine/engine_snapshot.py`, the `snapshot` session input and its
      tests and tools (`engine_main_cost.py` stays as the record of the decision).
 4b. Live-engine and off-steady-state gates (audit H3): a gate whose reference is the live `_SpotifyBeatEngine` fed
@@ -244,7 +250,7 @@ switch never remaps.
    on these numbers whether P2a's production wiring proceeds (capturing only what the mode reads) or P2b (the worker
    owns capture and DSP; the snapshot layer is deleted) goes first.
    **Measured and decided (8 Nov): P2b first.** `tools/visualizer_replay/engine_main_cost.py` (every mode, 20 s of both
-   shipped clips through production DSP, ~3,600 ticks per mode; report
+   shipped clips through production DSP, 2,312 ticks per mode; report
    `.artifacts/evidence/architecture/native_core_p2/20261108_main_cost/main_cost.json`; three agents ran focused work
    at the same time, so absolute numbers carry noise, the per-mode comparison does not). p50 per tick, ms:
 
@@ -267,6 +273,15 @@ switch never remaps.
    the main process keeps only control edges and the frame take. P2a's built pieces stay until P2b's worker owns the
    engine: the ABI, codec, mailbox, wake and worker session are P2b's too; `engine_snapshot.py` and the `snapshot`
    session input are deleted when P2b lands.
+   **Corrections (checkpoint audit 2, 8 Nov):** the DSP column double-counts for Spectrum, Extruded Spectrum and Neon
+   Lake: `ProductionLaneEngine` analyses each new block twice for them (`feature_replay.py:255` and `:376`, 1.54
+   passes per frame against .77) plus ~.2 ms of replay-only bookkeeping, so P2b saves ~.8 ms for those three, not
+   ~1.3; and "a floor" is unproven (live DSP per callback, and how much of NumPy's FFT holds the GIL, are unmeasured:
+   the live-engine rig, P2b slice 1, measures them). The worker tick ran in the measuring process, so its garbage
+   collection can land inside the timed take; the per-mode capture set came from two clips at default settings. Under
+   P2b the frame take's decode (.07-.37 ms) runs on the render thread while the GUI thread waits
+   (`quick_presentation_sync.py:308-311`): it is added sync latency, not only main-process time. The decision stands:
+   P2b removes more main-process work than P2a for every mode after the corrections.
 5. Production wiring and lifecycle. Must specify (audit H2, M5): a main -> worker latest-wins snapshot mapping (the
    ABI with roles swapped, a wake byte to the worker; the supervisor's FIFO request queue carries edges only); an
    in-place `set_mode` and a resolved-settings delta applied to the existing session at a tick boundary (a rebuild per
