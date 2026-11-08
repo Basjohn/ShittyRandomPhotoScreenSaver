@@ -229,3 +229,74 @@ def test_every_registered_mode_has_one_stable_header_code():
     assert len(set(codes)) == len(codes) and 0 not in codes and abi.mode_code(None) == 0
     with pytest.raises(KeyError):
         abi.mode_code('not_a_mode')
+
+
+#: The ABI's mode codes as of ABI 2 (C readers carry the same table): an ABI constant, not a user-editable value.
+#: Append-only: an entry here never changes or goes away, and a new mode only adds after these (checkpoint audit 4,
+#: A4-L2). Adding a mode extends this list in the same change.
+_KNOWN_MODE_CODES = (
+    ("spectrum", 1), ("oscilloscope", 2), ("bubble", 3), ("devcurve", 4), ("sphere", 5), ("extruded_spectrum", 6),
+    ("shockwave_grid", 7), ("extruded_bubble", 8), ("waveform_ribbon", 9),
+)
+
+
+def test_mode_codes_are_append_only():
+    table = list(abi.MODE_CODES.items())
+    assert table[:len(_KNOWN_MODE_CODES)] == list(_KNOWN_MODE_CODES)        # no renumbering, reordering or removal
+    known_max = max(code for _mode, code in _KNOWN_MODE_CODES)
+    appended = [code for _mode, code in table[len(_KNOWN_MODE_CODES):]]
+    assert appended == sorted(appended) and all(code > known_max for code in appended)   # new codes only after
+
+
+def _identity(activation, mode="spectrum"):
+    return {"runtime_generation": 3, "engine_generation": activation, "activation_id": activation,
+            "mode_code": abi.MODE_CODES[mode]}
+
+
+def test_a_protected_edge_never_crosses_into_another_activations_slot():
+    # A4-M4: an edge published under activation N and not yet read is carried into later slots of activation N only;
+    # after an in-place switch the reader's first slot of activation N+1 carries none of N's edges.
+    buffer, writer, reader = fresh()
+    writer.publish(b'a', payload_schema=1, logical_timestamp=1., protected_edges=0b001, **_identity(4))
+    writer.publish(b'b', payload_schema=1, logical_timestamp=2., protected_edges=0b100, **_identity(5, "sphere"))
+    writer.publish(b'c', payload_schema=1, logical_timestamp=3., **_identity(5, "sphere"))
+    packet = reader.read_latest()
+    assert packet.payload == b'c' and packet.activation_id == 5 and packet.protected_edge_mask == 0b100
+    # Control: within one activation the unread edge is carried (the survival contract still holds).
+    buffer, writer, reader = fresh()
+    writer.publish(b'a', payload_schema=1, logical_timestamp=1., protected_edges=0b001, **_identity(4))
+    writer.publish(b'c', payload_schema=1, logical_timestamp=3., **_identity(4))
+    assert reader.read_latest().protected_edge_mask == 0b001
+
+
+class _StoreLog:
+    """A struct whose stores are logged as (offset, size) as they are made."""
+
+    def __init__(self, real, log):
+        self._real, self._log = real, log
+        self.size = real.size
+
+    def unpack_from(self, *args):
+        return self._real.unpack_from(*args)
+
+    def pack_into(self, buffer, offset, *values):
+        self._log.append((offset, self._real.size))
+        return self._real.pack_into(buffer, offset, *values)
+
+
+def test_the_odd_sequence_begin_is_its_own_store_before_any_other_slot_head_field(monkeypatch):
+    # A4-L1: the odd begin is stored alone (8 bytes at the slot base) before the rest of the head, so the identity can
+    # never become visible ahead of the begin change (a combined pack zero-fills the whole head in one C store).
+    buffer, writer, reader = fresh()
+    log = []
+    for name, value in list(vars(abi).items()):
+        if name.startswith("_") and isinstance(value, struct.Struct):
+            monkeypatch.setattr(abi, name, _StoreLog(value, log))
+    sequence = writer.publish(b'x', payload_schema=1, logical_timestamp=1., **_identity(4))
+    base = next(abi.HEADER_BYTES+slot*SLOT for slot in range(abi.SLOT_COUNT)
+                if struct.unpack_from('<Q', buffer, abi.HEADER_BYTES+slot*SLOT)[0] == sequence)
+    head = [(offset, size) for offset, size in log if base <= offset < base+abi.SLOT_PAYLOAD_OFFSET]
+    assert head[0] == (base, 8)                                   # the odd begin, alone, first
+    assert all(offset >= base+8 for offset, _size in head[1:-1])  # then the head after it (identity included) ...
+    assert head[-1] == (base, 8)                                  # ... and the even begin last
+    assert reader.read_latest().activation_id == 4                # the C2 reader still accepts the whole slot

@@ -25,8 +25,10 @@ slot i at HEADER_BYTES + i * slot_bytes:
 Sequences start at 2 and grow by 2 per frame; a slot whose begin is odd, or whose begin and end differ, is torn and
 is never accepted. Protected edges (one bit per edge kind) survive frames the reader skipped: each slot carries the OR
 of every edge published after the reader's ``consumed_sequence``, so an edge stays visible until a read acknowledges
-it. Ordering (a seqlock): the writer stores ``sequence_begin`` odd (with the slot head), the payload,
-``sequence_begin`` even, ``sequence_end``, then ``latest_sequence``. The reader loads in the opposite order: the word
+it, within one identity: an edge is carried only into later slots of its own identity, so a new activation's slot
+never carries an edge produced under the previous one. Ordering (a seqlock): the writer stores ``sequence_begin`` odd
+in a store of its own (an aligned 8-byte store that precedes every other head store: the P3 C reader relies on it),
+then the rest of the slot head (identity included), the payload, ``sequence_begin`` even, ``sequence_end``, then ``latest_sequence``. The reader loads in the opposite order: the word
 the writer stores last first (``sequence_end``), then the head and payload, then ``sequence_begin`` again, and
 accepts only if both equal ``latest`` and are even, so a write that starts while the payload is copied always shows in
 the final ``sequence_begin``. CPython stores to the mapping in program order and x86 keeps store order; the P3 C
@@ -84,6 +86,7 @@ def mode_code(mode_id: str | None) -> int:
 
 _HEADER = struct.Struct("<4sHHIIIIIIQQ")          # through consumed_sequence (48 bytes, padded to 64)
 _SLOT_HEAD = struct.Struct("<QIIddIIIIII")        # through the slot identity (56 bytes, payload at 64)
+_SLOT_HEAD_REST = struct.Struct("<IIddIIIIII")    # the slot head after sequence_begin (stored at offset 8)
 _U64 = struct.Struct("<Q")
 _IDENTITY = struct.Struct("<III")                 # runtime_generation, engine_generation, activation_id at 8
 _U32 = struct.Struct("<I")
@@ -97,6 +100,7 @@ def _u32(value: int) -> int:
         raise ValueError(f"header identity {value} does not fit a u32")
     return value & 0xFFFFFFFF
 assert _HEADER.size <= HEADER_BYTES and _SLOT_HEAD.size <= SLOT_PAYLOAD_OFFSET
+assert _U64.size + _SLOT_HEAD_REST.size == _SLOT_HEAD.size
 
 
 class PacketAbiError(ValueError):
@@ -172,7 +176,9 @@ class FramePacketWriter:
         self._latest_slot = next((slot for slot in range(SLOT_COUNT)
                                   if fields[9] and _U64.unpack_from(self._view, HEADER_BYTES+slot*self._slot_bytes)[0]
                                   == fields[9]), -1)
-        self._edges: list[tuple[int, int]] = []    # (sequence, edges) published after the reader's last consume
+        # (sequence, edges, identity) published after the reader's last consume; an edge is carried only into slots
+        # of its own identity (checkpoint audit 4, A4-M4: a new activation's slot never carries an old one's edge).
+        self._edges: list[tuple[int, int, tuple[int, int, int, int]]] = []
 
     def publish(self, payload: bytes, *, payload_schema: int, logical_timestamp: float,
                 source_timestamp: float | None = None, flags: int = 0, protected_edges: int = 0,
@@ -181,26 +187,29 @@ class FramePacketWriter:
         payload = bytes(payload)
         if len(payload) > self.capacity:
             raise ValueError(f"frame payload of {len(payload)} bytes exceeds the slot's {self.capacity}")
+        identity = (_u32(runtime_generation), _u32(engine_generation), _u32(activation_id), _u32(mode_code))
         consumed = _U64.unpack_from(self._view, _CONSUMED_OFFSET)[0]
-        self._edges = [(seq, edges) for seq, edges in self._edges if seq > consumed]
+        self._edges = [entry for entry in self._edges if entry[0] > consumed and entry[2] == identity]
         sequence = self._sequence+2
         mask = int(protected_edges)
-        for _seq, edges in self._edges:
+        for _seq, edges, _identity in self._edges:
             mask |= edges
         slot = (self._latest_slot+1) % SLOT_COUNT      # never the newest slot a reader may be copying
         base = HEADER_BYTES+slot*self._slot_bytes
         view = self._view
-        # sequence_begin odd first (in the same store as the slot head): torn until sequence_end matches.
-        _SLOT_HEAD.pack_into(view, base, sequence-1, len(payload), int(payload_schema), float(logical_timestamp),
-                             math.nan if source_timestamp is None else float(source_timestamp), int(flags), mask,
-                             _u32(runtime_generation), _u32(engine_generation), _u32(activation_id), _u32(mode_code))
+        # sequence_begin odd first, in its own store (torn until sequence_end matches), then the rest of the head:
+        # no head field, the identity included, can become visible before the begin change (A4-L1).
+        _U64.pack_into(view, base, sequence-1)
+        _SLOT_HEAD_REST.pack_into(view, base+_U64.size, len(payload), int(payload_schema), float(logical_timestamp),
+                                  math.nan if source_timestamp is None else float(source_timestamp), int(flags), mask,
+                                  *identity)
         view[base+SLOT_PAYLOAD_OFFSET:base+SLOT_PAYLOAD_OFFSET+len(payload)] = payload
         _U64.pack_into(view, base, sequence)
         _U64.pack_into(view, base+self._slot_bytes-8, sequence)
         _U64.pack_into(view, _LATEST_OFFSET, sequence)
         self._sequence, self._latest_slot = sequence, slot
         if protected_edges:
-            self._edges.append((sequence, int(protected_edges)))
+            self._edges.append((sequence, int(protected_edges), identity))
         return sequence
 
     def write_identity(self, *, runtime_generation: int, engine_generation: int, activation_id: int,
