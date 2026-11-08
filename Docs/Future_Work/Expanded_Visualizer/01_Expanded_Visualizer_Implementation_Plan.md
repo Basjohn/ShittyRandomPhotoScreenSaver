@@ -592,6 +592,31 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   stops; Achievement Pulse's pulse stops). What still runs while covered: each family's provider cadence and model
   updates, exactly as before expansion. Reopen only on measured evidence that a covered display's exclusive provider
   work matters.
+- *Suspension audit (8 Nov, operator: "widgets are still doing work when they are not visible").* Evidence: the
+  last 05:06-05:45 session in `logs/` (the expanded intent stayed persisted the whole session, so every Settings
+  generation started expanded; rotation edges logged the display covered at 05:08:43, 05:21:58, 05:29:39 and
+  05:39:44). Generation 7, the newest, was covered from its 05:37:25 reveal to the end of the log at 05:45, the LG
+  TV its only display, with Clock, three NEWS cards, Gmail, Media, Reddit and Weather on it. Every widget line
+  logged while covered was provider work this section keeps: Media's event-driven GSMTC reads (about 16 a minute
+  while Spotify sat paused, the coalesced
+  timeline flush in `widgets/media_runtime.py`) and its 30 s reconcile watchdog (0.05 ms each, re-reading the 85 KB
+  thumbnail, decoded once: the Visualizer's playback truth and the Now Playing overlay's art); the NEWS sources'
+  startup refresh (12 fetches about 3 s apart, 05:37:37-05:38:12, each followed by an artwork warm on an io worker
+  that only verified already-cached files with PIL: 0 downloads, 26-126 ms per source, nothing on the GUI thread,
+  nothing more until the next due refresh); Gmail's 5 min poll (05:42:24, 10 ms dispatch, mail unchanged, no
+  repaint). Exclusive to the covered display here (it was the only one) but not costly, so no open question. The
+  source audit found two presentation-only cadences the cover did not stop, and they now pause at its edge:
+  the Clock's 1 Hz publication (a covered Clock left subscribed, keeping the global ticker's timer alive when it is
+  the only Clock; about 0.06 ms of GUI work a tick) and the display's refresh-edge clock (each Gmail/Reddit/Feeds
+  BUSY edge ran a 240 ms `QVariantAnimation` with about 17 Python phase callbacks on glyphs nobody can see).
+  `QuickSceneController.set_ordinary_widgets_covered` tells its `OrdinaryWidgetPresentationHost`, the one owner:
+  it runs each ordinary widget's bound cover handler (`RetainedOverlayWidget.set_cover_handler`; a late root or a
+  display move joins the host's state; the foreground OSD lane is outside) and stops refresh edges animating
+  (`RefreshTransitionClock.set_covered`: an edge settles at once; one already running finishes inside the fade).
+  The Clock binds `ClockPresentationModel.set_presentation_covered`: it leaves the ticker, and on uncover publishes
+  the current time before the first fade-in frame, then rejoins the shared tick. Left as they are, by inspection:
+  one-shot QML content fades (Feeds, artwork, Media metadata, System Stats bars), which run in C++ only when a
+  provider update lands. Evidence: `tests/test_visualizer_expansion_covered_presentation.py`.
 - *§F open points, decided.* A widget enabled or disabled by Settings while covered: Settings replaces the
   generation, and the readiness restore covers the new one before reveal. Edit collapses first (uncovered, snapped),
   so its live enable/disable commits happen on the ordinary layout. Nothing is frozen, so collapse reconciles

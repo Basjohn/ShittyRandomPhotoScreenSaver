@@ -947,6 +947,15 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   `tests/test_visualizer_expansion_overlay_settings.py` holds the one value
   (`core/settings/fullscreen_overlays.py`): schema, clamps, projection, and a value stored before the extents
   reading them as the natural look (idempotent).
+- `tests/test_visualizer_expansion_covered_presentation.py` — Expanded Visualizer M3 Suspension on the hidden
+  production scene, cover driven through the scene controller's one setter: a covered Clock leaves the real global
+  ticker (its timer stops when it is the only Clock), straggling ticks reach nothing, uncovering publishes the
+  current time at the edge before the first fade-in frame and rejoins with one subscription and one timer, and the
+  frame at the pre-cover time is pixel-identical; a Clock built under the cover or moved onto a covered display
+  joins it paused (and resumes when moved off); a refresh BUSY edge under the cover starts no epoch on the
+  display's refresh-edge clock (the production `RefreshStateGlyph.qml` settles at once, no phase callback) and
+  animates again after uncover. Negative controls: no host call at the cover edge (3 red), the Clock not bound to
+  the cover (2 red), refresh edges animating while covered (1 red), a transfer ignoring the target's cover (1 red).
 
 Cost: `tools/visualizer_cost_probe.py` (one mode) and `tools/overhead_baseline.py` (everything): offscreen, production host, control-relative GPU/CPU, GL and Python call counts and recorded system conditions; how to run and read them and the expected results are in `Docs/Reference/Benchmarks.md`.
 
