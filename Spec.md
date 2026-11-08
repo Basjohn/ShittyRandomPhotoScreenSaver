@@ -717,6 +717,7 @@ Every registered descriptor must explicitly declare how it supports the two CUST
 ```text
 uniform_visual_scale
     wheel -> whole visualizer scales uniformly; viewport extent unchanged
+    never below 40% of the canonical card's pixels per world unit, across any number of sessions (R-181)
 
 viewport_extent
     left/right edge -> width only

@@ -347,7 +347,7 @@ These focused gates supplement rather than replace the maintained destination pr
 | Contract | Executable gate | What the gate establishes |
 | --- | --- | --- |
 | Normalized child persistence, physical floor and resize no-churn | `tests/test_qtquick_child_persist_floor_regression.py` | Stable persisted geometry and no republish floor churn across enrolled families. |
-| Shared parent/Visualizer Edit no-op publication and gesture release | `tests/test_qtquick_edit_noop_publication.py` | No-op gestures do not manufacture state/publication and release retires transient work. |
+| Shared parent/Visualizer Edit no-op publication and gesture release | `tests/test_qtquick_edit_noop_publication.py` | No-op gestures do not manufacture state/publication and release retires transient work (its hand-built owner/scene fakes declare ordinary, not Fullscreen, Edit). |
 | Mapped child/proxy geometry and cancelling axes | `tests/test_qtquick_child_mapped_geometry.py` | Selected Edit proxies follow real painted geometry through transforms/clips while axis cancellation remains coherent. |
 | Reddit/Reddit2 committed painted child reopen | `tests/test_qtquick_reddit_child_committed_reopen_scene.py` | Save/live promotion/fresh display/re-Edit uses committed painted geometry rather than stale delegates. |
 | Achievement Pulse semantic header/list flip and paint | `tests/test_qtquick_achievement_pulse_presentation.py` | Header/list semantics, text/badge paint and family reflow remain coupled to one orientation intent. |
@@ -791,6 +791,13 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
 - `tests/test_visualizer_geometry_profiles.py`, `tests/test_visualizer_custom_geometry_profiles.py` — independent descriptor
   geometry-kind/layout-profile metadata, N-profile CUSTOM persistence, one-way legacy claim, hidden 2D↔3D and 3D↔3D hot-swap,
   profile-local Save/Cancel plus Arrange/slot/transfer, and proof that turn/tilt/camera state is not layout geometry;
+- `tests/test_visualizer_content_scale_floor.py` — R-181: three real Runtime Edit sessions (a 2D card mode and a framed
+  3D one, from the registry) and four Settings Arrange sessions each shrink the card as far as allowed, then a side drag
+  grows it; the content scale (pixels per world unit) stays at the absolute minimum (before the fix: 1.0 -> 0.4 -> 0.16
+  -> the pixel floor). The load repair (`SettingsManager.validate_and_repair`, Standard and Media Center) lifts every
+  stored planar/legacy-`default` card entry below it in the live CUSTOM map and in layout slots, keeping the card and
+  the world's aspect; legal, freeform, retired-profile and unjudgeable entries stay bit-identical and a second load
+  repairs nothing. Values derive from the canonical minimum and world;
 - `tests/test_visualizer_edit_native_input.py`, `tests/test_visualizer_edit_footprint.py`,
   `tests/test_visualizer_edit_content_envelope.py`, `tests/test_visualizer_edit_orbit_publication.py`,
   `tests/test_qtquick_visualizer_render_bridge.py` — native QQuickWindow/QML wheel/move/orbit delivery, actual GPU footprint,
