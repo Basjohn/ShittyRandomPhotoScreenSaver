@@ -1043,13 +1043,22 @@ High-value permanent guards include:
   source is used whatever its truth value (A3-L5). `tests/test_visualizer_engine_packet_abi.py` pins per-slot identity
   and one code per registered mode (`MODE_CODES`, append-only: the ABI 2 table is a pinned prefix, A4-L2); a protected
   edge never crosses into another activation's slot (A4-M4, control within one activation); the odd `sequence_begin`
-  is its own store before the rest of the slot head (A4-L1). `tests/test_visualizer_logical_edges_parity.py` (A4-H1):
-  the production owner and the engine session call one module for activation and the engine edges
-  (`widgets/spotify_visualizer/logical_edges.py`); the same edge scripts through both on recording engines give
-  identical engine/controller call logs and fence state, and a drifted hand copy on the session's side fails it.
-  The fresh-spawn probe in
+  is its own store before the rest of the slot head (A4-L1). `tests/test_visualizer_engine_packet_mailbox.py`: a
+  writer-side clear drops its pending edges from the frame and the slot's edge mask (A5-L3; control: without the
+  clear the edge is carried). `tests/test_visualizer_logical_edges_parity.py` (A4-H1, A5-M2, A5-L1): the production
+  owner and the engine session call one module for configuration, activation and the engine edges
+  (`widgets/spotify_visualizer/logical_edges.py`); the same edge scripts through each host's own path (the owner's
+  `configure` + bind and `set_playing` + `start` as the host binding drives them; the session's `_configure` and first
+  input) on warm and cold recording engines give identical engine/controller call logs and logical state, including a
+  start while the displays are off; the owner's Edit-profile and backdrop steps sit inside the transaction / configure;
+  the park order with a running logical runtime and the owner's activation failure stages are pinned (the failure log
+  names `begin_engine_transaction` for a profile-discard failure, A5-L5); negative controls: the session configured
+  with the replay copy, a drifted hand copy of its play edge, and unparking before the resume inside the shared module
+  each fail it. The fresh-spawn probe in
   `tests/test_visualizer_engine_worker.py` ticks one live input per mode and pins QtCore/QtGui only (it caught the
-  Spectrum DSP importing the Settings shape editor). Whole-clip gate (scenarios steady / pause_warm / pause_cold /
+  Spectrum DSP importing the Settings shape editor); it also reports the worker's Qt modules at spawn (QtCore at most)
+  and after its first activation (QtCore and QtGui today: the presentation config's `QColor`s, A5-L2; work order 5
+  slice 5.4 flips it). Whole-clip gate (scenarios steady / pause_warm / pause_cold /
   reentry / switch, `--order`, `--stress`) and cost: `tools/visualizer_replay/live_engine_gate.py`,
   `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
 - real-GL visualizer clip/render tests where driver/context behavior matters.

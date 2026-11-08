@@ -92,13 +92,19 @@ if __name__ == "__main__":
     supervisor.register_worker_factory(WorkerType.VISUALIZER, visualizer_worker_main)
     supervisor.start(WorkerType.VISUALIZER)
     loaded = {}
+    # At spawn (no session yet), then after the first activation (one live configure: the owner's configuration),
+    # in call order: checkpoint audit 5, A5-L2.
+    stopped = supervisor.send_request_and_await_response(WorkerType.VISUALIZER, MessageType.VIS_STOP, {},
+                                                         timeout_ms=60000)
+    loaded["@spawn"] = stopped.payload["qt_modules"]
     for mode in sys.argv[1:]:
         # P2b's live engine first (its ThreadManager, capture lane, compute pool and recorded capture, one input
         # ticked), then the reply of a plain configure lists every Qt module the process has loaded so far.
         reader = PacketMailbox(role="reader")
-        supervisor.send_request_and_await_response(
+        configured = supervisor.send_request_and_await_response(
             WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE,
             {"mapping": reader.mapping_name, "mode": mode, "runtime_generation": 1, "inputs": "live"}, timeout_ms=60000)
+        loaded.setdefault("@first_activation", configured.payload["qt_modules"])
         ticked = supervisor.send_request_and_await_response(
             WorkerType.VISUALIZER, MessageType.VIS_INPUT, {"frame": frame}, timeout_ms=60000)
         reader.close()
@@ -118,8 +124,12 @@ if __name__ == "__main__":
 
 def test_the_worker_loads_no_gui_stack_in_a_production_spawn(tmp_path):
     # A fresh interpreter, as the app spawns it: the worker loads QtCore and, for the presentation config the tick
-    # still reads, QtGui (QColor), never Quick, QML or Widgets; the live engine (P2b) adds nothing to that. (A child spawned from inside pytest also carries the
-    # test environment's imports, so this runs outside it.)
+    # still reads, QtGui (QColor), never Quick, QML or Widgets; the live engine (P2b) adds nothing to that. (A child
+    # spawned from inside pytest also carries the test environment's imports, so this runs outside it.)
+    # "QtCore only" holds at import time only (checkpoint audit 5, A5-L2): at spawn the worker has loaded no QtGui, and
+    # the first activation loads it (``config_applier._color_or_none`` builds ``QColor``s for the presentation
+    # config). Expected today and asserted, so the day work order 5 slice 5.4 moves those reads to the logical config
+    # this check fails and is flipped to "QtCore only after an activation".
     import json
     import subprocess
     import sys
@@ -132,6 +142,9 @@ def test_the_worker_loads_no_gui_stack_in_a_production_spawn(tmp_path):
                          timeout=300, env={**__import__("os").environ, "PYTHONPATH": str(root)})
     assert out.returncode == 0, out.stderr[-2000:]
     loaded = json.loads(out.stdout.strip().splitlines()[-1])
+    spawn, first = loaded.pop("@spawn"), loaded.pop("@first_activation")
+    assert set(spawn) <= {"PySide6.QtCore"}, spawn
+    assert set(first) == {"PySide6.QtCore", "PySide6.QtGui"}, first      # A5-L2: QtGui at call time (slice 5.4)
     assert set(loaded) == set(_modes())
     for mode, modules in loaded.items():
         assert isinstance(modules, list) and set(modules) <= {"PySide6.QtCore", "PySide6.QtGui"}, (mode, modules)

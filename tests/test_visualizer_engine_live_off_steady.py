@@ -191,7 +191,14 @@ def test_the_fence_never_admits_the_retained_frame_on_reentry(qt_app, monkeypatc
     first = next(i for i, row in enumerate(rows) if row[3] > retained_seq)
     assert rows[first + 1][1] and not rows[first + 1][2]
 
-    monkeypatch.setattr(tick_pipeline, "arm_reentry_fresh_frame_fence", lambda state, engine: False)
+    def never_armed(state, _engine):
+        # The arm disabled: every engine treated as cold (the helper's own cold path). The session's configure runs
+        # it too (the owner's configure, A5-M2), so a stub that left the state untouched would also skip that clear.
+        state._waiting_for_fresh_engine_frame = False
+        state._pending_engine_frame_epoch = -1
+        return False
+
+    monkeypatch.setattr(tick_pipeline, "arm_reentry_fresh_frame_fence", never_armed)
     rows, _armed, _seq = resume_rows()
     assert rows[0][1] and not rows[0][2]                  # control: the retained frame is admitted at once
 

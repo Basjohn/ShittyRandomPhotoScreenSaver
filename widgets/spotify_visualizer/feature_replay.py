@@ -8,8 +8,9 @@ beat engine, logical tick and mode runtimes with no audio capture, window or wor
 * ``ProductionLaneEngine``: every lane a mode reads answered by the production getters from that reanalysis, so the
   Audio Analysis controls (Sensitivity, the floors, Gain, Block Size...) act as they do live.
 * ``deterministic_clock``: process clocks and RNG pinned for byte-reproducible replay.
-* ``configure_offline_controller``: configure a ``VisualizerRuntimeController`` for a mode exactly as
-  the runtime does, from a curated preset or a complete resolved settings mapping.
+* ``configure_offline_controller``: configure a ``VisualizerRuntimeController`` for an offline replay of a mode, from
+  a curated preset or a complete resolved settings mapping (the replay's configure: playing from the first frame,
+  render admission open at once; the product's own configure is ``logical_edges.configure_logical_controller``).
 
 The Waveform Studio's recorded fixtures (``ui.studio.waveform_recorded_inputs``) and the operator
 analysis tools (``tools/visualizer_replay``) both use this module; production code never imports
@@ -439,7 +440,14 @@ def offline_activation_request(mode, preset: int = 0, overrides=None, settings=N
 
 
 def configure_offline_controller(controller, mode, preset: int = 0, overrides=None, settings=None):
-    """``settings``: a complete resolved settings mapping (or ``mode -> mapping``) used instead of the curated
+    """The offline replays' configure (Studios, replay tools, the evidence owner replay): no owner, no bind, no start
+    sequence, so it sets the mode, opens render admission at once and treats the controller as playing with the fence
+    clear. Not the product's configure: the owner and the engine worker's session configure through
+    ``logical_edges.configure_logical_controller`` (checkpoint audit 5, A5-M2; the logical-edges parity test compares
+    that step), and the frames it ticks equal the owner's for every mode on the shipped clip
+    (``tests/test_visualizer_engine_worker.py``).
+
+    ``settings``: a complete resolved settings mapping (or ``mode -> mapping``) used instead of the curated
     ``preset``; tests pass frozen copies so authored presets never decide them (Current_Plan N2)."""
     model, activation = _offline_model(mode, preset, overrides, settings)
     controller.set_mode(mode)

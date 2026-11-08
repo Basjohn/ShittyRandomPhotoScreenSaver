@@ -12,9 +12,12 @@ what the identity gates need: the worker's frames equal the in-process tick's fo
 (``tests/test_visualizer_engine_worker.py``, ``tests/test_visualizer_engine_snapshot.py``). P2b's rig
 (``inputs="live"``) runs the production ``_SpotifyBeatEngine`` itself, with its real audio worker, capture lane and
 compute pool, fed the recordings' PCM through the capture callback (``recorded_capture``;
-``tests/test_visualizer_engine_live.py``). Production wiring
-(latest-wins snapshots without acknowledgements, park, crash fail-closed) is work order 5. The worker loads QtCore and, for the presentation config the tick still reads, QtGui (QColor only:
-no QGuiApplication, no QtQuick); removing that read is part of work order 5.
+``tests/test_visualizer_engine_live.py``). Every session configures through the production owner's own
+configuration (``logical_edges.configure_logical_controller``, then the owner's bind: render admission for the
+configured identity; checkpoint audit 5, A5-M2), never a replay copy. Production wiring (latest-wins snapshots without
+acknowledgements, park, crash fail-closed) is work order 5. Imports load QtCore only; a configuration loads QtGui
+(``QColor`` in the presentation config the tick still reads: no QGuiApplication, no QtQuick; A5-L2); work order 5
+slice 5.4 moves those reads to the logical config.
 """
 from __future__ import annotations
 
@@ -72,7 +75,7 @@ class EngineSession:
         from core.visualizer_engine.packet_mailbox import PacketMailbox
         from widgets.spotify_visualizer import extruded_bubble_drift_log
         from widgets.spotify_visualizer.feature_replay import (
-            PcmReanalysis, ProductionLaneEngine, ReplayBeatEngine, configure_offline_controller, deterministic_clock,
+            PcmReanalysis, ProductionLaneEngine, ReplayBeatEngine, deterministic_clock,
         )
         from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
 
@@ -143,14 +146,11 @@ class EngineSession:
                                                  engine_factory=lambda _count: engine)
         controller.engine = engine
         controller.replace_logical_mailbox(self.mailbox)
-        # Both sides: the logical capture still reads presentation config (Spectrum's decoration fades and colours,
-        # the Oscilloscope/Bubble spec parameters), which loads QtGui for QColor here. Work order 5 moves those
-        # reads into the logical config so the worker imports QtCore only (P2 design, Risks).
-        configure_offline_controller(controller, mode, preset, None, settings)
         self._engine, self._controller = engine, controller
         self.mode = mode
+        self._configure(preset, settings, self._prepare_live_engine() if self._live else None)
         if self._live:
-            self._start_live_engine(mode)
+            self._wire_live_engine(mode)
         # The header's configure-time identity, before any frame (audit H5); every slot carries its own frame's
         # identity under its seqlock (A3-M4), so an in-place mode switch never relabels a slot.
         self.mailbox.write_identity(runtime_generation=int(runtime_generation),
@@ -160,28 +160,58 @@ class EngineSession:
         raw = get_visualizer_mode_descriptor(mode).raw_musical_signals
         self._reanalysis = PcmReanalysis() if raw and inputs == "feature" else None
 
-    def _start_live_engine(self, mode: str) -> None:
-        """Wire the engine as the owner's ``configure`` leaves it: its own ``ThreadManager`` (the capture lane and the
-        compute pool) on the controller, the recorded capture source, the device refused; the owner's ``start``
-        (engine reference, playback commit, cold capture) runs at the first input."""
+    def _configure(self, preset: int, settings: Any, thread_manager: Any) -> None:
+        """The host binding's configure and bind on the logical side (checkpoint audit 5, A5-M2): the owner's
+        ``configure`` (``logical_edges.configure_logical_controller``: the activation's resolved inputs recorded, then
+        the configuration with separate logical / presentation kwargs, the technical config, the mode's logical state
+        and the warm re-entry fence; Media's state not playing until its edge, as the host binding passes it), then the
+        owner's bind (render admission for the configured identity). The logical capture still reads presentation
+        config (Spectrum's decoration fades and colours, the Oscilloscope/Bubble spec parameters), which loads QtGui
+        for ``QColor`` here (A5-L2; work order 5 slice 5.4)."""
+        from widgets.spotify_visualizer.feature_replay import offline_activation_request
+        from widgets.spotify_visualizer.logical_edges import configure_logical_controller
+        from widgets.spotify_visualizer.technical_config import resolve_technical_config
+
+        controller, engine = self._controller, self._engine
+        request = offline_activation_request(controller.mode_id, preset, None, settings)
+        configure_logical_controller(
+            controller,
+            activation={key: request[key] for key in ("settings_model", "resolved_activation", "technical_cache")},
+            logical_kwargs=request["logical_kwargs"], presentation_kwargs=request["presentation_kwargs"],
+            technical_config=resolve_technical_config(request["technical_cache"], controller.mode_id),
+            thread_manager=thread_manager, process_supervisor=None, playing=False,
+        )
+        controller.begin_render_activation(engine_generation=engine.get_generation_id(),
+                                           activation_id=engine.get_activation_id())
+
+    def _prepare_live_engine(self) -> Any:
+        """Before the configuration: the device refused and the session's own ``ThreadManager`` (the capture lane and
+        the compute pool), which the configuration hands the controller as the owner's ``configure`` does."""
         from core.threading.manager import ThreadManager
+
+        # A recorded-PCM session never opens a device, in whichever process it runs (checkpoint audit 3, A3-L1: a
+        # test's monkeypatch reaches only its own process): this engine's audio worker refuses the device path for
+        # its life (per engine, never a process-wide swap: A4-L3). The refusal matters only while no capture factory
+        # is installed (the factory, installed below, is always the source when present), so it is defence in depth
+        # for this session's own engine; another engine in the same process is not refused (checkpoint audit 5,
+        # A5-L6; the worker hosts one engine).
+        self._engine.refuse_capture_devices()
+        manager = ThreadManager()
+        self._stack.callback(manager.shutdown, wait=True, timeout=self.LIVE_EDGE_TIMEOUT_S)
+        return manager
+
+    def _wire_live_engine(self, mode: str) -> None:
+        """Wire the configured engine: the recorded capture source, the commit observers; the owner's ``start``
+        (engine reference, playback commit, cold capture) runs at the first input."""
         from widgets.spotify_visualizer.tick_pipeline import declare_mode_engine_demands
 
         engine = self._engine
-        # A recorded-PCM session never opens a device, in whichever process it runs (checkpoint audit 3, A3-L1: a
-        # test's monkeypatch reaches only its own process): this engine's audio worker refuses the device path for
-        # its life (per engine, never a process-wide swap: A4-L3). The recorded backend comes through the factory
-        # seam.
-        engine.refuse_capture_devices()
-        manager = ThreadManager()
-        self._stack.callback(manager.shutdown, wait=True, timeout=self.LIVE_EDGE_TIMEOUT_S)
         engine.set_capture_backend_factory(self._open_capture)
         engine.set_analysis_settled_observer(self._settled.set)
         if self.order == "production":
             engine.set_analysis_admission_gate(self._admit_analysis)
             # An admission failure refuses that tick's frame before it reaches the mapping (A4-L6).
             self.mailbox.set_publish_guard(self._check_admission)
-        self._controller.thread_manager = manager
         # Closed before the manager shuts down (LIFO): capture fenced and released on its lane, the compute lane
         # stopped, then the manager joins both.
         self._stack.callback(engine.force_stop)
@@ -237,16 +267,22 @@ class EngineSession:
             raise RuntimeError("the live engine's capture never opened")
 
     def _start_playback(self, playing: bool) -> None:
-        """The owner's ``start`` at the first input (Media's state then is its configure-time ``playing``): the engine
-        bound to the session's ``ThreadManager``, the engine reference, Media's state committed with no edge, then the
-        cold capture admission when playing."""
-        from widgets.spotify_visualizer.logical_edges import admit_engine_start, prepare_engine_start
+        """The host binding's start at the first input: Media's state as the owner's ``set_playing`` edge (configure
+        left it not playing), then the owner's ``start``: the engine bound to the session's ``ThreadManager``, the
+        engine reference, Media's state committed with no edge, the cold capture admission when playing, and, when
+        the displays are off, the reference released again (the runtime starts parked)."""
+        from widgets.spotify_visualizer.logical_edges import (
+            admit_engine_start, apply_playback_edge, prepare_engine_start, release_engine_started_parked,
+        )
 
         controller = self._controller
-        controller.playing = bool(playing)
+        apply_playback_edge(controller, playing, started=False)
         engine = prepare_engine_start(controller)
         admit_engine_start(controller, engine, on_acquired=self._on_engine_acquired)
         self._live_started = True
+        if release_engine_started_parked(engine, display_on=self._display_on, engine_acquired=self._engine_acquired):
+            self._engine_acquired = False
+            self._released_for_display_power = True
         self._settle_capture()
 
     def _on_engine_acquired(self) -> None:
@@ -261,11 +297,12 @@ class EngineSession:
         self._settle_capture()
 
     def set_display_power(self, on: bool) -> bool:
-        """Display power (park/unpark), the owner's ``set_display_power`` engine side (``logical_edges``): park
-        releases the engine reference (capture stops) and no input ticks while parked; unpark re-acquires it, reopens
-        capture when playing, arms the warm re-entry fence and rebases the logical clocks. The owner's cadence park and
-        reader-side mailbox clear stay the main process's. Whether anything changed."""
-        from widgets.spotify_visualizer.logical_edges import release_engine_for_park, resume_engine_after_park
+        """Display power (park/unpark), the owner's ``set_display_power`` logical side (``logical_edges``): park parks
+        the cadence and releases the engine reference (capture stops) and no input ticks while parked; unpark
+        re-acquires it, reopens capture when playing, arms the warm re-entry fence and rebases the logical clocks while
+        the cadence is still parked, then unparks it. The owner's reader-side mailbox clear stays the main process's.
+        Whether anything changed."""
+        from widgets.spotify_visualizer.logical_edges import park_logical_side, unpark_logical_side
 
         if not self._live:
             raise ValueError("display power is a live-session control")
@@ -275,13 +312,13 @@ class EngineSession:
         self._display_on = on
         controller = self._controller
         if not on:
-            if release_engine_for_park(controller, engine_acquired=self._engine_acquired):
+            if park_logical_side(controller, engine_acquired=self._engine_acquired):
                 self._engine_acquired = False
                 self._released_for_display_power = True
         else:
-            resume_engine_after_park(controller, started=self._live_started,
-                                     released_for_display_power=self._released_for_display_power,
-                                     on_reacquired=self._on_engine_acquired)
+            unpark_logical_side(controller, started=self._live_started,
+                                released_for_display_power=self._released_for_display_power,
+                                on_reacquired=self._on_engine_acquired)
         self._settle_capture()
         return True
 
@@ -472,7 +509,9 @@ class VisualizerEngineWorker(BaseWorker):
                 return self._reply(msg, changed=changed)
             if msg.msg_type == MessageType.VIS_STOP:
                 self._close_session()
-                return self._reply(msg)
+                # The Qt modules the process has loaded so far (the fresh-spawn probe reads them at spawn too).
+                return self._reply(msg, qt_modules=sorted(name for name in sys.modules
+                                                          if name.startswith("PySide6.Qt")))
         except (Exception, SnapshotContractError) as exc:   # reported to the owner, never a silent worker death
             return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}")
         return self._reply(msg, success=False, error=f"unsupported message {msg.msg_type}")

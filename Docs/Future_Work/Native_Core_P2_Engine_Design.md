@@ -364,7 +364,7 @@ switch never remaps.
    - **Slice 2 follow-ups (8 Nov): checkpoint audit 4's open findings** (`Native_Core_P2_Audit.md`, "Checkpoint audit
      4"; A4-M1 landed first on main, e66644c1; A4-M5's evidence copied to the cited paths):
      - *A4-H1, one owner for activation and the engine edges:* `widgets/spotify_visualizer/logical_edges.py` (QtCore at
-       most; in the import-weight probe) holds the sequences once and both hosts call them:
+       most at import time, in the import-weight probe; a configuration loads QtGui at call time, A5-L2 below) holds the sequences once and both hosts call them:
        `apply_logical_configuration` (the owner's `_apply_configuration`, its backdrop passed in as the presentation
        step), `commit_logical_activation` (the owner's `_activate_pending_mode` from the outgoing runtime's stop through
        the engine transaction, a preset's view motion and the reset to the pending identity; the owner passes its Edit
@@ -413,6 +413,55 @@ switch never remaps.
        live off-steady, worker, packet ABI / mailbox, snapshot, codec, import weight). Not re-run: the whole-clip
        gates (the activation now drops logical mode states as production does, so a switch-back's frames differ from
        the slice 2 report; both sides of the in-process vs worker comparison run the same code).
+   - **Checkpoint audit 5 follow-ups (8 Nov)** (`Native_Core_P2_Audit.md`, "Checkpoint audit 5"; A5-M1 landed first on
+     main, b1baa58c: the spectrum demand withdrawn):
+     - *A5-M2, the configure edge is the owner's:* `logical_edges.configure_logical_controller` is the owner's
+       `configure` (the activation's resolved inputs recorded by `record_activation_inputs`, the one recording step the
+       activation commit uses too, then `apply_logical_configuration` with separate logical / presentation kwargs, the
+       technical config, the mode's logical state and the warm re-entry fence; Media's `playing` as the host binding
+       passes it, False). `visualizer_host_binding` hands the owner the activation's inputs (`configure(activation=...)`)
+       instead of writing them onto the controller itself. `EngineSession._configure` calls the same function and then
+       the owner's bind step (render admission for the configured identity); the session's start is the host
+       binding's (`set_playing` with Media's state, then `start`, including `start`'s release when the displays are
+       off). `feature_replay.configure_offline_controller` stays the offline replays' configure (Studios, replay tools,
+       the evidence owner replay: no owner, bind or start, so playing from the first frame and admission open at once)
+       and nothing on the product path calls it. The session's frames are unchanged for the feature and snapshot inputs
+       (the worker and snapshot identity tests still equal the owner replay for all nine modes); on the live rig the
+       fence test's control now disables the arm as the cold path does (the configure arms it too). The parity test
+       configures each host through its own path (the owner's `configure` + bind as the host binding drives them; the
+       session's `_configure`) and compares the call logs and the logical state from the configure on (primitive tick
+       state, settings model, technical cache, resolved activation); negative control: the session configured with the
+       replay copy fails it.
+     - *A5-L1, the parity test's blind spots:* scripts on warm and cold engines; start while the displays are off (the
+       owner's tail release is `logical_edges.release_engine_started_parked`, the session runs it too); the owner's
+       Edit-profile and backdrop steps logged and placed (the profile discard and commit inside the transaction before
+       the mode changes, planar -> 3D only); the park order with a running logical runtime pinned (the cadence park and
+       unpark are `park_logical_side` / `unpark_logical_side`, the session's too: park, release; re-acquire, capture,
+       rebase while parked, unpark), with a negative control unparking before the resume inside the shared module (both
+       hosts lose the rebase; the parity comparison alone cannot see it); the owner's activation failures per stage
+       pinned (profile discard, profile commit, `set_mode`, the reset after `set_mode`: the step logged, the outgoing
+       mode restored inside the transaction or `failed`, the transaction always ended); a failed preset and an unjoined
+       runtime on both hosts (same logs; nothing begun).
+     - *A5-L2:* "QtCore only" is import time only; the first activation loads QtGui (`config_applier._color_or_none`,
+       `QColor`s for the presentation config the tick reads). The fresh-spawn probe now reports the worker's Qt modules
+       at spawn (QtCore at most) and after its first activation (QtCore and QtGui, asserted as today's state); the real
+       fix is work order 5 slice 5.4, which flips that assertion.
+     - *A5-L3:* the writer-side `PacketMailbox.clear` now also drops the writer's pending edges
+       (`FramePacketWriter.drop_pending_edges`), so the next publication carries none in the frame or the slot's edge
+       mask, whatever its identity (before, a same-identity clear kept them in the mask; only the identity filter
+       dropped them across a switch). The newest slot already published stays: it is the reader's (test with a
+       control: without the clear the edge is carried).
+     - *A5-L5:* the owner sets the `activate_committed_profile` step after its render-bridge discard, so a discard
+       failure logs `begin_engine_transaction` again, as before the shared module (test; the pre-fix module fails it).
+     - *A5-L6:* the device refusal is per engine and acts only while no capture factory is installed (the session
+       always installs one), so it is defence in depth for the session's own engine; another engine in the worker
+       process is not refused (the old global swap did). Acceptable while the worker hosts one engine (docstrings of
+       `refuse_devices` and the session).
+     - Ran: the parity test (18), the owner's focused tests (35 files + the defaults authority and source freshness
+       tests: 661 passed, 2 skipped), `test_visualizer_engine_*` (worker, snapshot, live, live off-steady, packet ABI /
+       mailbox, import weight). Mutations each failing their test: the A5-L5 label, the session without the
+       start-while-parked release, without the play edge before start, without the cadence park, the writer clear
+       without dropping edges.
 4V. **Built for the Vulkan core (operator, 8 Nov: "make sure you're still making the native core with Vulkan and
    what it brings us in mind").** P3 is a C++ render core behind the existing `QSGRenderNode`, on Qt Quick's Vulkan RHI
    (`Graphics_Backend_Decision_2026-11-05.md`; P1 proved QRhi on Vulkan in and outside Quick's frame). What it brings,
@@ -559,7 +608,10 @@ switch never remaps.
      "playing" (sent as an edge); audio device changes, COM initialisation on the worker's capture lane, capture
      failure reported as a crash.
    - 5.4 Settings: a resolved-settings delta applied to the existing session at a tick boundary (no rebuild per
-     slider step); the presentation-config reads moved to logical config so the worker imports QtCore only.
+     slider step); the presentation-config reads moved to logical config so the worker imports QtCore only, at call
+     time too (checkpoint audit 5, A5-L2: today an activation loads QtGui through `config_applier.py`'s
+     `_color_or_none` `QColor`s; the fresh-spawn probe asserts that and is flipped to "QtCore only after an
+     activation" by this slice).
    - 5.5 Fail-closed: `session_closed` and heartbeat loss fade the Visualizer (never vanish) and reconfigure once;
      the label-namespace counter owned by the main process for the app's life; the wake sender closed after
      configure; a full wake pipe never blocks the tick.
@@ -583,8 +635,9 @@ switch never remaps.
   each. `tests/test_visualizer_engine_import_weight.py` pins it.
 - **The tick still reads presentation config (8 Nov):** the logical capture reads Spectrum's decoration fades and
   colours and the Oscilloscope/Bubble spec parameters from the presentation state, so the worker configures both
-  sides and loads QtGui for `QColor` (never Quick, QML or Widgets; pinned by a fresh-spawn test). Move those reads into
-  the logical config before production wiring, so the worker imports QtCore only.
+  sides and loads QtGui for `QColor` at the first activation (never Quick, QML or Widgets; the fresh-spawn test reports
+  the modules at spawn and after the first activation, A5-L2). Move those reads into the logical config (work order 5
+  slice 5.4), so the worker imports QtCore only.
 - **Process-unique labels across worker generations (8 Nov, resolved):** Extruded Bubble numbers its drift families
   from a process-wide counter that the renderer uses as a geometry cache identity. Every `EngineSession` takes a
   `label_namespace` from the main process (>= 1 in production, a monotonic counter never repeated across sessions or

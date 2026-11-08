@@ -393,7 +393,9 @@ class SpotifyVisualizerAudioWorker(QObject):
         """This worker never opens an audio device from now on: with no capture factory installed, capture fails
         closed instead of opening the device. Per worker, never a process-wide swap (checkpoint audit 4, A4-L3): a
         recorded-PCM engine session refuses for its own engine only, so sessions closing in any order leave every
-        other worker's device path untouched."""
+        other worker's device path untouched. So it is defence in depth for that one engine: an installed factory is
+        always the source (the session installs one), and another engine in the same process is not refused, which
+        the old global swap did (checkpoint audit 5, A5-L6; the worker hosts one engine)."""
         with self._capture_lock:
             self._devices_refused = True
 

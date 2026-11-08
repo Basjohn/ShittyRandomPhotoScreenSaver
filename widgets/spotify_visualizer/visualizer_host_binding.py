@@ -439,12 +439,12 @@ class VisualizerHostBinding:
             card_shadow_kwargs=card_shadow_kwargs,
         )
         try:
-            owner.controller.settings_model = model
-            owner.controller.record_resolved_activation(activation)
-            owner.controller.technical_config_cache = technical_cache
             from widgets.spotify_visualizer.technical_config import (
                 resolve_technical_config,
             )
+            # The activation's inputs are recorded by the owner's configure
+            # (``logical_edges.configure_logical_controller``, the engine
+            # worker's session configures through it too).
             owner.configure(
                 logical_kwargs=asdict(model),
                 presentation_kwargs=services.presentation_kwargs(model, mode),
@@ -452,6 +452,11 @@ class VisualizerHostBinding:
                 thread_manager=services.thread_manager(),
                 process_supervisor=services.process_supervisor(),
                 playing=False,
+                activation={
+                    "settings_model": model,
+                    "resolved_activation": activation,
+                    "technical_cache": technical_cache,
+                },
             )
             self._configure_committed_layout(chosen, owner, widgets, mode)
             # Authored placement is resolved before start so the first retained

@@ -6,17 +6,27 @@ engine through the same control edges. Each sequence lives here once and both ca
 a change to the owner's order reaches the worker and the call-log parity test
 (``tests/test_visualizer_logical_edges_parity.py``) fails if either side runs its own copy:
 
-- ``apply_logical_configuration``: the configuration a mode activation (or the owner's ``configure``) commits on the
-  logical side: tick state, presentation state, engine kwargs, technical config, the mode's logical state and the warm
-  re-entry fence.
+- ``configure_logical_controller``: the first activation's configuration (the owner's ``configure`` with the
+  activation's inputs the host binding resolved: settings model, resolved activation, technical cache), recorded and
+  applied through ``apply_logical_configuration`` (checkpoint audit 5, A5-M2: the session configured with a replay
+  copy before).
+- ``apply_logical_configuration``: the configuration a mode activation (or ``configure``) commits on the logical side:
+  tick state, presentation state, engine kwargs, technical config, the mode's logical state and the warm re-entry
+  fence.
 - ``commit_logical_activation``: the hidden activation commit, from the outgoing runtime's stop through one engine
   activation transaction to the target's pending identity.
-- ``apply_playback_edge``, ``prepare_engine_start`` / ``admit_engine_start``, ``release_engine_for_park`` /
-  ``resume_engine_after_park``: the play edge, ``start`` and display power, engine side.
+- ``apply_playback_edge``, ``prepare_engine_start`` / ``admit_engine_start`` / ``release_engine_started_parked``,
+  ``park_logical_side`` / ``unpark_logical_side``: the play edge, ``start`` and display power (the cadence park, the
+  engine reference, the fence and the clock rebase, in the owner's order).
+- ``start_logical_cadence``: the logical runtime's cadence (``VisualizerLogicalRuntime`` through the controller), the
+  owner's and, paced by the worker itself (work order 5, slice 5.1), the session's.
 
-What stays the hosts' own: the owner's Edit profile, backdrop, render binding, crossfade, logical runtime cadence and
-reader-side mailbox; the session's capture-lane completion edge. This module imports QtCore at most (the worker imports
-it; ``tests/test_visualizer_engine_import_weight.py``) and adds no work at rest: it runs only at the edges.
+What stays the hosts' own: the owner's Edit profile, backdrop, render binding, crossfade and reader-side mailbox clear;
+the session's capture-lane completion edge and recorded audio source. This module imports QtCore at most at import time
+(``tests/test_visualizer_engine_import_weight.py``); a configuration loads QtGui at call time today
+(``config_applier._color_or_none`` builds ``QColor``s for the presentation config the tick reads; checkpoint audit 5,
+A5-L2; work order 5 slice 5.4 moves those reads to the logical config). It adds no work at rest: it runs only at the
+edges.
 """
 from __future__ import annotations
 
@@ -27,6 +37,12 @@ from core.authored_clock import authored_now
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 
 logger = get_logger(__name__)
+
+#: The authored logical cadence (Hz). The owner's default cadence, here so every host paces with the one value.
+DEFAULT_LOGICAL_HZ = 90.0
+
+#: The configuration reason the owner's ``configure`` reports (``apply_controller_technical_config``'s log label).
+CONFIGURE_REASON = "quick_owner_configure"
 
 
 def mode_runtime_factory(mode_id: str) -> Callable[[], Any]:
@@ -155,6 +171,50 @@ def apply_logical_configuration(
         begin_playback_edge(state, now_ts=authored_now(), playing=bool(controller.playing), kind="recreation")
 
 
+def record_activation_inputs(
+    controller: Any,
+    *,
+    settings_model: Any,
+    resolved_activation: Any,
+    technical_cache: Mapping[str, Any],
+) -> None:
+    """An activation's resolved inputs onto the controller: settings model, resolved activation, technical cache."""
+    controller.settings_model = settings_model
+    controller.record_resolved_activation(resolved_activation)
+    controller.technical_config_cache = dict(technical_cache)
+
+
+def configure_logical_controller(
+    controller: Any,
+    *,
+    activation: Mapping[str, Any] | None,
+    logical_kwargs: Mapping[str, Any] | None,
+    presentation_kwargs: Mapping[str, Any] | None,
+    technical_config: Mapping[str, Any] | None,
+    thread_manager: Any | None,
+    process_supervisor: Any | None,
+    playing: bool,
+    refresh_presentation: Callable[[], None] | None = None,
+) -> None:
+    """The owner's ``configure`` on the logical side: ``activation`` (``record_activation_inputs``' keywords: what the
+    host binding resolved for the first activation; None keeps what the controller holds), then
+    ``apply_logical_configuration``. Media's playing state is ``playing`` (the host binding passes False and commits
+    Media's state with the play edge before ``start``). Render admission is the host's bind, after this."""
+    if activation is not None:
+        record_activation_inputs(controller, **activation)
+    apply_logical_configuration(
+        controller,
+        logical_kwargs=logical_kwargs,
+        presentation_kwargs=presentation_kwargs,
+        technical_config=technical_config,
+        thread_manager=thread_manager,
+        process_supervisor=process_supervisor,
+        playing=playing,
+        reason=CONFIGURE_REASON,
+        refresh_presentation=refresh_presentation,
+    )
+
+
 # ------------------------------------------------------------------------------------------- activation commit
 
 
@@ -198,7 +258,9 @@ def commit_logical_activation(
     admission for them and starts its cadence.
 
     ``on_layout_profile_change(target)``: inside the transaction, when the target's layout profile differs (the
-    owner's render-bridge discard and committed profile). ``configure(**kwargs)``: the host's configuration entry
+    owner's render-bridge discard and committed profile). The step label stays ``begin_engine_transaction`` while it
+    runs; the host moves ``progress.step`` on (the owner names ``activate_committed_profile`` after its discard, as
+    before the shared module: checkpoint audit 5, A5-L5). ``configure(**kwargs)``: the host's configuration entry
     (``apply_logical_configuration``'s keywords without the controller; the owner's adds its backdrop), by default
     ``apply_logical_configuration`` itself. ``recover(step)``: called inside the failure, before the
     transaction ends, when a step of it raised; True means the host restored the outgoing activation (the commit
@@ -225,7 +287,6 @@ def commit_logical_activation(
 
             if get_visualizer_layout_profile(target) != get_visualizer_layout_profile(controller.mode_id):
                 if on_layout_profile_change is not None:
-                    progress.step = "activate_committed_profile"
                     on_layout_profile_change(target)
             progress.step = "set_controller_mode"
             controller.set_mode(target)
@@ -234,9 +295,8 @@ def commit_logical_activation(
         elif target != controller.mode_id:
             raise RuntimeError("preset activation attempted to change visualizer mode")
         progress.step = "configure_target"
-        controller.settings_model = settings_model
-        controller.record_resolved_activation(resolved_activation)
-        controller.technical_config_cache = dict(technical_cache)
+        record_activation_inputs(controller, settings_model=settings_model, resolved_activation=resolved_activation,
+                                 technical_cache=technical_cache)
         from widgets.spotify_visualizer.technical_config import resolve_technical_config
 
         if configure is None:
@@ -358,6 +418,46 @@ def admit_engine_start(
             ensure_started()
 
 
+def release_engine_started_parked(engine: Any, *, display_on: bool, engine_acquired: bool) -> bool:
+    """``start``'s tail while the displays are off: the runtime started parked, so the host holds no capture
+    reference until they come back. Whether the reference was released (the host's resume re-acquires it)."""
+    if display_on or not engine_acquired:
+        return False
+    release = getattr(engine, "release", None)
+    if callable(release):
+        release()
+    return True
+
+
+def start_logical_cadence(
+    controller: Any,
+    *,
+    interval_s: float | None = None,
+    step: Callable[[float], None] | None = None,
+) -> Any:
+    """Start (or return) the controller's one logical runtime: ``VisualizerLogicalRuntime``, the cadence owner (one
+    non-Qt thread, a monotonic deadline sequence, missed deadlines skipped, parking with no wake cadence). ``step``
+    (the deadline timestamp in) defaults to the tick on the controller's tick state; ``interval_s`` to the authored
+    cadence. A runtime started while the controller is parked starts parked."""
+    from widgets.spotify_visualizer.tick_pipeline import logical_tick
+
+    # Warm the first-publish import chain here, during activation and before the cadence thread starts, so the
+    # first logical tick does not pay the one-shot cold import of the immutable frame-capture module (and its
+    # render-state / config-applier / frame-runtime deps) on the cadence thread's first step. This moves a one-shot
+    # activation cost off the first frame; it adds no per-frame work (the import is a no-op once cached) and does
+    # not change the authored cadence.
+    from widgets.spotify_visualizer import logical_frame_capture  # noqa: F401
+
+    interval = float(interval_s) if interval_s is not None else 1.0 / max(15.0, DEFAULT_LOGICAL_HZ)
+    if step is None:
+        state = controller.logical_tick_state
+
+        def step(_deadline_ts: float, _state: Any = state) -> None:
+            logical_tick(_state)
+
+    return controller.start_logical_runtime(step=step, interval_s=interval)
+
+
 def release_engine_for_park(controller: Any, *, engine_acquired: bool) -> bool:
     """Display power off, engine side: release the host's engine reference (capture and analysis stop when it was
     the last). Whether a reference was released (the host re-acquires it on resume)."""
@@ -408,15 +508,59 @@ def resume_engine_after_park(
     return engine
 
 
+def park_logical_side(
+    controller: Any,
+    *,
+    engine_acquired: bool,
+    clear_reader: Callable[[], None] | None = None,
+) -> bool:
+    """Display power off, logical side, in the owner's order: the cadence parks first (returns once no step is in
+    flight; a runtime started later honours the request), then the host's reader-side clear (the owner drops its
+    unread frame; the worker has none), then the engine reference goes (``release_engine_for_park``). Whether a
+    reference was released."""
+    if not controller.set_logical_parked(True):
+        logger.error("[SPOTIFY_VIS][DISPLAY_POWER] Logical runtime did not park; it stays requested")
+    if clear_reader is not None:
+        clear_reader()
+    return release_engine_for_park(controller, engine_acquired=engine_acquired)
+
+
+def unpark_logical_side(
+    controller: Any,
+    *,
+    started: bool,
+    released_for_display_power: bool,
+    on_reacquired: Callable[[], None],
+) -> Any:
+    """Display power on, logical side: ``resume_engine_after_park`` while the cadence is still parked (the clocks
+    rebase only then), then the cadence unparks on a fresh deadline sequence. The engine, or None."""
+    engine = resume_engine_after_park(
+        controller,
+        started=started,
+        released_for_display_power=released_for_display_power,
+        on_reacquired=on_reacquired,
+    )
+    controller.set_logical_parked(False)
+    return engine
+
+
 __all__ = [
+    "CONFIGURE_REASON",
+    "DEFAULT_LOGICAL_HZ",
     "ActivationProgress",
     "LogicalRuntimeNotJoined",
     "admit_engine_start",
     "apply_logical_configuration",
     "apply_playback_edge",
     "commit_logical_activation",
+    "configure_logical_controller",
     "mode_runtime_factory",
+    "park_logical_side",
     "prepare_engine_start",
+    "record_activation_inputs",
     "release_engine_for_park",
+    "release_engine_started_parked",
     "resume_engine_after_park",
+    "start_logical_cadence",
+    "unpark_logical_side",
 ]

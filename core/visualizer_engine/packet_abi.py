@@ -219,6 +219,11 @@ class FramePacketWriter:
                             _u32(activation_id))
         _U32.pack_into(self._view, _MODE_CODE_OFFSET, _u32(mode_code))
 
+    def drop_pending_edges(self) -> None:
+        """Forget every edge not yet acknowledged, so no later slot carries one (the producer cleared its unread
+        frame). Slots already published are untouched: a written slot is the reader's (it never changes under it)."""
+        self._edges = []
+
     @property
     def consumed_sequence(self) -> int:
         """The newest sequence the reader has acknowledged (0: none yet)."""

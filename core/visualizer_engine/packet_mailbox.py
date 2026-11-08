@@ -232,10 +232,14 @@ class PacketMailbox(LatestStateMailbox):
     def clear(self) -> None:
         with self._lock:
             if self._reader is None:
-                # Writer (the engine worker): the unread frame is the reader's to drop (the main process clears its
-                # own mailbox); the producer forgets its unread record, so the next publication coalesces none of its
-                # edges, as the in-process mailbox's clear drops them.
+                # Writer (the engine worker): the producer forgets its unread record and the writer its pending edges,
+                # so the next publication carries none of them, neither in the frame (no coalesce) nor in the slot's
+                # edge mask, whatever its identity (checkpoint audit 5, A5-L3: the mask kept same-identity edges, and
+                # only the identity filter dropped them across a switch). As the in-process mailbox's clear drops
+                # them. The newest slot already in the mapping stays: it is the reader's to drop (the main process
+                # clears its own mailbox), and a written slot never changes under a reader.
                 self._unread = None
+                self._writer.drop_pending_edges()
                 return
             self._consume()
             self._peeked = None

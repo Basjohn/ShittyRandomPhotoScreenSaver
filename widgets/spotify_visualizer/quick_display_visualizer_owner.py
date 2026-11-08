@@ -24,19 +24,23 @@ from core.authored_clock import authored_now
 from widgets.spotify_visualizer.logical_edges import (
     ActivationProgress,
     LogicalRuntimeNotJoined,
+    DEFAULT_LOGICAL_HZ,
     admit_engine_start,
     apply_logical_configuration,
     apply_playback_edge,
     commit_logical_activation,
+    configure_logical_controller,
     mode_runtime_factory,
+    park_logical_side,
     prepare_engine_start,
-    release_engine_for_park,
-    resume_engine_after_park,
+    release_engine_started_parked,
+    start_logical_cadence,
+    unpark_logical_side,
 )
 
 logger = get_logger(__name__)
 
-_DEFAULT_MAX_FPS = 90.0
+_DEFAULT_MAX_FPS = DEFAULT_LOGICAL_HZ
 _MODE_TRANSITION_HALF_DURATION_S = 0.25
 # Authored first-appearance reveal for the visualizer scene fade. The whole
 # visualizer (card + GL content) eases up from zero once per activation so it
@@ -238,21 +242,18 @@ class QuickDisplayVisualizerOwner:
         self._display_power_on = on
         self._project_expanded_overlays()
         if not on:
-            if not controller.set_logical_parked(True):
-                logger.error("[SPOTIFY_VIS][DISPLAY_POWER] Logical runtime did not park; it stays requested")
-            controller.logical_mailbox.clear()
-            if release_engine_for_park(controller, engine_acquired=self._engine_acquired):
+            if park_logical_side(controller, engine_acquired=self._engine_acquired,
+                                 clear_reader=controller.logical_mailbox.clear):
                 self._engine_acquired = False
                 self._engine_released_for_display_power = True
             logger.info("[SPOTIFY_VIS][DISPLAY_POWER] Visualizer parked mode=%s", controller.mode_id)
             return True
-        resume_engine_after_park(
+        unpark_logical_side(
             controller,
             started=self._started,
             released_for_display_power=self._engine_released_for_display_power,
             on_reacquired=self._on_engine_reacquired_for_display_power,
         )
-        controller.set_logical_parked(False)
         logger.info("[SPOTIFY_VIS][DISPLAY_POWER] Visualizer resumed mode=%s", controller.mode_id)
         return True
 
@@ -285,17 +286,23 @@ class QuickDisplayVisualizerOwner:
         thread_manager: Any | None = None,
         process_supervisor: Any | None = None,
         playing: bool = False,
+        activation: Mapping[str, Any] | None = None,
     ) -> None:
+        """The first activation's configuration (``logical_edges.configure_logical_controller``, shared with the
+        engine worker's session): ``activation`` is what the host binding resolved (settings model, resolved
+        activation, technical cache; None keeps what the controller holds)."""
         if self._retired:
             raise RuntimeError("cannot configure a retired visualizer owner")
-        self._apply_configuration(
+        configure_logical_controller(
+            self._controller,
+            activation=activation,
             logical_kwargs=logical_kwargs,
             presentation_kwargs=presentation_kwargs,
             technical_config=technical_config,
             thread_manager=thread_manager,
             process_supervisor=process_supervisor,
             playing=playing,
-            reason="quick_owner_configure",
+            refresh_presentation=self._refresh_backdrop,
         )
         self._configured = True
 
@@ -1424,6 +1431,7 @@ class QuickDisplayVisualizerOwner:
             # Drop any unread old-mode snapshot before switching geometry so
             # it cannot be rejected later as a one-frame stale presentation.
             controller.render_bridge.discard_pending()
+            progress.step = "activate_committed_profile"
             # Edit's target profile was already projected/validated
             # BEFORE stopping the outgoing logical runtime. Never
             # repeat a fallible QML projection inside this transaction.
@@ -1539,27 +1547,9 @@ class QuickDisplayVisualizerOwner:
         )
 
     def _start_logical_runtime(self, *, interval_s: float | None = None) -> None:
-        from widgets.spotify_visualizer.tick_pipeline import logical_tick
-
-        # Warm the first-publish import chain here, during activation and before
-        # the cadence thread starts, so the first logical tick does not pay the
-        # one-shot cold import of the immutable frame-capture module (and its
-        # render-state / config-applier / frame-runtime deps) on the cadence
-        # thread's first step. This moves a one-shot activation cost off the
-        # first frame; it adds no per-frame work (the import is a no-op once
-        # cached) and does not change the authored cadence.
-        from widgets.spotify_visualizer import logical_frame_capture  # noqa: F401
-
-        controller = self._controller
-        interval = (
-            float(interval_s)
-            if interval_s is not None
-            else 1.0 / max(15.0, _DEFAULT_MAX_FPS)
-        )
-        controller.start_logical_runtime(
-            step=lambda _deadline_ts, _s=controller.logical_tick_state: logical_tick(_s),
-            interval_s=interval,
-        )
+        # The cadence owner (``logical_edges.start_logical_cadence``; the engine worker's session paces itself with
+        # the same one).
+        start_logical_cadence(self._controller, interval_s=interval_s)
 
     def start(self, *, interval_s: float | None = None) -> None:
         if self._retired:
@@ -1580,12 +1570,10 @@ class QuickDisplayVisualizerOwner:
             self._activation_fade_started_at = float(self._transition_clock())
             self._started = True
             self._start_logical_runtime(interval_s=interval_s)
-            if not self._display_power_on and self._engine_acquired:
+            if release_engine_started_parked(engine, display_on=self._display_power_on,
+                                             engine_acquired=self._engine_acquired):
                 # Started while the displays are off: the runtime started parked;
                 # hold no capture reference until they come back.
-                release = getattr(engine, "release", None)
-                if callable(release):
-                    release()
                 self._engine_acquired = False
                 self._engine_released_for_display_power = True
         except Exception:

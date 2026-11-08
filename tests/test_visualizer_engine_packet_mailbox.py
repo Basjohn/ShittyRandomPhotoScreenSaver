@@ -118,6 +118,29 @@ def test_a_retired_generation_never_reaches_its_replacement(mailbox):
     assert mailbox.take() is None
 
 
+def test_a_writer_side_clear_drops_its_pending_edges_from_the_frame_and_the_slot(mailbox):
+    # A5-L3: the producer's clear (the session's ``stop_logical_runtime``) drops the unread frame's edges entirely: the
+    # next publication of the same identity carries none, in the decoded frame or in the slot's edge mask. The slot
+    # already published stays readable (the reader's to drop).
+    writer = PacketMailbox(role="writer", attach=mailbox.mapping_name)
+    try:
+        writer.publish(_Frame(1.0, protected_edges=(_Edge("reveal", 7),)), generation=4, activation_id=2)
+        writer.clear()
+        writer.publish(_Frame(2.0), generation=4, activation_id=2)
+        packet = mailbox._reader.read_latest()
+        assert packet.protected_edge_mask == 0
+    finally:
+        writer.close()
+    # Control: without the clear the unread edge is carried (the survival contract).
+    writer = PacketMailbox(role="writer", attach=mailbox.mapping_name)
+    try:
+        writer.publish(_Frame(3.0, protected_edges=(_Edge("reveal", 8),)), generation=4, activation_id=2)
+        writer.publish(_Frame(4.0), generation=4, activation_id=2)
+        assert mailbox._reader.read_latest().protected_edge_mask != 0
+    finally:
+        writer.close()
+
+
 def test_close_unlinks_the_mapping():
     from multiprocessing.shared_memory import SharedMemory
     box = PacketMailbox(slot_bytes=4096)
