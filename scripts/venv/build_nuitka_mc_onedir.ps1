@@ -389,7 +389,12 @@ $argsList = @(
 
 $argsList += @(Get-SRPSSNuitkaQmlPruneArguments -RepoRoot $Root)
 
-if ($Icon) { $argsList += @("--windows-icon-from-ico=$($Icon.FullName)") }
+if ($Icon) {
+    $argsList += @("--windows-icon-from-ico=$($Icon.FullName)")
+    # With an icon, the PySide6 plugin makes every first PySide6 import (worker processes included) import QtWidgets
+    # and QtGui; this user plugin removes that hook (tools/nuitka_worker_qt_plugin.py, R-176).
+    $argsList += "--user-plugin=$(Join-Path $Root 'tools\nuitka_worker_qt_plugin.py')"
+}
 if ($Version) {
     $argsList += "--product-version=$Version"
     $argsList += "--file-version=$Version"
