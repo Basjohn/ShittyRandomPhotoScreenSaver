@@ -686,6 +686,8 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **`tests/test_qtquick_context_menu.py` fails after `tests/test_qtquick_custom_layout_owner.py` in one process**
   (two right-click tests; each file passes alone; identical on the M3c base without its changes). Likely a
   process-wide pointer-suppression deadline or input state one file leaves for the next. Not investigated further.
+  The same pairing turns three `tests/test_visualizer_direct_gestures.py` tests red (Alt-wheel / Alt-drag gestures
+  never begin; reproduced on e9bbd7a4 without the M3c single-axis/rotate changes, 8 Nov), so it is the same leak.
 - **The overlays' Edit placeholders are fixed English words** ("Preset Name", "Track Title", "Artist"), shown only in
   Fullscreen Edit when there is nothing to show yet.
 
