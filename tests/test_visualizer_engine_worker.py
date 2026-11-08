@@ -85,11 +85,26 @@ from core.process.types import MessageType, WorkerType
 from core.visualizer_engine.engine_worker import visualizer_worker_main
 from core.visualizer_engine.packet_mailbox import PacketMailbox
 if __name__ == "__main__":
+    import tools.expanded_visualizer_evidence as evidence
+
+    frame = evidence.shipped_clip(0.05).frames[0]
     supervisor = ProcessSupervisor()
     supervisor.register_worker_factory(WorkerType.VISUALIZER, visualizer_worker_main)
     supervisor.start(WorkerType.VISUALIZER)
     loaded = {}
     for mode in sys.argv[1:]:
+        # P2b's live engine first (its ThreadManager, capture lane, compute pool and recorded capture, one input
+        # ticked), then the reply of a plain configure lists every Qt module the process has loaded so far.
+        reader = PacketMailbox(role="reader")
+        supervisor.send_request_and_await_response(
+            WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE,
+            {"mapping": reader.mapping_name, "mode": mode, "runtime_generation": 1, "inputs": "live"}, timeout_ms=60000)
+        ticked = supervisor.send_request_and_await_response(
+            WorkerType.VISUALIZER, MessageType.VIS_INPUT, {"frame": frame}, timeout_ms=60000)
+        reader.close()
+        if not (ticked and ticked.success):
+            loaded[mode] = repr(ticked and ticked.error)
+            continue
         reader = PacketMailbox(role="reader")
         response = supervisor.send_request_and_await_response(
             WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE,
@@ -103,7 +118,7 @@ if __name__ == "__main__":
 
 def test_the_worker_loads_no_gui_stack_in_a_production_spawn(tmp_path):
     # A fresh interpreter, as the app spawns it: the worker loads QtCore and, for the presentation config the tick
-    # still reads, QtGui (QColor), never Quick, QML or Widgets. (A child spawned from inside pytest also carries the
+    # still reads, QtGui (QColor), never Quick, QML or Widgets; the live engine (P2b) adds nothing to that. (A child spawned from inside pytest also carries the
     # test environment's imports, so this runs outside it.)
     import json
     import subprocess
