@@ -901,3 +901,150 @@ old activation's edges.**
   reopens on fresh audio).
 - The `free` order in the worker process (probe (c) ran in process; the worker's IPC round trip makes races rarer
   still). The whole-clip gates were not re-run.
+
+## Checkpoint audit 5 (8 Nov): the shared logical_edges module and follow-ups
+
+Scope: e66644c1, b24d6e28, df394784, 3dea34cb. Diffed the old owner (`git show df394784^:...owner.py`) against the
+new owner plus `logical_edges.py` method by method. Ran: the parity test, `test_visualizer_engine_packet_abi.py`,
+`test_beat_engine_spectrum_demand.py`, `test_sphere_voxel_audio_contract.py`, `test_visualizer_camera_activation.py`,
+`test_visualizer_custom_geometry_profiles.py`, `test_visualizer_engine_import_weight.py`,
+`test_visualizer_mode_dormancy.py` (146 passed, 21 s). Probes, in process (live `EngineSession`, production order,
+shipped clip 4 s; digests of every frame): (a) the current rising-edge demand vs a no-op demand (pre-slice-2) vs the
+slice 2 standing demand, Sphere `steady` / `reentry` / `pause_warm`, with a real-vs-real control; (b) spectrum copies
+per commit, Neon Lake / Oscilloscope (`switch`) and Sphere (`steady`); (c) what Qt modules the shared edges load at
+call time (an import hook). Whole-clip gates not run. Probe scripts deleted.
+
+### Medium
+
+**A5-M1. e66644c1 does not restore Sphere's production frames. The rising edge gives frames byte-identical to the
+slice 2 standing demand. They still differ from pre-slice-2 for the whole session.**
+- Claim: e66644c1, "Slice 2's standing demand changed Sphere's production frames for the whole session ... Now the
+  mode rule's declaration requests only the first commit after an activation ... afterwards the tick's own reads
+  request publications exactly as before"; `beat_engine.py:1566-1571`.
+- Evidence: probe (a), production order. Rising edge vs no-op: Sphere differs on 359/364 frames (`steady`), 268/273
+  (`reentry`) and 542/547 (`pause_warm`), from frame 5 to the end. These are the numbers A4-M1 measured for the
+  standing demand. Rising edge vs standing demand: 0/364 differ. Real vs real: 0. Probe (b): Sphere makes 282 copies
+  with the edge and 281 without, so there really is only one extra copy per activation. But that first spectrum flows
+  into Sphere's integrators and changes the rest of the session. Neon Lake and Oscilloscope match pre-slice-2 (175/282
+  copies either way, 0/547 frames differ in `pause_warm`), so the per-commit cost A4-M1 raised is fixed. Stale
+  docstrings: `tick_pipeline.py:957-967` ("demand the analysis spectrum at every commit") and the class comment at
+  `beat_engine.py:141` ("every commit publishes it").
+- Failure scenario: the record reads as if the Sphere change was reverted. In fact Sphere still ships a different
+  trajectory, with no visual check. A4-M1 asked for a before/after render and a production-order Sphere test, and
+  neither was done.
+- Fix: say in the design doc that Sphere's whole-session trajectory change is the intended result of the first-commit
+  spectrum, and that only Neon Lake's cost was undone. Render Sphere before/after (showcase WebP, production engine)
+  and keep the result or drop the demand. Correct the two docstrings. Add a production-order variant of
+  `test_spectrum_readers_publish_on_the_first_commit_after_activation` (it runs `settled` only, `:347`).
+
+**A5-M2. The configure edge is still a hand copy, and the parity test hides it by configuring both hosts the same
+way.**
+- Claim: design doc, Slice 2 follow-ups, "`apply_logical_configuration` (the owner's `_apply_configuration` ...) ...
+  both hosts call them"; `logical_edges.py:9-11` ("or the owner's `configure`").
+- Evidence: the session's initial configuration is `configure_offline_controller` (`feature_replay.py:441-467`, called
+  at `engine_worker.py:150`), not `apply_logical_configuration`. It differs from the owner's `configure`
+  (`quick_display_visualizer_owner.py:279-300` -> `_apply_configuration`) in several ways:
+  - no `resolve_logical_mode_state`
+  - no warm re-entry fence
+  - `playing = True` is forced (`:460`)
+  - `_waiting_for_fresh_engine_frame = False` (`:467`)
+  - one kwargs dict serves as both logical and presentation kwargs
+  - render activation begins immediately
+  The parity test sets up both hosts with `configure_offline_controller` (`test_visualizer_logical_edges_parity.py:84`),
+  so the owner's configure is never compared. The activation path is now shared; the configure path is not.
+- Failure scenario: work order 5 wires the worker's configure to `configure_offline_controller`, so a replay helper
+  becomes the product's first activation. A configure fix in the owner (new reset, new fence) never reaches the worker,
+  and every gate stays green.
+- Fix: give the session's configure `apply_logical_configuration`, with the owner's inputs (separate logical and
+  presentation kwargs, technical cache, Media's `playing`). In the parity test, configure each host through its own
+  configure path and compare that step too.
+
+### Low
+
+- **A5-L1. The parity test cannot see several owner branches.** In both hosts `logical_runtime` is None (the owner's
+  `_start_logical_runtime` is stubbed, `:108`), so `resume_engine_after_park` always takes the rebase branch. Moving
+  the owner's `set_logical_parked(False)` before the resume would go unnoticed, and so would the unparked-runtime
+  error branch. Also never exercised:
+  - `start` while the displays are off (owner `:1583-1591`, the tail release)
+  - every failure path (`LogicalRuntimeNotJoined`, `recover`, begin/end missing, the bind stage)
+  - the cold-engine fence (the recording engine is always warm)
+  - the layout-profile callback (owner only, and not recorded)
+  - diagnostics-on branches
+  By construction it cannot catch a change inside `logical_edges` either: both sides follow it. The owner's own
+  regression tests carry that. The negative control covers session-side drift only. Fix: add a script with a stub
+  logical runtime whose `is_parked` and `set_logical_parked` are recorded, a start-while-off script, and one failing
+  activation per stage on the owner (comparing the owner's log against a pinned sequence, not against the session).
+- **A5-L2. "QtCore at most" holds at import time only.** Probe (c): `commit_logical_activation` ->
+  `apply_logical_configuration` (`logical_edges.py:94`) -> `apply_presentation_vis_mode_kwargs`
+  (`config_applier.py:188`) -> `_color_or_none` imports `PySide6.QtGui` (`config_applier.py:32`) on the first call.
+  This predates the slice (`configure_offline_controller` does the same; the comment at `engine_worker.py:146-148`
+  admits it). But `logical_edges.py:18` and the design doc ("QtCore at most; in the import-weight probe") overclaim,
+  and the import-weight test checks only import time. Its lazy function-level imports are covered only because other
+  probed modules happen to import them. Fix: reword. When work order 5 removes the QColor reads, add a call-time
+  probe: one configure plus one activation in a fresh interpreter, then assert on `sys.modules`.
+- **A5-L3. The writer-side `PacketMailbox.clear` drops only the Python unread record.** `FramePacketWriter._edges`
+  and the mapping's newest slot stay (`packet_mailbox.py:232-239`). Its docstring says "the next publication
+  coalesces none of its edges", but the slot-level mask still carries edges of the same identity. Today every writer
+  clear (`stop_logical_runtime` at a session activation) comes before an identity change, so b24d6e28's filter drops
+  them. A future same-identity clear (`reset_logical_handoff`, a park) would not. No production caller: the main
+  process never builds a `PacketMailbox`, and the publish guard is set only by a production-order session. Fix: clear
+  the writer's `_edges` in the same branch, or document that the identity filter carries the guarantee.
+- **A5-L4. The rising edge's reset coverage is asserted by hand.** `test_beat_engine_spectrum_demand.py:38-39` assigns
+  the two fields instead of calling `reset_smoothing_state` / `reconfigure_bar_count` / `force_stop`, so a reset that
+  forgets the declaration still passes. Today all three clear both fields (`beat_engine.py:540-541, 557-558, 795-796`),
+  and only the publication clears the request alone (`:1169`). A path that activates with no reset: a new owner on the
+  warm shared engine. `force_stop` runs only at shutdown (`beat_engine.py:2050`), so Sphere's declaration stays True,
+  no edge rises, and the first-commit gap A3-M1 targeted is still there on warm owner recreation. That matches
+  pre-slice-2 (not a regression), but "the first commit after an activation" does not cover it. Fix: call the real
+  resets in the test, and say where the guarantee stops.
+- **A5-L5. Only owner-visible change: one failure-log label.** If `render_bridge.discard_pending()` raises, the log
+  now names `step=activate_committed_profile` (it was `begin_engine_transaction`), because `progress.step` is set
+  before the callback (`logical_edges.py:228-229`). Harmless.
+- **A5-L6. The device refusal now covers one engine, not the process.** It also only matters when no capture factory
+  is installed (`audio_worker.py:_capture_factory`), and the session always installs one (`engine_worker.py:179`). So
+  it is defence in depth for the session's own engine. Any other engine in the worker process is no longer refused,
+  which the old global swap did refuse. Acceptable while the worker hosts one engine; worth saying in 4P.
+
+### Verified sound
+
+- **The owner refactor preserves production behaviour.**
+  - `set_playing`, `start` and `set_display_power` make the same calls in the same order, under the same conditions
+    (`_started` for wake; `_engine_acquired` for release; `_engine_released_for_display_power` and
+    `controller.playing` for acquire/ensure_started; the runtime-parked condition for rebase).
+  - The host flags are set at the same points: after acquire on start and on reacquire; only when a release happened
+    on park.
+  - `_apply_configuration` keeps the same sequence, with the backdrop refresh in the same place.
+  - `_activate_pending_mode` handles each stage as before:
+    - `ensure_engine` and the stop raising: re-raised with no phase change.
+    - A non-joined stop: Edit profile reverted, `failed`, a `RuntimeError` subclass with the same message.
+    - Missing or raising begin/end: `failed`, no log.
+    - A failure inside the transaction: `recover` runs inside the `except`, before `end()` in `finally`, as before. It
+      logs once, restores and restarts the outgoing runtime inside the transaction, and returns before bind.
+    - Bind failures: same log and `failed`.
+    - An `end()` that raises after success or recovery: propagates as before.
+  - The new unknown-kind `ValueError` cannot be reached from the owner (`_request_visualizer_activation` admits only
+    mode/preset).
+  - The session's divergences (switch stops the outgoing runtime, resume re-acquires only what park released, engine
+    binding at first input) are all session-side; none reaches the owner.
+  - The production capture path is unchanged: no factory and not refused resolves to `create_audio_capture`, looked
+    up at call time, so test monkeypatches still apply.
+- **The parity test compares real paths.** It runs the owner's real methods and the session's real methods on two
+  controllers, recording engine and controller calls. It fails if either host adds, drops or reorders a recorded call
+  outside the shared module: the session-drift control is proven, and owner-side drift is caught symmetrically.
+- **The edge-identity filter matches in-process semantics.** In process, an edge is also lost across a switch:
+  `stop_logical_runtime` clears the mailbox, the render bridge clears its edges, and
+  `_coalesce_protected_state` refuses to coalesce across a mode or engine generation. Within one activation the state's
+  `engine_generation` is the engine's current one, so the filter does not drop same-activation edges.
+- **Begin-first stores stay compatible with the reader.** The reader (`packet_abi.py:258-267`) still accepts only
+  `end == head begin == final begin == latest`, even. The writer now makes begin odd before any other head byte.
+- **The `MODE_CODES` prefix ratchet fails** on renumbering, reordering, removal or reuse.
+- **The publish guard costs one attribute read per publish**, has no production caller, and is installed before any
+  tick.
+- **All three resets clear both the request and the declaration**, and no path clears only one.
+
+### Not verified
+
+- Whether Sphere's whole-session divergence (A5-M1) is visible: measured as digests, not rendered.
+- Cross-process behaviour of the writer clear and the identity filter against a real main-process reader, since no
+  production reader exists yet.
+- The owner's 35 focused files (668) cited by the slice; only the 8 files above were re-run. The whole-clip gates.
