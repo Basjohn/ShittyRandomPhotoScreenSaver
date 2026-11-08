@@ -838,8 +838,9 @@ switch never remaps.
        process's GUI COM apartment, registered only while a Media or OSD consumer is active. Following the default is
        also not the goal. A player pinned to the old output keeps rendering there, and moving capture to the new
        default would lose the music (test). What the picture needs is capture where the audio is, and one signal for
-       "the audio is not here" covers the switch, the unplug and the stale stream: no capture publication while
-       Media says playing. `EngineSession._watch_device_delivery` (device sessions only) compares the engine's capture
+       "the audio is not here" covers the switch, the unplug and the stale stream when the player is the endpoint's
+       only renderer: no capture publication while Media says playing (its limits, checkpoint audit 11's A11-L6, are
+       under *Known limits* below). `EngineSession._watch_device_delivery` (device sessions only) compares the engine's capture
        publications (`capture_publications`, one counter read) with the previous step's on every cadence step. After
        `SILENT_CAPTURE_STEPS_BEFORE_REOPEN = 180` consecutive playing steps with none (about 2 s at 90 Hz), it reopens
        the stream once through `_SpotifyBeatEngine.restart_stale_capture`. That is new, and nothing in process calls
@@ -866,14 +867,18 @@ switch never remaps.
        plugged in meanwhile opens at Media's next play edge). No step fails, the session does not fail closed and its
        wake pipe stays open, so the owner sees no session end and nothing counts towards the two-strike rule.
      - *Reported to the owner.* Every reply that carried `capture_failed` now carries the session's device report
-       (`EngineSession.device_report`: `capture_failed`, `capture_reopens`, `capture_resumed`), and so does
-       `VIS_STOP`'s report. The worker process's own log lines never reach the main log: a worker logs nowhere unless
-       perf metrics are on, and the session's module loggers not even then. So the link logs the device state in the
-       main log when a reply changes it (`EngineWorkerLink._note_device_report`). A reopen between two edges reaches
+       (`EngineSession.device_report`: `capture_failed`, `capture_reopens`, `capture_resumed`), and `VIS_STOP`'s report
+       carries it nested under `report["engine"]`. The worker process's own log lines never reach the main log: a
+       worker logs nowhere unless perf metrics are on, and the session's module loggers not even then. So the link logs
+       the device state in the main log when a reply changes it (`EngineWorkerLink._note_device_report`, reached from
+       either shape by `_note_device_state_in` since checkpoint audit 11, A11-L5). A reopen between two edges reaches
        the main log at the next edge's reply (Media's pause or play, display power, a mode or preset change, a view
-       change). The owner does nothing else with it: as in process, the Visualizer shows the engine's idle frames
-       until the audio comes back (fade, never vanish: the bars go down through the existing silence decay, and the
-       frames never stop).
+       change). **A reopen after the session's last edge never reaches it** (Media plays on until the Visualizer is
+       turned off, a display reload or the exit): the owner's `retire` sends `VIS_STOP` without awaiting it and closes
+       the link at once, so the stop's report is read only where a stop is awaited (`EngineWorkerLink.stop`: tests and
+       tools). For a long uninterrupted play the reopen line appears at the next pause. The owner does nothing else
+       with it: as in process, the Visualizer shows the engine's idle frames until the audio comes back (fade, never
+       vanish: the bars go down through the existing silence decay, and the frames never stop).
      - *Measured* (evidence `.artifacts/evidence/architecture/native_core_p2/20261108_p2b_53_devices/
        device_reopen_probe.json`). Setup: the production count, the session's own 90 Hz cadence in process, a loopback
        stand-in with its own delivery thread (no device), three runs per scenario.
@@ -934,12 +939,29 @@ switch never remaps.
           device as in process.
        5. *Control, in process* (without `--viz-engine-worker`): check 1 leaves the bars at rest until Media's next
           pause and play (today's in-process behaviour).
-     - **Left for step 6:** the operator checks above. The worker's own log lines are still invisible: the main log
-       learns of a reopen only at the next edge's reply, because there is no worker -> main event channel for
-       diagnostics (an unsolicited response or the heartbeat's acknowledgement would be one; the supervisor is not
-       changed here). In-process parity (`Current_Plan.md`). Linux (`utils/audio_capture_pulse.py`) is unexamined:
-       the watch is backend-neutral, but whether a Pulse monitor stream goes quiet or keeps delivering on a sink
-       change was not read.
+       6. *Media playing, nothing rendered here* (checkpoint audit 11, A11-L6): Spotify Connect or casting to another
+          device, a player set to a non-default output from the session's start, or a stream still buffering on the
+          network. Expected: the bars rest (as in process); about 2 s after each play edge, and once per silent run,
+          the worker reopens the loopback device once (one PortAudio terminate and re-initialise, then the default
+          opened). Watch for a visible stall in the bars or the Media card at those moments; at the next pause the
+          reopen line counts them, with `0 delivering again`.
+       7. *A second app on the old default* (a voice chat, a system sound loop) while the player follows a default
+          switch. Expected limit: the old endpoint keeps publishing, so the watch never fires and the bars stay on
+          the other app's audio until Media's next pause and play (as in process).
+     - *Known limits (A11-L6):* "no publication while Media says playing" means "the audio is not here" only when the
+       player is the endpoint's only renderer. With nothing rendered locally (check 6) it costs one reopen per silent
+       run and one more per capture edge (play, park, activation), each harmless by design (the bars are at rest).
+       With another renderer on the old endpoint (check 7) a switch is hidden. The reopen's cost on a real device is
+       unmeasured: 20 ms is the stand-in's, while `Pa_Terminate` / `Pa_Initialize` enumerate every WASAPI endpoint
+       (Bluetooth included), and whether PyAudioWPatch holds the GIL there (stalling the worker's cadence for that
+       time) is unverified.
+     - **Left for step 6:** the operator checks above. A real-device reopen timed in the worker, with the cadence's
+       step dt across it (A11-L6). The worker's own log lines are still invisible: the main log learns of a reopen
+       only at the next edge's reply, and never of one after the session's last edge (A11-L5, above), because there
+       is no worker -> main event channel for diagnostics (an unsolicited response or the heartbeat's acknowledgement
+       would be one; the supervisor is not changed here). In-process parity (`Current_Plan.md`). Linux
+       (`utils/audio_capture_pulse.py`) is unexamined: the watch is backend-neutral, but whether a Pulse monitor
+       stream goes quiet or keeps delivering on a sink change was not read.
    - 5.4 Settings: a resolved-settings delta applied to the existing session at a tick boundary (no rebuild per
      slider step); the presentation-config reads moved to logical config so the worker imports QtCore only, at call
      time too (checkpoint audit 5, A5-L2: today an activation loads QtGui through `config_applier.py`'s
@@ -1194,9 +1216,10 @@ switch never remaps.
        (its owner leases the running worker synchronously inside `initialize_displays`); a replacement with no owner on
        the worker ends the hold and retires it. Settings holds nothing: its dialog can stay open for minutes with no
        Visualizer, so the worker is retired with its owner and respawned at the close, off the GUI thread (spawn
-       to ready: 0.29 s from the production entry since checkpoint audit 10's A10-M1, 1.6 s before it; the Visualizer
-       shows after that, the configure, the session's build, its first presentable frame and its fade; the first
-       configure's deadline bounds it). Why this policy: it is event-driven (no idle timer),
+       to ready, idle: 0.29 s from the production entry since checkpoint audit 10's A10-M1, 1.6 s before it; the
+       first configure now imports what the old preload had loaded, 1.69-1.72 s against 1.03-1.16 s, so ready plus
+       configure is about 0.7 s faster, not 1.3 s: A11-L1; the Visualizer shows after that, the configure, the
+       session's build, its first presentable frame and its fade; the first configure's deadline bounds it). Why this policy: it is event-driven (no idle timer),
        it never thrashes on the frequent edges (mode/preset changes are in-session; a recovery swaps links within a
        turn; reloads are held) and it leaves no worker where no Visualizer runs. The retirement is fenced: the task
        re-checks under the lifetime lock that no lease or hold arrived and marks the role retiring; a link that
@@ -1212,8 +1235,10 @@ switch never remaps.
        workers, left as is). 33 threads while a session exists, 29 after it (numpy's and the runtime's pools), flat
        over three more sessions. These figures are from a bare entry (no `main.py` module level, no
        `configure_native_thread_pools` of its own); until A10-M1 the production entry's worker was a different process
-       (112 MB RSS idle, the Qt GUI stack loaded), since then it is the same as the bare one at ready (32 MB). The
-       production worker inside a session (RSS, threads with `OPENBLAS_NUM_THREADS=1`) is not measured here.
+       (112 MB RSS idle, the Qt GUI stack loaded), since then it is the same as the bare one at ready (32 MB). In a
+       session the bare entry's worker held about 71 MB, so the in-session saving is about 40 MB, not the 80 MB of the
+       idle figures (A11-L1). The production worker inside a session (RSS, threads with `OPENBLAS_NUM_THREADS=1`) is
+       not measured here.
      - *Diagnostics:* `ProcessSupervisor.get_visualizer_worker_usage_snapshot()` names the worker's PID from supervisor
        state (no OS query); `main.py`'s `--usage` resource provider adds it, and the sampler logs
        `visualizer_worker_pid`, `_cpu_pct`, `_rss_mb` and `_threads` from its own per-process pass (the values it
@@ -1239,7 +1264,9 @@ switch never remaps.
        resets it; a shorter run of failures stays the runtime's retry, as in process. A longer one, which in process
        recovers silently, is a visible recovery here: fade out, reconfigure, fade in. Corrected by checkpoint audit 10,
        A10-L4, which also stopped it counting toward the owner's two strikes for life: a recovery whose reveal
-       completes starts the count again): the session records why, requests a
+       completes starts the count again; bounded by checkpoint audit 11, A11-M1: at most
+       `engine_worker_link.MAX_RECOVERIES_PER_RUN = 3` recoveries per run, and the failure after them keeps the
+       Visualizer in process for the run): the session records why, requests a
        park from inside its own step (`VisualizerLogicalRuntime.request_park`, the non-waiting half of `park`) and closes
        its wake sender, so the owner's listener sees the session's end (the existing recovery: hold, fade, reconfigure
        once); a later edge closes it and replies `session_closed`, and `VIS_STOP`'s report carries `failed`.
@@ -1261,7 +1288,8 @@ switch never remaps.
        `main_mc.py` skip their application imports while a worker re-executes them
        (`core.spawn_child.importing_parents_main`: the spawn name `__mp_main__` / `__parents_main__`, a frozen
        `__parents_main__` being imported, or multiprocessing's own inheriting marker; stdlib only); the parent runs the
-       same module-level statements in the same order. From the production entry, three runs each (evidence
+       same module-level statements in the same order. From the production entry, three runs each, an idle,
+       unconfigured worker (ready, and memory 1 s after it; evidence
        `.artifacts/evidence/architecture/native_core_p2/20261108_audit10_spawn_cost/`, probe scripts kept there):
 
        | Worker, parent | Ready | RSS | USS | Private | Qt in the child |
@@ -1273,9 +1301,17 @@ switch never remaps.
        | engine / image, bare parent (reference) | 0.30 / 0.29 s | 31 MB | 18 MB | 21 MB | none |
 
        The `main_mc.py` parent measures the same as `main.py` after the fix. Medians of three; the ranges are within
-       0.06 s and 1 MB except the first engine run before the fix (1.73 s). **Operator check:** a frozen build with
-       `--viz-engine-worker` (the Visualizer on the worker, its frames shown) and the cold spawn's time to the first
-       configure's reply against the 6 s bound (audit 9, A9-L2), plus the worker's RSS in `--usage`.
+       0.06 s and 1 MB except the first engine run before the fix (1.73 s). **In use (checkpoint audit 11, A11-L1):**
+       the engine worker's first configure imports its session's graph itself now, 1.69-1.72 s from a bare start
+       against 1.03-1.16 s after the old preload, so about 0.6 s of the 1.33 s moved into the first configure; and a
+       configured worker in a session holds about 71 MB (bare entry), so the in-session saving is about 40 MB. The
+       image workers keep nearly all of it: their target imports no Qt at module level, and the first decode on the
+       default Qt path adds `PySide6.QtCore` and `PySide6.QtGui` (`QImage`) with `rendering.image_processor_async`
+       (about 0.1 s and 12 MB in a bare interpreter), never QtWidgets, QtQuick, QtQml, the engine or Settings; the
+       Pillow path adds nothing. **Operator check:** a frozen build with `--viz-engine-worker` (the Visualizer on the
+       worker, its frames shown) and the cold spawn's time to the first configure's reply against the 6 s bound
+       (audit 9, A9-L2; ready plus the first configure, which now includes the configure-time imports), plus the
+       worker's RSS in `--usage` inside a session.
      - *Audit 9:* A9-L1, the first configure's deadline is inert once `retire()` began (`_retiring`, set first: a retire
        whose logical join failed returns before `_retired`). A9-L2, the spawn task belongs to its link: it stops nothing
        (the link no longer stops the role), starts nothing once its link closed, and a worker it started for a link that
@@ -1301,7 +1337,8 @@ switch never remaps.
        the owner's failure count: the second strike is a failure before a recovery completed, not any second failure
        in the owner's life (smallest correct fix: one reset at an existing event; not counting a step-failure
        fail-close would need the reason sent over the pipe and would loop a deterministic step failure until the
-       recovery deadline). A recovery that never reveals still falls back at its deadline (counted). A10-L5 (test only):
+       recovery deadline). A recovery that never reveals still falls back at its deadline (counted). The reset had no
+       bound until audit 11 (A11-M1, below). A10-L5 (test only):
        an engine-level CUSTOM reload hands the held worker to the replacement's owner. Audit 9 correction: the engine's
        IO pool has four workers (`ThreadManager`'s default), not two (A9-L2's premise; `create_helper_manager` defaults
        to two).
@@ -1312,6 +1349,16 @@ switch never remaps.
        runs (no worker). Under `--usage` only: one refresh per unseen named PID (none is named at rest) and a newly
        added child's first CPU reads `na` (an image worker's first sample). The supervisor's heartbeat restart of an
        image worker charges a restart only when it restarts.
+     - *Checkpoint audit 11 (8 Nov), fixed:* A11-M1, the engine worker's recoveries are bounded per run: each recovery
+       takes one of `engine_worker_link.MAX_RECOVERIES_PER_RUN = 3` (`claim_recovery_for_run`, beside the run's
+       failure record), and the failure after the last one keeps the Visualizer in process for the run, through the
+       second strike's fallback (the held frame fades out, the in-process activation is revealed). A count, not a span:
+       a "the replacement ran N frames" threshold bounds only failures that recur faster than it, and a failure
+       minutes after each reveal (a fixed point in a song, a device path that fails closed at each reopen) outlives any
+       such threshold; a count needs no timer. Three still lets isolated failures recover on the worker a few times a
+       run. A genuinely recovered session still starts the two strikes again (A10-L4). A11-L1, the A10-M1 figures are
+       an idle worker's (the frozen-spawn record above). A11-L5 and A11-L6 are in the 5.3 record. Off the admission:
+       nothing changes (the count is taken only on the worker path).
      - *Tests:* `tests/test_visualizer_engine_worker_lifetime.py`, `tests/test_visualizer_engine_frozen_spawn.py`,
        `tests/test_usage_sampler.py` (two new), `tests/test_frozen_build_audit.py`,
        `tests/test_build_closeout_contract.py` (TestSuite lists each, with its negative control).
@@ -1324,8 +1371,9 @@ switch never remaps.
        (Settings round trips, display selection, replacement hang window, S hotkey, no display shown).
      - **Left for step 6 / gate 3:** gate 3's game60 run (lead, operator's yes); the operator's frozen check above
        (now also confirming the frozen worker loads no Qt GUI stack: A10-M1 is proven on the source spawn path and
-       on the entry module run as `__parents_main__`, not on a build); the production worker's RSS and threads inside
-       a session; 5.3's operator device checks and what its record leaves (5.3 above); the reply handlers outside the one-frame gate (the configure's reply,
+       on the entry module run as `__parents_main__`, not on a build; timed as ready plus the first configure, A11-L1);
+       the production worker's RSS and threads inside a session; 5.3's operator device checks, the real-device reopen
+       timing and what its record leaves (5.3 above, A11-L5/L6); the reply handlers outside the one-frame gate (the configure's reply,
        161-209 ms); the render-thread decode and completion cost with a real window; gate 4's 20 Settings open/close
        and 20 mode switches with no process, mapping or handle growth (the lifetime now retires the worker at each
        Settings open; to measure); `BaseWorker`'s 100 ms queue wait (10 wakes/s in an idle or parked worker, every

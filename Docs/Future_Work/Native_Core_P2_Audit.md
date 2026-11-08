@@ -2048,9 +2048,10 @@ and the test run; the failures are quoted in each commit message). Tests: `tests
 - **A10-M1** fixed by 22af1f00: `main.py` (and `main_mc.py`) skip their application imports while a worker process
   re-executes them (`core.spawn_child.importing_parents_main`: the spawn name, a frozen `__parents_main__` being
   imported, or multiprocessing's own inheriting marker). The parent runs the same module-level statements in the
-  same order. From a `main.py` parent, three runs each: the engine worker is ready in 0.29 s with 32 MB RSS / 19 MB
-  USS and no Qt module (was 1.62 s, 112 / 83 MB, the Qt GUI stack); an image worker the same (was 1.56 s, 112 / 83 MB);
-  a `main_mc.py` parent the same. Evidence and probe scripts:
+  same order. From a `main.py` parent, three runs each, idle and unconfigured (corrected by A11-L1: in use the engine
+  worker saves about 0.7 s to its first configure and about 40 MB in a session): the engine worker is ready in 0.29 s
+  with 32 MB RSS / 19 MB USS and no Qt module (was 1.62 s, 112 / 83 MB, the Qt GUI stack); an image worker the same
+  (was 1.56 s, 112 / 83 MB); a `main_mc.py` parent the same. Evidence and probe scripts:
   `.artifacts/evidence/architecture/native_core_p2/20261108_audit10_spawn_cost/`. Tests: the production-entry spawn
   loads no QtGui/QtWidgets/QtQuick/QtQml (engine worker by `sys.modules` and mapped DLLs, image worker from `main.py`
   and `main_mc.py` by mapped DLLs), and the entry modules run as `__parents_main__` import no Qt, engine or Settings
@@ -2073,7 +2074,8 @@ and the test run; the failures are quoted in each commit message). Tests: `tests
   `test_a_heartbeat_restart_of_an_image_worker_replaced_meanwhile_does_nothing_and_charges_nothing` (the foreground
   start holds the lifecycle lock while the restart waits on it). Reverted: `restart_count` 1.
 - **A10-L4** fixed by 0e8967fd: a recovery whose replacement completes its reveal on the worker resets
-  `_worker_failures`; the second strike is now a failure before a recovery completed. Chosen over "do not count a
+  `_worker_failures`; the second strike is now a failure before a recovery completed (the reset had no bound: A11-M1
+  caps the run's recoveries). Chosen over "do not count a
   step-failure fail-close": that needs the reason sent over the pipe, and a deterministic step failure would then
   reconfigure about every 0.7 s until the recovery deadline. The record's "as in process" is corrected (design doc,
   5.7 "Session (3c)"). Test: the lost-session test (a later loss after a completed recovery recovers; a loss before
@@ -2294,3 +2296,92 @@ Scope: `git log ef6cf521..5fb8dab7` (audit 10 fixes 32bd6c3f, 5.3's rest 5a79de3
 - The GitHub 422 on undeclared dispatch inputs (A11-L3): from GitHub's documented behaviour, not run.
 - `test_visualizer_expansion_fullscreen_edit.py` and the owner-on-the-worker liveness file were not run (window
   and timing risk). The A10 fix suites were not re-run beyond the files listed above.
+
+### Audit 11 resolution (8 Nov)
+
+Each code fix has a regression test that fails with the fix reverted (the audited hunk restored, or the one line that
+carries the fix removed, and the test run; each commit message quotes the failure). A11-L1 and A11-L6 are records only.
+
+- **A11-M1** fixed by 77609694. **Bound chosen: at most `engine_worker_link.MAX_RECOVERIES_PER_RUN = 3` recoveries
+  per run** (`claim_recovery_for_run`, under the run lock beside the run's failure record). The A10-L4 reset stays, so a
+  genuinely recovered session still starts the two strikes again; each recovery takes one of the three, and the
+  failure after the last one goes in process for the run ("recovery limit ..."), through the second strike's fallback
+  (the held frame fades out, the in-process activation is revealed). Why a count and not "reset only after N frames
+  since the reveal": a frame threshold bounds only failures that recur faster than it, and the scenarios here (a fault
+  at a fixed point in a song, a device path that fails closed at each reopen) recur minutes apart, so they would still
+  cycle for the whole run; a per-run count bounds every recurrence period with no timer. Three: isolated failures still
+  recover on the worker a few times a run; past that the in-process default takes over. Test:
+  `test_a_failure_that_recurs_after_every_completed_recovery_ends_in_process_at_the_runs_recovery_limit` (a real
+  worker; the session ends after each completed reveal: each recovery resets the count, the next failure is in process,
+  revealed and presenting). Reverted (the limit's check removed): the fourth failure recovers on the worker again.
+  The lost-session test still holds A10-L4 (three recoveries inside the limit, then "second failure").
+- **A11-L1** (records): R-176, the design doc's 5.7 record (the frozen-spawn table, the lifetime and park paragraphs,
+  the audit 10 bullet), this file's audit 10 resolution and `Current_Plan.md` now call 0.29 s / 32 MB an idle,
+  unconfigured worker; about 0.6 s of the saving moved into the engine worker's first configure (1.69-1.72 s against
+  1.03-1.16 s), so ready plus configure is about 0.7 s faster; a configured worker's in-session saving is about 40 MB.
+  Image workers keep nearly all of it: `core/process/workers/image_worker.py` imports no Qt at module level; its first
+  decode on the default Qt path (`smooth`, no sharpen) imports `PySide6.QtCore`, `PySide6.QtGui` (`QImage`),
+  `rendering.display_modes` and `rendering.image_processor_async` (about 0.1 s and 12 MB in a bare interpreter, 3
+  runs), and the Pillow path nothing more; neither loads QtWidgets, QtQuick, QtQml, QtNetwork, QtOpenGL, the engine
+  or Settings. R-176 keeps its lessons and adds "measure the configured worker, not only spawn-ready". The
+  operator's frozen check now times ready plus the first configure.
+- **A11-L2** fixed by 95c41043. The Linux job starts first, on its own thread with a dependent process owner
+  (`BuildProcessOwner.dependent`: the same launch seams, one active process of its own, cancelled with the
+  pipeline's owner, at once if taken after a cancel). The Windows runs are polled, retrieved, validated, published and
+  reported, and their installers compiled, without waiting for it; the pipeline joins it before `pipeline_done`, and on
+  a pipeline failure its shutdown cancels it (its `run_job` then cancels its GitHub run). Chosen over "dispatch first,
+  follow after the Windows retrieval", which needs the script split into two phases. Tests:
+  `test_the_linux_build_runs_beside_the_windows_runs_and_never_holds_their_retrieval` (Linux running before the
+  helper starts; published and the installer compiled before the Linux job ends; its own owner; done last; reverted:
+  the helper saw "Linux not started"), `test_a_stop_ends_the_linux_build_and_the_windows_runs_and_compiles_no_installer`
+  (one cancel ends the Linux worker's tree and is seen by the Windows side; no installer; unlinked owner: "ran on"),
+  `test_a_dependent_owner_runs_its_own_tree_and_is_cancelled_with_its_parent`. `Docs/Guides/GitHub_Remote_Build.md`
+  updated.
+- **A11-L3** fixed by 95c41043: `build_from_windows.ps1` sends `-f commit/token` only with `-Commit` (the Remote tab);
+  otherwise the pre-fa62ef14 dispatch and the commit-and-time run lookup. PowerShell's parser: 0 errors. Test:
+  `test_the_linux_dispatch_sends_inputs_only_for_a_pinned_commit` (text level; the audited script fails). On the
+  Remote tab a branch whose workflow predates the inputs still fails its Linux dispatch (recorded in the guide).
+- **A11-L4** fixed by 95c41043: `_stop_linux_github_run` cancels a run it never followed, found by the logged run
+  token in the display title, by the logged commit and the job's start time (the other tabs' plain dispatch, whose
+  log line now names the commit), or for a tag by the push run whose head branch is the tag (then deletes the tag);
+  one bounded `subprocess.run` each, and a run not found is said in the job's detail. Test:
+  `test_a_linux_job_stopped_before_it_followed_its_run_still_cancels_it` (fake `subprocess.run`; the audited reader
+  cancels none).
+- **A11-L5** fixed by b54c5903: the link reads the device state at the top level or under `report["engine"]`
+  (`_note_device_state_in`), for replies delivered as events and for an awaited stop. The owner's `retire` still
+  never receives the stop's reply, so a reopen after the session's last edge does not reach the main log; the 5.3
+  record now says so instead of implying a backstop. Test:
+  `test_the_link_logs_the_device_state_nested_in_the_stops_report` (top-level-only reader: `0 == 1`).
+- **A11-L6** (records): the 5.3 record's coverage sentence is limited to a player that is its endpoint's only
+  renderer; operator checks 6 (Media playing with nothing rendered here: Spotify Connect or casting, a player pinned
+  elsewhere from the start, network buffering; one PortAudio re-init per silent run and per capture edge) and 7 (a
+  second app on the old default hides a switch) and a *Known limits* entry (the real-device reopen cost and the GIL
+  question unmeasured) are added there and in `Current_Plan.md`; the real-device reopen timing is in "Left for step 6".
+- **A11-L7** fixed by 987b06fa: `toggleChildEditLock` selects its frame only when the click opens the lock. Test:
+  `test_a_lock_click_that_locks_an_unselected_frame_keeps_the_selection_and_its_held_gesture` (hidden production
+  scene, real pointer clicks; selecting on every click: "a locking click moved the selection").
+- **A11-L8** fixed by 3f8bf019: `_strip_ps1_comments` is one scan that reads single-quoted (doubled quote),
+  double-quoted (backtick escape, doubled quote) and here-strings (kept verbatim), and a backtick escape outside
+  strings; comments go only outside strings. Not modelled (docstring): a double quote inside a `$( )` of a
+  double-quoted string, and `#` inside an unquoted bareword; the every-literal test stays the guard. The real
+  scripts' stripped text is identical to the audited stripper's (29 declarations, 120 prune arguments). Test:
+  `test_powershell_escapes_and_here_strings_are_read_as_powershell_reads_them` (audited stripper: 6 of 12 lines
+  misread).
+
+No new historical-bug entry: A11-M1 is in unreleased, opt-in code (`--viz-engine-worker`, default off) and was found
+by audit the day it was written; A11-L2/L3/L4/L8 are build tooling with no shipped effect (the GitHub Remote tab and
+its Linux job date from 8 Nov); A11-L7 is an Edit selection side effect with no data change or Undo entry.
+
+Off the admission (`--viz-engine-worker` off): the recovery count is taken only on the worker path, and the link's
+device-state reader exists only there. The Edit lock change applies to every Edit session. The Build Runner changes
+touch only the GitHub Remote tab's pipeline, the Linux job's stop cleanup on every tab, and the Linux script's
+dispatch.
+
+Focused runs after the fixes (foreground, timeouts): `test_visualizer_owner_engine_worker.py` 27 passed;
+`test_visualizer_owner_engine_worker_liveness.py` with `test_visualizer_engine_worker_lifetime.py` 54 passed;
+`test_visualizer_engine_worker_device.py` 12 passed; `test_build_runner_cancellation.py`, `test_github_remote_build.py`
+and `test_build_linux_declarations.py` 59 passed; `test_build_runner.py` 19 passed; `test_build_linux_declarations.py`
+with `test_linux_build.py` 6 passed, 1 skipped (Linux only); `test_qtquick_child_lock_scene.py` 9 passed; the QML lock
+contract files (`test_quick_child_paint_containment_contract.py`, `test_r39_hover_edit_handoff_contract.py`,
+`test_r40_hover_edit_lock_contract.py`, `test_semantic_flip_and_fixed_gmail_source.py`) with
+`test_custom_layout_guides_contract.py` 50 passed. No build and no GitHub dispatch was run.
