@@ -461,7 +461,7 @@ def test_cold_play_ramp_is_one_second_but_warm_resume_stays_unramped(monkeypatch
 
 def test_the_ramp_flag_is_a_pure_read_of_the_ramp_clock(monkeypatch) -> None:
     # Extruded Bubble's "still ramping" source flag answers from the ramp's own clock, not from the latch a ramped
-    # getter clears on expiry: an engine snapshot captures every getter, so no read may depend on which ran first.
+    # getter clears on expiry, so no read depends on which getter ran first.
     engine = _SpotifyBeatEngine.__new__(_SpotifyBeatEngine)
     engine._is_spotify_playing = False
     engine._last_playback_state_ts = 0.0

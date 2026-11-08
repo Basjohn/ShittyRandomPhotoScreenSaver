@@ -123,6 +123,48 @@ def test_each_tick_reads_the_asynchronous_commit_of_its_own_block(qt_app, monkey
 
 
 @pytest.mark.qt
+def test_a_tick_that_raises_closes_the_live_session(qt_app, monkeypatch):
+    # Fail closed (audit M2; ported from the deleted snapshot input's gate, work order 5 slice 5.6): a tick that raised
+    # left its controller half-updated, so the worker ends the session and says so; the next input is refused instead
+    # of ticking on.
+    import tools.expanded_visualizer_evidence as evidence
+    from core.process.types import WorkerMessage
+    from core.visualizer_engine.engine_worker import VisualizerEngineWorker
+    from widgets.spotify_visualizer import tick_pipeline
+    from widgets.spotify_visualizer.feature_replay import REPLAY_SEED
+
+    frames = evidence.shipped_clip(0.2).frames
+    worker = VisualizerEngineWorker(None, None)
+    reader = PacketMailbox(role="reader")
+
+    def send(kind, payload, seq):
+        return worker.handle_message(WorkerMessage(msg_type=kind, seq_no=seq, correlation_id=str(seq), payload=payload))
+
+    try:
+        configured = send(MessageType.VIS_CONFIGURE, {"mapping": reader.mapping_name, "mode": "spectrum",
+                                                      "runtime_generation": GENERATION, "inputs": "live",
+                                                      "seed": REPLAY_SEED, "order": "settled"}, 1)
+        assert configured.success, configured.error
+        assert send(MessageType.VIS_INPUT, {"frame": frames[0]}, 2).success
+        real_tick = tick_pipeline.logical_tick
+
+        def raising(state):
+            real_tick(state)
+            raise RuntimeError("injected mid-tick failure")
+
+        monkeypatch.setattr(tick_pipeline, "logical_tick", raising)
+        failed = send(MessageType.VIS_INPUT, {"frame": frames[1]}, 3)
+        assert not failed.success and failed.payload.get("session_closed") is True, failed
+        assert worker._session is None
+        monkeypatch.setattr(tick_pipeline, "logical_tick", real_tick)
+        after = send(MessageType.VIS_INPUT, {"frame": frames[2]}, 4)
+        assert not after.success and "no engine session" in after.error
+    finally:
+        worker._close_session()
+        reader.close()
+
+
+@pytest.mark.qt
 def test_the_worker_process_ticks_the_live_engines_frames_for_every_mode(qt_app):
     # The P2b identity gate: the live engine in process equals the live engine in a WorkerType.VISUALIZER process,
     # frame for frame, through the packet ABI.

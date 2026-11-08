@@ -328,10 +328,6 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         real = self._replay_real
         return () if real is None else tuple(real.analysis_spectrum)
 
-    def peek_pre_agc_analysis_spectrum(self) -> tuple[float, ...]:
-        # A replay's spectrum getter is already a pure read (no publication request to make).
-        return self.get_pre_agc_analysis_spectrum()
-
     def get_event_scheduler(self):
         # Schema 1: exact onset authority is carried by the immutable transient frame, and no
         # scheduler avoids replaying stale live-worker events. Schema 2 frames carry their typed

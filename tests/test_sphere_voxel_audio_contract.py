@@ -209,9 +209,6 @@ def test_sphere_capture_uses_raw_analysis_spectrum_and_live_pre_agc_energy() -> 
     # (a mode-rule demand changed Sphere's production frames and was withdrawn: checkpoint audits 4-5).
     assert "_pre_agc_analysis_spectrum_requested" in engine_source
     assert "if not self._pre_agc_analysis_spectrum_requested:" in engine_source
-    from widgets.spotify_visualizer import mode_capabilities
-    assert mode_capabilities.reads_analysis_spectrum("sphere")
-    assert not mode_capabilities.reads_analysis_spectrum("spectrum")
     assert 'raw_spectrum = getattr(worker_state, "_freq_values", None)' in engine_source
     assert "get_live_pre_agc_energy_bands" in engine_source
 

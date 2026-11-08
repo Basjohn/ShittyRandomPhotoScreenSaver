@@ -6,16 +6,15 @@ per tick, and the logical mailbox replaced by the writer side of the frame packe
 tick lands in the shared mapping the main process owns and reads. ``VisualizerEngineWorker`` runs sessions in a
 ``WorkerType.VISUALIZER`` process under ``ProcessSupervisor`` (control messages only: configure, input, stop).
 
-A session ticks recorded post-DSP inputs (``FeatureFrame``, the replay schema the live engine records) or live
-inputs, the main process's lossless engine snapshots (``engine_snapshot``), one acknowledged input per tick, which is
-what the identity gates need: the worker's frames equal the in-process tick's for every mode
-(``tests/test_visualizer_engine_worker.py``, ``tests/test_visualizer_engine_snapshot.py``). P2b's rig
+A session ticks recorded post-DSP inputs (``FeatureFrame``, the replay schema the live engine records), one
+acknowledged input per tick, which is what the identity gates need: the worker's frames equal the in-process tick's
+for every mode (``tests/test_visualizer_engine_worker.py``). P2b's rig and product path
 (``inputs="live"``) runs the production ``_SpotifyBeatEngine`` itself, with its real audio worker, capture lane and
 compute pool, fed the recordings' PCM through the capture callback (``recorded_capture``;
 ``tests/test_visualizer_engine_live.py``). Every session configures through the production owner's own
 configuration (``logical_edges.configure_logical_controller``, then the owner's bind: render admission for the
-configured identity; checkpoint audit 5, A5-M2), never a replay copy. Production wiring (latest-wins snapshots without
-acknowledgements, park, crash fail-closed) is work order 5; its first slice (5.1) is built: a ``cadence="worker"``
+configured identity; checkpoint audit 5, A5-M2), never a replay copy. Production wiring (park, crash fail-closed) is work
+order 5; its first slice (5.1) is built: a ``cadence="worker"``
 live session ticks on its own clock, the logical runtime's own cadence (``VisualizerLogicalRuntime``, started through
 ``logical_edges.start_logical_cadence`` as the owner starts it), fed a recorded PCM stream paced on the audio clock at
 the cadence's edges (``recorded_capture.PacedPcmSource``), and its frames reach the reader through the same mailbox
@@ -37,7 +36,6 @@ from typing import Any, Optional
 
 from core.process.types import MessageType, WorkerMessage, WorkerResponse, WorkerType
 from core.process.workers.base import BaseWorker
-from core.visualizer_engine.engine_snapshot import SnapshotContractError
 
 
 class EngineSession:
@@ -45,13 +43,12 @@ class EngineSession:
 
     #: ``feature``: recorded post-DSP inputs (``FeatureFrame``) through ``ReplayBeatEngine`` (the replay contract).
     #: ``lanes``: the same inputs through production DSP on their native PCM (``ProductionLaneEngine``), the
-    #: in-process reference for live inputs. ``snapshot``: live inputs, the main process's lossless engine snapshots
-    #: (``engine_snapshot``), through ``SnapshotBeatEngine``; requires ``initial_snapshot``. ``live`` (P2b): the
+    #: in-process reference on production DSP (the Studios' replay). ``live`` (P2b, the product path): the
     #: production ``_SpotifyBeatEngine`` with its real audio worker, capture lane and compute pool on the session's
     #: own ``ThreadManager``, fed each ``FeatureFrame``'s native PCM through the capture callback
     #: (``recorded_capture.RecordedCaptureBackend``; a device is refused for the session's life); ``order`` decides
     #: when the asynchronous commit lands relative to the tick (``ORDERS``).
-    INPUTS = ("feature", "lanes", "live", "snapshot")
+    INPUTS = ("feature", "lanes", "live")
 
     #: Live sessions' commit order. ``production`` (the reference for the off-steady-state gates; checkpoint audit
     #: 3, A3-H1): the tick's own engine step consumes the newest block and submits its analysis, the tick reads the
@@ -94,11 +91,10 @@ class EngineSession:
 
     def _construct(self, *, mapping: str, mode: str, runtime_generation: int, preset: int = 0, settings: Any = None,
                  bar_count: int = 32, label_namespace: int = 0, wake: Any = None, inputs: str = "feature",
-                 initial_snapshot: Any = None, seed: int | None = None, order: str = "production",
+                 seed: int | None = None, order: str = "production",
                  cadence: str = "input", pcm: Any = None, pcm_rate: int | None = None,
                  interval_s: float | None = None, activation: Any = None) -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-        from core.visualizer_engine.engine_snapshot import SnapshotBeatEngine
         from core.visualizer_engine.packet_mailbox import PacketMailbox
         from widgets.spotify_visualizer import extruded_bubble_drift_log
         from widgets.spotify_visualizer.feature_replay import (
@@ -108,8 +104,8 @@ class EngineSession:
 
         if not 0 <= int(label_namespace) < (1 << 30):
             raise ValueError(f"label namespace out of range: {label_namespace}")
-        if inputs not in self.INPUTS or (inputs == "snapshot") != (initial_snapshot is not None):
-            raise ValueError(f"inputs {inputs!r} with{'' if initial_snapshot is not None else 'out'} an initial snapshot")
+        if inputs not in self.INPUTS:
+            raise ValueError(f"unknown session inputs {inputs!r}")
         if order not in self.ORDERS:
             raise ValueError(f"unknown live commit order {order!r}")
         if cadence not in self.CADENCES:
@@ -131,11 +127,11 @@ class EngineSession:
         self._activation = dict(activation) if activation is not None else None
         self._stack = contextlib.ExitStack()
         # The session's authored clock follows its inputs' own timestamps (each input carries the time it was
-        # produced), so the worker ticks the same frames whatever its scheduling. Live (snapshot) sessions pin only
+        # produced), so the worker ticks the same frames whatever its scheduling. Live sessions pin only
         # the authored clock: ``time.*`` and ``random`` stay the process's own (audit H6), so a tick that read a wall
         # clock or the RNG would fail the identity gates instead of being pinned equal. Recorded-input sessions are
         # replays and keep the replay harness's full pin.
-        if inputs in ("snapshot", "live"):
+        if inputs == "live":
             from core.authored_clock import pinned_authored_clock
 
             self._clock = [0.0]
@@ -160,10 +156,7 @@ class EngineSession:
         self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake)
         self._stack.callback(self.mailbox.close)
         self._live = inputs == "live"
-        if inputs == "snapshot":
-            engine = SnapshotBeatEngine(initial_snapshot)
-            self._clock[0] = initial_snapshot.timestamp
-        elif self._live:
+        if self._live:
             import threading
 
             from core.visualizer_engine.recorded_capture import CaptureHistoryStream
@@ -678,25 +671,10 @@ class EngineSession:
         """The session's authored clock cell (in-process gates step their main-side engine on it)."""
         return self._clock
 
-    def tick_snapshot(self, snapshot: Any) -> int:
-        """Run the tick on one live input (an engine snapshot); the mailbox revision after it."""
-        from widgets.spotify_visualizer.tick_pipeline import logical_tick
-
-        if self.inputs != "snapshot":
-            raise ValueError("this session ticks recorded inputs")
-        self._clock[0] = snapshot.timestamp
-        self._controller.playing = snapshot.playing
-        self._engine.accept_snapshot(snapshot)
-        if logical_tick(self._controller.logical_tick_state) is None:
-            raise RuntimeError("the tick produced no logical frame")
-        return self.mailbox.revision
-
     def tick(self, feature: Any) -> int:
         """Accept one post-DSP input, run the tick, publish its frame; the mailbox revision after it."""
         from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
-        if self.inputs == "snapshot":
-            raise ValueError("this session ticks engine snapshots")
         if self._paced:
             raise ValueError("a worker-paced session ticks on its own cadence")
         self._clock[0] = feature.timestamp_us / 1_000_000.0
@@ -750,11 +728,8 @@ class VisualizerEngineWorker(BaseWorker):
                 if self._session is None:
                     return self._reply(msg, success=False, error="no engine session is configured")
                 try:
-                    if "snapshot" in msg.payload:
-                        revision = self._session.tick_snapshot(msg.payload["snapshot"])
-                    else:
-                        revision = self._session.tick(msg.payload["frame"])
-                except (Exception, SnapshotContractError) as exc:
+                    revision = self._session.tick(msg.payload["frame"])
+                except Exception as exc:
                     # Fail closed (audit M2): a tick that raised left its controller half-updated, so the session
                     # ends; the owner treats it as a worker crash (fade, reconfigure once).
                     self._close_session()
@@ -774,7 +749,7 @@ class VisualizerEngineWorker(BaseWorker):
                             session.start(bool(msg.payload["playing"]))
                         else:
                             session.set_playing(bool(msg.payload["playing"]))
-                    except (Exception, SnapshotContractError) as exc:
+                    except Exception as exc:
                         self._close_session()       # the edge may have half-applied: fail closed
                         return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}",
                                            session_closed=True)
@@ -790,7 +765,7 @@ class VisualizerEngineWorker(BaseWorker):
                     session.validate_mode_request(mode)
                     try:
                         committed = session.request_mode(mode, **payload)
-                    except (Exception, SnapshotContractError) as exc:
+                    except Exception as exc:
                         self._close_session()
                         return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}",
                                            session_closed=True)
@@ -801,7 +776,7 @@ class VisualizerEngineWorker(BaseWorker):
                                        capture_failed=session.capture_failed)
                 try:
                     changed = self._session.set_display_power(bool(msg.payload["on"]))
-                except (Exception, SnapshotContractError) as exc:
+                except Exception as exc:
                     # The edge may have half-applied (capture reference, fence): fail closed, as a tick does.
                     self._close_session()
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
@@ -817,18 +792,18 @@ class VisualizerEngineWorker(BaseWorker):
                     return self._reply(msg, report=None, stale=True)
                 try:
                     report = session.finish() if session is not None else None
-                except (Exception, SnapshotContractError) as exc:
+                except Exception as exc:
                     error = f"{type(exc).__name__}: {exc}"
                     try:
                         self._close_session()           # drops the session first, then unwinds all it holds
-                    except (Exception, SnapshotContractError) as close_exc:
+                    except Exception as close_exc:
                         error += f"; close: {type(close_exc).__name__}: {close_exc}"
                     return self._reply(msg, success=False, error=error, session_closed=True)
                 self._close_session()
                 # The Qt modules the process has loaded so far (the fresh-spawn probe reads them at spawn too).
                 return self._reply(msg, report=report, qt_modules=sorted(name for name in sys.modules
                                                                          if name.startswith("PySide6.Qt")))
-        except (Exception, SnapshotContractError) as exc:   # reported to the owner, never a silent worker death
+        except Exception as exc:   # reported to the owner, never a silent worker death
             return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}")
         return self._reply(msg, success=False, error=f"unsupported message {msg.msg_type}")
 
