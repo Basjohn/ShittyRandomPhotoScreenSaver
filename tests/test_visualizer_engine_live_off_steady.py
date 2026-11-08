@@ -336,35 +336,6 @@ def test_each_slot_carries_the_identity_and_flags_a_native_reader_validates(qt_a
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize("into", ["configure", "switch"])
-def test_spectrum_readers_publish_on_the_first_commit_after_activation(qt_app, monkeypatch, into):
-    # A3-M1: the activation reset clears the per-read spectrum request, so the first commit after an activation
-    # published none (a commit-long gap, production too). The mode rule declares the demand before every step.
-    # Control: with the declaration a no-op the first commit publishes nothing.
-    from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
-
-    def first_spectrum():
-        frames = _clip(1.0)
-        reader = PacketMailbox(role="reader")
-        session = _session(reader, "spectrum" if into == "switch" else "sphere", order="settled")
-        try:
-            if into == "switch":
-                for feature in frames[:10]:
-                    session.tick(feature)
-                    reader.take()
-                session.request_mode("sphere")
-            session.tick(frames[10])
-            return session._engine.peek_pre_agc_analysis_spectrum()
-        finally:
-            session.close()
-            reader.close()
-
-    assert len(first_spectrum()) > 8
-    monkeypatch.setattr(_SpotifyBeatEngine, "set_analysis_spectrum_demand", lambda self, demanded: None)
-    assert first_spectrum() == ()
-
-
-@pytest.mark.qt
 def test_a_recorded_session_refuses_an_audio_device_in_any_process(qt_app, supervisor):
     # A3-L1: a test's monkeypatch reaches only its own process; the session itself refuses a device for its life,
     # in process and in the worker (the configure reply reports it). A4-L3: per engine, never a process-wide swap:

@@ -333,12 +333,11 @@ switch never remaps.
      - *Slot identity and flags, ABI 2 (H5, A3-M4):* see "The frame packet ABI" above; read back with plain `struct`
        in the tests (header, every slot's flags and identity equal to the frame it holds, changing across a switch,
        the header staying the configure-time identity).
-     - *Spectrum at activation (A3-M1):* `tick_pipeline.declare_mode_engine_demands` declares the mode rules before
-       every engine step (idle waveform, history, and now `set_analysis_spectrum_demand` from
-       `mode_capabilities.reads_analysis_spectrum`); while demanded every commit publishes the spectrum, so the first
-       commit after configure or a switch (whose reset clears the per-read request) publishes one. Same tick path in
-       process and in the worker; the snapshot engine takes it as a no-op setter. Control: the demand disabled, the
-       first commit publishes nothing.
+     - *Spectrum at activation (A3-M1): withdrawn (8 Nov).* A mode-rule spectrum demand closed the commit-long gap
+       after an activation, but changed Sphere's production frames for the whole session (audit 4 A4-M1 as a
+       standing demand; audit 5 A5-M1 still 359/364 frames as a one-shot request: the first spectrum stays in Sphere's
+       integrators). Sphere is accepted, so production keeps its pre-slice-2 behaviour exactly: the tick's own read
+       requests each publication; `declare_mode_engine_demands` declares only the waveform demands.
      - *Device refusal in any process (A3-L1):* a recorded-PCM session refuses the device for its life; the worker's
        configure reply reports `device_refused` and every gate asserts it. (Built as a process-wide swap of
        `audio_worker.create_audio_capture`; per engine since the follow-ups below, A4-L3.)

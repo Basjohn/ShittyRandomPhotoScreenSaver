@@ -959,10 +959,8 @@ def declare_mode_engine_demands(engine: Any, mode: str) -> None:
 
     Only sample-consuming modes (Oscilloscope) draw paused idle waveform samples
     and live audio from capture's contiguous history; nothing else pays for
-    either. The spectrum-reading modes (Sphere, Oscilloscope, Neon Lake) demand
-    the analysis spectrum at every commit, so the first commit after an
-    activation (whose reset clears the per-read request) publishes one instead
-    of leaving a commit-long gap (checkpoint audit 3, A3-M1). Declared before
+    either. (The analysis spectrum stays requested by the tick's own read: a
+    mode-rule demand changed Sphere's production frames, checkpoint audits 4-5.) Declared before
     the step, a switch (paused or not) is current at once.
     """
 
@@ -970,7 +968,6 @@ def declare_mode_engine_demands(engine: Any, mode: str) -> None:
     for name, demanded in (
         ("set_idle_waveform_demand", draws_samples),
         ("set_waveform_history_demand", draws_samples),
-        ("set_analysis_spectrum_demand", mode_capabilities.reads_analysis_spectrum(mode)),
     ):
         declare = getattr(engine, name, None)
         if declare is not None:
