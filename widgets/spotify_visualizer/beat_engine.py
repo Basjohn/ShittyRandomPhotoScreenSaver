@@ -289,6 +289,12 @@ class _SpotifyBeatEngine(QObject):
         """
         return self._audio_worker.fence_capture_transactions(callback)
 
+    def capture_publications(self) -> int:
+        """How many capture blocks the audio worker's capture callback has published into the engine's current audio
+        buffer (replaced at each activation boundary). The paced rig counts the blocks the engine actually accepted
+        with it (checkpoint audit 6, A6-M1); nothing reads it per frame."""
+        return self._audio_buffer.published
+
     def set_analysis_settled_observer(self, observer: Optional[Any]) -> None:
         """Install ``observer()``: called on the compute lane each time an analysis result has been committed (or
         rejected) and the engine's one analysis slot is free with nothing pending (``has_analysis_in_flight`` False).

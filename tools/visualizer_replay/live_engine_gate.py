@@ -29,10 +29,14 @@ on its own wake thread: no exceptions, no stranded or torn frames, revisions adv
 ``WorkerType.VISUALIZER`` process (``EngineSession(cadence="worker")``: its own logical runtime cadence, the shipped
 clip's PCM paced on the audio clock at the cadence's edges) free-running for ``--paced-seconds``, the reader taking
 frames on its own wake thread and stalling after each take (a slow GUI). Gated (``paced_ok``): no exception or step
-failure; one frame per cadence step at the cadence (at least 60% of the authored rate under load); latest-wins
-coalescing observed (taken < published); the newest frame reached by a wake after the stop (never stranded); revisions
-only advance; 0 torn reads; the audio delivered is the audio clock's (>= 97% of the paced time, and the paced time at
-least 80% of the run). Not frame identity: the commits race the tick, as live.
+failure; one frame per cadence step, the cadence's own rate (its steps over its run time) within 5% of the authored
+rate; coalescing (taken < published) and latest wins (every take after a stall is the newest frame published before
+it, with at least one such take); the newest frame reached by a wake after the stop (never stranded); revisions only
+advance; 0 torn reads; the audio reached the engine on the audio clock (checkpoint audit 6, A6-M1: the source
+delivered >= 97% of the paced time, the paced time at least 80% of the run, the audio worker's capture callback
+published every offered block into the engine, >= 97% of the paced time, the engine committed an analysis on at least
+half the steps, and at least half the frames taken carry energy). Not frame identity: the commits race the tick, as
+live.
 Runs at below-normal priority; exit 1 on any mismatch or stress/paced failure.
 """
 from __future__ import annotations
@@ -260,6 +264,12 @@ def stress_in_worker(supervisor, frames, mode: str) -> dict:
 
 #: The reader's stall after each take in the paced gate (a GUI busy ~40 ms per frame: ~25 Hz against a 90 Hz cadence).
 PACED_STALL_S = 0.04
+#: The cadence's rate within this share of the authored rate (A6-L6; the evidence shows 89.5-90.1 Hz of 90).
+PACED_RATE_TOLERANCE = 0.05
+#: Engine-side audio evidence (A6-M1): the engine's analysis commits per cadence step, and the share of taken frames
+#: with energy above zero (the clip's opening is music, not silence).
+PACED_MIN_COMMITS_PER_STEP = 0.8
+PACED_MIN_ENERGETIC = 0.5
 
 
 class PacedReader:
@@ -282,6 +292,9 @@ class PacedReader:
         self.errors: list[str] = []
         self._stall = threading.Event()               # never set: a bounded stall, not a wait for anything
         self._stall_s = float(stall_s)
+        self.energetic = 0                            # frames taken whose overall energy is above zero (A6-M1)
+        self.latest_checks = 0                        # takes after a stall with newer frames published (A6-L6)
+        self.stale_takes: list[tuple[int, int]] = []  # (taken, newest published before the take): latest-wins broken
         self.mailbox.set_wake_callback(self._woke.set)
         self.mailbox.listen_for_wakes(self.receiver)
         self._thread = threading.Thread(target=self._consume, name="paced-gate-reader", daemon=True)
@@ -294,16 +307,32 @@ class PacedReader:
                 return
             self._woke.clear()
             try:
+                newest = self.newest_published()          # the header's newest frame, read before the take
                 publication = self.mailbox.take()
             except Exception as exc:                      # noqa: BLE001 - reported, the run fails
                 self.errors.append(repr(exc))
                 continue
             if publication is not None:
                 with self._lock:
+                    previous = self.taken[-1] if self.taken else 0
                     self.taken.append(publication.revision)
+                    if newest > previous + 1:             # several frames published during the stall
+                        self.latest_checks += 1
+                    if publication.revision < newest:     # latest wins: never a frame older than the newest
+                        self.stale_takes.append((publication.revision, newest))
                     if self._target is not None and publication.revision >= self._target:
                         self._reached.set()
+                common = getattr(publication.state, "common", None)
+                if common is not None and float(common.energy.overall) > 0.0:
+                    self.energetic += 1
             self._stall.wait(self._stall_s)
+
+    def newest_published(self) -> int:
+        """The revision of the newest frame the writer has published (the mapping header's ``latest``), 0 if none."""
+        from core.visualizer_engine.packet_abi import FIRST_SEQUENCE
+
+        latest = struct.unpack_from("<Q", self.mailbox._reader._view, 32)[0]
+        return 0 if latest < FIRST_SEQUENCE else (latest - FIRST_SEQUENCE) // 2 + 1
 
     def wait_for(self, revision: int, timeout_s: float = 5.0) -> bool:
         """Whether the consumer takes ``revision`` (the last published) through its wakes alone."""
@@ -322,28 +351,40 @@ class PacedReader:
 
 def paced_verdict(report: dict, reader: PacedReader, *, seconds: float, reached: bool) -> dict:
     """The paced gate's checks on a finished session's report and its reader (module docstring)."""
-    cadence, audio = report["cadence"] or {}, report["audio"]
+    cadence, audio, engine = report["cadence"] or {}, report["audio"], report["engine"]
     published, steps = report["revision"], cadence.get("steps", 0)
     interval_s = cadence.get("interval_ms", 0.0) / 1000.0
     taken = list(reader.taken)
     rate_hz = published / seconds if seconds > 0 else 0.0
     authored_hz = 1.0 / interval_s if interval_s else 0.0
-    delivered_ratio = audio["delivered_s"] / audio["paced_s"] if audio["paced_s"] else 0.0
+    # The cadence's own rate: the last runtime's steps over its run time, less its parked time (A6-L6).
+    running_s = report["cadence_s"] - cadence.get("parked_seconds", 0.0)
+    cadence_hz = steps / running_s if running_s > 0 else 0.0
+    paced_s = audio["paced_s"]
+    delivered_ratio = audio["delivered_s"] / paced_s if paced_s else 0.0
+    accepted_ratio = engine["accepted_s"] / paced_s if paced_s else 0.0
+    energetic = reader.energetic / len(taken) if taken else 0.0
     verdict = {
         "seconds": seconds, "published": published, "steps": steps,
         "skipped_deadlines": cadence.get("skipped_deadlines"), "step_failures": cadence.get("step_failures"),
-        "published_hz": round(rate_hz, 2), "authored_hz": round(authored_hz, 2), "taken": len(taken),
-        "last_taken": taken[-1] if taken else None, "torn_reads": reader.mailbox._reader.torn_reads,
+        "published_hz": round(rate_hz, 2), "cadence_hz": round(cadence_hz, 2), "authored_hz": round(authored_hz, 2),
+        "taken": len(taken), "last_taken": taken[-1] if taken else None,
+        "torn_reads": reader.mailbox._reader.torn_reads,
         "advancing": all(b > a for a, b in zip(taken, taken[1:])), "stranded": not reached,
-        "audio": audio, "delivered_over_paced": round(delivered_ratio, 4), "capture": report.get("capture"),
-        "failure": report["failure"], "reader_errors": list(reader.errors),
+        "latest_checks": reader.latest_checks, "stale_takes": list(reader.stale_takes),
+        "audio": audio, "delivered_over_paced": round(delivered_ratio, 4), "engine": engine,
+        "accepted_over_paced": round(accepted_ratio, 4), "energetic_share": round(energetic, 4),
+        "capture": report.get("capture"), "reader_errors": list(reader.errors),
     }
+    verdict["cadence_ok"] = bool(published > 0 and abs(cadence_hz - authored_hz) <= PACED_RATE_TOLERANCE * authored_hz)
+    verdict["audio_ok"] = bool(
+        delivered_ratio >= 0.97 and audio["delivered_s"] <= paced_s + 0.05 and paced_s >= 0.8 * seconds
+        and accepted_ratio >= 0.97 and engine["accepted_blocks"] == engine["offered_blocks"]
+        and engine["analysis_commits"] >= PACED_MIN_COMMITS_PER_STEP * steps and energetic >= PACED_MIN_ENERGETIC)
     verdict["paced_ok"] = bool(
-        report["failure"] is None and not reader.errors and cadence.get("step_failures") == 0
-        and published == steps and published > 0 and rate_hz >= 0.6 * authored_hz
+        not reader.errors and cadence.get("step_failures") == 0 and published == steps and verdict["cadence_ok"]
         and len(taken) < published and reached and verdict["advancing"] and verdict["torn_reads"] == 0
-        and delivered_ratio >= 0.97 and audio["delivered_s"] <= audio["paced_s"] + 0.05
-        and audio["paced_s"] >= 0.8 * seconds)
+        and verdict["latest_checks"] > 0 and not verdict["stale_takes"] and verdict["audio_ok"])
     return verdict
 
 
@@ -544,11 +585,15 @@ def _main_paced(args, supervisor, modes, report, started) -> int:
             verdict = paced_in_worker(supervisor, pcm, rate, mode, seconds=args.paced_seconds)
             report["paced"][mode] = verdict
             report["paced_failures"] += 0 if verdict["paced_ok"] else 1
+            engine = verdict["engine"]
             print(f"[PACED] {mode:18s} {'OK' if verdict['paced_ok'] else 'FAILED'} published {verdict['published']} "
-                  f"({verdict['published_hz']} Hz of {verdict['authored_hz']}) steps {verdict['steps']} skipped "
-                  f"{verdict['skipped_deadlines']} taken {verdict['taken']} last {verdict['last_taken']} torn "
-                  f"{verdict['torn_reads']} audio {verdict['audio']['delivered_s']:.3f}/{verdict['audio']['paced_s']:.3f} s "
-                  f"failure {verdict['failure']}", flush=True)
+                  f"(cadence {verdict['cadence_hz']} Hz of {verdict['authored_hz']}) steps {verdict['steps']} skipped "
+                  f"{verdict['skipped_deadlines']} failures {verdict['step_failures']} taken {verdict['taken']} last "
+                  f"{verdict['last_taken']} latest-wins {verdict['latest_checks']} checks "
+                  f"{len(verdict['stale_takes'])} stale torn {verdict['torn_reads']} audio paced "
+                  f"{verdict['audio']['paced_s']:.3f} delivered {verdict['audio']['delivered_s']:.3f} engine "
+                  f"{engine['accepted_s']:.3f} s commits {engine['analysis_commits']} energetic "
+                  f"{verdict['energetic_share']}", flush=True)
     finally:
         supervisor.shutdown()
     report["elapsed_s"] = time.time() - started

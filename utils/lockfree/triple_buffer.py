@@ -35,6 +35,13 @@ class TripleBuffer(Generic[T]):
         sequence = 1 if latest is None else latest[0] + 1
         self._latest = (sequence, value)
 
+    @property
+    def published(self) -> int:
+        """How many values have been published (the newest publication's sequence; 0: none). A read for rigs and
+        gates; nothing reads it per frame."""
+        latest = self._latest
+        return 0 if latest is None else latest[0]
+
     def consume_latest(self) -> Optional[T]:
         latest = self._latest
         if latest is None or latest[0] == self._consumed:

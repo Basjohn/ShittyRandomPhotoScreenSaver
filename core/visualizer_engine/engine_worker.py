@@ -167,9 +167,16 @@ class EngineSession:
 
                 self._source = PacedPcmSource(pcm, int(pcm_rate))
                 self._interval_s = interval_s
-                self._paced_failure: str | None = None
-                self._paced_failed = threading.Event()
                 self._cadence_record: dict | None = None
+                self._cadence_started_ts = 0.0        # the current runtime's start (perf_counter)
+                self._cadence_s = 0.0                 # the last stopped runtime's run time
+                # What reached the engine (checkpoint audit 6, A6-M1): blocks handed to the capture callback, the
+                # blocks the audio worker's callback published into the engine's audio buffer, and the engine's
+                # analysis commits since the cadence first started.
+                self._offered_blocks = 0
+                self._accepted_blocks = 0
+                self._accepted_samples = 0
+                self._commits_at_start: int | None = None
         else:
             engine = (ProductionLaneEngine if inputs == "lanes" else ReplayBeatEngine)(bar_count)
         # The main process's runtime generation (a control input: every frame carries it).
@@ -343,52 +350,75 @@ class EngineSession:
             self._set_playing(playing)
 
     def _start_cadence(self) -> None:
+        import time
+
         from widgets.spotify_visualizer.logical_edges import start_logical_cadence
 
+        if self._commits_at_start is None:
+            self._commits_at_start = int(self._engine.get_authoritative_frame_commit_seq())
+        self._cadence_started_ts = time.perf_counter()
         start_logical_cadence(self._controller, interval_s=self._interval_s, step=self._paced_step)
 
-    def _paced_step(self, deadline_ts: float) -> None:
-        """One cadence edge (the cadence thread): the audio the clock produced since the previous edge goes through
-        the capture callback, then the tick (its own engine step consumes the newest block and submits the analysis,
-        which commits on the compute lane while the tick reads the previous commit, as live). A step that raised
-        fails the session closed: nothing more is ticked or published (the owner's fade and reconfigure are slice
-        5.5)."""
+    def _paced_step(self, now: float) -> None:
+        """One cadence edge (the cadence thread; ``now`` is the runtime's wake time, the ``perf_counter`` read just
+        before the step, not its deadline): the audio the clock produced since the previous edge goes through the
+        capture callback, then the tick (its own engine step consumes the newest block and submits the analysis,
+        which commits on the compute lane while the tick reads the previous commit, as live). The blocks the audio
+        worker's callback actually published into the engine are counted (A6-M1).
+
+        A step that raises is the cadence owner's, exactly as in process (checkpoint audit 6, A6-M3): nothing here
+        catches it, so ``VisualizerLogicalRuntime`` logs it (once per run of failures), counts it in its
+        ``step_failures`` and the next step retries. In process there is no fail-closed bound on repeated step
+        failures either; a session whose steps keep failing publishes nothing new, which the owner's heartbeat and
+        fade (slice 5.5) handle."""
         from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
-        if self._paced_failure is not None:
-            return
-        try:
-            backend, controller = self._backend, self._controller
-            if backend is not None:
-                if backend.sample_rate != self._source.sample_rate:
-                    raise ValueError(f"recorded rate {self._source.sample_rate} != capture rate "
-                                     f"{backend.sample_rate}")
-                running = backend.is_running() and controller.playing
-                for block in self._source.due(deadline_ts, backend.block_size, running=running):
+        backend, controller = self._backend, self._controller
+        if backend is not None:
+            if backend.sample_rate != self._source.sample_rate:
+                raise ValueError(f"recorded rate {self._source.sample_rate} != capture rate {backend.sample_rate}")
+            running = backend.is_running() and controller.playing
+            blocks = self._source.due(now, backend.block_size, running=running)
+            if blocks:
+                engine = self._engine
+                before = engine.capture_publications()
+                for block in blocks:
                     backend.offer(block)
-            logical_tick(controller.logical_tick_state)
-        except (Exception, SnapshotContractError) as exc:
-            self._paced_failure = f"{type(exc).__name__}: {exc}"
-            self._paced_failed.set()
+                published = max(0, engine.capture_publications() - before)
+                self._offered_blocks += len(blocks)
+                self._accepted_blocks += published
+                self._accepted_samples += published * len(blocks[0])
+        logical_tick(controller.logical_tick_state)
 
     def _stop_cadence(self) -> None:
         """Stop and join the session's cadence (idempotent), keeping its final accounting."""
+        import time
+
         runtime = self._controller.logical_runtime
         if runtime is None:
             return
+        stopping = time.perf_counter()
         if not self._controller.stop_logical_runtime():
             raise RuntimeError("the session's cadence did not join")
+        self._cadence_s = stopping - self._cadence_started_ts
         self._cadence_record = runtime.describe()
 
     def finish(self) -> dict:
-        """Stop the cadence, then report (``VIS_STOP``'s reply): the frames published, the cadence's accounting (steps,
-        skipped deadlines, step failures), the audio the source paced, a failure that closed the session."""
+        """Stop the cadence, then report (``VIS_STOP``'s reply): the frames published, the last runtime's accounting
+        (steps, skipped deadlines, step failures, parked time) and run time (``cadence_s``: its start to its stop),
+        the audio the source paced, and what reached the engine (``engine``: the blocks offered to the capture
+        callback, the blocks and seconds the audio worker's callback published into the engine, the analysis
+        commits since the cadence first started; A6-M1)."""
         if self._paced:
             self._stop_cadence()
         report: dict = {"revision": self.mailbox.revision}
         if self._paced:
-            report.update(cadence=self._cadence_record, audio=self._source.describe(), failure=self._paced_failure,
-                          capture=self.capture_counts)
+            commits = int(self._engine.get_authoritative_frame_commit_seq()) - int(self._commits_at_start or 0)
+            report.update(cadence=self._cadence_record, cadence_s=self._cadence_s, audio=self._source.describe(),
+                          capture=self.capture_counts,
+                          engine={"offered_blocks": self._offered_blocks, "accepted_blocks": self._accepted_blocks,
+                                  "accepted_s": self._accepted_samples / self._source.sample_rate,
+                                  "analysis_commits": commits})
         return report
 
     def _on_engine_acquired(self) -> None:
@@ -433,6 +463,16 @@ class EngineSession:
         activation commit (``logical_edges.commit_logical_activation``) on the existing engine and controller, never a
         rebuild. Another mode is a mode activation; the current mode with its ``preset`` / ``settings`` is the
         owner's same-mode preset activation (A4-M3: never dropped)."""
+        self.validate_mode_request(mode)
+        self._pending_mode = (str(mode), int(preset), settings)
+        if self._paced:
+            # The owner's activation stops its runtime (the tick boundary), commits and restarts it: at once, as the
+            # owner does on the GUI thread. A failure here may have half-applied (the runtime stopped, the engine
+            # transaction, the capture settle), so ``VIS_SET_MODE`` closes the session (A6-M2).
+            self._apply_pending_mode()
+
+    def validate_mode_request(self, mode: str) -> None:
+        """Refuse a mode request before anything is applied (the session stays as it was)."""
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.packet_abi import mode_code
 
@@ -440,11 +480,6 @@ class EngineSession:
             raise ValueError("an in-session mode switch is a live-session control")
         get_visualizer_mode_descriptor(mode)
         mode_code(mode)                                   # a mode the header cannot name fails here, not mid-tick
-        self._pending_mode = (str(mode), int(preset), settings)
-        if self._paced:
-            # The owner's activation stops its runtime (the tick boundary), commits and restarts it: at once, as the
-            # owner does on the GUI thread.
-            self._apply_pending_mode()
 
     def _apply_pending_mode(self) -> None:
         from widgets.spotify_visualizer.feature_replay import offline_activation_request
@@ -623,9 +658,20 @@ class VisualizerEngineWorker(BaseWorker):
                                            session_closed=True)
                     return self._reply(msg)
                 if msg.msg_type == MessageType.VIS_SET_MODE:
-                    # Validated now, applied at the session's next tick boundary (the newest request wins).
+                    # Validated now (a refused request leaves the session as it was), applied at the session's next
+                    # tick boundary (the newest request wins), or at once on a worker-paced session: an apply that
+                    # raised may have half-applied (runtime stopped, engine transaction, capture), so the session
+                    # closes, as a tick does (checkpoint audit 6, A6-M2).
                     payload = dict(msg.payload)
-                    self._session.request_mode(payload.pop("mode"), **payload)
+                    mode = payload.pop("mode")
+                    session = self._session
+                    session.validate_mode_request(mode)
+                    try:
+                        session.request_mode(mode, **payload)
+                    except (Exception, SnapshotContractError) as exc:
+                        self._close_session()
+                        return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}",
+                                           session_closed=True)
                     return self._reply(msg)
                 try:
                     changed = self._session.set_display_power(bool(msg.payload["on"]))
@@ -635,7 +681,18 @@ class VisualizerEngineWorker(BaseWorker):
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
                 return self._reply(msg, changed=changed)
             if msg.msg_type == MessageType.VIS_STOP:
-                report = self._session.finish() if self._session is not None else None
+                # The session closes even when ``finish`` raises (an unjoined cadence: A6-L7), releasing capture,
+                # the compute lane and the mapping; the reply then carries the error.
+                session = self._session
+                try:
+                    report = session.finish() if session is not None else None
+                except (Exception, SnapshotContractError) as exc:
+                    error = f"{type(exc).__name__}: {exc}"
+                    try:
+                        self._close_session()           # drops the session first, then unwinds all it holds
+                    except (Exception, SnapshotContractError) as close_exc:
+                        error += f"; close: {type(close_exc).__name__}: {close_exc}"
+                    return self._reply(msg, success=False, error=error, session_closed=True)
                 self._close_session()
                 # The Qt modules the process has loaded so far (the fresh-spawn probe reads them at spawn too).
                 return self._reply(msg, report=report, qt_modules=sorted(name for name in sys.modules

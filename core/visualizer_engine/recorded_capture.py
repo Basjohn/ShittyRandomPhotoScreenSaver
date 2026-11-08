@@ -13,10 +13,14 @@ blocks a device with the configured block size delivers: the newest block whole,
 
 ``PacedPcmSource`` (work order 5, slice 5.1) paces a continuous recorded PCM stream on the audio clock for a session
 that ticks on its own cadence: at each cadence edge it hands over the blocks a device would have delivered since the
-previous edge (the elapsed deadline time times the sample rate, in device-sized blocks, the remainder carried). It is
-not a poll and adds no timer: it has no thread and never waits; it runs only inside the cadence's own step, which the
-logical runtime already wakes for, and the audio clock is that step's deadline timestamp. ``pcm_from_capture_histories``
-rebuilds a recording's continuous PCM (``CaptureHistoryStream``'s samples, concatenated).
+previous edge (the elapsed time between the steps' wake times times the sample rate, in device-sized blocks, the
+remainder carried; at most a device's buffer, ``PacedPcmSource.MAX_BACKLOG_S``, per edge). It is not a poll and adds
+no timer: it has no thread and never waits; it runs only inside the cadence's own step, which the logical runtime
+already wakes for, and the audio clock is that step's wake time (the ``perf_counter`` the runtime reads just before
+the step, not its deadline: a late step really gets the late audio; checkpoint audit 6, A6-L3). The blocks are
+delivered phase-locked to the tick, on the cadence thread just before it (A6-L2: never concurrently with the tick, as
+a real device's own thread would). ``pcm_from_capture_histories`` rebuilds a recording's continuous PCM
+(``CaptureHistoryStream``'s samples, concatenated).
 """
 from __future__ import annotations
 
@@ -102,10 +106,13 @@ class RecordedCaptureBackend(AudioCaptureBackend):
 
     def start(self, callback: Callable[[Any], None]) -> bool:
         self._negotiate()
-        self._callback = callback
-        self._note_capture_starting()
+        # ``on_started`` (a paced source's clock restart) runs before the callback is installed, so a cadence edge
+        # that lands inside ``start`` sees either a closed stream or the restarted clock, never an open stream on the
+        # pre-open clock (checkpoint audit 6, A6-L1: an unpark burst).
         if self._on_started is not None:
             self._on_started(self)
+        self._callback = callback
+        self._note_capture_starting()
         return True
 
     def push(self, block: np.ndarray) -> None:
@@ -169,13 +176,20 @@ class PacedPcmSource:
     """Recorded PCM on the audio clock, handed over at the cadence's own edges (module docstring).
 
     ``due(now, block, running=...)`` at each edge: the whole device blocks the audio clock has produced since the
-    previous edge (``now`` is the edge's deadline timestamp, seconds), the remainder carried to the next edge; the
-    stream loops at its end. Nothing is due, and the elapsed audio is dropped, while capture is closed or Media is not
-    playing (``running`` False: a closed stream captures nothing, and paused playback produces no audio, so the
-    playhead holds), and on the first edge after ``rebase`` (capture just (re)opened: audio before it was never
-    captured, so an unpark or reopen delivers no burst for the closed gap). ``rebase`` may be called from any thread
-    (the capture lane's open): it only raises a flag the next edge consumes.
+    previous edge (``now`` is the step's wake time, seconds: the runtime's ``perf_counter`` read before the step, not
+    its deadline), the remainder carried to the next edge; the stream loops at its end. Nothing is due, and the
+    elapsed audio is dropped, while capture is closed or Media is not playing (``running`` False: a closed stream
+    captures nothing, and paused playback produces no audio, so the playhead holds), and on the first edge after
+    ``rebase`` (capture just (re)opened: audio before it was never captured, so an unpark or reopen delivers no burst
+    for the closed gap). ``rebase`` may be called from any thread (the capture lane's open, before the stream's
+    callback is installed): it only raises a flag the next edge consumes. One edge never hands over more than a
+    device's buffer (``MAX_BACKLOG_S``): older audio overflowed it, as a device drops it, so the playhead moves past it
+    (``dropped_samples``) and no gap, however long, is delivered as one burst (checkpoint audit 6, A6-L1).
     """
+
+    #: The most audio one edge hands over: about a capture device's buffer. A late step catches up to it; anything
+    #: older was overflowed (dropped, never delivered).
+    MAX_BACKLOG_S = 0.1
 
     def __init__(self, pcm: Any, sample_rate: int) -> None:
         self._pcm = np.ascontiguousarray(pcm, dtype=np.float32).reshape(-1)
@@ -187,6 +201,7 @@ class PacedPcmSource:
         self._last: float | None = None
         self._rebase = True
         self.delivered_samples = 0          # handed over to the capture (by ``due``)
+        self.dropped_samples = 0            # overflowed a device's buffer (a step later than ``MAX_BACKLOG_S``)
         self.paced_seconds = 0.0            # audio-clock time accounted while running
         self.edges = 0
         self.most_blocks = 0                # the most blocks one edge handed over (a late edge catches up)
@@ -205,6 +220,12 @@ class PacedPcmSource:
         self._last = float(now)
         self.paced_seconds += elapsed
         self._owed += elapsed * self.sample_rate
+        backlog = max(block, int(self.MAX_BACKLOG_S * self.sample_rate))
+        if self._owed > backlog:
+            dropped = int(self._owed - backlog)
+            self._owed -= dropped
+            self._cursor = (self._cursor + dropped) % len(self._pcm)
+            self.dropped_samples += dropped
         count = int(self._owed // block)
         self._owed -= count * block
         self.most_blocks = max(self.most_blocks, count)
@@ -217,6 +238,7 @@ class PacedPcmSource:
     def describe(self) -> dict:
         return {"sample_rate": self.sample_rate, "edges": self.edges, "delivered_samples": self.delivered_samples,
                 "delivered_s": self.delivered_samples / self.sample_rate, "paced_s": self.paced_seconds,
+                "dropped_s": self.dropped_samples / self.sample_rate,
                 "most_blocks_per_edge": self.most_blocks}
 
 
