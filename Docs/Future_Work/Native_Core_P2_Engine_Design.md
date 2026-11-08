@@ -825,6 +825,59 @@ switch never remaps.
      presentation state, Waveform's view span/top, Expanded Visualizer) and forward them as `VIS_SET_VIEW` does the
      layout metrics; Fullscreen Edit's content envelope reads the tick state's Sphere parameters, which the main side
      no longer has on the worker path.
+     **Built (8 Nov, with checkpoint audit 7's A7-M1 and A7-M2):**
+     - *Inventory (what the worker's capture read from a presentation state it never received):* the view records
+       (held-key orbit, framed flight, drag inertia, Auto Rotate: `view_orbit`), the mode's presentation-only controls
+       (turn and tilt, framed camera position and lens, scene transform, mirror, finish...; written at runtime by Edit's
+       orbit and drag, the camera keys, Home and a preset's activation), the 3D Detail tier, and the reflected wallpaper.
+       Waveform Ribbon's camera, `zoom_hold` and `view_span` derive from those (its camera keys are presentation-only
+       controls, and the view span from the forwarded layout metrics). Expanded Visualizer: nothing; the display-wide
+       route is presentation only and the controller keeps the ordinary metrics the tick reads (already forwarded).
+     - *One forwarding path for the view inputs (A7-M2):* `VIS_SET_VIEW` carries, with the layout metrics, the
+       presentation inputs that changed since the last send (`logical_edges.presentation_inputs_snapshot`: the records
+       and the mode's presentation-only controls, plain data only; `apply_presentation_inputs` on the worker refuses any
+       other attribute). Latest wins, at most one in flight, sent at the end of every presentation (so an orbit edge
+       reaches the session within one frame; the records are time-parameterised, so the pose at each later step is
+       exact) and at once by `QuickDisplayVisualizerOwner.forward_presentation_inputs` (a rig's scripted edge). A
+       preset's immediate Auto Rotate is armed on the main state at the commit's reply and forwarded. The Fullscreen
+       Edit envelopes: Sphere's reads the newest frame's resolved parameters when the main tick state has none (the
+       worker path), and the main controller's bar count follows the session's (the configure and commit replies carry
+       it), so Extruded Spectrum's envelope and a reconfigure use the target's count.
+     - *The reflected wallpaper (A7-M1), decided: the main side completes the frame.* The wallpaper is presentation data
+       the owner makes on the GUI thread from the displayed photograph; shipping its pixels to the worker only to have
+       them shipped back in the frame would be the wrong owner, so the worker never sees it. The reader mailbox runs a
+       frame completion (`PacketMailbox.set_frame_completion`, set by the owner): `backdrop.complete_frame_backdrop` puts
+       the owner's wallpaper (frozen once per wallpaper) and its crossfade into a reflecting frame's parameters (Sphere,
+       Extruded Spectrum), exactly where the in-process capture puts them; frames with no wallpaper are untouched (no
+       work).
+     - *Settings deltas, decided:* in process a preset or settings change is an activation (`commit_logical_activation
+       (kind="preset")`: the runtime stop, the engine's resets, the crossfade), and the worker path does the same
+       (`VIS_SET_MODE` for the current mode); a logical delta that kept the engine's state would differ from in process,
+       so none is added. What changes at runtime without an activation is the presentation state (the inventory
+       above), and it now reaches the session as a delta between two steps: no `VIS_SET_MODE`, no rebuild, the mode's
+       runtime the same object (test). There is no runtime per-slider logical path in process to match (Settings
+       changes reach a running display through an activation or a rebuild).
+     - *QtCore-only worker (A5-L2):* the presentation colours the capture reads (the shared bar fill and border) are
+       held Qt-free, as the (r, g, b, a) a `QColor` froze to in the frame (`config_applier._color_or_none`; the border
+       opacity through Qt's 16-bit alpha rounding, `_with_alpha_f`; both checked against `QColor` for every channel
+       value and 20,001 opacities). Nothing else in the tick or the presentation config builds a Qt GUI type, so every
+       mode's activation in the worker loads QtCore only; the fresh-spawn probe is flipped to "QtCore only after an
+       activation" (restoring the `QColor`s fails it). Frames unchanged (the production-path frame test, the identity
+       gates).
+     - *Gates* (`tests/test_visualizer_owner_engine_worker_inputs.py`): the view gate per 3D mode (Sphere, Extruded
+       Spectrum, Extruded Bubble, Neon Lake, Waveform Ribbon) on a real worker process vs in process, frame for frame,
+       with the inputs exercised (`owner_worker_gate.identity_script_view`: a reflecting photograph on the rig's unshown
+       scene for Sphere and Extruded Spectrum, a held-key orbit, a preset's Auto Rotate, a second orbit): all identical
+       (419 frames each); without the forwarded inputs all five differ from frame 73 (the orbit), without the frame
+       completion Sphere and Extruded Spectrum differ from frame 0. Also: the wallpaper on the worker's frames (none
+       without the completion), a presentation setting step reaching the session without a rebuild (not without the
+       forwarding), the Fullscreen Edit envelopes (none for Sphere and a stale bar count with the pre-fix reads), the
+       Qt-free colours.
+     - **Left for 5.6-5.7:** a GUI-thread edge between two presentations reaches the worker at the next presentation's
+       end (at most one frame; frames ticked before it show the previous view, as a tick that ran just before the edge
+       would in process); presentation inputs are compared every presentation on the worker path (measured: the snapshot
+       is 1.7-18.7 us for 9-105 attributes, Sphere to Neon Lake, plus the comparison with the last send; nothing in
+       process); the frame completion runs where the frame is decoded (on the render thread at sync admission).
    - 5.5 Fail-closed: `session_closed` and heartbeat loss fade the Visualizer (never vanish) and reconfigure once;
      the label-namespace counter owned by the main process for the app's life; the wake sender closed after
      configure; a full wake pipe never blocks the tick. **Done in 5.2:** the namespace counter's owner
@@ -925,11 +978,15 @@ switch never remaps.
   tick and mode runtimes. Measured 8 Nov: the logical runtime, the tick pipeline, render state, the ABI, the codec and
   all eight mode frame runtimes import QtCore only (no QtGui/QtQml/QtQuick); about 0.9-1.1 s cold and ~350 modules
   each. `tests/test_visualizer_engine_import_weight.py` pins it.
-- **The tick still reads presentation config (8 Nov):** the logical capture reads Spectrum's decoration fades and
-  colours and the Oscilloscope/Bubble spec parameters from the presentation state, so the worker configures both
-  sides and loads QtGui for `QColor` at the first activation (never Quick, QML or Widgets; the fresh-spawn test reports
-  the modules at spawn and after the first activation, A5-L2). Move those reads into the logical config (work order 5
-  slice 5.4), so the worker imports QtCore only.
+- **The tick still reads presentation config (8 Nov; the QtGui part resolved by 5.4):** the logical capture reads
+  Spectrum's decoration fades and colours, the Oscilloscope/Bubble spec parameters and the 3D modes' view from the
+  presentation state, so the worker configures a presentation state of its own: a copy the main side owns (configured
+  from the same activation's `presentation_kwargs`, then kept current by `VIS_SET_VIEW`'s forwarded presentation
+  inputs, latest wins), with the wallpaper completed on the main side. 5.4 kept the reads where they are and made the
+  presentation config Qt-free instead of moving them into the logical config (the colours the capture reads are the
+  tuples a `QColor` froze to): every activation in the worker loads QtCore only (the fresh-spawn test), frames
+  unchanged. Moving the reads into the logical config remains the cleaner long-term shape (one copy); it is not
+  needed for P2's gates.
 - **Process-unique labels across worker generations (8 Nov, resolved):** Extruded Bubble numbers its drift families
   from a process-wide counter that the renderer uses as a geometry cache identity. Every `EngineSession` takes a
   `label_namespace` from the main process (>= 1 in production, a monotonic counter never repeated across sessions or

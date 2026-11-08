@@ -53,4 +53,46 @@ def make_visualizer_backdrop(image) -> VisualizerBackdrop:
     return VisualizerBackdrop(identity=str(image.identity), size=target, rgba=bits[:row * target[1]])
 
 
-__all__ = ["VisualizerBackdrop", "backdrop_size", "make_visualizer_backdrop"]
+def complete_frame_backdrop(state, presentation_state):
+    """A frame the engine worker ticked, completed with the reflected wallpaper the owner keeps (native core P2b,
+    work order 5 slice 5.4; checkpoint audit 7, A7-M1).
+
+    The wallpaper is presentation data the owner makes on the GUI thread from the displayed photograph; the worker's
+    presentation state never has one (shipping pixels to the worker to have them shipped back in the frame would be
+    the wrong owner). A reflecting mode's frame carries ``backdrop`` / ``backdrop_blend_s`` in its parameters as
+    captured in process (Sphere, Extruded Spectrum); the main side puts its own there when it takes the frame, so
+    the renderer reads exactly what it reads in process. Returns ``state`` itself when nothing differs (no
+    wallpaper: no work)."""
+    import dataclasses
+
+    mode_state = getattr(state, "mode_state", None)
+    parameters = getattr(mode_state, "parameters", None)
+    if parameters is None or "backdrop" not in parameters:
+        return state
+    backdrop = getattr(presentation_state, "_backdrop", None)
+    blend_s = getattr(presentation_state, "_backdrop_blend_s", None)
+    carried = parameters.get("backdrop")
+    carried_identity = None if carried is None else carried.get("identity")
+    if carried_identity == (None if backdrop is None else backdrop.identity) and \
+            parameters.get("backdrop_blend_s") == blend_s:
+        return state
+    from widgets.spotify_visualizer.render_state import freeze_render_fields, freeze_render_value
+
+    # The frozen wallpaper is made once per wallpaper (the frame freezes it as the in-process capture does), not per
+    # frame: one reference kept with the wallpaper it froze.
+    cached = _FROZEN_WALLPAPER
+    if backdrop is None:
+        frozen = None
+    elif cached[0] is backdrop:
+        frozen = cached[1]
+    else:
+        frozen = freeze_render_value(backdrop)
+        cached[0], cached[1] = backdrop, frozen
+    fields = freeze_render_fields({**dict(parameters), "backdrop": frozen, "backdrop_blend_s": blend_s})
+    return dataclasses.replace(state, mode_state=dataclasses.replace(mode_state, parameters=fields))
+
+
+_FROZEN_WALLPAPER: list = [None, None]          # (the wallpaper, its frozen fields): the completion's one entry
+
+
+__all__ = ["VisualizerBackdrop", "backdrop_size", "complete_frame_backdrop", "make_visualizer_backdrop"]

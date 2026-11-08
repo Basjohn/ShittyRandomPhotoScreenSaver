@@ -183,9 +183,12 @@ after the operator's yes on a question card; agents never run load (invisible ch
      (replies are events; the spawn is off the GUI thread; a hung worker's edges cost 0.2 ms instead of 21.9 s), a dead
      or hung worker reaches the failure path by an event (the pipe's end, the supervisor's heartbeat), the recovery is
      bounded (one fallback in process, then faded out with requests admitted), a full wake pipe never blocks the tick,
-     a device that fails to open no longer counts as a worker failure. Next: 5.3's rest (device changes), 5.4 (settings
-     deltas, view inputs and the reflected wallpaper, QtCore-only worker), 5.6 (delete the snapshot layer, Bubble's own
-     RNG), 5.7 (dormancy, diagnostics, frozen spawn), then 6 (gate 3).
+     a device that fails to open no longer counts as a worker failure. 5.4 built 8 Nov with audit 7's A7-M1/A7-M2: the
+     presentation inputs the capture reads (view records, the mode's presentation-only controls) reach the worker with
+     the framed view, the reflected wallpaper completes the frames on the main side, the Fullscreen Edit envelopes
+     work on the worker, and every activation in the worker loads QtCore only; the view gate is identical for the
+     five 3D modes with a photograph, an orbit and a preset's Auto Rotate. Next: 5.3's rest (device changes), 5.6
+     (delete the snapshot layer, Bubble's own RNG), 5.7 (dormancy, diagnostics, frozen spawn), then 6 (gate 3).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 

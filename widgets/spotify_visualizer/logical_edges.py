@@ -23,10 +23,10 @@ a change to the owner's order reaches the worker and the call-log parity test
 
 What stays the hosts' own: the owner's Edit profile, backdrop, render binding, crossfade and reader-side mailbox clear;
 the session's capture-lane completion edge and recorded audio source. This module imports QtCore at most at import time
-(``tests/test_visualizer_engine_import_weight.py``); a configuration loads QtGui at call time today
-(``config_applier._color_or_none`` builds ``QColor``s for the presentation config the tick reads; checkpoint audit 5,
-A5-L2; work order 5 slice 5.4 moves those reads to the logical config). It adds no work at rest: it runs only at the
-edges.
+(``tests/test_visualizer_engine_import_weight.py``), and a configuration QtCore only at call time too (the presentation
+config is Qt-free since work order 5 slice 5.4; checkpoint audit 5, A5-L2). ``presentation_inputs_snapshot`` /
+``apply_presentation_inputs`` carry the presentation inputs the capture reads to the engine worker (slice 5.4). It adds
+no work at rest: it runs only at the edges.
 """
 from __future__ import annotations
 
@@ -544,8 +544,74 @@ def unpark_logical_side(
     return engine
 
 
+# ------------------------------------------------------------------------- presentation inputs (work order 5.4)
+
+#: The view records the logical capture's pose evaluation reads (``view_orbit``): held-key orbit, framed flight, drag
+#: inertia, Auto Rotate. Written on the GUI thread by Edit's orbit, the camera keys, a preset's activation and Home.
+VIEW_RECORD_ATTRS = ("_view_orbit_motion", "_view_framed_flight_motion", "_view_orbit_inertia",
+                     "_view_orbit_auto_rotate")
+_PRESENTATION_INPUT_ATTRS: dict[str, tuple[str, ...]] = {}
+_ALL_PRESENTATION_INPUT_ATTRS: set[str] = set()
+
+
+def presentation_input_attrs(mode_id: str) -> tuple[str, ...]:
+    """The presentation-state attributes ``mode_id``'s logical capture reads that change at runtime without an
+    activation (native core P2b, work order 5 slice 5.4; checkpoint audit 7, A7-M1/A7-M2): the view records, the
+    resolved 3D Detail tier, and the mode's presentation-only controls (its turn and tilt, framed camera, scene
+    transform, mirror, finish...: Edit's orbit and camera writes, Home, live presentation tweaks). Registry data,
+    resolved once per mode."""
+    attrs = _PRESENTATION_INPUT_ATTRS.get(mode_id)
+    if attrs is None:
+        from core.settings.visualizer_mode_settings import control_runtime_attr, require_mode_settings
+
+        found = [*VIEW_RECORD_ATTRS, "_scene3d_detail"]
+        try:
+            controls = require_mode_settings(mode_id).body_controls
+        except (KeyError, ValueError):
+            controls = ()
+        for control in controls:
+            attr = control_runtime_attr(control)
+            if not control.logical and attr not in found:
+                found.append(attr)
+        attrs = tuple(found)
+        _PRESENTATION_INPUT_ATTRS[mode_id] = attrs
+        _ALL_PRESENTATION_INPUT_ATTRS.update(attrs)
+    return attrs
+
+
+def presentation_inputs_snapshot(presentation_state: Any, mode_id: str) -> dict[str, Any]:
+    """The values of ``presentation_input_attrs(mode_id)`` the engine worker's tick needs (the main side's, forwarded
+    latest-wins with the framed view): plain data only (a Qt value stays on the presentation side; a list is copied)."""
+    values: dict[str, Any] = {}
+    for attr in presentation_input_attrs(mode_id):
+        value = getattr(presentation_state, attr, None)
+        if type(value).__module__.startswith("PySide6"):
+            continue
+        values[attr] = list(value) if isinstance(value, list) else value
+    return values
+
+
+def apply_presentation_inputs(presentation_state: Any, values: Mapping[str, Any]) -> None:
+    """The worker side of ``presentation_inputs_snapshot``: each forwarded attribute onto the session's presentation
+    state (only the attributes some mode forwards; anything else is refused)."""
+    for attr, value in values.items():
+        if attr not in _ALL_PRESENTATION_INPUT_ATTRS:
+            # A mode this process has not resolved yet: resolve every mode's set once, then check again.
+            from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
+
+            for descriptor in iter_all_visualizer_mode_descriptors():
+                presentation_input_attrs(descriptor.mode_id)
+            if attr not in _ALL_PRESENTATION_INPUT_ATTRS:
+                raise ValueError(f"not a forwarded presentation input: {attr!r}")
+        setattr(presentation_state, attr, value)
+
+
 __all__ = [
     "CONFIGURE_REASON",
+    "VIEW_RECORD_ATTRS",
+    "apply_presentation_inputs",
+    "presentation_input_attrs",
+    "presentation_inputs_snapshot",
     "DEFAULT_LOGICAL_HZ",
     "ActivationProgress",
     "LogicalRuntimeNotJoined",

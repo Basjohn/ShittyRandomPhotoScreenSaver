@@ -26,12 +26,23 @@ def _visualizer_default(key: str) -> Any:
     return require_canonical_default(f"widgets.spotify_visualizer.{key}")
 
 
-def _color_or_none(value: Any) -> Any:
-    """Return a QColor if *value* is a list/tuple of ≥3 ints, else None (presentation state only)."""
-    if isinstance(value, (list, tuple)) and len(value) >= 3:
-        from PySide6.QtGui import QColor   # presentation-only: the logical tick (and its engine worker) stays QtGui-free
-        return QColor(*value)
-    return None
+def _color_or_none(value: Any) -> tuple[int, int, int, int] | None:
+    """A presentation colour (the shared bar fill and border) as the (r, g, b, a) ``QColor(*value).getRgb()`` gives,
+    or None (native core P2b, work order 5 slice 5.4).
+
+    The logical capture reads these from the presentation state into the frame's style, which freezes a ``QColor`` to
+    exactly this tuple (``render_state.freeze_render_value``), and nothing else reads them; holding the tuple keeps the
+    presentation config Qt-free, so an activation in the engine worker loads QtCore only (checkpoint audit 5, A5-L2).
+    Frames are unchanged (``tests/test_visualizer_owner_production_path.py``)."""
+    return _rgba_or_none(value)
+
+
+def _with_alpha_f(rgba: Any, opacity: float) -> tuple[int, int, int, int]:
+    """``rgba`` with the alpha ``QColor.setAlphaF(opacity)`` then ``getRgb()`` gives (Qt rounds the opacity to a
+    16-bit channel, then that to 8 bits), Qt-free."""
+    red, green, blue = (int(channel) for channel in tuple(rgba)[:3])
+    alpha16 = int(float(opacity) * 65535.0 + 0.5)
+    return (red, green, blue, int(alpha16 / 257.0 + 0.5))
 
 
 def _rgba_or_none(value: Any) -> tuple[int, int, int, int] | None:
@@ -194,10 +205,7 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
             host._bar_border_color = c
     if 'bar_border_opacity' in kwargs:
         opacity = max(0.0, min(1.0, float(kwargs['bar_border_opacity'])))
-        from PySide6.QtGui import QColor
-        color = QColor(host._bar_border_color)
-        color.setAlphaF(opacity)
-        host._bar_border_color = color
+        host._bar_border_color = _with_alpha_f(host._bar_border_color, opacity)
 
     # --- Rainbow (per-mode keys fall back to the global key) ---------
     _mode_str = getattr(host, '_vis_mode_str', None) or ''

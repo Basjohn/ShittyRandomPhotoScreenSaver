@@ -1118,6 +1118,14 @@ High-value permanent guards include:
   unpark), A7-L5 (play-edge T1/T2 records, "parked" only on success) and A7-L6 (a paused switch reveals on the same
   frame as in process, frames identical). Each test carries or was shown with its negative control (the design doc's
   5.5 record lists them);
+  `tests/test_visualizer_owner_engine_worker_inputs.py` (slice 5.4 and checkpoint audit 7's A7-M1/A7-M2): the view
+  gate per 3D mode (the owner on a real worker process vs in process, frame for frame, with a reflecting photograph on
+  the rig's unshown scene, a held-key orbit and a preset's Auto Rotate exercised: `owner_worker_gate
+  .identity_script_view`; without the forwarded presentation inputs or the frame completion it fails); the reflected
+  wallpaper completing the worker's frames; a presentation setting step reaching the session without a rebuild (the
+  mode's runtime kept); the Fullscreen Edit envelopes on the worker (Sphere's from the newest frame, the bar count the
+  session's); the Qt-free presentation colours equal to what a `QColor` froze to. The fresh-spawn probe in
+  `tests/test_visualizer_engine_worker.py` asserts QtCore only after every mode's activation;
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 
 The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.

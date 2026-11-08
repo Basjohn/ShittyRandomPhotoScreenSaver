@@ -103,6 +103,28 @@ def identity_script_paused_switch(clip_frames, target: str) -> list[tuple[str, A
             + [("input", frame) for frame in frames[switch:]])
 
 
+#: The 3D modes whose drawn view the presentation side owns (orbit, Auto Rotate, camera): the view-input gate's modes.
+VIEW_MODES = ("sphere", "extruded_spectrum", "extruded_bubble", "shockwave_grid", "waveform_ribbon")
+#: The modes that reflect the displayed photograph (their descriptor's ``backdrop_setting``).
+REFLECTING_MODES = ("sphere", "extruded_spectrum")
+
+
+def identity_script_view(clip_frames, mode: str) -> list[tuple[str, Any]]:
+    """Work order 5 slice 5.4 (checkpoint audit 7, A7-M1/A7-M2): the presentation inputs the capture reads, exercised
+    while playing: a reflecting photograph from the start (a reflecting mode), a held-key orbit from 0.8 s to 1.6 s
+    (turn and tilt), a same-mode preset re-activation at 2.2 s (its immediate Auto Rotate), then a second orbit."""
+    frames = list(clip_frames)
+    script: list[tuple[str, Any]] = [("reflect", True)] if mode in REFLECTING_MODES else []
+    marks = {_after(frames, 0.8): ("orbit", (1.0, 0.5)), _after(frames, 1.6): ("orbit", None),
+             _after(frames, 2.2): ("preset", mode), _after(frames, 3.4): ("orbit", (-1.0, -0.5)),
+             _after(frames, 4.0): ("orbit", None)}
+    for index, frame in enumerate(frames):
+        if index in marks:
+            script.append(marks[index])
+        script.append(("input", frame))
+    return script
+
+
 # ------------------------------------------------------------------------------------------------- the owner rig
 
 
@@ -186,6 +208,35 @@ class OwnerRig:
             engine.set_analysis_admission_gate(self._admit_analysis)
         self.engines.append(engine)
         return engine
+
+    def reflect(self) -> None:
+        """Make the owner's mode reflect a photograph: its mirror setting and a 3D Detail tier with reflections
+        written through the presentation config (as Home or a live tweak writes the presentation state), and a small
+        synthetic photograph displayed on the unshown scene (the owner's backdrop listener makes the wallpaper)."""
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        from rendering.quick.image_state import PresentationImage
+        from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+
+        owner = self.owner
+        setting = get_visualizer_mode_descriptor(owner.controller.mode_id).backdrop_setting
+        apply_presentation_vis_mode_kwargs(owner.controller.presentation_state,
+                                           {setting: 0.6, "scene3d_detail": "High"})
+        width, height = 64, 40
+        pixels = bytearray()
+        for y in range(height):
+            for x in range(width):
+                pixels += bytes((x * 4 % 256, y * 6 % 256, (x + y) % 256, 255))
+        image = PresentationImage(identity="owner-rig-photo", source_path="owner-rig-photo.png",
+                                  logical_size=(float(width), float(height)), device_pixel_ratio=1.0,
+                                  pixel_size=(width, height), row_stride=width * 4, rgba8=bytes(pixels))
+        scene = owner.presentation_runtime.scene_controller
+        try:
+            scene.set_presentation_image(image)
+        except RuntimeError:                        # an unshown scene whose admission is not open: the same edge
+            scene.background_item.set_presentation_image(image)
+            owner._refresh_backdrop()
+        if owner.controller.presentation_state._backdrop is None:
+            raise RuntimeError("the rig's photograph made no reflected wallpaper")
 
     def settle(self) -> None:
         """In process: wait for every capture transaction admitted so far (the session's own completion edge). On the
@@ -413,6 +464,24 @@ def identity_run(mode: str, script, *, worker: bool, supervisor: Any = None, nam
                 elif kind == "mode":
                     if not owner.request_mode_change(value, **activation_inputs(rig.widgets, value)):
                         raise RuntimeError(f"the owner refused the switch to {value}")
+                elif kind == "preset":
+                    if not owner.request_preset_change(value, **activation_inputs(rig.widgets, value)):
+                        raise RuntimeError(f"the owner refused the preset activation of {value}")
+                elif kind in ("orbit", "reflect"):
+                    # Presentation inputs, written on the GUI thread between two ticks; on the worker they are
+                    # forwarded at once (the presentation boundary that follows such an edge in production).
+                    if kind == "reflect":
+                        rig.reflect()
+                    else:
+                        from widgets.spotify_visualizer.view_orbit import set_view_orbit_rates, stop_view_orbit_motion
+
+                        if value is None:
+                            stop_view_orbit_motion(controller.presentation_state, clock[0])
+                        else:
+                            set_view_orbit_rates(controller.presentation_state, controller.mode_id, value[0],
+                                                 value[1], clock[0])
+                    owner.forward_presentation_inputs()
+                    rig.settle()
             report.update(inputs=inputs, final_mode=controller.mode_id, phase=owner._mode_transition_phase,
                           on_worker=bool(owner._worker is not None) if worker else None)
             report["digests"] = [evidence.frame_digest(logical) for logical in rig.published]

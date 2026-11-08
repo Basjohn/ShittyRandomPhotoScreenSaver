@@ -123,13 +123,11 @@ if __name__ == "__main__":
 
 
 def test_the_worker_loads_no_gui_stack_in_a_production_spawn(tmp_path):
-    # A fresh interpreter, as the app spawns it: the worker loads QtCore and, for the presentation config the tick
-    # still reads, QtGui (QColor), never Quick, QML or Widgets; the live engine (P2b) adds nothing to that. (A child
-    # spawned from inside pytest also carries the test environment's imports, so this runs outside it.)
-    # "QtCore only" holds at import time only (checkpoint audit 5, A5-L2): at spawn the worker has loaded no QtGui, and
-    # the first activation loads it (``config_applier._color_or_none`` builds ``QColor``s for the presentation
-    # config). Expected today and asserted, so the day work order 5 slice 5.4 moves those reads to the logical config
-    # this check fails and is flipped to "QtCore only after an activation".
+    # A fresh interpreter, as the app spawns it: the worker loads QtCore only, at spawn and after every mode's
+    # activation, never QtGui, Quick, QML or Widgets; the live engine (P2b) adds nothing to that. (A child spawned from
+    # inside pytest also carries the test environment's imports, so this runs outside it.) Flipped by work order 5
+    # slice 5.4 (checkpoint audit 5, A5-L2): the presentation config the tick reads holds its colours Qt-free
+    # (``config_applier._color_or_none`` gives the (r, g, b, a) a QColor froze to), so an activation loads no QtGui.
     import json
     import subprocess
     import sys
@@ -144,10 +142,10 @@ def test_the_worker_loads_no_gui_stack_in_a_production_spawn(tmp_path):
     loaded = json.loads(out.stdout.strip().splitlines()[-1])
     spawn, first = loaded.pop("@spawn"), loaded.pop("@first_activation")
     assert set(spawn) <= {"PySide6.QtCore"}, spawn
-    assert set(first) == {"PySide6.QtCore", "PySide6.QtGui"}, first      # A5-L2: QtGui at call time (slice 5.4)
+    assert set(first) <= {"PySide6.QtCore"}, first                       # slice 5.4: QtCore only after an activation
     assert set(loaded) == set(_modes())
     for mode, modules in loaded.items():
-        assert isinstance(modules, list) and set(modules) <= {"PySide6.QtCore", "PySide6.QtGui"}, (mode, modules)
+        assert isinstance(modules, list) and set(modules) <= {"PySide6.QtCore"}, (mode, modules)
 
 
 @pytest.mark.qt

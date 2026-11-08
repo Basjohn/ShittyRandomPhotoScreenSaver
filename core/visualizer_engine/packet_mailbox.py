@@ -115,6 +115,7 @@ class PacketMailbox(LatestStateMailbox):
         self._wake_thread: threading.Thread | None = None
         self._wake_receiver: Any = None
         self._last_taken: LogicalPublication | None = None   # reader side: the newest publication handed out
+        self._frame_completion: Callable[[Any], Any] | None = None   # reader side: the owner's frame completion
         if (role == "writer") != (attach is not None):
             raise ValueError("a writer attaches to the owner's mapping by name; readers and loopbacks create it")
         if attach is None:
@@ -228,6 +229,9 @@ class PacketMailbox(LatestStateMailbox):
         if packet is None:
             return None
         generation, activation_id, produced, state = frame_codec.decode(packet.payload)
+        completion = self._frame_completion
+        if completion is not None:
+            state = completion(state)
         self._peeked = LogicalPublication(
             state=state, revision=(packet.sequence-FIRST_SEQUENCE)//2+1, generation=generation,
             activation_id=activation_id, produced_ts=produced,
@@ -242,6 +246,15 @@ class PacketMailbox(LatestStateMailbox):
             self._peeked = None
             self._last_taken = publication
         return publication
+
+    def set_frame_completion(self, completion: Callable[[Any], Any] | None) -> None:
+        """Reader side: ``completion(state)`` runs on every decoded frame and returns the frame presentation reads
+        (work order 5 slice 5.4: the owner completes a frame with the presentation data it holds and the worker never
+        sees, the reflected wallpaper; checkpoint audit 7, A7-M1). None: frames as decoded (one attribute read)."""
+        if completion is not None and not callable(completion):
+            raise TypeError("a frame completion must be callable or None")
+        with self._lock:
+            self._frame_completion = completion
 
     @property
     def last_taken(self) -> LogicalPublication | None:

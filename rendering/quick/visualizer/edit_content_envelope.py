@@ -393,6 +393,13 @@ def resolve_owner_edit_content_envelope(
     if mode_id == 'sphere':
         parameters = getattr(controller.logical_tick_state, '_sphere_parameters', None)
         if not isinstance(parameters, Mapping):
+            # On the engine worker the tick state is the worker's (native core P2b 5.4, checkpoint audit 7 A7-M2):
+            # the newest frame taken carries the same resolved parameters (plus the presentation-owned ones, which
+            # the live view below overrides as it does here).
+            taken = getattr(getattr(controller, 'logical_mailbox', None), 'last_taken', None)
+            frame = getattr(getattr(taken, 'state', None), 'mode_state', None)
+            parameters = getattr(frame, 'parameters', None) if getattr(frame, 'mode_id', None) == 'sphere' else None
+        if not isinstance(parameters, Mapping):
             return None
         from widgets.spotify_visualizer.view_orbit import view_orbit_values
         # Live view is presentation-owned, exactly as in the render capture.

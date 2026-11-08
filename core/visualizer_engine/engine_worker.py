@@ -24,9 +24,9 @@ and wake (``tests/test_visualizer_engine_paced.py``). Slice 5.2 runs the product
 activation (``activation``: settings model, resolved activation, technical cache, logical and presentation kwargs),
 started, played, parked and switched by the owner's control edges, and in production (no ``pcm``) its engine opens the
 real loopback device through the normal capture path on its own capture lane (slice 5.3's core); a capture that fails to
-open is a device failure (slice 5.5, A7-L4): the session keeps running and retries it at the next capture edge. Imports load QtCore only; a configuration loads QtGui
-(``QColor`` in the presentation config the tick still reads: no QGuiApplication, no QtQuick; A5-L2); work order 5
-slice 5.4 moves those reads to the logical config.
+open is a device failure (slice 5.5, A7-L4): the session keeps running and retries it at the next capture edge.
+Imports and every configuration load QtCore only (the presentation config the tick reads is Qt-free since slice 5.4;
+A5-L2), and the owner forwards the presentation inputs it changes at runtime (``VIS_SET_VIEW``).
 """
 from __future__ import annotations
 
@@ -227,8 +227,9 @@ class EngineSession:
         the configuration with separate logical / presentation kwargs, the technical config, the mode's logical state
         and the warm re-entry fence; Media's state not playing until its edge, as the host binding passes it), then the
         owner's bind (render admission for the configured identity). The logical capture still reads presentation
-        config (Spectrum's decoration fades and colours, the Oscilloscope/Bubble spec parameters), which loads QtGui
-        for ``QColor`` here (A5-L2; work order 5 slice 5.4)."""
+        config (Spectrum's decoration fades and colours, the Oscilloscope/Bubble spec parameters, the 3D view), held
+        Qt-free since work order 5 slice 5.4, so this loads QtCore only (A5-L2); the owner keeps it current with
+        ``VIS_SET_VIEW``'s presentation inputs."""
         from widgets.spotify_visualizer.feature_replay import offline_activation_request
         from widgets.spotify_visualizer.logical_edges import configure_logical_controller
         from widgets.spotify_visualizer.technical_config import resolve_technical_config
@@ -542,16 +543,30 @@ class EngineSession:
         return True
 
     def set_view(self, *, extent: Any, rotations: Any, override_extent: Any = None,
-                 override_rotations: Any = None) -> None:
+                 override_rotations: Any = None, presentation: Any = None) -> None:
         """The framed view the tick reads (``VIS_SET_VIEW``, latest wins; work order 5 slice 5.2): the owner's
         controller's layout metrics (committed extent and per-mode rotations, the live CUSTOM override or None) onto
         this session's controller, which resolves them for its own mode as the owner's does. The tick reads them under
-        the controller's lock, so a step sees the old or the new metrics, never half of them."""
+        the controller's lock, so a step sees the old or the new metrics, never half of them. ``presentation`` (slice
+        5.4): the presentation inputs the main side changed since its last send (``logical_edges
+        .presentation_inputs_snapshot``: the view records and the mode's presentation-only controls), set onto the
+        session's presentation state between two steps (each attribute is one reference; a pose read mid-update sees
+        each record whole)."""
+        from widgets.spotify_visualizer.logical_edges import apply_presentation_inputs
+
         controller = self._controller
+        if presentation:
+            apply_presentation_inputs(controller.presentation_state, presentation)
         controller.hydrate_committed_layout_metrics(tuple(extent), dict(rotations or {}))
         controller.set_custom_viewport_override(
             None if override_extent is None else tuple(override_extent),
             dict(override_rotations) if override_rotations is not None else 0)
+
+    @property
+    def bar_count(self) -> int:
+        """The session's controller's bar count (a mode's technical config sets it; the owner's main side mirrors it
+        for presentation readers such as Fullscreen Edit's envelope, A7-M2)."""
+        return int(self._controller.bar_count)
 
     def request_mode(self, mode: str, *, preset: int = 0, settings: Any = None, activation: Any = None,
                      at_once: bool = False) -> tuple[int, int] | None:
@@ -729,7 +744,8 @@ class VisualizerEngineWorker(BaseWorker):
                 qt = sorted(name for name in sys.modules if name.startswith("PySide6.Qt"))
                 generation, activation_id = self._session.identity
                 return self._reply(msg, qt_modules=qt, device_refused=self._session.device_refused,
-                                   engine_generation=generation, activation_id=activation_id)
+                                   engine_generation=generation, activation_id=activation_id,
+                                   bar_count=self._session.bar_count)
             if msg.msg_type == MessageType.VIS_INPUT:
                 if self._session is None:
                     return self._reply(msg, success=False, error="no engine session is configured")
@@ -781,6 +797,7 @@ class VisualizerEngineWorker(BaseWorker):
                     if committed is None:
                         return self._reply(msg)
                     return self._reply(msg, engine_generation=committed[0], activation_id=committed[1],
+                                       bar_count=session.bar_count,
                                        capture_failed=session.capture_failed)
                 try:
                     changed = self._session.set_display_power(bool(msg.payload["on"]))

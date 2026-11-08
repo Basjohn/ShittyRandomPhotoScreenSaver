@@ -1761,8 +1761,16 @@ class QuickDisplayVisualizerOwner:
         self._worker = link
         self._worker_identity = None
         self._activation_inputs = dict(inputs)
-        # The framed view the tick reads follows the main controller's layout metrics (latest wins, never awaited).
-        link.set_view_source(lambda: controller.layout_metrics_snapshot)
+        # The framed view the tick reads follows the main controller's layout metrics and the presentation inputs the
+        # capture reads (the view records, the mode's presentation-only controls: slice 5.4), latest wins, never
+        # awaited; the reflected wallpaper stays here and completes each frame taken (A7-M1).
+        from widgets.spotify_visualizer.backdrop import complete_frame_backdrop
+        from widgets.spotify_visualizer.logical_edges import presentation_inputs_snapshot
+
+        presentation = controller.presentation_state
+        link.set_view_source(lambda: (controller.layout_metrics_snapshot,
+                                      presentation_inputs_snapshot(presentation, controller.mode_id)))
+        link.mailbox.set_frame_completion(lambda state: complete_frame_backdrop(state, presentation))
         controller.set_layout_metrics_observer(self._on_layout_metrics_written)
         self._view_dirty = False
         link.send_view()
@@ -1774,6 +1782,8 @@ class QuickDisplayVisualizerOwner:
             return
         identity = (int(identity[0]), int(identity[1]))
         self._worker_identity = identity
+        if link.bar_count is not None:
+            self._controller.bar_count = link.bar_count   # presentation readers (Edit's envelope) see the session's
         logger.info("[SPOTIFY_VIS][ENGINE_WORKER] Visualizer configured on the engine worker mode=%s namespace=%d "
                     "engine=%s/%s", self._controller.mode_id, link.label_namespace, identity[0], identity[1])
         now = float(self._transition_clock())
@@ -1802,13 +1812,17 @@ class QuickDisplayVisualizerOwner:
             link.view_changed()
 
     def _forward_view(self) -> None:
-        """At the end of a presentation: the layout metrics it committed reach the session before its next step."""
-        if not self._view_dirty:
-            return
+        """At the end of a presentation: the layout metrics it committed, and any presentation input changed since
+        (Edit's orbit, the camera keys, Auto Rotate, Home...), reach the session before its next step."""
         self._view_dirty = False
+        self.forward_presentation_inputs()
+
+    def forward_presentation_inputs(self) -> bool:
+        """Send the session the framed view and presentation inputs changed since the last send (engine worker only;
+        latest wins, at most one in flight). Runs at the end of every presentation; a host that changes them outside
+        one (a rig's scripted orbit) calls it at once. Whether a send went out."""
         link = self._worker
-        if link is not None:
-            link.send_view()
+        return bool(link is not None and link.send_view())
 
     def _set_display_power_on_worker(self, on: bool) -> bool:
         """Display power on the engine worker (sent, never awaited): the session parks (cadence, capture) or resumes
@@ -1921,6 +1935,8 @@ class QuickDisplayVisualizerOwner:
         now = float(self._transition_clock())
         if kind == "mode":
             controller.set_mode(target)
+        if commit["link"].bar_count is not None:
+            controller.bar_count = commit["link"].bar_count  # the target's technical config, as in process (A7-M2)
         configure_presentation_side(controller, activation=inputs, playing=controller.playing,
                                     refresh_presentation=self._refresh_backdrop, **self._configure_services)
         if kind == "preset":

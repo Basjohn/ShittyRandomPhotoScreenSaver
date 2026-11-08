@@ -216,6 +216,7 @@ class EngineWorkerLink:
         self.label_namespace = 0
         self.mapping_name: str | None = None
         self.configured = False                   # the configure's reply arrived
+        self.bar_count: int | None = None         # the session's bar count, from its configure and commit replies
         self.capture_failed = False               # the newest reply said the session's device did not open (A7-L4)
         self._events = _LinkEvents(self)
         self._emit_lock = threading.Lock()        # a late emit from another thread never races ``close``
@@ -224,6 +225,7 @@ class EngineWorkerLink:
         self._outbox: list | None = None          # requests waiting for the worker's spawn, in order
         self._respawned = False                   # the unanswered configure went out again once (a restarted worker)
         self._view_source: Callable[[], tuple] | None = None
+        self._presentation_sent: dict = {}         # the presentation inputs the session holds (sent so far)
         self._view_sent: Any = None
         self._view_in_flight = False
         self._view_scheduled = False
@@ -369,6 +371,8 @@ class EngineWorkerLink:
             (on_failed or self._report_lost)(failure)
             return
         reply = response.payload or {}
+        if "bar_count" in reply:
+            self.bar_count = int(reply["bar_count"])     # the session's bar count (its mode's technical config)
         if "capture_failed" in reply:
             self.capture_failed = bool(reply["capture_failed"])
         if on_reply is not None:
@@ -453,9 +457,12 @@ class EngineWorkerLink:
     # The framed view (latest-wins state) ------------------------------------------------------------------------
 
     def set_view_source(self, source: Callable[[], tuple] | None) -> None:
-        """Where the view comes from (the owner's controller's ``layout_metrics_snapshot``), read once per send."""
+        """Where the view comes from: ``(layout_metrics_snapshot, presentation inputs)`` (the owner's controller's
+        layout metrics, and ``logical_edges.presentation_inputs_snapshot`` of its presentation state), read once per
+        send. The layout goes whole; the presentation inputs as the attributes changed since the last send."""
         self._view_source = source
         self._view_sent = None
+        self._presentation_sent = {}
 
     def view_changed(self) -> None:
         """The view changed: one send per GUI turn at most (a queued flush), never more than one in flight."""
@@ -476,18 +483,22 @@ class EngineWorkerLink:
         source = self._view_source
         if source is None or self._closed or (self._view_in_flight and not force):
             return False
-        snapshot = source()
-        if snapshot == self._view_sent:
+        snapshot, presentation = source()
+        sent = self._presentation_sent
+        changed = {attr: value for attr, value in presentation.items() if attr not in sent or sent[attr] != value}
+        if snapshot == self._view_sent and not changed:
             return False
         from core.process.types import MessageType
 
         extent, rotations, override_extent, override_rotations = snapshot
         self._view_sent = snapshot
+        sent.update(changed)
         self._view_in_flight = True
-        self._send(MessageType.VIS_SET_VIEW, {"extent": extent, "rotations": rotations,
-                                              "override_extent": override_extent,
-                                              "override_rotations": override_rotations},
-                   on_reply=self._view_answered)
+        payload = {"extent": extent, "rotations": rotations, "override_extent": override_extent,
+                   "override_rotations": override_rotations}
+        if changed:
+            payload["presentation"] = changed
+        self._send(MessageType.VIS_SET_VIEW, payload, on_reply=self._view_answered)
         return True
 
     def _view_answered(self, _reply: dict) -> None:
