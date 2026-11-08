@@ -2107,3 +2107,190 @@ expansion capability's import graph, GUI stall sampler, ownership trace, experim
 passed, 7 skipped. The four owner-on-the-worker files: 77 passed and one failure of a pre-existing negative control
 (`test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`, its `run(False)` half) that passed alone
 and in its own file (26 passed); recorded in `Current_Plan.md` as a side finding.
+
+## Checkpoint audit 11 (8 Nov): audit 10 fixes, 5.3, Edit and build fixes
+
+Scope: `git log ef6cf521..5fb8dab7` (audit 10 fixes 32bd6c3f, 5.3's rest 5a79de34, liveness timing 0d32b308, Edit
+154e5228 / 89a916f5 / b1289242 / d26e6011, R-176 / R-177 in 5fb8dab7). The Linux build commit `fa62ef14` is
+**outside** that range (it is `ef6cf521`'s parent); it was audited on request. Read-only. Focused runs:
+`test_visualizer_engine_worker_device.py`, `_frozen_spawn.py`, `test_usage_sampler.py`,
+`test_build_linux_declarations.py` (40 passed); `test_qtquick_child_lock_scene.py`, `test_card_surface_panels.py`,
+`test_custom_layout_guides_contract.py` (38 passed). One probe (configure-time imports, below), deleted afterwards.
+
+### Medium
+
+**A11-M1. A10-L4's strike reset has no bound: a failure that recurs after each completed reveal cycles forever.**
+- Claim (audit 10 resolution): a completed recovery resets `_worker_failures`, so "an isolated failure hours later
+  recovers again instead of leaving the worker for the run".
+- Evidence: `quick_display_visualizer_owner.py:1326-1334` sets `_worker_failures = 0` on every completed recovery
+  reveal; `:2100-2123` is the only fallback (`_worker_failures == 1` recovers, the second goes in process). No time
+  window, no per-run recovery count. A session's fail-close (60 failed steps, a `session_closed` reply, a cancelled
+  correlation) reconfigures the session without restarting the worker process, so the supervisor's
+  `MAX_RESTARTS_PER_WINDOW` does not bound it.
+- Failure scenario: a deterministic failure that fires some seconds after a session is revealed (a mode whose tick
+  raises once its audio history fills, a native fault at a fixed point in a song, a device path that fails closed
+  each time it is reopened). Before A10-L4: one recovery, then in process for the run. Now: fade out, reconfigure,
+  fade in, fail again, for the whole run. Each cycle is a visible fade and a full session build. The two-strike rule
+  no longer bounds anything that outlives a reveal.
+- Fix: keep the reset, but bound it. Either reset only when the replacement has run for a minimum span (for example
+  a number of committed frames or cadence steps, not a timer), or count recoveries per run and fall back after N
+  (for example 3). Add a test: a failure injected N steps after every reveal ends in process.
+
+### Low
+
+**A11-L1. A10-M1's figures are the pre-configure idle worker. Part of the import cost moved into the first configure.**
+- Claim (R-176, the audit 10 resolution, the 32bd6c3f merge message): "spawn 1.6 s -> 0.29 s, 112 -> 32 MB" per
+  worker.
+- Evidence: the evidence (`20261108_audit10_spawn_cost/spawn_cost.json`) measures `Process.start()` to WORKER_READY,
+  and memory 1 s after ready, with no configure. Probe (this audit, 3 runs, source tree): the engine worker's
+  configure-time imports (`EngineSession.__init__`'s and the live path's: runtime controller, beat engine,
+  tick pipeline, logical edges, technical config, `ThreadManager`...) take **1.69-1.72 s** in a bare interpreter
+  against **1.03-1.16 s** after the old `main.py` preload. About 0.6 s of the 1.33 s saving now lands inside the first
+  configure, in the worker's message loop and inside the 6 s first-configure bound. 0d32b308 is the symptom: the
+  liveness rig's 1.25 s fast heartbeat started retiring healthy workers mid-configure. For memory, audit 10 itself
+  measured the engine worker at ~71 MB in a session from a bare entry, so the steady saving in a session is about
+  40 MB, not 80.
+- Failure scenario: none functional. The net gain to a configured session is ~0.7 s, not 1.3 s. The frozen cold
+  first configure (the operator's open check) now includes those imports. That check should time ready plus
+  configure, not ready alone.
+- Fix: record ready plus first configure, and the session-time RSS, from a `main.py` parent. Restate the headline
+  as "idle worker". Make the operator's frozen check time the first configure.
+
+**A11-L2. GitHub Remote: the Linux job in `between` holds the Windows runs' polling and retrieval until it finishes.**
+- Evidence: `tools/github_remote_build.py:680-683` calls `between()` synchronously before the `while pending` poll
+  loop. `tools/build_runner.py:2908-2915` puts the Reddit Helper (local build) and then the Linux job in it. The
+  Linux worker blocks in `gh run watch` (30-60 min; `timeout-minutes: 120`).
+- Failure scenario: a Windows run that finishes (or fails) in 25 min shows a frozen "Building" status. It is not
+  downloaded, validated or published, and its failure is not reported, until the Linux run ends. The Linux run is
+  dispatched only after the Reddit Helper's local build, so "all GitHub runs build at the same time" is overstated.
+  Cancellation is correct: the owner's cancel kills the Linux worker, `_stop_linux_github_run` cancels its run, and
+  the loop's tail cancels the Windows runs.
+- Fix: run the Linux job after the poll loop, or poll the Windows runs while it runs. At minimum, dispatch Linux
+  before the Reddit Helper.
+
+**A11-L3. Linux Dispatch always sends `-f commit/token`; a ref whose `linux-build.yml` predates fa62ef14 refuses it.**
+- Evidence: `scripts/linux/build_from_windows.ps1:91-92` passes both inputs on every Dispatch, including the other
+  tabs' runs without `-Commit`. Auto picks Dispatch whenever the workflow exists on the default branch (`:75-82`).
+  GitHub refuses a `workflow_dispatch` with inputs the ref's workflow does not declare (HTTP 422, "Unexpected inputs
+  provided"). By reading only: no dispatch was run.
+- Failure scenario: building any branch cut before 8 Nov (an old release or feature branch) fails at dispatch on
+  every tab.
+- Fix: read `git show origin/<Branch>:.github/workflows/linux-build.yml`. Pass the inputs only when it declares them,
+  and otherwise use the old run lookup, or Tag when `-Commit` is required.
+
+**A11-L4. An operator stop before "Following run" leaves the Linux run running on GitHub.**
+- Evidence: `build_runner.py:818-844` parses only `Following run (\d+)` and the tag line. The run token is logged
+  earlier (`build_from_windows.ps1:91`, "run token srpss-..."), but nothing reads it. The run lookup can take up to
+  120 s (30 x 4 s).
+- Failure scenario: a stop during dispatch or lookup leaves a 30-60 min Ubuntu run going. In Tag mode, the tag is
+  deleted but its triggered run continues.
+- Fix: also parse the token, and find and cancel the run by `displayTitle`, as the script itself finds it.
+
+**A11-L5. 5.3's device report: "and so does VIS_STOP's report" is carried, but nothing reads it.**
+- Evidence: `engine_worker.py:617-619` nests the device report under `report["engine"]`. The link's
+  `_note_device_report` runs only for a top-level `capture_failed` (`engine_worker_link.py:405-406`). The owner's
+  retire sends VIS_STOP without awaiting it (`quick_display_visualizer_owner.py:2412-2419`).
+- Failure scenario: a reopen after the session's last edge (Media plays on until the Visualizer is turned off, a
+  reload or exit) never reaches the main log. For a long uninterrupted play, the reopen line appears only at the next
+  pause. That is recorded ("Left for step 6"), but the VIS_STOP sentence implies a backstop that does not exist.
+- Fix: correct the record, or log from the stop report when its reply arrives before the link closes.
+
+**A11-L6. 5.3's watch: its cost on real devices is unmeasured, and the record's coverage claim is too broad.**
+- Evidence: the reopen is the audio worker's `restart` (PortAudio terminate plus re-initialise, then open the
+  default), timed at 20 ms on the stand-in only. Classes the record does not name, where Media says playing and
+  nothing renders locally: Spotify Connect or cast playback, a player pinned to a non-default output from the
+  session's start, and network buffering. Each costs one reopen per silent run and one more per capture edge (play,
+  park, activation). The reverse also exists: another app rendering on the old default (a voice chat, a system
+  sound loop) keeps publications going, so a switch the player follows is never reopened. "One signal covers the
+  switch, the unplug and the stale stream" is true only when the player is the endpoint's only renderer.
+- Failure scenario: a reopen is harmless by design (the bars are at rest). But Pa_Terminate/Pa_Initialize enumerate
+  every WASAPI endpoint (Bluetooth included). If PyAudioWPatch holds the GIL there (unverified), each reopen stalls
+  the worker's cadence for that time.
+- Fix: add a Spotify Connect (Media playing, nothing local) case and a "second app on the old default" case to the
+  operator checks. Time a real-device reopen in the worker, with the cadence's step dt across it.
+
+**A11-L7. Child lock: a lock click on an unselected frame now selects it even when the click locks.**
+- Evidence: `CustomLayoutOverlay.qml:325-336` selects first whenever `!selectedForChildEdit`. `childEditingLocked` is
+  per delegate and survives deselection (`:324`; `onSelectedForChildEditChanged` at `:368` resets only
+  `parentGlyphControlsHidden`).
+- Failure scenario: frame A was left unlocked; B is selected. Hovering A and clicking its lock (to lock it) moves
+  the selection to A, cancels B's held child gesture (`custom_layout_overlay.py:399-402`) and reveals A's parent
+  glyphs. The intent "expose the children" holds only for an unlock. Keyboard L and the widget-path lock act on the
+  already-selected frame, so they are unaffected. Selection carries no Undo entry (not recorded by `select_item`).
+- Fix: select first only when the click unlocks (`childEditingLocked` true before the toggle), and add the
+  lock-direction case to the scene test.
+
+**A11-L8. `_strip_ps1_comments` does not know PowerShell's escapes or here-strings; today's scripts pass by parity.**
+- Evidence: `tools/linux_build.py:46-64` toggles on every quote character. A backtick-escaped quote happens to pair up
+  (probe: ``"--a=`"x`""  # it's`` keeps the argument and drops the comment). A `` `" `` alone, a doubled `''`
+  across a `#`, or a `#` inside a here-string (`build_nuitka.ps1:55`, `build_layout.ps1:1065`, both outside the
+  extracted blocks today) would be misread. The every-literal check in `test_build_linux_declarations.py` is the real
+  guard.
+- Fix: skip a quote after a backtick in double-quoted text, and blank out here-strings before the line pass. Better,
+  R-177's lesson 2: a declared data file both builds read.
+
+### Questions answered
+
+- *Can `importing_parents_main` be True in the application process?* No path found.
+  - `__parents_main__` exists only in a Nuitka child. The installed Nuitka 4.2 `MultiprocessingPlugin.py` compiles the
+    root module a second time as `__parents_main__` and appends `__nuitka_freeze_support()`, which restores
+    `--multiprocessing-fork`'s arguments and calls `spawn_main`. Its `_fixup_main_from_path` replacement imports
+    `__parents_main__` only inside `spawn.prepare` in the child. The name and the flow are as the records say.
+  - `_inheriting` is set only by `spawn._main` (`spawn.py:128-134`) and the forkserver's preload
+    (`forkserver.py:228-232`), and deleted after them.
+  - Frozen, `main_mc`, `main_diagnostic` (imports `main` unguarded, but only after the flavour; in a child the guard
+    still sees `__parents_main__` / `_inheriting`), tests, pytest-xdist (execnet, no `_inheriting`): all False in the
+    parent. No tool, `ui`, `core` or `widgets` module imports `main`. A spawned child whose target module imports
+    `main` at its top would get the stripped module (it is imported while `_inheriting` is set). None exists; the
+    only test that imports `main` near a spawn (`test_native_thread_pools.py`) does it in the parent.
+- *Skipped side effects a worker needs?* None found.
+  - `configure_native_thread_pools()` and `activate_flavour_for_artifact` stay above the guard.
+  - No worker target loads `OpenGL` (checked: image worker, engine worker, beat engine, tick pipeline and runtime
+    controller import no `OpenGL*`, and only `PySide6.QtCore`), so `disable_per_call_gl_error_checking` is moot.
+  - The Quick environment variables are `os.environ` writes, inherited.
+  - Worker logging is `setup_worker_logging` (`core/process/workers/base.py:25-60`), which imports
+    `core.logging.logger` itself.
+  - The FEEDS parser (`core/feeds/process_parser.py`) and the handle-attribution sidecar import their own modules.
+  - An AST walk of `main.py` found no import-time use (decorator, default, base class, class body) of any guarded
+    name.
+- *`from __future__ import annotations`:* `main.py` has no dataclass, `get_type_hints`, `Signal`/`Slot` or annotated
+  class body (one `Enum` with plain members). No runtime effect.
+- *180 steps:* a count on the step, no timer. Production's cadence is fixed at `DEFAULT_LOGICAL_HZ = 90`
+  (`logical_edges.py:42`), and `interval_s` is set only by rigs, so it is ~2 s whenever steps keep time (longer when
+  the step is starved). The watch does not run while parked (the cadence is parked). A pause sets
+  `controller.playing` False at the edge (`apply_playback_edge`), so the 6 s warm grace never counts. Digital silence
+  publishes (`audio_worker.py:826-832` publishes every non-empty callback with its timestamp), so it never counts.
+- *Thread safety:* `restart_stale_capture` (cadence thread) and Media's `wake` (message thread) both go through
+  `restart_capture` under `_capture_lock` with `_capture_restart_pending` coalescing (`audio_worker.py:1053-1067`). A
+  play edge between the watch's read and its call yields at most one coalesced restart. `_last_smooth_ts` is a float
+  written by both. Benign.
+- *`utils/lockfree/triple_buffer.py`:* docstring only. No behaviour change with the flag off.
+- *Volume material:* `MaterialSurface` is one `ShaderEffect` sampling the card's shared backdrop (no layer or FBO
+  per instance). A level change is a geometry and uniform update. The Loader's `height > 0` gate destroys and
+  recreates the item only when the level crosses 0 (a mute, or a step to and from 0), not on every step.
+- *`_stop_linux_github_run` and an old run id:* not possible. Each run's log is a new timestamped file opened `wb`
+  (`build_runner.py:1522, 1573`).
+- *`_restart_judged`:* the identity, the budget and the stop are under the lifecycle lock. After the backoff,
+  `start()` of a role that a foreground start already brought up returns True without replacing it
+  (`supervisor.py:224-226`).
+
+### Records overstated
+
+- R-176 and the audit 10 resolution: "112 -> 32 MB / 1.6 -> 0.29 s per worker" (A11-L1). The resolution's
+  "`core.spawn_child` comes first" is not quite right: it comes after `core.build_profile` and
+  `core.native_threads`.
+- 5.3: "so does `VIS_STOP`'s report" (A11-L5), and "one signal covers the switch, the unplug and the stale stream"
+  (A11-L6).
+- fa62ef14 / R-177: "so all GitHub runs build at the same time" (A11-L2).
+
+### Not verified
+
+- The frozen (Nuitka) child: that Nuitka registers `__parents_main__` in `sys.modules` before its body runs (the MC
+  build's `import main` from it depends on this), and that `from __future__` stays the first statement after the
+  plugin's pre-load code. A build is the only proof. The running GitHub Remote build was not touched.
+- Linux: the forkserver preload with a Nuitka binary, and Pulse (`utils/audio_capture_pulse.py`) on a sink change.
+- Whether PyAudioWPatch releases the GIL in `Pa_Initialize` / `Pa_Terminate` (A11-L6), and the real-device reopen
+  time.
+- The GitHub 422 on undeclared dispatch inputs (A11-L3): from GitHub's documented behaviour, not run.
+- `test_visualizer_expansion_fullscreen_edit.py` and the owner-on-the-worker liveness file were not run (window
+  and timing risk). The A10 fix suites were not re-run beyond the files listed above.
