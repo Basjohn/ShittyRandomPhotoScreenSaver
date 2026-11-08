@@ -212,7 +212,7 @@ Repository `Basjohn/ShittyRandomPhotoScreenSaver`, default `main`, examined 2026
 3. **Exiting:** reverse glyph (diagonal lower-left), explicit collapse, Edit entry, loss of capability, or relocation. Return exact authored pre-expansion presentation rather than saving the temporary screen-sized rect. Collapse/restore is independent of preset and CUSTOM values.
 4. **Mode selection:** ordinary double-click and context-menu mode switches retain current meaning, except that a double-click while expanded cycles only through capable modes (§0.6). Capable -> capable stays expanded through the canonical activation. Capable -> incapable collapses in a strictly ordered handoff, then changes mode. A rejected mode request leaves the current mode/expansion intact. Middle-click still cycles preset only.
 5. **Other display:** no fades, audio change, transition suppression, image queue mutation or OSD change, except legitimate shared-source work already occurring. A shared provider survives while any real consumer still needs it.
-6. **Overlays (operator, 8 Nov; supersedes the bottom-right HUD with a volume rail):** two gentle event-revealed overlays on the expanded display, nothing else. (a) **Preset name, top left**, in Title Case, fading in and out gently when the preset changes. (b) **Now playing, bottom left**: Artist, Song and Artwork fading in and out very gently when the track changes. The artwork carries the themed card border; the text has none. Text is white with a customizable font; long term, a cheap detection of bright areas under the text switches it to black where needed. No volume rail (the OSD owns volume), no pointer-hover reveal, no permanent timer/poller, no duplicate transport controller, and no overlap/hitbox conflict with OSD, camera, presets or the collapse glyph.
+6. **Overlays (operator, 8 Nov; supersedes the bottom-right HUD with a volume rail):** two gentle event-revealed overlays on the expanded display, nothing else. (a) **Preset name, top left**, in Title Case, fading in and out gently when the preset changes. (b) **Now playing, bottom left**: Artist, Song and Artwork fading in and out very gently when the track changes. The artwork carries the themed card border; the text has none. Text is white with a customizable font; long term, a cheap detection of bright areas under the text switches it to black where needed. No volume rail (the OSD owns volume), no pointer-hover reveal by default (Show On Hover, an option the operator asked for on 8 Nov, re-fades Now Playing where it sits; §G), no permanent timer/poller, no duplicate transport controller, and no overlap/hitbox conflict with OSD, camera, presets or the collapse glyph.
 7. **Persistence:** expansion is a user intent, per existing settings profile. It is effective only if the currently resolved mode supports it, owner is live, monitor participates, and Edit/Settings/retirement aren't active. Losing eligibility must not rewrite user intent as a false 'off' unless the user explicitly toggles it off; a deliberately selected incapable mode can normalize effective state off without destroying the original authored layout. (Operator, 7 Nov: selecting an incapable mode also clears the intent, so a later capable mode starts ordinary; §D3.)
 8. **Restore:** startup/Settings restart/topology replacement re-evaluates persisted intent **once at an already-defined readiness edge**; no unguarded early fade, first-wallpaper duplication or reentry loop. Missing explicit target remains unadmitted (no theft of another display), and later reconnection restores safely.
 9. **DPR/size:** recompute physical frame/viewport from target display and its existing display identity, not from screen-1 cached values. Treat camera, frustum, stream volume, near field, lighting reach, translucency and particles as authored mode semantics, not as a stretched old texture.
@@ -397,6 +397,20 @@ next admitted edge). The checklist below stays as its review list.
     Their hit area joins the overlay's, outside the OSD, collapse glyph and camera/preset controls. They are the
     Media card's own control bar, small (operator, 8 Nov: "it should have the media control bar just a small
     version"), not separate buttons.
+  - **Show On Hover (operator, 8 Nov, later: "the media section should optionally refade in if hovered over where it
+    was positioned. Without timers or polling"):** Now Playing only, off by default (`now_playing.hover_reveal`).
+    Built (M3c branch): the pointer arriving where Now Playing is placed fades it back in from where it is and holds
+    it while the pointer rests; leaving runs the reveal's own hold and fade-out (the same window as after a track
+    change). Driven by one `HoverHandler` (`blocking: false`) on an empty region item over the slot's rectangle
+    (`ExpandedVisualizerOverlays.qml`, `nowPlayingHoverRegion`; its `hovered` edge drives `nowPlayingHoverActive` ->
+    `ExpandedOverlaySlot.hoverEnter()` / `hoverExit()`). The fade machinery reused as is: the slot's one finite
+    `SequentialAnimation` (fade in, `PauseAnimation` hold, fade out), never a Timer; `hoverHeld` joins Always Show and
+    Edit as a reason to hold, and leaving restarts the same cycle (`_showAgain`, which `resume()` also uses). Nothing
+    takes a press (clicks, wheel and gestures reach what lies under it; the Media Controls keep their own hover); the
+    handler is disabled while the option is off and under Fullscreen Edit (Edit holds the overlays itself); without
+    a track or under Always Show it does nothing; the preset toast is untouched. The region is exactly the shown
+    block while faded out: the text layout no longer reads the controls' effective visibility (which fell with the
+    slot's own fade and shrank the faded slot by the Media Controls row).
   - **Card:** an optional border and theme surface like the widget cards (the card chrome owner: border colour, width
     and radius, plus the active Widget Theme's surface material), wrapping the whole overlay; off by default, so the
     artwork alone keeps its themed border.
@@ -803,7 +817,7 @@ can most geometry normally."
   (`tests/test_visualizer_expansion_reducer.py`; only the superseded collapse-on-Edit traces were replaced).
 - *One session, one Save.* The display manager's Edit entry asks the coordinator first; Fullscreen Edit opens the
   `QuickCustomLayoutOwner`'s one session (`start_fullscreen`) on the expanded display's overlays only:
-  `fullscreen_overlay.preset`, `.now_playing` (the text block, with its Media Controls when shown) and `.artwork`. The
+  `fullscreen_overlay.preset`, `.now_playing` (the text block, with its Media Controls when shown) and `.artwork` (since 8 Nov: `.now_playing` is the whole block and its parts are its children; see "Now Playing's parts" below). The
   same retained Edit layer, frames, corner handles, wheel, Restore Size, guides, Ctrl+Z, Enter/Esc, background
   double-click and context menu; the frames offer no close (the overlays have no enabled state). Save writes exactly
   the placement members into `widgets.spotify_visualizer.fullscreen_overlays`; no ordinary widget, Visualizer item or
@@ -817,7 +831,9 @@ can most geometry normally."
   the Edit layer (the guide underlay lies under the expanded card). Stored offsets are the ones the overlay really
   took (clamps included). Corner drags scale by the dragged corner's distance from the opposite one and keep that
   corner; the wheel (5 % per notch) and Restore Size (the canonical scale) keep the frame's top centre.
-- *Artwork (decided).* Now Playing's artwork has its own size factor, `now_playing.artwork_scale` (canonical default,
+- *Artwork (decided; superseded 8 Nov by "Now Playing's parts" below: the artwork is the block's child and has no
+  Edit item of its own; `artwork_scale` / `artwork_width` / `artwork_height` still draw as stored and Restore Size
+  returns them to canonical).* Now Playing's artwork has its own size factor, `now_playing.artwork_scale` (canonical default,
   clamped like `scale`), on top of the text-derived size; it stays beside its text, so dragging the artwork or the
   text moves Now Playing as one (its undo step is Now Playing's), and the artwork grows away from the overlay's anchor
   corner. Media Controls belong to the text block (they scale with the text).
@@ -938,6 +954,47 @@ can most geometry normally."
   pill bars. Fourteen M3c mutations (and five reducer ones, four schema ones) each turned a bar red. Stills
   (Extruded Bubble, PERSONALSET 859804, 1600 x 900) were handed to the lead outside the repository: the chrome, a
   mid-drag guide, a resized Now Playing, stacked Cards, after Cancel.
+- *Now Playing's parts are the block's children (operator, 8 Nov: "I meant separately when there is no block visible
+  but what we could do is allow movement within the block that is not drawn like we already do for child elements in
+  normal geometry. I should be able to move every element around in that block and change it. The existing child
+  geometry logic is probably good for this."; built on an agent branch).* Now Playing's Edit item is its **block**
+  (`fullscreen_overlay.now_playing`: the whole overlay, artwork, text and Media Controls; the separate artwork item
+  is gone). It mirrors how an ordinary widget enters child edit: the item declares ordinary Edit's child roles
+  (`core.settings.fullscreen_overlays.NOW_PLAYING_CHILD_ROLES`: `artwork` = the freeform artwork frame, `title` and
+  `artist` = uniform text roles like the Media card's metadata and artist, `controls` = a two-axis role like the
+  Media card's transport controls; all movable), and the scene's presentation resolver for Fullscreen Edit
+  (`QuickSceneController._fullscreen_overlay_presentation_item`) gives the block's frame the Now Playing slot as its
+  presentation, which declares `customEditableChildRoles` exactly as `OverlayWidget` roots do. So the one child editor
+  in `CustomLayoutOverlay.qml` (select the block, open its child lock by its glyph or L; the parts' frames, move
+  areas, corner handles, side strips, child guides, containment, the global collision preference) drives the
+  owner's own `begin_child_move` / `update_child_move` / `begin_child_resize` / `update_child_resize` /
+  `preview_child_resize` / `cancel_child_gesture` (`resolve_child_*_geometry`), bound into the Fullscreen session by
+  `bind_fullscreen_overlay_edit_session`; no second editor. The records live in the one value,
+  `now_playing.child_geometry` (ordinary Edit's CUSTOM `child_geometry` carrier, parsed by `normalize_child_geometry`
+  against the roles; `{}` = today's layout, and a value stored before it reads so; no bridge): per part a size factor
+  of its own drawn size and an offset in fractions of 10 ems of the block's font (`CHILD_NORMALIZATION_EMS`), so a
+  part keeps its place under the block's scale and the font size and never moves with a track's text length. The QML
+  draws each part at today's place plus its offset, growing from its top-left (the child editor's contract): the
+  artwork frame and the bar resize (the image crops), the text parts scale whole through applied `Scale`/`Translate`
+  transforms (published to the editor as `customEditMappingDependency`); the block's own size never follows its parts
+  (every natural size is the authored one, as ordinary Edit never grows a parent for a child edit) and a part is
+  always drawn inside the block, card padding included (whatever a record says). The text parts' frames are their
+  lines (as wide as the text draws, up to the box), so they can move across the box. Save writes the records with
+  the rest of the placement, Cancel and undo (one step per gesture) restore them exactly, a part's edit alone marks
+  the draft (Settings held), and Restore Size on the block also restores the authored parts (ordinary Restore Size's
+  `restore_authored_child_geometry`). The block keeps its own handles: move, corner / wheel scale (every part
+  follows) and its side strips, which set the text box that makes the block that size (its artwork beside its text
+  box). **Room (decided):** the parts move within the block, which is as large as its content (today's layout) until
+  its own side handles make it larger; that is ordinary Edit's rule (a child is contained in its parent; the parent's
+  content box is the outer handles' job). **With a block surface (Card; decided):** the parts stay editable inside
+  it, mirroring a widget with a visible card (the Media card's children are edited inside the card); the card is
+  then the block's visible extent. Evidence: `tests/test_visualizer_expansion_fullscreen_edit.py` (real pointer
+  events: selection, the lock glyph, three part moves and the artwork's side strip, containment, undo, Cancel, Save;
+  with and without Card; scale-follow; a record past the edge drawn at the edge; eight negative controls),
+  `..._overlay_settings.py` (records, old values); stills outside the repository
+  (`D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer\20261108_np_children\`: the hover sequence, the block
+  selected with its parts open, title / artist moved, artwork resized, bar moved, after Save, before and after
+  Cancel, and the same with a Card).
 - *Also on this branch (operator, 8 Nov):* playback resuming (the Media model's paused -> playing edge) reveals Now
   Playing like a track change, keeping its content; Always Show is untouched; a pause is no event. And a bar that the
   display-wide card keeps the framed camera's controls (Reset Camera, the preset steps, the 3D hint) under the card's

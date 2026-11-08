@@ -21,8 +21,9 @@ import QtQuick.Effects
 //
 // Fullscreen Edit (M3c): while ``editing`` (the Edit session is open on this display's overlays) both overlays show
 // and hold, with a quiet placeholder where there is no preset name or track yet, so each can be grabbed; their
-// geometry changes are reported through editGeometryChanged (Python re-reads the Edit frames: the preset toast, the
-// Now Playing text block and its artwork). When Edit ends they return to their authored visibility with a fade.
+// geometry changes are reported through editGeometryChanged (Python re-reads the Edit frames: the preset toast and
+// Now Playing's block, whose parts are its children for ordinary Edit's child editor). When Edit ends they return to
+// their authored visibility with a fade.
 Item {
     id: overlays
     objectName: "expandedVisualizerOverlays"
@@ -484,7 +485,7 @@ Item {
             id: titleMetrics
             font: titleText.effectiveFont
         }
-        // The text block (Fullscreen Edit's Now Playing frame): the column at its natural size or in a set box.
+        // The text block (what the block's side handles set): the column at its natural size or in a set box.
         Item {
             id: textBlock
             objectName: "expandedOverlayNowPlayingText"

@@ -1327,7 +1327,7 @@ class QuickSceneController(QObject):
         overlays.
 
         The same retained Edit layer, model, gestures and Save signal as ``bind_custom_layout_session``; what differs
-        is what the items are. They are the overlays' parts (the preset toast, Now Playing's text and its artwork), so
+        is what the items are. They are the overlays' parts (the preset toast, Now Playing's block), so
         ``item_change_publisher`` projects their draft placement onto the overlays (never onto an ordinary root), and
         the expanded Visualizer card keeps its own presentation: no CUSTOM authority over it, never hidden. Native
         runtime input pauses as in every Edit; the overlays show to be grabbed and report their geometry to
