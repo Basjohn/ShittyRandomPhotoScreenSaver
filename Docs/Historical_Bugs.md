@@ -1,6 +1,6 @@
 # Historical Bugs — single archive index
 
-**Updated:** 2026-11-06. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
+**Updated:** 2026-11-08. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
 
 **Admission bar:** retain costly, elusive, multi-tool investigations and architectural, resource, timing, scheduling or performance failures. A quickly fixed one-off UI/test/routing defect is not archival merely because it happened. Historical data records what was true *then*, never an instruction to revive retired QWidget/GL infrastructure. Current behavior is in `Spec.md`, `Docs/Contracts.md`, current reference/guardrail documents and tests. `Current_Plan.md` owns actual remaining work.
 
@@ -102,6 +102,8 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-173 / Hidden display scene GL context freed before its render control; heap corrupted for the next test](Historical_Bugs/R-173_Hidden_Scene_Context_Freed_Before_Render_Control_Heap_Corruption.md) | Source repair (tests/tools only) | Standard |
 | [R-174 / Save Preset As wrote Bubble's values over Neon Lake's Preset 1](Historical_Bugs/R-174_Save_Preset_As_Wrote_Bubble_Values_Over_Neon_Lake_Preset.md) | Source repair (data loss) | **STRONG** |
 | [R-175 / Settings round trips left retired generations in uncollected cycles (~20 MB each)](Historical_Bugs/R-175_Settings_Round_Trip_Retired_Generation_Cycles_Never_Collected.md) | Source repair | **STRONG** |
+| [R-176 / Every worker process loaded the whole application before its target (~1.3 s and ~80 MB per worker)](Historical_Bugs/R-176_Every_Worker_Process_Loaded_The_Whole_Application.md) | Source repair (performance, all worker roles) | **STRONG** |
+| [R-177 / The Linux build lost every Windows Nuitka declaration to a quoted comment (no presets shipped)](Historical_Bugs/R-177_Linux_Build_Lost_Every_Windows_Declaration_To_A_Quoted_Comment.md) | Source repair (build payload) | Standard |
 | [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](Historical_Bugs/A-01_Settings_Dialog_Placeholder_Investigation.md) | Archived investigation | Standard |
 | [U-02 — 2026-04-10 / 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](Historical_Bugs/U-02_Bubble_Blob_Signal_Contract.md) | Archived investigation | Standard |
 | [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md) | Archived investigation | **STRONG** |
