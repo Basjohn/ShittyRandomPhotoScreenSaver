@@ -107,7 +107,9 @@ def production_owner_replay(clip: Any, mode: str, *, preset: int = 0, generation
     from rendering.quick.state import QuickWindowPolicy
     from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
     from widgets.spotify_visualizer import tick_pipeline
-    from widgets.spotify_visualizer.feature_replay import PcmReanalysis, ReplayBeatEngine, deterministic_clock
+    from widgets.spotify_visualizer.feature_replay import (
+        REPLAY_SEED, PcmReanalysis, ReplayBeatEngine, deterministic_clock,
+    )
     from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
     from widgets.spotify_visualizer.visualizer_host_binding import VisualizerHostBinding, VisualizerHostServices
 
@@ -183,6 +185,9 @@ def production_owner_replay(clip: Any, mode: str, *, preset: int = 0, generation
                     raise RuntimeError(f"the binding built {controller.mode_id} with {len(steps)} cadence starts and "
                                        f"{len(engines)} engines")
                 engine = engines[0]
+                # The replay's mode-generator seed (Bubble's spawn), as ``configure_offline_controller`` seeds the
+                # offline replay's: the product's path never seeds, so the replay seeds its controller before a step.
+                controller.seed_mode_generators(REPLAY_SEED)
                 for index, feature in enumerate(frames):
                     clock[0] = feature.timestamp_us / 1_000_000.0
                     if bool(feature.playing) != bool(controller.playing):

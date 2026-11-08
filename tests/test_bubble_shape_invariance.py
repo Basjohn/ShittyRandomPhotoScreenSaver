@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import functools
 import math
-import random
 from statistics import median
 
 import pytest
@@ -61,8 +60,7 @@ def _measure(extent, stream, *, seeds=(4411, 4412, 4413)):
 
 
 def _measure_seed(extent, stream, seed):
-    random.seed(seed)
-    sim = BubbleSimulation()
+    sim = BubbleSimulation(seed=seed)
     settings = neutral_bubble_settings(
         viewport_extent=extent, bubble_big_count=6, bubble_small_count=24,
         bubble_stream_direction=stream, bubble_drift_direction="swish_horizontal",

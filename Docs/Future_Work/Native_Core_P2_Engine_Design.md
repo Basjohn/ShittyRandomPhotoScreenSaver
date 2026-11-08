@@ -168,7 +168,8 @@ switch never remaps.
    `.artifacts/evidence/architecture/native_core_p2/20261108_worker_gate/report_rerun.json` (re-run after the audit's
    C1/C2 fixes with the current script: 160 pairs, 291,024 frames, 0 mismatching, exit 0, 34 min at below-normal
    priority). The first `report.json` predates the skip and records the 11 rows as errors (audit M4).
-   **Live inputs: the lossless engine snapshot (built 8 Nov):** `FeatureFrame` is the replay contract, not the live
+   **Live inputs: the lossless engine snapshot (built 8 Nov; deleted in work order 5 slice 5.6, when P2b's live input,
+   the worker owning capture, DSP and the tick, had replaced it; kept here as the record):** `FeatureFrame` is the replay contract, not the live
    one: the recorder's capture (`tools/visualizer_replay/record.py` `_frame`) clamps lanes to 0..1, resamples bars and
    waveform to fixed counts and consumes scheduler events. `core/visualizer_engine/engine_snapshot.py` instead:
    - The main process keeps the beat engine. Per tick, `EngineSnapshotSource.capture` steps it (`engine.tick()`, which
@@ -196,7 +197,8 @@ switch never remaps.
      spectrum request as a back-edge, one tick late and racy against the compute commit (audit H4).
    - Live sessions pin only the authored clock to the snapshot's timestamp; `time.*` and `random` stay the worker's
      own (audit H6). Bubble's spawn draws from the process RNG by design, so `seed` is a control input: the gates pass
-     the replay seed, production none. A tick that raised closes its session (`session_closed`, audit M2).
+     the replay seed, production none (since 5.6 the seed reaches Bubble's own generator, never the process RNG). A
+     tick that raised closes its session (`session_closed`, audit M2; on the live input since 5.6).
    - `EngineSession(inputs="snapshot", initial_snapshot=...)` ticks snapshots (`tick_snapshot` -> revision;
      `VIS_INPUT {"snapshot": ...}` across processes); `inputs="lanes"` is the in-process reference on production DSP
      (`ProductionLaneEngine`).
@@ -244,9 +246,10 @@ switch never remaps.
      thread; the usage sampler counting a long-lived child; worker logging into the app's log; where the frame
      decode runs (render-thread latency above); wake-pipe backpressure (a full pipe must never block the worker's
      tick: drop the byte, the reader coalesces anyway); Bubble's spawn on its own generator, so the gates need no
-     process-wide seed (A2-M2); the main-process listener thread's wake cost counted in gate 3.
-   - **Deleted when P2b lands:** `core/visualizer_engine/engine_snapshot.py`, the `snapshot` session input and its
-     tests and tools (`engine_main_cost.py` stays as the record of the decision).
+     process-wide seed (A2-M2; done in 5.6); the main-process listener thread's wake cost counted in gate 3.
+   - **Deleted when P2b lands (done in work order 5 slice 5.6):** `core/visualizer_engine/engine_snapshot.py`, the
+     `snapshot` session input and its tests and tools (`engine_main_cost.py` stays as the record of the decision: its
+     in-process half still runs; the snapshot half is reproducible at 4df640b7).
    - **Slice 1 built (8 Nov): the live engine on recorded PCM, in process and in the worker** (the rig every P2b gate
      uses; gate (2)'s steady-state half). `EngineSession(inputs="live")` builds the production `_SpotifyBeatEngine`
      with its real `SpotifyVisualizerAudioWorker` on the session's own `ThreadManager` (the capture affinity lane and
@@ -360,7 +363,8 @@ switch never remaps.
        0 mismatching, 15 min (`.../20261108_live_gate_slice2_settled/live_gate.json`). The stress run is synchronous
        per input (the worker does not pace itself until work order 5).
      - *Left for work order 5:* production wiring of these controls (the worker's own cadence, latest-wins
-       application, the main-side mailbox clear on park, fail-closed fades), and Bubble's own generator (A2-M2).
+       application, the main-side mailbox clear on park, fail-closed fades), and Bubble's own generator (A2-M2; done in
+       5.6).
    - **Slice 2 follow-ups (8 Nov): checkpoint audit 4's open findings** (`Native_Core_P2_Audit.md`, "Checkpoint audit
      4"; A4-M1 landed first on main, e66644c1; A4-M5's evidence copied to the cited paths):
      - *A4-H1, one owner for activation and the engine edges:* `widgets/spotify_visualizer/logical_edges.py` (QtCore at
@@ -532,7 +536,7 @@ switch never remaps.
    the whole snapshot layer (capture, scheduler tap, the main side of the mode rules) and with it audit H1, H2 and M1;
    the main process keeps only control edges and the frame take. P2a's built pieces stay until P2b's worker owns the
    engine: the ABI, codec, mailbox, wake and worker session are P2b's too; `engine_snapshot.py` and the `snapshot`
-   session input are deleted when P2b lands.
+   session input are deleted when P2b lands (done, 5.6).
    **Corrections (checkpoint audit 2, 8 Nov):** the DSP column double-counts for Spectrum, Extruded Spectrum and Neon
    Lake: `ProductionLaneEngine` analyses each new block twice for them (`feature_replay.py:255` and `:376`, 1.54
    passes per frame against .77) plus ~.2 ms of replay-only bookkeeping, so P2b saves ~.8 ms for those three, not
@@ -993,6 +997,64 @@ switch never remaps.
        retries, A6-M3) still publishes nothing and is not detected; device changes (5.3).
    - 5.6 Cleanup: delete `engine_snapshot.py` and the `snapshot` input; Bubble's spawn on its own generator so no
      gate needs a process-wide seed.
+     **Built (8 Nov):**
+     - *The snapshot layer, deleted:* `core/visualizer_engine/engine_snapshot.py` and
+       `tests/test_visualizer_engine_snapshot.py`; `EngineSession.INPUTS` is `feature`, `lanes`, `live` (no
+       `initial_snapshot`, `tick_snapshot` or `VIS_INPUT {"snapshot"}`; the worker's handlers catch `Exception`, as
+       `SnapshotContractError` was their only `BaseException`). The surface only the snapshot used went with it:
+       `_SpotifyBeatEngine.peek_pre_agc_analysis_spectrum` / `request_pre_agc_analysis_spectrum`, the replay engine's
+       peek and `mode_capabilities.reads_analysis_spectrum` (the main side's spectrum rule). Of its gates, "a tick that
+       raises closes its session" (audit M2) still guards the live input and is ported
+       (`test_visualizer_engine_live.py`); the rest guarded the snapshot itself (the scheduler tap's replay, the
+       main side's mode-rule agreement, the contract-miss `BaseException`, the static getter scan against
+       `CAPTURED_GETTERS`) and went with it; the live input's identity gates (in process == worker, every mode, off
+       the steady state, owner on the worker) are the live path's. `engine_main_cost.py` keeps its in-process
+       tick/DSP half (runnable); its snapshot half is reproducible at 4df640b7 and its report stays the 4c record.
+       `engine_read_audit.py` (the tick's engine read surface per mode) does not depend on the snapshot and stays.
+     - *Bubble's own generator (A2-M2):* `BubbleSimulation(seed=None)` owns a `random.Random` (None: OS entropy, as the
+       process RNG seeds at import); every draw, 57 call sites (15 in the spawn helpers, which now take the caller's
+       generator, 42 in the simulation), keeps its call, arguments and order and reads it instead of the module
+       (Bubble Temporal Fidelity: only the generator's source changed). `seed_generator` re-seeds it (a reset keeps
+       the stream). `BubbleFrameRuntime(seed=...)` / `seed_generator` carry the seed to the simulation it builds, and
+       `VisualizerRuntimeController.seed_mode_generators(seed)` seeds the mode states built before and after it, per
+       controller (only Bubble's runtime draws at random from a live generator: Extruded Bubble's simulation is
+       seeded by its runtime, and Bubble's ambient layers and Extruded Bubble's wake use fixed-seed generators). Production never calls it (test: the owner, host binding and worker
+       link never seed). The session's `seed` control input seeds its controller (live: the gates pass
+       `REPLAY_SEED`, production none; recorded-input sessions default to `REPLAY_SEED`, as every offline replay);
+       `deterministic_clock` no longer seeds or restores the process RNG; `configure_offline_controller(seed=
+       REPLAY_SEED)` seeds the replay's controller. The gates and replays seed their own controllers: the owner gate's
+       in-process owner (after its build, before any tick), `owner_production_replay`, the Bubble Studio evaluator
+       (which no longer swaps the app's process-RNG state around its steps) and its recorded-input extract. Bubble's
+       tests seed the simulation (`BubbleSimulation(seed=N)`, `sim.seed_generator(N)`) instead of `random.seed(N)`.
+     - *Proof (evidence `.artifacts/evidence/architecture/native_core_p2/20261108_p2b_56_bubble_generator/`):* the
+       4df640b7 simulation seeded through the process RNG and this one seeded alike: 144 configurations (every stream
+       x drift direction, Group Drift on and off, bounce and the three pop modes, 720 ticks of a passage with a hot
+       stretch and a silent gap), 103,680 frames identical and the generator states equal at the end (the same draws
+       in the same order; `sim_equivalence.json`). Through the session paths, 4df640b7 (an archive copy, deleted) and
+       this tree give identical Bubble digests: live sessions in settled and production order, feature and lanes
+       sessions (273 frames each), the Studio's recorded-input extract (273) and evaluator (40 instants)
+       (`session_paths_digests.json`). Same seed in process and on the worker: `owner_worker_gate` identity Bubble ->
+       Oscilloscope and Oscilloscope -> Bubble, 549 frames each, identical (`owner_worker_gate.json`);
+       `live_engine_gate --modes bubble oscilloscope`, every scenario on the three shipped clips whole, 27 pairs,
+       36,561 frames, 0 mismatching (`live_gate/live_gate.json`). Production: an unseeded `random.Random()` is the
+       module's own generator type seeded the way the module seeds itself, and the draws are the same calls in the
+       same order, so the distribution is unchanged; each Bubble activation now has its own stream instead of sharing
+       the process's with other threads. Negative control (A2-M2): Bubble handed the process RNG (`random` itself)
+       makes two seeded sessions diverge (`test_visualizer_engine_live.py`); with the old process-wide seed they were
+       equal.
+     - *Found:* `test_bubble_reactivity.py::test_group_drift_aligns_non_swirl_bubble_motion[random-x]` holds for
+       ~61% of draws (2,000 seeds; Diagonal for all): unseeded, it had passed on the process-RNG state the file's
+       earlier seeded tests left behind. Seeded now (seed 2) and recorded in `Current_Plan.md` (not a 5.6 change: what
+       Random Group Drift should guarantee is Bubble's owner's call).
+     - Ran: `test_visualizer_engine_live.py`, `_live_off_steady`, `_worker`, `_paced`, `_import_weight`,
+       `test_visualizer_owner_engine_worker.py`, `_inputs`, `test_visualizer_owner_production_path.py`,
+       `test_visualizer_logical_edges_parity.py`, `test_visualizer_audio_source_freshness.py`,
+       `test_visualizer_authored_clock.py`, `test_bubble_own_generator.py`, the Bubble suites (reactivity, viewport
+       reflow, shape invariance, normal drift, BTF coalescing, ambient, Studio, lifecycle fades, render judder,
+       viewport scaling contracts; six repeated runs, no flake), `test_studio_clip_loop.py`,
+       `test_waveform_ribbon_source_policy.py`, `test_display_power.py`, `test_sphere_voxel_audio_contract.py`,
+       `test_qtquick_visualizer_reactivity_config_parity.py`.
+     - **Left for 5.7:** nothing from 5.6.
    - 5.7 Dormancy and diagnostics: the worker exists only while a Visualizer is active and parks with the display;
      the usage sampler and logs include it; the frozen (Nuitka) spawn reaches `visualizer_worker_main` (operator
      check). From 5.2: the worker process stays up after the owner retires (its session closed) until the supervisor

@@ -12,15 +12,14 @@ cadence is substituted, batched or decimated.
 The only Studio-owned pieces are on the *engine* side of that seam: ``FixtureBeatEngine`` (the production replay
 engine serving one fixture tick's post-DSP Bubble lane, transient lane and typed events) and the event scheduler's
 clock, which is the fixture's time instead of the process clock (the production replay pins the process clock
-instead; the Studio runs inside the app and must not). Bubble's spawn randomness comes from the process ``random``
-module; the evaluator keeps its own seeded generator state and swaps it in only around its own steps, so replays are
-exact and the app's random stream is untouched.
+instead; the Studio runs inside the app and must not). Bubble's spawn randomness comes from the simulation's own
+generator, which the evaluator's controller seeds (``SEED``) at every replay start, so replays are exact and the app's
+process RNG is never touched.
 """
 from __future__ import annotations
 
 import dataclasses
 import math
-import random
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
@@ -44,7 +43,7 @@ PREFIX = "bubble_"
 STEP = 1.0 / 90.0             # Bubble's authored logical service class (BTF 5.1)
 PREROLL = 3.0                 # inputs before t = 0 so the population has spawned and settled into the music
 DURATION = 10.0
-SEED = 1729                   # the production replay's seed (``feature_replay.deterministic_clock``)
+SEED = 1729                   # the production replay's mode-generator seed (``feature_replay.REPLAY_SEED``)
 
 # Workspace of each canonical bucket (presentation only; group titles are the registry's bucket titles).
 _BUCKET_WORKSPACE = {
@@ -436,10 +435,6 @@ class BubbleStudioEvaluator(PassRestart):
         self._time = -math.inf
         self._last_tick: TickInput | None = None
         self._approximate = False
-        state = random.getstate()
-        random.seed(SEED)
-        self._rng = random.getstate()
-        random.setstate(state)
 
     def _retire(self) -> None:
         controller, self._controller = self._controller, None
@@ -463,7 +458,7 @@ class BubbleStudioEvaluator(PassRestart):
         controller = VisualizerRuntimeController(runtime_generation=0, initial_mode=MODE,
                                                  engine_factory=lambda _bars: engine)
         controller.engine = engine
-        configure_offline_controller(controller, MODE, settings=resolved_settings(values))
+        configure_offline_controller(controller, MODE, settings=resolved_settings(values), seed=SEED)
         if self._extent is not None:
             controller.hydrate_committed_layout_metrics(self._extent, 0)
         self._controller = controller
@@ -532,20 +527,14 @@ class BubbleStudioEvaluator(PassRestart):
         if self._presentation_signature(values) != self._presentation:
             self._restyle_controller(values)
         origin = getattr(self._inputs, "_origin", 0.0)
-        saved = random.getstate()
-        random.setstate(self._rng)
-        try:
-            while True:
-                tick = self._pending if self._pending is not None else next(self._iterator, None)
-                self._pending = None
-                if tick is None or tick.now - origin > time + 1e-9:
-                    self._pending = tick
-                    break
-                self._step(tick)
-                self._last_tick = tick
-        finally:
-            self._rng = random.getstate()
-            random.setstate(saved)
+        while True:
+            tick = self._pending if self._pending is not None else next(self._iterator, None)
+            self._pending = None
+            if tick is None or tick.now - origin > time + 1e-9:
+                self._pending = tick
+                break
+            self._step(tick)
+            self._last_tick = tick
         self._time = time
         if self._last_tick is None:
             raise RuntimeError("Fixture produced no logical step")

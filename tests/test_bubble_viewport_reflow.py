@@ -14,7 +14,6 @@ canonical units. There are no aspect/shape speed or count modifiers.
 from __future__ import annotations
 
 import math
-import random
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -50,8 +49,7 @@ _ENERGY = {"bass": 0.3, "mid": 0.2, "high": 0.1, "overall": 0.3}
 
 
 def _run(extent, *, seed=20260829, ticks=1, **over):
-    random.seed(seed)
-    sim = BubbleSimulation()
+    sim = BubbleSimulation(seed=seed)
     for _ in range(ticks):
         sim.tick(0.016, dict(_ENERGY), _settings(extent, **over))
     return sim
@@ -209,13 +207,12 @@ def _run_viewport_transient_motion_impl(
     start=(0.5, 0.5),
     group_drift=False,
 ):
-    random.seed(20260831)
     domain_w = float(extent[0]) / 420.0
     domain_h = float(extent[1]) / 280.0
     # The same canonical-unit offset from the world centre on every shape.
     start_x = 0.5 * domain_w + (start[0] - 0.5)
     start_y = 0.5 * domain_h + (start[1] - 0.5)
-    sim = BubbleSimulation()
+    sim = BubbleSimulation(seed=20260831)
     sim._apply_viewport_domain(extent)
     sim._bubbles = [
         BubbleState(
@@ -377,8 +374,7 @@ def test_swirl_orbit_is_the_canonical_geometry_on_every_shape(
 @pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
 def test_swirl_spawn_radius_is_canonical_units(expanded_extent) -> None:
     def _spawn(extent):
-        random.seed(20260831)
-        sim = BubbleSimulation()
+        sim = BubbleSimulation(seed=20260831)
         sim._apply_viewport_domain(extent)
         sim._spawn_bubble(False, "none", 0.6, "swirl_cw")
         bubble = sim._bubbles[0]
@@ -430,8 +426,7 @@ def test_directional_refill_entry_depth_is_canonical_units(
     """The entry lane spans the whole world edge; how far off-card a bubble is born is canonical."""
 
     def _spawn(extent):
-        random.seed(20260831)
-        sim = BubbleSimulation()
+        sim = BubbleSimulation(seed=20260831)
         sim._apply_viewport_domain(extent)
         sim._spawn_bubble(False, stream_direction, 0.6, "none")
         bubble = sim._bubbles[0]
@@ -446,8 +441,7 @@ def test_directional_refill_entry_depth_is_canonical_units(
 @pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
 def test_refill_cluster_spread_is_canonical_units(expanded_extent) -> None:
     def _record_spawn_positions(extent):
-        random.seed(1)  # first refill chooses the authored cluster branch
-        sim = BubbleSimulation()
+        sim = BubbleSimulation(seed=1)  # first refill chooses the authored cluster branch
         sim._apply_viewport_domain(extent)
         sim._time = 1.0
         recorded = []
@@ -555,8 +549,7 @@ def test_pre_entry_prediction_distance_is_canonical_units(
 
 
 def test_geometry_change_creates_no_extra_tick() -> None:
-    random.seed(7)
-    sim = BubbleSimulation()
+    sim = BubbleSimulation(seed=7)
     sim.tick(0.016, dict(_ENERGY), _settings(None))
     assert sim._diag_tick_count == 1
     # Changing the extent between steps is configuration, not an authored step.
@@ -684,8 +677,7 @@ def test_overlap_retry_clamp_uses_actual_logical_domain() -> None:
     # the canonical 0.25-unit off-world allowance, not the legacy unit box.
     # Starting far past the ceiling makes the clamp bind exactly.
     def _forced_overlap_spawn(domain_w, domain_h):
-        random.seed(3)
-        sim = BubbleSimulation()
+        sim = BubbleSimulation(seed=3)
         sim._domain_w = domain_w
         sim._domain_h = domain_h
         calls = {"n": 0}

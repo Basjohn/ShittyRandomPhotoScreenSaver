@@ -123,6 +123,86 @@ def test_each_tick_reads_the_asynchronous_commit_of_its_own_block(qt_app, monkey
 
 
 @pytest.mark.qt
+def test_the_seed_reaches_bubble_and_a_process_rng_draw_in_the_tick_diverges(qt_app, monkeypatch):
+    # Work order 5 slice 5.6 (checkpoint audit 2, A2-M2): the session's ``seed`` seeds Bubble's own generator through
+    # its controller, never the process RNG, so two sessions with the seed tick identical frames, while a tick that
+    # drew from the process RNG (here: Bubble's simulation handed the ``random`` module itself) is not seeded by any
+    # session and the same comparison fails (with the old process-wide seed it passed).
+    import random
+
+    import tools.expanded_visualizer_evidence as evidence
+    from widgets.spotify_visualizer import bubble_simulation
+
+    frames = evidence.shipped_clip(0.6).frames
+
+    def digests():
+        reader = PacketMailbox(role="reader")
+        session = _live_session(reader, "bubble")
+        try:
+            seen = []
+            for feature in frames:
+                session.tick(feature)
+                seen.append(evidence.frame_digest(reader.take().state))
+            return seen
+        finally:
+            session.close()
+            reader.close()
+
+    first = digests()
+    assert len(first) > 40 and digests() == first
+    real_init = bubble_simulation.BubbleSimulation.__init__
+
+    def process_rng(self, seed=None):
+        real_init(self, seed)
+        self._rng = random                                    # the module: the process RNG's draws
+
+    monkeypatch.setattr(bubble_simulation.BubbleSimulation, "__init__", process_rng)
+    assert digests() != digests()
+
+
+@pytest.mark.qt
+def test_a_tick_that_raises_closes_the_live_session(qt_app, monkeypatch):
+    # Fail closed (audit M2; ported from the deleted snapshot input's gate, work order 5 slice 5.6): a tick that raised
+    # left its controller half-updated, so the worker ends the session and says so; the next input is refused instead
+    # of ticking on.
+    import tools.expanded_visualizer_evidence as evidence
+    from core.process.types import WorkerMessage
+    from core.visualizer_engine.engine_worker import VisualizerEngineWorker
+    from widgets.spotify_visualizer import tick_pipeline
+    from widgets.spotify_visualizer.feature_replay import REPLAY_SEED
+
+    frames = evidence.shipped_clip(0.2).frames
+    worker = VisualizerEngineWorker(None, None)
+    reader = PacketMailbox(role="reader")
+
+    def send(kind, payload, seq):
+        return worker.handle_message(WorkerMessage(msg_type=kind, seq_no=seq, correlation_id=str(seq), payload=payload))
+
+    try:
+        configured = send(MessageType.VIS_CONFIGURE, {"mapping": reader.mapping_name, "mode": "spectrum",
+                                                      "runtime_generation": GENERATION, "inputs": "live",
+                                                      "seed": REPLAY_SEED, "order": "settled"}, 1)
+        assert configured.success, configured.error
+        assert send(MessageType.VIS_INPUT, {"frame": frames[0]}, 2).success
+        real_tick = tick_pipeline.logical_tick
+
+        def raising(state):
+            real_tick(state)
+            raise RuntimeError("injected mid-tick failure")
+
+        monkeypatch.setattr(tick_pipeline, "logical_tick", raising)
+        failed = send(MessageType.VIS_INPUT, {"frame": frames[1]}, 3)
+        assert not failed.success and failed.payload.get("session_closed") is True, failed
+        assert worker._session is None
+        monkeypatch.setattr(tick_pipeline, "logical_tick", real_tick)
+        after = send(MessageType.VIS_INPUT, {"frame": frames[2]}, 4)
+        assert not after.success and "no engine session" in after.error
+    finally:
+        worker._close_session()
+        reader.close()
+
+
+@pytest.mark.qt
 def test_the_worker_process_ticks_the_live_engines_frames_for_every_mode(qt_app):
     # The P2b identity gate: the live engine in process equals the live engine in a WorkerType.VISUALIZER process,
     # frame for frame, through the packet ABI.

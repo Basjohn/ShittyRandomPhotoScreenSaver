@@ -696,6 +696,13 @@ population and the capacity zoom. Measure on recorded music with
 `python -m tools.visualizer_replay.bubble_shape_invariance --report <path>` and review frames with
 `python -m tools.visualizer_replay.bubble_shape_strip --out-dir <dir>` (offscreen, no window).
 
+Bubble's own generator (native core P2b slice 5.6): `test_bubble_own_generator.py` — the simulation never draws from
+the process RNG (its state is unchanged across a spawning, drifting run), its own seed alone decides the frames
+(unseeded simulations differ even with the process RNG seeded alike), `VisualizerRuntimeController.seed_mode_generators`
+seeds Bubble runtimes built before and after it, and the owner, host binding and worker link never seed. Bubble tests
+seed the simulation (`BubbleSimulation(seed=N)`, `sim.seed_generator(N)`, `BubbleFrameRuntime(seed=N)`), never
+`random.seed`: a process seed no longer reaches Bubble (only the historical 510520e anchor, old code, still uses it).
+
 Voxel Sphere is a standard selectable Visualizer while retaining lazy mode-owned behavior on the shared low-level Scene3D substrate. Its behavioural/state contract remains private and golden-protected; standard product admission does not make its reaction/material schema a shared family. `Docs/Reference/Sphere_Visualizer.md` owns the current contract; current Voxel Sphere tests supersede the retired smooth/material Sphere family.
 
 User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runtime compacts selectable positions without renaming/deleting authored files or treating shipped manifests as catalogue authority.
@@ -1028,7 +1035,12 @@ High-value permanent guards include:
   (`RecordedCaptureBackend` via the audio worker's source seam; a device open fails the test), ticks identical frames
   in process and in a `WorkerType.VISUALIZER` process for every mode; the recorded stream rebuilds every capture
   history; each tick reads the asynchronous commit of its own block (`order="settled"`, the portability order: the
-  engine's analysis-settled edge, committed on the lane's thread). `tests/test_visualizer_engine_live_off_steady.py`
+  engine's analysis-settled edge, committed on the lane's thread). It also holds (slice 5.6) a tick that raises
+  closing its session (`session_closed`, the next input refused; ported from the deleted snapshot input's gate) and
+  checkpoint audit 2's A2-M2: the session's `seed` reaches Bubble's own generator through its controller, never the
+  process RNG, so a tick drawing from the process RNG (Bubble handed the `random` module) makes two seeded sessions
+  diverge. The lossless engine snapshot (`engine_snapshot.py`, `inputs="snapshot"`) and its test were deleted in
+  slice 5.6. `tests/test_visualizer_engine_live_off_steady.py`
   (P2b slice 2, 4b) runs the rig in production commit order (the tick's own step submits, the tick reads the previous
   commit, held at the compute lane's admission gate; an adversarial 50 ms schedule fails it without the gate) through
   warm and cold pause/resume, display-power re-entry and in-session mode switches (`VIS_SET_MODE`), identical frames

@@ -410,7 +410,6 @@ class OwnerRig:
 def identity_run(mode: str, script, *, worker: bool, supervisor: Any = None, namespace: int | None = None) -> dict:
     """One owner through ``script``; the digests of the logical frames it published to its render bridge."""
     import itertools
-    import random
 
     import tools.expanded_visualizer_evidence as evidence
     from core.authored_clock import pinned_authored_clock
@@ -433,11 +432,14 @@ def identity_run(mode: str, script, *, worker: bool, supervisor: Any = None, nam
                 stack.enter_context(engine_worker_link.recorded_capture_for_testing(
                     cadence="input", order="production", seed=REPLAY_SEED))
             else:
-                # The worker session's numbering (its label namespace) and its process RNG seed, here.
+                # The worker session's numbering (its label namespace), here.
                 extruded_bubble_drift_log._REVISIONS = itertools.count((int(namespace or 0) << 32) + 1)
-                random.seed(REPLAY_SEED)
             owner = rig.build()
             controller = owner.controller
+            if not worker:
+                # The worker session's mode-generator seed (Bubble's spawn), on this owner's own controller: built,
+                # configured and started, nothing ticked yet, so the first draw is the seed's first, as in the session.
+                controller.seed_mode_generators(REPLAY_SEED)
             if worker:
                 report["namespace"] = owner._worker.label_namespace
             inputs = 0

@@ -904,8 +904,7 @@ class TestInitialFillContract:
         )
 
     def test_directional_stream_cold_start_avoids_single_lane_boot_columns(self):
-        random.seed(1337)
-        sim = BubbleSimulation()
+        sim = BubbleSimulation(seed=1337)
         settings = _default_settings(
             bubble_big_count=8,
             bubble_small_count=18,
@@ -927,8 +926,7 @@ class TestInitialFillContract:
         )
 
     def test_directional_stream_assigns_non_uniform_travel_speeds(self):
-        random.seed(7331)
-        sim = BubbleSimulation()
+        sim = BubbleSimulation(seed=7331)
         settings = _default_settings(
             bubble_big_count=6,
             bubble_small_count=15,
@@ -978,8 +976,7 @@ class TestInitialFillContract:
         assert bubble.y < start_y, "Top-left stream should move bubble upward on screen."
 
     def test_big_bubbles_do_not_spawn_tightly_clustered(self):
-        random.seed(404)
-        sim = BubbleSimulation()
+        sim = BubbleSimulation(seed=404)
         settings = _default_settings(
             bubble_big_count=8,
             bubble_small_count=12,
@@ -1002,8 +999,7 @@ class TestInitialFillContract:
         )
 
     def test_runtime_overlap_guard_reduces_severe_transparent_stackups(self):
-        random.seed(505)
-        sim = BubbleSimulation()
+        sim = BubbleSimulation(seed=505)
         settings = _default_settings(
             bubble_big_count=8,
             bubble_small_count=18,
@@ -1199,12 +1195,10 @@ class TestStreamSpeedReactivity:
             bubble_stream_reactivity=0.0,
         )
 
-        random.seed(seed)
-        sim_low = BubbleSimulation()
+        sim_low = BubbleSimulation(seed=seed)
         _warm_up(sim_low, base_settings, frames=60)
 
-        random.seed(seed)
-        sim_high = BubbleSimulation()
+        sim_high = BubbleSimulation(seed=seed)
         _warm_up(sim_high, base_settings, frames=60)
 
         sim_high._bubbles = copy.deepcopy(sim_low._bubbles)
@@ -1255,12 +1249,10 @@ class TestStreamSpeedReactivity:
             bubble_stream_reactivity=0.95,
         )
 
-        random.seed(seed)
-        sim_quiet = BubbleSimulation()
+        sim_quiet = BubbleSimulation(seed=seed)
         _warm_up(sim_quiet, settings, frames=60)
 
-        random.seed(seed)
-        sim_hot = BubbleSimulation()
+        sim_hot = BubbleSimulation(seed=seed)
         _warm_up(sim_hot, settings, frames=60)
         sim_hot._bubbles = copy.deepcopy(sim_quiet._bubbles)
 
@@ -1307,7 +1299,10 @@ class TestStreamSpeedReactivity:
 def test_group_drift_aligns_non_swirl_bubble_motion(drift_dir, axis):
     from widgets.spotify_visualizer.bubble_simulation import BubbleState
 
-    sim = BubbleSimulation()
+    # Seeded (the simulation's own generator, work order 5 slice 5.6): Random group drift picks its vector at random,
+    # and on the x axis the signs agree for only ~61% of draws (2,000 seeds measured; Diagonal for all). Unseeded, the
+    # case passed only on the process RNG state earlier tests left behind (Current_Plan.md records it).
+    sim = BubbleSimulation(seed=2)
     sim._time = 1.0
     sim._bubbles = [
         BubbleState(x=0.30, y=0.45, radius=0.012, is_big=False, phase=0.1, drift_bias=-0.9),
@@ -1375,8 +1370,7 @@ def test_group_drift_viz_diagnostics_path_does_not_crash(monkeypatch):
 
 
 def test_group_drift_swish_horizontal_reverses_on_authored_cadence_without_snapping():
-    random.seed(10115)
-    sim = BubbleSimulation()
+    sim = BubbleSimulation(seed=10115)
     settings = _default_settings(
         bubble_big_count=0,
         bubble_small_count=0,
@@ -1890,7 +1884,6 @@ class TestBubblePlateauGuardrails:
         )
 
     def test_hot_preset_1_big_render_stays_near_510520e_shape(self):
-        random.seed(1014)
         payload = {
             "bubble_big_count": 6,
             "bubble_small_count": 45,
@@ -1922,7 +1915,7 @@ class TestBubblePlateauGuardrails:
         quiet = _energy(bass=0.15, mid=0.10, high=0.05)
         hot = _energy(bass=1.55, mid=0.65, high=0.16)
 
-        current = BubbleSimulation()
+        current = BubbleSimulation(seed=1014)
         _warm_up(current, settings, frames=80)
         for _ in range(24):
             current.tick(1 / 60, hot, settings)
@@ -1935,7 +1928,7 @@ class TestBubblePlateauGuardrails:
         )
 
         hist_mod = _load_historical_bubble_module("510520e")
-        random.seed(1014)
+        random.seed(1014)                                   # the 510520e anchor still draws from the process RNG
         historical = hist_mod.BubbleSimulation()
         for _ in range(80):
             historical.tick(1 / 60, quiet, settings)
@@ -2106,7 +2099,7 @@ class TestBubbleBouncePhysics:
         a, b = self._pair(left_big=True, right_big=True)
         sim._bubbles = [a, b]
 
-        random.seed(7)
+        sim.seed_generator(7)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2126,7 +2119,7 @@ class TestBubbleBouncePhysics:
         start_dist = math.hypot(b.x - a.x, b.y - a.y)
         sim._bubbles = [a, b]
 
-        random.seed(3)
+        sim.seed_generator(3)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=0.0,
@@ -2145,7 +2138,7 @@ class TestBubbleBouncePhysics:
         a, b = self._pair(left_big=True, right_big=False)
         sim._bubbles = [a, b]
 
-        random.seed(11)
+        sim.seed_generator(11)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2157,7 +2150,7 @@ class TestBubbleBouncePhysics:
 
         a2, b2 = self._pair(left_big=True, right_big=False)
         sim._bubbles = [a2, b2]
-        random.seed(11)
+        sim.seed_generator(11)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=0.0,
@@ -2212,7 +2205,7 @@ class TestBubbleBouncePhysics:
             for i in range(10)
         ]
 
-        random.seed(19)
+        sim.seed_generator(19)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2260,7 +2253,7 @@ class TestBubbleBouncePhysics:
         sim._bubbles = [a, b]
         start_dist = math.hypot(b.x - a.x, b.y - a.y)
 
-        random.seed(9)
+        sim.seed_generator(9)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2285,7 +2278,7 @@ class TestBubbleBouncePhysics:
         start_a = (a.x, a.y)
         start_b = (b.x, b.y)
 
-        random.seed(21)
+        sim.seed_generator(21)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2305,7 +2298,7 @@ class TestBubbleBouncePhysics:
         a, b = self._pair(left_big=True, right_big=True)
         sim._bubbles = [a, b]
 
-        random.seed(22)
+        sim.seed_generator(22)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2341,7 +2334,7 @@ class TestBubbleBouncePhysics:
         a, b = self._pair(left_big=True, right_big=True)
         sim._bubbles = [a, b]
 
-        random.seed(123)
+        sim.seed_generator(123)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2359,7 +2352,7 @@ class TestBubbleBouncePhysics:
         big_b, small_b = self._pair(left_big=True, right_big=False)
         sim._bubbles = [big_b, small_b]
 
-        random.seed(124)
+        sim.seed_generator(124)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2380,7 +2373,7 @@ class TestBubbleBouncePhysics:
         start_small = (small_b.x, small_b.y)
         sim._bubbles = [big_b, small_b]
 
-        random.seed(125)
+        sim.seed_generator(125)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2404,7 +2397,7 @@ class TestBubbleBouncePhysics:
         b = BubbleState(x=0.50, y=0.5, radius=0.05, is_big=True)
         sim._bubbles = [a, b]
 
-        random.seed(77)
+        sim.seed_generator(77)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2418,7 +2411,7 @@ class TestBubbleBouncePhysics:
         # Force immediate re-overlap and attempt a second response in the same
         # simulation time instant; pair cooldown should block re-bounce impulse.
         a.x, b.x = 0.49, 0.51
-        random.seed(78)
+        sim.seed_generator(78)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
@@ -2471,7 +2464,7 @@ class TestBubbleBouncePhysics:
 
         start_a_x = a.x
         start_b_x = b.x
-        random.seed(79)
+        sim.seed_generator(79)
         _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,

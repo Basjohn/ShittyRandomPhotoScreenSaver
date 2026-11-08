@@ -1,7 +1,6 @@
 """Drift musical authority without changing Group Drift's established carrier."""
 from __future__ import annotations
 
-import random
 
 import pytest
 
@@ -21,8 +20,7 @@ def test_normal_drift_music_gain_has_a_quiet_floor_and_meaningful_midrange():
 def _run(grouped: bool, energy: float):
     # A fixed synthetic passage is sufficient for this control-route gate.
     # Native musical/pixel performance acceptance remains separate.
-    random.seed(1138)
-    sim = sim_module.BubbleSimulation()
+    sim = sim_module.BubbleSimulation(seed=1138)
     settings = dict(require_canonical_default('widgets.spotify_visualizer'))
     settings.update(bubble_group_drift=grouped, bubble_drift_amount=.55,
                     bubble_drift_speed=.55, bubble_drift_frequency=.45,

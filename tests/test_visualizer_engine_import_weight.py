@@ -16,7 +16,7 @@ import importlib, json, sys
 names = ["widgets.spotify_visualizer.logical_runtime", "widgets.spotify_visualizer.tick_pipeline",
          "widgets.spotify_visualizer.render_state", "core.visualizer_engine.frame_codec",
          "core.visualizer_engine.packet_abi", "core.visualizer_engine.packet_mailbox",
-         "core.visualizer_engine.engine_worker", "core.visualizer_engine.engine_snapshot",
+         "core.visualizer_engine.engine_worker",
          "widgets.spotify_visualizer.feature_replay", "widgets.spotify_visualizer.transient_bus",
          "widgets.spotify_visualizer.runtime_controller",
          # P2b: the live engine, its audio worker and ThreadManager, and the recorded capture source.

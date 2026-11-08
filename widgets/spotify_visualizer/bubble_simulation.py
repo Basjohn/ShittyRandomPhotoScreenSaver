@@ -5,7 +5,7 @@ and lifecycle (surface-reach vs pop/fade). The simulation advances through the s
 presentation consumes its immutable snapshots.
 
 The public API is:
-    sim = BubbleSimulation()
+    sim = BubbleSimulation()                # its own generator, OS-seeded; BubbleSimulation(seed=...) for replays
     sim.tick(dt, energy_bands, settings_dict)
     pos_data, extra_data = sim.snapshot()   # lists ready for uniform upload
 """
@@ -160,18 +160,18 @@ def _shape_authored_bubble_control(
     return 0.5 + 0.5 * (((x - 0.5) / 0.5) ** high_power)
 
 
-def _random_direction() -> Tuple[float, float]:
-    angle = random.uniform(0.0, math.tau)
+def _random_direction(rng: random.Random) -> Tuple[float, float]:
+    angle = rng.uniform(0.0, math.tau)
     return (math.cos(angle), math.sin(angle))
 
 
-def _get_stream_vector(direction: str) -> Tuple[float, float]:
+def _get_stream_vector(direction: str, rng: random.Random) -> Tuple[float, float]:
     if direction == "random":
-        return _random_direction()
+        return _random_direction(rng)
     if direction == "diagonal":
         # Legacy compatibility: old single "diagonal" mode becomes random
         # diagonal direction.
-        return random.choice(_DIAGONAL_STREAM_VECTORS)
+        return rng.choice(_DIAGONAL_STREAM_VECTORS)
     return _DIRECTION_VECTORS.get(direction, (0.0, 1.0))
 
 
@@ -180,6 +180,8 @@ def _spawn_position(
     is_big: bool,
     domain_w: float = 1.0,
     domain_h: float = 1.0,
+    *,
+    rng: random.Random,
 ) -> Tuple[float, float]:
     """Spawn at the opposite edge of the stream direction.
 
@@ -191,33 +193,33 @@ def _spawn_position(
     margin_x = margin
     margin_y = margin
     if direction == "up":
-        return (random.uniform(margin_x, domain_w - margin_x), domain_h + margin_y)
+        return (rng.uniform(margin_x, domain_w - margin_x), domain_h + margin_y)
     elif direction == "down":
-        return (random.uniform(margin_x, domain_w - margin_x), -margin_y)
+        return (rng.uniform(margin_x, domain_w - margin_x), -margin_y)
     elif direction == "left":
-        return (domain_w + margin_x, random.uniform(margin_y, domain_h - margin_y))
+        return (domain_w + margin_x, rng.uniform(margin_y, domain_h - margin_y))
     elif direction == "right":
-        return (-margin_x, random.uniform(margin_y, domain_h - margin_y))
+        return (-margin_x, rng.uniform(margin_y, domain_h - margin_y))
     elif direction in {"top_left", "top_right", "bottom_left", "bottom_right", "diagonal"}:
-        dx, dy = _get_stream_vector(direction)
+        dx, dy = _get_stream_vector(direction, rng)
         # Spawn on the edge opposite to the travel direction
-        if random.random() < 0.5:
+        if rng.random() < 0.5:
             # Spawn on the horizontal edge opposite to dy
             edge_y = (domain_h + margin_y) if dy > 0 else -margin_y
-            return (random.uniform(margin_x, domain_w - margin_x), edge_y)
+            return (rng.uniform(margin_x, domain_w - margin_x), edge_y)
         else:
             # Spawn on the vertical edge opposite to dx
             edge_x = (-margin_x) if dx > 0 else (domain_w + margin_x)
-            return (edge_x, random.uniform(margin_y, domain_h - margin_y))
+            return (edge_x, rng.uniform(margin_y, domain_h - margin_y))
     elif direction == "none":
         return (
-            random.uniform(0.1 * domain_w, 0.9 * domain_w),
-            random.uniform(0.1 * domain_h, 0.9 * domain_h),
+            rng.uniform(0.1 * domain_w, 0.9 * domain_w),
+            rng.uniform(0.1 * domain_h, 0.9 * domain_h),
         )
     else:  # random
         return (
-            random.uniform(0.1 * domain_w, 0.9 * domain_w),
-            random.uniform(0.1 * domain_h, 0.9 * domain_h),
+            rng.uniform(0.1 * domain_w, 0.9 * domain_w),
+            rng.uniform(0.1 * domain_h, 0.9 * domain_h),
         )
 
 
@@ -239,6 +241,7 @@ def _directional_entry_position(
     startup: bool = False,
     domain_w: float = 1.0,
     domain_h: float = 1.0,
+    rng: random.Random,
 ) -> Tuple[float, float]:
     """Spawn off-card with randomized depth so directional streams avoid columns.
 
@@ -248,15 +251,15 @@ def _directional_entry_position(
     off-card depth preserves side-entry semantics while helping the stream read
     as a flowing field rather than synchronized lanes.
     """
-    x, y = _spawn_position(direction, is_big, domain_w, domain_h)
+    x, y = _spawn_position(direction, is_big, domain_w, domain_h, rng=rng)
     if direction in {"none", "random"}:
         return (x, y)
 
-    dx, dy = _get_stream_vector(direction)
+    dx, dy = _get_stream_vector(direction, rng)
     if startup:
-        extra_depth = random.uniform(0.02, 0.10)
+        extra_depth = rng.uniform(0.02, 0.10)
     else:
-        extra_depth = random.uniform(0.01, 0.06)
+        extra_depth = rng.uniform(0.01, 0.06)
     return (
         x + dx * extra_depth,
         y - dy * extra_depth,
@@ -270,7 +273,13 @@ def _bubble_behaves_big(bubble: BubbleState) -> bool:
 class BubbleSimulation:
     """Lightweight bubble particle system."""
 
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
+        # Bubble's own generator (native core P2b slice 5.6): every spawn, drift and bounce draw comes from it, in the
+        # order the process-wide ``random`` module served them before. Unseeded (production) it seeds from OS entropy
+        # exactly as that module does at import; gates and replays seed it (``seed`` here, ``seed_generator``, or the
+        # runtime controller's ``seed_mode_generators``), so no process-wide seed is needed and a stray draw from the
+        # process RNG in the tick diverges instead of being pinned equal (checkpoint audit 2, A2-M2).
+        self._rng = random.Random(seed)
         self._bubbles: List[BubbleState] = []
         self._time: float = 0.0
         self._last_tick_dt: float = 0.016
@@ -333,6 +342,10 @@ class BubbleSimulation:
         self._group_drift_arc_x: float = 0.0
         self._group_drift_arc_y: float = 0.0
         self._group_drift_arc_sign: float = 1.0
+
+    def seed_generator(self, seed: int | None) -> None:
+        """Re-seed the simulation's own generator (gates and replays; ``None``: OS entropy). A reset keeps the stream."""
+        self._rng.seed(seed)
 
     def reset(self) -> None:
         """Clear all accumulated state for a clean cold-start on mode re-entry."""
@@ -1071,9 +1084,9 @@ class BubbleSimulation:
 
             # Stream velocity
             use_stored = stream_dir == "random"
-            sv = _get_stream_vector(stream_dir) if not use_stored else (b.vx, b.vy)
+            sv = _get_stream_vector(stream_dir, self._rng) if not use_stored else (b.vx, b.vy)
             if use_stored and b.vx == 0.0 and b.vy == 0.0:
-                rd = _random_direction()
+                rd = _random_direction(self._rng)
                 b.vx, b.vy = rd
                 sv = (b.vx, b.vy)
 
@@ -1494,8 +1507,8 @@ class BubbleSimulation:
             and big_spawn_budget > 0
         ):
             if allow_initial_fill:
-                bx = random.uniform(0.08 * self._domain_w, 0.92 * self._domain_w)
-                by = random.uniform(0.08 * self._domain_h, 0.92 * self._domain_h)
+                bx = self._rng.uniform(0.08 * self._domain_w, 0.92 * self._domain_w)
+                by = self._rng.uniform(0.08 * self._domain_h, 0.92 * self._domain_h)
                 self._spawn_bubble_at(True, bx, by, stream_dir, surface_reach, drift_dir,
                                       initial_fill=True)
             else:
@@ -1513,16 +1526,16 @@ class BubbleSimulation:
             and small_spawn_budget > 0
         ):
             is_initial = allow_initial_fill
-            cluster = (not is_initial) and random.random() < 0.18
-            count = random.randint(2, 3) if cluster else 1
+            cluster = (not is_initial) and self._rng.random() < 0.18
+            count = self._rng.randint(2, 3) if cluster else 1
             if is_initial:
                 # First fill: scatter across card area
-                base_x = random.uniform(0.05 * self._domain_w, 0.95 * self._domain_w)
-                base_y = random.uniform(0.05 * self._domain_h, 0.95 * self._domain_h)
+                base_x = self._rng.uniform(0.05 * self._domain_w, 0.95 * self._domain_w)
+                base_y = self._rng.uniform(0.05 * self._domain_h, 0.95 * self._domain_h)
             elif drift_dir in _SWIRL_DIRECTIONS:
                 # Swirl: spawn near the logical-world centre so bubbles spiral out
-                _angle = random.uniform(0.0, math.tau)
-                _spawn_r = random.uniform(0.02, 0.10)
+                _angle = self._rng.uniform(0.0, math.tau)
+                _spawn_r = self._rng.uniform(0.02, 0.10)
                 _spawn_dx = math.cos(_angle) * _spawn_r
                 _spawn_dy = math.sin(_angle) * _spawn_r
                 base_x = self._domain_w / 2.0 + _spawn_dx
@@ -1534,6 +1547,7 @@ class BubbleSimulation:
                     startup=False,
                     domain_w=self._domain_w,
                     domain_h=self._domain_h,
+                    rng=self._rng,
                 )
             for c in range(count):
                 if (
@@ -1542,8 +1556,8 @@ class BubbleSimulation:
                     or small_spawn_budget <= 0
                 ):
                     break
-                cluster_dx = random.uniform(-0.07, 0.07) if c > 0 else 0.0
-                cluster_dy = random.uniform(-0.07, 0.07) if c > 0 else 0.0
+                cluster_dx = self._rng.uniform(-0.07, 0.07) if c > 0 else 0.0
+                cluster_dy = self._rng.uniform(-0.07, 0.07) if c > 0 else 0.0
                 cx = base_x + cluster_dx
                 cy = base_y + cluster_dy
                 self._spawn_bubble_at(False, cx, cy, stream_dir, surface_reach, drift_dir,
@@ -1570,8 +1584,8 @@ class BubbleSimulation:
                       surface_reach: float, drift_dir: str) -> None:
         if drift_dir in _SWIRL_DIRECTIONS:
             # Swirl: spawn near the logical-world centre so bubbles spiral out.
-            angle = random.uniform(0.0, math.tau)
-            spawn_r = random.uniform(0.02, 0.10)
+            angle = self._rng.uniform(0.0, math.tau)
+            spawn_r = self._rng.uniform(0.02, 0.10)
             spawn_dx = math.cos(angle) * spawn_r
             spawn_dy = math.sin(angle) * spawn_r
             x = self._domain_w / 2.0 + spawn_dx
@@ -1583,6 +1597,7 @@ class BubbleSimulation:
                 startup=False,
                 domain_w=self._domain_w,
                 domain_h=self._domain_h,
+                rng=self._rng,
             )
         self._spawn_bubble_at(is_big, x, y, stream_dir, surface_reach, drift_dir)
 
@@ -1598,9 +1613,9 @@ class BubbleSimulation:
     ) -> Tuple[float, float]:
         """Project a bubble forward along stream travel for entry-lane checks."""
         if stream_dir == "random":
-            dx, dy = (vx, vy) if (vx != 0.0 or vy != 0.0) else _random_direction()
+            dx, dy = (vx, vy) if (vx != 0.0 or vy != 0.0) else _random_direction(self._rng)
         else:
-            dx, dy = _get_stream_vector(stream_dir)
+            dx, dy = _get_stream_vector(stream_dir, self._rng)
         return (
             x + dx * distance,
             y - dy * distance,
@@ -1835,7 +1850,7 @@ class BubbleSimulation:
                     overlap_hits += 1
 
                     if dist_sq < 1e-10:
-                        angle = random.uniform(0.0, math.tau)
+                        angle = self._rng.uniform(0.0, math.tau)
                         nx = math.cos(angle)
                         ny = math.sin(angle)
                         dist = 0.0
@@ -1902,7 +1917,7 @@ class BubbleSimulation:
                                 self._trigger_collision_pop(b)
                             else:
                                 self._trigger_collision_pop(a)
-                        elif random.random() < 0.5:
+                        elif self._rng.random() < 0.5:
                             self._trigger_collision_pop(a)
                         else:
                             self._trigger_collision_pop(b)
@@ -1917,7 +1932,7 @@ class BubbleSimulation:
                         and speed_norm > 0.0
                         and both_in_view
                         and (not in_pair_cooldown)
-                        and random.random() <= bounce_prob
+                        and self._rng.random() <= bounce_prob
                     ):
                         rel_vx = b.impulse_vx - a.impulse_vx
                         rel_vy = b.impulse_vy - a.impulse_vy
@@ -2316,7 +2331,7 @@ class BubbleSimulation:
         elif drift_dir == "diagonal":
             candidates = list(_DIAGONAL_STREAM_VECTORS)
         else:
-            candidates = [_random_direction() for _ in range(4)]
+            candidates = [_random_direction(self._rng) for _ in range(4)]
         if previous != (0.0, 0.0) and drift_dir not in {"swish_horizontal", "swish_vertical"}:
             non_opposites = [
                 cand
@@ -2325,7 +2340,7 @@ class BubbleSimulation:
             ]
             if non_opposites:
                 candidates = non_opposites
-        return random.choice(candidates)
+        return self._rng.choice(candidates)
 
     def _update_group_drift_carrier(
         self,
@@ -2375,7 +2390,7 @@ class BubbleSimulation:
                     drift_dir,
                     period,
                 )
-                self._group_drift_arc_sign = random.choice((-1.0, 1.0))
+                self._group_drift_arc_sign = self._rng.choice((-1.0, 1.0))
                 if is_viz_diagnostics_enabled():
                     logger.info(
                         "[SPOTIFY_VIS][BUBBLE][GROUP_DRIFT] dir=%s target=(%.3f,%.3f) period=%.3fs turn=%.3fs freq=%.3f",
@@ -2386,7 +2401,7 @@ class BubbleSimulation:
                         self._group_drift_turn_duration,
                         drift_freq,
                     )
-            self._group_drift_remaining = period * random.uniform(0.98, 1.06)
+            self._group_drift_remaining = period * self._rng.uniform(0.98, 1.06)
         if self._group_drift_turn_duration > 0.0:
             self._group_drift_turn_elapsed = min(
                 self._group_drift_turn_duration,
@@ -2524,21 +2539,21 @@ class BubbleSimulation:
             else:
                 lo = center * 0.68
                 hi = center * 1.30
-            radius = random.uniform(lo, hi)
+            radius = self._rng.uniform(lo, hi)
         else:
             center = max(0.005, self._small_size_max)
             lo = center * 0.55
             hi = center * 1.45
-            radius = random.uniform(lo, hi)
+            radius = self._rng.uniform(lo, hi)
 
         # Per-bubble velocity for random stream direction.
         vx, vy = 0.0, 0.0
         if stream_dir == "random":
-            rd = _random_direction()
+            rd = _random_direction(self._rng)
             vx, vy = rd
         elif stream_dir == "diagonal":
             # Legacy compatibility for previously persisted single diagonal key.
-            dv = random.choice(_DIAGONAL_STREAM_VECTORS)
+            dv = self._rng.choice(_DIAGONAL_STREAM_VECTORS)
             vx, vy = dv
 
         # Overlap prevention: retry up to 15 times with increasing jitter
@@ -2554,8 +2569,8 @@ class BubbleSimulation:
             ):
                 break
             spread = 0.08 + _attempt * 0.015
-            jitter_x = random.uniform(-spread, spread)
-            jitter_y = random.uniform(-spread, spread)
+            jitter_x = self._rng.uniform(-spread, spread)
+            jitter_y = self._rng.uniform(-spread, spread)
             x = x + jitter_x
             y = y + jitter_y
             # Off-world retry allowance, in canonical-card units.
@@ -2567,33 +2582,33 @@ class BubbleSimulation:
         else:
             return
 
-        reaches = random.random() < surface_reach
-        max_age = 999.0 if reaches else random.uniform(2.0, 8.0)
-        phase = random.uniform(0.0, math.tau)
+        reaches = self._rng.random() < surface_reach
+        max_age = 999.0 if reaches else self._rng.uniform(2.0, 8.0)
+        phase = self._rng.uniform(0.0, math.tau)
 
         # Drift bias
         if drift_dir == "random":
-            drift_bias = random.uniform(-1.0, 1.0)
+            drift_bias = self._rng.uniform(-1.0, 1.0)
         elif drift_dir == "left":
-            drift_bias = -0.7 + random.uniform(-0.3, 0.3)
+            drift_bias = -0.7 + self._rng.uniform(-0.3, 0.3)
         elif drift_dir == "right":
-            drift_bias = 0.7 + random.uniform(-0.3, 0.3)
+            drift_bias = 0.7 + self._rng.uniform(-0.3, 0.3)
         elif drift_dir == "diagonal":
-            drift_bias = 0.5 + random.uniform(-0.3, 0.3)
+            drift_bias = 0.5 + self._rng.uniform(-0.3, 0.3)
         elif drift_dir == "swish_horizontal":
-            drift_bias = random.uniform(-0.9, 0.9)
+            drift_bias = self._rng.uniform(-0.9, 0.9)
         elif drift_dir == "swish_vertical":
-            drift_bias = random.uniform(-0.9, 0.9)
+            drift_bias = self._rng.uniform(-0.9, 0.9)
         elif drift_dir in _SWIRL_DIRECTIONS:
-            drift_bias = random.uniform(-1.0, 1.0)
+            drift_bias = self._rng.uniform(-1.0, 1.0)
         else:  # none
-            drift_bias = random.uniform(-0.3, 0.3)
+            drift_bias = self._rng.uniform(-0.3, 0.3)
 
         if stream_dir in {"up", "down", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right", "diagonal"}:
             if is_big:
-                speed_mult = random.uniform(0.90, 1.12)
+                speed_mult = self._rng.uniform(0.90, 1.12)
             else:
-                speed_mult = random.uniform(0.84, 1.18)
+                speed_mult = self._rng.uniform(0.84, 1.18)
         else:
             speed_mult = 1.0
 
@@ -2605,15 +2620,15 @@ class BubbleSimulation:
         age = 0.0
         alpha = 0.0
         if initial_fill:
-            age = random.uniform(0.0, max_age * 0.3) if max_age < 900.0 else random.uniform(0.0, 3.0)
+            age = self._rng.uniform(0.0, max_age * 0.3) if max_age < 900.0 else self._rng.uniform(0.0, 3.0)
             fade_in_duration = 1.5
         else:
             fade_in_duration = self._runtime_spawn_fade_seconds
 
         # Per-bubble specular mutation: slight random variation so bubbles look distinct
-        spec_size_mut = random.uniform(0.85, 1.2)
-        spec_ox = random.uniform(-0.03, 0.03)
-        spec_oy = random.uniform(-0.02, 0.02)
+        spec_size_mut = self._rng.uniform(0.85, 1.2)
+        spec_ox = self._rng.uniform(-0.03, 0.03)
+        spec_oy = self._rng.uniform(-0.02, 0.02)
 
         b = BubbleState(
             x=x, y=y, radius=radius, is_big=is_big,
@@ -2662,7 +2677,7 @@ class BubbleSimulation:
 
         dist = math.hypot(mx, my)
         if dist < 1e-4:
-            angle = random.uniform(0.0, math.tau)
+            angle = self._rng.uniform(0.0, math.tau)
             mx = math.cos(angle) * 0.01
             my = math.sin(angle) * 0.01
             dist = math.hypot(mx, my)

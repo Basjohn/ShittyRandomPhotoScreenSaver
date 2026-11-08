@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import random
 import sys
 from dataclasses import fields
 from pathlib import Path
@@ -69,9 +68,9 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
         controller = VisualizerRuntimeController(runtime_generation=0, initial_mode=MODE,
                                                  engine_factory=lambda _: engine)
         controller.engine = engine
-        configure_offline_controller(controller, MODE, settings=resolved_settings(settings))
+        # The Studio evaluator's mode-generator seed (Bubble's spawn) at its first step.
+        configure_offline_controller(controller, MODE, settings=resolved_settings(settings), seed=SEED)
         state = controller.logical_tick_state
-        random.seed(SEED)                  # the Studio evaluator's seed at its first step
         carried: list = []                 # events fed on ticks that did not step Bubble (still in the scheduler)
         try:
             for feature in frames:
