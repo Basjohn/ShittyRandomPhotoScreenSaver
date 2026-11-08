@@ -60,6 +60,10 @@ def _owner_class(constructed: list):
             self.origins.append((float(x), float(y)))
             return True
 
+        def engine_identity(self):
+            engine = self.controller.engine
+            return int(engine.get_generation_id()), int(engine.get_activation_id())
+
         def bind(self, **_kwargs) -> None:
             return None
 

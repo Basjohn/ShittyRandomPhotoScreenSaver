@@ -183,6 +183,10 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
         def set_authored_outer_origin(self, x, y):
             self.authored_outer_origin = (x, y)
 
+        def engine_identity(self):
+            engine = self.controller.engine
+            return int(engine.get_generation_id()), int(engine.get_activation_id())
+
         def bind(self, **_kwargs) -> None:
             return None
 

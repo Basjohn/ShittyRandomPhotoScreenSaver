@@ -470,9 +470,9 @@ class VisualizerHostBinding:
             if placement is not None:
                 owner.set_authored_outer_origin(placement.x, placement.y)
 
-            engine = owner.controller.engine
-            generation = int(engine.get_generation_id())
-            activation_id = int(engine.get_activation_id())
+            # The owner's engine identity: its controller's engine in process, the configured session's on the
+            # engine worker (which keeps no engine in this process; native core P2b slice 5.2).
+            generation, activation_id = owner.engine_identity()
             owner.bind(
                 engine_generation=generation,
                 activation_id=activation_id,
