@@ -17,7 +17,7 @@ Those items were open at that checkpoint; they are preserved as historical evide
 yank-down, large/small size judder, unreliable close DoF/pixelation, and about 50% excessive active speck glow.
 Spherical form and readable overlap depth take priority over glow tuning. Details and solution plans:
 [Investigation §19](Investigation.md#19-latest-live-rejection-overshoot-judder-and-near-field-pixels). Reproducible startup/ramp attribution and unresolved DoF/lighting boundaries:
-[Investigation §20](Investigation.md#20-godzip-54cac99a6a-independent-follow-up-startup-reference-overshoot-2026-10-20).
+[Investigation §20](Investigation.md#20-godzip-96d5408a09-independent-follow-up-startup-reference-overshoot-2026-10-20).
 New operator-rejected camera-orbit oblongness, the strict 1.5px near-layer switch and the
 other-lane driver audit are in [Investigation §21](Investigation.md#21-camera-projection-judder-branches-and-other-lane-attribution-2026-10-20-source-level-only).
 The latest **unaccepted Settings-size, source-ramp and centred-camera implementation candidates**

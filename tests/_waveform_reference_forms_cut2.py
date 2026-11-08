@@ -1,5 +1,5 @@
 """The straightforward forms of Waveform's logical-tick hot paths before the second tick cut (7 Nov 2026, main
-cba6ee54): the snapshot as written (every packet-only term recomputed each tick, ``%`` for the HSV remainders, card
+4467759c): the snapshot as written (every packet-only term recomputed each tick, ``%`` for the HSV remainders, card
 crest and HSV columns rebuilt each tick, the surge's windows from the packet headers), the spark emitter's cloth
 evaluation (continuing an empty side) and the drive routing (each source clamped per target).
 

@@ -61,7 +61,7 @@ def test_real_neon_inner_field_preserves_landmarks_with_fixed_chrome():
     assert observations[2]==pytest.approx(observations[0])
 
 
-# Since 477a1cf9 framed 3D modes share the ``planar`` CUSTOM slot and geometry kind with framed 2D
+# Since 7ef02b38 framed 3D modes share the ``planar`` CUSTOM slot and geometry kind with framed 2D
 # (Contracts: layout_profile; is_framed_visualizer_layout_profile), so their side handles use the
 # planar viewport-world rule. The retired distinct-profile mechanics that admitted historical stage
 # aspects (e.g. a 630x210 rect over a 420x280 world) no longer exist; that case was removed.

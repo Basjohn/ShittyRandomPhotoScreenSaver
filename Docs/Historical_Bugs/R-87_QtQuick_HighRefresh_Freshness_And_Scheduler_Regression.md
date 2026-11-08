@@ -2,7 +2,7 @@
 
 **STRONG RETENTION VALUE DOCUMENT**
 
-Status: **[x] CLOSED — CHK26 / `a0bf70932c` IS THE OPERATOR-ACCEPTED GOLDEN PERFORMANCE/FRESHNESS BASELINE**
+Status: **[x] CLOSED — CHK26 / `985b9d5306` IS THE OPERATOR-ACCEPTED GOLDEN PERFORMANCE/FRESHNESS BASELINE**
 
 The early sections below preserve the historical regression, the investigation branches that followed, and former closure gates. They are evidence and negative controls, not current work sequencing. R-87 is closed: CHK26 removed the last proven low-risk local waste, later CHK27-CHK29 sidecar attribution showed the large remaining scheduler-shaped intervals are Qt frame/render-phase ownership or small distributed Bubble/driver costs, and the operator accepted CHK26 as neutral-or-better. Performance work is now symptom-driven only.
 
@@ -332,7 +332,7 @@ Source preservation: **51/51** directly runnable contracts green; **896/896** Py
 
 ## 2026-09-15 — CHK14 installed D1 torture run / CHK15 diagnostic freeze
 
-This assessment was intentionally formed **before** asking the operator how the session felt. The evidence archive is `cfdabe39-1d4c-4682-8335-56e5f1964c7d.zip`; the runtime reports source head `22dd8d4d4c5290e5a82f6bcea9f6555e9fd8ae78`. The run is D1-only and deliberately abusive: repeated visualizer mode/shape changes, widget disable/re-enable work, two Settings lifecycles, and long settled windows.
+This assessment was intentionally formed **before** asking the operator how the session felt. The evidence archive is `cfdabe39-1d4c-4682-8335-56e5f1964c7d.zip`; the runtime reports source head `f15634cde2779b1d83fc2c059e4300a98975caff`. The run is D1-only and deliberately abusive: repeated visualizer mode/shape changes, widget disable/re-enable work, two Settings lifecycles, and long settled windows.
 
 ### Evidence quality
 - frame trace: **1,710,531 records**, **0 dropped**, **0 writer errors**; all CHK14 nested render markers are present;
@@ -508,7 +508,7 @@ CHK21 therefore makes a bounded architectural optimization: steady unchanged wal
 
 Do **not** use this change as permission to remove `_InheritedGlState` or other GL state fences from the custom transition/visualizer paths. CHK21 removes the measured steady callback instead of gambling with correctness inside the remaining direct-GL paths.
 
-CHK21 is an installed-validation candidate, not a new baseline. The required routine lane is D1 heavy with `--frame-trace`, one image transition and one Settings teardown/rebuild. Acceptance requires steady `BACKGROUND_*` records to disappear while visualizer tracing continues, transition-only background records to remain healthy, no black flash/stale image/resource/lifecycle regressions, and operator smoothness/freshness neutral-or-better. CHK15 / `0abc479c52` remains golden until that proof exists.
+CHK21 is an installed-validation candidate, not a new baseline. The required routine lane is D1 heavy with `--frame-trace`, one image transition and one Settings teardown/rebuild. Acceptance requires steady `BACKGROUND_*` records to disappear while visualizer tracing continues, transition-only background records to remain healthy, no black flash/stale image/resource/lifecycle regressions, and operator smoothness/freshness neutral-or-better. CHK15 / `ce07b9919f` remains golden until that proof exists.
 
 
 ## 2026-09-15 — CHK21 installed acceptance pair: retained-background win, promotion held on subjective edit responsiveness
@@ -521,7 +521,7 @@ Mixed refresh remains healthy: D0 transition-excluded steady publication->draw i
 
 The sole adverse installed signal is subjective: context menu and entering/leaving/using edit mode felt **slightly less responsive**, while still functioning. That report is binding enough to prevent baseline promotion. It is **not yet a measured causal regression**: CHK21's steady D1 event-loop p95 is commonly ~2.5–3.0 ms versus CHK20 ~4.1–4.7 ms, and the CHK20->CHK21 source delta does not change context-menu/custom-layout logic. The production scene-controller delta only recognizes the native retained-background readiness state; the substantive change is background scenegraph ownership. Do not dismiss the operator report, but do not speculatively roll back the retained-background architecture either.
 
-The supplied pair does not contain a post-startup Settings teardown/rebuild generation, so that particular CHK21 lifecycle seam is not claimed as re-proven by these captures. CHK15 / `0abc479c52` therefore remains the golden rollback/bisect baseline. CHK21 remains an **active performance candidate with a subjective interaction-responsiveness acceptance hold**. Full evidence is frozen in `.godzip/CHK21_ACCEPTANCE_RESULT.md`.
+The supplied pair does not contain a post-startup Settings teardown/rebuild generation, so that particular CHK21 lifecycle seam is not claimed as re-proven by these captures. CHK15 / `ce07b9919f` therefore remains the golden rollback/bisect baseline. CHK21 remains an **active performance candidate with a subjective interaction-responsiveness acceptance hold**. Full evidence is frozen in `.godzip/CHK21_ACCEPTANCE_RESULT.md`.
 
 
 ## 2026-09-15 — CHK23 accepted GOLDEN: retained-background ownership promoted
@@ -530,7 +530,7 @@ The operator explicitly accepted the CHK21 retained-background candidate after r
 
 **CHK23 is therefore the new GOLDEN forward performance/freshness baseline.** It promotes the CHK21 production bytes; CHK23 itself introduces no new runtime behavior. Accepted D1-heavy evidence includes publication->draw **14.144 / 16.497 ms**, publication->swap **14.827 / 17.272 ms**, GUI snapshot->Quick sync **5.391 / 8.035 ms**, `QUICK_SYNC_READY -> RENDER_BEGIN` **4.412 / 6.647 ms**, and render-begin->draw **2.699 / 7.538 ms** median/p95, with Bubble still ~**89–90 logical revisions/s**. The mixed-refresh run also remained healthy: D0 transition-excluded steady publication->draw ~**7.048 / 24.126 ms**; after the live D0->D1 visualizer hop, settled D1 ~**13.642 / 16.160 ms**. No black flash was observed, transition rendering remained functional, cross-display edit/save completed, and final lifecycle barriers were clean.
 
-The old CHK15 repository commit `0abc479c52` remains an immutable **older rollback/bisect landmark**, not the forward baseline. Keep it available for regression archaeology. Future performance candidates compare primarily against CHK23.
+The old CHK15 repository commit `ce07b9919f` remains an immutable **older rollback/bisect landmark**, not the forward baseline. Keep it available for regression archaeology. Future performance candidates compare primarily against CHK23.
 
 R-87 headroom work remains open because meaningful residual cost remains. The next preferred seam is the visualizer clip/stencil setup. On accepted D1-heavy evidence, `RENDER_PREP_READY -> RENDER_HOST_BEGIN` is ~**1.095 / 6.064 ms** median/p95 and maps directly to `VisualizerClipHost.begin()`. That path performs inherited stencil/scissor state capture using multiple synchronous OpenGL state queries plus the first rounded-mask draw, which performs additional state queries. The correct next move is trace-only subdivision of this path under explicit `--frame-trace`, followed by one D1-heavy attribution run. Do not revive Windows priority, global GIL switching, audio smoothing/cadence changes, raw ETL capture, `QSG_RENDER_TIMING` terminal spam, steady custom-background redraw, Python display pacing, `frameSwapped -> requestUpdate()`, or Bubble cadence/reactivity compression.
 
@@ -581,7 +581,7 @@ The corrected CHK26 shared inherited-GL-state candidate completed the installed 
 
 The physical correctness evidence is clean: CUSTOM edit/resize saved, several normal visualizer hotswaps completed and returned to Bubble, Settings tore down generation 0 and rebuilt generation 1, Bubble recovered to ~89–90 logical revisions/s, QML capture contains zero messages, native-fault capture is clean and final lifecycle teardown completes. The trace contains **664,399 records / 4 dropped / 0 write errors**. CHK26 therefore validates the specific duplicate-query ownership hypothesis. The clip seam is now considered exhausted for routine performance work; do not keep removing inherited scissor/stencil/state-restoration fences for smaller gains.
 
-**CHK26 is now the formal operator-accepted GOLDEN.** The operator explicitly reported the corrected CHK26 run as **neutral or better** subjectively and pushed repository commit `a0bf70932c` as the GOLDEN landmark. CHK23 is now the immediately prior GOLDEN rollback/bisect landmark; CHK15 / `0abc479c52` remains the older baseline landmark. The promotion rests on the bounded objective win plus clean clipping/hotswap/Settings/lifecycle behavior and neutral-or-better physical smoothness.
+**CHK26 is now the formal operator-accepted GOLDEN.** The operator explicitly reported the corrected CHK26 run as **neutral or better** subjectively and pushed repository commit `985b9d5306` as the GOLDEN landmark. CHK23 is now the immediately prior GOLDEN rollback/bisect landmark; CHK15 / `ce07b9919f` remains the older baseline landmark. The promotion rests on the bounded objective win plus clean clipping/hotswap/Settings/lifecycle behavior and neutral-or-better physical smoothness.
 
 The next residual is `GUI_SNAPSHOT_PUBLISH -> QUICK_SYNC_CONSUME`, still approximately **5.4 ms median** in settled heavy evidence. CHK27 changes no production scheduling. It adds explicit-`--frame-trace` markers after presentation commit, after the retained update request, at `updatePaintNode()` entry, and immediately after bridge snapshot acquisition. This separates GUI-side follow-up, Qt dirty-item/update admission, bridge acquisition, and local pre-sync diagnostic work while preserving the legacy aggregate marker. Ordinary runtime performs no new timestamping when `--frame-trace` is absent. Historical CHK25/CHK26 traces remain byte-for-byte report-compatible.
 
@@ -616,7 +616,7 @@ CHK27's D1-heavy physical trace (`801,200` records, `5` dropped, `0` write error
 
 This is a major attribution correction: the ~5.4 ms aggregate is **not 5 ms of SRPSS GUI/Python work**. The retained update request has already returned; Qt has not yet entered `VisualizerRenderItem.updatePaintNode()`. Qt documents `QQuickItem.update()` as causing `updatePaintNode()` during the scenegraph synchronization stage, and the threaded render loop places `beforeSynchronizing -> updatePaintNode() synchronization -> rendering` on the render thread. Treat this as Qt frame admission/phase latency until a more specific native phase proves otherwise. Do not revive Python refresh pacing, polling, swap-feedback, continuous duplicate drawing or cadence changes to cosmetically shrink it.
 
-CHK27 leaves CHK26 / `a0bf70932c` GOLDEN unchanged. The clean settled publication->draw path remains ~**12.970 / 14.871 ms** and the run ends with zero QML messages, clean native-fault capture and clean lifecycle teardown. The automatic transition late in the run is outside the clean attribution window.
+CHK27 leaves CHK26 / `985b9d5306` GOLDEN unchanged. The clean settled publication->draw path remains ~**12.970 / 14.871 ms** and the run ends with zero QML messages, clean native-fault capture and clean lifecycle teardown. The automatic transition late in the run is outside the clean attribution window.
 
 The adjacent `QUICK_SYNC_READY -> RENDER_BEGIN` interval remains ~**4.630 / 6.405 ms**. CHK16 already disproved the old interpretation of this as ordinary Windows runnable starvation. CHK28 therefore adds direct, explicit-`--frame-trace` markers for QQuickWindow `beforeFrameBegin`, `beforeSynchronizing`, `afterSynchronizing`, `beforeRendering`, `beforeRenderPassRecording`, `afterRenderPassRecording`, and `afterRendering`. These use a separate render-cycle identity namespace and do not alter scheduling. The reporter can now distinguish next-frame admission, remaining synchronization, Qt render handoff, render-pass preparation and scenegraph work before the visualizer render node. Historical traces are report-compatible because the new events are optional.
 
@@ -626,7 +626,7 @@ Closed false trail added by CHK27: **do not target presentation commit, render-b
 
 CHK28's intentionally long D1-heavy explicit-`--frame-trace` run adds direct QQuickWindow phase boundaries without changing product scheduling. The run lasted roughly 12 minutes, wrote **2,989,907 records / 8 dropped / 0 write errors**, rotated the bounded trace **3** times, ended with **0 QML messages**, clean native-fault capture and clean final teardown. The 4 × 32 MiB / 128 MiB rolling trace therefore remains useful under a substantially longer heavy run and should not be stripped merely because this investigation closes.
 
-Use the clean 15–60 s settled lane. Publication->draw remains healthy at roughly **12.60 / 14.29**, **12.52 / 14.49** and **12.55 / 14.28 ms median/p95** across the three 15 s windows. CHK26 / `a0bf70932c` remains the GOLDEN comparison authority.
+Use the clean 15–60 s settled lane. Publication->draw remains healthy at roughly **12.60 / 14.29**, **12.52 / 14.49** and **12.55 / 14.28 ms median/p95** across the three 15 s windows. CHK26 / `985b9d5306` remains the GOLDEN comparison authority.
 
 The former ~5.1 ms retained-update-request -> `updatePaintNode()` interval is now directly explained by Qt frame admission. In the clean lane, request-return -> `beforeFrameBegin` is ~**5.034 / 5.755 ms**, while `beforeFrameBegin` -> `beforeSynchronizing` is only ~**0.041 / 0.104 ms** and `beforeSynchronizing` -> Visualizer item entry is ~**0.031 / 0.072 ms**. There is no multi-millisecond SRPSS GUI or synchronization job after Qt begins the frame.
 
@@ -662,7 +662,7 @@ The p95 tail is distributed across common/reactive/style submission, VAO bind an
 
 Do **not** micro-optimize Bubble from this attribution. A few tenths of a millisecond of ordinary work does not justify risk to attack latency, elasticity, breathing, loud-passage response, ghosts/tails, event admission, integration or source freshness. Any future Bubble-touching performance candidate requires an explicit active-music physical lane and operator feel, not merely an idle frame trace.
 
-The campaign closes here. The useful architectural wins are retained, the sidecar instrumentation stays available, and future performance work is reopened only by a concrete reproduced symptom or newly proven duplicated owner. CHK26 / `a0bf70932c` remains the forward GOLDEN.
+The campaign closes here. The useful architectural wins are retained, the sidecar instrumentation stays available, and future performance work is reopened only by a concrete reproduced symptom or newly proven duplicated owner. CHK26 / `985b9d5306` remains the forward GOLDEN.
 
 ### Permanent R-87 false trails / negative controls
 

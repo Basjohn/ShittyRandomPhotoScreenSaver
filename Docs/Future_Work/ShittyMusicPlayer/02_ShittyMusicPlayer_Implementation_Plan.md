@@ -1,7 +1,7 @@
 # 02 | ShittyMusicPlayer: MC-First Implementation Plan
 
 **Prepared:** 2026-11-05. **Live tracked document since 2026-11-07** (extracted from the plans zip, which was never  
-tracked; this file is the one source of truth). Reviewed 7 Nov against `8328a6d2` with the  
+tracked; this file is the one source of truth). Reviewed 7 Nov against `a295697c` with the  
 [Architecture Checklist](../../Reference/Architecture_Checklist.md): §0A holds the prerequisite phases, the `--smp`  
 gate, the phase ladder with entry/exit gates, owners, dormancy, lifecycle, budgets and risks; §13-16 hold the  
 operator's box items (audio quality, the SMP Settings tab with pills, the icon and artwork rules, full rearrangement)  

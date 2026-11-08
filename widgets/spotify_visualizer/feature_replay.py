@@ -208,7 +208,7 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
                 raw_bars = resampled
         # Real audio capture timestamps are wall-clock and therefore always > 0.
         # The fixture's first frame has timestamp_us == 0, which trips the
-        # authoritative-live freshness gate (0abc479c) and spuriously suppresses
+        # authoritative-live freshness gate (ce07b991) and spuriously suppresses
         # the cold-start oscilloscope waveform. Model real capture by keeping
         # the committed authoritative timestamp strictly positive; frame deltas
         # (and every logical bar metric) are unchanged.

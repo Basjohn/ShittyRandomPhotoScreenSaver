@@ -1,6 +1,6 @@
 # E0: covered-display image admission (design proof for M4, 8 Nov 2026)
 
-Answers plan 01 §E0 before any suppression code. Source traced at main 3ba37c88. Owner: lead. The operator's complaint
+Answers plan 01 §E0 before any suppression code. Source traced at main e5960416. Owner: lead. The operator's complaint
 this closes: under a fullscreen (Expanded) Visualizer the covered display "still fire[s] complex transitions which
 wastes resources".
 

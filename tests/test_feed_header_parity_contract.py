@@ -76,7 +76,7 @@ def test_feed_subtitle_is_small_metadata_below_not_inside_shared_header_pill():
     assert "readonly property real subtitleGap: 2.5" in feed
     assert "y: headerFrame.y + headerFrame.height * headerFrame.scale + feedRoot.subtitleGap" in feed
     assert "feedModel.showSubtitle" in feed
-    # Set in points through one FontMetrics-backed font (d3c7fe28), so the box
+    # Set in points through one FontMetrics-backed font (86faae78), so the box
     # is the font's real line height rather than fontSize read as pixels.
     assert '"pointSize": Math.max(8.5, feedModel.fontSize - 3.0)' in feed
     assert "font: feedRoot.subtitleFont" in feed

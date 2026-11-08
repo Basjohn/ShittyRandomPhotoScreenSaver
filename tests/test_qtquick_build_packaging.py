@@ -64,7 +64,7 @@ def test_work_in_progress_usu_assets_stay_out_of_resource_packs_and_frozen_build
         source = script.read_text(encoding="utf-8").replace("\\", "/").lower()
         assert "usu" not in re.findall(r"[a-z_]+", source), script
         # ``assets`` wholesale is forbidden; a named product subdirectory is not
-        # (548ccdab ships assets/textures/waveform_floor for Waveform's floor).
+        # (b7e61b87 ships assets/textures/waveform_floor for Waveform's floor).
         assert not re.search(r"include-data-dir=assets/?=", source), script
         assert "include-data-dir=assets/usu" not in source, script
         assert not re.search(r'source:\s*"?[^"\n]*assets/?(\*|")', source), script

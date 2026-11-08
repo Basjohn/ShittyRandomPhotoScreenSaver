@@ -132,7 +132,7 @@ R37 source candidate details and acceptance implications:
 
 ## 6. Native recorded-audio forensic report (2026-10-20; investigation only)
 
-**Tree examined:** `e599387303e282a16953f2d88fab62a854f74efd`, initially clean. No production code, presets,
+**Tree examined:** `da25970a16d11b0bf07098883cff1eea36e6beb8`, initially clean. No production code, presets,
 Settings, accepted 2D Bubble or lifecycle policy changed. No agents delegated. Evidence is retained locally at
 `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/forensics/`; these ignored artifacts are not bundled into source control. Reproduction tooling
 is in `tools/visualizer_replay/{extruded_bubble_forensics,bubble_reference_capture,extruded_bubble_log_inventory}.py`.
@@ -517,7 +517,7 @@ recorded snare every 11 ms. `held_hot_comparison.json` / `held_hot_actual_featur
 claim. Corrected `held_bands_baseline_corrected.json` / `held_bands_candidate_corrected.json` explicitly clear
 new onsets, scheduler events and transient lanes while holding the real recorded band tuple
 **(0.500531, 0.971323, 0.587140)** for 13.2 s. This is a controlled hold, not continuous music or a live tuple receipt.
-The baseline uses a process-local simulation-source override from `3c63d31e`, with compiled-source SHA recorded;
+The baseline uses a process-local simulation-source override from `8ccae556`, with compiled-source SHA recorded;
 it does not check out, revert or mutate the worktree.
 
 | Mature ordinary small radius at held bands | Median | Maximum |
@@ -1042,7 +1042,7 @@ logs summaries and investigation artifacts under this canonical folder. The exis
 mechanism proofs remain scoped facts, not acceptance of the latest live behavior.
 
 
-## 20. Godzip `54cac99a6a` independent follow-up: startup reference overshoot (2026-10-20)
+## 20. Godzip `96d5408a09` independent follow-up: startup reference overshoot (2026-10-20)
 
 **Scope:** source inspection and synthetic logical execution against the **supplied Godzip**; no EB Lab, recorded
 clip, Windows native scene, graphics driver or actual visual acceptance. No production source or authored presets
@@ -2154,7 +2154,7 @@ viewable-tank complaint remains failed, with local evidence available rather tha
 ## 47. Native idle release and recorded recovery (22 October; scoped evidence)
 
 `Evidence/2026-10-22_idle_recovery/` retains the producer, source hash, settings, complete sampled ordinary
-records/scalars, selected full-resolution frames, contact sheets and full/chains-only GIFs for P1/P7 on 82467ae2.
+records/scalars, selected full-resolution frames, contact sheets and full/chains-only GIFs for P1/P7 on 3b5853e1.
 Input is recorded `anything_mixed2` first ten seconds, explicit paused zero-input sixty seconds at 90Hz, then
 the same recorded passage resumed in the same logical runtime. GIFs show continuous release 0–8 seconds at
 10fps, an explicitly labelled jump to settled idle60s, then continuous resume 0–8 seconds. They are silent
@@ -2199,7 +2199,7 @@ Recorded musical motion, perceived idle visibility and 256/512/2D breathing comp
 
 The operator's latest pair shows a populated upper strip over empty lower water during playback and essentially
 background-only idle. Originals and contemporaneous logs are retained in
-`Evidence/2026-10-22_operator_active_idle_rejection/`. The 22:17:17 source run identifies `f60f9581` and cold
+`Evidence/2026-10-22_operator_active_idle_rejection/`. The 22:17:17 source run identifies `64ef3660` and cold
 SCENE/Custom index 7; its saved camera has turn .0506971, tilt -.2253051, scale 1, zero pan, FOV45 and normalized
 position offset (.320911,-1.110771,1.90208). No intervening camera gesture/reset is logged before the pause at
 22:18:09. Clipboard creation times are not exact capture timestamps, and the actual screenshot audio/seed/frame
@@ -2733,7 +2733,7 @@ gesture acceptance remain separate input work; the successful run's orbit probe 
 The operator rejects the09:41:49 capture's displaced columns/sheets and explicitly requests checkpoint
 restoration for BEAM, with further experiments confined to SCENE. `Preset1Acceptance.png` was captured22 Oct
 23:47:35. The160d6a78 lateral cone (23 Oct01:20) therefore postdates that image; restoring only the angular fan
-removed in b256036f would still leave a narrowed footprint. The pre-acceptance a51aab8a shader owns the restored
+removed in 68dc1b9f would still leave a narrowed footprint. The pre-acceptance a556657d shader owns the restored
 BEAM fan, axial Source→End fades, two-depth fan support, fixed18 selective attenuation and matching
 shaft_fan/fan_rays/fan_contrast/fan_march uniform mapping. New width1x is an identity. Its other values scale the
 fan/angular concentration, including Deep compositing; they no longer assert a physical cone aperture.
@@ -2872,10 +2872,10 @@ installed motion, 256/512 block sizes and operator acceptance. Method for future
 Raw lanes grow with FFT length (offset in the log domain), so at 512 EB's input pinned again: preset 3 large
 range 0.24/0.43/0.58/1.16 vs 0.74/0.73/0.84/1.11 at 256. `get_extruded_bubble_body_bands` now rescales the
 lanes to the 256 reference via the FFT bin count (`_last_raw_fft_bins`) with per-lane exponents (1.0, 0.9, 0.6);
-synthetic-signal test: 512 within 0.08 of 256, 0.13–0.20 off without it (commit 5ca50b7a).
+synthetic-signal test: 512 within 0.08 of 256, 0.13–0.20 off without it (commit 8e97fab1).
 
 **Large span.** Knee 0.45 → 0.55 (span 0.52), held weight 0.45 + 0.55 × sustain, change term gated by held level,
-per-identity excursion capped at the Breathing loud handle (commit aa3f2e5d). 60 s per song, preset 3, block 512,
+per-identity excursion capped at the Breathing loud handle (commit 4ec2ba59). 60 s per song, preset 3, block 512,
 2D Dynamic Floor ON reference:
 
 | song | large range 2D / EB | large p05/median/p95 2D | EB |

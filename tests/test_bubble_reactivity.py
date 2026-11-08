@@ -1297,7 +1297,7 @@ class TestStreamSpeedReactivity:
     [
         ("random", "x"),
         ("diagonal", "x"),
-        # The swish cases were removed: 5.1.3 (f9f09679, bubble_simulation.py) keeps
+        # The swish cases were removed: 5.1.3 (6dd336b7, bubble_simulation.py) keeps
         # 49% of the Group Drift carrier and mixes 51% independently phased local
         # travel "to break full-field lockstep", so per-bubble signs on the swish
         # axis are no longer an invariant. Removing only that mix line restores the

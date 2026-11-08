@@ -330,7 +330,7 @@ def test_shell_primitives_carry_no_per_frame_or_business_logic() -> None:
     shadowed_text_code = _qml_code_without_comments(QML_ROOT / "ShadowedText.qml")
     for banned in ("MultiEffect", "shadowBlur", "QtQuick.Effects"):
         assert banned not in shadowed_text_code, banned
-    # Since 8c5490a0 (Contracts: Shadow authority) the explicit light-theme Soft
+    # Since 09265956 (Contracts: Shadow authority) the explicit light-theme Soft
     # Text Shadows modifier filters ONLY the shadow glyph through the shared
     # SoftShadowEffect; the hard path keeps no layer. Every layer line is gated.
     assert "layer.enabled: shadowedText.shadowEnabled && shadowedText.shadowSoft" in shadowed_text_code

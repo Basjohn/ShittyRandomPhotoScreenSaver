@@ -262,7 +262,7 @@ def test_preflight_passes_a_complete_release_tree(
         tmp_path / "ui" / "resources" / "onboarding_assets.qrc",
         tmp_path / "resources" / "tutuogg.ogg",
         tmp_path / "resources" / "jedimodeyall.mp3",
-        # Waveform floor textures became required release assets in 548ccdab.
+        # Waveform floor textures became required release assets in b7e61b87.
         tmp_path / "assets" / "textures" / "waveform_floor" / "concrete_albedo.png",
         tmp_path / "assets" / "textures" / "waveform_floor" / "concrete_roughness.png",
         tmp_path / "assets" / "textures" / "waveform_floor" / "wet_surface_height.png",

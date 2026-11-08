@@ -1,12 +1,12 @@
 # Architecture Audit, 6 Nov 2026 (one-time, read-only)
 
 **Status:** dated audit snapshot (evidence, not authority; `Index.md` → Directory roles). Reviewed 7 Nov against
-`8328a6d2`: every finding confirmed, merged and re-weighted into the live work list
+`a295697c`: every finding confirmed, merged and re-weighted into the live work list
 [`Docs/Reference/Architecture_Checklist.md`](../Reference/Architecture_Checklist.md), which `Current_Plan.md` links
 and promotes from. Nothing here is fixed; `file:line` references below are as of 6 Nov. **Source:** branch
 `worktree-agent-ae7baee1b36deb171`, written on
-`0a4fba7e` and rechecked after `git merge main` (fast-forward to `d84dceff`; that merge touched only
-`Current_Plan.md`, so every `file:line` below is valid on `d84dceff`).
+`db66881a` and rechecked after `git merge main` (fast-forward to `ddd75900`; that merge touched only
+`Current_Plan.md`, so every `file:line` below is valid on `ddd75900`).
 
 **Scope:** thread manager, resource/GL ownership, lifecycles, dead code, churn, GIL contention, memory, dormancy,
 plus the lenses SSOT, 2D/3D consistency, performance and readiness for SMP and full visual rearrangement.
@@ -567,8 +567,8 @@ blockers for SMP and full rearrangement, plus a handful of SSOT duplicates and b
   (`render_host.py:276-363`), except for A-11's per-frame retry.
 - Card surface materials: an all-Normal card creates nothing. The `Loader` is inactive when Normal
   (`OverlayCard.qml:99-106`), and the backdrop owner is lazy and parks (`surface_backdrop_owner.py`).
-- Bench evidence: transition GL and Python call counts are identical from pre-materials `90f65ee9` to now, and the
-  Visualizer counts are identical to `e61647f5` (`overhead_*_run.txt`). The size differed from the stored 2560x1440
+- Bench evidence: transition GL and Python call counts are identical from pre-materials `9897d4f8` to now, and the
+  Visualizer counts are identical to `dd4005d2` (`overhead_*_run.txt`). The size differed from the stored 2560x1440
   baselines, so the GPU deltas are not comparable; the counts are.
 
 **Timers and threads**

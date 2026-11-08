@@ -2,7 +2,7 @@
 
 **Role:** the live, ordered checklist distilled from the one-time
 [Architecture Audit of 6 Nov 2026](../Audits/Architecture_Audit_2026-11-06.md) after a second reviewer verified every
-finding against the source on `8328a6d2` (7 Nov). The audit stays as evidence; this file is the work list.
+finding against the source on `a295697c` (7 Nov). The audit stays as evidence; this file is the work list.
 `Current_Plan.md` owns admission and sequence: it links here and promotes items; an item that lands is deleted here
 and its durable contract moves to its owner (`Spec.md`, `Docs/Contracts.md`, the focused doc). Nothing below is
 authority over a contract; every fix must keep the "must stay true" lines.

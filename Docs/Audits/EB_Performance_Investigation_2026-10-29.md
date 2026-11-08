@@ -2,7 +2,7 @@
 
 > **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
 
-**Read-only source audit:** GODZIP `d2b0a73b06`, 2026-10-29 13:00 snapshot.  
+**Read-only source audit:** GODZIP `c8b60340e8`, 2026-10-29 13:00 snapshot.  
 **Status: closed 2026-10-31 (operator).** Under the calibrated game-like load (`game60`, matched live to the
 operator's game) EB's median frame age went 38.8 → 22.4 ms, render-mode 9.1 → 5.0 ms and the logical tick
 4.9 → 4.2 ms against the pre-investigation code, with no visual or reactive change: the logical changes are
@@ -130,9 +130,9 @@ Frame validation is a Python `_finite` per float over about 7,000 wake/bubble fl
 
 | Commit | Change | Proof |
 |---|---|---|
-| `573a799d` | Solve only the chains the Bead Chains Range can draw (`min(240, high × 12)`); skip the definition compare and copy when the cached geometry is unchanged | Drawn rows bit-identical per tick against `850b1c37` |
-| `129a8983` | Validation checks floats in C-level loops. Probe: face rotations are prebuilt C arrays, uniform locations are cached, face completeness is checked once at allocation. Defocus caches uniform locations. EB matrix uniforms upload from C arrays. | 12 frames pixel-identical against `850b1c37`; Python calls per frame 10,288 → 8,128 |
-| `f6bd6c5a` | The swirl field skips the on-axis fallback when no record is on the axis. Chains shift history only for the paths that moved. Clouds reuse last tick's progress. Both integrate per component in place. | Bit-identical per tick against `850b1c37` (preset 1 Clockwise, mid Particles, Wander) |
+| `565c48f7` | Solve only the chains the Bead Chains Range can draw (`min(240, high × 12)`); skip the definition compare and copy when the cached geometry is unchanged | Drawn rows bit-identical per tick against `f265423c` |
+| `d6dcf648` | Validation checks floats in C-level loops. Probe: face rotations are prebuilt C arrays, uniform locations are cached, face completeness is checked once at allocation. Defocus caches uniform locations. EB matrix uniforms upload from C arrays. | 12 frames pixel-identical against `f265423c`; Python calls per frame 10,288 → 8,128 |
+| `c54993b4` | The swirl field skips the on-axis fallback when no record is on the axis. Chains shift history only for the paths that moved. Clouds reuse last tick's progress. Both integrate per component in place. | Bit-identical per tick against `f265423c` (preset 1 Clockwise, mid Particles, Wander) |
 
 **Results:**
 - **Preset 1 logical tick on heavy1, single-threaded:** 14.5 → 6.6 ms median. Chains went from 6.1 to 1.5 ms, specks from 0.7 to 0.34 ms, and validation from 1.4 to 0.35 ms. Machine CPU load was 30% before and 23% after.
@@ -143,9 +143,9 @@ Frame validation is a Python `_finite` per float over about 7,000 wake/bubble fl
 
 | Commit | Change | Proof |
 |---|---|---|
-| `a053189d` | Raw getters for the per-frame write-mask, depth-mask, framebuffer and viewport reads (shafts, scene target, defocus) | Same values; Python calls per frame 8,128 → 7,789 |
-| `12144ffa` | The scalar drift field is written out per component in the generator/`sum()` evaluation order. Collisions test distance first among side-effect-free rejections. | Bit-identical per tick against `a053189d` (Clockwise, Wander, Left, Random) |
-| `63e336d3` | **GPU drift solver (§1).** The logical tick publishes a float64 step log and per-family geometry. `DriftSolver` integrates it with compute into the unchanged `ebMaterialDrift` layout. | Log + CPU reference = previous live payloads bit for bit per tick. GPU = reference to float32 precision for all nine directions, multi-step frames, a geometry edit and capacity changes (`tests/test_extruded_bubble_drift_solver.py`). Frames differ only in isolated sparkle pixels (about 0.13% of pixels, 9–58 above 2 levels). |
+| `ed9a835e` | Raw getters for the per-frame write-mask, depth-mask, framebuffer and viewport reads (shafts, scene target, defocus) | Same values; Python calls per frame 8,128 → 7,789 |
+| `43635fab` | The scalar drift field is written out per component in the generator/`sum()` evaluation order. Collisions test distance first among side-effect-free rejections. | Bit-identical per tick against `ed9a835e` (Clockwise, Wander, Left, Random) |
+| `ab84ea83` | **GPU drift solver (§1).** The logical tick publishes a float64 step log and per-family geometry. `DriftSolver` integrates it with compute into the unchanged `ebMaterialDrift` layout. | Log + CPU reference = previous live payloads bit for bit per tick. GPU = reference to float32 precision for all nine directions, multi-step frames, a geometry edit and capacity changes (`tests/test_extruded_bubble_drift_solver.py`). Frames differ only in isolated sparkle pixels (about 0.13% of pixels, 9–58 above 2 levels). |
 
 **Measured after the solver:**
 - **Logical tick, preset 1 on heavy1:** 3.0 ms median (14.5 at baseline). Free drift now costs 0.05 ms per tick. At 216k specks it's also 3.0 ms (was 152).
@@ -177,7 +177,7 @@ Screen 1 is the 4K panel at **60 Hz**. Steady swaps sat at the refresh rate (16.
 **Offline findings** (`tools/eb_gpu_stage_cost.py`, `tools/gpu_load_generator.py`):
 
 - **EB's GPU frame, truly idle, at 1662×888:** 2.32 ms. The probe prefilter took 1.07 ms of that, as 48 dependent tiny draws with GPU pipeline drains between them. Next were the near-layer composite (about 0.44 ms) and shafts (about 0.3 ms).
-- **`8a67a808`:** the prefilter now does one layered draw per level (geometry-shader `gl_Layer`), at 0.68 ms. The whole frame is 1.93 ms, pixel-identical.
+- **`c47fab65`:** the prefilter now does one layered draw per level (geometry-shader `gl_Layer`), at 0.68 ms. The whole frame is 1.93 ms, pixel-identical.
 - **Under a 60% game-like competing load:** submit-to-completion is about 9.1 ms both before and after that change. EB waits behind the other process's in-flight GPU packets, and the wait barely depends on how much work EB submits. So trimming EB's GPU work alone will not halve the frame age under load.
 - **Rejected, measured:**
   - *Prefilter tap table:* the arithmetic was not the cost.
@@ -242,7 +242,7 @@ All of these need measuring against the 60% reference load (submit-to-completion
   (`QuickVisualizerPresentationSync.admit_latest_at_sync`, through `VisualizerSnapshotBridge.publish`). Steady state
   only; mode transitions, Edit framing and CUSTOM rebasing keep the GUI path. No timer, poll or extra frame: emptying
   the mailbox leaves the next publication's wake to drive the next frame. Trace event `quick_sync_latest_admitted`.
-  Live confirmation (`68db98a3`, same tool, operator's load at GPU ~64% mean):
+  Live confirmation (`c5bb4d1d`, same tool, operator's load at GPU ~64% mean):
 
   | Measure (median) | Before | After |
   |---|---|---|
@@ -260,7 +260,7 @@ All of these need measuring against the 60% reference load (submit-to-completion
   and the A/B hold. The first corrected run, `tools/visualizer_live_check.py` invisible on recorded music under the
   game at ~67% system CPU, still measured render-mode 11.5 ms, tick 5.3 ms (GIL share 0.47) and HUD age 32 ms. The
   render figure is not an error-checking artefact.
-- **Bit-identical trims, second round (`0a61756e`, operator's choice over a vectorised rewrite):**
+- **Bit-identical trims, second round (`fb3780b4`, operator's choice over a vectorised rewrite):**
   - What changed:
     - per-bubble motion, radius and fade loops hoist each product's per-tick head and steer fixed headings once per
       class;
@@ -275,7 +275,7 @@ All of these need measuring against the 60% reference load (submit-to-completion
     a tick) and collision neighbour enumeration in a grid dense in columns (~730 column hits, ~2,200 depth lookups,
     ~380 occupied). Each remaining exact trim is worth about 0.05 ms. Together the two rounds took about 15-20% off
     the tick (expected live ~5.3 → ~4.4 ms). Further logical gains need the vectorised rewrite.
-- **Live check under `game60` (current code, `113ce92d` + tool fixes, game closed):**
+- **Live check under `game60` (current code, `7081aac8` + tool fixes, game closed):**
   - Results: HUD age 19-20 ms median, publish to swap 15.2-15.5 ms, render-mode 4.2-4.4 ms, logical tick 3.7-3.8 ms
     (GIL share 0.33-0.34), 88 fps, steady late frames 0.1-0.2%.
   - Idle reference: 16 ms HUD age at 90 fps, matching the earlier visible low-load MC run (18 ms at 90 fps).
@@ -289,9 +289,9 @@ All of these need measuring against the 60% reference load (submit-to-completion
     single-thread tick to 3.56 ms. `game60` workers at 8000 compute steps per 256 KB copy give 3.56 ms.
   - Live check, current code: `game60` against the game menu matched closely. Frames 72.1 / 71.6 fps, publish to
     swap 17.44 / 17.42 ms, render 5.03 / 4.93 ms, tick 4.20 / 4.26 ms, GIL share 0.38 / 0.38, HUD 22.4 / 25.1 ms.
-  - A/B under calibrated `game60`, pre-change `01e3ccb6` against current code:
+  - A/B under calibrated `game60`, pre-change `00b00731` against current code:
 
-    | Measure (median) | `01e3ccb6` | Current |
+    | Measure (median) | `00b00731` | Current |
     |---|---|---|
     | HUD age | 38.8 ms | 22.4 ms |
     | Publish to swap | 28.4 ms | 17.4 ms |

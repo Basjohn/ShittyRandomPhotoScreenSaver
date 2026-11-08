@@ -19,7 +19,7 @@ def _admission_engine_stub(engine: SimpleNamespace) -> SimpleNamespace:
     image admission silently optional merely to support these lightweight tests.
     """
     engine._display_selection_suspended = lambda: False
-    # Startup RSS IO gate (7bc62183): no source IO is pending in these stubs.
+    # Startup RSS IO gate (a202ba75): no source IO is pending in these stubs.
     engine._rss_startup_image_pending = lambda: False
     engine._runtime_generation = 16
     engine._terminal_shutdown_requested = False

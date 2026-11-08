@@ -688,7 +688,7 @@ Presets: Water Reaction 1.0 on Presets 1 and 2, 0.25 on Preset 3 (its mock's hig
 net) with Water Detail 0.06 -> 0.03, so its motion stays at pass 6's (0.231 against 0.232 /255 on heavy1); Presets 4
 and 5 at 0 (pixel-identical apart from the skyline fix). GPU (RTX 4090, PairedBench, pass 6 and pass 7 alternated in one session, control-relative): P1 291.5 -> 294.2 cf
 at 1300x750, 188.6 -> 191.2 at 2560x1440; P3 318.5 -> 325.8, 220.1 -> 220.5; CPU thread unchanged (1.49 / 1.46 ms).
-Overhead baseline against 90f65ee9 (visualizers): only Neon Lake moves (+1 GL call, the uniform; +51 Python calls,
+Overhead baseline against 9897d4f8 (visualizers): only Neon Lake moves (+1 GL call, the uniform; +51 Python calls,
 the drive); Extruded Bubble's +51 Python calls come from main's EB work, every other mode unchanged. Evidence
 `.artifacts/evidence/visualizers/shockwave_grid/fidelity/20261106_fidelity/pass7/`.
 

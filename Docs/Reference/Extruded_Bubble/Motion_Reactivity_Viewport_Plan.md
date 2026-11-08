@@ -11,7 +11,7 @@ entire historical EB recovery or permission to retune accepted materials, popula
 
 ## Evidence and its limits
 
-Source baseline: `71049610896c63a8568b1045df201410397ed1b4`. No product code, settings or presets changed during assessment.
+Source baseline: `fa36022ccc8fe1c766cbbcf16f0cb46314f5f187`. No product code, settings or presets changed during assessment.
 One Sol High read-only audit independently traced free-chain visibility and ray response. Findings below distinguish
 source-established behavior, measured replay and hypotheses requiring further reproduction.
 

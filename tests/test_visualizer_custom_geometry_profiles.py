@@ -567,7 +567,7 @@ def test_runtime_edit_save_touches_only_active_profile_and_preserves_all_sibling
 
     screen = qt_app.primaryScreen(); signature = get_screen_signature(screen); profile = MODE_PROFILE[mode]
     variants = _canonical_variants()
-    # Since 477a1cf9 the freeform cases hot-swap into the PLANAR sibling, whose Edit activation
+    # Since 7ef02b38 the freeform cases hot-swap into the PLANAR sibling, whose Edit activation
     # requires one pixels-per-world scale. Give that sibling a world consistent with its screen
     # fraction on THIS screen (the shared fixture's 960x320 is only a token world).
     planar_rect = variants[PLANAR]["rect"]; geometry = screen.geometry()
@@ -815,7 +815,7 @@ def test_in_edit_profile_with_missing_legacy_world_gets_canonical_viewport_not_o
     original.current_viewport_extent = (729.0, 321.0)
     session = CustomLayoutSession()
     session.add_item(original)
-    # Shockwave (the old target) shares the planar slot since 477a1cf9; Sphere is the remaining
+    # Shockwave (the old target) shares the planar slot since 7ef02b38; Sphere is the remaining
     # distinct freeform 3D slot whose historic saves may omit their world.
     variants = {EXTRUDED: _entry(.1, .1, .3, .2)}
     variants[SPHERE] = {

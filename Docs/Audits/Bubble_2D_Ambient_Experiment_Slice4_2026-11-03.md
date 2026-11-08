@@ -1,6 +1,6 @@
 # Bubble 2D ambient experiment, Slice 4: direction, glow, and column sculpting
 
-Status: **implementation candidate / native visual acceptance open**. Branch authority: supersedes experimental Slice 3 on unchanged GODZIP baseline `cc4c390a9e`. This session is intentionally **not** incorporated into `Current_Plan.md` or `Future_Work.md`.
+Status: **implementation candidate / native visual acceptance open**. Branch authority: supersedes experimental Slice 3 on unchanged GODZIP baseline `0d69f4ae77`. This session is intentionally **not** incorporated into `Current_Plan.md` or `Future_Work.md`.
 
 ## Intent and boundaries
 

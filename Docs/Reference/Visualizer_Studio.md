@@ -394,7 +394,7 @@ control.
   Custom-row edits through the bridge save and reload through a never-shown `VisualizersTab`; conditional rows hide
   live; negative controls drop a property per category; every authored heightfield is the brush's target, and a brush
   stroke saves once, reloads and undoes exactly. Before the flip it also proved each Studio against the body
-  users had (every row the body collected and every row its spec and hand-written conditions hid; commit `db7468ab`).
+  users had (every row the body collected and every row its spec and hand-written conditions hid; commit `2f44e510`).
 - **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked. On
   Custom it then runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. On a curated
   preset there is **no automatic switch to Custom** (operator, 6 Nov). The edit is held as a *draft*:

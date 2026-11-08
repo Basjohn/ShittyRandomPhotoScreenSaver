@@ -506,7 +506,7 @@ def test_quick_bubble_payload_still_rejects_short_active_arrays(fields) -> None:
 
 
 def test_quick_bubble_payload_bounds_oversized_arrays_without_mutating_source() -> None:
-    # Since 5.1.3 (f9f09679) the frame itself admits at most 110 heroes (its class
+    # Since 5.1.3 (6dd336b7) the frame itself admits at most 110 heroes (its class
     # bits are validated at construction), so a count above the shader loop cannot
     # exist; arrays longer than the admitted count are still bounded by the payload.
     with pytest.raises(ValueError, match="110-hero limit"):
@@ -654,7 +654,7 @@ def test_quick_bubble_bulk_uniforms_use_reused_float32_transport(monkeypatch) ->
         "glUniform1f",
         "glUniform1i",
         "glUniform4f",
-        # 5.1.3 (f9f09679): the hero big/small class words ride a uvec4 uniform.
+        # 5.1.3 (6dd336b7): the hero big/small class words ride a uvec4 uniform.
         "glUniform4ui",
         "glBindVertexArray",
         "glDrawArrays",

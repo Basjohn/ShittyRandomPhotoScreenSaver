@@ -10,9 +10,9 @@ it must be delivered by the curve, not by the limiter: the curve may ride the sl
 ticks (straight runs at the limit are the cap the lead measured on 76-89% of ticks).
 
 Negative controls (same measurement, the mapping swapped):
-* pre-headroom (07d1afd1 and earlier): amplitude = authored unit x drive x swell straight into the limiter -> the
+* pre-headroom (96f5db7a and earlier): amplitude = authored unit x drive x swell straight into the limiter -> the
   curve rides the limiter on most ticks;
-* the paused WIP (c0ca4ffa): body compressed into 0.65 of the ceiling, the accent added on top, then the TOTAL
+* the paused WIP (7d278163): body compressed into 0.65 of the ceiling, the accent added on top, then the TOTAL
   soft-capped near the ceiling -> the steady accent fills the cap and the kick barely shows.
 Structure only: no preset values."""
 from __future__ import annotations

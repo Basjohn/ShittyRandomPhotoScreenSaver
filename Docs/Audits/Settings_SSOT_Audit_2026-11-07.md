@@ -1,6 +1,6 @@
 # Settings system and single-source-of-truth audit (7 Nov 2026)
 
-**Role:** a one-time, read-only audit of the post-registry Settings code (`main` at `71c909d4`, AC-01 merged),
+**Role:** a one-time, read-only audit of the post-registry Settings code (`main` at `29e03539`, AC-01 merged),
 requested in `Current_Plan.md` §3. It is evidence for the lead, who challenges each item and promotes what survives
 into `Docs/Reference/Architecture_Checklist.md`. It changes no code and is not an authority over any contract.
 

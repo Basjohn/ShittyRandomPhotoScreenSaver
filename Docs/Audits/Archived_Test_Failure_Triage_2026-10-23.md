@@ -2,7 +2,7 @@
 
 **Status:** 102 failures recorded in four Windows pytest chunks, spanning **32 test files**. This audit is a classification of the *provided run logs*, not a new execution of the entire suite and **not** a claim that these tests currently pass or that all failures are stale. [Controlling plan](../../Current_Plan.md) | [Test durability](../Guides/Test_Durability.md) | [Settings startup flash audit](Settings_Transient_Window_Regression_2026-10-23.md).
 
-The source handoff is the 23 October `e692801bb9` godzip. Archived log source: operator-provided `logs993de3141c.zip` (four `pytest_chunk_N.log` runs). A later source candidate changed Settings bucket policy, a Ray Fan Spread visibility gate and a couple of literal-default readers. **Do not treat archived failure counts as current rerun results.** Every original test remains present; no test was deleted or XFAIL-marked here.
+The source handoff is the 23 October `f15e2a418c` godzip. Archived log source: operator-provided `logs993de3141c.zip` (four `pytest_chunk_N.log` runs). A later source candidate changed Settings bucket policy, a Ray Fan Spread visibility gate and a couple of literal-default readers. **Do not treat archived failure counts as current rerun results.** Every original test remains present; no test was deleted or XFAIL-marked here.
 
 **24 October closure:** the complete isolated suite (`tests/run_chunked.py --isolated`, every file in its own
 process) passed **737 of 737 files** on the current source, with `collect_ignore` empty. The archived failures are

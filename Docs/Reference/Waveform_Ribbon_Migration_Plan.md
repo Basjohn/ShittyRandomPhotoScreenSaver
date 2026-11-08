@@ -633,7 +633,7 @@ references. Its GPU-only median 8.15 ms/p90 10.14 ms is scoped capture evidence,
 [preserved exact image](Images/Waveform_Ribbon_Material_Baseline_20261103.png),
 [full source/settings/capture receipt](Images/Waveform_Ribbon_Material_Baseline_20261103.capture.json).
 The supplied clipboard image is pixel-identical to `wr_preset3_material_balance_20261103/frame_0003.png`, at source
-time 23 s. Source revision `2e201069` plus the receipt's six explicit overrides reconstructs this baseline; Preset 3
+time 23 s. Source revision `51f7723d` plus the receipt's six explicit overrides reconstructs this baseline; Preset 3
 now incorporates them. Keep background at least this bright and preserve the floor colour level. The operator calls
 this a good direction, with remaining lumps; it does not approve full shape, musical motion, mist, floor texture or UX.
 

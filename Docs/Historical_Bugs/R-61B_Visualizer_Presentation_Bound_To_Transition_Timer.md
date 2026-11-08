@@ -10,11 +10,11 @@ Status: Resolved by exact revert to the pre-P2 anchor
 ## Commits
 
 ```text
-pre-P2 anchor (restored):        30e66e08
-rejected P2 implementation:      caab5a10
-follow-up attach fix:            cd3ffc55
-follow-up GUI-thread fix:        02b097ea
-revert on main:                  50a7f93e
+pre-P2 anchor (restored):        15651cf2
+rejected P2 implementation:      dc6985a4
+follow-up attach fix:            c49b4320
+follow-up GUI-thread fix:        6b7c2c80
+revert on main:                  09486ebf
 ```
 
 ## Observed Failure
@@ -88,7 +88,7 @@ were not read:
 
 ## Resolution
 
-Exact revert of the four production files to `30e66e08`. The P1 contract bars are retained and
+Exact revert of the four production files to `15651cf2`. The P1 contract bars are retained and
 pass. No part of the rejected design was retuned in place.
 
 ## Anti-Regression

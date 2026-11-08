@@ -36,7 +36,7 @@ The one-way bridge is `core/settings/resample_filter_input_compat.py`.
 ## Bounded processing measurements
 
 Measured on the development machine with installed Pillow, three samples per case, median wall time, source
-decode + scale + final RGBA bytes. Baseline is `c13f1745`'s foreground implementation; these measurements exclude
+decode + scale + final RGBA bytes. Baseline is `e5602f02`'s foreground implementation; these measurements exclude
 prefetch/cache benefit, process startup, IPC and GUI publication. Concurrent operator work and small sample counts
 make them indicative, not latency guarantees.
 

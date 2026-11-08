@@ -226,7 +226,7 @@ states explicitly decline because no alpha raster is available; existing menus a
 An existing exclusive/mouse grab must retain its complete press/release sequence even below the card: any
 exclusive grab (including a lower retained MouseArea) declines orbit promotion, and only passive grabs use the
 lower-passive-handler stacking exception, which does not authorize stealing that sequence. Closed 23 Oct 2026
-(commit 9997e976); the falsifier is `test_lower_retained_mouse_area_exclusive_grab_keeps_its_press_and_release`
+(commit 35acf71e); the falsifier is `test_lower_retained_mouse_area_exclusive_grab_keeps_its_press_and_release`
 in `tests/test_visualizer_plain_orbit.py`. Physical orbit remains operator acceptance (synthetic Qt presses are not).
 
 Framed 3D modes reuse `VisualizerPresentation.qml` for a noninteractive keyboard/mouse hint at the top right.

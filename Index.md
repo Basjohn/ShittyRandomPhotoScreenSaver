@@ -120,7 +120,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | EB accepted baseline, targets and historical recovery | `Docs/Reference/Extruded_Bubble/README.md`; `Current_Plan.md` §0 |
 | EB drift/stream, framed viewport, Perspective camera, pause/resume and rays | `Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md` (accepted reference; reopen only on a concrete defect) |
 | EB R42 surface retirement, birth clustering and Bounce next repair; glyph native test audit | retired EB-R42 history; `Docs/Reference/R42_EB_Surface_Birth_Glyph_Test_Audit.md` |
-| EB architectural work order and visual acceptance falsifiers | retired recovery sequence (see `git show 3c6cf7d8:Current_Plan.md`); [`Docs/Reference/Extruded_Bubble/Acceptance_Runbook.md`](Docs/Reference/Extruded_Bubble/Acceptance_Runbook.md) |
+| EB architectural work order and visual acceptance falsifiers | retired recovery sequence (see `git show 9f1f1434:Current_Plan.md`); [`Docs/Reference/Extruded_Bubble/Acceptance_Runbook.md`](Docs/Reference/Extruded_Bubble/Acceptance_Runbook.md) |
 | EB viewport-sized near-shell blur/fade, off-axis continuity and native diagnostic evidence | historical G11 evidence; `rendering/gl_programs/extruded_bubble_program.py` → `EB_LENS_GLSL`; `Docs/TestSuite.md` → Extruded Bubble recovery gates |
 | EB lighting physical authority, independent Lighting Coverage BEAM/SCENE, Beam Width and persistent SCENE emission clustering | [`Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md`](Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md); historical recovery evidence, not a live queue |
 | EB **22 Oct additional source-level reproductions**, per-mode exit leakage, emission-mode transitions, slider-endpoint coupling, GPU visibility and disabled-ray cost hypothesis | [`Docs/Reference/Extruded_Bubble/Additional_Source_Audit_2026-10-22.md`](Docs/Reference/Extruded_Bubble/Additional_Source_Audit_2026-10-22.md); historical source findings, not a current task queue |
@@ -167,7 +167,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 
 ## Performance/freshness baseline
 
-CHK26 / repository commit `a0bf70932c` is the current operator-accepted GOLDEN performance/freshness baseline. CHK23 is the immediately prior GOLDEN rollback/bisect landmark and CHK15 / `0abc479c52` is the older pre-retained-background baseline.
+CHK26 / repository commit `985b9d5306` is the current operator-accepted GOLDEN performance/freshness baseline. CHK23 is the immediately prior GOLDEN rollback/bisect landmark and CHK15 / `ce07b9919f` is the older pre-retained-background baseline.
 
 The generic headroom campaign is closed. CHK27-CHK29 retained useful `--frame-trace` observability and proved that the largest remaining scheduler-shaped residuals are Qt frame/render-phase ownership or small distributed Bubble/driver costs rather than another obvious local hotspot. Reopen performance work only from a concrete reproduced symptom. The complete chronology and false trails live in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md`.
 

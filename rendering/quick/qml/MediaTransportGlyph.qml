@@ -4,7 +4,7 @@ import QtQuick
 // Every glyph has the same ink height (0.64 of the box plus one stroke) and the same stroke
 // weight, and is optically centred in its box, so previous | pause | next read as one set at
 // any DPR. Placed centred in its segment by the caller. Replaces the font characters
-// ("←", "||", "▶", "→") the controls used since d8a643a4: those took the card's font, whose
+// ("←", "||", "▶", "→") the controls used since ace52dcb: those took the card's font, whose
 // fallback arrows are hairline and sit on the text baseline rather than the segment's centre.
 Canvas {
     id: glyph

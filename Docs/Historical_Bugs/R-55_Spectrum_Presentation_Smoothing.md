@@ -184,7 +184,7 @@ Operator (6 Nov): "Spectrum still has broken visual only smoothing" (live: Spect
 
 **Cause.** `SpectrumFrameRuntime.resolve` snaps to source while `first_frame` holds (a correct reset boundary). The
 capture derives `first_frame = not widget._has_pushed_first_frame`, and the only writer that set the flag True was the
-legacy GL overlay push deleted in `2cd939a0` (2 Sep, R77 debris cleanup). From then on every tick was a "first
+legacy GL overlay push deleted in `a0bc0b99` (2 Sep, R77 debris cleanup). From then on every tick was a "first
 frame", the reset branch ran every tick and every strength drew exactly the unsmoothed bars: Spectrum, Extruded
 Spectrum and Shockwave Grid alike, and the Spectrum Studio's step too. The tests missed it because their stub hosts
 set `_has_pushed_first_frame=True` by hand, which production never did.
@@ -200,7 +200,7 @@ the fix agent's worktree on 7 Nov). It holds:
 - 0.5 s trace and kick strip PNGs;
 - realtime and quarter-speed before/after WebPs.
 
-Commits: `bb826a84` (fix), `c66c3278` (merge). The cleanup that removed the flag's only writer was `2cd939a0`.
+Commits: `9e70def8` (fix), `7e80eca5` (merge). The cleanup that removed the flag's only writer was `a0bc0b99`.
 
 **Fix.** `capture_visualizer_logical_frame` ends the first-frame edge with the first captured frame (one attribute
 write per capture; no timer, thread or new state). The filter itself, its symmetric one-pole shape, its `2–14 ms`

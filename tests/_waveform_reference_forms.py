@@ -1,4 +1,4 @@
-"""The straightforward forms of Waveform's logical-tick hot paths before the 6 Nov 2026 tick cut (main c962ad42).
+"""The straightforward forms of Waveform's logical-tick hot paths before the 6 Nov 2026 tick cut (main a30dae99).
 (Group Wave's lead gradient, formerly ``np.gradient``, is checked by patching ``uniform_gradient`` with it.)
 
 They are the oracle of ``tests/test_waveform_logical_tick_exactness.py``: each is patched over its production

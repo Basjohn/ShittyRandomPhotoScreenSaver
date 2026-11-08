@@ -1,7 +1,7 @@
 # 01 | Expanded Visualizer: SRPSS / MC Implementation Plan
 
 **Prepared:** 2026-11-05. **Live tracked document since 2026-11-07** (extracted from the plans zip, which was never  
-tracked; this file is the one source of truth). Reviewed 7 Nov against `8328a6d2` with the  
+tracked; this file is the one source of truth). Reviewed 7 Nov against `a295697c` with the  
 [Architecture Checklist](../../Reference/Architecture_Checklist.md); §0 below holds the phase ladder, gates, owners,  
 dormancy, lifecycle, 2D/3D consistency, budgets and risks the review added. Sections A-J are the original plan,  
 corrected where the review found drift.  

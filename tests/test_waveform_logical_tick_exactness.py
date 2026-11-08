@@ -95,7 +95,7 @@ _REFERENCE = ((WaveformDynamics, '_advance_springs', reference.advance_springs),
               (dyn, 'uniform_gradient', lambda field, spacing: np.gradient(field, spacing)))
 
 
-# The second cut (7 Nov, main cba6ee54): the snapshot's per-packet terms, card crest and HSV columns, exact remainders
+# The second cut (7 Nov, main 4467759c): the snapshot's per-packet terms, card crest and HSV columns, exact remainders
 # and flat-index surge gathers; the spark emitter's cloth evaluation; the drive routing's clamped sources. The snapshot's
 # reference form has no packet terms, so it always runs with the surge's reference form.
 _REFERENCE_CUT2 = ((WaveformDynamics, 'snapshot', reference_cut2.snapshot),

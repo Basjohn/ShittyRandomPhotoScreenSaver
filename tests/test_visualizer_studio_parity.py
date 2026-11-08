@@ -445,7 +445,7 @@ def test_conditional_rows_hide_and_show_live_in_the_studio(studio_on, mode):
 
 
 # ----------------------------------------------------------------------------------- the Settings body itself
-# Before the flip, this file proved the Studios against the bodies users had (commit db7468ab): every row each body
+# Before the flip, this file proved the Studios against the bodies users had (commit 2f44e510): every row each body
 # collected and every row its spec and hand-written conditions hid (Bubble's Swirl and Particles rules, now
 # StudioProperty.when / when_any in the Bubble adapter). The bodies are now the preset row and the launcher.
 @pytest.mark.parametrize("mode", MODES)

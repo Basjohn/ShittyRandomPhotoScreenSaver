@@ -86,7 +86,7 @@ def test_actual_plane_covers_complete_ground_and_reports_true_world_xz(qt_app,wi
         observed=pixels[:,:,0]>200
         np.testing.assert_array_equal(observed,valid)
         assert np.nanmax(np.abs(hits[:,:,1]))==0.
-        # Since the grounded long-lens orbit (2e201069: eye radius 64-104, 4.5 high, pitch at most a
+        # Since the grounded long-lens orbit (51f7723d: eye radius 64-104, 4.5 high, pitch at most a
         # few degrees, 3 degree lens) the visible ground runs 10^2-10^5 world units out at grazing
         # incidence, where a float32 inverse-MVP ray loses ~1e-3 of its range ALONG the view. The
         # accuracy that matters is that each hit lies on its own pixel's ray: reproject it.
@@ -103,7 +103,7 @@ def test_actual_plane_covers_complete_ground_and_reports_true_world_xz(qt_app,wi
 
 def test_ground_occlusion_and_perspective_positive_actor_clip(qt_app):
     # Steepest grounded pose. Actors are placed on one real pixel ray (bottom-centre) relative to
-    # that ray's own ground hit, not at fixed world points framed by the pre-2e201069 close orbit.
+    # that ray's own ground hit, not at fixed world points framed by the pre-51f7723d close orbit.
     probe=GroundProbe(144,96);values=camera(tilt=-1.)
     try:
         view,projection,eye,lens,baseline,hits=probe.draw(values)
@@ -146,7 +146,7 @@ def test_negative_control_larger_plane_and_disabled_depth_test_cannot_remove_act
         gl.glUseProgram(program);gl.glBindVertexArray(vao)
         from core.settings.framed_camera import perspective_matrix
         # A finite clip interval inside the ground's real depth range (taken from the analytic hits,
-        # since the long-lens orbit of 2e201069 puts the visible ground far beyond a fixed .3-200).
+        # since the long-lens orbit of 51f7723d puts the visible ground far beyond a fixed .3-200).
         depth=np.dot(hits[ground][:,:3]-eye,-view[2,:3])
         clip_near,clip_far=np.percentile(depth,(25.,75.))
         old=np.asarray(perspective_matrix(lens[:2],clip_near,clip_far)).reshape(4,4,order='F')@view
@@ -159,7 +159,7 @@ def test_negative_control_larger_plane_and_disabled_depth_test_cannot_remove_act
     finally:probe.close()
 
 
-# At the steepest grounded pose. Under the long-lens grounded orbit (2e201069) the scene's mirror image
+# At the steepest grounded pose. Under the long-lens grounded orbit (51f7723d) the scene's mirror image
 # lies below the near-level (tilt .5) frame, so the floor's reflection is physically out of view there.
 def test_production_floor_material_and_specular_cap_share_coverage_and_reflection(qt_app):
     from rendering.gl_error_policy import disable_per_call_gl_error_checking

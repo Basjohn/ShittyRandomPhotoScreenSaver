@@ -8,7 +8,7 @@ Live acceptance: `Current_Plan.md` section 1.
 
 ## Accepted baseline and protected behavior
 
-The operator reported 1-2px drawn-radius vibration between breathing states. The first repair (`800bf70f18`) keeps raw
+The operator reported 1-2px drawn-radius vibration between breathing states. The first repair (`f95839109a`) keeps raw
 simulation/pulse/motion authority and gives drawn loudness, drawn body energy and the hero size gate an immediate rise plus
 `RENDER_SIZE_RELEASE_S` release. Feeding that envelope into `pulse_energy` was rejected because it changed excursion/feel.
 The accepted render-release repair remains; small drawn radii now follow every resulting authored target directly.

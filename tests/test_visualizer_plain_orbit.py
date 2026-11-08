@@ -729,7 +729,7 @@ def test_actual_framed_camera_route_keeps_layout_and_persists_once(production_ca
     mouse(card, QEvent.Type.MouseMove, p + QPointF(40, 20), Qt.MouseButton.LeftButton, NONE)
     assert pose(card) != before and card.writes == []
     mouse(card, QEvent.Type.MouseButtonRelease, p + QPointF(40, 20), Qt.MouseButton.LeftButton, NONE)
-    # The pointer clip is the card itself. Since 477a1cf9 the framed card uses the planar
+    # The pointer clip is the card itself. Since 7ef02b38 the framed card uses the planar
     # presentation, so the fixture's 480x210 stage presents at its 160x90 world's aspect.
     assert acquired == [tuple(round(v) for v in presentation.outer_rect[2:])]
     assert len(card.writes) == 1

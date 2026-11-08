@@ -8,9 +8,9 @@ Status: Rejected on fidelity; reverted to the approved anchor
 ## Commits
 
 ```text
-approved anchor (restored):   30e66e08
-rejected candidate:           8eb381fb
-revert on main:               b6e3e051
+approved anchor (restored):   15651cf2
+rejected candidate:           3a712a22
+revert on main:               067a8a48
 preserved evidence:           logs/evidence_chest/08_17_8eb381fb_p2_transition_deferral_REJECTED/
 ```
 

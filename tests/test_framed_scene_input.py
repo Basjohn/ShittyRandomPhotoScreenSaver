@@ -127,7 +127,7 @@ def test_native_pan_zoom_and_orbit_never_change_card_layout(card, editing):
     presentation = card.scene.visualizer_item.presentation
     viewport = deepcopy(card.visualizer.controller.committed_viewport_extent)
     # TEST INPUT: the committed 480x210 stage is intentionally unlike its 160x90 viewport. Since
-    # 477a1cf9 framed 3D modes share the planar presentation, which resolves that saved stage at
+    # 7ef02b38 framed 3D modes share the planar presentation, which resolves that saved stage at
     # the viewport's aspect from its width; the gestures below must leave that card untouched.
     assert presentation.outer_rect[2] == 480.
     assert presentation.outer_rect[3] == pytest.approx(480. * 90. / 160.)

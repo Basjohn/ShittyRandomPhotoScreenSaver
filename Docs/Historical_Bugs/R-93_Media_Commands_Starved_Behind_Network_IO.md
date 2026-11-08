@@ -32,7 +32,7 @@ worker, and a WinRT query can hold it that long.
 
 `ThreadManager` offers named dedicated affinity workers; the shared Media runtime creates a lazy `"media"` lane
 on first use, submits refreshes there and injects it into its controller for commands, and stops it at
-retirement (`a8e38012`, `468ec0cc`). Refresh one-in-flight/one-pending, command de-dup and event authority are
+retirement (`8c8c84d8`, `99502856`). Refresh one-in-flight/one-pending, command de-dup and event authority are
 unchanged. Operator logs: IO max 1736.9 ms under load while the media lane stayed ≤7.17 ms.
 
 ## Regression Coverage

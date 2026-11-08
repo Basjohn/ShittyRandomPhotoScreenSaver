@@ -6,7 +6,7 @@ evidence); code: `rendering/quick/render/surface_backdrop.py`, `rendering/quick/
 `rendering/quick/widgets/surface_material.py`, `rendering/quick/qml/MaterialSurface.qml` and its shaders. This decision **supersedes** the 2 Sep 2026 rejection of runtime card
 materials (`Docs/Contracts.md` "Runtime card surfaces", `Spec.md` Widget Themes, `Docs/Guides/10_WIDGET_GUIDELINES.md`,
 `Docs/Guides/Custom_Style_Implementation.md`). The rejection record stays in git history
-(`f8567436:Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`) and is summarised in section 1
+(`a36fd32d:Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`) and is summarised in section 1
 because its lessons bind this design.
 
 Operator priorities, in order: (1) never risk damaging the compositor, (2) be as performance-neutral as possible,
@@ -40,7 +40,7 @@ Related records that bind the design:
 - **R-74** (shadow overpaint) and R-108 (card chrome parity): card shadows sit beneath every card surface in their own
   lane; a material must not move shadows or re-stack cards.
 - Compositor_Architecture §6-7: one `QQuickWindow`, `QSGRenderNode` direct GL is the only custom primitive, the
-  Visualizer clip host is render-node-local and protected (CHK26 optimisations, commits 0abc479c/78ab96a5/a0bf7093).
+  Visualizer clip host is render-node-local and protected (CHK26 optimisations, commits ce07b991/07486d83/985b9d53).
 
 ## 2. Invariants a material must never touch
 
@@ -190,8 +190,8 @@ mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and th
   outline sit on top unchanged.
 - The transport glyphs are vectors (`MediaTransportGlyph.qml`): previous, next, play and pause share one stroke
   weight (at least 2 px) and one ink height and sit centred in their segments at every DPR. They were font characters
-  ("←", "||", "▶", "→") in the card's font since the Quick port (d8a643a4, Phase F4; the QWidget painter had set
-  pause in Segoe UI Bold), whose fallback arrows are hairline and sit on the text baseline; 116e1fc4 routed them
+  ("←", "||", "▶", "→") in the card's font since the Quick port (ace52dcb, Phase F4; the QWidget painter had set
+  pause in Segoe UI Bold), whose fallback arrows are hairline and sit on the text baseline; adee7b90 routed them
   through `ThemedText`. This changes Media's Normal pixels on purpose.
 
 On a material the light-theme soft text halo (a blurred `MultiEffect` silhouette) is not drawn: over a colourful blur it
@@ -223,7 +223,7 @@ timing-sensitive item for little visible gain"); the operator then saw Spectrum'
   background's z, under the content host; it loads the same `MaterialSurface` while the card shell is on, the
   material is not Normal and the backdrop is bound, and the authored background `Rectangle` hides meanwhile. The
   border, the clip host and the render node are untouched (the protected CHK26 path, commits
-  0abc479c/78ab96a5/a0bf7093, is not edited). The material is a static quad: nothing runs per Visualizer frame; it
+  ce07b991/07486d83/985b9d53, is not edited). The material is a static quad: nothing runs per Visualizer frame; it
   samples the shared backdrop, which is captured below z 20, so the Visualizer's own pixels are never read.
 - **Which material.** The Widget Theme baseline (`resolve_global_surface_material`, the same value the Context Menu
   takes; `engine/display_manager.py` projects it through `QuickSceneController.apply_visualizer_surface_material` once

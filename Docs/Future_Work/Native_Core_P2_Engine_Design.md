@@ -5,7 +5,7 @@ logical tick leaves the main process, so the GUI and render threads stop competi
 toolchain) is [GO with conditions](Native_Core_P1_Spike.md); P2 needs none of P1's downloads and does not wait for them.
 P3 (the native render core) reads P2's packets straight from shared memory, so P2 fixes the packet ABI P3 builds on.
 
-## What runs where today (source audit, main c960d511 + 7 Nov)
+## What runs where today (source audit, main e885f896 + 7 Nov)
 
 | Stage | Owner (exact source) | Thread / process | GIL |
 | --- | --- | --- | --- |

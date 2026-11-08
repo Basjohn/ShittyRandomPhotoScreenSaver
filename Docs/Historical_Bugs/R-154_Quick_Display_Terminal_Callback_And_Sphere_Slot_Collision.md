@@ -2,7 +2,7 @@
 
 **STRONG RETENTION VALUE DOCUMENT**
 
-**Evidence:** October 9, 2026 diagnostic sessions (05:58–06:01, 06:03–14:00, 14:05–14:08), then source from the operator's `836e3aa7f5` Godzip, including R153.
+**Evidence:** October 9, 2026 diagnostic sessions (05:58–06:01, 06:03–14:00, 14:05–14:08), then source from the operator's `f3b88f2a97` Godzip, including R153.
 
 ## 1. Retired display Python owners survive terminal-barrier timeout
 

@@ -100,7 +100,7 @@ def test_disabled_moon_has_no_sun_or_body_when_sky_is_disabled(target):
     moon = capture.render(host, snapshot)
     disabled = capture.render(host, _change(snapshot, shockwave_grid_sun_enabled=False))
     _different(moon, disabled)
-    # The terrain reaches the horizon (494d3723), and since the shared framed camera
+    # The terrain reaches the horizon (5a4646b8), and since the shared framed camera
     # / aperture changes this level view can frame a near-transparent black horizon
     # fringe (alpha 1/255 at the left edge, identical in Sun and Moon modes). That
     # is terrain, not a body: a disabled body leaves nothing where the Moon drew,

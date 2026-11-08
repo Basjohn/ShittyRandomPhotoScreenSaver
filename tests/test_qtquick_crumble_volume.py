@@ -92,7 +92,7 @@ def test_real_driver_fall_has_continuous_late_departure_without_an_endpoint_cut(
 
 
 # Oracle baseline: the fracture roughness/debris these pixel thresholds were
-# calibrated with (the pre-d56d7099 defaults). Product defaults may move freely.
+# calibrated with (the pre-e89f357a defaults). Product defaults may move freely.
 _CALIBRATED = {
     "crack_complexity": 1.0,
     "debris": 0.65,
@@ -197,7 +197,7 @@ def test_debris_amount_drives_chip_count_and_size():
 )
 def test_real_driver_each_crumble_control_changes_the_volume(qt_app, field, value):
     # Compare against the pinned baseline these deltas were calibrated on, not
-    # the moving product defaults (d56d7099 raised complexity/debris to 1.8/0.85,
+    # the moving product defaults (e89f357a raised complexity/debris to 1.8/0.85,
     # which left 2.0/1.0 barely different -- or, for complexity, identical).
     capture = TransitionCapture(320, 180)
     try:

@@ -144,7 +144,7 @@ always keep an eye on though as well as of course the waveform reaction trace to
   never the only or leading route of a main drive. Bass is loud and sustained in most mixes (the live bass lane is
   pinned almost always, §2A), so a bass-led drive sits on the bass and cannot show the voice.
 - **Measured on Waveform:** every preset's Pulse Strength (the bend drive) was bass-only. Routed mid-led (Bass gain
-  1.0 -> .5, Mids gain 0 -> .8, both curve 1.3; commit d5623bdc), on eight recordings back to back: Pulse Strength vs
+  1.0 -> .5, Mids gain 0 -> .8, both curve 1.3; commit 683042e0), on eight recordings back to back: Pulse Strength vs
   the PCM vocal band +.50 -> +.66 (Don't You See, a vocal song with little bass, -.58 -> +.18; Rag Doll, bass-led,
   +.71 -> +.57), loudness tracking on Preset 1 +.45 -> +.48, Frozen Past born swell +.50 -> +.56. The cost: a kick
   inside sustained bass raises the swell 21% less (median .058 -> .046), and those kicks now reach Kick Accent (roll,
@@ -907,6 +907,6 @@ Read these for the cases behind this guide rather than copying their old impleme
 - R-76 / tall Spectrum evidence — physical-pixel flicker caused by delivery/temporal scaling must not be “fixed” by reducing response.
 - `Docs/Reference/Extruded_Bubble/Investigation.md` §65 — floor-independent fixed-scale body feed, sustained-lane knee/timing and per-identity breathing measured against 2D with Dynamic Floor ON (§13A).
 - `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` → Current reaction model and `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` — travelling pulse, flow rule, adaptive gain, floor lift and no-twitch evidence (§13D); negative-control tests `tests/test_waveform_no_twitch.py`, `tests/test_waveform_reaction_modes.py`, `tests/test_waveform_trough_clearance.py`.
-- `.artifacts/evidence/visualizers/waveform_ribbon/memoryless_reactivity/` (`20261107_lead/README.md`, `20261107_bands/`) and `Current_Plan.md` §1 item 2 — the adaptive stages removed and what replaced them (§2B), pulse bands and the cloth-fixed freeze (§13D), and the vocals-first routing (§2C, commit d5623bdc); tests `tests/test_waveform_memoryless_response.py`, `tests/test_waveform_fixed_response_and_kick_accent.py`, `tests/test_waveform_pulse_count_and_falloff.py`.
+- `.artifacts/evidence/visualizers/waveform_ribbon/memoryless_reactivity/` (`20261107_lead/README.md`, `20261107_bands/`) and `Current_Plan.md` §1 item 2 — the adaptive stages removed and what replaced them (§2B), pulse bands and the cloth-fixed freeze (§13D), and the vocals-first routing (§2C, commit 683042e0); tests `tests/test_waveform_memoryless_response.py`, `tests/test_waveform_fixed_response_and_kick_accent.py`, `tests/test_waveform_pulse_count_and_falloff.py`.
 
 Historical files are evidence and negative controls. Current source + `Spec.md` + current guardrails remain implementation authority.

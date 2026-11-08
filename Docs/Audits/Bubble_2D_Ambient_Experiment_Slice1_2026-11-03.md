@@ -1,6 +1,6 @@
 # 2D Bubble ambient experiment, slice 1 (2026-11-03)
 
-**Scope:** deliberately isolated experiment on the `cc4c390a9e` GODZIP working tree. `Current_Plan.md` and `Future_Work.md` are untouched. This does not change EB or the original Bubble population, collisions, ghosting, shader or its authored audio response.
+**Scope:** deliberately isolated experiment on the `0d69f4ae77` GODZIP working tree. `Current_Plan.md` and `Future_Work.md` are untouched. This does not change EB or the original Bubble population, collisions, ghosting, shader or its authored audio response.
 
 ## Design invariants
 
@@ -17,7 +17,7 @@
 - Python syntax compiled for all touched Python files. Standalone isolated ambient simulation checks passed for deterministic point counts, disabled-layer emptiness, fixed particle size under quiet/loud breathing changes and glow change with the same audio input.
 - Added `tests/test_bubble_ambient_optin.py` for Windows/venv native test execution, including independent seeds, no global RNG consumption, capped counts, and no breathing-induced physical size change.
 - **Not yet physically accepted:** the archive runtime cannot import PySide6 or OpenGL. The GL overlay was source-audited but **not executed on the user's native GPU**, so no FPS or actual image-parity claim is made.
-- Native checks required: open old Bubble preset with all five toggles off and compare still/motion/reaction with `cc4c390a9e`; enable micro stream and drift individually and in combination; enable particles stream/drift/glow separately, inspect halo on sustained loud recordings; verify no size pulse, proper orientation and clipping on resized/rotated cards, no pink shader compilation errors, acceptable FPS with both densities at 100%, and no GL resources left on mode switch.
+- Native checks required: open old Bubble preset with all five toggles off and compare still/motion/reaction with `0d69f4ae77`; enable micro stream and drift individually and in combination; enable particles stream/drift/glow separately, inspect halo on sustained loud recordings; verify no size pulse, proper orientation and clipping on resized/rotated cards, no pink shader compilation errors, acceptable FPS with both densities at 100%, and no GL resources left on mode switch.
 - This is a first slice to be judged visually. Placement, chain density, microcircle size, alpha and visual interaction with existing hero bubbles may need further operator tuning. In particular the extra pass is a subtle ambient **overlay**, not a depth-occluded background render; inspect hero overlaps during native review.
 
 **Reversion:** revert the small set of changed and added full files or revert to the preceding `GODZIP_cc4c390a9e_2026-11-03_1344.zip`; do not apply partial work atop unrelated local changes without reconciling it.

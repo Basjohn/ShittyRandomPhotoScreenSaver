@@ -77,7 +77,7 @@ Physical Windows testing of the landed fix established all three acceptance poin
 - persisted Acrylic remains healthy on fresh startup;
 - Glass is materially visually different from Acrylic, with Glass palette/opacity differences supplied by the semantic Qt layers rather than a hidden native Glass tint.
 
-The accepted implementation was committed at `cdb2a0f83a98dfd9244cedc46d8d641afc8adc8f`.
+The accepted implementation was committed at `864b4729e0c7f1102983bb6ef4f8c389c1c00ab3`.
 
 ## Guardrail
 

@@ -113,12 +113,12 @@ def test_only_preexisting_local_image_multieffects_remain() -> None:
     allowed = {
         "AbandonmentIssuesPresentation.qml",
         "AchievementPulsePresentation.qml",
-        # 8c5490a0: BrandedHeader's logo effect moved into the one shared
+        # 09265956: BrandedHeader's logo effect moved into the one shared
         # light-theme soft-shadow profile (Contracts: Shadow authority).
         "SoftShadowEffect.qml",
         "FriendPulsePresentation.qml",
         "MediaPresentation.qml",
-        # ed474c08: story artwork adopted the same local rounded-mask
+        # ba2c11ef: story artwork adopted the same local rounded-mask
         # artwork-frame contract (static layers, enabled only while visible).
         "FeedPresentation.qml",
         "GamesYouFollowPresentation.qml",

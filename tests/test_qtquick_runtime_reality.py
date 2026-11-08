@@ -1,7 +1,7 @@
 """Focused post-cutover runtime-reality regressions.
 
 Added after the first real source-mode Quick production run
-(`logs/evidence_chest/08_30_RuntimeSwap_03_37/`, source 427eafed...) exposed
+(`logs/evidence_chest/08_30_RuntimeSwap_03_37/`, source 413ee365...) exposed
 live product seams that the otherwise-green H destination profile did not
 falsify.
 
@@ -429,7 +429,7 @@ def test_controller_owned_logical_state_installs_tick_spike_diagnostics(
     state = controller.logical_tick_state
     install_default_logical_tick_state(state, bar_count=2)
 
-    # The 427eafed runtime run raised AttributeError for the first of these.
+    # The 413ee365 runtime run raised AttributeError for the first of these.
     assert state._last_tick_spike_log_ts == 0.0
     assert float(state._dt_spike_log_cooldown) > 0.0
 

@@ -1,7 +1,7 @@
 # Semantic Naming Audit (2026-11-07)
 
 Read-only audit. No code, docs, settings, presets or tests were changed. Source snapshot: branch
-`worktree-agent-ab77df54c8fe5d4a6` at `62c87bf6` (main `f4fdb765` plus the unmerged evidence-layout work).
+`worktree-agent-ab77df54c8fe5d4a6` at `c2e20df1` (main `106592b0` plus the unmerged evidence-layout work).
 Counts are `git grep` over tracked files, excluding `release/` and `logs/`. "files/lines" means matching files and
 matching lines.
 
@@ -185,8 +185,8 @@ and 63 test files mention `shockwave_grid`.
 
 **History:**
 
-- `d898c08d` (2026-10-03) added "Shockwave Grid: a neon grid floor rippled by onset shockwaves".
-- `6a63dcda` (2026-10-13) rebuilt it as Neon Lake Basin and kept the id.
+- `ef09aa53` (2026-10-03) added "Shockwave Grid: a neon grid floor rippled by onset shockwaves".
+- `86f68912` (2026-10-13) rebuilt it as Neon Lake Basin and kept the id.
 - New modules after that were named `neon_*`. The current split is the result of that **partial rename**.
 
 **Failure scenarios:**

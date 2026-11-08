@@ -1,6 +1,6 @@
 # 2026-10-23 operator reconciliation | EB, Neon Lake, Settings
 
-**Status:** SOURCE/OPERATOR OBSERVATION; ALL additions `[~]` or `[ ]` until native operator/visual-agent acceptance. The single live task authority remains [Current Plan](../../Current_Plan.md); do not replace any existing detail or close an older failure because a source candidate landed. Supplied code is commit `e692801bb9`; operator has not requested a blanket code or preset reset. The current seven EB presets and all Neon Lake presets are editable at any time. A useful visual result should survive by careful, reversible architecture changes and visual validation, **not by freezing JSON**.
+**Status:** SOURCE/OPERATOR OBSERVATION; ALL additions `[~]` or `[ ]` until native operator/visual-agent acceptance. The single live task authority remains [Current Plan](../../Current_Plan.md); do not replace any existing detail or close an older failure because a source candidate landed. Supplied code is commit `f15e2a418c`; operator has not requested a blanket code or preset reset. The current seven EB presets and all Neon Lake presets are editable at any time. A useful visual result should survive by careful, reversible architecture changes and visual validation, **not by freezing JSON**.
 
 ## Extruded Bubble | preserve BEAM, improve SCENE
 

@@ -169,7 +169,7 @@ Render-thread state is detached, generation/activation fenced and latest-state o
 
 ## 4C. Reactivity parity audit
 
-For reactivity regressions, use the durable Bubble/Visualizer contracts and Historical Bug records before tuning. The older known-good `3fe5df687387b6b6a121142372c43a7719442386` remains a regression-archeology reference, not current architecture authority.
+For reactivity regressions, use the durable Bubble/Visualizer contracts and Historical Bug records before tuning. The older known-good `5640ef37c9821545b7593803ec8ea87ebde12bbd` remains a regression-archeology reference, not current architecture authority.
 
 - [ ] Separate intentional idle energy/motion from real music reactivity; smooth authored idle motion at ~90 Hz is not proof that live source energy arrived.
 - [ ] Compare source identity/readiness before changing gain. If `playing && !reactive_source_ready`, determine why current source identity was rejected/delayed.

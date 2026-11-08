@@ -1459,7 +1459,7 @@ control and independent painted coverage mask prevent black-only/vacuous passes.
 in unobstructed sky, not by placing the distant Sun/Moon in front of terrain. The shared geometry tests use
 `basin_project`, the actual style/density-dependent basin mesh, framed card clipping and live Sphere Edit orbit.
 
-`test_extruded_bubble_accepted_beam_gpu.py` compiles the frozen a51aab8a custom shader body and production
+`test_extruded_bubble_accepted_beam_gpu.py` compiles the frozen a556657d custom shader body and production
 fragment against the same current shared GLSL. Surface/Deep, poses and softness values must match at default
 width1x, and a positive-energy guard rejects black-only comparisons. The fixture records the explicitly
 requested pre-regression equations; it does not authorize preset or full-image golden changes.

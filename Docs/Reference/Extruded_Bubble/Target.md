@@ -237,7 +237,7 @@ comparison (`tools/overhead_baseline.py`) and its lessons appended to `Transitio
 ## 5. Baselines
 
 Recorded before any of the steps above: `tools/baselines/overhead/2026-10-17_13f65941.json` (after the light-shafts
-commit 61d73602; other processes' CPU 54%, GPU 72% busy, 2775 MHz, all passes admitted). Compared with the 2026-10-11
+commit df184fc2; other processes' CPU 54%, GPU 72% busy, 2775 MHz, all passes admitted). Compared with the 2026-10-11
 baseline (which predates control-relative timing), transitions moved only by +2 Python calls per frame; Neon Lake's
 preview rose from 0.135 to 1.52 ms GPU and 146 to 338 GL calls with the week's sky, reaction and ray features, and
 Oscilloscope's GL calls from 17 to 110 with its rework. Later steps compare against the 2026-10-17 file.
@@ -308,7 +308,7 @@ review in §11 rejects bead-chain fade/curvature/width and idle surface/chain sp
 → P3 double rim and curvature → P4 shafts alone → P5 all-scene validation and performance. One variable family per
 checkpoint; every stage compares mock | previous | candidate on all seven scenes plus 1:1 glass crops.
 
-**Stage results (2026-10-18; evidence `tmp/release_media/recovery/`, mock | baseline `e2b12cd3` | candidate):**
+**Stage results (2026-10-18; evidence `tmp/release_media/recovery/`, mock | baseline `d796014c` | candidate):**
 - P1 correctness, landed: C01 rim spread removed (the same-scene A/B showed stippled bands; no cost saving), C03, C04,
   C05 (clusters shade the union surface; normal diagnostic continuous through the neck), C06 depth writes. Diagnostic
   views `--diag=1..5`, per-pass GPU timestamps, `--set` same-scene overrides, `--yaw` orbit.

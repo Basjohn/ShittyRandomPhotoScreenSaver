@@ -2,7 +2,7 @@
 
 The Studio is the only Spectrum shape editor since 6 Nov (Settings' body is the preset row and the launcher). Before
 that, this file drove every capability of Settings' own shape editor and proved the Studio reached exactly what it
-saved (commit db7468ab); what remains is the Studio's own rule: each structural edit is one undoable, admitted edit
+saved (commit 2f44e510); what remains is the Studio's own rule: each structural edit is one undoable, admitted edit
 within the node limits. Nothing shows a window.
 """
 from __future__ import annotations

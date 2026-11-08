@@ -861,7 +861,7 @@ def test_chk26_clipped_gl_state_is_captured_once_and_carried_through_mode() -> N
     # changing color writes must extend the common fence instead of silently
     # invalidating the carried-state contract.
     implementation_root = root / "rendering" / "quick" / "visualizer" / "implementations"
-    # 5.1.3 (f9f09679) added Bubble's ambient pass, which draws into its OWN
+    # 5.1.3 (6dd336b7) added Bubble's ambient pass, which draws into its OWN
     # FBO and must open color writes there. It is admitted only because it
     # captures the live mask first and restores it in ``finally``, so the
     # carried snapshot is still truthful when control returns to the mode.
