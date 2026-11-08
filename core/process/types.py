@@ -67,7 +67,11 @@ class MessageType(Enum):
     # its own cadence) and Media's play edge ({"playing": bool}).
     VIS_START = "vis_start"
     VIS_SET_PLAYING = "vis_set_playing"
-    
+    # The framed view the tick reads (work order 5 slice 5.2): the main controller's layout metrics, latest wins
+    # ({"extent", "rotations", "override_extent", "override_rotations"}: committed extent and per-mode rotations, and
+    # the live CUSTOM override or None).
+    VIS_SET_VIEW = "vis_set_view"
+
     # Error messages
     ERROR = "error"
 

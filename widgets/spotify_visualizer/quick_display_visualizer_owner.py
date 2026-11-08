@@ -120,6 +120,9 @@ class QuickDisplayVisualizerOwner:
     _recovery_held: "tuple[Any, float] | None" = None
     _activation_inputs: "dict[str, Any] | None" = None
     _configure_services: Mapping[str, Any] = {}
+    _view_sent: Any = None
+    _view_dirty = False
+    _in_sync_present = False
 
     def __init__(
         self,
@@ -1202,6 +1205,9 @@ class QuickDisplayVisualizerOwner:
         self._signal_transition_failure("deadline:" + phase)
 
     def sync_present(self) -> bool:
+        on_worker = self._worker is not None
+        if on_worker:
+            self._in_sync_present = True
         try:
             return self._sync_present_transaction()
         except Exception:
@@ -1210,6 +1216,11 @@ class QuickDisplayVisualizerOwner:
             logger.exception("[SPOTIFY_VIS] Retained visualizer mode activation failed")
             self._signal_transition_failure("activation_exception")
             return False
+        finally:
+            if on_worker:
+                # The layout metrics this presentation committed reach the worker's tick before its next step.
+                self._in_sync_present = False
+                self._forward_view()
 
     def _sync_present_transaction(self) -> bool:
         if self._retired or self._sync is None:
@@ -1710,6 +1721,29 @@ class QuickDisplayVisualizerOwner:
         self._worker = link
         self._worker_identity = (int(identity[0]), int(identity[1]))
         self._activation_inputs = dict(inputs)
+        # The framed view the tick reads follows the main controller's layout metrics (latest wins).
+        controller.set_layout_metrics_observer(self._on_layout_metrics_written)
+        self._view_sent = None
+        self._view_dirty = True
+        self._forward_view()
+
+    def _on_layout_metrics_written(self) -> None:
+        """The controller's layout-metrics observer (engine worker only): forwarded at once, or, inside a
+        presentation (which commits them on every publication), once at its end."""
+        self._view_dirty = True
+        if not self._in_sync_present:
+            self._forward_view()
+
+    def _forward_view(self) -> None:
+        """Send the layout metrics to the session when they changed since the last send (``VIS_SET_VIEW``)."""
+        if not self._view_dirty or self._worker is None:
+            return
+        self._view_dirty = False
+        snapshot = self._controller.layout_metrics_snapshot
+        if snapshot == self._view_sent:
+            return
+        self._view_sent = snapshot
+        self._worker_edge(lambda link: link.set_view(snapshot))
 
     def _worker_edge(self, send: Callable[[Any], None]) -> bool:
         """Send one control edge to the session; a failure is the worker failure path (False)."""
@@ -1763,7 +1797,17 @@ class QuickDisplayVisualizerOwner:
         inputs = {key: pending[key] for key in ("settings_model", "resolved_activation", "technical_cache",
                                                  "logical_kwargs", "presentation_kwargs")}
         link = self._worker
+        profile_changed = kind == "mode" and (get_visualizer_layout_profile(target)
+                                              != get_visualizer_layout_profile(outgoing_mode))
+        if profile_changed:
+            # The hidden transaction's profile switch, before the session commits the target: its configuration and
+            # first tick read the target's committed layout metrics, as in process.
+            controller.render_bridge.discard_pending()
+            self._activate_committed_layout_profile(target)
+            self._forward_view()
         try:
+            if link is not self._worker:
+                raise RuntimeError("the session failed while its layout metrics were sent")
             generation, activation_id = link.set_mode(target, inputs)
         except Exception as exc:
             logger.error("[SPOTIFY_VIS][ENGINE_WORKER] Hidden %s activation FAILED source=%s target=%s: %s",
@@ -1773,6 +1817,12 @@ class QuickDisplayVisualizerOwner:
                     self._edit_layout_profile_activator(outgoing_mode)
                 except Exception:
                     logger.exception("[SPOTIFY_VIS] Could not restore the outgoing Edit profile mode=%s", outgoing_mode)
+            if profile_changed:
+                try:
+                    self._activate_committed_layout_profile(outgoing_mode)
+                except Exception:
+                    logger.exception("[SPOTIFY_VIS] Could not restore the outgoing layout profile mode=%s",
+                                     outgoing_mode)
             self._pending_mode_activation = None
             self._mode_transition_phase = "idle"
             self._mode_transition_started_at = 0.0
@@ -1781,9 +1831,6 @@ class QuickDisplayVisualizerOwner:
                 self._on_engine_worker_failed(f"activation failed: {exc}")
             return
         if kind == "mode":
-            if get_visualizer_layout_profile(target) != get_visualizer_layout_profile(outgoing_mode):
-                controller.render_bridge.discard_pending()
-                self._activate_committed_layout_profile(target)
             controller.set_mode(target)
         configure_presentation_side(controller, activation=inputs, playing=controller.playing,
                                     refresh_presentation=self._refresh_backdrop, **self._configure_services)
@@ -1880,6 +1927,7 @@ class QuickDisplayVisualizerOwner:
         controller = self._controller
         inputs = self._activation_inputs
         playing = bool(controller.playing)
+        controller.set_layout_metrics_observer(None)            # in process the tick reads them directly
         mailbox = LatestStateMailbox()
         mailbox.set_trace_screen_index(int(self._presentation_runtime.screen_index))
         controller.replace_logical_mailbox(mailbox)

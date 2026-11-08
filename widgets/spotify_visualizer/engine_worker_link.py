@@ -262,6 +262,16 @@ class EngineWorkerLink:
 
         self._request(MessageType.VIS_SET_DISPLAY_POWER, {"on": bool(on)})
 
+    def set_view(self, snapshot: tuple) -> None:
+        """``VIS_SET_VIEW``: the owner's controller's layout metrics (``layout_metrics_snapshot``), which the worker's
+        tick reads (the framed view: committed extent and rotations, the live CUSTOM override)."""
+        from core.process.types import MessageType
+
+        extent, rotations, override_extent, override_rotations = snapshot
+        self._request(MessageType.VIS_SET_VIEW, {"extent": extent, "rotations": rotations,
+                                                  "override_extent": override_extent,
+                                                  "override_rotations": override_rotations})
+
     def set_mode(self, mode: str, activation: Mapping[str, Any]) -> tuple[int, int]:
         """``VIS_SET_MODE`` applied at once (the owner's hidden activation commit, in the worker): another mode, or the
         same mode as a preset / settings re-activation. The committed (generation, activation id)."""

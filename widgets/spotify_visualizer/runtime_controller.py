@@ -57,6 +57,8 @@ class VisualizerRuntimeController:
 
     # Display-power park request default; __init__ / set_logical_parked own the instance value.
     _logical_parked = False
+    # The layout-metrics observer (``set_layout_metrics_observer``): None in process.
+    _layout_metrics_observer: Callable[[], None] | None = None
 
     def __init__(
         self,
@@ -427,6 +429,33 @@ class VisualizerRuntimeController:
             )
             return extent, quarters, has_override
 
+    def set_layout_metrics_observer(self, observer: Callable[[], None] | None) -> None:
+        """Install ``observer()``, called after every write of the layout metrics the tick reads (committed extent and
+        per-mode rotations, the live CUSTOM override). The engine-worker owner forwards them to the worker's
+        controller, where its tick reads them (native core P2b slice 5.2); in process there is none (one attribute
+        read per write)."""
+        if observer is not None and not callable(observer):
+            raise TypeError("layout metrics observer must be callable or None")
+        self._layout_metrics_observer = observer
+
+    @property
+    def layout_metrics_snapshot(self) -> tuple:
+        """(committed extent, committed rotations, override extent or None, override rotations or None): the raw
+        layout metrics, mode-independent (each controller resolves them for its own mode)."""
+        with self._lock:
+            return (
+                tuple(self._committed_viewport_extent),
+                dict(self._committed_content_rotations),
+                None if self._custom_viewport_override is None else tuple(self._custom_viewport_override),
+                None if self._custom_content_rotation_override is None
+                else dict(self._custom_content_rotation_override),
+            )
+
+    def _layout_metrics_written(self) -> None:
+        observer = self._layout_metrics_observer
+        if observer is not None:
+            observer()
+
     @property
     def presentation_physical_viewport_extent(self) -> tuple[float, float]:
         """Physical CUSTOM viewport extent before content orientation."""
@@ -523,6 +552,7 @@ class VisualizerRuntimeController:
                 )
             self._custom_viewport_override = resolved
             self._custom_content_rotation_override = rotations
+        self._layout_metrics_written()
 
     def hydrate_committed_layout_metrics(
         self,
@@ -554,6 +584,7 @@ class VisualizerRuntimeController:
         with self._lock:
             self._committed_viewport_extent = (width, height)
             self._committed_content_rotations = rotations
+        self._layout_metrics_written()
 
     def commit_presentation_metrics(
         self,
@@ -588,6 +619,7 @@ class VisualizerRuntimeController:
                         self._committed_content_rotations[self._mode_id] = quarters
                     else:
                         self._committed_content_rotations.pop(self._mode_id, None)
+        self._layout_metrics_written()
 
     def commit_content_rotation_map(self, value: object) -> None:
         """Promote one full sparse CUSTOM orientation map at Save boundary."""
@@ -599,6 +631,7 @@ class VisualizerRuntimeController:
         rotations = normalize_content_rotation_by_mode(value)
         with self._lock:
             self._committed_content_rotations = rotations
+        self._layout_metrics_written()
 
     def resolve_logical_mode_state(
         self,

@@ -525,6 +525,18 @@ class EngineSession:
         self._settle_capture()
         return True
 
+    def set_view(self, *, extent: Any, rotations: Any, override_extent: Any = None,
+                 override_rotations: Any = None) -> None:
+        """The framed view the tick reads (``VIS_SET_VIEW``, latest wins; work order 5 slice 5.2): the owner's
+        controller's layout metrics (committed extent and per-mode rotations, the live CUSTOM override or None) onto
+        this session's controller, which resolves them for its own mode as the owner's does. The tick reads them under
+        the controller's lock, so a step sees the old or the new metrics, never half of them."""
+        controller = self._controller
+        controller.hydrate_committed_layout_metrics(tuple(extent), dict(rotations or {}))
+        controller.set_custom_viewport_override(
+            None if override_extent is None else tuple(override_extent),
+            dict(override_rotations) if override_rotations is not None else 0)
+
     def request_mode(self, mode: str, *, preset: int = 0, settings: Any = None, activation: Any = None,
                      at_once: bool = False) -> tuple[int, int] | None:
         """An in-session activation, applied at the next tick boundary (the newest request wins): the owner's
@@ -717,9 +729,12 @@ class VisualizerEngineWorker(BaseWorker):
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
                 return self._reply(msg, revision=revision)
             if msg.msg_type in (MessageType.VIS_SET_MODE, MessageType.VIS_SET_DISPLAY_POWER, MessageType.VIS_START,
-                                MessageType.VIS_SET_PLAYING):
+                                MessageType.VIS_SET_PLAYING, MessageType.VIS_SET_VIEW):
                 if self._session is None:
                     return self._reply(msg, success=False, error="no engine session is configured")
+                if msg.msg_type == MessageType.VIS_SET_VIEW:
+                    self._session.set_view(**dict(msg.payload))   # state only: a refused view leaves the session
+                    return self._reply(msg)
                 if msg.msg_type in (MessageType.VIS_START, MessageType.VIS_SET_PLAYING):
                     session = self._session
                     try:
