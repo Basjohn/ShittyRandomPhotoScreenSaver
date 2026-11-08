@@ -11,6 +11,7 @@ from OpenGL import GL as gl
 from rendering.quick.render.gl_resources import compile_program
 from widgets.spotify_visualizer.render_state import SpectrumFrame
 from widgets.spotify_visualizer.shaders import load_fragment_shader
+from widgets.spotify_visualizer.spectrum_display_bar_count import resample_levels, resolve_display_bar_count
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     SPECTRUM_SHADER_INPUT_SCALE,
     compute_spectrum_height_scale,
@@ -44,6 +45,7 @@ def resolve_spectrum_decor_uniforms(
     return (
         ("u_ghost_custom_mix", "1f", (unit("spectrum_ghost_custom_mix"),)),
         ("u_ghost_color", "4f", rgba(parameter(parameters, "spectrum_ghost_color"))),
+        ("u_ghost_fill_mix", "1f", (unit("spectrum_ghost_fill_mix"),)),
         ("u_ghost_gradient_mix", "1f", (unit("spectrum_ghost_gradient_mix"),)),
         ("u_ghost_tip_color", "4f", rgba(parameter(parameters, "spectrum_ghost_tip_color"))),
         ("u_gloss", "1f", (unit("spectrum_gloss"),)),
@@ -68,8 +70,8 @@ def resolve_spectrum_decor_uniforms(
 # Every frame parameter ``resolve_spectrum_decor_uniforms`` reads, fetched in ONE C call so a frame whose decoration
 # did not change costs no per-option Python work (the options are default-off; at rest they must cost nothing).
 _DECOR_SOURCES = (
-    "spectrum_ghost_custom_mix", "spectrum_ghost_color", "spectrum_ghost_gradient_mix", "spectrum_ghost_tip_color",
-    "spectrum_gloss", "spectrum_fill_gradient_mix", "spectrum_fill_tip_color", "spectrum_peak_caps_mix",
+    "spectrum_ghost_custom_mix", "spectrum_ghost_color", "spectrum_ghost_fill_mix", "spectrum_ghost_gradient_mix",
+    "spectrum_ghost_tip_color", "spectrum_gloss", "spectrum_fill_gradient_mix", "spectrum_fill_tip_color", "spectrum_peak_caps_mix",
     "spectrum_peak_cap_color", "spectrum_peak_cap_thickness", "spectrum_pattern_shown",
     "spectrum_pattern_anchor_shown", "spectrum_pattern_mix", "spectrum_pattern_strength", "spectrum_pattern_color",
     "spectrum_pattern_scale",
@@ -78,8 +80,8 @@ _decor_sources = operator.itemgetter(*_DECOR_SOURCES)
 
 
 _DECOR_UNIFORMS = (
-    "u_ghost_custom_mix", "u_ghost_color", "u_ghost_gradient_mix", "u_ghost_tip_color", "u_gloss",
-    "u_fill_gradient_mix", "u_fill_tip_color", "u_peak_cap_mix", "u_peak_cap_color", "u_peak_cap_thickness",
+    "u_ghost_custom_mix", "u_ghost_color", "u_ghost_fill_mix", "u_ghost_gradient_mix", "u_ghost_tip_color",
+    "u_gloss", "u_fill_gradient_mix", "u_fill_tip_color", "u_peak_cap_mix", "u_peak_cap_color", "u_peak_cap_thickness",
     "u_pattern", "u_pattern_shared", "u_pattern_mix", "u_pattern_color", "u_pattern_scale",
 )
 
@@ -197,13 +199,27 @@ class QuickSpectrumRenderer:
         count = min(_MAX_BARS, int(logical.common.bar_count))
         if count <= 0:
             return
+        presentation = snapshot.presentation
+        logical_bars, logical_peaks = logical.common.bars, mode_state.peaks
+        if presentation.expanded_display:
+            # The display-wide card may draw more bars than the engine computes (one rule, its own module).
+            drawn = resolve_display_bar_count(
+                "spectrum", count, expanded=True,
+                content_rotation_quarters=presentation.content_rotation_quarters,
+            )
+            if drawn != count:
+                levels = list(logical_bars[:count]) + [0.0] * max(0, count - len(logical_bars))
+                peak_levels = list(logical_peaks[:count])
+                peak_levels += levels[len(peak_levels):count]
+                logical_bars = resample_levels(levels, drawn)
+                logical_peaks = resample_levels(peak_levels, drawn)
+                count = drawn
         bars, peaks = prepare_spectrum_shader_levels(
-            logical.common.bars,
-            mode_state.peaks,
+            logical_bars,
+            logical_peaks,
             bar_count=count,
         )
 
-        presentation = snapshot.presentation
         local_content_rect = frame.logical_content_rect
         layout = compute_quick_spectrum_layout(
             local_content_rect=local_content_rect,

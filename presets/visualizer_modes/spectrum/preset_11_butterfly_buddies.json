@@ -35,14 +35,14 @@
           88,
           255
         ],
-        "spectrum_ghost_alpha": 0.9,
+        "spectrum_ghost_alpha": 0.6,
         "spectrum_ghost_color": [
           86,
           214,
           88,
           255
         ],
-        "spectrum_ghost_color_source": "Custom",
+        "spectrum_ghost_color_source": "Bar Fill",
         "spectrum_ghost_decay": 0.18,
         "spectrum_ghost_gradient": false,
         "spectrum_ghost_tip_color": [
@@ -136,7 +136,7 @@
           255
         ],
         "spectrum_peak_cap_thickness": 3,
-        "spectrum_peak_caps": true,
+        "spectrum_peak_caps": false,
         "spectrum_profile_floor": 0.2,
         "spectrum_rainbow_border": false,
         "spectrum_rainbow_enabled": false,

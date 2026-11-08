@@ -31,6 +31,7 @@ ON = {
     "pattern": {"spectrum_pattern": "Dots", "spectrum_pattern_color": [0, 255, 0, 255],
                 "spectrum_pattern_strength": 1.0},
     "ghost_custom": {"spectrum_ghost_color_source": "Custom", "spectrum_ghost_color": [0, 255, 0, 255]},
+    "ghost_fill": {"spectrum_ghost_color_source": "Bar Fill"},
     "ghost_gradient": {"spectrum_ghost_gradient": True, "spectrum_ghost_tip_color": [0, 255, 0, 255]},
     "fill_gradient": {"spectrum_fill_gradient": True, "spectrum_fill_tip_color": [0, 255, 0, 255]},
     "gloss": {"spectrum_gloss": 1.0},
@@ -264,7 +265,7 @@ def test_fill_options_change_only_fill_pixels(render, option, solid):
 
 @pytest.mark.qt
 @pytest.mark.parametrize("solid", (True, False), ids=("bars", "segments"))
-@pytest.mark.parametrize("option", ("ghost_custom", "ghost_gradient"))
+@pytest.mark.parametrize("option", ("ghost_custom", "ghost_gradient", "ghost_fill"))
 def test_ghost_options_change_only_ghost_pixels(render, option, solid):
     import numpy as np
     off = render(solid=solid)
@@ -273,7 +274,7 @@ def test_ghost_options_change_only_ghost_pixels(render, option, solid):
     assert changed.sum() > 100 and not (changed & ~ghost).any(), option
     # Negative controls: no ghosts, no effect; Rainbow Ghost on overrides a custom colour.
     assert np.array_equal(render(ghosting=False, solid=solid), render(ON[option], ghosting=False, solid=solid))
-    if option == "ghost_custom":
+    if option in ("ghost_custom", "ghost_fill"):
         rainbow = {"spectrum_rainbow_ghost": True}
         assert np.array_equal(render(rainbow, solid=solid), render({**rainbow, **ON[option]}, solid=solid))
 
@@ -552,3 +553,84 @@ def test_an_equal_parameter_mapping_skips_even_the_decoration_fetch(render, monk
     assert (len(fetches), len(resolves)) == (fetched + 1, resolved)      # unrelated change: fetched, not resolved
     render({"spectrum_gloss": 1.0}, raw_parameters={"spectrum_unrelated_probe": 1.0})
     assert len(resolves) == resolved + 1                                 # a decoration change is resolved
+
+
+# ------------------------------------------------------------------------------------- Bar Fill ghosts (8 Nov)
+def _unpremultiplied(pixels):
+    """The render target holds premultiplied colour: straight RGB of each pixel (0 where nothing is drawn)."""
+    import numpy as np
+    alpha = pixels[..., 3:4].astype(float)
+    return np.where(alpha > 0, pixels[..., :3] * 255.0 / np.maximum(alpha, 1.0), 0.0)
+
+
+def test_bar_fill_has_its_own_fade_envelope():
+    owner = _owner()
+    fade = SpectrumDecorFade(owner)
+    fade.advance(owner, 0.0)
+    owner._spectrum_ghost_color_source = "Bar Fill"
+    fade.advance(owner, 0.05)
+    assert 0.0 < fade.mixes()["spectrum_ghost_fill_mix"] < 1.0           # fades in, never pops
+    t = 0.05
+    for _ in range(30):
+        t += 0.05
+        fade.advance(owner, t)
+    assert fade.mixes()["spectrum_ghost_fill_mix"] == 1.0 and fade.mixes()["spectrum_ghost_custom_mix"] == 0.0
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("solid", (True, False), ids=("bars", "segments"))
+def test_a_bar_fill_ghost_is_a_faded_copy_of_its_own_bar(render, solid):
+    """Ghost Colour Bar Fill: wherever a ghost is drawn, its straight colour is the colour the same bar shows at that
+    pixel when it really reaches that height (fill gradient and pattern included); on the bar's border it is the
+    border colour. Negative control: the Bar Colour source paints the border colour over the fill and fails the
+    same comparison."""
+    import numpy as np
+    look = {"spectrum_fill_gradient": True, "spectrum_fill_tip_color": [0, 255, 0, 255],
+            "spectrum_pattern": "Dots", "spectrum_pattern_color": [255, 255, 255, 255],
+            "spectrum_pattern_strength": 1.0}
+    tall = render(look, bars=PEAKS, peaks=PEAKS, ghosting=False, solid=solid)
+    tall_plain = render(bars=PEAKS, peaks=PEAKS, ghosting=False, solid=solid)
+    ghost = _changed(render(look, solid=solid), render(look, ghosting=False, solid=solid))
+
+    def compare(source):
+        drawn = render(dict(look, spectrum_ghost_color_source=source), solid=solid)
+        image = _unpremultiplied(drawn)
+        readable = ghost & (drawn[..., 3] > 100)
+        inside = readable & _is(tall_plain, FILL)
+        edge = readable & _is(tall_plain, BORDER)
+        return (np.abs(image[inside] - tall[inside][:, :3]).max(axis=1),
+                np.abs(image[edge] - np.array(BORDER[:3])).max(axis=1), tall[inside][:, :3])
+
+    error, edge_error, expected = compare("Bar Fill")
+    assert error.size > 300 and error.max() <= 4
+    assert len(np.unique(expected // 48, axis=0)) > 2                   # gradient and dots really vary under it
+    assert edge_error.size == 0 or edge_error.max() <= 4
+    control, _edge, _expected = compare("Bar Colour")
+    assert (control > 40).mean() > 0.9
+
+
+@pytest.mark.qt
+def test_nothing_draws_a_line_over_a_fading_ghost_unless_peak_caps_are_on(render):
+    """Every ghost fades out toward its top: down each ghost column, from whatever is drawn highest to the ghost's
+    lowest row, opacity never falls, so the ghost's top is the faintest thing there (Bar Fill and Bar Colour
+    alike). Negative control: Peak Caps draw an opaque line right above that faint top, the hard line the curated
+    presets 2-15 showed over their ghosts until 8 Nov."""
+    import numpy as np
+
+    def hard_tops(settings):
+        image = render(settings)
+        ghost = _changed(image, render(settings, ghosting=False))
+        columns = np.unique(np.nonzero(ghost)[1])
+        hard = 0
+        for column in columns:
+            bottom = np.nonzero(ghost[:, column])[0].max()
+            rows = np.nonzero(image[:bottom + 1, column, 3] > 0)[0]          # top row first
+            if rows.size >= 4 and (np.diff(image[rows, column, 3]) < -2).any():
+                hard += 1
+        return hard, len(columns)
+
+    for source in ("Bar Fill", "Bar Colour"):
+        hard, columns = hard_tops({"spectrum_ghost_color_source": source})
+        assert columns > 100 and hard == 0, source
+    hard, columns = hard_tops(dict(ON["peak_caps"], spectrum_ghost_color_source="Bar Fill"))
+    assert hard > columns // 2

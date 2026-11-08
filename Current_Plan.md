@@ -87,6 +87,12 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - Double-click cycling while expanded skips incapable enabled modes and stays expanded; an explicit selection of
      an incapable mode collapses.
    - Spectrum gains bars in proportion to the extra width (its own milestone after M2, with a fade at the edges).
+     Operator, 8 Nov: "20% more if fullscreen and horizontal". Landed (agent branch): the expanded, horizontal card
+     draws round(1.2 x) the authored bars (cap 64), resampled from the same logical frame by the renderer; the rule's
+     one owner is `widgets/spotify_visualizer/spectrum_display_bar_count.py`, read from the display-wide record
+     (`expanded_display`), so it switches at the fade-through's invisible midpoint. A quarter turn, the ordinary card
+     and Extruded Spectrum (not expansion-capable) keep the authored count. The width-ratio DSP recompute of plan 01
+     M2b stays open; it needs the hidden activation transaction (an engine bar-count change bumps its generation).
    - Operator, 7 Nov night: "Don't reach nearly close enough to the screen borders" and "Don't really hide/disable
      the widgets underneath". Landed 8 Nov (agent branch, lead-audited): the expanded card is inset only by its own
      chrome plus 2 px (14 logical px at 2560 x 1440 with canonical chrome, was 30) and draws the card's own shadow;
@@ -325,10 +331,15 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   Evidence: `.artifacts/evidence/visualizers/spectrum/presets/20261107_lead/` (contact sheets, motion strips, metrics, the
   authoring script). Open: the operator's eyes. Silhouette is the plainest by concept.
 
-  **Operator, 8 Nov:** "definitely better", but none of them ghosted. They drew only the cap line, because the 7 Nov
-  authoring turned ghosting off in all 14. Each now ghosts under its caps in a light colour from its own palette
-  (only the Ghost keys changed). Before and after renders:
-  `.artifacts/evidence/visualizers/spectrum/20261108_ghost/`.
+  **Operator, 8 Nov (twice):** first none of them ghosted; then the flat-colour ghosts under caps were "horsepiss":
+  a solid line on every ghost's top, no blend, and bad colours on 2 and 6. Cause: Peak Caps draw an opaque line
+  right on each ghost's faintest row, and a flat Custom colour cannot continue flag, gradient or patterned bars.
+  Now (v2): caps off on 2-15, and a new Ghost Colour source **Bar Fill** makes each ghost a fading copy of its own
+  bar (fill, gradient, flag or pattern, outline), as Preset 1's Rainbow Ghost continues its rainbow borders. Glass
+  Player ghosts in its cyan Bar Colour, Holo Foil keeps its Rainbow Ghost; opacities sit near Preset 1's.
+  Evidence (falling instants, each preset beside Preset 1 with 2x ghost-top crops):
+  `D:\Temp\Scratch\SRPSS\evidence\visualizers\spectrum\20261108_ghost_v2\` (`before/`, `after/`). Open: the
+  operator's eyes.
 - **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`).
   **The tick cut is merged (7 Nov).** Lead audit: three realistic mutations are each caught by
   `tests/test_waveform_logical_tick_exactness.py` (a Gaussian cache key ignoring the width, one shifted grid shared

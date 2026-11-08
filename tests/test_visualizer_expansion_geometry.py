@@ -245,8 +245,8 @@ def test_the_owner_shows_the_display_and_restores_the_ordinary_record_byte_for_b
 @pytest.mark.parametrize("mode", [d.mode_id for d in iter_all_visualizer_mode_descriptors()
                                   if d.supports_expanded_display])
 def test_published_logical_frames_are_identical_ordinary_and_expanded(qt_app, looped_clip, mode):
-    """Reactivity and payload are untouched for every capable mode (Spectrum's bars widen until its bar-count
-    milestone). Bubble and Waveform Ribbon are extent-sensitive sentinels: their logical worlds read the
+    """Reactivity and payload are untouched for every capable mode (Spectrum's extra bars on the expanded
+    horizontal card are drawn from these same frames: ``spectrum_display_bar_count``). Bubble and Waveform Ribbon are extent-sensitive sentinels: their logical worlds read the
     controller's committed extent (Bubble's world, Waveform's visible span), so a display-wide record reaching the
     controller would change their frames (``tools/expanded_visualizer_evidence.leak_control``)."""
     clip = looped_clip

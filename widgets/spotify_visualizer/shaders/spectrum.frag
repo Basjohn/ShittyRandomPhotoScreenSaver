@@ -44,6 +44,7 @@ uniform float u_bar_span_px;
 // fade envelopes, so a toggled decoration fades instead of popping.
 uniform float u_ghost_custom_mix;   // 0 = ghosts in the border colour, 1 = the custom ghost colour
 uniform vec4 u_ghost_color;
+uniform float u_ghost_fill_mix;     // 0 = the colour above, 1 = Bar Fill: the bar's own fill surface where the ghost is
 uniform float u_ghost_gradient_mix; // ghost shades toward the tip colour at the peak
 uniform vec4 u_ghost_tip_color;
 uniform float u_gloss;              // glassy highlight across each bar
@@ -374,6 +375,24 @@ vec4 spectrum_bar_surface(vec4 c, float lx, float bw, float y, float fx, float s
     return c;
 }
 
+// Ghost Colour Bar Fill: the ghost is a fading copy of its own bar's surface at this pixel. Inside the bar's border
+// it shows the fill (``fill`` already carries the Fill Gradient at this height; Rainbow Fill, a pattern or flag sheet
+// and gloss follow); on the bar's side border (and, in Segments, each segment's border ring) it shows the border
+// colour at the border's own opacity, so a transparent or dark outline stays one on the ghost. The ghost never
+// takes the bar's top stroke: nothing draws a line over its fading top. Rainbow Ghost, when on, colours it instead.
+vec4 spectrum_ghost_fill(vec4 ghost, vec4 fill, bool on_border, int bidx, float lx, float bw, float y, float fx,
+                         float scale) {
+    if (u_rainbow_ghost == 1 || u_ghost_fill_mix <= 0.0) return ghost;
+    float k = clamp(u_ghost_fill_mix, 0.0, 1.0);
+    if (on_border) {
+        vec4 edge = (u_rainbow_border == 1) ? apply_spectrum_rainbow(u_border_color, bidx) : u_border_color;
+        return vec4(mix(ghost.rgb, edge.rgb, k), ghost.a * mix(1.0, clamp(u_border_color.a, 0.0, 1.0), k));
+    }
+    vec4 surface = (u_rainbow_fill == 1) ? apply_spectrum_rainbow(fill, bidx) : fill;
+    surface = spectrum_bar_surface(surface, lx, bw, y, fx, scale);
+    return vec4(mix(ghost.rgb, surface.rgb, k), ghost.a);
+}
+
 // Peak cap coverage: a band ``thickness`` tall a small gap above ``top``, box-filtered over the pixel so a
 // moving cap never loses its coverage at fractional heights.
 float spectrum_cap_coverage(float y, float top, float scale) {
@@ -661,7 +680,10 @@ void main() {
             float ghost_factor = mix(1.0, 0.15, t);
             // Ghost visibility is owned by its opacity, not border alpha. An
             // author may deliberately use fully transparent or black borders.
-            vec4 ghost_base = spectrum_ghost_tip(spectrum_ghost_colour(bar_index, u_fade), t);
+            bool ghost_side = (bw_px <= 2.0 * authored_scale) || bx <= authored_scale
+                || bx >= bw_px - authored_scale;
+            vec4 ghost_base = spectrum_ghost_tip(spectrum_ghost_fill(spectrum_ghost_colour(bar_index, u_fade), fill,
+                ghost_side, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale), t);
             ghost_base.a *= ghost_alpha * ghost_factor;
             sp_color = ghost_base;
             sp_is_border = true;
@@ -812,7 +834,7 @@ void main() {
     float by = floor(seg_local_y);
 
     bool on_border = false;
-    if (is_bar_frag) {
+    if (is_bar_frag || is_ghost_frag) {
         if (bw_px <= 2.0 * authored_scale || sh_px <= 2.0 * authored_scale) {
             on_border = true;
         } else {
@@ -852,7 +874,8 @@ void main() {
             ghost_t = t;
         }
 
-        vec4 ghost = spectrum_ghost_tip(spectrum_ghost_colour(bar_index, u_fade), ghost_t);
+        vec4 ghost = spectrum_ghost_tip(spectrum_ghost_fill(spectrum_ghost_colour(bar_index, u_fade), fill,
+            on_border, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale), ghost_t);
         ghost.a *= ghost_alpha * ghost_factor;
         out_color = ghost;
         seg_is_border = true;

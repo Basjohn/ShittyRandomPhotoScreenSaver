@@ -1020,6 +1020,9 @@ class ResolvedVisualizerPresentation:
     # this token without changing the outer card geometry.
     content_rotation_quarters: int = 0
     shell_style: FrozenFields = FrozenFields()
+    # True only for the Expanded Visualizer's display-wide record (``resolve_expanded_visualizer_presentation``);
+    # a mode may draw it differently (Spectrum: ``spectrum_display_bar_count``). Never persisted.
+    expanded_display: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.shell_policy, VisualizerShellPolicy):
@@ -1027,6 +1030,7 @@ class ResolvedVisualizerPresentation:
         if not isinstance(self.clip_policy, VisualizerClipPolicy):
             raise TypeError("clip policy must already be resolved")
         object.__setattr__(self, "viewport_resize_capable", bool(self.viewport_resize_capable))
+        object.__setattr__(self, "expanded_display", bool(self.expanded_display))
         object.__setattr__(self, "outer_rect", _rect_tuple(self.outer_rect, name="outer rect"))
         object.__setattr__(self, "content_rect", _rect_tuple(self.content_rect, name="content rect"))
         object.__setattr__(self, "dpr", _finite(self.dpr, name="DPR"))

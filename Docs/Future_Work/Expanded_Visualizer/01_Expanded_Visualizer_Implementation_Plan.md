@@ -571,6 +571,13 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 
 > "Spectrum would need to add a percentage of bars though based on how much wider it is when it goes full screen."
 
+Operator, 8 Nov: "20% more if fullscreen and horizontal." **Landed** as a presentation rule: the display-wide record
+(`ResolvedVisualizerPresentation.expanded_display`) of a horizontal card draws round(1.2 x) the authored bars, capped
+at 64 (`widgets/spotify_visualizer/spectrum_display_bar_count.py`, the one owner). The renderer resamples the same
+logical bars and peaks, so logical frames and their digests stay identical ordinary and expanded, and the count
+switches with the record at the fade-through's midpoint (card invisible). A quarter-turned card keeps the authored
+count (`tests/test_spectrum_expanded_bar_count.py`). The DSP recompute below remains open.
+
 - [ ] Expanded bar count = the card's bar count x (expanded content width / card content width), clamped to the
   DSP's maximum, so a bar keeps its authored width.
 - [ ] The DSP band layout is recomputed at the expand and collapse edges behind a fade (never a jump), through the
