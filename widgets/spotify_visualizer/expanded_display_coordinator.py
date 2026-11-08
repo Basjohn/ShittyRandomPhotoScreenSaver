@@ -20,6 +20,10 @@ translates the facts in and performs the actions it returns through the existing
   every family, model, provider and display lease (Media, Gmail, Feeds, Steam...) stays exactly as it was, so the
   Visualizer's Media truth and every shared backend keep their consumers, and collapsing returns each widget exactly
   as it was. The OSD's foreground lane is outside the cover. Other displays are never touched.
+* Fullscreen Edit (M3c): Edit entered on a resting expanded view keeps it expanded (no collapse transaction); the
+  display manager then opens the Edit session on the full-display overlays only (``fullscreen_edit``). A collapse
+  press under it is answered through the Edit session (declined: its draft and Edit stay); the one forced end
+  (an incapable mode became the Visualizer's) ends the session through ``end_fullscreen_edit``.
 
 Fences (§0.5): the takeover generation is this coordinator's own admission serial, advanced at every owner
 admission (a Settings return or topology change replaces the display manager, and with it this object). The
@@ -43,6 +47,7 @@ from core.expanded_visualizer_takeover import (
     EditEntered,
     EditExited,
     EditResolutionDeclined,
+    EndFullscreenEdit,
     EnterCommitted,
     EnterFailed,
     EnterPrepared,
@@ -99,6 +104,8 @@ class ExpandedDisplayServices:
     publish_glyph: Callable[[Any, bool, bool], None]
     #: Cover (True) or uncover the ordinary widget lanes on one unit: (unit, covered, fade seconds; 0 snaps).
     cover_widgets: Callable[[Any, bool, float], None] = lambda _unit, _covered, _fade_s: None
+    #: End a Fullscreen Edit session whose expanded view cannot stay (its draft is not saved).
+    end_fullscreen_edit: Callable[[], None] = lambda: None
 
 
 def display_key(unit: Any) -> str | None:
@@ -162,6 +169,12 @@ class ExpandedDisplayCoordinator:
         display manager leaves it out of image batches while it already shows an image (plan 01 E0, M4)."""
 
         return self._cover_unit
+
+    @property
+    def fullscreen_edit(self) -> bool:
+        """Edit is open on the expanded view (M3c): it edits the full-display overlays, never the ordinary layout."""
+
+        return bool(self._state.edit_fullscreen)
 
     @property
     def blocks_ordinary_layout(self) -> bool:
@@ -285,7 +298,9 @@ class ExpandedDisplayCoordinator:
             self._transfer_done = False
 
     def edit_entered(self) -> None:
-        """Before an Edit session (or a direct Alt gesture) starts: an expanded view collapses first, at once."""
+        """Before an Edit session (or a direct Alt gesture) starts. A resting expanded view stays expanded and the
+        Edit becomes Fullscreen Edit (``fullscreen_edit``); a view still entering or moving collapses at its commit
+        edge, as before (an ordinary Edit)."""
 
         if not self._retired and not self._state.edit_active:
             self._feed(EditEntered(self._generation))
@@ -397,9 +412,12 @@ class ExpandedDisplayCoordinator:
             self._rejected.add(action.request_id)
             logger.info("[EXPANDED_VIS] Mode request refused: %s", action.reason)
         elif isinstance(action, RequestEditResolution):
-            # The glyph is withdrawn under Edit, so this arises only from a stale press: never discard a draft
-            # implicitly; the session keeps its draft and Edit.
+            # The glyph is withdrawn under Edit (Fullscreen Edit too), so this arises only from a stale press: never
+            # discard or save a draft implicitly; the session keeps its draft and Edit (Save or Cancel first).
             self._events.append(EditResolutionDeclined(generation))
+        elif isinstance(action, EndFullscreenEdit):
+            logger.warning("[EXPANDED_VIS] Fullscreen Edit ends with its view (the mode is no longer capable)")
+            self._services.end_fullscreen_edit()
         elif isinstance(action, BeginTransfer):
             # Only an ordinary move that already committed is reported. An expanded transfer is M5 (one
             # source-collapse + transfer + target-expand transaction); until then the routes refuse it.

@@ -102,6 +102,7 @@ class _Host:
         self.edit = False
         self.glyphs: list[tuple[str, bool, bool]] = []
         self.covers: list[tuple[str, bool, float]] = []
+        self.fullscreen_edit_ends = 0
         self.coordinator = ExpandedDisplayCoordinator(ExpandedDisplayServices(
             admitted_owner=lambda: self.owner,
             admitted_unit=lambda: self.unit,
@@ -113,7 +114,13 @@ class _Host:
                 (display_key(unit), bool(available), bool(expanded))),
             cover_widgets=lambda unit, covered, fade_s: self.covers.append(
                 (display_key(unit), bool(covered), float(fade_s))),
+            end_fullscreen_edit=self._end_fullscreen_edit,
         ))
+
+    def _end_fullscreen_edit(self) -> None:
+        self.fullscreen_edit_ends += 1
+        self.edit = False
+        self.coordinator.edit_exited(saved=False)
 
     def _persist(self, value: bool) -> None:
         self.requested = bool(value)
@@ -266,17 +273,59 @@ def test_a_mode_request_during_a_transition_is_refused_without_change():
     assert not accepted and forwarded == []
 
 
-def test_edit_collapses_at_once_and_its_exit_restores_without_writing():
+def test_edit_on_an_expanded_view_is_fullscreen_edit_without_a_collapse_transaction():
+    """M3c (operator, 8 Nov; supersedes "entering Edit collapses"): Edit on the expanded view keeps it expanded."""
     host = _expanded_by_user()
+    calls, covers = list(host.owner.calls), list(host.covers)
     host.edit = True
     host.coordinator.edit_entered()
-    assert host.owner.calls[-1] == (False, False)             # Edit never shows an expanded state
-    assert host.coordinator.phase is Phase.ORDINARY and host.glyph == (False, False)
+    assert host.owner.calls == calls                          # no collapse transaction reached the owner
+    assert host.covers == covers                              # the ordinary widgets stay covered
+    assert host.coordinator.phase is Phase.EXPANDED and host.coordinator.fullscreen_edit
+    assert host.glyph == (False, True)                        # the glyph is withdrawn under Edit, as in every Edit
+    # A stale collapse press goes through the session's resolution, which keeps the draft and Edit.
+    assert not host.press(False)
+    assert host.owner.calls == calls and host.writes == [True] and host.coordinator.fullscreen_edit
+    host.edit = False
+    host.coordinator.edit_exited(saved=True)
+    assert host.owner.calls == calls and host.writes == [True]
+    assert host.coordinator.phase is Phase.EXPANDED and not host.coordinator.fullscreen_edit
+    assert host.glyph == (True, True)
+
+
+def test_an_ordinary_edit_begun_while_entering_collapses_at_once_at_the_commit_and_restores_after():
+    host = _Host()
+    host.coordinator.generation_ready()
+    assert host.press(True)                                   # entering (the fade runs)
+    host.edit = True
+    host.coordinator.edit_entered()
+    assert not host.coordinator.fullscreen_edit
+    host.owner.finish()                                       # the enter commits, then collapses for Edit at once
+    assert host.owner.calls[-1] == (False, False) and host.coordinator.phase is Phase.ORDINARY
     host.edit = False
     host.coordinator.edit_exited(saved=True)
     assert host.owner.calls[-1] == (True, True)
     host.owner.finish()
     assert host.coordinator.phase is Phase.EXPANDED and host.writes == [True]
+
+
+def test_an_incapable_activation_under_fullscreen_edit_ends_the_session_first():
+    host = _expanded_by_user()
+    host.edit = True
+    host.coordinator.edit_entered()
+    host.complete_mode(INCAPABLE)                             # unreachable by request; the reducer stays total
+    assert host.fullscreen_edit_ends == 1 and not host.coordinator.fullscreen_edit
+    assert host.owner.calls[-1] == (False, True)
+
+
+def test_an_incapable_request_under_fullscreen_edit_is_refused_without_change():
+    host = _expanded_by_user()
+    host.edit = True
+    host.coordinator.edit_entered()
+    calls = list(host.owner.calls)
+    accepted, forwarded = host.request_mode(INCAPABLE)
+    assert not accepted and forwarded == [] and host.owner.calls == calls
+    assert host.coordinator.phase is Phase.EXPANDED and host.coordinator.fullscreen_edit
 
 
 def test_a_direct_layout_gesture_fails_the_preflight():
@@ -336,14 +385,27 @@ def test_the_widgets_fade_out_with_the_enter_and_back_in_with_the_collapse():
     assert len(host.covers) == 2
 
 
-def test_a_restore_before_reveal_and_edits_collapse_snap_the_cover():
+def test_a_restore_before_reveal_snaps_the_cover_and_fullscreen_edit_keeps_it():
     host = _Host(requested=True)
     host.coordinator.generation_ready()
     key = display_key(host.unit)
     assert host.covers == [(key, True, 0.0)]                  # never shown before reveal: no fade, no flash
     host.edit = True
-    host.coordinator.edit_entered()
-    assert host.covers[-1] == (key, False, 0.0)               # Edit edits the ordinary layout at once
+    host.coordinator.edit_entered()                           # Fullscreen Edit: the widgets stay covered
+    host.edit = False
+    host.coordinator.edit_exited(saved=False)
+    assert host.covers == [(key, True, 0.0)]
+
+
+def test_an_ordinary_edits_collapse_snaps_the_cover():
+    host = _Host()
+    host.coordinator.generation_ready()
+    key = display_key(host.unit)
+    host.press(True)
+    host.edit = True
+    host.coordinator.edit_entered()                           # begun while entering: an ordinary Edit
+    host.owner.finish()
+    assert host.covers[-1] == (key, False, 0.0)               # it edits the ordinary layout at once
     host.edit = False
     host.coordinator.edit_exited(saved=False)
     assert host.covers[-1] == (key, True, HALF)               # the intent re-applies, with the fade
