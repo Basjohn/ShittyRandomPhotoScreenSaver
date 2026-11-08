@@ -200,6 +200,39 @@ switch never remaps.
    processes; a free-running writer stranded the reader after frame 7 on the old edge rule), C2 (seqlock read order:
    `sequence_end` first, `sequence_begin` last; an interleaved overwrite was accepted torn), H3a, H4, H6, M2. Open:
    4b, 4c and 5 below.
+4P. **P2b (decided 8 Nov, 4c): the worker owns audio capture, DSP and the tick.** The main process keeps no beat
+   engine on the product path; it sends control edges and takes frames.
+   - **Worker side:** `WorkerType.VISUALIZER` hosts the production `_SpotifyBeatEngine` with its
+     `SpotifyVisualizerAudioWorker` (loopback capture through `utils/audio_capture.py`: pyaudiowpatch WASAPI on
+     Windows, sounddevice / Pulse monitor elsewhere), its own `ThreadManager` (the capture lane and the compute pool
+     the engine requires, `beat_engine.py:252-272`), and the logical runtime's cadence (the worker paces its own
+     ticks; the main process no longer drives them). Frames go out through the existing `PacketMailbox` writer and
+     wake; everything below the engine (ABI, codec, mailbox, wake, `EngineSession`'s controller and mode runtimes) is
+     reused unchanged.
+   - **Control edges (main -> worker), from the owner's engine calls today** (`quick_display_visualizer_owner.py`):
+     display power (`acquire` / `ensure_started` / `release`, `set_display_power` ~251), playing (`set_playback_state`
+     and `wake`, `set_playing` ~594; it also reads the private `_play_ramp_start_ts`, which becomes a field of the
+     frame or the reply), mode activation (`begin_activation_transaction` / `end_activation_transaction`,
+     `_activate_pending_mode` ~1578), start/retire (`set_runtime_generation`, `acquire` / `release`, `start` ~1766,
+     `retire` ~1845), configuration (`_apply_configuration` ~389: the DSP technical config and the logical config,
+     as a resolved-settings delta applied at a tick boundary, never a rebuild), plus the framed view inputs and park.
+     `visualizer_host_binding.py:468` reads the engine's generation/activation at bind: they come back in the
+     configure reply and in every frame.
+   - **What the main process still needs from the engine:** only what frames carry (identities, playing,
+     readiness). Anything else the owner or Settings reads from the live engine today must be found and turned into
+     a frame field or a reply (inventory first, as 4's read audit did).
+   - **Not affected:** the Studios and offline replays keep their in-process replay engines
+     (`ui/studio/*`, `feature_replay`); only the product path moves.
+   - **Capture device ownership:** one process owns the loopback device; the worker opens it after `VIS_CONFIGURE`
+     and closes it on park/retire/stop, so a restarted worker never collides with a dying one (the supervisor waits
+     for the old process's exit before starting capture in the new one). A capture failure is reported like a crash
+     (fail closed, fade, reconfigure once).
+   - **Gates:** (1) identity: the worker's production DSP on recorded PCM (`inputs="lanes"`, already built) equals the
+     in-process owner; (2) 4b's live-engine gate: `_SpotifyBeatEngine` with the real audio worker fed PCM blocks
+     offline through the capture callback, in process vs in the worker; (3) gate 3 with the main process's GIL time
+     before/after.
+   - **Deleted when P2b lands:** `core/visualizer_engine/engine_snapshot.py`, the `snapshot` session input and its
+     tests and tools (`engine_main_cost.py` stays as the record of the decision).
 4b. Live-engine and off-steady-state gates (audit H3): a gate whose reference is the live `_SpotifyBeatEngine` fed
    PCM through the real audio worker (offline, blocks pushed into the capture callback, so asynchronous commits are in
    play); gate clips with pause/resume, a warm re-entry (fence armed) and an in-session mode switch; the read audit
