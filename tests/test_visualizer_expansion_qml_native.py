@@ -102,6 +102,34 @@ def test_the_glyph_sits_in_the_upper_right_safe_zone_clear_of_the_hint(glyph_car
 
 
 @pytest.mark.qt
+def test_the_camera_controls_stay_offered_and_working_while_display_wide(glyph_card):
+    """Operator, 8 Nov ("the fullscreen visualizer is also missing its rotate glyph"): the framed camera's in-card
+    controls are the card's on the display-wide view too: Reset Camera (the rotate arrow), the preset steps and the
+    3D control hint show under the same admission, clear of the collapse glyph, and Reset Camera still acts."""
+    card = glyph_card
+    root = card.scene._visualizer_root
+    root.setProperty("presentationActive", True)
+    card.scene.set_visualizer_camera_reset_available(True)
+    card.scene.set_visualizer_control_hints_available(True)
+    resets = []
+    card.scene.visualizer_camera_reset_requested.connect(lambda *_args: resets.append(1))
+    for expanded in (False, True):
+        card.scene.set_visualizer_expand_glyph(True, expanded)
+        reset = _find(root, "visualizerCameraResetGlyph")
+        steps = _find(root, "visualizerPresetControls")
+        assert reset.isVisible() and steps.isVisible(), expanded
+        assert bool(root.property("controlHintEligible")), expanded
+        glyph = _glyph(card)
+        for control in (reset, steps):
+            assert control.x() + control.width() <= glyph.x() or control.y() >= glyph.y() + glyph.height()
+        _click(card, _hovered(reset))
+        assert len(resets) == (2 if expanded else 1), expanded
+        root.setProperty("widgetGlowAdmitted", False)       # the same input admission as on the card
+        assert not reset.isVisible()
+        root.setProperty("widgetGlowAdmitted", True)
+
+
+@pytest.mark.qt
 def test_edit_glyphs_are_withdrawn_while_display_wide(glyph_card):
     card = glyph_card
     root = card.scene._visualizer_root
