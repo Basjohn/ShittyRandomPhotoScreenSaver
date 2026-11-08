@@ -50,8 +50,8 @@ def _owner_class(constructed: list):
             self.origins: list[tuple[float, float]] = []
             constructed.append(self)
 
-        def configure(self, **_kwargs) -> None:
-            return None
+        def configure(self, **kwargs) -> None:
+            self.configured = dict(kwargs)
 
         def resolved_outer_size(self):
             return (420.0, 280.0)
@@ -273,6 +273,26 @@ def test_one_owner_across_construct_transfer_retire_onto_a_stub_second_host(cons
     assert binding.construct(second_host) is True
     assert len(constructed) == 2
     assert sum(not candidate.is_retired for candidate in constructed) == 1
+
+
+def test_the_binding_hands_the_owner_the_activations_resolved_inputs(constructed) -> None:
+    # Checkpoint audit 6, A6-L4: the owner's configure records the activation the binding resolved (settings model,
+    # resolved activation, technical cache); ``activation=None`` keeps what the controller holds, so a binding that
+    # dropped the keyword would leave the controller with no model and an empty technical cache, silently.
+    from core.settings.models import SpotifyVisualizerSettings
+    from widgets.spotify_visualizer.visualizer_host_binding import VisualizerHostBinding
+
+    host = _StubHost(3)
+    caller = _Caller([host])
+    assert VisualizerHostBinding(caller.services()).construct(host) is True
+    (owner,) = constructed
+    activation = owner.configured.get("activation")
+    assert activation is not None and set(activation) == {"settings_model", "resolved_activation", "technical_cache"}
+    model = activation["settings_model"]
+    assert isinstance(model, SpotifyVisualizerSettings) and model.mode == owner.controller.mode_id
+    assert activation["resolved_activation"] is not None and activation["resolved_activation"].mode == model.mode
+    assert isinstance(activation["technical_cache"], dict) and activation["technical_cache"]
+    assert owner.configured["playing"] is False
 
 
 def test_the_binding_admits_card_input_and_clears_it_on_route_release(constructed) -> None:
