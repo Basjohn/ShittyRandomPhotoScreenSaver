@@ -174,9 +174,9 @@ def test_fullscreen_edit_envelopes_on_the_worker(qt_app, pcm, monkeypatch, pre_f
         if pre_fix:
             committed = owner_module.QuickDisplayVisualizerOwner._on_worker_committed
 
-            def stale(self, commit, identity):
+            def stale(self, commit, identity, *records):
                 count = self._controller.bar_count
-                committed(self, commit, identity)
+                committed(self, commit, identity, *records)
                 self._controller.bar_count = count
 
             monkeypatch.setattr(owner_module.QuickDisplayVisualizerOwner, "_on_worker_committed", stale)
@@ -194,6 +194,66 @@ def test_fullscreen_edit_envelopes_on_the_worker(qt_app, pcm, monkeypatch, pre_f
         session_count = stand_in.worker._session.bar_count
         assert session_count != before, before            # the switch changes it (else the check proves nothing)
         assert (owner.controller.bar_count == session_count) is not pre_fix
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_presets_auto_rotate_is_armed_once_by_the_session(qt_app, pcm, monkeypatch, pre_fix):
+    # Checkpoint audit 8, A8-L2: a same-mode preset with Auto Rotate on. The session's commit arms it once (as the
+    # in-process commit does); the main side adopts that record and sends nothing back, so the session's swivel keeps
+    # the start its commit gave it. Negative control (the pre-fix main side, arming again at the reply): two immediate
+    # armings, and the main side's later record replaces the session's, stepping the turn back by the reply's latency.
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+    from widgets.spotify_visualizer import view_orbit
+    from widgets.spotify_visualizer.config_applier import presentation_setting_range
+
+    mode = "shockwave_grid"
+    armed: list = []
+    arm = view_orbit.arm_view_auto_rotate
+
+    def recording(host, mode_id, now, *, immediate):
+        record = arm(host, mode_id, now, immediate=immediate)
+        if immediate and record is not None:
+            armed.append(record)
+        return record
+
+    monkeypatch.setattr(view_orbit, "arm_view_auto_rotate", recording)
+    if pre_fix:
+        committed = owner_module.QuickDisplayVisualizerOwner._on_worker_committed
+
+        def arm_again_at_the_reply(self, commit, identity, *records):
+            committed(self, commit, identity, *records)
+            if commit["kind"] == "preset":
+                now = float(self._transition_clock())
+                view_orbit.rebase_view_orbit_motion(self._controller.presentation_state, now)
+                view_orbit.arm_view_auto_rotate(self._controller.presentation_state, commit["target"], now,
+                                                immediate=True)
+
+        monkeypatch.setattr(owner_module.QuickDisplayVisualizerOwner, "_on_worker_committed", arm_again_at_the_reply)
+    enable, after_key, speed_key = get_visualizer_mode_descriptor(mode).view_auto_rotate_settings
+    stand_in, rig, owner = _stand_in_rig(pcm, mode)
+    try:
+        _pump(rig, 0.4)
+        inputs = gate.activation_inputs(rig.widgets, mode)
+        kwargs = dict(inputs["presentation_kwargs"])
+        kwargs[enable] = True                                  # Auto Rotate on for this preset (a test-owned input)
+        for key in (after_key, speed_key):
+            if not float(kwargs.get(key) or 0.0) > 0.0:
+                low, high = presentation_setting_range(key)
+                kwargs[key] = low + 0.5 * (high - low)
+        inputs["presentation_kwargs"] = kwargs
+        assert owner.request_preset_change(mode, **inputs)
+        _pump(rig, 3.0, until=lambda: owner._mode_transition_phase == "idle" and not owner._worker.busy)
+        _pump(rig, 0.3)
+        session = stand_in.worker._session._controller.presentation_state._view_orbit_auto_rotate
+        main = owner.controller.presentation_state._view_orbit_auto_rotate
+        assert len(armed) == (2 if pre_fix else 1), armed
+        assert session is not None and main == session
+        assert (session == armed[0]) is not pre_fix, (session, armed)
     finally:
         rig.close()
         stand_in.close()

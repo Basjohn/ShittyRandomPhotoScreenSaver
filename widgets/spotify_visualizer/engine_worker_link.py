@@ -507,21 +507,31 @@ class EngineWorkerLink:
         self._send(MessageType.VIS_SET_VIEW, payload, on_reply=self._view_answered)
         return True
 
+    def adopt_presentation_inputs(self, values: Mapping[str, Any]) -> None:
+        """Presentation inputs the session itself wrote (a preset commit's view records, A8-L2), which the main side
+        adopts: recorded as held by the session, so they are not sent back."""
+        from widgets.spotify_visualizer.logical_edges import detach_presentation_value
+
+        self._presentation_sent.update({attr: detach_presentation_value(value) for attr, value in values.items()})
+
     def _view_answered(self, _reply: dict) -> None:
         self._view_in_flight = False
         self.send_view()                              # the newest view, if it moved on meanwhile
 
     # -------------------------------------------------------------------------------------------------------------
 
-    def set_mode(self, mode: str, activation: Mapping[str, Any], *, on_committed: Callable[[tuple[int, int]], None],
+    def set_mode(self, mode: str, activation: Mapping[str, Any], *,
+                 on_committed: Callable[[tuple[int, int], dict], None],
                  on_failed: Callable[[EngineWorkerFailure], None]) -> None:
         """``VIS_SET_MODE`` applied at once (the owner's hidden activation commit, in the worker): another mode, or the
         same mode as a preset / settings re-activation. The reply calls ``on_committed`` with the committed (generation,
-        activation id); a failure calls ``on_failed`` (the session closes on a failed apply, A6-M2)."""
+        activation id) and the session's view records as the commit left them (A8-L2: the owner adopts them, see
+        ``adopt_presentation_inputs``); a failure calls ``on_failed`` (the session closes on a failed apply, A6-M2)."""
         from core.process.types import MessageType
 
         def committed(reply: dict) -> None:
-            on_committed((int(reply["engine_generation"]), int(reply["activation_id"])))
+            on_committed((int(reply["engine_generation"]), int(reply["activation_id"])),
+                         dict(reply.get("view_records") or {}))
 
         self._send(MessageType.VIS_SET_MODE, {
             "mode": str(mode), "activation": {key: activation[key] for key in ACTIVATION_KEYS}, "at_once": True},

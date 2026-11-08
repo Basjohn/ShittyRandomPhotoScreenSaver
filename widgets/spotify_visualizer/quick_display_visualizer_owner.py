@@ -1928,8 +1928,14 @@ class QuickDisplayVisualizerOwner:
         link = self._worker
         profile_changed = kind == "mode" and (get_visualizer_layout_profile(target)
                                               != get_visualizer_layout_profile(outgoing_mode))
+        from widgets.spotify_visualizer.logical_edges import VIEW_RECORD_ATTRS
+
+        state = controller.presentation_state
         commit = {"link": link, "kind": kind, "target": target, "outgoing": outgoing_mode, "inputs": inputs,
-                  "profile_changed": profile_changed, "edit_profile_switched": edit_profile_switched}
+                  "profile_changed": profile_changed, "edit_profile_switched": edit_profile_switched,
+                  # The main side's view records as the commit is sent: one the GUI thread replaces before the reply
+                  # (a camera key meanwhile) is newer than the session's commit and is kept (A8-L2).
+                  "view_records": {attr: getattr(state, attr, None) for attr in VIEW_RECORD_ATTRS}}
         self._worker_commit = commit
         self._waiting_target_since = now
         self._mode_transition_phase = "waiting_target"
@@ -1944,14 +1950,17 @@ class QuickDisplayVisualizerOwner:
             link.send_view(force=True)
         try:
             link.set_mode(target, inputs,
-                          on_committed=lambda identity, _commit=commit: self._on_worker_committed(_commit, identity),
+                          on_committed=lambda identity, records, _commit=commit: self._on_worker_committed(
+                              _commit, identity, records),
                           on_failed=lambda failure, _commit=commit: self._on_worker_commit_failed(_commit, failure))
         except Exception as exc:
             self._on_worker_commit_failed(commit, exc)
 
-    def _on_worker_committed(self, commit: dict[str, Any], identity: tuple[int, int]) -> None:
-        """GUI thread, ``VIS_SET_MODE``'s reply: the target's committed identity. The main side's presentation of the
-        target, bound for that identity; the target stays hidden until its first presentable frame (``waiting_target``)."""
+    def _on_worker_committed(self, commit: dict[str, Any], identity: tuple[int, int],
+                             view_records: Mapping[str, Any] | None = None) -> None:
+        """GUI thread, ``VIS_SET_MODE``'s reply: the target's committed identity (and the session's view records as
+        its commit left them). The main side's presentation of the target, bound for that identity; the target stays
+        hidden until its first presentable frame (``waiting_target``)."""
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from widgets.spotify_visualizer.engine_worker_link import configure_presentation_side
 
@@ -1969,10 +1978,22 @@ class QuickDisplayVisualizerOwner:
         configure_presentation_side(controller, activation=inputs, playing=controller.playing,
                                     refresh_presentation=self._refresh_backdrop, **self._configure_services)
         if kind == "preset":
-            from widgets.spotify_visualizer.view_orbit import arm_view_auto_rotate, rebase_view_orbit_motion
+            from widgets.spotify_visualizer.view_orbit import rebase_view_orbit_motion
 
-            rebase_view_orbit_motion(controller.presentation_state, now)
-            arm_view_auto_rotate(controller.presentation_state, target, now, immediate=True)
+            # One arming owner (A8-L2): the session's commit rebased the motion and armed Auto Rotate (as the
+            # in-process commit does, once, at its own time); the main side adopts those records instead of arming
+            # again at the reply, which stepped the turn back by the reply's latency. The rebase here only drops the
+            # GUI's own drag tail and inertia; a record the GUI replaced since the commit was sent is newer and stays
+            # (it is forwarded as any edit is).
+            state = controller.presentation_state
+            before = commit["view_records"]
+            current = {attr: getattr(state, attr, None) for attr in before}
+            rebase_view_orbit_motion(state, now)
+            adopted = {attr: value for attr, value in (view_records or {}).items()
+                       if attr in before and current[attr] is before[attr]}
+            for attr, value in adopted.items():
+                setattr(state, attr, value)
+            commit["link"].adopt_presentation_inputs(adopted)
         self._activation_inputs = dict(inputs)
         self._worker_identity = (generation, activation_id)
         self._render_identity = self._runtime.bind_visualizer_render_source(
