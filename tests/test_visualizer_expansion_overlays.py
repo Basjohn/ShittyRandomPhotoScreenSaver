@@ -411,6 +411,112 @@ def test_playback_resuming_leaves_always_show_as_it_is(display):
     assert lowest == [1.0, 1.0]                                    # no dip, no content crossfade
 
 
+# ------------------------------------------------------------------------------------------- Show On Hover
+
+
+def _pointer(display, point: QPointF, kind=QEvent.Type.MouseMove, button=Qt.MouseButton.NoButton,
+             buttons=Qt.MouseButton.NoButton) -> None:
+    """One real pointer event delivered to the hidden window (a move with no button is a hover)."""
+    QCoreApplication.sendEvent(display.window, QMouseEvent(kind, point, point, point, button, buttons,
+                                                           Qt.KeyboardModifier.NoModifier))
+    _render(display)
+
+
+def _centre(item) -> QPointF:
+    return item.mapToScene(QPointF(item.width() / 2.0, item.height() / 2.0))
+
+
+@pytest.mark.qt
+def test_show_on_hover_fades_now_playing_back_in_where_it_sits_and_out_after_the_pointer_leaves(display):
+    """Operator, 8 Nov: "the media section should optionally refade in if hovered over where it was positioned.
+    Without timers or polling." With Show On Hover on, real pointer moves onto where the faded-out Now Playing sits fade
+    it back in (gently) and hold it while the pointer rests; leaving runs the reveal's own hold and fade-out. The
+    preset toast is untouched; nothing reveals while Fullscreen Edit is open; a press there reaches what it reached
+    without the option (the region takes no input); with the option off a hover does nothing."""
+    name = "expandedOverlayNowPlaying"
+    _draw(display, media=_Media(), config=_config(now_playing={"hover_reveal": True}))
+    _open(display)
+    _settle(display, lambda: all(_shown(display, slot) for slot in SLOTS))
+    _settle(display, lambda: not any(_shown(display, slot) for slot in SLOTS))   # the entering reveal retired
+    slot, preset = _slot(display, name), _slot(display, "expandedOverlayPreset")
+    away = QPointF(WIDTH * 0.75, HEIGHT * 0.45)
+    _pointer(display, away)
+    _run(display, 300)
+    assert not _shown(display, name)                                  # a hover elsewhere is no event
+
+    rises: list[float] = []
+    _pointer(display, _centre(slot))
+    _settle(display, lambda: rises.append(float(_prop(slot, "presence"))) or rises[-1] >= 1.0)
+    assert any(0.0 < value < 1.0 for value in rises)                  # it faded in (never popped)
+    assert rises == sorted(rises)
+    _run(display, 3 * (FAST["holdMs"] + FAST["fadeOutMs"]))           # resting: held well past a reveal's window
+    assert float(_prop(slot, "presence")) >= 1.0 and _prop(slot, "hoverHeld") is True
+    assert not _shown(display, "expandedOverlayPreset")               # the toast is untouched
+
+    falls: list[float] = []
+    _pointer(display, away)                                           # leaving: hold, then the reveal's fade-out
+    _run(display, FAST["holdMs"] // 2, lambda: falls.append(float(_prop(slot, "presence"))))
+    assert min(falls) >= 1.0
+    _settle(display, lambda: falls.append(float(_prop(slot, "presence"))) or not _shown(display, name))
+    assert any(0.0 < value < 1.0 for value in falls) and falls == sorted(falls, reverse=True)
+    assert _prop(slot, "hoverHeld") is False and _prop(slot, "shown") is False
+
+    # A press where Now Playing sits reaches what it reached with the option off: the region takes no input.
+    _pointer(display, _centre(slot))
+    _pointer(display, _centre(slot), QEvent.Type.MouseButtonPress, Qt.MouseButton.LeftButton,
+             Qt.MouseButton.LeftButton)
+    with_option = display.window.mouseGrabberItem()
+    _pointer(display, _centre(slot), QEvent.Type.MouseButtonRelease, Qt.MouseButton.LeftButton)
+    _pointer(display, away)
+    _settle(display, lambda: _prop(slot, "shown") is False)
+    display.scene.set_visualizer_expanded_overlay_config(_config(now_playing={"hover_reveal": False}))
+    _render(display)
+    _pointer(display, _centre(slot))
+    _pointer(display, _centre(slot), QEvent.Type.MouseButtonPress, Qt.MouseButton.LeftButton,
+             Qt.MouseButton.LeftButton)
+    without_option = display.window.mouseGrabberItem()
+    _pointer(display, _centre(slot), QEvent.Type.MouseButtonRelease, Qt.MouseButton.LeftButton)
+    assert with_option is without_option
+    assert with_option is None or "HoverRegion" not in with_option.objectName()
+    # Off: resting on it does nothing.
+    _run(display, 300)
+    assert not _shown(display, name) and _prop(slot, "hoverHeld") is False
+    _pointer(display, away)
+
+    # Under Fullscreen Edit (which shows and holds the overlays itself) a hover is no event: on leaving Edit with the
+    # pointer away it fades out as authored.
+    display.scene.set_visualizer_expanded_overlay_config(_config(now_playing={"hover_reveal": True}))
+    _root(display).setProperty("expandedOverlayEditing", True)
+    _settle(display, lambda: float(_prop(slot, "presence")) >= 1.0)
+    _pointer(display, _centre(slot))
+    _run(display, 200)
+    assert _prop(slot, "hoverHeld") is False
+    _pointer(display, away)
+    _root(display).setProperty("expandedOverlayEditing", False)
+    _settle(display, lambda: not _shown(display, name))
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("controls", [False, True])
+def test_show_on_hover_covers_exactly_where_now_playing_shows_while_it_is_faded_out(display, controls):
+    """The hover region is where Now Playing is placed: while faded out it is the very rectangle Now Playing occupies
+    when shown (its layout never depends on its own fade, Media Controls included), so a pointer on any part of it,
+    its top row included, reveals it."""
+    name = "expandedOverlayNowPlaying"
+    _draw(display, media=_Media(), config=_config(now_playing={"hover_reveal": True, "media_controls": controls}))
+    _open(display)
+    slot = _slot(display, name)
+    _settle(display, lambda: float(_prop(slot, "presence")) >= 1.0)
+    shown = _rect(slot, _root(display))
+    _settle(display, lambda: _prop(slot, "shown") is False)
+    region = _named(_layer(display), "expandedOverlayNowPlayingHoverRegion")
+    assert _rect(region, _root(display)) == shown == _rect(slot, _root(display))
+    _pointer(display, slot.mapToScene(QPointF(slot.width() / 2.0, 2.0)))       # its top edge
+    _settle(display, lambda: float(_prop(slot, "presence")) >= 1.0)
+    _pointer(display, QPointF(WIDTH * 0.75, HEIGHT * 0.45))
+    _settle(display, lambda: _prop(slot, "shown") is False)
+
+
 # --------------------------------------------------------------------------------------------- Always Show
 
 
@@ -528,7 +634,9 @@ def test_the_overlays_sit_below_the_cards_controls_the_osd_lane_and_the_menu(dis
     handlers = [child for item in _visual(layer) for child in item.children()
                 if child.metaObject().className().startswith(("QQuickTapHandler", "QQuickHoverHandler",
                                                               "QQuickWheelHandler", "QQuickDragHandler"))]
-    assert len(takers) == 3 and handlers == []
+    # The one handler is Show On Hover's: passive (never blocking, never a press) and off unless the option is on.
+    assert len(takers) == 3 and [handler.objectName() for handler in handlers] == ["expandedOverlayNowPlayingHover"]
+    assert handlers[0].property("blocking") is False and handlers[0].property("enabled") is False
     # Each press area is its segment's (the shared bar loads it into the segment).
     assert all(item.parentItem().parentItem().objectName().startswith("expandedOverlayTransport_") for item in takers)
     assert all(item.property("consumesDoubleClick") is True for item in takers)

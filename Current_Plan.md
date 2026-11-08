@@ -104,19 +104,24 @@ after the operator's yes on a question card; agents never run load (invisible ch
      Options: any corner per overlay, Always Show, Media Controls with the now-playing (default off), an optional card
      border + theme surface (default off); all in a new Visualizers pill "Fullscreen Mode", first after Setup.
    - Fullscreen Edit (operator, 8 Nov; plan 01 M3c): merged 8 Nov (with single-axis handles and Rotate Widget
-     Content). Edit entered while expanded stays expanded and edits the overlays (the toast, Now Playing's text and its
-     artwork, sized apart) through the one Edit session; Save writes their value (and the Visualizer's turn to CUSTOM),
+     Content). Edit entered while expanded stays expanded and edits the overlays (the toast and Now Playing's block)
+     through the one Edit session; Save writes their value (and the Visualizer's turn to CUSTOM),
      other displays keep running without Edit chrome, and an unsaved draft holds Settings. Also there: Now Playing
      reveals when playback resumes (paused -> playing).
      The operator's live defects (8 Nov), merged c5cf132e (plan 01 M3c "Live defects"): Now Playing's rows fill a
      set box (the artist follows the side handles); the Volume OSD is a Fullscreen Edit part, its placement over the
      expanded card `fullscreen_overlays.volume_osd` (its ordinary placement untouched); Now Playing's controls are a
      small Media card control bar (one shared `MediaTransportBar.qml`).
-     **Requested (operator, 8 Nov):** (a) an option (Fullscreen Mode pill, default off) to re-fade Now Playing in when
-     the pointer hovers where it is placed, events only (no timers, no polling); (b) "the metadata text cannot be
-     moved" meant moving parts separately: in Fullscreen Edit, when no block surface is drawn, every part of Now
-     Playing (artwork, title, artist, the media bar) moves and sizes on its own inside the block, through ordinary
-     Edit's existing child-geometry editing. Both assigned to the Now Playing child-edit agent.
+     The operator's two requests (8 Nov) are built on an agent branch (plan 01 M3c "Now Playing's parts" and §G
+     "Show On Hover"): (a) **Show On Hover** (Fullscreen Mode, default off, `now_playing.hover_reveal`): the pointer
+     resting where Now Playing is placed fades it back in and holds it; leaving runs the reveal's own hold and
+     fade-out (one passive HoverHandler's edges, no timer or polling; nothing under Fullscreen Edit). (b) **Now
+     Playing's parts** (artwork, title, artist, the Media Controls bar) are its block's children in Fullscreen Edit,
+     moved and sized one by one through ordinary Edit's child editor (select the block, open its child lock), stored
+     in `now_playing.child_geometry`; the block is its whole overlay (the separate artwork item is gone); with a
+     Card the parts stay editable inside it. The parts move within the block: it is as large as its content until
+     its own side handles make room. The operator's live look is owed (the feel of the lock, a part drag and the
+     hover re-fade on the real display).
      Side defect (8 Nov): `tests/test_qtquick_system_audio_osd.py::test_osd_colour_inheritance_respects_active_widget_
      theme_and_authored_overrides` fails when run after `tests/test_visualizers_fullscreen_mode_pill.py` in one
      process (passes alone; reproduced on the base): Widget Theme state leaks between the files.

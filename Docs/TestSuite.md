@@ -949,15 +949,34 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   with real pointer events through the window moves it as one (guides, undo, Save); the Volume OSD as a part
   (frame without side strips, move, undo, corner scale, Save writing `volume_osd`, the ordinary layout and the OSD's
   layout rectangle untouched, collapse returning it exactly; red without the part).
-  `tests/test_visualizer_expansion_overlays.py` (M3b, hidden production scene) also holds the Media Controls bar:
+  Now Playing's parts as its block's children (operator, 8 Nov; the parts are now `now_playing` = the whole block,
+  no separate artwork item): with real pointer events the block is selected, its child lock opened through its
+  glyph, the title, the artist and the Media Controls bar moved through the child editor's move areas and the
+  artwork sized on one axis through its side strip (the block and the other parts stay put), a drag far past the
+  block stays inside it, undo, Cancel exactly back, Save drawing what the draft showed, with and without a Card;
+  the toast offers no child lock, a part's edit alone makes the draft pending, the parts keep their places under
+  the block's scale and a record past the block's edge draws at the edge. Negative controls (one at a time): no
+  presentation for the block (3 red), the draft dropping the records (parity and child tests red), Restore Size
+  keeping the records (red), the title ignoring its offset (2 red), the artwork ignoring its size (2 red), no
+  presentation containment (red), no draft mark on a part's edit (red), the block keeping the text block's frame
+  (2 red).
+  `tests/test_visualizer_expansion_overlays.py` (M3b, hidden production scene) also holds Show On Hover (real
+  pointer moves: a hover where the faded Now Playing sits fades it in and holds it, leaving runs the reveal's hold
+  and fade-out, the toast untouched, a press there reaches what it reached with the option off, nothing while
+  Fullscreen Edit is open, nothing with the option off; the hover region is exactly the shown block while faded,
+  Media Controls included; red with the handler disabled, without the hover hold, and with the old leave rule; the
+  region red when the text layout follows the slot's own fade) and the Media Controls bar:
   Now Playing's controls and the Media card's bar are the one `MediaTransportBar` (the card's look from the one
   Media model, its three segments pressing with the overlay's keys), smaller than the card's, and the narrowest set
   text width still holds the whole bar; the overlays leave no connection on the Media model after Media state
   changes and an undraw. Negative controls: the former three-circle Row (red), the card's former inline bar (red),
   the bar's colours read as QColor through the model (`var`): 5 connections left per state change (red).
   `tests/test_visualizer_expansion_overlay_settings.py` holds the one value
-  (`core/settings/fullscreen_overlays.py`): schema, clamps, projection, and a value stored before the extents
-  reading them as the natural look (idempotent).
+  (`core/settings/fullscreen_overlays.py`): schema, clamps, projection, a value stored before the extents reading
+  them as the natural look (idempotent), and Now Playing's part records (`child_geometry`, ordinary Edit's carrier
+  and parser; a value stored before it and Show On Hover reads both as canonical). `tests/test_visualizers_fullscreen_
+  mode_pill.py` writes every Fullscreen Mode check (Show On Hover included) through the real Settings dialog (red
+  when the check writes another member).
 - `tests/test_visualizer_expansion_covered_presentation.py` — Expanded Visualizer M3 Suspension on the hidden
   production scene, cover driven through the scene controller's one setter: a covered Clock leaves the real global
   ticker (its timer stops when it is the only Clock), straggling ticks reach nothing, uncovering publishes the

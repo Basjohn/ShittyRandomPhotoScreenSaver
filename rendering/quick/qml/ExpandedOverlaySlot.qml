@@ -38,8 +38,11 @@ Item {
                                                                                  : defaultCorner
     readonly property bool alwaysShow: options.alwaysShow === true
     readonly property bool editing: stage ? stage.editing === true : false
-    // Holds at full once revealed: Always Show, or Fullscreen Edit.
-    readonly property bool holding: alwaysShow || editing
+    // The pointer rests where the overlay is placed (Now Playing's Show On Hover; the stage's HoverHandler edges set
+    // it through hoverEnter/hoverExit).
+    property bool hoverHeld: false
+    // Holds at full once revealed: Always Show, Fullscreen Edit, or the pointer resting on it.
+    readonly property bool holding: alwaysShow || editing || hoverHeld
     readonly property bool cardOn: options.card === true
     readonly property real unit: {
         const value = Number(options.scale)
@@ -144,7 +147,7 @@ Item {
         hideAnimation.stop()
         // Read the stage, not the derived binding: an edit edge reveals from the stage's own handler, possibly before
         // this slot's ``editing`` binding has re-evaluated.
-        const holding = alwaysShow || (!!stage && stage.editing === true)
+        const holding = alwaysShow || hoverHeld || (!!stage && stage.editing === true)
         const showing = presence > 0.001
         if (!showing) {
             order = stage ? stage.nextRevealOrder() : order + 1
@@ -167,6 +170,12 @@ Item {
     function resume() {
         if (holding && presence > 0.001)
             return
+        _showAgain()
+    }
+
+    // Show Again from where it is, without swapping the content: the reveal's own one finite cycle (fade in, hold,
+    // fade out), holding at full instead while something holds it (Always Show, Edit, the pointer resting on it).
+    function _showAgain() {
         cycle.stop()
         hideAnimation.stop()
         const showing = presence > 0.001
@@ -175,21 +184,51 @@ Item {
             contentOpacity = 1.0
         }
         shown = true
+        const holdsNow = alwaysShow || hoverHeld || (!!stage && stage.editing === true)
         const makeRoom = !showing && !!stage && stage.cornerPeerShowing(slot)
         swapOut.duration = 0
         settle.duration = makeRoom ? stackGlideMs : 0
         fadeIn.duration = Math.round(fadeInMs * (1.0 - Math.min(1.0, presence)))
         contentIn.duration = showing ? Math.round(swapInMs * (1.0 - contentOpacity)) : 0
-        hold.duration = holding ? 0 : holdMs
-        fadeOut.to = holding ? 1.0 : 0.0
-        fadeOut.duration = holding ? 0 : fadeOutMs
+        hold.duration = holdsNow ? 0 : holdMs
+        fadeOut.to = holdsNow ? 1.0 : 0.0
+        fadeOut.duration = holdsNow ? 0 : fadeOutMs
         cycle.start()
     }
 
-    // Fullscreen Edit ended: back to the authored visibility. Always Show (with content) stays; anything else fades.
+    // Show On Hover (Now Playing, operator 8 Nov): the pointer arrived where the overlay is placed (the stage's
+    // HoverHandler edge; never while editing). It fades back in from wherever it is and holds while the pointer rests.
+    // Always Show is untouched.
+    function hoverEnter() {
+        if (hoverHeld)
+            return
+        hoverHeld = true
+        if (alwaysShow)
+            return
+        _showAgain()
+    }
+
+    // The pointer left: from where it is, the reveal's own rest of the fade-in, hold and fade-out (the same window as
+    // after a track change).
+    // ``hasContent`` false (the track went): conceal() already fades it; nothing else runs.
+    function hoverExit(hasContent) {
+        if (!hoverHeld)
+            return
+        hoverHeld = false
+        if (alwaysShow || !hasContent || !shown || (!!stage && stage.editing === true))
+            return
+        _showAgain()
+    }
+
+    // Fullscreen Edit ended: back to the authored visibility. Always Show (with content) stays; under a resting
+    // pointer (Show On Hover) it holds as hovered; anything else fades.
     function endEdit(hasContent) {
         if (alwaysShow && hasContent)
             return
+        if (hoverHeld && hasContent) {
+            _showAgain()
+            return
+        }
         conceal()
     }
 

@@ -16,12 +16,14 @@ import QtQuick.Effects
 //
 // Events: entering the full display (once the startup reveal has opened), a preset announcement, a change of the
 // track's identity, and playback resuming (paused -> playing: Now Playing shows again, as on a track change; operator,
-// 8 Nov). Nothing else reveals an overlay; nothing runs at rest.
+// 8 Nov), and with Now Playing's Show On Hover the pointer arriving where it is placed (a HoverHandler edge; it holds
+// while the pointer rests and fades after it leaves). Nothing else reveals an overlay; nothing runs at rest.
 //
 // Fullscreen Edit (M3c): while ``editing`` (the Edit session is open on this display's overlays) both overlays show
 // and hold, with a quiet placeholder where there is no preset name or track yet, so each can be grabbed; their
-// geometry changes are reported through editGeometryChanged (Python re-reads the Edit frames: the preset toast, the
-// Now Playing text block and its artwork). When Edit ends they return to their authored visibility with a fade.
+// geometry changes are reported through editGeometryChanged (Python re-reads the Edit frames: the preset toast and
+// Now Playing's block, whose parts are its children for ordinary Edit's child editor). When Edit ends they return to
+// their authored visibility with a fade.
 Item {
     id: overlays
     objectName: "expandedVisualizerOverlays"
@@ -300,7 +302,7 @@ Item {
         // so a set text height (more title lines) never resizes the artwork.
         readonly property real titleLineHeight: Math.max(1.0, Math.ceil(titleMetrics.height))
         readonly property real naturalTextHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistText.implicitHeight)
-            + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controls.height : 0.0)
+            + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controlsHeight : 0.0)
         readonly property real artBase: Math.max(Math.round(fontSize * 3.1),
                                                  Math.ceil(boxHeight > 0.0 ? naturalTextHeight : textColumn.height))
         readonly property real artWidth: Math.round(artBase * artworkScale * artworkWidthFactor)
@@ -311,10 +313,10 @@ Item {
         // Media Controls); a set height is at least the natural block and gives the title the extra lines that fit
         // (it wraps, then elides), the block centred in it. Unset, it is today's block.
         readonly property real naturalTextWidth: Math.min(textWidthLimit,
-            Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth, controlsShown ? controls.width : 0.0)))
+            Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth, controlsShown ? controlsWidth : 0.0)))
         readonly property real boxWidth: setTextWidth > 0.0
             ? Math.round(Math.min(Math.max(1.0, maxBoxWidth - artWidth - gap),
-                                  Math.max(minimumTextWidth, controlsShown ? controls.width : 0.0, setTextWidth)))
+                                  Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0, setTextWidth)))
             : 0.0
         readonly property real boxHeight: setTextHeight > 0.0
             ? Math.round(Math.min(maxBoxHeight, Math.max(naturalTextHeight, setTextHeight))) : 0.0
@@ -322,6 +324,49 @@ Item {
             ? 1 + Math.max(0, Math.floor((boxHeight - naturalTextHeight + 0.5) / titleLineHeight)) : 1
         readonly property bool playing: !!overlays.mediaModel
             && String(overlays.mediaModel.playbackState).toLowerCase() === "playing"
+
+        // ---- Its parts as children of the block (Fullscreen Edit's child editing; operator, 8 Nov: "I should be able
+        // to move every element around in that block and change it"). ``childGeometry`` is ordinary Edit's CUSTOM
+        // child_geometry carrier (``now_playing.child_geometry``): per part, a size factor of its own drawn size and an
+        // offset from where today's layout puts it. ``{}`` (the default) is today's layout exactly. The block's own size
+        // never follows its parts (ordinary Edit never grows a parent for a child edit): every natural size above is the
+        // authored one. A part grows from its top-left (the child editor's contract) and stays inside the block, card
+        // padding included (ordinary Edit contains a child in its parent).
+        readonly property var childGeometry: options.childGeometry ? options.childGeometry : ({})
+        // Offsets are fractions of a square of ``CHILD_NORMALIZATION_EMS`` (10) ems of this overlay's font, so a part
+        // keeps its place under the block's scale and the font size, and never moves with a track's text length.
+        readonly property real childNormalizationWidth: Math.max(1.0, fontSize * 10.0)
+        readonly property real childNormalizationHeight: childNormalizationWidth
+        function childNumber(roleId, key, fallback) {
+            const record = childGeometry[roleId]
+            const value = record ? Number(record[key]) : NaN
+            return isFinite(value) ? value : fallback
+        }
+        function childWidthScale(roleId) { return Math.max(0.01, childNumber(roleId, "width_scale", 1.0)) }
+        function childHeightScale(roleId) { return Math.max(0.01, childNumber(roleId, "height_scale", 1.0)) }
+        function childOffsetX(roleId) { return childNumber(roleId, "x_offset", 0.0) * childNormalizationWidth }
+        function childOffsetY(roleId) { return childNumber(roleId, "y_offset", 0.0) * childNormalizationHeight }
+        // In the content's coordinates (``body``): the block is the slot, so a part may use the card's padding too.
+        function containX(x, extent) { return Math.max(-padding, Math.min(naturalWidth + padding - extent, x)) }
+        function containY(y, extent) { return Math.max(-padding, Math.min(naturalHeight + padding - extent, y)) }
+        // Where the text column's origin sits in the content's coordinates (the text parts' authored places are in it).
+        readonly property real columnX: textBlock.x
+        readonly property real columnY: textBlock.y + textColumn.y
+        // Ordinary Edit's editable-child declaration (OverlayWidget.customEditableChildRoles): Fullscreen Edit's frame
+        // for Now Playing resolves this slot as its presentation, so the one child editor draws each part's frame,
+        // move area and handles when the block is selected and its child lock is open. Stable items only (rebuilding
+        // the list would retire a live gesture); the live normalisation box is read from ``normalizationTarget``.
+        readonly property var customEditableChildRoles: [
+            {"roleId": "artwork", "target": artFrame, "normalizationTarget": nowPlayingSlot,
+             "geometryDependencies": [textBlock]},
+            {"roleId": "title", "target": titleText, "normalizationTarget": nowPlayingSlot,
+             "geometryDependencies": [textBlock, textColumn]},
+            {"roleId": "artist", "target": artistText, "normalizationTarget": nowPlayingSlot,
+             "geometryDependencies": [textBlock, textColumn]},
+            {"roleId": "controls", "target": controls, "normalizationTarget": nowPlayingSlot,
+             "geometryDependencies": [textBlock, textColumn]}
+        ]
+        readonly property var customEditableChildRequirementTarget: null
 
         // The latched track (swapped only while the content is invisible, so text and artwork always belong together).
         property string contentKey: ""
@@ -341,10 +386,15 @@ Item {
         Item {
             id: artFrame
             objectName: "expandedOverlayArtwork"
-            width: nowPlayingSlot.artWidth
-            height: nowPlayingSlot.artHeight
-            x: nowPlayingSlot.rightSide ? parent.width - width : 0.0
-            y: (parent.height - height) / 2.0
+            // A part of the block (``artwork``): today's place beside the text, moved and sized by its child record
+            // (the frame resizes freely; the image crops into it, ordinary Edit's freeform artwork frame).
+            readonly property real authoredX: nowPlayingSlot.rightSide ? nowPlayingSlot.naturalWidth - nowPlayingSlot.artWidth
+                                                                      : 0.0
+            readonly property real authoredY: (nowPlayingSlot.naturalHeight - nowPlayingSlot.artHeight) / 2.0
+            width: Math.round(nowPlayingSlot.artWidth * nowPlayingSlot.childWidthScale("artwork"))
+            height: Math.round(nowPlayingSlot.artHeight * nowPlayingSlot.childHeightScale("artwork"))
+            x: nowPlayingSlot.containX(authoredX + nowPlayingSlot.childOffsetX("artwork"), width)
+            y: nowPlayingSlot.containY(authoredY + nowPlayingSlot.childOffsetY("artwork"), height)
             readonly property real imageInset: Math.max(0.75, overlays.borderWidth * 0.65)
             onXChanged: overlays.noteEditGeometry()
             onYChanged: overlays.noteEditGeometry()
@@ -435,7 +485,7 @@ Item {
             id: titleMetrics
             font: titleText.effectiveFont
         }
-        // The text block (Fullscreen Edit's Now Playing frame): the column at its natural size or in a set box.
+        // The text block (what the block's side handles set): the column at its natural size or in a set box.
         Item {
             id: textBlock
             objectName: "expandedOverlayNowPlayingText"
@@ -459,16 +509,37 @@ Item {
                 width: textBlock.width
                 readonly property real spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
                 readonly property real naturalHeight: titleText.height + spacing + artistText.height
-                    + (controls.visible ? 2.0 * spacing + controlsSpacer.height + controls.height : 0.0)
+                    + (nowPlayingSlot.controlsShown ? 2.0 * spacing + controlsSpacer.height + nowPlayingSlot.controlsHeight
+                       : 0.0)
                 readonly property real slack: nowPlayingSlot.boxHeight > 0.0
                     ? Math.max(0.0, nowPlayingSlot.boxHeight - naturalHeight) : 0.0
-                readonly property real gapExtra: slack / (controls.visible ? 2.0 : 1.0)
+                readonly property real gapExtra: slack / (nowPlayingSlot.controlsShown ? 2.0 : 1.0)
                 height: naturalHeight + slack
 
                 ShadowedText {
                     id: titleText
                     objectName: "expandedOverlayTitle"
-                    width: textColumn.width
+                    // A part of the block (``title``): scaled whole (its layout keeps today's size) and moved, kept
+                    // inside the block.
+                    readonly property real partScale: nowPlayingSlot.childWidthScale("title")
+                    transform: [
+                        Scale { id: titleScale; xScale: titleText.partScale; yScale: titleText.partScale },
+                        Translate {
+                            id: titleShift
+                            x: nowPlayingSlot.containX(
+                                   nowPlayingSlot.columnX + titleText.x + nowPlayingSlot.childOffsetX("title"),
+                                   titleText.width * titleText.partScale) - nowPlayingSlot.columnX - titleText.x
+                            y: nowPlayingSlot.containY(nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("title"),
+                                                       titleText.height * titleText.partScale) - nowPlayingSlot.columnY
+                        }
+                    ]
+                    // The child editor maps through these applied transform values (never the transform list).
+                    readonly property string customEditMappingDependency: [titleScale.xScale, titleScale.yScale,
+                                                                          titleShift.x, titleShift.y].join(",")
+                    // As wide as its text draws (up to the box, where it elides or wraps), on its side of the box: the
+                    // part's frame is the line itself, so it can move across the box (the pixels are today's).
+                    width: Math.min(Math.ceil(implicitWidth), textColumn.width)
+                    x: nowPlayingSlot.rightSide ? textColumn.width - width : 0.0
                     text: nowPlayingSlot.contentTitle
                     font.family: overlays.fontFamily
                     font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize))
@@ -488,7 +559,24 @@ Item {
                     id: artistText
                     objectName: "expandedOverlayArtist"
                     y: titleText.height + textColumn.spacing + textColumn.gapExtra
-                    width: textColumn.width
+                    // A part of the block (``artist``): scaled whole and moved from its row, kept inside the block.
+                    readonly property real partScale: nowPlayingSlot.childWidthScale("artist")
+                    transform: [
+                        Scale { id: artistScale; xScale: artistText.partScale; yScale: artistText.partScale },
+                        Translate {
+                            id: artistShift
+                            x: nowPlayingSlot.containX(
+                                   nowPlayingSlot.columnX + artistText.x + nowPlayingSlot.childOffsetX("artist"),
+                                   artistText.width * artistText.partScale) - nowPlayingSlot.columnX - artistText.x
+                            y: nowPlayingSlot.containY(
+                                   nowPlayingSlot.columnY + artistText.y + nowPlayingSlot.childOffsetY("artist"),
+                                   artistText.height * artistText.partScale) - nowPlayingSlot.columnY - artistText.y
+                        }
+                    ]
+                    readonly property string customEditMappingDependency: [artistScale.xScale, artistScale.yScale,
+                                                                          artistShift.x, artistShift.y].join(",")
+                    x: nowPlayingSlot.rightSide ? textColumn.width - width : 0.0
+                    width: Math.min(Math.ceil(implicitWidth), textColumn.width)
                     text: nowPlayingSlot.contentArtist
                     font.family: overlays.fontFamily
                     font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize * 0.74))
@@ -508,20 +596,31 @@ Item {
                     y: artistText.y + artistText.height + textColumn.spacing
                     width: textColumn.width
                     height: Math.round(nowPlayingSlot.fontSize * 0.25)
-                    visible: controls.visible
+                    visible: nowPlayingSlot.controlsShown
                 }
                 MediaTransportBar {
                     id: controls
                     objectName: "expandedOverlayMediaControls"
                     readonly property var model: overlays.mediaModel
                     visible: nowPlayingSlot.controlsShown
-                    x: nowPlayingSlot.rightSide ? textColumn.width - width : 0.0
-                    y: controlsSpacer.y + controlsSpacer.height + textColumn.spacing + textColumn.gapExtra
-                    width: nowPlayingSlot.controlsWidth
-                    height: nowPlayingSlot.controlsHeight
-                    // The card's bar, scaled as one: its outline, radius and shadow by the same factor as its height.
-                    radius: 12.0 * nowPlayingSlot.controlsFactor
-                    border.width: Math.max(1.0, 1.5 * nowPlayingSlot.controlsFactor)
+                    // A part of the block (``controls``): today's row under the artist, sized on each axis and moved
+                    // by its child record (as the Media card's transport controls), kept inside the block.
+                    readonly property real authoredX: nowPlayingSlot.rightSide
+                        ? textColumn.width - nowPlayingSlot.controlsWidth : 0.0
+                    readonly property real authoredY: controlsSpacer.y + controlsSpacer.height + textColumn.spacing
+                        + textColumn.gapExtra
+                    x: nowPlayingSlot.containX(nowPlayingSlot.columnX + authoredX + nowPlayingSlot.childOffsetX("controls"),
+                                               width) - nowPlayingSlot.columnX
+                    y: nowPlayingSlot.containY(nowPlayingSlot.columnY + authoredY + nowPlayingSlot.childOffsetY("controls"),
+                                               height) - nowPlayingSlot.columnY
+                    width: Math.round(nowPlayingSlot.controlsWidth * nowPlayingSlot.childWidthScale("controls"))
+                    height: Math.round(nowPlayingSlot.controlsHeight * nowPlayingSlot.childHeightScale("controls"))
+                    // The card's bar, scaled as one: its outline, radius and shadow by the same factor as its height
+                    // (its own drawn height: a part sized taller keeps the card's proportions).
+                    readonly property real drawnFactor: nowPlayingSlot.controlsFactor
+                        * Math.min(nowPlayingSlot.childWidthScale("controls"), nowPlayingSlot.childHeightScale("controls"))
+                    radius: 12.0 * drawnFactor
+                    border.width: Math.max(1.0, 1.5 * drawnFactor)
                     border.color: overlays.mediaLook("borderColor", "#ffffffff")
 
                     canPrevious: !!model && model.canPrevious === true
@@ -535,9 +634,9 @@ Item {
                     separatorWidth: 1.0
                     shadowEnabled: overlays.mediaLook("shadowEnabled", false) === true
                     shadowColor: overlays.mediaLook("shadowColor", "#00000000")
-                    shadowBlur: Number(overlays.mediaLook("shadowBlur", 0.0)) * nowPlayingSlot.controlsFactor
-                    shadowOffsetX: Number(overlays.mediaLook("shadowOffsetX", 0.0)) * nowPlayingSlot.controlsFactor
-                    shadowOffsetY: Number(overlays.mediaLook("shadowOffsetY", 0.0)) * nowPlayingSlot.controlsFactor
+                    shadowBlur: Number(overlays.mediaLook("shadowBlur", 0.0)) * drawnFactor
+                    shadowOffsetX: Number(overlays.mediaLook("shadowOffsetX", 0.0)) * drawnFactor
+                    shadowOffsetY: Number(overlays.mediaLook("shadowOffsetY", 0.0)) * drawnFactor
                     // Over the Visualizer, whose double-click cycles its mode: each segment holds its own presses.
                     exclusivePress: true
                     materialObjectName: "expandedOverlayMediaControlsMaterial"
@@ -549,5 +648,38 @@ Item {
                 }
             }
         }
+    }
+
+    // ------------------------------------------------------------------------------- Show On Hover (Now Playing)
+    // Operator, 8 Nov: "the media section should optionally refade in if hovered over where it was positioned.
+    // Without timers or polling." With the option on, the pointer arriving where Now Playing is placed (its slot's
+    // rectangle, kept while it is faded out) fades it back in and holds it; leaving starts the reveal's own hold and
+    // fade-out. Driven by this HoverHandler's hovered edges only: no Timer, no polling, nothing per frame. The region
+    // is an empty item above the slots: its handler is passive (blocking: false) and nothing here takes a press, so
+    // clicks, the wheel, the Media Controls' own hover and every gesture reach what lies under it. Off (the
+    // default), while Fullscreen Edit is open (Edit holds the overlays itself) or with no track, it does nothing.
+    readonly property bool nowPlayingHoverReveal: nowPlayingOptions.hoverReveal === true
+    Item {
+        id: nowPlayingHoverRegion
+        objectName: "expandedOverlayNowPlayingHoverRegion"
+        x: nowPlayingSlot.x
+        y: nowPlayingSlot.y
+        width: nowPlayingSlot.width
+        height: nowPlayingSlot.height
+        z: 2
+        HoverHandler {
+            id: nowPlayingHover
+            objectName: "expandedOverlayNowPlayingHover"
+            enabled: overlays.nowPlayingHoverReveal && !overlays.editing
+            blocking: false
+        }
+    }
+    readonly property bool nowPlayingHoverActive: nowPlayingHover.hovered && nowPlayingHoverReveal && !editing
+        && entered && liveTrackKey.length > 0
+    onNowPlayingHoverActiveChanged: {
+        if (nowPlayingHoverActive)
+            nowPlayingSlot.hoverEnter()
+        else
+            nowPlayingSlot.hoverExit(liveTrackKey.length > 0)
     }
 }

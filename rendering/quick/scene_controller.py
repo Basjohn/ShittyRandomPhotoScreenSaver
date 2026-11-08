@@ -1314,16 +1314,28 @@ class QuickSceneController(QObject):
         content_rotation_handler: ContentRotationHandler | None = None,
         item_change_publisher: Callable[[CustomLayoutSessionItem], None] | None = None,
         geometry_listener: Callable[[], None] | None = None,
+        child_resize_begin_handler: ChildResizeBeginHandler | None = None,
+        child_resize_preview_handler: ChildResizePreviewHandler | None = None,
+        child_resize_update_handler: ChildResizeUpdateHandler | None = None,
+        child_move_begin_handler: ChildMoveBeginHandler | None = None,
+        child_move_update_handler: ChildMoveUpdateHandler | None = None,
+        child_gesture_cancel_handler: ChildGestureCancelHandler | None = None,
+        child_content_extent_handler: ChildContentExtentHandler | None = None,
+        child_content_extent_clear_handler: ChildContentExtentClearHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind Fullscreen Edit (Expanded Visualizer M3c): the one Edit overlay over this display's full-display
         overlays.
 
         The same retained Edit layer, model, gestures and Save signal as ``bind_custom_layout_session``; what differs
-        is what the items are. They are the overlays' parts (the preset toast, Now Playing's text and its artwork), so
+        is what the items are. They are the overlays' parts (the preset toast, Now Playing's block), so
         ``item_change_publisher`` projects their draft placement onto the overlays (never onto an ordinary root), and
         the expanded Visualizer card keeps its own presentation: no CUSTOM authority over it, never hidden. Native
         runtime input pauses as in every Edit; the overlays show to be grabbed and report their geometry to
         ``geometry_listener`` (from the QML, at their geometry edges only) until ``clear_custom_layout_session``.
+
+        Now Playing's parts are its block's children: the block item's presentation is the Now Playing slot (it
+        declares ``customEditableChildRoles``, as every child-capable widget root does), and the child handlers are
+        ordinary Edit's own (the owner's), so the one child editor moves and sizes them.
         """
 
         identity = str(display_identity or "").strip()
@@ -1355,10 +1367,36 @@ class QuickSceneController(QObject):
             content_rotation_handler=content_rotation_handler,
             # The expanded card's frame reads the card's bottom-right glyph row (its Rotate Widget Content sits in it).
             content_envelope_item_resolver=self._custom_layout_content_envelope_item,
+            presentation_item_resolver=self._fullscreen_overlay_presentation_item,
+            child_resize_begin_handler=child_resize_begin_handler,
+            child_resize_preview_handler=child_resize_preview_handler,
+            child_resize_update_handler=child_resize_update_handler,
+            child_move_begin_handler=child_move_begin_handler,
+            child_move_update_handler=child_move_update_handler,
+            child_gesture_cancel_handler=child_gesture_cancel_handler,
+            child_content_extent_handler=child_content_extent_handler,
+            child_content_extent_clear_handler=child_content_extent_clear_handler,
         )
         model.save_requested.connect(self.custom_layout_save_requested.emit)
         model.selection_changed.connect(self.custom_layout_selection_changed.emit)
         return model
+
+    def _fullscreen_overlay_presentation_item(self, item: CustomLayoutSessionItem) -> QQuickItem | None:
+        """Fullscreen Edit: the live presentation of an item with editable children (Now Playing's block: its slot).
+
+        Resolved on demand, never stored (as ``_custom_layout_presentation_item`` for ordinary roots); every other part
+        has no child presentation.
+        """
+
+        if not item.child_geometry_capable:
+            return None
+        root = self._visualizer_root
+        if root is None or not _qobject_is_alive(root):
+            return None
+        # Found from the retained root (whose wrapper the controller holds): a wrapper reached through a temporary
+        # one (the Loader's ``item`` property) is invalidated with it when this returns.
+        slot = root.findChild(QQuickItem, "expandedOverlayNowPlaying")
+        return slot if slot is not None and _qobject_is_alive(slot) else None
 
     @property
     def custom_layout_fullscreen(self) -> bool:
@@ -1371,9 +1409,8 @@ class QuickSceneController(QObject):
 
         Read on demand at Edit edges (never cached, never per frame): the stage (the overlays' item over the expanded
         card) and its safe area, each overlay's rectangle, its stage position, its corner anchor (``anchoredX`` /
-        ``anchoredY``: where it sits at a zero offset, its stacking included), its font size and card padding, and the
-        Edit parts' rectangles: the
-        preset toast, Now Playing's text block (with its Media Controls when shown) and its artwork. None while the
+        ``anchoredY``: where it sits at a zero offset, its stacking included), its font size, card padding and text box,
+        and the Edit parts' rectangles: the preset toast and Now Playing's block (its whole overlay). None while the
         overlays are not drawn.
         """
 
@@ -1405,10 +1442,21 @@ class QuickSceneController(QObject):
                 "padding": float(slot.property("padding")),
             }
         text = stage.findChild(QQuickItem, "expandedOverlayNowPlayingText")
-        artwork = stage.findChild(QQuickItem, "expandedOverlayArtwork")
-        if text is None or artwork is None:
+        if text is None:
             return None
-        parts = {"preset": slots["preset"]["rect"], "now_playing": rect(text), "artwork": rect(artwork)}
+        # Each overlay's text box (what its side handles set): the toast's is its frame inside the card padding; Now
+        # Playing's is its text block, beside its artwork (``beside``: the artwork's authored width and the gap).
+        for name, slot in slots.items():
+            x, y, width, height = slot["rect"]
+            pad = slot["padding"]
+            slot["text"] = (x + pad, y + pad, max(0.0, width - 2.0 * pad), max(0.0, height - 2.0 * pad))
+            slot["beside"] = 0.0
+        now_playing = stage.findChild(QQuickItem, "expandedOverlayNowPlaying")
+        slots["now_playing"]["text"] = rect(text)
+        slots["now_playing"]["beside"] = float(now_playing.property("artWidth")) + float(now_playing.property("gap"))
+        # The Edit parts: the preset toast and Now Playing's block (its whole overlay; its parts are the block's
+        # children, edited by ordinary Edit's child editor through the slot as the block's presentation).
+        parts = {"preset": slots["preset"]["rect"], "now_playing": slots["now_playing"]["rect"]}
         # The Volume OSD (when this display has one): drawn at its expanded placement; its anchor is where a zero
         # offset puts it (its ordinary rectangle scaled about its centre), in the coordinates its position is in.
         osd = self._volume_osd_widget()

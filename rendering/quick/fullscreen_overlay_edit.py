@@ -9,34 +9,46 @@ There is no second editor. Edit entered while the Visualizer is expanded opens t
 retained Edit layer (frames, corner handles, the wheel, Restore Size, snapping guides, undo, Save/Cancel, Enter/Esc).
 This module is what differs about those items:
 
-* **Items.** The preset toast, Now Playing's text block (with its Media Controls when shown) and Now Playing's artwork.
-  The artwork stays beside its text: dragging either moves Now Playing as one; its handles size the artwork alone.
+* **Items.** The preset toast and Now Playing's block (its whole overlay: artwork, text and Media Controls when shown).
   On a display with a Volume OSD, the OSD too (operator, 8 Nov: it shows during Fullscreen Edit, so it must be
   editable there): its placement over the expanded card, ``volume_osd`` (offset and scale from where its ordinary
   layout puts it), moved and scaled like the toast; it has no single-axis extents (no side strips). Its ordinary
   placement (ordinary Edit, CUSTOM) is never changed by it.
+* **Now Playing's parts are its block's children** (operator, 8 Nov: "allow movement within the block that is not
+  drawn like we already do for child elements in normal geometry. I should be able to move every element around in
+  that block and change it"). The block's item declares ordinary Edit's child roles
+  (``core.settings.fullscreen_overlays.NOW_PLAYING_CHILD_ROLES``: artwork, title, artist, controls), its payload
+  carries ordinary Edit's ``child_geometry`` record map and the Now Playing slot (QML) is its presentation, exposing
+  ``customEditableChildRoles`` as every child-capable widget does. So the one child editor (``CustomLayoutOverlay.qml``'s
+  child layer; the owner's ``begin_child_move``/``update_child_move``/``begin_child_resize``/``update_child_resize``
+  and ``resolve_child_*_geometry``) moves and sizes each part inside the block, with its lock, guides, containment,
+  collision preference and undo; this module only carries the records into the overlays' value. Decided (mirroring
+  ordinary Edit, where a widget with a visible card keeps its children editable inside the card): the parts are
+  editable whether or not the block draws a surface (Card); the card is then the block's visible extent.
 * **Geometry is the overlays' own canonical value**, never a rectangle the session owns: each item's
   ``current_size_payload`` is its draft placement (``core.settings.fullscreen_overlays.PLACEMENT_KEYS``: the offset
-  from the anchor corner in fractions of the expanded card's safe area, ``scale``, ``artwork_scale``) and its
+  from the anchor corner in fractions of the expanded card's safe area, ``scale``, the extents, the children) and its
   rectangle is read back from the live QML after every projection, so a frame is always what is drawn (content
   size, stacking and the card's control reserves included). Positions stay relative to the safe area, so they reflow
   on displays of other sizes and DPRs.
 * **Moves** snap with the ordinary Edit rule (``resolve_snap_local_rect_for_edit``) inside the safe area: its edges
   (and so its corners), its centre, and the other overlay's edges, centre and the 30 px gutter.
-* **Scaling.** Corner handles and the wheel scale the preset toast and the text by ``scale`` (their font) and the
-  artwork by ``artwork_scale``. A corner drag uses the drag-to-scale gesture of ordinary Edit and keeps the frame's
-  opposite corner where it was; the wheel and Restore Size keep its top centre (as ordinary Edit does). The artwork
-  grows from its place beside the text.
+* **Scaling.** Corner handles and the wheel scale the preset toast and Now Playing's block by ``scale`` (their font;
+  every part follows). A corner drag uses the drag-to-scale gesture of ordinary Edit and keeps the frame's opposite
+  corner where it was; the wheel and Restore Size keep its top centre (as ordinary Edit does).
 * **Single-axis sizing** (ordinary Edit's ``content_extent``: every part declares both content axes, so the same Edit
   layer draws the same side strips and, on the selected part, the same two-axis diagonal corners). A side handle
   changes only its axis: the text box's ``text_width`` / ``text_height`` (ems of the overlay's font; the text elides,
-  or wraps into a taller box) or the artwork's ``artwork_width`` / ``artwork_height`` (factors of its square size; the
-  image crops). The dragged edge follows the cursor under the ordinary resize rule (``edge_resize_rect``, bounded by
-  the safe area) and snaps with ``resolve_resize_edge_snap`` (the safe area's centre, the other overlay's edges), the
-  opposite edge staying put; the artwork again grows from its place. The untouched axis keeps its member exactly
+  or wraps into a taller box). Now Playing's block is its artwork beside its text box, so its side handles set the
+  text box that makes the block that size. The dragged edge follows the cursor under the ordinary resize rule
+  (``edge_resize_rect``, bounded by the safe area) and snaps with ``resolve_resize_edge_snap`` (the safe area's
+  centre, the other overlay's edges), the opposite edge staying put. The untouched axis keeps its member exactly
   (natural stays natural); the stored extent is the one the overlay really drew (its floors and the safe area
   included). A uniform scale keeps the box (its extents are font-relative), as ordinary Edit's does; Restore Size
-  returns the part's scale and extents to their canonical values, as ordinary Edit drops ``content_extent``.
+  returns the part's scale and extents to their canonical values and clears its children's records, as ordinary
+  Edit drops ``content_extent`` and restores authored child geometry. (``artwork_scale`` / ``artwork_width`` /
+  ``artwork_height``, M3c's artwork sizing before the artwork became a child, keep drawing as stored; only Restore
+  Size returns them to canonical.)
 * **Save** writes exactly the placement members into the one value; nothing else is in the session, so the ordinary
   layout and CUSTOM cannot change. Cancel restores the baseline (the committed value) through the session's own
   ``restore_baseline``.
@@ -55,6 +67,8 @@ from typing import Any
 from PySide6.QtCore import QPoint, QRect, QSize
 
 from core.settings.fullscreen_overlays import (
+    CHILD_GEOMETRY_KEY,
+    NOW_PLAYING_CHILD_ROLES,
     OFFSET_MAX,
     OFFSET_MIN,
     PLACEMENT_KEYS,
@@ -70,6 +84,7 @@ from rendering.custom_layout_contract import (
     resolve_resize_edge_snap,
     resolve_snap_local_rect_for_edit,
 )
+from rendering.custom_child_geometry import normalize_child_geometry
 from rendering.custom_layout_session import CustomLayoutKey, CustomLayoutSession, CustomLayoutSessionItem
 from rendering.quick.custom_layout_size import edge_resize_rect, uniform_wheel_scale
 from widgets.spotify_visualizer.presentation_orientation import (
@@ -84,22 +99,23 @@ EDIT_ID_PREFIX = "fullscreen_overlay."
 #: Visualizer item.
 CARD_EDIT_ID = f"{EDIT_ID_PREFIX}visualizer"
 #: Edit part -> (the overlay whose value holds it, the members it writes).
+#: Now Playing's block also carries M3c's artwork sizing (drawn as stored; Restore Size resets it) and its children's
+#: records (ordinary Edit's ``child_geometry``).
 PARTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "preset": ("preset", ("offset_x", "offset_y", "scale", "text_width", "text_height")),
-    "now_playing": ("now_playing", ("offset_x", "offset_y", "scale", "text_width", "text_height")),
-    "artwork": ("now_playing", ("artwork_scale", "artwork_width", "artwork_height")),
+    "now_playing": ("now_playing", ("offset_x", "offset_y", "scale", "text_width", "text_height",
+                                    "artwork_scale", "artwork_width", "artwork_height", CHILD_GEOMETRY_KEY)),
     "volume_osd": ("volume_osd", ("offset_x", "offset_y", "scale")),
 }
 #: The size factor each part's corner handles and wheel change.
-SCALE_KEY = {"preset": "scale", "now_playing": "scale", "artwork": "artwork_scale", "volume_osd": "scale"}
+SCALE_KEY = {"preset": "scale", "now_playing": "scale", "volume_osd": "scale"}
 #: The (horizontal, vertical) extents each part's side handles change (ordinary Edit's content axes).
 EXTENT_KEYS = {"preset": ("text_width", "text_height"), "now_playing": ("text_width", "text_height"),
-               "artwork": ("artwork_width", "artwork_height"), "volume_osd": ()}
+               "volume_osd": ()}
 #: Every part declares both content axes: the Edit layer draws its side strips and two-axis diagonal corners.
 CONTENT_AXES = frozenset({"horizontal", "vertical"})
-#: The part whose payload holds the overlay's position (the artwork moves Now Playing as one).
-POSITION_PART = {"preset": "preset", "now_playing": "now_playing", "artwork": "now_playing",
-                 "volume_osd": "volume_osd"}
+#: The parts whose children ordinary Edit's child editor edits (role descriptors, from the one settings owner).
+CHILD_ROLES = {"now_playing": NOW_PLAYING_CHILD_ROLES}
 #: Guide kinds a move publishes (the safe area's edges and centre, the other overlay's edges and centre).
 GUIDE_KINDS = frozenset({"edge", "display_center", "peer", "peer_center"})
 _CORNER_HANDLES = frozenset({"top_left", "top_right", "bottom_left", "bottom_right"})
@@ -145,7 +161,10 @@ def draft_value(committed: Mapping[str, Any], items: tuple[CustomLayoutSessionIt
         overlay, keys = PARTS[part]
         target = value.setdefault(overlay, {})
         for key in keys:
-            if key in item.current_size_payload:
+            if key == CHILD_GEOMETRY_KEY:
+                # Ordinary Edit's carrier drops the key when every child is back at its authored place.
+                target[key] = deepcopy(dict(item.current_size_payload.get(key) or {}))
+            elif key in item.current_size_payload:
                 target[key] = item.current_size_payload[key]
     return normalize_fullscreen_overlays(value)
 
@@ -186,18 +205,14 @@ def resize_edges(handle: str) -> tuple[str | None, str | None]:
     return ("left" if corner.endswith("left") else "right"), ("top" if corner.startswith("top_") else "bottom")
 
 
-def extent_value(part: str, size: float, *, font_size: float, padding: float = 0.0,
-                 origin_size: float = 1.0, origin_factor: float = 1.0) -> float:
-    """The stored extent that draws ``size`` px on one axis of ``part``'s frame.
+def extent_value(size: float, *, font_size: float, inset: float = 0.0) -> float:
+    """The stored text-box extent (ems of the overlay's font) that draws a frame of ``size`` px on one axis.
 
-    The text parts store their box in ems of the overlay's font (the preset toast's frame includes its card padding);
-    the artwork stores a factor of its square size, measured against the gesture's origin frame and factor.
+    ``inset`` is what the frame holds besides the text box on that axis: the card padding on both sides, and on Now
+    Playing's horizontal axis its artwork and the gap beside it.
     """
 
-    if part == "artwork":
-        factor = float(origin_factor) * float(size) / max(1.0, float(origin_size))
-        return _clamp_scale(factor)
-    box = max(1.0, float(size) - 2.0 * float(padding))
+    box = max(1.0, float(size) - float(inset))
     return round(max(0.01, min(TEXT_EXTENT_MAX, box / max(1.0, float(font_size)))), 4)
 
 
@@ -217,8 +232,6 @@ class _ResizeOrigin:
     cursor: QPoint
     scale: float
     handle: str
-    #: The part's (horizontal, vertical) extents at the gesture's start.
-    extents: tuple[float, float] = (0.0, 0.0)
 
 
 class FullscreenOverlayEdit:
@@ -262,8 +275,12 @@ class FullscreenOverlayEdit:
         return deepcopy(self._committed)
 
     def admit(self, session: CustomLayoutSession, *,
-              card: tuple[tuple[float, float], Mapping[str, int]] | None = None) -> bool:
-        """Add the three parts to ``session`` from the committed value and the drawn overlays (False: not drawn).
+              card: tuple[tuple[float, float], Mapping[str, int]] | None = None,
+              child_collision: bool = True) -> bool:
+        """Add the parts to ``session`` from the committed value and the drawn overlays (False: not drawn).
+
+        ``child_collision`` is ordinary Edit's global child/child collision preference
+        (``widgets.global.child_collision_enabled``), applied to Now Playing's parts as to every multi-child widget.
 
         ``card`` (the Visualizer's committed physical extent and per-mode orientation map), given when the live mode
         can turn its content, adds the expanded card's item first, below the overlays' frames: ordinary Edit's
@@ -281,7 +298,12 @@ class FullscreenOverlayEdit:
         for part, (overlay, keys) in PARTS.items():
             if part not in snapshot["parts"]:
                 continue        # the Volume OSD on a display without one
-            payload = {key: self._committed[overlay][key] for key in keys}
+            payload = {key: deepcopy(self._committed[overlay][key]) for key in keys}
+            roles = CHILD_ROLES.get(part, ())
+            children = normalize_child_geometry(payload.get(CHILD_GEOMETRY_KEY), roles) if roles else {}
+            if roles and not payload.get(CHILD_GEOMETRY_KEY):
+                # Ordinary Edit's carrier holds no key while every child is authored: Cancel/undo compare alike.
+                payload.pop(CHILD_GEOMETRY_KEY, None)
             rect = _qrect(snapshot["parts"][part], self._origin)
             session.add_item(CustomLayoutSessionItem(
                 source_key=CustomLayoutKey(edit_widget_id(part), self._identity),
@@ -295,6 +317,11 @@ class FullscreenOverlayEdit:
                 resize_capable=True,
                 size_reset_capable=True,
                 content_extent_axes=CONTENT_AXES if EXTENT_KEYS[part] else frozenset(),
+                # Ordinary Edit's editable children (Now Playing's parts): the one child editor's roles and records.
+                custom_child_roles=roles,
+                child_collision_enabled=bool(child_collision),
+                baseline_child_sizes=dict(children),
+                current_child_sizes=dict(children),
                 current_display_identity=self._identity,
                 source_monitor_route=self._monitor_route,
             ))
@@ -370,11 +397,9 @@ class FullscreenOverlayEdit:
             item.current_size_payload != item.baseline_size_payload for item in self.items())
 
     def position_item(self, item: CustomLayoutSessionItem) -> CustomLayoutSessionItem:
-        """The item whose payload holds ``item``'s position (the artwork moves Now Playing)."""
+        """The item whose payload holds ``item``'s position (every part holds its own)."""
 
-        part = edit_part(item)
-        owner = self.item_for(POSITION_PART[part]) if part is not None else None
-        return owner if owner is not None else item
+        return item
 
     # ------------------------------------------------------------------------------------------ projection
 
@@ -473,7 +498,7 @@ class FullscreenOverlayEdit:
         snapshot = self._geometry()
         if part is None or snapshot is None:
             return QRect(item.current_global_rect)
-        overlay = PARTS[POSITION_PART[part]][0]
+        overlay = PARTS[part][0]
         current = item.current_global_rect
         dx, dy = proposed.x() - current.x(), proposed.y() - current.y()
         slot_rect = _qrect(snapshot["slots"][overlay]["rect"])
@@ -513,8 +538,8 @@ class FullscreenOverlayEdit:
         """After a size change, move the overlay so ``item``'s frame keeps ``anchor``'s top centre or a corner."""
 
         part = edit_part(item)
-        if part is None or part == "artwork":
-            return      # the artwork grows from its place beside the text
+        if part is None:
+            return
         snapshot = self._geometry()
         if snapshot is None:
             return
@@ -554,10 +579,8 @@ class FullscreenOverlayEdit:
         if handle not in _CORNER_HANDLES and not EXTENT_KEYS[part]:
             return False        # no single-axis extents (the Volume OSD): corners and the wheel only
         payload = item.current_size_payload
-        extents = tuple(float(payload.get(key, 0.0)) for key in EXTENT_KEYS[part]) or (0.0, 0.0)
         self._resize_origins[item.source_key] = _ResizeOrigin(
-            QRect(item.current_global_rect), QPoint(cursor), float(payload.get(SCALE_KEY[part], 1.0)), handle,
-            extents)
+            QRect(item.current_global_rect), QPoint(cursor), float(payload.get(SCALE_KEY[part], 1.0)), handle)
         return True
 
     def update_resize(self, item: CustomLayoutSessionItem, handle: str, cursor: QPoint, finalize: bool) -> bool:
@@ -586,21 +609,35 @@ class FullscreenOverlayEdit:
         return QRect(int(round(snapshot["stage"][0] + inset)), int(round(snapshot["stage"][1] + inset)),
                      max(1, int(round(snapshot["safe_width"]))), max(1, int(round(snapshot["safe_height"]))))
 
-    def _extents_for(self, part: str, origin: _ResizeOrigin, width: float | None, height: float | None,
+    def _extents_for(self, part: str, width: float | None, height: float | None,
                      snapshot: Mapping[str, Any]) -> dict[str, float]:
         """The extent members that draw a frame of ``width`` / ``height`` px (None: that axis is untouched)."""
 
         slot = snapshot["slots"][PARTS[part][0]]
         font_size = float(slot["font_size"])
-        padding = float(slot["padding"]) if part == "preset" else 0.0
+        padding = 2.0 * float(slot["padding"])
         horizontal, vertical = EXTENT_KEYS[part]
         members: dict[str, float] = {}
-        for key, size, origin_size, origin_factor in (
-                (horizontal, width, origin.rect.width(), origin.extents[0]),
-                (vertical, height, origin.rect.height(), origin.extents[1])):
+        for key, size, inset in ((horizontal, width, padding + float(slot.get("beside", 0.0))),
+                                 (vertical, height, padding)):
             if size is not None:
-                members[key] = extent_value(part, size, font_size=font_size, padding=padding,
-                                            origin_size=origin_size, origin_factor=origin_factor)
+                members[key] = extent_value(size, font_size=font_size, inset=inset)
+        return members
+
+    def _drawn_extents(self, part: str, horizontal: bool, vertical: bool,
+                       snapshot: Mapping[str, Any]) -> dict[str, float]:
+        """The extent members the overlay really drew on the touched axes (its text box; floors and the safe area
+        applied)."""
+
+        slot = snapshot["slots"][PARTS[part][0]]
+        font_size = float(slot["font_size"])
+        box = slot["text"]
+        keys = EXTENT_KEYS[part]
+        members: dict[str, float] = {}
+        if horizontal:
+            members[keys[0]] = extent_value(box[2], font_size=font_size)
+        if vertical:
+            members[keys[1]] = extent_value(box[3], font_size=font_size)
         return members
 
     def _resize_extent(self, item: CustomLayoutSessionItem, origin: _ResizeOrigin, cursor: QPoint) -> bool:
@@ -616,7 +653,7 @@ class FullscreenOverlayEdit:
         # Ordinary Edit's one edge rule: the delta from the press, bounded by the safe area on the moving edge.
         rect = edge_resize_rect(start, safe, QSize(1, 1), cursor.x() - origin.cursor.x(), cursor.y() - origin.cursor.y(),
                                 horizontal_edge=horizontal_edge, vertical_edge=vertical_edge)
-        overlay = PARTS[POSITION_PART[part]][0]
+        overlay = PARTS[part][0]
         resolution = resolve_resize_edge_snap(
             rect.translated(-safe.x(), -safe.y()), safe.size(), horizontal_edge=horizontal_edge,
             vertical_edge=vertical_edge, peer_rects=[
@@ -624,17 +661,15 @@ class FullscreenOverlayEdit:
                 for name, slot in snapshot["slots"].items() if name != overlay], min_size=QSize(1, 1))
         target = resolution.rect
         changed = self._set_members(item, self._extents_for(
-            part, origin, target.width() if horizontal_edge else None, target.height() if vertical_edge else None,
+            part, target.width() if horizontal_edge else None, target.height() if vertical_edge else None,
             snapshot))
-        # WYSIWYG: keep the extent the part really drew (its floors and the safe area applied), as offsets do.
+        # WYSIWYG: keep the extent the part really drew (its floors and the safe area applied), as offsets are.
         drawn = self._geometry()
         if drawn is not None:
-            frame = drawn["parts"][part]
-            settled = self._extents_for(part, origin, frame[2] if horizontal_edge else None,
-                                        frame[3] if vertical_edge else None, drawn)
-            if part != "artwork" and settled != {k: item.current_size_payload.get(k) for k in settled}:
+            settled = self._drawn_extents(part, horizontal_edge is not None, vertical_edge is not None, drawn)
+            if settled != {k: item.current_size_payload.get(k) for k in settled}:
                 changed = self._set_members(item, settled) or changed
-        # The opposite edge stays where it was (the artwork grows from its place beside the text).
+        # The opposite edge stays where it was.
         fixed = ("bottom" if vertical_edge == "top" else "top") + ("_right" if horizontal_edge == "left" else "_left")
         self._keep(item, origin.rect, fixed)
         self._publish_move_guides(resolution, safe.topLeft())
@@ -652,9 +687,11 @@ class FullscreenOverlayEdit:
         return True
 
     def restore_size(self, item: CustomLayoutSessionItem) -> bool:
-        """Restore Size: the part's size factor and extents back to their canonical defaults, keeping its top centre.
+        """Restore Size: the part's size factors and extents back to their canonical defaults and its children back
+        to their authored places and sizes, keeping its top centre.
 
-        Ordinary Edit's Restore Size likewise returns the uniform scale and drops ``content_extent``.
+        Ordinary Edit's Restore Size likewise returns the uniform scale, drops ``content_extent`` and restores the
+        authored child geometry (``restore_authored_child_geometry``: the records and the payload's carrier together).
         """
 
         part = edit_part(item)
@@ -663,8 +700,15 @@ class FullscreenOverlayEdit:
         self._resize_origins.pop(item.source_key, None)
         canonical = canonical_fullscreen_overlays()[PARTS[part][0]]
         before = QRect(item.current_global_rect)
-        if not self._set_members(item, {key: float(canonical[key]) for key in (SCALE_KEY[part], *EXTENT_KEYS[part])}):
+        members = {key: float(canonical[key]) for key in PARTS[part][1]
+                   if key not in ("offset_x", "offset_y", CHILD_GEOMETRY_KEY)}
+        children = bool(item.current_child_sizes) or bool(item.current_size_payload.get(CHILD_GEOMETRY_KEY))
+        if children:
+            item.current_size_payload = item.restore_authored_child_geometry(item.current_size_payload)
+        if not self._set_members(item, members) and not children:
             return False
+        if children:
+            self.project(item)
         self._keep(item, before, "top_centre")
         return True
 

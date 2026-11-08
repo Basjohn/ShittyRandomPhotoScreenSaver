@@ -20,6 +20,14 @@ when ``scale`` or the font size changes (as ordinary Edit's uniform scale keeps 
 Now Playing's artwork has ``artwork_width`` / ``artwork_height``, factors of its square size (``1`` = square), the image
 cropped like ordinary Edit's freeform artwork frame.
 
+Now Playing's parts (Fullscreen Edit's child editing, operator 8 Nov: "I should be able to move every element around in
+that block and change it"): ``now_playing.child_geometry`` is ordinary Edit's CUSTOM ``child_geometry`` carrier for the
+block's children (:data:`NOW_PLAYING_CHILD_ROLES`: the artwork, the title, the artist line and the Media Controls bar),
+one record per moved or sized part (``width_scale``/``height_scale`` of its own drawn size, ``x_offset``/``y_offset``
+in fractions of :data:`CHILD_NORMALIZATION_EMS` ems of the overlay's font); ``{}`` (the canonical default) is today's
+layout, so a value stored before it reads as it always drew (no bridge). It is parsed by ordinary Edit's own
+``normalize_child_geometry`` against the declared roles.
+
 The Volume OSD's placement over the expanded card (``volume_osd``; Fullscreen Edit, operator 8 Nov) mirrors the
 overlays' model: ``offset_x``/``offset_y`` in fractions of the safe area and ``scale``, both relative to where the OSD's
 ordinary layout puts it (zero offset and unit scale: exactly there). It applies only while the display-wide card is
@@ -35,6 +43,12 @@ import math
 from typing import Any
 
 from core.settings.default_contract import require_canonical_default
+from rendering.custom_child_geometry import (
+    CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY,
+    CustomChildRoleDescriptor,
+    freeform_artwork_child_role,
+    normalize_child_geometry,
+)
 
 FULLSCREEN_OVERLAYS_KEY = "widgets.spotify_visualizer.fullscreen_overlays"
 #: The two overlays, in their canonical order.
@@ -51,10 +65,28 @@ SCALE_KEYS = ("scale", "artwork_scale", "artwork_width", "artwork_height")
 #: The text box's single-axis extents, in ems of the overlay's font size; 0 is the natural (content) size.
 TEXT_EXTENT_KEYS = ("text_width", "text_height")
 TEXT_EXTENT_MAX = 60.0
+#: Now Playing's per-part geometry member (ordinary Edit's CUSTOM ``child_geometry`` carrier).
+CHILD_GEOMETRY_KEY = CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY
+#: Now Playing's children in Fullscreen Edit (ordinary Edit's child-role descriptors, mirroring the Media card's): the
+#: artwork is ordinary Edit's freeform artwork frame (free X/Y, the image cropped); the title and the artist line scale
+#: uniformly (their text keeps its shape, as the Media card's metadata and artist do); the Media Controls bar sizes
+#: freely on each axis (as the Media card's transport controls). Every one moves.
+NOW_PLAYING_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
+    freeform_artwork_child_role("artwork", minimum_scale=(0.40, 0.40), maximum_scale=(3.00, 3.00), movable=True),
+    CustomChildRoleDescriptor("title", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
+                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
+    CustomChildRoleDescriptor("artist", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
+                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
+    CustomChildRoleDescriptor("controls", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
+                              maximum_scale=(2.50, 2.50), uniform_scale=False, movable=True),
+)
+#: The children's offsets are fractions of a square of this many ems of the overlay's (scaled) font: they move with the
+#: block's scale and the font size, and never with a track's text length.
+CHILD_NORMALIZATION_EMS = 10.0
 #: The placement members Fullscreen Edit writes, per overlay (the corner is Settings').
 PLACEMENT_KEYS = {"preset": ("offset_x", "offset_y", "scale", "text_width", "text_height"),
                   "now_playing": ("offset_x", "offset_y", "scale", "text_width", "text_height",
-                                  "artwork_scale", "artwork_width", "artwork_height"),
+                                  "artwork_scale", "artwork_width", "artwork_height", CHILD_GEOMETRY_KEY),
                   VOLUME_OSD_ID: ("offset_x", "offset_y", "scale")}
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
@@ -121,7 +153,9 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
             if key not in raw:
                 continue
             item = raw[key]
-            if key == "corner":
+            if key == CHILD_GEOMETRY_KEY:
+                target[key] = normalize_now_playing_children(item)
+            elif key == "corner":
                 if isinstance(item, str) and item.strip().lower() in CORNERS:
                     target[key] = item.strip().lower()
             elif isinstance(default, bool):
@@ -133,6 +167,14 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
             elif key in TEXT_EXTENT_KEYS:
                 target[key] = _number(item, float(default), 0.0, TEXT_EXTENT_MAX)
     return result
+
+
+def normalize_now_playing_children(raw: Any) -> dict[str, dict[str, Any]]:
+    """Now Playing's ``child_geometry`` as stored: ordinary Edit's parse (known roles, clamped, authored records
+    omitted), each record in its canonical mapping form."""
+
+    return {role_id: size.to_mapping()
+            for role_id, size in normalize_child_geometry(raw, NOW_PLAYING_CHILD_ROLES).items()}
 
 
 def rebase_offset_for_corner(options: Mapping[str, Any], corner: str) -> dict[str, Any]:
@@ -195,6 +237,8 @@ def volume_osd_rect(authored: tuple[float, float, float, float], safe: tuple[flo
 
 
 __all__ = [
+    "CHILD_GEOMETRY_KEY",
+    "CHILD_NORMALIZATION_EMS",
     "CORNERS",
     "FONT_SIZE_MAX",
     "FONT_SIZE_MIN",
@@ -208,9 +252,11 @@ __all__ = [
     "SCALE_MIN",
     "TEXT_EXTENT_KEYS",
     "TEXT_EXTENT_MAX",
+    "NOW_PLAYING_CHILD_ROLES",
     "VOLUME_OSD_ID",
     "canonical_fullscreen_overlays",
     "normalize_fullscreen_overlays",
+    "normalize_now_playing_children",
     "rebase_offset_for_corner",
     "volume_osd_anchor",
     "volume_osd_rect",
