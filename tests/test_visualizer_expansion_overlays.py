@@ -517,7 +517,7 @@ def test_the_overlays_sit_below_the_cards_controls_the_osd_lane_and_the_menu(dis
     assert row.parentItem() is loader.parentItem() and row.z() > loader.z()
     for name in ("visualizerExpandGlyph", "visualizerCameraResetGlyph", "visualizerPresetControls"):
         control = root.findChild(QQuickItem, name)
-        assert control.parentItem() is row, name
+        assert control.parentItem().parentItem() is row, name          # each in its own slot of the row
     scene_root = display.scene.scene_root
     visualizer_lane = scene_root.findChild(QQuickItem, "visualizerPresentationLoader")
     osd_lane = scene_root.findChild(QQuickItem, "systemAudioOSDForegroundHost")

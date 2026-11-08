@@ -134,8 +134,10 @@ def test_the_camera_controls_stay_offered_and_working_while_display_wide(glyph_c
         assert reset.isVisible() and steps.isVisible(), expanded
         assert bool(root.property("controlHintEligible")), expanded
         glyph = _glyph(card)
+        collapse = glyph.mapRectToItem(root, QRectF(0.0, 0.0, glyph.width(), glyph.height()))
         for control in (reset, steps):
-            assert control.x() + control.width() <= glyph.x() or control.y() >= glyph.y() + glyph.height()
+            assert not control.mapRectToItem(root, QRectF(0.0, 0.0, control.width(), control.height())).intersects(
+                collapse)
         _click(card, _hovered(reset))
         assert len(resets) == (2 if expanded else 1), expanded
         root.setProperty("widgetGlowAdmitted", False)       # the same input admission as on the card

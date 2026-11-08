@@ -400,207 +400,228 @@ Item {
         scale: visualizerPresentationRoot.glyphRowScale
         transformOrigin: Item.BottomRight
         z: 12
-        visible: visualizerPresentationRoot.widgetGlowAdmitted && visualizerPresentationRoot.visible
 
-        Row {
-            id: presetControls
-            objectName: "visualizerPresetControls"
-            spacing: visualizerPresentationRoot.glyphSpacing
-            // In the row outside Edit (Edit draws its own steps in the row); the row adds the shared admission.
+        // In the row outside Edit (Edit draws its own steps in its continuation of the row).
+        Item {
+            id: presetSlot
+            objectName: "visualizerPresetSlot"
             visible: visualizerPresentationRoot.volumeWheelEnabled
-            opacity: (visualizerPresentationRoot.alwaysShowGlyphs && cameraResetHover.hovered) ? 0.92 : 0.0
-            enabled: visible && visualizerPresentationRoot.alwaysShowGlyphs
-                && cameraResetHover.hovered && opacity > 0.05
-            Behavior on opacity {
-                NumberAnimation { duration: cameraResetHover.hovered ? 700 : 1200; easing.type: Easing.InOutSine }
-            }
-            Repeater {
-                model: [-1, 1]
-                delegate: Rectangle {
-                    required property int modelData
-                    objectName: modelData < 0 ? "visualizerPreviousPresetGlyph" : "visualizerNextPresetGlyph"
-                    width: cameraResetGlyph.width
-                    height: cameraResetGlyph.height
-                    radius: width / 2
-                    color: cameraResetGlyph.color
-                    border.width: cameraResetGlyph.border.width
-                    border.color: cameraResetGlyph.border.color
-                    Canvas {
-                        anchors.centerIn: parent
-                        width: 20
-                        height: 20
-                        onPaint: {
-                            const ctx = getContext("2d")
-                            ctx.clearRect(0, 0, width, height)
-                            ctx.save()
-                            if (modelData < 0) { ctx.translate(20, 0); ctx.scale(-1, 1) }
-                            ctx.strokeStyle = "white"
-                            ctx.lineWidth = 1.8
-                            ctx.lineCap = "round"
-                            ctx.lineJoin = "round"
-                            ctx.beginPath()
-                            ctx.moveTo(4, 10)
-                            ctx.lineTo(16, 10)
-                            ctx.moveTo(11, 5)
-                            ctx.lineTo(16, 10)
-                            ctx.lineTo(11, 15)
-                            ctx.stroke()
-                            ctx.restore()
+            width: presetControls.width
+            height: visualizerPresentationRoot.glyphSize
+            Row {
+                id: presetControls
+                objectName: "visualizerPresetControls"
+                spacing: visualizerPresentationRoot.glyphSpacing
+                // The shared input admission (widgetGlowAdmitted, the card shown); its slot is its place in the row.
+                visible: visualizerPresentationRoot.widgetGlowAdmitted && visualizerPresentationRoot.visible
+                opacity: (visualizerPresentationRoot.alwaysShowGlyphs && cameraResetHover.hovered) ? 0.92 : 0.0
+                enabled: visible && visualizerPresentationRoot.alwaysShowGlyphs
+                    && cameraResetHover.hovered && opacity > 0.05
+                Behavior on opacity {
+                    NumberAnimation { duration: cameraResetHover.hovered ? 700 : 1200; easing.type: Easing.InOutSine }
+                }
+                Repeater {
+                    model: [-1, 1]
+                    delegate: Rectangle {
+                        required property int modelData
+                        objectName: modelData < 0 ? "visualizerPreviousPresetGlyph" : "visualizerNextPresetGlyph"
+                        width: cameraResetGlyph.width
+                        height: cameraResetGlyph.height
+                        radius: width / 2
+                        color: cameraResetGlyph.color
+                        border.width: cameraResetGlyph.border.width
+                        border.color: cameraResetGlyph.border.color
+                        Canvas {
+                            anchors.centerIn: parent
+                            width: 20
+                            height: 20
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                ctx.save()
+                                if (modelData < 0) { ctx.translate(20, 0); ctx.scale(-1, 1) }
+                                ctx.strokeStyle = "white"
+                                ctx.lineWidth = 1.8
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                ctx.moveTo(4, 10)
+                                ctx.lineTo(16, 10)
+                                ctx.moveTo(11, 5)
+                                ctx.lineTo(16, 10)
+                                ctx.lineTo(11, 15)
+                                ctx.stroke()
+                                ctx.restore()
+                            }
                         }
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        propagateComposedEvents: false
-                        onEntered: {
-                            visualizerPresentationRoot.cameraActionTip = modelData < 0 ? "PREVIOUS PRESET" : "NEXT PRESET"
-                            visualizerPresentationRoot.cameraActionTipX = visualizerPresentationRoot.glyphRowPointX(
-                                presetControls.x + parent.x + parent.width)
-                            cameraResetTipReveal.restart()
-                        }
-                        onExited: {
-                            if (visualizerPresentationRoot.cameraActionTip !== (modelData < 0 ? "PREVIOUS PRESET" : "NEXT PRESET")) return
-                            cameraResetTipReveal.stop()
-                            visualizerPresentationRoot.cameraResetTipProgress = 0.0
-                        }
-                        onPressed: function(mouse) { mouse.accepted = true }
-                        readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
-                        onDoubleClicked: function(mouse) { mouse.accepted = true }
-                        onClicked: function(mouse) {
-                            mouse.accepted = true
-                            visualizerPresentationRoot.presetStepRequested(modelData)
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            propagateComposedEvents: false
+                            onEntered: {
+                                visualizerPresentationRoot.cameraActionTip = modelData < 0 ? "PREVIOUS PRESET" : "NEXT PRESET"
+                                visualizerPresentationRoot.cameraActionTipX = visualizerPresentationRoot.glyphRowPointX(
+                                    presetSlot.x + parent.x + parent.width)
+                                cameraResetTipReveal.restart()
+                            }
+                            onExited: {
+                                if (visualizerPresentationRoot.cameraActionTip !== (modelData < 0 ? "PREVIOUS PRESET" : "NEXT PRESET")) return
+                                cameraResetTipReveal.stop()
+                                visualizerPresentationRoot.cameraResetTipProgress = 0.0
+                            }
+                            onPressed: function(mouse) { mouse.accepted = true }
+                            readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+                            onDoubleClicked: function(mouse) { mouse.accepted = true }
+                            onClicked: function(mouse) {
+                                mouse.accepted = true
+                                visualizerPresentationRoot.presetStepRequested(modelData)
+                            }
                         }
                     }
                 }
             }
         }
 
-        Rectangle {
-            id: cameraResetGlyph
-            objectName: "visualizerCameraResetGlyph"
-            width: visualizerPresentationRoot.glyphSize
-            height: visualizerPresentationRoot.glyphSize
-            radius: width / 2
-            color: "#bb20262c"
-            border.width: 1
-            border.color: "#c2ffffff"
-            // In the row while offered; the row adds the shared admission (widgetGlowAdmitted, the card shown).
+        // In the row while offered.
+        Item {
+            id: cameraResetSlot
+            objectName: "visualizerCameraResetSlot"
             visible: visualizerPresentationRoot.cameraResetAvailable
-            opacity: (visualizerPresentationRoot.alwaysShowGlyphs
-                      && cameraResetHover.hovered) ? 0.92 : 0.0
-            enabled: visible && visualizerPresentationRoot.alwaysShowGlyphs
-                && cameraResetHover.hovered && opacity > 0.05
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: cameraResetHover.hovered ? 700 : 1200
-                    easing.type: Easing.InOutSine
-                }
-            }
-            Text {
-                anchors.centerIn: parent
-                text: "↺"
-                color: "white"
-                font.pixelSize: 19
-                font.bold: true
-            }
-            MouseArea {
+            width: visualizerPresentationRoot.glyphSize
+            height: visualizerPresentationRoot.glyphSize
+            Rectangle {
+                id: cameraResetGlyph
+                objectName: "visualizerCameraResetGlyph"
                 anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                propagateComposedEvents: false
-                onEntered: {
-                    visualizerPresentationRoot.cameraActionTip = "RESET CAMERA"
-                    visualizerPresentationRoot.cameraActionTipX = visualizerPresentationRoot.glyphRowPointX(
-                        cameraResetGlyph.x + cameraResetGlyph.width)
-                    cameraResetTipReveal.restart()
+                radius: width / 2
+                color: "#bb20262c"
+                border.width: 1
+                border.color: "#c2ffffff"
+                // The shared input admission (widgetGlowAdmitted, the card shown); its slot is its place in the row.
+                visible: visualizerPresentationRoot.widgetGlowAdmitted && visualizerPresentationRoot.visible
+                opacity: (visualizerPresentationRoot.alwaysShowGlyphs
+                          && cameraResetHover.hovered) ? 0.92 : 0.0
+                enabled: visible && visualizerPresentationRoot.alwaysShowGlyphs
+                    && cameraResetHover.hovered && opacity > 0.05
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: cameraResetHover.hovered ? 700 : 1200
+                        easing.type: Easing.InOutSine
+                    }
                 }
-                onExited: {
-                    if (visualizerPresentationRoot.cameraActionTip !== "RESET CAMERA") return
-                    cameraResetTipReveal.stop()
-                    visualizerPresentationRoot.cameraResetTipProgress = 0.0
+                Text {
+                    anchors.centerIn: parent
+                    text: "↺"
+                    color: "white"
+                    font.pixelSize: 19
+                    font.bold: true
                 }
-                onPressed: function(mouse) { mouse.accepted = true }
-                // An in-card control consumes every press of its own, the second press of a double-click
-                // included: it never reaches the card's double-click mode cycle.
-                readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
-                onDoubleClicked: function(mouse) { mouse.accepted = true }
-                onClicked: function(mouse) {
-                    mouse.accepted = true
-                    visualizerPresentationRoot.cameraResetRequested()
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    propagateComposedEvents: false
+                    onEntered: {
+                        visualizerPresentationRoot.cameraActionTip = "RESET CAMERA"
+                        visualizerPresentationRoot.cameraActionTipX = visualizerPresentationRoot.glyphRowPointX(
+                            cameraResetSlot.x + cameraResetSlot.width)
+                        cameraResetTipReveal.restart()
+                    }
+                    onExited: {
+                        if (visualizerPresentationRoot.cameraActionTip !== "RESET CAMERA") return
+                        cameraResetTipReveal.stop()
+                        visualizerPresentationRoot.cameraResetTipProgress = 0.0
+                    }
+                    onPressed: function(mouse) { mouse.accepted = true }
+                    // An in-card control consumes every press of its own, the second press of a double-click
+                    // included: it never reaches the card's double-click mode cycle.
+                    readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+                    onDoubleClicked: function(mouse) { mouse.accepted = true }
+                    onClicked: function(mouse) {
+                        mouse.accepted = true
+                        visualizerPresentationRoot.cameraResetRequested()
+                    }
                 }
             }
         }
 
-        Rectangle {
-            id: expandGlyph
-            objectName: "visualizerExpandGlyph"
+        // In the row while offered.
+        Item {
+            id: expandSlot
+            objectName: "visualizerExpandSlot"
+            visible: visualizerPresentationRoot.expandGlyphAvailable
             width: visualizerPresentationRoot.glyphSize
             height: visualizerPresentationRoot.glyphSize
-            radius: width / 2
-            color: "#bb20262c"
-            border.width: 1
-            border.color: "#c2ffffff"
-            // In the row while offered; the row adds the shared admission (widgetGlowAdmitted, the card shown).
-            visible: visualizerPresentationRoot.expandGlyphAvailable
-            opacity: (visualizerPresentationRoot.alwaysShowGlyphs
-                      && cameraResetHover.hovered) ? 0.92 : 0.0
-            enabled: visible && visualizerPresentationRoot.alwaysShowGlyphs
-                && cameraResetHover.hovered && opacity > 0.05
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: cameraResetHover.hovered ? 700 : 1200
-                    easing.type: Easing.InOutSine
-                }
-            }
-            onEnabledChanged: if (!enabled) {
-                expandTipReveal.stop()
-                visualizerPresentationRoot.expandTipProgress = 0.0
-            }
-            Canvas {
-                id: expandArrow
-                objectName: "visualizerExpandGlyphArrow"
-                anchors.centerIn: parent
-                width: 18
-                height: 18
-                readonly property bool collapse: visualizerPresentationRoot.expandedDisplay
-                onCollapseChanged: requestPaint()
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.clearRect(0, 0, width, height)
-                    ctx.save()
-                    // Expand points up-right; collapse is the same arrow turned to point down-left.
-                    if (collapse) { ctx.translate(width, height); ctx.rotate(Math.PI) }
-                    ctx.strokeStyle = "#f2f4f7"
-                    ctx.lineWidth = 2.0
-                    ctx.lineCap = "round"
-                    ctx.lineJoin = "round"
-                    ctx.beginPath()
-                    ctx.moveTo(4.5, 13.5)
-                    ctx.lineTo(13.5, 4.5)
-                    ctx.moveTo(7.5, 4.5)
-                    ctx.lineTo(13.5, 4.5)
-                    ctx.lineTo(13.5, 10.5)
-                    ctx.stroke()
-                    ctx.restore()
-                }
-            }
-            MouseArea {
+            Rectangle {
+                id: expandGlyph
+                objectName: "visualizerExpandGlyph"
                 anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                propagateComposedEvents: false
-                onEntered: expandTipReveal.restart()
-                onExited: {
+                radius: width / 2
+                color: "#bb20262c"
+                border.width: 1
+                border.color: "#c2ffffff"
+                // The shared input admission (widgetGlowAdmitted, the card shown); its slot is its place in the row.
+                visible: visualizerPresentationRoot.widgetGlowAdmitted && visualizerPresentationRoot.visible
+                opacity: (visualizerPresentationRoot.alwaysShowGlyphs
+                          && cameraResetHover.hovered) ? 0.92 : 0.0
+                enabled: visible && visualizerPresentationRoot.alwaysShowGlyphs
+                    && cameraResetHover.hovered && opacity > 0.05
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: cameraResetHover.hovered ? 700 : 1200
+                        easing.type: Easing.InOutSine
+                    }
+                }
+                onEnabledChanged: if (!enabled) {
                     expandTipReveal.stop()
                     visualizerPresentationRoot.expandTipProgress = 0.0
                 }
-                onPressed: function(mouse) { mouse.accepted = true }
-                readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
-                onDoubleClicked: function(mouse) { mouse.accepted = true }
-                onClicked: function(mouse) {
-                    mouse.accepted = true
-                    visualizerPresentationRoot.expandGlyphRequested(!visualizerPresentationRoot.expandedDisplay)
+                Canvas {
+                    id: expandArrow
+                    objectName: "visualizerExpandGlyphArrow"
+                    anchors.centerIn: parent
+                    width: 18
+                    height: 18
+                    readonly property bool collapse: visualizerPresentationRoot.expandedDisplay
+                    onCollapseChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.save()
+                        // Expand points up-right; collapse is the same arrow turned to point down-left.
+                        if (collapse) { ctx.translate(width, height); ctx.rotate(Math.PI) }
+                        ctx.strokeStyle = "#f2f4f7"
+                        ctx.lineWidth = 2.0
+                        ctx.lineCap = "round"
+                        ctx.lineJoin = "round"
+                        ctx.beginPath()
+                        ctx.moveTo(4.5, 13.5)
+                        ctx.lineTo(13.5, 4.5)
+                        ctx.moveTo(7.5, 4.5)
+                        ctx.lineTo(13.5, 4.5)
+                        ctx.lineTo(13.5, 10.5)
+                        ctx.stroke()
+                        ctx.restore()
+                    }
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    propagateComposedEvents: false
+                    onEntered: expandTipReveal.restart()
+                    onExited: {
+                        expandTipReveal.stop()
+                        visualizerPresentationRoot.expandTipProgress = 0.0
+                    }
+                    onPressed: function(mouse) { mouse.accepted = true }
+                    readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+                    onDoubleClicked: function(mouse) { mouse.accepted = true }
+                    onClicked: function(mouse) {
+                        mouse.accepted = true
+                        visualizerPresentationRoot.expandGlyphRequested(!visualizerPresentationRoot.expandedDisplay)
+                    }
                 }
             }
         }
@@ -615,7 +636,7 @@ Item {
         width: expandTooltipText.implicitWidth + 16
         height: expandTooltipText.implicitHeight + 8
         // Above the row like the other tips, its right edge on the glyph's.
-        x: Math.max(3, visualizerPresentationRoot.glyphRowPointX(expandGlyph.x + expandGlyph.width) - width)
+        x: Math.max(3, visualizerPresentationRoot.glyphRowPointX(expandSlot.x + expandSlot.width) - width)
         y: Math.max(3, visualizerPresentationRoot.glyphRowTop - height - 7)
         radius: 4
         z: 13

@@ -1286,11 +1286,14 @@ class QuickSceneController(QObject):
         """Return the retained Visualizer root for derived Edit-only framing.
 
         It is deliberately separate from editable child presentation: the root
-        supplies a read-only renderer-derived envelope only and never joins the
-        child editor, snapping or session persistence contracts.
+        supplies a read-only renderer-derived envelope and its bottom-right glyph
+        row's geometry only (Edit's preset steps and Rotate Widget Content
+        continue that row, on the ordinary frame and Fullscreen Edit's expanded
+        card alike) and never joins the child editor, snapping or session
+        persistence contracts.
         """
 
-        if item.model_identity != "spotify_visualizer":
+        if item.model_identity not in ("spotify_visualizer", FULLSCREEN_CARD_EDIT_ID):
             return None
         root = self._visualizer_root
         return root if _qobject_is_alive(root) else None
@@ -1350,6 +1353,8 @@ class QuickSceneController(QObject):
             size_reset_handler=size_reset_handler,
             close_item_handler=close_item_handler,
             content_rotation_handler=content_rotation_handler,
+            # The expanded card's frame reads the card's bottom-right glyph row (its Rotate Widget Content sits in it).
+            content_envelope_item_resolver=self._custom_layout_content_envelope_item,
         )
         model.save_requested.connect(self.custom_layout_save_requested.emit)
         model.selection_changed.connect(self.custom_layout_selection_changed.emit)
@@ -1408,9 +1413,6 @@ class QuickSceneController(QObject):
             "safe_inset": float(stage.property("safeInset")),
             "safe_width": float(stage.property("safeWidth")),
             "safe_height": float(stage.property("safeHeight")),
-            # How far up from the card's bottom edge its own right-hand controls reach (Reset Camera, the preset
-            # steps): the expanded card part's Rotate Widget Content sits above them.
-            "bottom_right_reserve": float(stage.property("bottomRightReserve")),
             "slots": slots,
             "parts": {"preset": slots["preset"]["rect"], "now_playing": rect(text), "artwork": rect(artwork)},
         }
