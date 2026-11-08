@@ -169,10 +169,13 @@ after the operator's yes on a question card; agents never run load (invisible ch
      order (design doc work orders): 4c measured 8 Nov: the snapshot path saves nothing for Spectrum, Oscilloscope,
      Sphere, Extruded Spectrum and Neon Lake (its capture + pickle + take cost about their whole tick) and ~1.0-1.3 ms
      for the four heavy modes, while moving DSP too would save ~.7-2.2 ms for every mode, so **P2b goes first**: the
-     worker owns audio capture, DSP and the tick, the snapshot layer is deleted. Next: the P2b work order (capture
-     and DSP in the worker, control edges only from the main process), the 4b gates against the live engine in the
-     worker, then 5 (production wiring: in-place mode and settings deltas, park, fail-closed, QtCore-only worker)
-     and 6 (gate 3).
+     worker owns audio capture, DSP and the tick, the snapshot layer is deleted. Built 8 Nov: P2b slice 1 (the live
+     engine on recorded PCM through its own capture callback, identical in process and in the worker) and slice 2
+     (pause/resume, warm re-entry and in-session mode switch in production read order, 126 pairs, 0 mismatching;
+     `VIS_SET_MODE` / `VIS_SET_DISPLAY_POWER`; per-slot identity under the seqlock, ABI 2), each audited. The Vulkan
+     core's needs are in the design doc (4V); compute shaders are SPIR-V-gated by test. Next: 5 (production wiring:
+     the worker paces its own ticks and owns the live device, settings deltas, latest-wins, fail-closed with fades,
+     QtCore-only worker, Bubble's own RNG; then delete the snapshot layer), then 6 (gate 3).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 
