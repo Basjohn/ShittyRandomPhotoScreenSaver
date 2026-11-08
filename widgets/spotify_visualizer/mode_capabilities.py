@@ -53,6 +53,11 @@ _SOURCE_INDEPENDENT_SCENE = frozenset({'waveform_ribbon'})
 # stay live for every mode (waveform readiness keys on the generation).
 _WAVEFORM_SAMPLE_CONSUMERS = frozenset({"oscilloscope"})
 
+# Modes whose capture reads the pre-AGC analysis spectrum (``get_pre_agc_analysis_spectrum``): Sphere's fragmentation,
+# Oscilloscope's spectrum lane, Neon Lake's terrain reaction (while enabled; declared for the mode). An engine worker's
+# main process requests the spectrum from this rule before each step instead of from the tick's read.
+_ANALYSIS_SPECTRUM_READERS = frozenset({"sphere", "oscilloscope", "shockwave_grid"})
+
 
 def mode_key(mode: Any) -> str:
     """Normalize a mode name or mode-carrying widget attribute to its key."""
@@ -91,6 +96,12 @@ def consumes_waveform_samples(mode: Any) -> bool:
     """True when the mode's renderer reads ``common.waveform`` samples."""
 
     return mode_key(mode) in _WAVEFORM_SAMPLE_CONSUMERS
+
+
+def reads_analysis_spectrum(mode: Any) -> bool:
+    """True when the mode's capture reads the engine's pre-AGC analysis spectrum."""
+
+    return mode_key(mode) in _ANALYSIS_SPECTRUM_READERS
 
 
 def requires_authoritative_first_source(mode: Any) -> bool:

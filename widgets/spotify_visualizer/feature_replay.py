@@ -381,6 +381,10 @@ class PcmReanalysis:
         self.frames += 1
 
 
+#: The replay harness's RNG seed (``deterministic_clock``); identity gates pass it to live engine sessions.
+REPLAY_SEED = 1729
+
+
 @contextmanager
 def deterministic_clock():
     """Pin the Visualizer's authored clock (``logical_runtime.authored_now``) and ``time.time``/``time.monotonic`` to
@@ -391,7 +395,7 @@ def deterministic_clock():
     now = [0.0]
     saved_random = random.getstate()
     saved_time, saved_monotonic = time.time, time.monotonic
-    random.seed(1729)
+    random.seed(REPLAY_SEED)
     time.time = lambda: now[0]
     time.monotonic = lambda: now[0]
     try:

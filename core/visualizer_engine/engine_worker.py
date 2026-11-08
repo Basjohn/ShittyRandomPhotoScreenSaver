@@ -22,6 +22,7 @@ from typing import Any, Optional
 
 from core.process.types import MessageType, WorkerMessage, WorkerResponse, WorkerType
 from core.process.workers.base import BaseWorker
+from core.visualizer_engine.engine_snapshot import SnapshotContractError
 
 
 class EngineSession:
@@ -35,7 +36,7 @@ class EngineSession:
 
     def __init__(self, *, mapping: str, mode: str, runtime_generation: int, preset: int = 0, settings: Any = None,
                  bar_count: int = 32, label_namespace: int = 0, wake: Any = None, inputs: str = "feature",
-                 initial_snapshot: Any = None) -> None:
+                 initial_snapshot: Any = None, seed: int | None = None) -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.engine_snapshot import SnapshotBeatEngine
         from core.visualizer_engine.packet_mailbox import PacketMailbox
@@ -52,8 +53,23 @@ class EngineSession:
         self.inputs = inputs
         self._stack = contextlib.ExitStack()
         # The session's authored clock follows its inputs' own timestamps (each input carries the time it was
-        # produced), so the worker ticks the same frames whatever its scheduling.
-        self._clock = self._stack.enter_context(deterministic_clock())
+        # produced), so the worker ticks the same frames whatever its scheduling. Live (snapshot) sessions pin only
+        # the authored clock: ``time.*`` and ``random`` stay the process's own (audit H6), so a tick that read a wall
+        # clock or the RNG would fail the identity gates instead of being pinned equal. Recorded-input sessions are
+        # replays and keep the replay harness's full pin.
+        if inputs == "snapshot":
+            from core.authored_clock import pinned_authored_clock
+
+            self._clock = [0.0]
+            self._stack.enter_context(pinned_authored_clock(lambda: self._clock[0]))
+            # Bubble's spawn draws from the process RNG, by design random (as in process). ``seed`` (a control
+            # input) lets the identity gates compare against a seeded replay; production passes none.
+            if seed is not None:
+                import random
+
+                random.seed(int(seed))
+        else:
+            self._clock = self._stack.enter_context(deterministic_clock())
         # Extruded Bubble's drift-family revisions are the renderer's geometry cache identity, so no two sessions may
         # reuse one: the main process gives every session its own ``label_namespace`` (>= 1, never repeated), and its
         # revisions start at ``namespace << 32`` (the main process's own counter stays far below). Namespace 0 numbers
@@ -86,8 +102,8 @@ class EngineSession:
         """The session's authored clock cell (in-process gates step their main-side engine on it)."""
         return self._clock
 
-    def tick_snapshot(self, snapshot: Any) -> tuple[int, Any]:
-        """Run the tick on one live input (an engine snapshot); the mailbox revision and the tick's engine demands."""
+    def tick_snapshot(self, snapshot: Any) -> int:
+        """Run the tick on one live input (an engine snapshot); the mailbox revision after it."""
         from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
         if self.inputs != "snapshot":
@@ -97,7 +113,7 @@ class EngineSession:
         self._engine.accept_snapshot(snapshot)
         if logical_tick(self._controller.logical_tick_state) is None:
             raise RuntimeError("the tick produced no logical frame")
-        return self.mailbox.revision, self._engine.take_demands()
+        return self.mailbox.revision
 
     def tick(self, feature: Any) -> int:
         """Accept one post-DSP input, run the tick, publish its frame; the mailbox revision after it."""
@@ -147,10 +163,17 @@ class VisualizerEngineWorker(BaseWorker):
             if msg.msg_type == MessageType.VIS_INPUT:
                 if self._session is None:
                     return self._reply(msg, success=False, error="no engine session is configured")
-                if "snapshot" in msg.payload:
-                    revision, demands = self._session.tick_snapshot(msg.payload["snapshot"])
-                    return self._reply(msg, revision=revision, demands=demands)
-                return self._reply(msg, revision=self._session.tick(msg.payload["frame"]))
+                try:
+                    if "snapshot" in msg.payload:
+                        revision = self._session.tick_snapshot(msg.payload["snapshot"])
+                    else:
+                        revision = self._session.tick(msg.payload["frame"])
+                except (Exception, SnapshotContractError) as exc:
+                    # Fail closed (audit M2): a tick that raised left its controller half-updated, so the session
+                    # ends; the owner treats it as a worker crash (fade, reconfigure once).
+                    self._close_session()
+                    return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
+                return self._reply(msg, revision=revision)
             if msg.msg_type == MessageType.VIS_STOP:
                 self._close_session()
                 return self._reply(msg)
