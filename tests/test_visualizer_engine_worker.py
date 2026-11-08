@@ -214,8 +214,9 @@ def _free_running_writer(mapping, wake, count, words):
 
 
 def test_a_free_running_writer_never_strands_or_tears_a_frame():
-    # Audit C1/C2: a writer in its own process at ~165 Hz, the reader taking on wakes with random 0-20 ms stalls.
-    # Every frame taken is whole (its payload repeats its own number), and the newest frame is always taken by a wake.
+    # Audit C1: a writer in its own process at ~165 Hz, the reader taking on wakes with random 0-20 ms stalls; the
+    # newest frame is always taken by a wake (the old edge rule stranded the reader). Any frame taken is whole (its
+    # payload repeats its own number), though a free run rarely lands a torn read at all: the C2 tests interleave.
     import multiprocessing
     import random
     import threading
@@ -245,6 +246,9 @@ def test_a_free_running_writer_never_strands_or_tears_a_frame():
         assert taken == sorted(taken) and taken[-1] == count
     finally:
         child.join(30)
+        if child.is_alive():
+            child.terminate()
+            child.join(10)
         reader.close()
 
 

@@ -342,3 +342,177 @@ The design names the properties; the worker has three messages (`VIS_CONFIGURE` 
    authored-clock-only pin (H6) before any production wiring; both simplify work order 5.
 6. Mark the Risks entries "The GUI wake" as open (done in the design doc) and add "payload is Python-only; P3 layouts
    are a separate work order" (H5) or build Spectrum's fixed layout as part of P3's first port.
+
+## Checkpoint audit 2 (8 Nov): fixes and 4c
+
+Scope: 051b8f9e (C1, C2), a478552e (H3a, H4, H6, M2), 4a8b4199 (4c tool, report, "P2b first"), read against the P2b
+work order that landed after it (750297bc). Ran: `test_visualizer_engine_packet_abi.py` +
+`test_visualizer_engine_worker.py` (25 passed), `test_visualizer_engine_snapshot.py -k "not worker_process"` (15
+passed), `engine_main_cost.py --seconds 5 --modes spectrum bubble`, and three throwaway probes (a mutation of the C2
+reader, a torn-read counter on the free-running test, an analysis-pass counter on `ProductionLaneEngine`). None of the
+P2a code is wired into production (only tests/tools import `EngineSnapshotSource`/`VisualizerEngineWorker`), so no
+finding below is a shipped behaviour change.
+
+### High
+
+**A2-H1. The C2 test does not pin the C2 fix: a reader without the final `sequence_begin` re-read passes it and
+accepts a torn payload.**
+- Evidence: `tests/test_visualizer_engine_packet_abi.py:88-96` fires its overwrite on the reader's *second* read of
+  the slot. On the old reader that second read was the slot head (so the tear landed during the payload copy and the
+  test failed, correctly); on the new reader (`packet_abi.py:191`) it is the `sequence_end` load, so the overwrite
+  happens *before* the head read and the reader rejects it through `head != latest` (`:197`), the same check the old
+  code had. Mutation probe: replace `begin = _U64.unpack_from(view, base)` (`:196`) with `begin = head` -> the test
+  still PASSes; the same mutant with the overwrite injected right after the head read returns
+  `FramePacket(payload=b'DDDDDDDD')` (torn, accepted).
+- The free-running stress test cannot cover it either: two runs, 330 frames each, `torn_reads == 0` both times (the
+  writer would have to publish twice during one copy; at 165 Hz it never does), so its "never tears" half is vacuous.
+- Failure scenario: a later refactor of `read_latest` (or the P3 C reader written from this test as its spec) drops or
+  reorders the trailing load; every test stays green and torn frames reach the renderer under load.
+- Fix: inject the overwrite between the head/payload read and the final begin load (e.g. hook the payload slice, or
+  fire on the `_SLOT_HEAD` read specifically), assert `None`, and keep the "drop the re-read" mutant as a negative
+  control. Reword "never tears" in the stress test, or make it actually lap (a writer publishing in a tight loop while
+  the reader copies a large payload, asserting `torn_reads > 0` so it cannot pass vacuously).
+
+**A2-H2. 4c's DSP column double-counts analysis for the Spectrum family, so "P2b saves" is overstated there and
+"P2b's gain is a floor" is unsupported.**
+- Evidence: `ProductionLaneEngine.accept_feature_frame` runs `compute_bars_from_samples` twice per new audio block for
+  modes with Spectrum shaping (`feature_replay.py:255` via `_replay_shaped_bars`, then `PcmReanalysis.accept`,
+  `feature_replay.py:376`). Probe (3 s clip): Spectrum / Extruded Spectrum / Neon Lake 1.54 analysis passes per
+  frame, Bubble / Oscilloscope 0.77; analysis .85-1.08 ms vs .40-.48 ms per frame - exactly the 1.08-1.14 vs .46-.60
+  split in the report's DSP column (`main_cost.json`). Plus ~.17-.24 ms/frame of replay-only bookkeeping (recorded
+  lanes, scheduler ring copy, onset renumbering, the spectrum tuple published every frame, `feature_replay.py:483-499`)
+  that the live engine does not do; and only ~77% of ticks carry new audio while the live worker analyses every
+  ~10 ms capture callback. The proxy is off in both directions, so it is not a floor.
+- The design doc's table ("Measured and decided") states ~1.29-1.34 ms P2b savings for those three modes; with one
+  analysis pass it is nearer ~.8 ms.
+- The decision survives (P2a is break-even for five modes; even halved, DSP >= ~.4 ms makes P2b the larger saving for
+  every mode), but these numbers must not be quoted as the expected gain or used as gate 3's baseline.
+- Fix: measure DSP with one pass (time `PcmReanalysis` alone), or better the live `SpotifyVisualizerAudioWorker`
+  compute path fed PCM blocks at the capture cadence (4b's harness); restate the table and drop "a floor".
+
+**A2-H3. P2b moves the frame decode onto the render thread's sync, which 4c counts only as ordinary main-process
+time.**
+- Evidence: steady-state admission takes from the logical mailbox on the render thread at Quick synchronization
+  (`quick_presentation_sync.py:308-311`, wired at `quick_display_visualizer_owner.py:524`), with the GUI thread
+  blocked. In process that take is a reference hand-off; with `PacketMailbox` it is `read_latest` + `frame_codec.decode`
+  under the mailbox lock: .07-.37 ms p50 in the report (Extruded Bubble .37/.43 p90; .18-.29 in my loaded rerun), and
+  1.5 ms p50 for a 4096-element state in the stress probe.
+- Failure scenario: P2b lowers total main-process GIL time but lengthens every sync for the heavy-frame modes, the
+  stall budget the frame-pacing work protects.
+- Fix: P2b's work order says where the decode runs (render thread at sync vs. GUI wake vs. decode-ahead on the wake
+  listener thread into a decoded latest slot), and gate 3 measures sync duration per mode, not only GIL totals.
+
+### Medium
+
+**A2-M1. `SnapshotContractError` (a `BaseException`) kills the worker process outside VIS_INPUT, and a failed session
+constructor leaks its pins.**
+- Evidence: only the VIS_INPUT branch catches it (`engine_worker.py:171`). VIS_CONFIGURE builds `EngineSession` (which
+  runs `configure_offline_controller` against `SnapshotBeatEngine`, `engine_worker.py:94`) under `except Exception`
+  (`:180`), and `BaseWorker.run` catches only `Exception` (`core/process/workers/base.py:214, 225`) and
+  `KeyboardInterrupt`: the worker loop exits with no reply and the owner sees a request timeout, not an error. A
+  constructor that raises after `pinned_authored_clock` is entered (`engine_worker.py:64`) never closes its ExitStack:
+  the authored clock stays pinned to the dead session's cell and the attached mapping stays open (pre-existing for
+  `Exception` too).
+- Fix: catch `(Exception, SnapshotContractError)` around VIS_CONFIGURE/VIS_STOP as well, and close `self._stack` on a
+  constructor failure. Moot for the error type once P2b deletes the snapshot engine; the ExitStack leak applies to
+  every session input.
+
+**A2-M2. H6: the gates' `seed` re-masks what H6 asked to surface, and the per-mode gate still pins `time.*`.**
+- Evidence: `_split_in_process` runs the snapshot session inside `deterministic_clock()`
+  (`tests/test_visualizer_engine_snapshot.py:73`), which monkeypatches `time.time`/`time.monotonic` process-wide, so
+  only the single worker-process test (1.0 s clip) ticks with real wall clocks. Both gates pass `seed=REPLAY_SEED` and
+  the reference seeds the same value, so *any* new process-RNG consumer in the tick (not just Bubble's spawn,
+  `bubble_simulation.py:164-259, 1497-1546`) draws identically and passes. The comment "a tick that read a wall clock
+  or the RNG would fail the identity gates" (`engine_worker.py:57-59`) is false for the RNG and true for wall clocks in
+  one test only.
+- The `seed` input itself is honest (production passes none), but it reseeds the process-global `random`.
+- Fix: give Bubble's simulation its own `random.Random` (as `bubble_ambient.py:62-63` already does) seeded from the
+  control input, and stop seeding the global RNG in the gates so a stray global draw diverges; run the worker half of
+  `_split_in_process` with only the authored clock pinned.
+
+**A2-M3. The H3a static scan has blind spots that still fail silently.**
+- Evidence: the scan (`tests/test_visualizer_engine_snapshot.py:233-250`) only matches `get_`/`is_`/`peek_` names of
+  `_SpotifyBeatEngine`, only under `widgets/spotify_visualizer`, excluding `feature_replay.py`. Private-attribute reads
+  fall through `SnapshotBeatEngine.__getattr__` as `AttributeError`, which `getattr(..., default)` swallows:
+  `tick_pipeline.py:1255` reads `engine._last_playback_state_ts` with default 0.0, so on the worker the latency
+  logger's pause/resume `stale_source` classification is silently off (diagnostic only; `tick_pipeline.py:1217`
+  `_last_smooth_ts` is the same pattern in a fallback). `set_*`/`reconfigure_*`/`wake` are silently accepted.
+  Today no engine getter is read outside the package (grep of `core/`, `rendering/`) and no read builds a getter name
+  dynamically, so the scan is currently complete for public getters.
+- Fix: raise `SnapshotContractError` for `_`-prefixed names in `__getattr__`, extend the scan to `core/` and
+  `rendering/` - or, under P2b, drop the question with the snapshot engine.
+
+**A2-M4. 4c methodology confounds and record mismatches.**
+- The worker's tick runs in the same process between the timed pickle and take (`engine_main_cost.py:109`); its
+  allocations can trigger GC inside the timed `take` and it churns caches, biasing P2a's main side up; the per-getter
+  re-capture loop (`:113-116`) does the same after `take`. p50s absorb most of it, p90s do not.
+- The read set behind `gain_p50_read_only_capture` is what the tick read on two default-config clips;
+  settings-dependent reads (Neon Lake's reaction, `logical_frame_capture.py:359-362`; Sphere's `source_is_current`;
+  paused paths) are missing, so a capture set built from it would be unsafe. Moot under P2b.
+- The doc says "20 s of both shipped clips ... ~3,600 ticks per mode"; the report has 2,312 frames per mode (the clips
+  are shorter than 20 s).
+- Concurrency: my rerun on a busier system read +40-50% absolute (Spectrum tick .46 vs .31, Bubble 2.61 vs 1.78, DSP
+  1.50 vs 1.14) with the same per-mode ordering, so the three concurrent agents did not confound the *direction*;
+  absolute numbers from either run are not baselines.
+- Wall time stands in for GIL time (`engine_main_cost.py:12`); NumPy FFT/ufunc work may release the GIL, so the DSP
+  share of GIL time is at most the wall figure. Unverified either way.
+
+**A2-M5. What P2b's gain omits and what the P2b work order still does not say.**
+- Uncounted main-side costs: one wake byte per publish means the main process's listener thread wakes, takes the GIL
+  and the mailbox lock and calls `QuickVisualizerPublicationWake.request` on every worker frame
+  (`packet_mailbox.py:104-105, 176-185`; 330 wakes for 330 frames in the probe) at the worker's own cadence; control
+  edges through the supervisor queue; reading back what frames must now carry (`_play_ramp_start_ts`, identities).
+  Small, but gate 3 must include them.
+- The work order (design doc 4P) covers capture-device ownership, Studios/replays unaffected, the control-edge
+  inventory and fail-closed capture. Not yet said: (1) the cadence owner - steps 5 and 6 still say "the main
+  process's capture is the cadence", "a main -> worker latest-wins snapshot mapping" and "Measurement (gate 3), then
+  decide P2b", and the Staged list (~line 38) still says P2b is "taken only if P2a's measurement shows...", all stale
+  against 4P; (2) Media playback truth - the main process's media state vs. the worker engine's own silence/play-ramp
+  detection: which wins, and how a pause reaches the worker before the ramp misreads silence; (3) default-endpoint /
+  device change and COM init on the worker's capture thread, and a capture restart without a session rebuild; (4) the
+  usage sampler and dormancy receipt counting a long-lived child (the sampler's `children()` is a known GIL-held
+  hitch); (5) the worker's logging/telemetry routing; (6) where the frame decode runs (A2-H3); (7) wake-pipe
+  backpressure: `send_bytes` blocks the worker's tick when the pipe fills (a main process whose listener cannot get
+  the GIL), so the writer should skip a wake while one is still unread rather than block.
+
+### Low
+
+- **A2-L1. Stale "edge only" comments after C1:** `packet_mailbox.py:61-62`, `engine_worker.py:78` and
+  `QuickVisualizerPublicationWake`'s docstring (`quick_presentation_sync.py:57-64`, "Mailbox coalescing guarantees at
+  most one queued wake"). The coalescing that makes per-publish wakes harmless is real (`quick_presentation_sync.py:78-
+  86`: one pending queued event, cleared before delivery); the comments describe the old contract.
+- **A2-L2. The P3 C-reader guidance assumes atomic 8-byte stores the Python writer does not make.** `struct` packs
+  `'<Q'` through `_PyLong_AsByteArray`, which writes the target byte by byte, so a C reader can load a torn sequence
+  word. The protocol tolerates it (begin's low byte always changes first because parity flips; `end`/`latest` are
+  stored after begin settles), but `packet_abi.py:31-33` should say so, or the writer should store sequence words
+  through an aligned `memoryview.cast("Q")` element. (From CPython source, not measured.)
+- **A2-L3. H4 cost shape:** the mode rule requests the spectrum every tick for Neon Lake even with its reaction off
+  (`mode_capabilities.py:59`), where in process the read, request and tuple copy happen only while enabled
+  (`logical_frame_capture.py:359-362`): a small dormancy regression on the P2a path, invisible to the gates because
+  `ProductionLaneEngine` publishes the spectrum every frame regardless (`feature_replay.py:489`). Moot under P2b.
+- **A2-L4. Stress-test hygiene:** the first `woke.wait(5.0)` includes spawn + import (1.2 s quiet), and a failed
+  assertion leaves the child to `join(30)` then unlinks its mapping without terminating it
+  (`tests/test_visualizer_engine_worker.py:222, 232`).
+
+### Verified sound
+
+- C2 code: the reader's order (begin scan, `sequence_end`, head + payload, `sequence_begin` again;
+  `packet_abi.py:185-200`) is a correct seqlock against the writer's (`:146-151`), including a writer that laps the
+  slot and byte-wise torn words. C1 code: one byte per publish across processes (`packet_mailbox.py:104-105`) removes
+  the acknowledgement race; the C1 unit test fails on the old rule (2 wakes vs 4), and the free-running test does
+  detect stranding.
+- H3a: `get_authoritative_frame_commit_seq` is captured; `SnapshotContractError` passes through the tick's
+  `except Exception` blocks; no `except BaseException`/bare `except` in the tick path swallows it (`render_state.py:241`
+  re-raises).
+- H4: `reads_analysis_spectrum` names every current reader (`logical_frame_capture.py:362, 620`,
+  `sphere_capture.py:103`); the check is one-directional (a read without the rule raises), so Neon Lake's
+  settings-dependent read cannot trip it.
+- M2: a raising tick closes the session and replies `session_closed`; the next input is refused.
+- 4c's decision direction: P2a is break-even or worse for five modes on both runs; P2b removes more main-process work
+  for every mode even after A2-H2's correction.
+
+### Not verified
+
+- Live DSP cost per capture callback on the real compute pool (needs 4b's harness), and its true GIL share.
+- Whether NumPy's FFT path releases the GIL in this build.
+- The worker-process snapshot gate (`test_the_worker_process_ticks_identical_frames_from_snapshots`) was not run.

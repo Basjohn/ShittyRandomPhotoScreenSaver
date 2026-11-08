@@ -2485,8 +2485,9 @@ class QuickSceneController(QObject):
         lease and binding stays exactly as it is (no family is retired or rebuilt, ``widgets.<id>.enabled`` and
         layout slots are untouched), so collapsing returns every widget exactly as it was. The OSD foreground lane,
         the Visualizer card and its shadow are outside it. ``fade_s`` 0 snaps; otherwise QML fades over it. Called by
-        the takeover coordinator at its event edges only. Returns whether anything changed; a retired or closing
-        scene changes nothing.
+        the takeover coordinator at its event edges only. Presentation-only cadence under the lanes pauses with the
+        cover through the ordinary host (``OrdinaryWidgetPresentationHost.set_ordinary_widgets_covered``). Returns
+        whether anything changed; a retired or closing scene changes nothing.
         """
 
         root = self._scene_root
@@ -2501,6 +2502,11 @@ class QuickSceneController(QObject):
         # already running).
         root.setProperty("ordinaryWidgetsCoverFadeMs", fade_ms)
         root.setProperty("ordinaryWidgetsCovered", covered)
+        # The same edge pauses (resumes) the presentation-only work beneath the lanes (plan 01 M3, Suspension):
+        # a covered Clock stops ticking and refresh glyphs stop animating; providers and models run on.
+        host = self._ordinary_widget_host
+        if host is not None:
+            host.set_ordinary_widgets_covered(covered)
         return True
 
     # ------------------------------------------------- Expanded Visualizer overlays (plan 01 §G, M3b)
