@@ -125,6 +125,7 @@ def test_noop_viewport_resize_release_still_finishes_undo_and_clears_guides():
     item = SimpleNamespace(source_key=key, viewport_resize_capable=True)
     origin = _ResizeOrigin(QRect(20, 30, 200, 100), QPoint(), 1.0, (100., 50.), 2.0)
     owner._resize_origins = {key: origin}
+    owner._fullscreen = None                                           # ordinary Edit, not Fullscreen Edit
     completed = []
     owner._resize_viewport_edge = lambda *_args: False
     owner._finish_undo_gesture = lambda kind: completed.append(kind)
@@ -175,7 +176,8 @@ def test_retained_guides_ignore_identical_samples_but_update_and_clear(guide_set
         active_vertical = ((26, "peer"),)
     else:
         fake_scene = SimpleNamespace(custom_layout_overlay=overlay,
-                                     _custom_layout_guide_underlay=center)
+                                     _custom_layout_guide_underlay=center,
+                                     _custom_layout_fullscreen=False)   # ordinary Edit, not Fullscreen Edit
         def apply(vertical=(), horizontal=()):
             QuickSceneController.set_custom_layout_guides(
                 fake_scene, vertical=vertical, horizontal=horizontal,
