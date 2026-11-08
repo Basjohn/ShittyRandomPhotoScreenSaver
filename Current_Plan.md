@@ -300,9 +300,14 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
     Glass Player (WMP11), Butterfly Buddies (MSN), Silhouette (iPod posters), Away Message (AIM).
   - **Novel:** Holo Foil, Afterburner.
 
-  All carry Preset 1's reactivity unchanged (only look keys authored), with ghosts off and caps carrying the peak.
+  All carry Preset 1's reactivity unchanged (only look keys authored).
   Evidence: `.artifacts/evidence/visualizers/spectrum/presets/20261107_lead/` (contact sheets, motion strips, metrics, the
   authoring script). Open: the operator's eyes. Silhouette is the plainest by concept.
+
+  **Operator, 8 Nov:** "definitely better", but none of them ghosted. They drew only the cap line, because the 7 Nov
+  authoring turned ghosting off in all 14. Each now ghosts under its caps in a light colour from its own palette
+  (only the Ghost keys changed). Before and after renders:
+  `.artifacts/evidence/visualizers/spectrum/20261108_ghost/`.
 - **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`).
   **The tick cut is merged (7 Nov).** Lead audit: three realistic mutations are each caught by
   `tests/test_waveform_logical_tick_exactness.py` (a Gaussian cache key ignoring the width, one shifted grid shared
