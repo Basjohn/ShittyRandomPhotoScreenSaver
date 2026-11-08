@@ -108,12 +108,15 @@ after the operator's yes on a question card; agents never run load (invisible ch
      artwork, sized apart) through the one Edit session; Save writes their value (and the Visualizer's turn to CUSTOM),
      other displays keep running without Edit chrome, and an unsaved draft holds Settings. Also there: Now Playing
      reveals when playback resumes (paused -> playing).
-     The operator's three live defects (8 Nov) are fixed on an agent branch (plan 01 M3c "Live defects"): Now
-     Playing's rows fill a set box (the artist follows the side handles); the Volume OSD is a Fullscreen Edit part,
-     its placement over the expanded card `fullscreen_overlays.volume_osd` (its ordinary placement untouched). Open:
-     "the metadata text cannot be moved" did not reproduce on the hidden production scene (a real-pointer drag bar
-     now guards it): the operator's live recheck of all three is owed, and if the text still will not drag, note
-     the corner, Media Controls and what was dragged.
+     The operator's live defects (8 Nov), merged c5cf132e (plan 01 M3c "Live defects"): Now Playing's rows fill a
+     set box (the artist follows the side handles); the Volume OSD is a Fullscreen Edit part, its placement over the
+     expanded card `fullscreen_overlays.volume_osd` (its ordinary placement untouched); Now Playing's controls are a
+     small Media card control bar (one shared `MediaTransportBar.qml`).
+     **Requested (operator, 8 Nov):** (a) an option (Fullscreen Mode pill, default off) to re-fade Now Playing in when
+     the pointer hovers where it is placed, events only (no timers, no polling); (b) "the metadata text cannot be
+     moved" meant moving parts separately: in Fullscreen Edit, when no block surface is drawn, every part of Now
+     Playing (artwork, title, artist, the media bar) moves and sizes on its own inside the block, through ordinary
+     Edit's existing child-geometry editing. Both assigned to the Now Playing child-edit agent.
      Side defect (8 Nov): `tests/test_qtquick_system_audio_osd.py::test_osd_colour_inheritance_respects_active_widget_
      theme_and_authored_overrides` fails when run after `tests/test_visualizers_fullscreen_mode_pill.py` in one
      process (passes alone; reproduced on the base): Widget Theme state leaks between the files.
