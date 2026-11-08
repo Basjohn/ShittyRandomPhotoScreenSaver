@@ -831,9 +831,9 @@ can most geometry normally."
   the artwork, all new members of the one value (canonical default = today's look: text `0` = natural, artwork `1`
   = square; a value stored before them reads them so, no bridge). Mirrored semantics: the text box is ordinary
   Edit's content box (Media's card elides in a set width and reflows into a set height): a set width elides, a set
-  height adds lines (the toast's name and Now Playing's title wrap, then elide), the block centred in its box,
-  floored at one line (the toast) or the natural block (Now Playing), at least the Media Controls
-  bar's width; extents
+  height adds lines (the toast's name and Now Playing's title wrap, then elide; the toast's name is centred in its
+  box; Now Playing's rows fill it, see the artist-line fix below), floored at one line (the toast) or the natural
+  block (Now Playing), at least the Media Controls bar's width; extents
   are in ems of the overlay's font, so a uniform scale (corner, wheel) and the font size keep the box's shape, as
   ordinary Edit's uniform scale keeps `content_extent`; a set box may use the whole safe area (the 45 % cap is only
   the natural growth). The artwork mirrors ordinary Edit's freeform artwork frame
@@ -847,6 +847,31 @@ can most geometry normally."
   Evidence: `tests/test_visualizer_expansion_fullscreen_edit.py` (side strips, one axis per handle, reflow and crop,
   undo, Restore Size, uniform scale, the parity map with side drags) and `..._overlay_settings.py`; stills outside the
   repository (`D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer\20261108_m3c_axes\`).
+- *Live defects (operator, 8 Nov, live; fixed the same day).* (1) **The artist line follows the box.** A set Now
+  Playing box height gives the title the lines that fit and spreads what is left between the rows (title to artist,
+  artist to the Media Controls): the title sits at the box's top and the last row at its bottom, so the artist moves
+  with the side handles as the title does (formerly the rows stayed bunched in the middle with a stale gap above and
+  below); Media's own content extent likewise widens its metadata spacing with its height. Natural boxes are
+  unchanged. (2) **Dragging the text.** Now Playing's text block dragged with real pointer events through the window
+  is taken by its Edit frame and moves Now Playing as one (guides, one undo step, Save); this did not reproduce on
+  the hidden production scene (DPR 1 and 1.5, with and without Media Controls, stacked corners, after side handles,
+  with the expanded card's item) and is now a permanent bar; the operator's live recheck is owed. (3) **The Volume
+  OSD is a Fullscreen Edit part (decided: it mirrors the overlays' model).** Its placement over the expanded card is
+  `fullscreen_overlays.volume_osd` = `offset_x` / `offset_y` (fractions of the safe area) and `scale`, relative to
+  where its ordinary layout puts it (canonical zero / one = exactly there; a value stored before it reads it so, no
+  bridge). The scene controller maps the OSD's layout rectangle through it (`RetainedOverlayWidget.
+  set_display_placement`, `core.settings.fullscreen_overlays.volume_osd_rect`: scaled about its centre, offset, kept
+  inside the safe area) only while the display-wide card is drawn, at event edges (the config, the overlays' stage
+  appearing or going, the stage's `volumeOsdPlacementChanged`: safe area or OSD lane). Its ordinary placement
+  (ordinary Edit, CUSTOM) is never changed: the layout keeps assigning the ordinary rectangle (the authored one) and
+  collapsing returns it exactly; writing the ordinary placement instead would have moved the collapsed OSD too and
+  broken Fullscreen Edit's rule that its Save never reaches the ordinary layout. In the session it moves with the
+  same snapping (the safe area, the overlays), one undo step, corner / wheel scale and Restore Size; it has no
+  single-axis extents (no side strips; its ordinary content extent stays ordinary Edit's). No Settings options.
+  Evidence: `tests/test_visualizer_expansion_fullscreen_edit.py` (artist rows with and without Media Controls, draft
+  and after Save, red on the former centred column; the real-pointer text drag; the OSD part, Save, the ordinary
+  rect kept and collapse, red without the part), `..._overlay_settings.py`; stills outside the repository
+  (`D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer61108_m3c_defects\`).
 - *Rotate Widget Content on the expanded card (operator, 8 Nov: the fullscreen Visualizer is missing "THE ROTATE
   GLYPH"; decided).* Ordinary Edit's Visualizer frame offers Rotate Widget Content (`rotateContentControl`, a
   quarter-turn of the content, CUSTOM layout state per mode) for a mode that can turn its content (Spectrum,
