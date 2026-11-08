@@ -197,22 +197,39 @@ Item {
         swapOutMs: 420
         swapInMs: 560
         stackShift: overlays.stackShiftFor(presetSlot, nowPlayingSlot)
-        naturalWidth: Math.min(Math.ceil(presetText.implicitWidth), maxContentWidth)
-        naturalHeight: Math.ceil(presetText.implicitHeight)
+        // A set text width replaces the natural one (the name elides in it); a set height is at least one line and
+        // gives the name as many lines as fit (it wraps, then elides). Unset, it is one line at its natural width.
+        readonly property real lineHeight: Math.max(1.0, Math.ceil(presetMetrics.height))
+        readonly property real boxWidth: setTextWidth > 0.0
+            ? Math.round(Math.min(maxBoxWidth, Math.max(minimumTextWidth, setTextWidth))) : 0.0
+        readonly property real boxHeight: setTextHeight > 0.0
+            ? Math.round(Math.min(maxBoxHeight, Math.max(lineHeight, setTextHeight))) : 0.0
+        readonly property int lineCount: boxHeight > 0.0 ? Math.max(1, Math.floor((boxHeight + 0.5) / lineHeight)) : 1
+        naturalWidth: boxWidth > 0.0 ? boxWidth : Math.min(Math.ceil(presetText.implicitWidth), maxContentWidth)
+        naturalHeight: boxHeight > 0.0 ? boxHeight : Math.ceil(presetText.implicitHeight)
         property string contentText: ""
         onSwapContent: contentText = overlays.presetName.length > 0 || !overlays.editing
             ? overlays.presetName : overlays.editPresetPlaceholder
 
+        FontMetrics {
+            id: presetMetrics
+            font: presetText.effectiveFont
+        }
         ShadowedText {
             id: presetText
             objectName: "expandedOverlayPresetText"
             width: presetSlot.naturalWidth
+            height: presetSlot.boxHeight > 0.0 ? presetSlot.boxHeight : implicitHeight
             text: presetSlot.contentText
             font.family: overlays.fontFamily
             font.pixelSize: Math.max(1, Math.round(presetSlot.fontSize))
             font.weight: Font.DemiBold
             color: presetSlot.textColor
             elide: Text.ElideRight
+            wrap: presetSlot.lineCount > 1
+            breakLongWords: true
+            maximumLineCount: presetSlot.lineCount
+            verticalAlignment: Text.AlignVCenter
             horizontalAlignment: presetSlot.rightSide ? Text.AlignRight : Text.AlignLeft
             shadowSoft: true
             shadowColor: overlays.textShadowColor
@@ -235,20 +252,44 @@ Item {
         swapOutMs: 700
         swapInMs: 900
         stackShift: overlays.stackShiftFor(nowPlayingSlot, presetSlot)
-        naturalWidth: artSize + gap + textColumn.width
-        naturalHeight: Math.max(artSize, textColumn.height)
+        naturalWidth: artWidth + gap + textBlock.width
+        naturalHeight: Math.max(artHeight, textBlock.height)
 
         readonly property bool controlsShown: options.mediaControls === true
-        // Square artwork as tall as the text beside it (with Media Controls too), never smaller than its own size,
-        // times its own size factor (Fullscreen Edit sizes the artwork apart from the text; it stays beside it).
-        readonly property real artworkScale: {
-            const value = Number(options.artworkScale)
+        function factor(raw) {
+            const value = Number(raw)
             return isFinite(value) && value > 0 ? Math.max(0.5, Math.min(3.0, value)) : 1.0
         }
-        readonly property real artSize: Math.round(Math.max(Math.round(fontSize * 3.1), Math.ceil(textColumn.height))
-                                                   * artworkScale)
+        // Square artwork as tall as the text beside it (with Media Controls too), never smaller than its own size,
+        // times its own size factor (Fullscreen Edit sizes the artwork apart from the text; it stays beside it). Its
+        // width and height factors (Fullscreen Edit's side handles) make the frame non-square; the image crops into it.
+        readonly property real artworkScale: factor(options.artworkScale)
+        readonly property real artworkWidthFactor: factor(options.artworkWidth)
+        readonly property real artworkHeightFactor: factor(options.artworkHeight)
+        // The text block's height with a one-line title (Media Controls included): what the artwork's size follows,
+        // so a set text height (more title lines) never resizes the artwork.
+        readonly property real titleLineHeight: Math.max(1.0, Math.ceil(titleMetrics.height))
+        readonly property real naturalTextHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistText.implicitHeight)
+            + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controls.height : 0.0)
+        readonly property real artBase: Math.max(Math.round(fontSize * 3.1),
+                                                 Math.ceil(boxHeight > 0.0 ? naturalTextHeight : textColumn.height))
+        readonly property real artWidth: Math.round(artBase * artworkScale * artworkWidthFactor)
+        readonly property real artHeight: Math.round(artBase * artworkScale * artworkHeightFactor)
         readonly property real gap: Math.round(fontSize * 0.55)
-        readonly property real textWidthLimit: Math.max(48.0, maxContentWidth - artSize - gap)
+        readonly property real textWidthLimit: Math.max(48.0, maxContentWidth - artWidth - gap)
+        // The text block: a set width replaces the natural one (every line elides in it; never narrower than the
+        // Media Controls); a set height is at least the natural block and gives the title the extra lines that fit
+        // (it wraps, then elides), the block centred in it. Unset, it is today's block.
+        readonly property real naturalTextWidth: Math.min(textWidthLimit,
+            Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth, controlsShown ? controls.width : 0.0)))
+        readonly property real boxWidth: setTextWidth > 0.0
+            ? Math.round(Math.min(Math.max(1.0, maxBoxWidth - artWidth - gap),
+                                  Math.max(minimumTextWidth, controlsShown ? controls.width : 0.0, setTextWidth)))
+            : 0.0
+        readonly property real boxHeight: setTextHeight > 0.0
+            ? Math.round(Math.min(maxBoxHeight, Math.max(naturalTextHeight, setTextHeight))) : 0.0
+        readonly property int titleLines: boxHeight > 0.0
+            ? 1 + Math.max(0, Math.floor((boxHeight - naturalTextHeight + 0.5) / titleLineHeight)) : 1
         readonly property bool playing: !!overlays.mediaModel
             && String(overlays.mediaModel.playbackState).toLowerCase() === "playing"
 
@@ -270,14 +311,15 @@ Item {
         Item {
             id: artFrame
             objectName: "expandedOverlayArtwork"
-            width: nowPlayingSlot.artSize
-            height: nowPlayingSlot.artSize
+            width: nowPlayingSlot.artWidth
+            height: nowPlayingSlot.artHeight
             x: nowPlayingSlot.rightSide ? parent.width - width : 0.0
             y: (parent.height - height) / 2.0
             readonly property real imageInset: Math.max(0.75, overlays.borderWidth * 0.65)
             onXChanged: overlays.noteEditGeometry()
             onYChanged: overlays.noteEditGeometry()
             onWidthChanged: overlays.noteEditGeometry()
+            onHeightChanged: overlays.noteEditGeometry()
 
             RectangularShadow {
                 anchors.fill: parent
@@ -298,7 +340,7 @@ Item {
             Canvas {
                 id: noteGlyph
                 anchors.centerIn: parent
-                width: Math.round(parent.width * 0.42)
+                width: Math.round(Math.min(parent.width, parent.height) * 0.42)
                 height: width
                 readonly property color ink: Qt.rgba(overlays.borderColor.r, overlays.borderColor.g,
                                                      overlays.borderColor.b, 0.55)
@@ -359,105 +401,119 @@ Item {
             }
         }
 
-        Column {
-            id: textColumn
+        FontMetrics {
+            id: titleMetrics
+            font: titleText.effectiveFont
+        }
+        // The text block (Fullscreen Edit's Now Playing frame): the column at its natural size or in a set box.
+        Item {
+            id: textBlock
             objectName: "expandedOverlayNowPlayingText"
-            x: nowPlayingSlot.rightSide ? 0.0 : nowPlayingSlot.artSize + nowPlayingSlot.gap
+            x: nowPlayingSlot.rightSide ? 0.0 : nowPlayingSlot.artWidth + nowPlayingSlot.gap
             y: (parent.height - height) / 2.0
-            width: Math.min(nowPlayingSlot.textWidthLimit,
-                            Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth,
-                                               controls.visible ? controls.width : 0.0)))
-            spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
+            width: nowPlayingSlot.boxWidth > 0.0 ? nowPlayingSlot.boxWidth : nowPlayingSlot.naturalTextWidth
+            height: nowPlayingSlot.boxHeight > 0.0 ? nowPlayingSlot.boxHeight : textColumn.height
             onXChanged: overlays.noteEditGeometry()
             onYChanged: overlays.noteEditGeometry()
             onWidthChanged: overlays.noteEditGeometry()
             onHeightChanged: overlays.noteEditGeometry()
 
-            ShadowedText {
-                id: titleText
-                objectName: "expandedOverlayTitle"
-                width: textColumn.width
-                text: nowPlayingSlot.contentTitle
-                font.family: overlays.fontFamily
-                font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize))
-                font.weight: Font.DemiBold
-                color: nowPlayingSlot.textColor
-                elide: Text.ElideRight
-                horizontalAlignment: nowPlayingSlot.rightSide ? Text.AlignRight : Text.AlignLeft
-                shadowSoft: true
-                shadowColor: overlays.textShadowColor
-                shadowOffsetX: 0.0
-                shadowOffsetY: overlays.textShadowOffset
-            }
-            ShadowedText {
-                id: artistText
-                objectName: "expandedOverlayArtist"
-                width: textColumn.width
-                text: nowPlayingSlot.contentArtist
-                font.family: overlays.fontFamily
-                font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize * 0.74))
-                color: nowPlayingSlot.textColor
-                opacity: 0.88
-                elide: Text.ElideRight
-                horizontalAlignment: nowPlayingSlot.rightSide ? Text.AlignRight : Text.AlignLeft
-                shadowSoft: true
-                shadowColor: overlays.textShadowColor
-                shadowOffsetX: 0.0
-                shadowOffsetY: overlays.textShadowOffset
-            }
-            // Media Controls (default off): previous / play-pause / next on the Media card's own transport owner.
-            Item {
-                width: textColumn.width
-                height: controls.visible ? Math.round(nowPlayingSlot.fontSize * 0.25) : 0.0
-                visible: controls.visible
-            }
-            Row {
-                id: controls
-                objectName: "expandedOverlayMediaControls"
-                visible: nowPlayingSlot.controlsShown
-                x: nowPlayingSlot.rightSide ? textColumn.width - width : 0.0
-                spacing: Math.round(nowPlayingSlot.fontSize * 0.35)
+            Column {
+                id: textColumn
+                y: (parent.height - height) / 2.0
+                width: textBlock.width
+                spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
 
-                Repeater {
-                    model: ["previous", "play", "next"]
-                    delegate: Rectangle {
-                        id: control
-                        required property string modelData
-                        objectName: "expandedOverlayTransport_" + modelData
-                        readonly property var model: overlays.mediaModel
-                        readonly property bool available: !!model && (modelData === "previous" ? model.canPrevious
-                            : modelData === "next" ? model.canNext : model.canPlayPause)
-                        width: Math.round(nowPlayingSlot.fontSize * 1.3)
-                        height: width
-                        radius: width / 2.0
-                        // The card's in-card control look (Reset Camera, the preset steps).
-                        color: "#bb20262c"
-                        border.width: 1
-                        border.color: "#c2ffffff"
-                        opacity: !available ? 0.35 : (tap.enabled ? 1.0 : 0.68)
-                        scale: tap.pressed ? 1.10 : (tap.containsMouse && tap.enabled ? 1.06 : 1.0)
+                ShadowedText {
+                    id: titleText
+                    objectName: "expandedOverlayTitle"
+                    width: textColumn.width
+                    text: nowPlayingSlot.contentTitle
+                    font.family: overlays.fontFamily
+                    font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize))
+                    font.weight: Font.DemiBold
+                    color: nowPlayingSlot.textColor
+                    elide: Text.ElideRight
+                    wrap: nowPlayingSlot.titleLines > 1
+                    breakLongWords: true
+                    maximumLineCount: nowPlayingSlot.titleLines
+                    horizontalAlignment: nowPlayingSlot.rightSide ? Text.AlignRight : Text.AlignLeft
+                    shadowSoft: true
+                    shadowColor: overlays.textShadowColor
+                    shadowOffsetX: 0.0
+                    shadowOffsetY: overlays.textShadowOffset
+                }
+                ShadowedText {
+                    id: artistText
+                    objectName: "expandedOverlayArtist"
+                    width: textColumn.width
+                    text: nowPlayingSlot.contentArtist
+                    font.family: overlays.fontFamily
+                    font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize * 0.74))
+                    color: nowPlayingSlot.textColor
+                    opacity: 0.88
+                    elide: Text.ElideRight
+                    horizontalAlignment: nowPlayingSlot.rightSide ? Text.AlignRight : Text.AlignLeft
+                    shadowSoft: true
+                    shadowColor: overlays.textShadowColor
+                    shadowOffsetX: 0.0
+                    shadowOffsetY: overlays.textShadowOffset
+                }
+                // Media Controls (default off): previous / play-pause / next on the Media card's own transport owner.
+                Item {
+                    id: controlsSpacer
+                    width: textColumn.width
+                    height: Math.round(nowPlayingSlot.fontSize * 0.25)
+                    visible: controls.visible
+                }
+                Row {
+                    id: controls
+                    objectName: "expandedOverlayMediaControls"
+                    visible: nowPlayingSlot.controlsShown
+                    x: nowPlayingSlot.rightSide ? textColumn.width - width : 0.0
+                    spacing: Math.round(nowPlayingSlot.fontSize * 0.35)
 
-                        MediaTransportGlyph {
-                            anchors.centerIn: parent
-                            width: Math.round(control.width * 0.52)
-                            kind: control.modelData === "play" ? (nowPlayingSlot.playing ? "pause" : "play")
-                                                               : control.modelData
-                            glyphColor: "#ffffffff"
-                        }
-                        MouseArea {
-                            id: tap
-                            anchors.fill: parent
-                            enabled: nowPlayingSlot.interactive && control.available
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            propagateComposedEvents: false
-                            onPressed: function(mouse) { mouse.accepted = true }
-                            // An in-card control consumes every press of its own, a double-click's second included.
-                            readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
-                            onDoubleClicked: function(mouse) { mouse.accepted = true }
-                            onClicked: function(mouse) {
-                                mouse.accepted = true
-                                overlays.transportRequested(control.modelData)
+                    Repeater {
+                        model: ["previous", "play", "next"]
+                        delegate: Rectangle {
+                            id: control
+                            required property string modelData
+                            objectName: "expandedOverlayTransport_" + modelData
+                            readonly property var model: overlays.mediaModel
+                            readonly property bool available: !!model && (modelData === "previous" ? model.canPrevious
+                                : modelData === "next" ? model.canNext : model.canPlayPause)
+                            width: Math.round(nowPlayingSlot.fontSize * 1.3)
+                            height: width
+                            radius: width / 2.0
+                            // The card's in-card control look (Reset Camera, the preset steps).
+                            color: "#bb20262c"
+                            border.width: 1
+                            border.color: "#c2ffffff"
+                            opacity: !available ? 0.35 : (tap.enabled ? 1.0 : 0.68)
+                            scale: tap.pressed ? 1.10 : (tap.containsMouse && tap.enabled ? 1.06 : 1.0)
+
+                            MediaTransportGlyph {
+                                anchors.centerIn: parent
+                                width: Math.round(control.width * 0.52)
+                                kind: control.modelData === "play" ? (nowPlayingSlot.playing ? "pause" : "play")
+                                                                   : control.modelData
+                                glyphColor: "#ffffffff"
+                            }
+                            MouseArea {
+                                id: tap
+                                anchors.fill: parent
+                                enabled: nowPlayingSlot.interactive && control.available
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                propagateComposedEvents: false
+                                onPressed: function(mouse) { mouse.accepted = true }
+                                // An in-card control consumes every press of its own, a double-click's second included.
+                                readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+                                onDoubleClicked: function(mouse) { mouse.accepted = true }
+                                onClicked: function(mouse) {
+                                    mouse.accepted = true
+                                    overlays.transportRequested(control.modelData)
+                                }
                             }
                         }
                     }

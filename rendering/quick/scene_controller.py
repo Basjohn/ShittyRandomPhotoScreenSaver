@@ -63,6 +63,7 @@ from .custom_layout_overlay import (
     RetainedCustomLayoutOverlay,
     guide_property_matches,
 )
+from .fullscreen_overlay_edit import CARD_EDIT_ID as FULLSCREEN_CARD_EDIT_ID
 from .image_state import PresentationImage
 from .media_artwork import MediaArtworkImageProvider
 from .render import BackgroundRenderItem, RenderNodeTelemetry
@@ -1307,6 +1308,7 @@ class QuickSceneController(QObject):
         move_finished_handler: MoveFinishedHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         close_item_handler: CloseItemHandler | None = None,
+        content_rotation_handler: ContentRotationHandler | None = None,
         item_change_publisher: Callable[[CustomLayoutSessionItem], None] | None = None,
         geometry_listener: Callable[[], None] | None = None,
     ) -> CustomLayoutOverlayModel:
@@ -1347,6 +1349,7 @@ class QuickSceneController(QObject):
             move_finished_handler=move_finished_handler,
             size_reset_handler=size_reset_handler,
             close_item_handler=close_item_handler,
+            content_rotation_handler=content_rotation_handler,
         )
         model.save_requested.connect(self.custom_layout_save_requested.emit)
         model.selection_changed.connect(self.custom_layout_selection_changed.emit)
@@ -1362,8 +1365,9 @@ class QuickSceneController(QObject):
         """Fullscreen Edit: the full-display overlays' live geometry, in the Edit layer's local coordinates.
 
         Read on demand at Edit edges (never cached, never per frame): the stage (the overlays' item over the expanded
-        card) and its safe area, each overlay's rectangle, its stage position and its corner anchor (``anchoredX`` /
-        ``anchoredY``: where it sits at a zero offset, its stacking included), and the Edit parts' rectangles: the
+        card) and its safe area, each overlay's rectangle, its stage position, its corner anchor (``anchoredX`` /
+        ``anchoredY``: where it sits at a zero offset, its stacking included), its font size and card padding, and the
+        Edit parts' rectangles: the
         preset toast, Now Playing's text block (with its Media Controls when shown) and its artwork. None while the
         overlays are not drawn.
         """
@@ -1391,6 +1395,9 @@ class QuickSceneController(QObject):
                 "rect": rect(slot),
                 "pos": (float(slot.x()), float(slot.y())),
                 "anchored": (float(slot.property("anchoredX")), float(slot.property("anchoredY"))),
+                # The em of the overlay's text-box extents and its card padding (Fullscreen Edit's side handles).
+                "font_size": float(slot.property("fontSize")),
+                "padding": float(slot.property("padding")),
             }
         text = stage.findChild(QQuickItem, "expandedOverlayNowPlayingText")
         artwork = stage.findChild(QQuickItem, "expandedOverlayArtwork")
@@ -1401,6 +1408,9 @@ class QuickSceneController(QObject):
             "safe_inset": float(stage.property("safeInset")),
             "safe_width": float(stage.property("safeWidth")),
             "safe_height": float(stage.property("safeHeight")),
+            # How far up from the card's bottom edge its own right-hand controls reach (Reset Camera, the preset
+            # steps): the expanded card part's Rotate Widget Content sits above them.
+            "bottom_right_reserve": float(stage.property("bottomRightReserve")),
             "slots": slots,
             "parts": {"preset": slots["preset"]["rect"], "now_playing": rect(text), "artwork": rect(artwork)},
         }
@@ -1678,7 +1688,14 @@ class QuickSceneController(QObject):
         extent: tuple[float, float] | None = None
         rotation_state: object = {}
         if self._custom_layout_session is not None:
-            active_item = self._active_custom_layout_item("spotify_visualizer")
+            # Fullscreen Edit's expanded card part carries the Visualizer's committed extent and the draft
+            # orientation (its Rotate Widget Content); the ordinary Visualizer item is never in that session. Until
+            # the card is turned nothing is published: the Visualizer keeps its committed truth untouched.
+            active_item = self._active_custom_layout_item(
+                FULLSCREEN_CARD_EDIT_ID if self._custom_layout_fullscreen else "spotify_visualizer")
+            if (active_item is not None and self._custom_layout_fullscreen
+                    and active_item.current_size_payload == active_item.baseline_size_payload):
+                active_item = None
             if active_item is not None:
                 extent = active_item.current_viewport_extent
                 from widgets.spotify_visualizer.presentation_orientation import (
@@ -1693,6 +1710,11 @@ class QuickSceneController(QObject):
                     ),
                 )
         sink(extent, rotation_state)
+
+    def refresh_visualizer_viewport_config(self) -> None:
+        """Fullscreen Edit: republish the expanded card part's extent and draft orientation (a rotate, an undo)."""
+
+        self._publish_visualizer_viewport_config()
 
     def _sync_custom_layout_visualizer(self) -> None:
         # Publish the latest logical viewport extent even when there is no Quick

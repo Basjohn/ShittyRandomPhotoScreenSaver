@@ -245,6 +245,10 @@ Item {
             // Fullscreen Edit (M3c): a full-display overlay's frame (the preset toast, Now Playing's text, its
             // artwork). It moves and scales like any frame; it cannot be closed (the overlays have no enabled state).
             readonly property bool fullscreenOverlay: widgetId.indexOf("fullscreen_overlay.") === 0
+            // Fullscreen Edit's expanded Visualizer card: it offers only Rotate Widget Content (revealed on hover in
+            // its usual lower-right slot, as on the ordinary Visualizer frame). The card is never moved or sized, so
+            // its frame draws no outline and takes no press: the background stays Edit's (double-click Saves).
+            readonly property bool fullscreenCard: widgetId === "fullscreen_overlay.visualizer"
             Component.onCompleted: customLayoutOverlay.deliverPendingChildLock(editFrame)
             onHasPresentationItemChanged: customLayoutOverlay.deliverPendingChildLock(editFrame)
             readonly property var contentEnvelope: {
@@ -385,6 +389,7 @@ Item {
             height: geometryHeight
             Rectangle {
                 anchors.fill: parent
+                visible: !editFrame.fullscreenCard
                 color: "transparent"
                 border.width: 2
                 border.color: "#fff4f4f4"
@@ -1131,6 +1136,7 @@ Item {
                 id: moveArea
                 objectName: "customLayoutParentMoveArea-" + editFrame.widgetId
                 anchors.fill: parent
+                enabled: !editFrame.fullscreenCard
                 // The former full-width 32px top exclusion made most headers
                 // and the gap beside a flipped header impossible to select.
                 // Chrome owns its own higher z; do not remove an entire row of
@@ -1440,8 +1446,11 @@ Item {
                     property string edge: modelData
                     property bool horizontalEdge: edge === "left" || edge === "right"
                     // Inset the strips so they never sit on top of the corner
-                    // handles or the close control.
-                    property int edgeInset: 20
+                    // handles or the close control. A short frame (a one-line
+                    // Fullscreen Edit toast) keeps a grabbable 16 px strip
+                    // clear of its 14 px corner squares instead of none.
+                    readonly property real edgeSpan: horizontalEdge ? editFrame.height : editFrame.width
+                    property real edgeInset: Math.min(20, Math.max(8, (edgeSpan - 16) / 2))
                     property int edgeThickness: 10
 
                     objectName: "customLayoutViewportEdge-" + editFrame.widgetId + "-" + edge

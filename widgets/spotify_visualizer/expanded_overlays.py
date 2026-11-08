@@ -39,11 +39,16 @@ def resolve_expanded_overlay_config(section: Mapping[str, Any] | None, *, card_t
             "offsetX": float(options["offset_x"]),
             "offsetY": float(options["offset_y"]),
             "scale": float(options["scale"]),
+            # The text box's single-axis extents (ems of the overlay's font; 0 = the natural size).
+            "textWidth": float(options["text_width"]),
+            "textHeight": float(options["text_height"]),
         }
         if "media_controls" in options:
             projected["mediaControls"] = bool(options["media_controls"])
         if "artwork_scale" in options:
             projected["artworkScale"] = float(options["artwork_scale"])
+            projected["artworkWidth"] = float(options["artwork_width"])
+            projected["artworkHeight"] = float(options["artwork_height"])
         return projected
 
     return {

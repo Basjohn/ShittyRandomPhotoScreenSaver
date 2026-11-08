@@ -99,11 +99,12 @@ def _projection(value: dict) -> dict:
 class _Fullscreen:
     """Fullscreen Edit through the real owner on the hidden scene (the display manager's start, minus its menus)."""
 
-    def __init__(self, display, settings) -> None:
+    def __init__(self, display, settings, visualizer=None) -> None:
         from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
 
         self.display = display
         self.settings = settings
+        self.visualizer = visualizer
         self.reloads: list[str] = []
         self.flips: list[bool] = []
         self.unit = SimpleNamespace(
@@ -113,7 +114,8 @@ class _Fullscreen:
                                                                      geometry=(0, 0, WIDTH, HEIGHT))))
         self.owner = QuickCustomLayoutOwner(
             settings_manager=settings, participants_provider=lambda: (self.unit,),
-            visualizer_provider=lambda: (None, None), reload_request=self.reloads.append,
+            visualizer_provider=lambda: (self.visualizer, self.unit) if self.visualizer is not None else (None, None),
+            reload_request=self.reloads.append,
             fullscreen_draft_listener=self.flips.append)
 
     def start(self) -> bool:
@@ -159,6 +161,22 @@ class _Fullscreen:
         self.model.resizeItem(row, handle, x + dx / 2, y + dy / 2, False)
         self.model.resizeItem(row, handle, x + dx, y + dy, True)
 
+    def side(self, part: str, handle: str, delta: int, *, release: bool = True) -> None:
+        """Drag one side handle (``left``/``right``/``top``/``bottom``) or a two-axis diagonal (``content_*``) by
+        ``delta`` along its axis (both axes for a diagonal), pressing on the frame's edge as the Edit layer does."""
+        row = self.row(part)
+        rect = self._local(self.item(part).current_global_rect)
+        corner = handle.removeprefix("content_")
+        x = rect.x() if corner.endswith("left") else (rect.x() + rect.width() if corner.endswith("right")
+                                                       else rect.center().x())
+        y = rect.y() if corner.startswith("top") else (rect.y() + rect.height() if corner.startswith("bottom")
+                                                        else rect.center().y())
+        dx = delta if handle in ("left", "right") or handle.startswith("content_") else 0
+        dy = delta if handle in ("top", "bottom") or handle.startswith("content_") else 0
+        assert self.model.beginResize(row, handle, x, y)
+        self.model.resizeItem(row, handle, x + dx / 2, y + dy / 2, False)
+        self.model.resizeItem(row, handle, x + dx, y + dy, release)
+
     def frames(self) -> dict[str, tuple[int, int, int, int]]:
         return {part: self.item(part).current_global_rect.getRect() for part in PARTS}
 
@@ -178,7 +196,8 @@ class _Fullscreen:
 
 def _gesture(edit: _Fullscreen) -> None:
     """One script exercising every Fullscreen Edit gesture: move, wheel, corner drags (text and artwork), the artwork
-    moving Now Playing, and Restore Size."""
+    moving Now Playing, side handles (width only, height only) and a two-axis diagonal on every part, and Restore
+    Size."""
     edit.drag("preset", 180, 96)
     edit.wheel("now_playing", 2)
     edit.corner("artwork", "top_right", 36, -36)
@@ -187,6 +206,12 @@ def _gesture(edit: _Fullscreen) -> None:
     edit.wheel("preset", -1)
     edit.model.restoreSize(edit.row("preset"))
     edit.drag("preset", -24, 30)
+    edit.side("preset", "right", -70)
+    edit.side("preset", "bottom", 64)
+    edit.side("now_playing", "right", 140)
+    edit.side("now_playing", "top", -50)
+    edit.side("artwork", "right", 44)
+    edit.side("artwork", "content_bottom_right", -20)
 
 
 def _visual_items(item) -> list:
@@ -223,6 +248,11 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
         assert f"customLayoutEditFrame-fullscreen_overlay.{part}" in frames
         assert not frames[f"customLayoutClose-fullscreen_overlay.{part}"].isVisible()
         assert frames[f"customLayoutResize-fullscreen_overlay.{part}-bottom_right"].isVisible()
+        # ... and the same single-axis side strips as ordinary content-extent widgets, each one grabbable (a one-line
+        # toast is shorter than the strips' usual corner insets).
+        for edge in ("left", "right", "top", "bottom"):
+            strip = frames[f"customLayoutViewportEdge-fullscreen_overlay.{part}-{edge}"]
+            assert strip.isVisible() and min(strip.width(), strip.height()) >= 8, (part, edge)
     before_config = dict(display.scene._visualizer_overlay_config)
     before = edit.frames()
     assert before == edit.drawn()
@@ -233,10 +263,15 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
     draft_frames, draft_config = edit.frames(), dict(display.scene._visualizer_overlay_config)
     assert draft_frames == edit.drawn()                      # every frame is what the overlays draw
     assert draft_value != seeded and draft_frames != before   # the script really edited the draft
-    for overlay in ("preset", "now_playing"):
-        assert {k: v for k, v in draft_value[overlay].items() if k not in ("offset_x", "offset_y", "scale",
-                                                                            "artwork_scale")} == {
-            k: v for k, v in seeded[overlay].items() if k not in ("offset_x", "offset_y", "scale", "artwork_scale")}
+    from core.settings.fullscreen_overlays import PLACEMENT_KEYS
+
+    for overlay, keys in PLACEMENT_KEYS.items():
+        assert {k: v for k, v in draft_value[overlay].items() if k not in keys} == {
+            k: v for k, v in seeded[overlay].items() if k not in keys}
+        # The side handles really set every extent the script touched (each axis on its own).
+        assert all(draft_value[overlay][key] != seeded[overlay][key] for key in ("text_width", "text_height"))
+    assert all(draft_value["now_playing"][key] != seeded["now_playing"][key]
+               for key in ("artwork_width", "artwork_height"))
     assert edit.owner.fullscreen_draft_pending and edit.flips == [True]
 
     assert edit.owner.cancel()
@@ -547,6 +582,386 @@ def test_overlays_moved_into_the_control_column_keep_clear_of_the_cards_controls
         slot = geometry["slots"][overlay]
         assert offsets_for_position(slot["pos"], slot["anchored"], (geometry["safe_width"], geometry["safe_height"]))             == (draft[overlay]["offset_x"], draft[overlay]["offset_y"]), overlay
     edit.owner.cancel()
+
+
+# ------------------------------------------------------------------- single-axis sizing (ordinary side handles)
+
+
+def _centred(edit: _Fullscreen) -> None:
+    """Both overlays away from the safe area's edges, so every edge has room to move."""
+    edit.drag("preset", 300, 200)
+    edit.drag("now_playing", 320, -220)
+
+
+SIDES = {"right": 90, "left": -90, "top": -60, "bottom": 60}
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("part", PARTS)
+@pytest.mark.parametrize("handle", tuple(SIDES))
+def test_a_side_handle_changes_only_its_own_axis(display, tmp_path, part, handle):
+    """Ordinary Edit's single-axis content-extent semantics: a side strip changes one dimension and one extent member;
+    the other dimension and member stay exactly; on the text parts the opposite edge stays where it was (the artwork
+    grows from its place beside the text, as its corner drag does)."""
+    from rendering.quick.fullscreen_overlay_edit import EXTENT_KEYS, SCALE_KEY
+
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(), config=_projection(_seed(settings)))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    before = QRect(edit.item(part).current_global_rect)
+    payload = dict(edit.item(part).current_size_payload)
+
+    edit.side(part, handle, SIDES[handle])
+    _run(display, 60)
+    after = edit.item(part).current_global_rect
+    horizontal = handle in ("left", "right")
+    grown, kept = ((after.width(), before.width()), (after.height(), before.height())) if horizontal else (
+        (after.height(), before.height()), (after.width(), before.width()))
+    assert grown[0] >= grown[1] + abs(SIDES[handle]) // 2, (before, after)     # its axis followed the drag
+    assert kept[0] == kept[1], (before, after)                                   # the other axis did not move
+    if part != "artwork":
+        fixed = {"right": before.left() == after.left() and before.top() == after.top(),
+                 "left": before.right() == after.right() and before.top() == after.top(),
+                 "top": before.bottom() == after.bottom() and before.left() == after.left(),
+                 "bottom": before.top() == after.top() and before.left() == after.left()}
+        assert fixed[handle], (before, after)
+    changed, untouched = EXTENT_KEYS[part] if horizontal else EXTENT_KEYS[part][::-1]
+    now = edit.item(part).current_size_payload
+    assert now[changed] != payload[changed]
+    assert now[untouched] == payload[untouched] and now[SCALE_KEY[part]] == payload[SCALE_KEY[part]]
+    assert edit.frames() == edit.drawn()
+    edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_a_set_extent_reflows_the_text_and_crops_the_artwork(display, tmp_path):
+    """A narrower text box elides; a taller one gives the text more lines (it wraps); a non-square artwork frame
+    crops the image into it (the ordinary freeform artwork frame)."""
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(title="A Longer Track Title"),
+          preset="A Longer Preset Name", config=_projection(_seed(settings)))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    layer = _root(display)
+
+    def main(name: str):
+        holder = layer.findChild(QQuickItem, name)
+        return next(child for child in _visual_items(holder) if child.objectName() == "shadowedTextMain")
+
+    preset, title = main("expandedOverlayPresetText"), main("expandedOverlayTitle")
+    assert not preset.property("truncated") and int(preset.property("lineCount")) == 1
+    edit.side("preset", "right", -WIDTH)                       # as narrow as it draws: it elides
+    _run(display, 60)
+    assert preset.property("truncated") and int(preset.property("lineCount")) == 1
+    edit.side("preset", "bottom", 120)                         # taller: the name wraps onto more lines
+    _run(display, 60)
+    assert int(preset.property("lineCount")) >= 2
+
+    assert int(title.property("lineCount")) == 1
+    edit.side("now_playing", "right", -WIDTH)
+    _run(display, 60)
+    assert title.property("truncated")
+    artwork_before = QRect(edit.item("artwork").current_global_rect)
+    edit.side("now_playing", "top", -140)                       # the title gets the extra lines, the artwork stays
+    _run(display, 60)
+    assert int(title.property("lineCount")) >= 2
+    assert edit.item("artwork").current_global_rect.size() == artwork_before.size()
+
+    edit.side("artwork", "right", 80)
+    _run(display, 60)
+    art = edit.item("artwork").current_global_rect
+    assert art.width() > art.height()
+    image = layer.findChild(QQuickItem, "expandedOverlayArtworkImage")
+    assert int(image.property("fillMode")) == 2                 # Image.PreserveAspectCrop: never distorted
+    assert edit.frames() == edit.drawn()
+    edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_a_side_change_undoes_exactly_and_restore_size_returns_the_natural_box(display, tmp_path):
+    from core.settings.fullscreen_overlays import canonical_fullscreen_overlays
+    from rendering.quick.fullscreen_overlay_edit import EXTENT_KEYS
+
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(), config=_projection(_seed(settings)))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    before = (edit.frames(), {part: dict(edit.item(part).current_size_payload) for part in PARTS})
+    edit.side("now_playing", "left", -80)
+    _run(display, 60)
+    assert edit.frames() != before[0]
+    assert edit.owner.undo_last_change()                        # Ctrl+Z: one step, exactly back
+    _run(display, 60)
+    assert (edit.frames(), {part: dict(edit.item(part).current_size_payload) for part in PARTS}) == before
+
+    canonical = canonical_fullscreen_overlays()
+    for part, handle in (("preset", "right"), ("preset", "bottom"), ("artwork", "bottom")):
+        edit.side(part, handle, 60)
+    for part in ("preset", "artwork"):
+        assert edit.model.restoreSize(edit.row(part))
+        overlay = "preset" if part == "preset" else "now_playing"
+        for key in EXTENT_KEYS[part]:
+            assert edit.item(part).current_size_payload[key] == canonical[overlay][key], (part, key)
+    _run(display, 60)
+    assert edit.frames()["preset"][2:] == before[0]["preset"][2:]
+    assert edit.frames()["artwork"][2:] == before[0]["artwork"][2:]
+    edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_a_uniform_scale_keeps_the_box_its_extents_are_font_relative(display, tmp_path):
+    """Ordinary Edit's uniform scale keeps the content box; here the box is in ems, so the wheel grows it whole."""
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(), config=_projection(_seed(settings)))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    edit.side("preset", "right", 120)
+    edit.side("preset", "bottom", 70)
+    payload = dict(edit.item("preset").current_size_payload)
+    _, _, width, height = edit.frames()["preset"]
+    edit.wheel("preset", 4)
+    _run(display, 60)
+    grown = edit.item("preset").current_size_payload
+    assert (grown["text_width"], grown["text_height"]) == (payload["text_width"], payload["text_height"])
+    assert grown["scale"] > payload["scale"]
+    _, _, new_width, new_height = edit.frames()["preset"]
+    assert new_width > width and new_height > height
+    assert new_width / new_height == pytest.approx(width / height, rel=0.03)
+    edit.owner.cancel()
+
+
+# --------------------------------------------------------- Rotate Widget Content on the expanded card (operator)
+
+
+class _Visualizer:
+    """The Visualizer owner surface Fullscreen Edit reads and calls: the controller's mode, policy, committed world and
+    orientation map, the ordinary card's record and the live promotion (recorded). The production owner's side of
+    the same calls is proven by ``test_the_production_owner_draws_promotes_and_restores_a_turn_while_expanded``."""
+
+    def __init__(self, mode: str, ordinary, rotations: dict | None = None) -> None:
+        from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+
+        self.controller = SimpleNamespace(
+            mode_id=mode, presentation_policy=get_visualizer_presentation_policy(mode),
+            committed_viewport_extent=tuple(ordinary.viewport_extent),
+            committed_content_rotations=dict(rotations or {}))
+        self.ordinary_presentation = ordinary
+        self.promoted: list[dict] = []
+
+    def commit_live_custom_layout(self, **kwargs) -> None:
+        self.promoted.append(kwargs)
+
+
+def _ordinary_card(mode: str = "spectrum"):
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from tests.test_visualizer_expansion_overlays import CHROME
+    from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+
+    return resolve_visualizer_presentation(policy=get_visualizer_presentation_policy(mode), display_size=(WIDTH, HEIGHT),
+                                           outer_origin=(30.0, 400.0), **CHROME)
+
+
+def _visualizer_entry(settings, screen, mode: str = "spectrum"):
+    from rendering.quick.custom_layout_hydration import resolve_visualizer_custom_entry
+
+    return resolve_visualizer_custom_entry(settings.get_widgets_map(), screen, mode)
+
+
+@pytest.mark.qt
+def test_the_expanded_card_offers_rotate_widget_content_through_the_one_edit_session(display, tmp_path):
+    """Ordinary Edit's Visualizer frame offers Rotate Widget Content for a mode that turns its content; Fullscreen
+    Edit's expanded card does too: the same glyph and ``rotateContent`` route, one undo step per turn, the draft
+    orientation previewed through the Visualizer's viewport/orientation seam, Cancel restoring exactly (nothing
+    written) and Save writing the turn where every Edit writes it (the Visualizer's CUSTOM entry, at its unchanged
+    ordinary rect) and promoting it live."""
+    from widgets.spotify_visualizer.presentation_orientation import normalize_content_rotation_by_mode
+
+    settings = _manager(tmp_path)
+    seeded = _seed(settings)
+    store = _store(settings)
+    _draw(display, media=_Media(), config=_projection(seeded))
+    _open(display)
+    ordinary = _ordinary_card()
+    visualizer = _Visualizer("spectrum", ordinary)
+    edit = _Fullscreen(display, settings, visualizer)
+    published: list[tuple] = []
+    display.scene.set_visualizer_viewport_config_sink(
+        lambda extent, state: published.append((extent, normalize_content_rotation_by_mode(state))))
+    try:
+        assert edit.start()
+        _shown_and_settled(display)
+        extent = tuple(ordinary.viewport_extent)
+        # The card is the session's first item (its frame lies under the overlays' frames), offering only the turn.
+        assert edit.row("visualizer") == 0
+        layer = display.scene.custom_layout_overlay.item
+        chrome = {item.objectName(): item for item in _visual_items(layer)}
+        rotate = chrome["customLayoutRotateContent-fullscreen_overlay.visualizer"]
+        assert rotate.isVisible()
+        # The card's frame takes no press: the background stays Edit's (its double-click Saves).
+        assert chrome["customLayoutParentMoveArea-fullscreen_overlay.visualizer"].property("enabled") is False
+        assert not chrome["customLayoutRestoreSize-fullscreen_overlay.visualizer"].isVisible()
+        corner = chrome.get("customLayoutResize-fullscreen_overlay.visualizer-bottom_right")
+        assert corner is None or not corner.isVisible()                # never sized
+        # Its lower-right slot sits inside the card, above the card's own lower-right controls.
+        geometry = display.scene.expanded_overlay_edit_geometry()
+        glyph = rotate.mapRectToItem(layer, QRectF(0.0, 0.0, rotate.width(), rotate.height()))
+        stage_x, stage_y, stage_w, stage_h = geometry["stage"]
+        assert glyph.right() <= stage_x + stage_w and glyph.bottom() <= stage_y + stage_h - geometry[
+            "bottom_right_reserve"]
+        # A clean draft publishes nothing to the Visualizer (its committed orientation stays the authority).
+        assert all(extent_ is None for extent_, _state in published)
+
+        card = edit.row("visualizer")
+        assert edit.model.rotateContent(card)
+        assert published[-1] == (extent, {"spectrum": 1})          # the expanded card previews the turn
+        assert edit.owner.fullscreen_draft_pending and edit.flips == [True]
+        assert edit.owner.undo_last_change()                         # one step, exactly back
+        assert published[-1] == (None, {}) and not edit.owner.fullscreen_draft_pending   # committed truth again
+        assert edit.model.rotateContent(card) and edit.model.rotateContent(card)
+        assert published[-1] == (extent, {"spectrum": 2})
+        assert edit.owner.cancel()
+        assert published[-1] == (None, {})                           # the preview retired: committed truth again
+        assert _store(settings) == store and visualizer.promoted == []
+
+        # A Save without a turn writes nothing but the overlays' value (the ordinary layout stays byte-identical).
+        assert edit.start()
+        edit.drag("preset", 40, 30)
+        assert edit.owner.save()
+        assert _store(settings) == store and visualizer.promoted == []
+
+        assert edit.start()
+        binding = next(iter(edit.owner._bindings.values()))
+        assert edit.model.rotateContent(edit.row("visualizer"))
+        assert edit.owner.save()
+        entry = _visualizer_entry(settings, binding.screen)
+        assert entry is not None
+        assert normalize_content_rotation_by_mode(entry.size_payload.get("content_rotation_quarters_by_mode")) == {
+            "spectrum": 1}
+        from rendering.quick.custom_layout_hydration import resolve_committed_visualizer_rect
+
+        saved = resolve_committed_visualizer_rect(entry, binding.geometry.size())
+        x, y, width, height = ordinary.outer_rect
+        assert saved.getRect() == (round(x), round(y), round(width), round(height))   # the card's rect, unchanged
+        assert visualizer.promoted == [{"local_rect": (float(round(x)), float(round(y)), float(round(width)),
+                                                       float(round(height))),
+                                        "viewport_extent": extent, "content_rotation_by_mode": {"spectrum": 1}}]
+        assert published[-1] == (None, {}) and edit.reloads == []
+    finally:
+        if edit.owner.is_active:
+            edit.owner.cancel()
+        display.scene.set_visualizer_viewport_config_sink(None)
+
+
+@pytest.mark.qt
+def test_a_mode_that_cannot_turn_its_content_gets_no_rotate_glyph(display, tmp_path):
+    """As on the ordinary Visualizer frame: no turn for a mode whose content does not turn (a framed 3D mode)."""
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(), config=_projection(_seed(settings)))
+    _open(display)
+    edit = _Fullscreen(display, settings, _Visualizer("extruded_bubble", _ordinary_card("extruded_bubble")))
+    assert edit.start()
+    assert {item.model_identity for item in edit.model._items} == {f"fullscreen_overlay.{p}" for p in PARTS}
+    edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(qt_app, tmp_path):
+    """End to end on the production Visualizer owner (an unshown runtime, never shown): Fullscreen Edit's card turn
+    reaches the owner through the scene's viewport/orientation seam, so the drawn display-wide card turns (same card
+    rect) while nothing is committed; Cancel returns the committed orientation exactly; Save writes the turn into the
+    Visualizer's CUSTOM entry and the live promotion (validated against the ordinary record, since the scene draws
+    the display-wide one) commits it, so it stays after Edit ends and the collapsed card shows it at its own rect."""
+    from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
+    from rendering.quick.custom_layout_hydration import resolve_committed_visualizer_rect
+    from rendering.quick.runtime import QuickDisplayRuntime
+    from rendering.quick.scene_controller import QuickSceneFactory
+    from rendering.quick.state import QuickWindowPolicy
+    from tests._visualizer_presentation import make_visualizer_owner
+    from widgets.spotify_visualizer.presentation_orientation import normalize_content_rotation_by_mode
+
+    settings = _manager(tmp_path)
+    _seed(settings)
+    factory = QuickSceneFactory()
+    runtime = QuickDisplayRuntime(screen_index=0, runtime_generation=778, screen=qt_app.primaryScreen(),
+                                  scene_factory=factory,
+                                  window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
+    owner = make_visualizer_owner(runtime, bar_count=32, initial_mode="spectrum")
+    controller = owner.controller
+    unit = SimpleNamespace(is_retired=False, screen_index=0, presenter=SimpleNamespace(bound_widget_ids=()),
+                           runtime=runtime)
+    edit = QuickCustomLayoutOwner(settings_manager=settings, participants_provider=lambda: (unit,),
+                                  visualizer_provider=lambda: (owner, unit), reload_request=lambda _reason: None)
+    scene = runtime.scene_controller
+
+    def drawn():
+        owner._reapply_route()           # one publication edge (no logical runtime runs here)
+        qt_app.processEvents()
+        return scene.visualizer_item.presentation
+
+    def turn() -> None:
+        model = scene.custom_layout_overlay.model
+        row = next(index for index, item in enumerate(model._items)
+                   if item.model_identity == "fullscreen_overlay.visualizer")
+        assert model.rotateContent(row)
+
+    try:
+        owner.bind(engine_generation=1, activation_id=1)
+        ordinary = drawn()
+        extent = controller.committed_viewport_extent
+        assert owner.set_expanded_display(True)
+        expanded = drawn()
+        assert expanded.outer_rect != ordinary.outer_rect and expanded.content_rotation_quarters == 0
+        scene.set_visualizer_startup_reveal_opacity(1.0)
+
+        # Turn, then Cancel: the display-wide card turns in place, nothing is committed; Cancel restores it exactly.
+        assert edit.start_fullscreen(unit, _value(settings))
+        turn()
+        turned = drawn()
+        assert turned.content_rotation_quarters == 1 and turned.outer_rect == expanded.outer_rect
+        assert owner.ordinary_presentation.outer_rect == ordinary.outer_rect
+        assert controller.committed_content_rotation_quarters == 0
+        assert edit.cancel()
+        assert drawn() == expanded and controller.committed_content_rotation_quarters == 0
+
+        # Turn, then Save: written into the Visualizer's CUSTOM entry at the card's own rect, promoted live.
+        assert edit.start_fullscreen(unit, _value(settings))
+        binding = next(iter(edit._bindings.values()))
+        turn()
+        drawn()
+        owner._started = True            # the live promotion's liveness gate (no logical runtime is started here)
+        assert edit.save()
+        assert controller.committed_content_rotation_quarters == 1
+        assert drawn().content_rotation_quarters == 1
+        entry = _visualizer_entry(settings, binding.screen)
+        assert normalize_content_rotation_by_mode(entry.size_payload.get("content_rotation_quarters_by_mode")) == {
+            "spectrum": 1}
+        saved = resolve_committed_visualizer_rect(entry, binding.geometry.size())
+        assert all(abs(a - b) <= 0.5 for a, b in zip(saved.getRect(), ordinary.outer_rect))
+        # Collapsing shows the ordinary card turned, at its own rect.
+        assert owner.set_expanded_display(False)
+        collapsed = drawn()
+        assert collapsed.content_rotation_quarters == 1 and collapsed.outer_rect == ordinary.outer_rect
+    finally:
+        if edit.is_active:
+            edit.cancel()
+        owner._started = False
+        owner.retire()
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
 
 
 # ------------------------------------------------------------------------------ guides on the Edit layer

@@ -75,7 +75,7 @@ from rendering.custom_layout_contract import (
     SnapResolution,
 )
 from rendering.custom_layout_commit import commit_custom_session
-from rendering.quick.fullscreen_overlay_edit import FullscreenOverlayEdit
+from rendering.quick.fullscreen_overlay_edit import FullscreenOverlayEdit, is_card_item
 from rendering.custom_layout_session import (
     CustomLayoutKey,
     CustomLayoutSession,
@@ -609,9 +609,18 @@ class QuickCustomLayoutOwner:
             project=project,
             guides=lambda vertical, horizontal: scene.set_custom_layout_guides(
                 vertical=vertical, horizontal=horizontal),
+            orientation=scene.refresh_visualizer_viewport_config,
         )
+        # The expanded card's Rotate Widget Content (ordinary Edit's Visualizer frame offers it for a mode that can
+        # turn its content): the Visualizer owner's committed world and per-mode orientation map.
+        card = None
+        visualizer, visualizer_unit = self._visualizer_provider()
+        if (visualizer is not None and visualizer_unit is unit
+                and visualizer.controller.presentation_policy.content_rotation_capable):
+            card = (tuple(visualizer.controller.committed_viewport_extent),
+                    visualizer.controller.committed_content_rotations)
         session = CustomLayoutSession()
-        if not editor.admit(session):
+        if not editor.admit(session, card=card):
             logger.info("[CUSTOM_LAYOUT] Fullscreen Edit refused: the overlays are not drawn")
             return False
         try:
@@ -626,6 +635,7 @@ class QuickCustomLayoutOwner:
                 move_finished_handler=self.clear_move_guides,
                 size_reset_handler=self.restore_item_size,
                 close_item_handler=self.close_item,
+                content_rotation_handler=self.rotate_visualizer_content,
                 item_change_publisher=editor.project,
                 geometry_listener=editor.geometry_changed,
             )
@@ -934,15 +944,67 @@ class QuickCustomLayoutOwner:
 
         editor = self._fullscreen
         value = editor.draft_value()
+        # A turned expanded card: the Visualizer's orientation is CUSTOM layout state, so it is written where every
+        # Edit writes it (the Visualizer's CUSTOM entry, at its unchanged ordinary rect), in the same save.
+        rotations = editor.orientation_draft() if editor.orientation_pending() else None
+        promotion = self._persist_fullscreen_orientation(rotations) if rotations is not None else None
         self._settings_manager.set(FULLSCREEN_OVERLAYS_KEY, value)
         self._settings_manager.save()
+        promotion_error: RetainedRuntimeIncoherenceError | None = None
+        if promotion is not None:
+            owner, local_rect, extent = promotion
+            try:
+                # The ordinary live promotion (as an ordinary Edit Save's), before Edit retires the preview override.
+                owner.commit_live_custom_layout(
+                    local_rect=local_rect, viewport_extent=extent, content_rotation_by_mode=rotations)
+            except RetainedRuntimeIncoherenceError as exc:
+                promotion_error = exc
+                logger.error("[CUSTOM_LAYOUT] Fullscreen Edit orientation promotion found retained-runtime "
+                             "incoherence; reconciling from the saved layout: %s", exc)
         cleanup_corruption = self._finish()
-        if cleanup_corruption:
+        if cleanup_corruption or promotion_error is not None:
             logger.error("[CUSTOM_LAYOUT] Fullscreen Edit Save closed over corrupt retained objects: %s",
                          cleanup_corruption)
             self._reload_request("save_corrupt_retained_runtime")
         logger.info("[CUSTOM_LAYOUT] Saved Fullscreen Edit")
         return True
+
+    def _persist_fullscreen_orientation(self, rotations: Mapping[str, int]) -> tuple[Any, tuple, tuple] | None:
+        """Write the expanded card's draft orientation into the Visualizer's CUSTOM entry (not yet saved to disk).
+
+        The entry is the one ordinary Edit and the direct Visualizer gesture write, through the same commit: the
+        Visualizer item admitted from the ordinary card's record (``ordinary_presentation``; the scene draws the
+        display-wide one), so its rect and world are exactly the card's, with the draft orientation map. Returns
+        (Visualizer owner, local rect, world) for the live promotion, or None when nothing could be admitted.
+        """
+
+        owner, _unit = self._visualizer_provider()
+        presentation = getattr(owner, "ordinary_presentation", None) if owner is not None else None
+        if presentation is None:
+            logger.error("[CUSTOM_LAYOUT] Fullscreen Edit orientation has no ordinary Visualizer record; not saved")
+            return None
+        widgets = self._settings_manager.get_widgets_map()
+        scratch = CustomLayoutSession()
+        descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
+        self._admit_visualizer_item(scratch, descriptors, self._bindings, widgets, presentation=presentation)
+        item = next(iter(scratch.items()), None)
+        if item is None or item.current_viewport_extent is None:
+            logger.error("[CUSTOM_LAYOUT] Fullscreen Edit orientation could not admit the Visualizer; not saved")
+            return None
+        payload = dict(item.current_size_payload)
+        normalized = normalize_content_rotation_by_mode(rotations)
+        if normalized:
+            payload[CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY] = normalized
+        else:
+            payload.pop(CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, None)
+        item.current_size_payload = payload
+        commit_custom_session(widgets, scratch, descriptors, self._bindings)
+        self._settings_manager.set_widgets_map(widgets, emit_change=False)
+        display = self._bindings[item.current_display_identity].geometry
+        rect = item.current_global_rect
+        local = (float(rect.x() - display.x()), float(rect.y() - display.y()),
+                 float(rect.width()), float(rect.height()))
+        return owner, local, tuple(item.current_viewport_extent)
 
     # ---- Direct Visualizer gestures (outside Edit) ------------------------------------
     #
@@ -2339,7 +2401,10 @@ class QuickCustomLayoutOwner:
         descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor],
         bindings: Mapping[str, _DisplayBinding],
         widgets: Mapping[str, Any],
+        presentation: Any = None,
     ) -> None:
+        """Admit the Visualizer item from its drawn presentation, or from ``presentation`` when given (Fullscreen
+        Edit's Save: the ordinary card's record, since the scene draws the display-wide one)."""
         owner, unit = self._visualizer_provider()
         descriptor = get_widget_runtime_descriptor("spotify_visualizer")
         if owner is None or unit is None or descriptor is None:
@@ -2350,8 +2415,9 @@ class QuickCustomLayoutOwner:
         )
         if binding is None:
             return
-        render_item = unit.runtime.scene_controller.visualizer_item
-        presentation = None if render_item is None else render_item.presentation
+        if presentation is None:
+            render_item = unit.runtime.scene_controller.visualizer_item
+            presentation = None if render_item is None else render_item.presentation
         if presentation is None:
             return
         x, y, width, height = presentation.outer_rect
@@ -2572,12 +2638,18 @@ class QuickCustomLayoutOwner:
         return True
 
     def rotate_visualizer_content(self, item: CustomLayoutSessionItem) -> bool:
-        """Advance one eligible Visualizer CUSTOM content orientation by 90°."""
+        """Advance one eligible Visualizer CUSTOM content orientation by 90°.
 
+        Fullscreen Edit's expanded card item carries the same per-mode map (its Save writes it into the Visualizer's
+        CUSTOM entry): the same turn, undo step and preview publication.
+        """
+
+        visualizer_item = item.model_identity == "spotify_visualizer" or (
+            self._fullscreen is not None and is_card_item(item))
         if (
             not self._active
             or self._session is None
-            or item.model_identity != "spotify_visualizer"
+            or not visualizer_item
             or not item.content_rotation_capable
         ):
             return False
@@ -2612,6 +2684,7 @@ class QuickCustomLayoutOwner:
         item.current_size_payload = payload
         self._commit_discrete_undo(before_undo)
         self._session.notify_item_changed(item)
+        self._note_fullscreen_draft()
         return True
 
     def restore_item_size(self, item: CustomLayoutSessionItem) -> bool:

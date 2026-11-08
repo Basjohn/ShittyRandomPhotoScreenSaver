@@ -681,18 +681,19 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   frame (`glFinish`); other users sampling animations should too, or the host could finish its frames itself.
 
 **Found while building Expanded Visualizer M3c (8 Nov; recorded, not yet admitted):**
-- **"The fullscreen visualizer is also missing its rotate glyph" (operator) needs the operator's call.** Measured on
-  the production presentation, the display-wide card shows the card's camera controls under the same admission
-  (Reset Camera, the preset steps, the 3D hint; now a bar). What it does not show is the hover Edit lane (Restore
-  Widget Size's curved arrow, Close, the transfer arrows), withdrawn since M2 because each edits the ordinary card's
-  layout, which the display-wide view does not draw (Restore would resize a hidden card, Close would disable the
-  Visualizer under its own takeover, transfers are M5). Returning it needs a decision on what each does while
-  expanded; nothing was changed.
+- **The expanded card's hover Edit lane stays withdrawn (operator's call if wanted back).** The rotate glyph the
+  operator missed is now on the expanded card in Fullscreen Edit (plan 01 M3c, "Rotate Widget Content"); the
+  ordinary Visualizer's hover lane never offered rotate. What the display-wide card still does not show outside Edit
+  is that lane (Restore Widget Size, the transfer arrows), withdrawn since M2 because each edits the ordinary card's
+  layout, which the display-wide view does not draw (Restore would resize a hidden card, transfers are M5).
+  Returning it needs a decision on what each does while expanded.
 - **A pause does nothing to the overlays (by the spec, not built):** Now Playing is event-only and has already faded
   after its window; with Always Show it stays up by definition. A fade-out on pause would need the operator's word.
 - **`tests/test_qtquick_context_menu.py` fails after `tests/test_qtquick_custom_layout_owner.py` in one process**
   (two right-click tests; each file passes alone; identical on the M3c base without its changes). Likely a
   process-wide pointer-suppression deadline or input state one file leaves for the next. Not investigated further.
+  The same pairing turns three `tests/test_visualizer_direct_gestures.py` tests red (Alt-wheel / Alt-drag gestures
+  never begin; reproduced on e9bbd7a4 without the M3c single-axis/rotate changes, 8 Nov), so it is the same leak.
 - **The overlays' Edit placeholders are fixed English words** ("Preset Name", "Track Title", "Artist"), shown only in
   Fullscreen Edit when there is nothing to show yet.
 

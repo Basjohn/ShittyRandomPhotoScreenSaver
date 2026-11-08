@@ -1029,8 +1029,11 @@ class QuickDisplayVisualizerOwner:
             raise ValueError("live CUSTOM visualizer geometry must be finite and positive")
         if not self._controller.has_custom_viewport_override:
             raise RetainedRuntimeIncoherenceError("live CUSTOM visualizer commit requires an active override")
-        presentation = self._presentation_runtime.scene_controller.visualizer_item.presentation
-        if presentation is None:
+        drawn = self._presentation_runtime.scene_controller.visualizer_item.presentation
+        # Display-wide (Fullscreen Edit's Rotate Widget Content): the scene draws the expanded variant; the ordinary
+        # card's record it derives from is the CUSTOM truth promoted here (never the display-wide one).
+        presentation = self.ordinary_presentation
+        if presentation is None or drawn is None:
             raise RetainedRuntimeIncoherenceError("live CUSTOM visualizer has no retained presentation")
         if presentation.viewport_extent != (extent_width, extent_height):
             raise RetainedRuntimeIncoherenceError("live CUSTOM visualizer extent differs from retained presentation")
@@ -1068,7 +1071,7 @@ class QuickDisplayVisualizerOwner:
         # never legal to relabel its immutable geometry as current. Discard only
         # that unconsumed snapshot; the next ordinary logical publication carries
         # the freshly committed, coherent stage/viewport pair.
-        self._controller.render_bridge.discard_if_presentation_differs(presentation)
+        self._controller.render_bridge.discard_if_presentation_differs(drawn)
         # Save promotes the complete sparse map, not only the currently visible
         # mode, so modes rotated earlier in the same edit session survive an
         # in-process mode switch without requiring recreation.
@@ -1077,6 +1080,16 @@ class QuickDisplayVisualizerOwner:
         self._committed_layout_extent = (extent_width, extent_height)
         self._legacy_layout_profile = None
         self._legacy_layout_source_variant = None
+
+    @property
+    def ordinary_presentation(self) -> Any:
+        """The ordinary card's resolved record: the drawn one, or, while the card is display-wide, the record the
+        display-wide one derives from (its latest resolve). None before the first presentation."""
+
+        if self._expanded_drawn():
+            return self._expanded_source
+        item = self._presentation_runtime.scene_controller.visualizer_item
+        return None if item is None else item.presentation
 
     def _activation_scene_fade(self) -> float:
         """Return the authored 0 -> 1 first-appearance scene fade progress.
@@ -1131,7 +1144,10 @@ class QuickDisplayVisualizerOwner:
             self._controller.presentation_layout_metrics
         )
         if has_custom_override:
-            working = self._presentation_runtime.scene_controller.visualizer_item.presentation
+            # A display-wide card is never the ordinary working stage (Fullscreen Edit's orientation preview sets an
+            # override while the scene draws the expanded variant): resolve the ordinary record from committed truth.
+            working = (None if self._expanded_drawn()
+                       else self._presentation_runtime.scene_controller.visualizer_item.presentation)
             if (working is not None and
                     tuple(working.viewport_extent) == tuple(controller_extent) and
                     working.content_rotation_quarters == content_rotation_quarters):

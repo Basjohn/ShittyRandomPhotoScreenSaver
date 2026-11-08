@@ -748,6 +748,63 @@ can most geometry normally."
   clamped like `scale`), on top of the text-derived size; it stays beside its text, so dragging the artwork or the
   text moves Now Playing as one (its undo step is Now Playing's), and the artwork grows away from the overlay's anchor
   corner. Media Controls belong to the text block (they scale with the text).
+- *Single-axis sizing (operator, 8 Nov: "Does the edit allow x only and y only changes like our proper edits do? It
+  should."; decided).* Every part declares both content axes (`content_extent_axes`), so the one Edit layer draws
+  ordinary Edit's side strips and, on the selected part, its two-axis diagonals; the owner routes them to
+  `FullscreenOverlayEdit` like the corners. A side drag uses ordinary Edit's edge rule (`edge_resize_rect`, bounded
+  by the safe area) and resize-edge snap (`resolve_resize_edge_snap`: the safe area's centre, the other overlay's
+  edges and centre), changes one member and keeps the other exactly (ordinary `content_extent_resize_payload`):
+  `text_width` / `text_height` for the toast and the Now Playing text block, `artwork_width` / `artwork_height` for
+  the artwork, all new members of the one value (canonical default = today's look: text `0` = natural, artwork `1`
+  = square; a value stored before them reads them so, no bridge). Mirrored semantics: the text box is ordinary
+  Edit's content box (Media's card elides in a set width and reflows into a set height): a set width elides, a set
+  height adds lines (the toast's name and Now Playing's title wrap, then elide), the block centred in its box,
+  floored at one line (the toast) or the natural block (Now Playing), at least the Media Controls' width; extents
+  are in ems of the overlay's font, so a uniform scale (corner, wheel) and the font size keep the box's shape, as
+  ordinary Edit's uniform scale keeps `content_extent`; a set box may use the whole safe area (the 45 % cap is only
+  the natural growth). The artwork mirrors ordinary Edit's freeform artwork frame
+  (`freeform_artwork_child_role`: free X/Y, image `PreserveAspectCrop`), so it may go non-square; its size still
+  follows the natural (one-line) text block, never a set text height. The text parts keep the opposite edge (and
+  the untouched axis's position); the artwork grows from its place beside the text, as its corner drag does, which
+  keeps each change one undo step of one item. The stored extent is the one drawn (floors and the safe area
+  applied), as offsets are. Restore Size returns scale and extents to canonical (ordinary Restore Size drops
+  `content_extent`). Shared chrome change: a side strip on a frame shorter than 56 px keeps a 16 px grabbable length
+  clear of the corner squares (it had none on a one-line toast; ordinary frames of 56 px and more are unchanged).
+  Evidence: `tests/test_visualizer_expansion_fullscreen_edit.py` (side strips, one axis per handle, reflow and crop,
+  undo, Restore Size, uniform scale, the parity map with side drags) and `..._overlay_settings.py`; stills outside the
+  repository (`D:\Temp\Scratch\SRPSS\evidence\expanded_visualizer\20261108_m3c_axes\`).
+- *Rotate Widget Content on the expanded card (operator, 8 Nov: the fullscreen Visualizer is missing "THE ROTATE
+  GLYPH"; decided).* Ordinary Edit's Visualizer frame offers Rotate Widget Content (`rotateContentControl`, a
+  quarter-turn of the content, CUSTOM layout state per mode) for a mode that can turn its content (Spectrum,
+  Oscilloscope, Bubble, Spline Curve; never a framed 3D mode). Fullscreen Edit now admits the expanded card as one
+  more session item, `fullscreen_overlay.visualizer`, when the live mode can turn (first in the session, so its frame
+  lies under the overlays'): the same frame glyph (revealed on hover in its lower-right slot, the card's frame
+  stopping above the card's own lower-right controls), the same `rotateContent` route and owner method
+  (`rotate_visualizer_content`, one undo step per turn). The card is never moved or sized (a viewport, not a layout):
+  not resizable, no Restore Size, no content axes, and its QML frame draws no outline and takes no press, so the
+  background stays Edit's (its double-click Saves). Preview: a turned card publishes the committed world with the
+  draft map through the scene's one viewport/orientation seam (the controller's `set_custom_viewport_override`, as
+  ordinary Edit's Visualizer item does); an unturned card publishes nothing, so Fullscreen Edit without a turn
+  leaves the Visualizer untouched. The production owner resolves the ordinary record with it and derives the
+  display-wide card (`resolve_expanded_visualizer_presentation` already carried the orientation), so the expanded
+  card turns exactly as the ordinary one; the working-stage reuse never takes the display-wide record for the
+  ordinary one. Save: orientation is CUSTOM layout state, so a turn is written where every Edit writes it, the
+  Visualizer's CUSTOM entry (`_admit_visualizer_item` from the ordinary card's record, `ordinary_presentation`, then
+  `commit_custom_session`, as the direct Visualizer gesture's Save; its rect is the ordinary card's, unchanged), and
+  promoted live by `commit_live_custom_layout`, which validates against the ordinary record while the scene draws the
+  display-wide one. This narrows the M3c byte-identity: without a turn a Fullscreen Save still writes only the
+  overlays' value; with one, exactly the Visualizer's CUSTOM entry also changes (on an authored layout it becomes
+  CUSTOM at its current rect, as an ordinary Edit or direct gesture Save makes it). Cancel and undo restore exactly.
+  Hover lane (checked, unchanged): the ordinary Visualizer's hover glyphs outside Edit offer no rotate
+  (`canRotate: false`; Restore Widget Size and the transfer arrows only), and the expanded card withdraws that lane
+  (M2), so outside Edit both stay without a rotate glyph, mirroring ordinary. The card item's capability is the
+  mode's at Edit entry and the owner re-checks the live mode at each turn (as ordinary Edit's admission snapshot);
+  a mode change during Fullscreen Edit to a mode that cannot turn leaves the glyph inert until Edit ends.
+  Evidence: `tests/test_visualizer_expansion_fullscreen_edit.py` (the Edit path on the hidden scene: glyph, preview,
+  undo, Cancel, a turn-free Save byte-identical, Save's CUSTOM entry and promotion; a 3D mode has no glyph; the
+  production owner end to end on an unshown runtime: preview draws the display-wide card turned in place without
+  committing, Cancel exactly back, Save commits and the collapsed card shows it at its own rect); stills 07-09 in the
+  same evidence folder.
 - *Corner change in Settings (decided).* `rebase_offset_for_corner` (the one owner): per axis, the offset is kept when
   it still points into the display from the new corner (right of a left corner, left of a right one, below a top
   corner, above a bottom one), so the overlay stays in bounds the same distance in from the new anchor's edge; an axis
@@ -784,8 +841,9 @@ can most geometry normally."
 - *Also on this branch (operator, 8 Nov):* playback resuming (the Media model's paused -> playing edge) reveals Now
   Playing like a track change, keeping its content; Always Show is untouched; a pause is no event. And a bar that the
   display-wide card keeps the framed camera's controls (Reset Camera, the preset steps, the 3D hint) under the card's
-  admission; the hover Edit lane (Restore Widget Size, Close, the transfer arrows) stays withdrawn while expanded (M2),
-  which is what reads as a missing "rotate glyph": its return is the operator's call (§3).
+  admission; the hover Edit lane (Restore Widget Size, Close, the transfer arrows) stays withdrawn while expanded (M2;
+  its return is the operator's call, §3). The rotate glyph itself is Edit's and now on the expanded card in Fullscreen
+  Edit ("Rotate Widget Content" above).
 
 **Milestone 4 | Wallpaper transition policy and GPU savings**
 

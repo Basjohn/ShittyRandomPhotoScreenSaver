@@ -20,6 +20,8 @@ from core.settings.default_contract import MC_PROFILE, NORMAL_PROFILE, require_c
 from core.settings.defaults import get_default_settings
 from core.settings.fullscreen_overlays import (
     PLACEMENT_KEYS,
+    TEXT_EXTENT_KEYS,
+    TEXT_EXTENT_MAX,
     rebase_offset_for_corner,
     CORNERS,
     FONT_SIZE_MAX,
@@ -68,6 +70,11 @@ def _flipped() -> dict:
         options["scale"] = 1.5 if options["scale"] != 1.5 else 0.75
         if "artwork_scale" in options:
             options["artwork_scale"] = 1.75 if options["artwork_scale"] != 1.75 else 0.625
+        for key in TEXT_EXTENT_KEYS:
+            options[key] = 7.5 if options[key] != 7.5 else 3.25
+        for key in ("artwork_width", "artwork_height"):
+            if key in options:
+                options[key] = 1.25 if options[key] != 1.25 else 0.75
     return value
 
 
@@ -96,6 +103,11 @@ def test_canonical_default_has_the_schema_every_consumer_reads(profile):
     # Now Playing's artwork has its own size factor (M3c); the preset toast has no artwork.
     assert isinstance(value["now_playing"]["artwork_scale"], float)
     assert "artwork_scale" not in value["preset"]
+    # The single-axis extents (Fullscreen Edit's side handles): every overlay's text box, Now Playing's artwork shape.
+    for overlay in OVERLAY_IDS:
+        assert all(isinstance(value[overlay][key], float) for key in TEXT_EXTENT_KEYS)
+    assert all(isinstance(value["now_playing"][key], float) for key in ("artwork_width", "artwork_height"))
+    assert "artwork_width" not in value["preset"]
     # Fullscreen Edit writes exactly the placement members, which every overlay's canonical value declares.
     for overlay, keys in PLACEMENT_KEYS.items():
         assert set(keys) <= set(value[overlay])
@@ -148,6 +160,32 @@ def test_malformed_members_fall_back_member_by_member_and_numbers_clamp():
         result = normalize_fullscreen_overlays({"now_playing": {"artwork_scale": raw}})["now_playing"]
         default = canonical_fullscreen_overlays()["now_playing"]["artwork_scale"]
         assert result["artwork_scale"] == (default if expected is None else expected)
+    # The single-axis extents: text boxes clamp to 0 (natural) .. TEXT_EXTENT_MAX ems, artwork shape like a scale.
+    for raw, expected in ((-3.0, 0.0), (TEXT_EXTENT_MAX * 10, TEXT_EXTENT_MAX), ("wide", None), (float("inf"), None)):
+        for overlay in OVERLAY_IDS:
+            result = normalize_fullscreen_overlays({overlay: {"text_width": raw, "text_height": raw}})[overlay]
+            for key in TEXT_EXTENT_KEYS:
+                assert result[key] == (canonical[overlay][key] if expected is None else expected), (overlay, key, raw)
+    for raw, expected in ((SCALE_MAX * 10, SCALE_MAX), (SCALE_MIN / 10, SCALE_MIN), ("tall", None)):
+        result = normalize_fullscreen_overlays({"now_playing": {"artwork_width": raw, "artwork_height": raw}})
+        for key in ("artwork_width", "artwork_height"):
+            assert result["now_playing"][key] == (canonical["now_playing"][key] if expected is None else expected)
+
+
+def test_a_value_stored_before_the_single_axis_extents_reads_them_as_the_natural_look():
+    """Persisted input: a value from before the extents existed (every member but them) normalises with each extent at
+    its canonical (natural) value and everything stored kept; a second normalisation changes nothing. No bridge: the
+    one normaliser fills a missing member from the canonical default, member by member."""
+    canonical = canonical_fullscreen_overlays()
+    stored = _flipped()
+    for overlay in OVERLAY_IDS:
+        for key in (*TEXT_EXTENT_KEYS, "artwork_width", "artwork_height"):
+            stored[overlay].pop(key, None)
+    result = normalize_fullscreen_overlays(stored)
+    for overlay in OVERLAY_IDS:
+        for key, item in result[overlay].items():
+            assert item == (stored[overlay][key] if key in stored[overlay] else canonical[overlay][key]), key
+    assert normalize_fullscreen_overlays(result) == result
 
 
 # ------------------------------------------------------------------------------- model and section ownership
@@ -251,6 +289,10 @@ def test_the_qml_projection_carries_every_option():
         assert projected[name]["card"] is options["card"]
         assert (projected[name]["offsetX"], projected[name]["offsetY"], projected[name]["scale"]) == (
             options["offset_x"], options["offset_y"], options["scale"])
+        assert (projected[name]["textWidth"], projected[name]["textHeight"]) == (
+            options["text_width"], options["text_height"])
+    assert (projected["nowPlaying"]["artworkWidth"], projected["nowPlaying"]["artworkHeight"]) == (
+        value["now_playing"]["artwork_width"], value["now_playing"]["artwork_height"])
     assert projected["nowPlaying"]["mediaControls"] is value["now_playing"]["media_controls"]
     assert "mediaControls" not in projected["preset"]
     assert projected["nowPlaying"]["artworkScale"] == value["now_playing"]["artwork_scale"]
