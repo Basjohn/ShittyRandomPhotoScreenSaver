@@ -117,18 +117,16 @@ def test_media_seek_and_transport_use_pointer_and_gesture_feedback_without_hover
     assert "cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor" in seek
     assert "border." not in seek
 
-    for button_id, hover_id, tap_id in (
-        ("previousButton", "previousHover", "previousTap"),
-        ("playPauseButton", "playPauseHover", "playPauseTap"),
-        ("nextButton", "nextHover", "nextTap"),
-    ):
-        section = media.split(f"id: {button_id}", 1)[1].split("TapHandler {", 1)[0]
-        assert f"id: {hover_id}" in section
-        assert "cursorShape: Qt.PointingHandCursor" in section
-        assert "1.055" in section
-        assert "border.color" not in section
-        assert "border.width" not in section
-        assert f"enabled: {tap_id}.enabled" in section
+    # The transport segments are the shared bar's (MediaTransportBar.qml), which the card draws.
+    assert "MediaTransportBar {" in media
+    bar = _text("MediaTransportBar.qml")
+    section = bar.split("component TransportButton", 1)[1].split("TapHandler {", 1)[0]
+    assert "id: hover" in section
+    assert "cursorShape: Qt.PointingHandCursor" in section
+    assert "1.055" in section
+    assert "border.color" not in section
+    assert "border.width" not in section
+    assert "enabled: tap.enabled" in section
 
     assert "id: systemMuteHover" in media
     assert 'objectName: "mediaAppVolumeInputArea"' in media

@@ -141,10 +141,8 @@ Rectangle {
         signal requested()
 
         readonly property bool inputEnabled: interactionEnabled && available
-        readonly property bool pressed: exclusivePress
-            ? pressArea.item !== null && pressArea.item.pressed : tap.pressed
-        readonly property bool hovered: exclusivePress
-            ? pressArea.item !== null && pressArea.item.containsMouse : hover.hovered
+        readonly property bool pressed: input.item !== null && input.item.pressed === true
+        readonly property bool hovered: input.item !== null && input.item.hovered === true
 
         width: (parent.width - 2.0) / 3.0
         height: parent.height
@@ -159,31 +157,46 @@ Rectangle {
             glyphColor: button.glyphColor
         }
 
-        HoverHandler {
-            id: hover
-            enabled: tap.enabled
-            blocking: false
-            cursorShape: Qt.PointingHandCursor
-        }
-
-        TapHandler {
-            id: tap
-            enabled: !button.exclusivePress && button.inputEnabled
-            acceptedButtons: Qt.LeftButton
-            onTapped: button.requested()
-        }
-
+        // Exactly one input kind exists per segment (never an idle handler of the other kind).
         Loader {
-            id: pressArea
+            id: input
             anchors.fill: parent
-            active: button.exclusivePress
-            sourceComponent: MouseArea {
+            sourceComponent: button.exclusivePress ? exclusiveInput : sharedInput
+        }
+
+        // The card's pointer handlers: a non-blocking hover (pointer cursor) and a tap.
+        Component {
+            id: sharedInput
+            Item {
+                readonly property bool pressed: tap.pressed
+                readonly property bool hovered: hover.hovered
+
+                HoverHandler {
+                    id: hover
+                    enabled: tap.enabled
+                    blocking: false
+                    cursorShape: Qt.PointingHandCursor
+                }
+
+                TapHandler {
+                    id: tap
+                    enabled: button.inputEnabled
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: button.requested()
+                }
+            }
+        }
+
+        // An exclusive press area: the segment consumes every press of its own, a double-click's second included.
+        Component {
+            id: exclusiveInput
+            MouseArea {
+                readonly property bool hovered: containsMouse
                 enabled: button.inputEnabled
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 propagateComposedEvents: false
-                // The segment consumes every press of its own, a double-click's second included.
-                readonly property bool consumesDoubleClick: true
+                readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
                 onPressed: function(mouse) { mouse.accepted = true }
                 onDoubleClicked: function(mouse) { mouse.accepted = true }
                 onClicked: function(mouse) {
