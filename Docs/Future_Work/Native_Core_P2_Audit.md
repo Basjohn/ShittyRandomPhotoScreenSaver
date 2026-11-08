@@ -701,3 +701,203 @@ mode/activation changes need it per slot.**
   reasoned from the code and one ordered probe, not measured.
 - Whether any renderer reads Bubble's `common.waveform_count`. Whether `qsb` compiles the existing compute shaders.
   The Vulkan flip on a real window (P1: operator-only).
+
+## Checkpoint audit 4 (8 Nov): P2b slice 2
+
+Scope: d99e4fd1 and 662e159f (merged at 97c1fb01). Ran: `test_visualizer_engine_packet_abi.py`,
+`test_sphere_voxel_audio_contract.py`, `test_visualizer_engine_live_off_steady.py` (89 passed, 95 s). Probes on the
+live rig, in process only: (a) production order, Sphere / Oscilloscope / Neon Lake, scenarios `steady`, `pause_warm`
+and `reentry` on 4 s of the shipped clip, with `set_analysis_spectrum_demand` real vs a no-op, frame digests compared;
+(b) the per-commit spectrum copy timed at 32/64/128 bands; (c) `free` order on 6 s of the clip (Spectrum, Sphere),
+counting pending-source replacements and commits that land inside a tick. The 21-minute gates were not re-run; the
+gate reports were read. One change reaches production today: `declare_mode_engine_demands` (A4-M1). The rest is the
+rig, the ABI and test seams.
+
+### High
+
+**A4-H1. The rig copies the owner's control sequences; it does not run them. The in-process vs worker gate cannot
+see the copy drift from the owner, and work order 5 would ship the copy as production code.**
+- Claim: 4P slice 2, "Every control edge mirrors the production owner's engine calls on the logical side"; the
+  switch is "the owner's `_activate_pending_mode` with its `_apply_configuration` on the existing controller and
+  engine".
+- Evidence: `feature_replay.switch_offline_controller_mode` (`feature_replay.py:424-474`) is a hand-written second
+  sequence of the owner's logical activation (`quick_display_visualizer_owner.py:1545-1725`, `_apply_configuration`
+  `:328-450`). `EngineSession._set_playing` / `set_display_power` / `_start_playback` (`engine_worker.py:230-286`)
+  are second copies of `set_playing` (`:561-620`), `set_display_power` (`:224-285`) and `start` (`:1761-1807`).
+  Today they agree step for step on the engine and logical side (checked: wake, playback state, fence on resume;
+  release / acquire / ensure_started / fence / rebase; transaction, defaults, kwargs, technical config, mode state,
+  fence, cancel/reset, pending identity, render activation). Differences that are harmless now but show the copy is
+  not the code: the switch resolves one dict for both the logical and presentation kwargs where the owner takes
+  `pending["logical_kwargs"]` / `pending["presentation_kwargs"]`; unpark always re-acquires and rebases where the
+  owner does so only when it released for display power / the runtime is parked; the owner's
+  `controller.stop_logical_runtime()` and `set_logical_parked` have no counterpart. Both sides of every gate run
+  `EngineSession`, so a change to the owner's sequence (new reset, reordered fence, new kwarg) passes every P2b gate.
+- Failure scenario: someone fixes an activation bug in `_activate_pending_mode` (the area has R-series history:
+  CHK10 phantom slot, Edit profile rollback); the rig keeps the old order, the gates stay green, and work order 5
+  wires the worker's `VIS_SET_MODE` to `feature_replay.switch_offline_controller_mode`: a replay module becomes the
+  product's activation path, and the main process and worker have two owners of one transition.
+- Fix: before work order 5, extract the logical-side activation commit (the part of `_activate_pending_mode` from
+  `begin()` through the pending identity, and `_apply_configuration`'s logical half) and the engine edges of
+  `set_playing` / `set_display_power` / `start` into one module both the owner and `EngineSession` call (the owner
+  keeps Edit profile, backdrop, render bridge, crossfade). Delete `switch_offline_controller_mode`. Add a test that
+  drives the owner's methods and the session's on two engines through the same edge script and compares the engine
+  call log, so drift fails.
+
+### Medium
+
+**A4-M1. `declare_mode_engine_demands` changes Sphere's production frames for the whole session, not one commit; it
+does not change Oscilloscope or Neon Lake in production order; and it costs Neon Lake with its reaction off a copy
+per commit for nothing.**
+- Claim: commit message and 4P, "so the first commit after an activation publishes one"; docstring
+  (`tick_pipeline.py:957-976`), "The spectrum-reading modes (Sphere, Oscilloscope, Neon Lake) demand the analysis
+  spectrum at every commit, so the first commit after an activation ... publishes one instead of leaving a
+  commit-long gap"; the control test runs in `settled` order only
+  (`test_visualizer_engine_live_off_steady.py:283-308`).
+- Evidence: production calls it every tick (`tick_pipeline.py:1000`), so `_publish_pre_agc_analysis_spectrum_if_requested`
+  (`beat_engine.py:1145`) copies `_freq_values` on every commit while a reader mode is active. Probe (a), production
+  order, demand real vs no-op: Sphere differs on 359/364 (`steady`), 542/547 (`pause_warm`), 268/273 (`reentry`)
+  frames, from frame 5 to the end (its integrators carry the one earlier spectrum); Oscilloscope and Neon Lake
+  (shipped settings) 0 differing frames in all three. Why: Sphere reads the spectrum only while its source is current
+  (`sphere_capture.py:79, 103`), so after an activation, and after any re-entry where the source is not yet current,
+  nothing requested the next commit's spectrum; Oscilloscope reads it every tick unconditionally
+  (`logical_frame_capture.py:620`), which already requested the commit that lands after the tick. Neon Lake reads it
+  only while its terrain reaction is enabled (`logical_frame_capture.py:351-362`), and the shipped default is off
+  (`default_settings.py:5887`); the mode rule demands it regardless, so every commit copies a spectrum nobody reads.
+  Probe (b): 4.0 us (32 bands), 8.9 us (64), 14.5 us (128) per commit, GIL-held on the compute lane, ~70-90 commits
+  per second: ~0.3-1.3 ms of GIL per second in the main process today, for a mode that is otherwise dormant there
+  (`mode_capabilities.py:56-59` itself says "while enabled"). No golden or test sees any of this: the Studio and
+  replay engines answer the spectrum themselves (`feature_replay.py:332`), so only the live `_SpotifyBeatEngine`
+  is affected, and the slice's own gate compares two sides that both carry the change. Checkpoint audit 3's A3-M1
+  was itself wrong about Oscilloscope and Neon Lake in production order (it reasoned from the settled rig).
+  The race case is also changed, unmeasured: live, a commit can land before the same tick's spectrum read, and the
+  request bit then skipped every other commit; with the demand every commit publishes.
+- Failure scenario: Sphere, an accepted mode, ships a different (probably better: no first-tick gap, no stale
+  pre-pause spectrum on re-entry) trajectory in production with no visual or reactivity check and a record that says
+  "one commit". Neon Lake with its reaction off pays a per-commit allocation the dormancy rule forbids.
+- Fix: correct 4P and the docstring (Sphere: whole session; Oscilloscope / Neon Lake: no change in production order,
+  only the race). Make the demand follow the setting that gates the read (Neon Lake: reaction enabled, strength > 0,
+  any part > 0, the same predicate `logical_frame_capture` uses), declared from the resolved logical config. Render
+  Sphere before/after on a shipped clip (production order) and record it; add a production-order variant of the
+  activation test for Sphere.
+
+**A4-M2. `production` order is live's nominal case, not "as live"; the reference has no intra-tick commit and no
+pending-source replacement, and the `free` stress run does not supply them either.**
+- Claim: 4P, "the tick reads the previous commit, as live"; "`free` (no hold, no wait) is the stress order";
+  "stress ... 27/27 clean, every frame taken, 0 torn".
+- Evidence: the hold (`engine_worker.py:195-198, 354-369`) forces each analysis to commit strictly after the tick
+  that submitted it and strictly before the next input. Live, the analysis (~0.4-0.8 ms) runs during the rest of the
+  tick: when it lands after the bars read (`consume_engine_bars`) but before the later energy / onset / spectrum
+  reads in the capture, one frame mixes two commits; when the lane is slow (GIL load) the next step finds the slot
+  busy and replaces the pending source (`beat_engine.py:1130-1134`). Probe (c), `free` order, 546 ticks each:
+  Spectrum and Sphere 0 pending-source replacements, 1 commit inside a tick. The gate report: every stress
+  run took `ticks == taken` (1,148 / 1,164 / 1,204 of each), so the reader never missed a frame: no coalescing, no
+  writer lapping the reader, no torn read possible. `stress_in_worker` (`live_engine_gate.py:202-249`) runs `steady`
+  only; its `ok` checks revisions advancing and the last one taken, not A3-H1's invariants (commit sequence never
+  backwards; bars, energy and commit stamp of one tick from one commit).
+- Failure scenario: work order 5's free-running worker hits intra-tick mixes and pending replacements on most busy
+  frames; no gate has ever run them, and "stress 27/27 clean" is read as evidence that it did.
+- Fix: say in 4P that `production` order is the nominal one-tick-latency schedule. Make the stress run asynchronous
+  for real: feed inputs from a producer thread on the authored cadence (or batch several VIS_INPUTs per round trip),
+  hold the compute lane at random points with the admission gate (a seeded jitter schedule), and assert the A3-H1
+  invariants plus counters (pending replacements > 0, intra-tick commits > 0, frames coalesced > 0) so the run
+  proves it exercised what it claims. Run it on the off-steady scenarios too.
+
+**A4-M3. `VIS_SET_MODE` for the current mode silently drops its preset and settings.**
+- Evidence: `_apply_pending_mode` returns when `mode == self.mode` (`engine_worker.py:308-309`), but the message
+  carries `preset` / `settings` and is acknowledged as success (`:471-475`). The owner has a same-mode `kind ==
+  "preset"` activation (`quick_display_visualizer_owner.py:1611-1625, 1641-1650`): new settings, technical config,
+  view motion re-arm, compute/smoothing/floor reset and a new activation.
+- Failure scenario: work order 5 sends a preset change as `VIS_SET_MODE`; the worker replies success and keeps the
+  old settings.
+- Fix: apply a same-mode request when preset or settings are given (the owner's preset kind), or refuse it with an
+  error; test both.
+
+**A4-M4. The ABI's protected-edge mask crosses activations, so a slot labelled with the new identity can carry the
+old activation's edges.**
+- Evidence: `FramePacketWriter.publish` ORs every unacknowledged edge into the new slot regardless of identity
+  (`packet_abi.py:184-189`); the Python payload only coalesces within one generation and activation
+  (`packet_mailbox.py:104-107`). Before ABI 2 the mapping held one activation; slice 2's in-place switch makes the
+  crossing reachable (switch while the reader has not consumed an edge-bearing frame).
+- Failure scenario: P3's native reader validates the slot identity (activation N+1) and acts on a protected edge
+  produced under activation N.
+- Fix: keep the identity with each pending edge entry and drop entries whose identity differs from the slot being
+  published (or reset `_edges` when the identity changes); test with a switch between an edge and its consume.
+
+**A4-M5. The slice's gate evidence is not where the doc says, and lives only in an unremoved worktree.**
+- Evidence: `.artifacts/evidence/architecture/native_core_p2/20261108_live_gate_slice2{,_settled}/` do not exist in
+  the repo's evidence store (`.artifacts/evidence` -> `D:\Temp\Scratch\SRPSS\evidence`; only `20261108_live_cost`,
+  `_live_gate`, `_main_cost`, `_worker_gate`). The two reports exist only at
+  `.claude/worktrees/agent-a30304d24c8bff822/.artifacts/evidence/...` (a real directory inside the slice's worktree,
+  which was not removed after the merge). Their content matches the doc's numbers.
+- Failure scenario: the worktree is cleaned up (the standing rule) and the 21-minute and 15-minute results cited as
+  the slice's proof are gone.
+- Fix: copy both reports into the evidence store at the cited paths, then remove the worktree.
+
+### Low
+
+- **A4-L1. The slot head's odd `sequence_begin` is not stored before the identity.** The writer packs the odd begin
+  and the identity in one `_SLOT_HEAD.pack_into` (`packet_abi.py:194-196`, "in the same store as the slot head").
+  CPython's `pack_into` zero-fills the target struct before packing the fields (from CPython's `_struct.c`
+  `s_pack_internal`; not verified on this build), and the zero-fill's store order is the C runtime's `memset`'s, so
+  the identity bytes can become visible before `sequence_begin` changes. A reader that loads `sequence_end`, the head
+  (old begin, new or zeroed identity) and then the old begin again, while the writer is preempted inside that store,
+  accepts a slot whose identity is not its frame's. It needs the writer to lap the reader twice (three slots) and be
+  descheduled inside one C call: rare, and the same holds for every head field since ABI 1. Fix: store the odd begin
+  with its own `_U64.pack_into`, then pack the rest of the head from offset 8; document the store order the P3 C
+  reader relies on.
+- **A4-L2. `MODE_CODES` append-only is not enforced.** `test_every_registered_mode_has_one_stable_header_code`
+  (`test_visualizer_engine_packet_abi.py:222-232`) checks coverage, uniqueness and non-zero; renumbering or reordering
+  the dict passes. These are ABI constants (not user-editable values), so pin the table literally in the test and fail
+  on any change to an existing entry.
+- **A4-L3. The device refusal is a process-global swap with nested-lifetime hazards.** `_devices_refused`
+  (`engine_worker.py:415-427`) saves and restores `audio_worker.create_audio_capture`. Two live sessions in one process
+  that close out of order (A then B open, A closes first) leave the refusal installed for good, and any production
+  owner in that process cannot open its device while a session is open. The worker hosts one session at a time, so
+  only in-process tools and tests are exposed. Fix: a refcounted refusal, or refuse inside the session's own factory
+  path (A3-L1's `_backend is self._backend` check) instead of patching the module global. A3-L5 (`or` instead of
+  `is None`, `audio_worker.py:872`) is still open.
+- **A4-L4. "Wake's wall-clock restart is proven frame-neutral" is a rig property.** The test forces
+  `is_capture_stale` both ways on Oscilloscope only (`test_visualizer_engine_live_off_steady.py:336-349`); it is
+  neutral because the recorded backend loses no audio across a restart and the next push comes after it. A device
+  restart drops real audio for its reopen latency. The worker's restart count is not reported, so the gate cannot
+  say whether its two sides took the same path. Fix: say "frame-neutral in the rig"; report the worker's restarts.
+- **A4-L5. The pause clips assume capture delivers nothing while Media is paused.** `synthesise_pause` gives every
+  paused tick the last playing history; `_on_audio_samples` (`audio_worker.py:737-800`) appends to the history
+  whenever capture runs, playing or not, and while warm (6 s grace) a loopback device keeps delivering whatever else
+  the system plays (or silence, depending on the backend). The gate covers the silent-device case only. Fix: a paused
+  variant that pushes silent blocks (and one with other audio) through the warm grace.
+- **A4-L6. Doc leftovers.** 4V still says "with the writer filling the header identity and flags per publish"
+  (design doc, 4V "Zero-Python uploads") and work order 6's P3 note says "the header identity written on configure"
+  as the validation source; ABI 2 made the slot the identity and the header configure-time only. The production-order
+  admission failure (`_admission_failed`) is checked only after the tick has published its frame
+  (`engine_worker.py:363-368`): fail-closed, but one frame from an unheld order reaches the mailbox first.
+
+### Verified sound
+
+- Production cost of the seams: `set_analysis_admission_gate` costs one attribute read and an `is not None` per
+  analysis (`beat_engine.py:901-903`), checked before the gate token / activation test so a held analysis that
+  outlives a switch is still rejected. `fence_capture_transactions` has no production caller. No deadlock path: the
+  hold blocks only the engine's own serial analysis lane, nothing in `logical_tick` waits on that lane, the hold is
+  released in `finally` and bounded (30 s), and switches, display power and close run with the gate open.
+- The production order does read the previous commit (the adversarial 50 ms test, mutation-checked per the doc); the
+  gate report's best lag against the lanes engine is 1 tick, as expected.
+- The seqlock read order and acceptance (`packet_abi.py:249-261`): `sequence_end`, head, payload, `sequence_begin`;
+  the identity is read inside that window. No reader decides a slot from the header identity
+  (`FramePacketReader.identity` / `mode_code` are set at attach and unused; the Python reader decodes the payload's
+  own identity). An ABI 1 mapping is refused by `_validate` on both sides (`PacketAbiError`), and the worker's
+  configure reports it as a failure. `-1` round-trips as `0xFFFFFFFF`.
+- The control sequences match the owner's engine calls today (see A4-H1 for why that is not enough): `set_playing`'s
+  wake-before-playback-state and the fence on resume, `set_display_power`'s release / acquire / ensure_started /
+  fence / rebase, `start`'s acquire, same-state playback commit and cold `ensure_started`.
+- The gate reports match the doc (126 pairs, 170,622 frames, 0 mismatching, 27/27 stress; settled 99 pairs, 138,978
+  frames), read from the worktree copy (A4-M5).
+
+### Not verified
+
+- The CPython `pack_into` zero-fill on this build and the C runtime's `memset` store order (A4-L1: from source
+  knowledge). Whether Sphere's whole-session divergence (A4-M1) is visible; it was measured as digests, not rendered.
+- How a real loopback device behaves through a Media pause (A4-L5), and whether Oscilloscope's history after a
+  display-power re-entry matches production (the rig's stream continues the recording across the park; a device
+  reopens on fresh audio).
+- The `free` order in the worker process (probe (c) ran in process; the worker's IPC round trip makes races rarer
+  still). The whole-clip gates were not re-run.
