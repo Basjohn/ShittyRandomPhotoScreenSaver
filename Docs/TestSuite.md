@@ -617,7 +617,7 @@ Required properties:
 
 Primary suites include `test_qtquick_resize_normalization.py`, `test_widget_auto_shrink.py`, `test_qtquick_family_size_policy.py`, `test_qtquick_geometry_resolver.py`, `test_qtquick_custom_layout_owner.py`, `test_qtquick_custom_layout_overlay.py` and capture/geometry tests.
 
-**Current Edit acceptance:** `test_qtquick_custom_layout_owner.py` exercises three completed-action undo, flips, wheel then reset; `test_qtquick_input_controller.py` exercises keyboard admission only in Edit without stealing non-Edit plain `Z`; `test_qtquick_child_lock_scene.py` checks keyboard and glyph signals against one retained lock frame. `test_qtquick_reddit_presentation.py` checks flipped title → age value → AGO order and compact live spacing; `test_qtquick_friend_pulse_presentation.py` checks separator growth/reset and edited width-scale preservation. Confirm these in the intended Windows Qt environment plus actual pointer/Save/Cancel/Restore interactions. Source tests cannot prove QML signal delivery, pointer grabs, render alignment or full paint/geometry parity.
+**Current Edit acceptance:** `test_qtquick_custom_layout_owner.py` exercises three completed-action undo, flips, wheel then reset; `test_qtquick_input_controller.py` exercises keyboard admission only in Edit without stealing non-Edit plain `Z`; `test_qtquick_child_lock_scene.py` checks keyboard and glyph signals against one retained lock frame, and (hidden production scene, real Clock and Media, real pointer events) that opening a lock exposes the children at once without a parent edit (operator, 8 Nov): the Edit frame's hover-revealed lock focuses its parent when another widget is selected, the children fade in (never pop) whether or not the parent was selected, sit where a no-net parent nudge puts them, and fade out on lock; the hover glyph's route (select, then the lock request before the frames exist) exposes them too. Negative control on the pre-fix overlay: the four Edit-frame cases red (parent not focused; selected parent's children popped in), the hover-glyph route green (it selects first). `test_qtquick_reddit_presentation.py` checks flipped title → age value → AGO order and compact live spacing; `test_qtquick_friend_pulse_presentation.py` checks separator growth/reset and edited width-scale preservation. Confirm these in the intended Windows Qt environment plus actual pointer/Save/Cancel/Restore interactions. Source tests cannot prove QML signal delivery, pointer grabs, render alignment or full paint/geometry parity.
 
 Clock face state is independent from its digital/analogue geometry variants. `test_layout_slots.py`, the real DisplayManager slot path, and Clock Settings preservation coverage must keep those authorities separate.
 
@@ -969,7 +969,8 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   presentation for the block (3 red), the draft dropping the records (parity and child tests red), Restore Size
   keeping the records (red), the title ignoring its offset (2 red), the artwork ignoring its size (2 red), no
   presentation containment (red), no draft mark on a part's edit (red), the block keeping the text block's frame
-  (2 red).
+  (2 red). The block's hover-revealed lock clicked while the toast is selected opens the parts at once (the block
+  focused and unmoved, the parts' frames those a no-net block nudge gives); red on the pre-fix overlay.
   `tests/test_visualizer_expansion_overlays.py` (M3b, hidden production scene) also holds Show On Hover (real
   pointer moves: a hover where the faded Now Playing sits fades it in and holds it, leaving runs the reveal's hold
   and fade-out, the toast untouched, a press there reaches what it reached with the option off, nothing while
