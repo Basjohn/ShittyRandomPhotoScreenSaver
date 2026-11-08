@@ -401,6 +401,36 @@ def test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller(qt_
 
 
 @pytest.mark.qt
+def test_a_retired_owner_leaves_no_callback_of_its_own_on_its_controller(qt_app, pcm):
+    # Gate 4 (8 Nov, R-178): the destruction barrier judges a retiring generation's Python owners by reference
+    # counting. On the worker path the owner installs its layout-metrics observer (a bound method) on its controller,
+    # so owner -> controller -> observer -> owner is a cycle only a deep collection frees: with the admission on,
+    # every Settings round trip timed the barrier out and the saver exited. Retirement leaves the controller holding
+    # nothing of the owner (it keeps the controller for post-retirement diagnostics).
+    import types
+
+    from widgets.spotify_visualizer import engine_worker_link
+
+    stand_in = _InProcessSupervisor()
+    rig = gate.OwnerRig("spectrum", worker=True, supervisor=stand_in, cadence="thread")
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            owner = rig.build()
+        controller = owner.controller
+        assert owner._worker is not None
+        installed = [name for name, value in vars(controller).items()
+                     if isinstance(value, types.MethodType) and value.__self__ is owner]
+        assert installed, "the worker path no longer installs an owner callback: this test checks nothing"
+        assert owner.retire()
+        held = [name for name, value in vars(controller).items()
+                if isinstance(value, types.MethodType) and value.__self__ is owner]
+        assert held == [], f"the retired owner is still referenced by its controller through {held}"
+    finally:
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.qt
 def test_the_session_is_configured_with_the_bindings_own_activation(qt_app, pcm):
     # A6-L4: the worker receives the activation the host binding resolved and its presentation kwargs (with the
     # resolved 3D Detail tier), never an offline request; its controller records the same inputs as the owner's.
