@@ -173,25 +173,54 @@ switch never remaps.
      since the previous snapshot (tapped from the compute pool under a lock).
    - The worker's `SnapshotBeatEngine` answers from the newest snapshot and replays the feeds into its own scheduler.
      The scheduler's debounce depends only on what it was fed, so the tick consumes the same events from it,
-     consume-once, as in process. DSP configuration is the main process's: the worker's setters are no-ops; a read no
-     snapshot carries raises (never an absent capability).
+     consume-once, as in process. DSP configuration is the main process's: the worker's setters are no-ops; a read or
+     write outside the contract raises `SnapshotContractError`, a `BaseException`, so the tick's defensive
+     `except Exception` blocks can never turn a missing capture into a silent fallback (audit H3). A static scan of the
+     Visualizer package pins every engine read against `CAPTURED_GETTERS` (it found the fence's
+     `get_authoritative_frame_commit_seq`, now captured).
    - Capture is side-effect free. `is_reactivity_play_ramping` is a pure read of the ramp clock (the latch a ramped
      getter clears on expiry no longer decides it; its one reader, Extruded Bubble, reads a ramped getter first, so in
-     process nothing changes). The analysis spectrum is peeked (`peek_pre_agc_analysis_spectrum`); the tick's read of
-     it requests the next one, the one write that depends on the tick, and returns as `EngineDemands` for the main
-     process to apply before its next step (`request_pre_agc_analysis_spectrum`).
-   - The waveform history and idle waveform demands are a rule of the mode (`consumes_waveform_samples`), declared by
-     the tick before it steps; the main process declares them from the same rule before each step, and the worker's
-     declarations must agree (a disagreement raises).
-   - `EngineSession(inputs="snapshot", initial_snapshot=...)` ticks snapshots (`tick_snapshot` -> revision and demands;
+     process nothing changes). The analysis spectrum is peeked (`peek_pre_agc_analysis_spectrum`).
+   - No tick -> engine write crosses back. The waveform history and idle waveform demands
+     (`consumes_waveform_samples`) and the spectrum request (`reads_analysis_spectrum`: Sphere, Oscilloscope, Neon
+     Lake) are rules of the mode; the main process applies them before each step (`request_pre_agc_analysis_spectrum`
+     before `engine.tick()`), and the worker's tick must agree (a disagreement raises). The first design returned the
+     spectrum request as a back-edge, one tick late and racy against the compute commit (audit H4).
+   - Live sessions pin only the authored clock to the snapshot's timestamp; `time.*` and `random` stay the worker's
+     own (audit H6). Bubble's spawn draws from the process RNG by design, so `seed` is a control input: the gates pass
+     the replay seed, production none. A tick that raised closes its session (`session_closed`, audit M2).
+   - `EngineSession(inputs="snapshot", initial_snapshot=...)` ticks snapshots (`tick_snapshot` -> revision;
      `VIS_INPUT {"snapshot": ...}` across processes); `inputs="lanes"` is the in-process reference on production DSP
      (`ProductionLaneEngine`).
    Gate (`tests/test_visualizer_engine_snapshot.py`): the snapshot path ticks frames identical to the in-process tick
    on production DSP for all nine modes, in process and in a `WorkerType.VISUALIZER` process. Mutations caught: no
    scheduler replay (Bubble), no onsets (Extruded Bubble), no spectrum (Sphere), the main side declaring no samples
    (Oscilloscope).
-5. Lifecycle: generation start/retire, park, crash fail-closed, frozen spawn check (operator), dormancy baseline.
-6. Measurement (gate 3), then decide P2b.
+   **Independent audit (8 Nov, `Native_Core_P2_Audit.md`):** fixed the same day: C1 (wake: one byte per publish across
+   processes; a free-running writer stranded the reader after frame 7 on the old edge rule), C2 (seqlock read order:
+   `sequence_end` first, `sequence_begin` last; an interleaved overwrite was accepted torn), H3a, H4, H6, M2. Open:
+   4b, 4c and 5 below.
+4b. Live-engine and off-steady-state gates (audit H3): a gate whose reference is the live `_SpotifyBeatEngine` fed
+   PCM through the real audio worker (offline, blocks pushed into the capture callback, so asynchronous commits are in
+   play); gate clips with pause/resume, a warm re-entry (fence armed) and an in-session mode switch; the read audit
+   run on those paths. Scheduler state at session start and an engine-owned feed observer instead of the tap (M1).
+4c. Main-process cost (audit H1), before 5: per mode, the main process's GIL time per tick in process vs. the
+   snapshot path (step + capture + pickle + decode, no acknowledgement). The audit measured capture .20-.25 ms, pickle
+   .07 and decode .08-.54 per tick, against in-process ticks of .33-.45 ms for Spectrum, Oscilloscope, Sphere and
+   Extruded Spectrum: P2a only gains for Bubble, Spline Curve, Waveform Ribbon, Extruded Bubble and Neon Lake. Decide
+   on these numbers whether P2a's production wiring proceeds (capturing only what the mode reads) or P2b (the worker
+   owns capture and DSP; the snapshot layer is deleted) goes first.
+5. Production wiring and lifecycle. Must specify (audit H2, M5): a main -> worker latest-wins snapshot mapping (the
+   ABI with roles swapped, a wake byte to the worker; the supervisor's FIFO request queue carries edges only); an
+   in-place `set_mode` and a resolved-settings delta applied to the existing session at a tick boundary (a rebuild per
+   slider step would reset the mode); playing / framed-view / park controls (the main process's capture is the
+   cadence); fail-closed handling of `session_closed` and of heartbeat loss, with a fade; the owner closing its wake
+   sender after configure; the label-namespace counter's owner; the presentation-config reads moved to logical config
+   (QtCore only); the worker in the dormancy receipt; frozen spawn (operator); frame age defined from the capture
+   timestamp on both paths (M3).
+6. Measurement (gate 3), then decide P2b. P3 note (audit H5): the tagged codec is P2's Python-to-Python transport,
+   not a C layout; P3 gets per-mode fixed layouts under new `payload_schema` values, with the header identity written
+   on configure.
 
 ## Risks
 
@@ -210,21 +239,18 @@ switch never remaps.
   restarted workers) and numbers from `namespace << 32`; the main process's own counter stays far below, and
   namespace 0 keeps the in-process numbering for the identity gates. Production wiring must pass a fresh namespace on
   every `VIS_CONFIGURE` (`tests/test_visualizer_engine_worker.py`).
-- **The GUI wake (8 Nov, built; OPEN, audit C1):** across processes the writer decides the edge from
-  `consumed_sequence`, which the reader writes only after decoding, so a publish that lands between the reader's
-  accept and its acknowledgement is taken as "still unread" and never woken; the owner then never reads again
-  (reproduced). Fix before work order 5 (a byte per publish with reader-side coalescing, or acknowledge at accept and
-  re-check after every take). As built: in process the mailbox wakes the GUI on its empty -> populated edge. Across
-  processes the writer sends one byte down a `multiprocessing.Pipe` on exactly that edge (handed to the worker in
-  `VIS_CONFIGURE` as `wake`); the reader's `listen_for_wakes` thread blocks on the pipe and runs the same wake callback
-  (the owner's thread-safe emitter). Never a poll; closing the mailbox ends the thread
-  (`tests/test_visualizer_engine_worker.py`: one byte per edge; three worker frames taken by wake across processes).
+- **The GUI wake (8 Nov; audit C1 fixed the same day):** in process the mailbox wakes the GUI on its
+  empty -> populated edge (one lock serialises publish and take). Across processes an edge cannot be derived from the
+  reader's acknowledgement, which lands only after decoding (a publish in between was mistaken for unread and never
+  woken again), so the writer sends one byte per publish down a `multiprocessing.Pipe` (handed to the worker in
+  `VIS_CONFIGURE` as `wake`); the reader's `listen_for_wakes` thread blocks on the pipe and runs the owner's wake
+  emitter, which coalesces. Never a poll; closing the mailbox ends the thread (`tests/test_visualizer_engine_worker.py`:
+  one byte per publish; a free-running writer at ~165 Hz against a stalling reader never strands or tears a frame).
 - **Hidden GUI-thread reads inside the tick:** every attribute the tick reads from the owner/widget must become a
   control input. The audit for step 4 lists them from `logical_tick`'s reads; a missed one shows up as an identity
-  failure only where the tick lets the read's error propagate. Where the tick wraps an engine read in
-  `except Exception` the miss is silent: `get_authoritative_frame_commit_seq` (the warm re-entry fence) is read
-  that way and is not captured, so the fence disarms on the worker (audit, H3). The read audit must cover the paused,
-  resume, re-entry and mode-switch paths, which no gate clip exercises yet.
+  failure only where the tick lets the read's error propagate. Engine reads now fail with `SnapshotContractError`
+  (never swallowed) and a static scan pins them; the fence's read was the one miss (audit H3, fixed). Owner/widget
+  reads and the paused, resume, re-entry and mode-switch paths still need the 4b gates.
 - **Two copies of state during a switch:** the main process must never keep a stale tick-side copy; one owner of each
   piece of state, the worker for logical state.
 - **Memory:** a second Python with numpy, QtCore and (until the presentation-config reads move) QtGui: measured 8 Nov

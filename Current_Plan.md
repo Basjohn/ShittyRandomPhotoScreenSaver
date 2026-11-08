@@ -140,10 +140,13 @@ after the operator's yes on a question card; agents never run load (invisible ch
      frames identical to the in-process owner for all nine modes, and on every recording: 160/160 replayable pairs,
      291k frames; live inputs are the lossless engine snapshot, `core/visualizer_engine/engine_snapshot.py`, whose
      frames equal the in-process tick on production DSP for all nine modes, in process and across processes; the
-     cross-process wake and per-session label namespaces are built). Next: 5 (production wiring behind the owner:
-     a fresh label namespace per `VIS_CONFIGURE`, latest-wins snapshots without acknowledgements, the spectrum demand
-     back-edge, park, crash fail-closed, dormancy; the tick's presentation-config reads moved to logical config so the
-     worker imports QtCore only), then 6 (measurement, gate 3).
+     cross-process wake and per-session label namespaces are built). Independent Fable audit, 8 Nov
+     (`Docs/Future_Work/Native_Core_P2_Audit.md`): its two critical findings (a lost cross-process wake that froze the
+     display; the seqlock reader accepting torn slots) and H3a/H4/H6/M2 are fixed with failing-first tests. Next, in
+     order (design doc work orders): 4b live-engine and pause/resume/re-entry/mode-switch gates; 4c the main
+     process's per-mode cost of the snapshot path, which decides whether P2a's wiring or P2b (the worker owns capture
+     and DSP) goes first; then 5 (production wiring with a latest-wins main -> worker snapshot mapping, in-place
+     mode and settings deltas, park, fail-closed, QtCore-only worker), then 6 (measurement, gate 3).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 
