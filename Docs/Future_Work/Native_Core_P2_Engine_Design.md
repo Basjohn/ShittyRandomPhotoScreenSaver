@@ -1312,7 +1312,8 @@ switch never remaps.
        Pillow path adds nothing. **Operator check:** a frozen build with `--viz-engine-worker` (the Visualizer on the
        worker, its frames shown) and the cold spawn's time to the first configure's reply against the 6 s bound
        (audit 9, A9-L2; ready plus the first configure, which now includes the configure-time imports), plus the
-       worker's RSS in `--usage` inside a session.
+       worker's RSS in `--usage` inside a session. Done 8 Nov (step 6, "Frozen check"): 1.62 s; it found R-176's
+       frozen half (Nuitka's icon hook loaded QtGui and QtWidgets) and R-179.
      - *Audit 9:* A9-L1, the first configure's deadline is inert once `retire()` began (`_retiring`, set first: a retire
        whose logical join failed returns before `_retired`). A9-L2, the spawn task belongs to its link: it stops nothing
        (the link no longer stops the role), starts nothing once its link closed, and a worker it started for a link that
@@ -1372,7 +1373,8 @@ switch never remaps.
        (Settings round trips, display selection, replacement hang window, S hotkey, no display shown).
      - **Left for step 6 / gate 3:** gate 3's game60 run (lead, operator's yes); the operator's frozen check above
        (now also confirming the frozen worker loads no Qt GUI stack: A10-M1 is proven on the source spawn path and
-       on the entry module run as `__parents_main__`, not on a build; timed as ready plus the first configure, A11-L1);
+       on the entry module run as `__parents_main__`, not on a build; timed as ready plus the first configure, A11-L1;
+       done 8 Nov, with a confirming build left: step 6's "Frozen check");
        the production worker's RSS and threads inside a session (from source: the Gate 4 record under 6); 5.3's
        operator device checks, the real-device reopen
        timing and what its record leaves (5.3 above, A11-L5/L6); the reply handlers outside the one-frame gate (the configure's reply,
@@ -1479,7 +1481,54 @@ switch never remaps.
        the logical tick's GIL share empty), so gate 3's frame-age comparison needs the worker's publish time in the trace
        (each slot carries its frame's produced time). The production worker in a session, from source: 74-75 MB RSS,
        58-59 MB private and 10 threads with Spectrum, 90-130 MB RSS and 7-10 threads across the modes (the frozen
-       build's figures stay the operator's check). Everything 5.7 left above except gate 4.
+       build's figures: the frozen check below). Everything 5.7 left above except gate 4.
+   - **Frozen check (8 Nov, lead; the operator check of step 6): the worker path runs frozen; two defects found and
+     fixed, a confirming build is next.** The GitHub Remote build of `5fb8dab7` (A10-M1 included, R-178 not), the
+     compiled diagnostic `release/diagnostic/SRPSS_Diagnostic.scr --viz-engine-worker`, a visible saver run of 90 s
+     ended by a key press, its process tree sampled from outside every ~1.2 s (psutil: RSS, USS, threads, mapped Qt
+     DLLs). The log's `entrypoint=main_diagnostic` is the flavour chosen by the published file's name; the binary's root
+     module is `main.py` (the report compiles `__main__` and `__parents_main__` from it; `main_diagnostic.py` is not in
+     the build).
+     - *Cold start:* the first configure took 1.62 s (T1 -> T2), inside its 6 s bound (A9-L2). A switch to Waveform
+       Ribbon committed on the worker; no fallback to in process.
+     - *A10-M1 holds frozen:* no worker mapped Qt6Quick, Qml, Network or OpenGL; the engine worker had no Qt at all at
+       its first sample, before its configure (97.9 MB RSS, 33.3 MB USS, 6 threads).
+     - *Engine worker in a session:* Spectrum 140.7-142.1 MB RSS, 57.1-58.4 MB USS, 11-14 threads; after the switch to
+       Waveform Ribbon a sawtooth of 158-265 MB RSS / 70-177 MB USS every ~3.6 s, 12 threads (`--usage`: 81.0 MB at
+       spawn, 142.1 with Spectrum, 286.2 and 276.9 with Waveform Ribbon; its 6 threads are the sampler's heavy refresh
+       at spawn, carried forward by design). The RSS is not comparable with the source figures: a frozen child with no
+       Qt and no work holds 78-95 MB RSS but only 15-21 MB USS (two other spawn children of the run, most likely the
+       feed parser's pool), the compiled executable's own shared pages. USS is: 57-58 MB frozen against 54-55 MB from
+       source with Spectrum (the worker's handler in a fresh interpreter, recorded PCM).
+     - *Found 1, Qt GUI DLLs in every worker that imports Qt (R-176's frozen half, fixed `601f8feb`):* the engine
+       worker mapped `Qt6Core.dll`, `Qt6Gui.dll` and `Qt6Widgets.dll` from its first configure on (QtCore only from
+       source), the image and prefetch workers the same three from their first Qt-path decode (QtCore and QtGui from
+       source). Not our code: Nuitka's PySide6 plugin, given the executable icon, appends `import PySide6.QtWidgets`
+       and `from PySide6.QtGui import QIcon, QPixmap, QImage` (a `QApplication` icon wrapper) to the `PySide6`
+       package's post-load trigger, which runs on the first PySide6 import of every compiled process
+       (`nuitka/plugins/standard/PySidePyQtPlugin.py`, `createPostModuleLoadCode`; the build report's
+       `PySide6-postLoad` uses `PySide6.QtWidgets` and `PySide6.QtGui`). The other candidates are ruled out from
+       source: the engine graph and a Waveform Ribbon activation import `PySide6.QtCore` only (first through
+       `widgets/spotify_visualizer/__init__.py` -> `beat_engine`), and every mode's pickled activation unpickles with no
+       Qt module at all. Nuitka 4.2 has no option for the hook, and `main.py` sets its own icon from `SRPSS.ico`; a
+       user plugin both Windows build workers pass with the icon (`tools/nuitka_worker_qt_plugin.py`) removes every Qt
+       GUI import from that trigger, and the frozen audit refuses a report whose PySide6/QtCore load triggers import
+       one (the 8 Nov reports are refused). Measured from source, the hook's imports add ~5.5 MB RSS and ~2 MB USS to a
+       QtCore-only process: a contract breach, a small cost; most of the frozen RSS above is the executable's pages.
+     - *Found 2, the Waveform Ribbon sawtooth (R-179, fixed `49203808`):* the frame codec's recursive closures left one
+       reference cycle per frame holding its buffers until the next cyclic collection; the same sawtooth reproduces
+       from source (84-155 MB RSS) and is flat after the fix (85 MB RSS / 60 MB USS; Extruded Bubble 57-58 MB USS).
+     - *Not exercised:* Settings (the build predates R-178, so every Settings round trip on the worker would have exited
+       the saver).
+     - *Next build (lead, GitHub Remote of a commit with both fixes and R-178):* the build log names the removal
+       (`srpss-worker-qt: Removed from 'PySide6' post-load ...: Loading Qt application icon from Windows resources.`, no
+       "nothing imported" warning) for both families; the frozen audit prints `PySide6/QtCore load triggers import no
+       Qt GUI module` and the report's `PySide6-postLoad` uses `PySide6` and `PySide6.QtCore` only; the same sampled run
+       shows the engine worker with `qt6core.dll` only, the image workers with `qt6core.dll` and `qt6gui.dll` only, and
+       the engine worker's RSS/USS flat across Waveform Ribbon; the app's window icon (taskbar, Settings) and the
+       `.scr`'s Explorer icon unchanged; then one Settings round trip on the worker.
+     - Evidence: `.artifacts/evidence/architecture/native_core_p2/20261108_frozen_diagnostic_check/`
+       (`process_samples.json`, `usage_samples.log`, `worker_log_lines.log`, the sampling script).
 
 ## Risks
 
@@ -1487,7 +1536,9 @@ switch never remaps.
   worker must import QtCore at most; P2a keeps the beat engine in the main process, so the first worker imports only the
   tick and mode runtimes. Measured 8 Nov: the logical runtime, the tick pipeline, render state, the ABI, the codec and
   all eight mode frame runtimes import QtCore only (no QtGui/QtQml/QtQuick); about 0.9-1.1 s cold and ~350 modules
-  each. `tests/test_visualizer_engine_import_weight.py` pins it.
+  each. `tests/test_visualizer_engine_import_weight.py` pins it. A frozen build adds what the compiler injects: Nuitka's
+  PySide6 plugin appended QtWidgets and QtGui imports to the first PySide6 import of every compiled process (R-176's
+  frozen half); `tools/nuitka_worker_qt_plugin.py` removes them and the frozen audit refuses a build that has them.
 - **The tick still reads presentation config (8 Nov; the QtGui part resolved by 5.4):** the logical capture reads
   Spectrum's decoration fades and colours, the Oscilloscope/Bubble spec parameters and the 3D modes' view from the
   presentation state, so the worker configures a presentation state of its own: a copy the main side owns (configured

@@ -5,9 +5,16 @@
 **Status:** fixed 8 Nov 2026 (merge `32bd6c3f`, commit `22af1f00`): `core/spawn_child.py`
 (`importing_parents_main`) and the guarded application imports in `main.py` / `main_mc.py`. Regression bar:
 `tests/test_visualizer_engine_frozen_spawn.py` (a spawn from a `main.py` parent loads no Qt GUI stack; the
-negative control re-runs the old module level and fails 5 tests). Operator check still open: the same on a frozen build.
-Found by checkpoint audit 10 (`Docs/Future_Work/Native_Core_P2_Audit.md`, A10-M1) while the native core's engine worker
-was being made dormant; it was never a native-core bug: every worker role had it.
+negative control re-runs the old module level and fails 5 tests). Found by checkpoint audit 10
+(`Docs/Future_Work/Native_Core_P2_Audit.md`, A10-M1) while the native core's engine worker was being made dormant; it
+was never a native-core bug: every worker role had it.
+
+**Correction (8 Nov 2026, the first frozen check): frozen workers still carried Qt6Gui and Qt6Widgets.** The fix
+above holds in a build (no frozen worker mapped Quick, Qml, Network or OpenGL), but the compiled engine worker mapped
+`Qt6Core.dll`, `Qt6Gui.dll` and `Qt6Widgets.dll` from its first configure on, and both image workers the same three
+from their first Qt-path decode, where source loads QtCore only (engine) or QtCore and QtGui (image). A second,
+build-only path, not `main.py`: see "Frozen half" below. Fixed `601f8feb`; a confirming build is the lead's next check
+(`Docs/Future_Work/Native_Core_P2_Engine_Design.md`, step 6, "Frozen check").
 
 ## Symptom
 
@@ -65,6 +72,39 @@ imports and skips them in a worker; the imports stay at module level behind that
 statements in the same order and tests that patch `main.QTimer` / `main.ScreensaverEngine` still work. A worker
 inherits its environment (thread-pool sizes, the Quick render-loop variables) from the parent that set it. `main_mc.py`
 does the same.
+
+## Frozen half (8 Nov 2026): the compiler's own import hook
+
+- **Found:** the GitHub Remote build of `5fb8dab7`, `SRPSS_Diagnostic.scr --viz-engine-worker`, its children sampled
+  every ~1.2 s with psutil: the engine worker had no Qt at its first sample, then `Qt6Core`, `Qt6Gui` and `Qt6Widgets`
+  together at its first configure; the image and prefetch workers the same three at their first Qt-path decode; two
+  other spawn children no Qt. Evidence: `.artifacts/evidence/architecture/native_core_p2/20261108_frozen_diagnostic_check/`.
+- **Cause:** Nuitka's PySide6 plugin (`nuitka/plugins/standard/PySidePyQtPlugin.py`, `createPostModuleLoadCode`),
+  whenever the build passes `--windows-icon-from-ico` (every SRPSS Windows build does), appends code to the `PySide6`
+  package's post-load trigger: `import PySide6.QtWidgets`, `from PySide6.QtGui import QIcon, QPixmap, QImage` and a
+  `QApplication` subclass that loads the executable's icons. The trigger runs on the first `import PySide6` of any
+  kind, so `from PySide6.QtCore import QObject` (the engine graph's first Qt import, through
+  `widgets/spotify_visualizer/__init__.py` -> `beat_engine`) loaded QtGui and QtWidgets in every compiled process. The
+  build report shows it: `PySide6-postLoad`, reason "Loading Qt application icon from Windows resources.", uses
+  `PySide6.QtWidgets` and `PySide6.QtGui`. Ruled out from source: the entry module (the binary's root is `main.py`;
+  `entrypoint=main_diagnostic` is the flavour chosen by the file name), the engine graph through a Waveform Ribbon
+  activation (QtCore only) and the owner's pickled activations (no Qt module at all).
+- **Cost:** a contract breach more than a weight: the hook's imports add ~5.5 MB RSS and ~2 MB USS to a QtCore-only
+  process (from source). The frozen engine worker's 142 MB RSS against 74-75 MB from source is mostly the compiled
+  executable's own shared pages (a frozen child with no Qt and no work holds 78-95 MB RSS, 15-21 MB USS); its
+  Waveform Ribbon swings were R-179.
+- **Fix (`601f8feb`):** `tools/nuitka_worker_qt_plugin.py`, a Nuitka user plugin both Windows build workers pass with
+  the icon, removes every Qt GUI import from what the PySide6 plugin attaches to the `PySide6` package and logs it;
+  every other trigger (Nuitka's compiled-method protection for `Signal.connect`, QtCore's library path) and the
+  executable's icon resource stay. Nuitka 4.2 has no option for the hook; `main.py` sets the application icon from
+  `SRPSS.ico` right after constructing `QApplication`, so nothing used it. `tools/frozen_build_audit.py verify` now
+  refuses publication when a PySide6/QtCore load trigger in the report imports a Qt module other than QtCore (the
+  8 Nov reports are refused). Regression bars: `tests/test_nuitka_worker_qt_plugin.py` (the installed Nuitka's own
+  plugin: the hook is there with an icon, the negative control, and gone with the user plugin; both build workers pass
+  it, which HEAD's scripts fail) and `tests/test_frozen_build_audit.py` (the 8 Nov trigger shape is refused).
+- **Lesson:** the source spawn tests prove what our code imports; a compiled process also runs what the compiler
+  injects (plugin pre/post-load triggers). Check the build report's trigger modules, and a frozen worker's mapped
+  DLLs, not only the source spawn.
 
 ## Why it hid
 

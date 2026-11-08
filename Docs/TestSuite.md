@@ -1193,6 +1193,15 @@ High-value permanent guards include:
   maps no Qt GUI DLL; the entry modules executed as `__parents_main__` import no Qt, engine or Settings, and under any
   other name import all of it (checkpoint audit 10, A10-M1; the pre-fix `main.py` fails 5; the frozen run itself is
   the operator's).
+  `tests/test_nuitka_worker_qt_plugin.py` (R-176's frozen half): on the installed Nuitka's own PySide6 plugin class,
+  an executable icon makes the `PySide6` package's post-load code import QtWidgets and QtGui (the negative control),
+  and with `tools/nuitka_worker_qt_plugin.py` active nothing GUI is left while QtCore's own trigger stays; the user
+  plugin refuses a build without the PySide6 plugin; both Windows build workers pass it with the icon (the pre-fix
+  scripts fail). `tests/test_frozen_build_audit.py` refuses a report whose PySide6/QtCore load trigger imports a Qt
+  module other than QtCore (the 8 Nov build's `PySide6-postLoad` shape) or that has no such trigger.
+  `tests/test_visualizer_engine_frame_codec.py::test_encoding_and_decoding_leave_nothing_for_the_cyclic_collector`
+  (R-179): with the collector off and `DEBUG_SAVEALL`, round trips and both refusal paths leave no codec closure for
+  the collector (before the fix: 30 for 10 round trips).
   `tests/test_usage_sampler.py` also pins the engine worker's labelled `--usage` breakdown (from the sample's own
   per-process pass; a topology refresh only when a named child is new, once per distinct PID even when the refresh
   cannot find it, forgotten once no longer named; a process the sample's own refresh added reports `na` CPU and stays
