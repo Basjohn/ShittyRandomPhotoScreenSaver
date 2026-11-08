@@ -1323,6 +1323,15 @@ class QuickDisplayVisualizerOwner:
                 self._mode_transition_phase = "idle"
                 self._mode_transition_started_at = 0.0
                 self._mode_transition_fade = 1.0
+                if self._recovery_stage and self._worker is not None and self._worker_failures:
+                    # An engine-worker recovery's replacement session is fully revealed (its first presentable frame
+                    # faded in): it proved itself, so the two-strike rule starts again (checkpoint audit 10, A10-L4). A
+                    # second strike is now a failure before a recovery completes; an isolated failure hours later (a
+                    # fail-closed run of failed steps during a device change, a crash) recovers again instead of
+                    # leaving the worker for the run. A recovery revealed after the fallback (stage 2) runs in process.
+                    logger.info("[SPOTIFY_VIS][ENGINE_WORKER] Recovery completed; the failure count starts again "
+                                "mode=%s", self._controller.mode_id)
+                    self._worker_failures = 0
                 self._recovery_stage = 0              # an engine-worker recovery's reveal completed
                 callback = None if pending is None else pending.get("on_complete")
                 if callable(callback):
@@ -2077,8 +2086,9 @@ class QuickDisplayVisualizerOwner:
         """A session failed (a failed reply, ``session_closed``, the session's end or worker death, a cancelled
         correlation: the supervisor's heartbeat restarted a hung worker). The last presented frame is held and fades
         out (never vanishes) while the replacement comes up: the first failure reconfigures the worker once, a second
-        keeps this owner in process for the run. Never waits on the worker (the old session's stop and the
-        replacement's configure are sent); bounded by the recovery deadline (``_on_recovery_deadline``)."""
+        before that recovery's reveal completed keeps this owner in process for the run (a completed reveal starts the
+        count again: A10-L4). Never waits on the worker (the old session's stop and the replacement's configure are
+        sent); bounded by the recovery deadline (``_on_recovery_deadline``)."""
         if self._retired or self._worker is None:
             return
         from widgets.spotify_visualizer import engine_worker_link as link_module

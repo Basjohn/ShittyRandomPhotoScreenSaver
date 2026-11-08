@@ -492,11 +492,15 @@ def test_a_worker_that_cannot_start_leaves_the_activation_in_process(qt_app, sup
 
 
 @pytest.mark.qt
-def test_a_lost_session_fades_the_held_frame_out_reconfigures_once_then_stays_in_process(qt_app, supervisor, pcm):
-    # The session ends under the owner (stopped behind its back: its wake pipe ends, as when the worker dies or its
-    # device fails to open). First: the held frame is re-presented fading out on the replacement's publications (never
-    # vanishing), then the replacement (a fresh session and namespace) is revealed from hidden. Second: the owner runs
-    # in process for the run.
+def test_a_lost_session_fades_the_held_frame_out_reconfigures_and_a_loss_before_the_reveal_stays_in_process(
+        qt_app, supervisor, pcm, monkeypatch):
+    # The session ends under the owner (stopped behind its back: its wake pipe ends, as when the worker dies, its
+    # device fails to open or its steps keep failing). First: the held frame is re-presented fading out on the
+    # replacement's publications (never vanishing), then the replacement (a fresh session and namespace) is revealed
+    # from hidden. The completed reveal starts the failure count again (checkpoint audit 10, A10-L4), so a later loss
+    # recovers the same way. A loss while a recovery's replacement is not yet revealed is the second strike: the owner
+    # runs in process for the run. Negative control (no reset, the pre-A10-L4 owner): the second loss, after a
+    # completed recovery, already left the worker for the run.
     from core.process.types import MessageType, WorkerType
     from widgets.spotify_visualizer import engine_worker_link
 
@@ -537,6 +541,28 @@ def test_a_lost_session_fades_the_held_frame_out_reconfigures_once_then_stays_in
             after = [fade for fade, _logical in fades[held_end:]]
             assert after and after[0] == 0.0 and max(after) == 1.0                  # revealed from hidden
             assert owner._mode_transition_phase == "idle" and not engine_worker_link.worker_disabled_for_run()
+            assert owner._worker_failures == 0                         # A10-L4: the completed reveal reset the count
+            # A later loss, after a completed recovery, recovers the same way.
+            stopped = supervisor.send_request_and_await_response(WorkerType.VISUALIZER, MessageType.VIS_STOP, {},
+                                                                 timeout_ms=10_000)
+            assert stopped is not None and stopped.success
+            _pump(rig, 3.0, until=lambda: owner._worker not in (None, second)
+                  and owner._mode_transition_phase == "idle")
+            third = owner._worker
+            assert third is not None and third is not second and third.label_namespace > second.label_namespace
+            assert not engine_worker_link.worker_disabled_for_run() and owner._worker_failures == 0
+            # A loss before a recovery's reveal completed: the replacement is held back from revealing (it waits for
+            # a fresh frame), so the next loss lands while the count still holds the first strike.
+            waiting = owner._worker_waiting_for_fresh_frame
+            monkeypatch.setattr(owner, "_worker_waiting_for_fresh_frame",
+                                lambda: owner._worker is not third or waiting())
+            stopped = supervisor.send_request_and_await_response(WorkerType.VISUALIZER, MessageType.VIS_STOP, {},
+                                                                 timeout_ms=10_000)
+            assert stopped is not None and stopped.success
+            _pump(rig, 3.0, until=lambda: owner._worker not in (None, third) and owner._worker.configured
+                  and owner._mode_transition_phase == "waiting_target")
+            assert owner._worker not in (None, third) and owner._mode_transition_phase == "waiting_target"
+            assert owner._worker_failures == 1
             presented = len(rig.published)
             stopped = supervisor.send_request_and_await_response(WorkerType.VISUALIZER, MessageType.VIS_STOP, {},
                                                                  timeout_ms=10_000)
@@ -544,6 +570,7 @@ def test_a_lost_session_fades_the_held_frame_out_reconfigures_once_then_stays_in
             _pump(rig, 1.0, until=lambda: owner._worker is None)
             _pump(rig, 1.5)
             assert owner._worker is None and engine_worker_link.worker_disabled_for_run()
+            assert str(engine_worker_link._run_disabled_reason).startswith("second failure")   # not the deadline
             assert owner.controller.engine is not None and owner.controller.logical_runtime.is_running()
             assert len(rig.published) > presented + 20                               # in process, presenting
     finally:

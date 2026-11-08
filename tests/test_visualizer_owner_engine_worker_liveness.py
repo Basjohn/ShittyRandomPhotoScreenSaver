@@ -489,9 +489,12 @@ def test_a_failed_commit_never_flashes_the_outgoing_frame_back(qt_app, pcm, monk
     try:
         _pump(rig, 1.6)
         fades = _record_fades(rig, owner)
+        first = owner._worker
         assert owner.request_mode_change("oscilloscope", **gate.activation_inputs(rig.widgets, "oscilloscope"))
-        _pump(rig, 4.0, until=lambda: owner._worker_failures == 1 and owner._mode_transition_phase == "idle")
-        assert owner._worker_failures == 1 and owner._mode_transition_phase == "idle"
+        _pump(rig, 4.0, until=lambda: owner._worker not in (None, first) and owner._mode_transition_phase == "idle")
+        # Recovered on the worker; its completed reveal started the failure count again (A10-L4).
+        assert owner._worker not in (None, first) and owner._mode_transition_phase == "idle"
+        assert owner._worker_failures == 0
         zero = next(index for index, (fade, _logical) in enumerate(fades) if fade == 0.0)
         # A re-presentation of a frame already shown (the recovery's held frame) at a visible fade is the flash.
         seen: set = set()
