@@ -70,6 +70,12 @@ data locations, product builds (including from Windows) and the Linux test route
 ### Phase 4: Linux backends
 
 - [x] MPRIS media controller; parec monitor capture; pactl system/app volume.
+- [ ] **Visualizer engine worker (native core P2) is the default on Linux too.** Operator, 8 Nov: there is no Linux
+  machine to prove it on, so assume it works with basic support; no Linux proving step. It is done with the
+  worker-default change (branch `p2/worker-default`, which still keeps Linux in process: flip
+  `visualizer_engine_worker_platform_default` to every platform and update the platform tests). Order and context:
+  `Current_Plan.md` §8b, P2 audit step 6. Untested on Linux: worker spawn under forkserver, the POSIX wake pipe and
+  mapping lifetime, `parec` capture in the worker; the in-process path stays the automatic fallback.
 
 ### Phase 5: build and desktop integration
 
