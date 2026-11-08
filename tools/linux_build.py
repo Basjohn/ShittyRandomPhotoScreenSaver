@@ -7,8 +7,8 @@ Single source of truth: the portable Nuitka declarations (data trees, packages, 
 plugins/modules, resource packs, strict no-include mode) and the Qt/QML size
 exclusions are **read from the Windows build scripts** (``scripts/venv/build_nuitka.ps1``
 and ``tools/build_layout.ps1``) and filtered to what exists on Linux. A new include
-added for Windows therefore reaches Linux automatically; ``tests/test_linux_build.py``
-fails if the extraction stops finding them.
+added for Windows therefore reaches Linux automatically; ``tests/test_build_linux_declarations.py``
+(which runs on Windows too, where these scripts are edited) fails if the extraction stops finding them.
 
 Linux differences, all deliberate:
 
@@ -43,6 +43,27 @@ _WINDOWS_ONLY_MARKERS = ("winrt", "pyaudiowpatch", "--msvc", "--onefile", "--win
 _DRIVER_OWNED = ("--jobs=", "--standalone")
 
 
+def _strip_ps1_comments(text: str) -> str:
+    """PowerShell source without its comments (``<# ... #>`` blocks and ``#`` to the end of a line outside quotes).
+
+    The quoted-value extraction below pairs quotes, so an apostrophe or quote inside a comment (``Nuitka's``) would
+    shift every later pair and silently drop every declaration after it (8 Nov 2026: 0 of the Windows declarations
+    reached the Linux build, presets included, and its install.sh failed)."""
+    text = re.sub(r"<#.*?#>", "", text, flags=re.DOTALL)
+    lines = []
+    for line in text.splitlines():
+        quote = None
+        cut = len(line)
+        for index, char in enumerate(line):
+            if quote is None and char == "#":
+                cut = index
+                break
+            if char in "'\"":
+                quote = None if quote == char else (char if quote is None else quote)
+        lines.append(line[:cut])
+    return "\n".join(lines)
+
+
 def _ps1_quoted(block: str) -> list[str]:
     return re.findall(r"""['"]([^'"]*)['"]""", block)
 
@@ -63,7 +84,7 @@ def _ps1_array(text: str, opener: str) -> str:
 def portable_windows_arguments(script: Path = WINDOWS_BUILD_SCRIPT) -> list[str]:
     """Return the Windows Nuitka declarations that also apply on Linux."""
 
-    block = _ps1_array(script.read_text(encoding="utf-8"), "$argsList = @(")
+    block = _ps1_array(_strip_ps1_comments(script.read_text(encoding="utf-8")), "$argsList = @(")
     arguments = []
     for value in _ps1_quoted(block):
         if not value.startswith("--") or "$" in value:
@@ -79,7 +100,7 @@ def portable_windows_arguments(script: Path = WINDOWS_BUILD_SCRIPT) -> list[str]
 def qt_prune_arguments(script: Path = WINDOWS_LAYOUT_SCRIPT) -> list[str]:
     """Return the Windows Qt/QML size exclusions translated to Linux shared objects."""
 
-    text = script.read_text(encoding="utf-8")
+    text = _strip_ps1_comments(script.read_text(encoding="utf-8"))
     function = text[text.index("function Get-SRPSSNuitkaQmlPruneArguments"):]
     function = function[:function.index("\nfunction ")]
     families = _ps1_quoted(_ps1_array(function, "$unusedQmlFamilies = @("))

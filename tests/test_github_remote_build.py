@@ -411,7 +411,9 @@ def test_a_branch_that_moved_since_pre_flight_is_never_built(tmp_path, monkeypat
 def test_the_github_tab_offers_the_remote_products_and_local_steps(tmp_path):
     github = {job.key: job for job in build_runner.jobs_for_mode("github", tmp_path)}
     venv = {job.key: job for job in build_runner.jobs_for_mode("venv", tmp_path)}
-    assert list(github) == ["standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer"]
+    assert list(github) == ["standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer",
+                            "linux"]
+    assert github["linux"] == venv["linux"] and not github["linux"].default_selected     # the other tabs' own job
     for key in ("standard", "media_center"):
         assert github[key].kind == "github" and github[key].script == tmp_path / remote.WORKFLOW_PATH
         assert github[key].artifacts == venv[key].artifacts and github[key].output_dir == venv[key].output_dir
@@ -494,6 +496,74 @@ def test_the_pipeline_runs_the_helper_while_github_builds_and_installers_after(m
     done = {event[1]: event[2] for event in events if event[0] == "job_done"}
     assert set(done) == {"standard", "media_center", "reddit_helper", "media_center_installer"}
     assert events[-1][0] == "pipeline_done" and events[-1][1] is False               # the Standard build failed
+
+
+def test_the_linux_build_runs_on_the_pinned_commit_while_github_builds(monkeypatch, tmp_path):
+    jobs = build_runner.jobs_for_mode("github", tmp_path)
+    by_key = {job.key: job for job in jobs}
+    commit = remote.PushedCommit("main", "c" * 40, "x", "c" * 40)
+    preflight = build_runner.PreflightResult(remote_commit=commit)
+    # The pre-flight's commit reaches the Linux worker; the other tabs' Linux job (no pinned commit) and other jobs
+    # take nothing.
+    assert build_runner._job_arguments(by_key["linux"], preflight) == ["-Branch", "main", "-Commit", "c" * 40]
+    assert build_runner._job_arguments(by_key["linux"], build_runner.PreflightResult()) == []
+    assert build_runner._job_arguments(by_key["reddit_helper"], preflight) == []
+
+    order = []
+
+    def run_remote(_root, _cli, keys, _commit, _token, *, emit, between, **_kwargs):
+        order.append(("dispatch", tuple(keys)))
+        between()
+        order.append(("follow", tuple(keys)))
+        for key in keys:
+            emit("done", key, _ok(key))
+        return {key: _ok(key) for key in keys}
+
+    def run_job(job, _preflight, *, process_owner):
+        order.append(("local", job.key))
+        return build_runner.JobResult(0, "Completed", Path("log"), job.output_dir)
+
+    monkeypatch.setattr(remote, "run_remote_builds", run_remote)
+    monkeypatch.setattr(build_runner, "run_job", run_job)
+    monkeypatch.setattr(build_runner, "record_helper_build", lambda *_a, **_k: True)
+    monkeypatch.setattr(build_runner, "helper_build_status", lambda *_a, **_k: SimpleNamespace(
+        needs_rebuild=False, reason="ok", fingerprint="f"))
+    app = SimpleNamespace(_events=queue.Queue())
+    build_runner.BuildRunnerApp._github_pipeline_worker(
+        app, jobs, {"standard", "reddit_helper", "linux"}, preflight, build_runner.BuildProcessOwner())
+    assert order == [("dispatch", ("standard",)), ("local", "reddit_helper"), ("local", "linux"),
+                     ("follow", ("standard",))]
+    events = []
+    while not app._events.empty():
+        events.append(app._events.get())
+    assert events[-1][0] == "pipeline_done" and events[-1][1] is True
+
+    # Linux alone (no Windows product selected): it still runs.
+    order.clear()
+    build_runner.BuildRunnerApp._github_pipeline_worker(
+        SimpleNamespace(_events=queue.Queue()), jobs, {"linux"}, preflight, build_runner.BuildProcessOwner())
+    assert order == [("local", "linux")]
+
+
+def test_a_stopped_linux_job_cancels_its_github_run_and_tag(monkeypatch, tmp_path):
+    log = tmp_path / "linux.log"
+    log.write_text("[LINUX-BUILD] Pushing temporary tag linux-build/20261108-120000 at origin/main (abc)\n"
+                   "[LINUX-BUILD] Following run 4242 (typically 30-60 minutes; ...)\n", encoding="utf-8")
+    calls = []
+
+    def fake_run(args, **_kwargs):
+        calls.append(list(args))
+        return subprocess.CompletedProcess(args, 0 if args[0] == "gh" else 1, "", "")
+
+    monkeypatch.setattr(build_runner.subprocess, "run", fake_run)
+    note = build_runner._stop_linux_github_run(log)
+    assert calls == [["gh", "run", "cancel", "4242"],
+                     ["git", "push", "origin", ":refs/tags/linux-build/20261108-120000"]]
+    assert "GitHub run 4242 cancelled" in note and "cleanup failed" in note
+    # A worker stopped before its run appeared leaves nothing to cancel.
+    (tmp_path / "early.log").write_text("[LINUX-BUILD] Dispatching linux-build.yml\n", encoding="utf-8")
+    calls.clear()
+    assert build_runner._stop_linux_github_run(tmp_path / "early.log") == "" and calls == []
 
 
 def test_preflight_names_the_pushed_commit_and_warns_about_local_differences(monkeypatch):

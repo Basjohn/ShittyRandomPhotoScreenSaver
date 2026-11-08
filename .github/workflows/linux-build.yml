@@ -5,21 +5,35 @@
 #
 # Triggers (no build on ordinary pushes):
 #   * manual: Actions tab -> "Linux build" -> Run workflow, or `gh workflow run linux-build.yml --ref <branch>`
-#     (GitHub only offers manual runs once this file exists on the default branch);
+#     (GitHub only offers manual runs once this file exists on the default branch). Build Runner's GitHub Remote tab
+#     passes `commit` (the pushed SHA fixed at its pre-flight, verified after checkout) and `token` (names the run so
+#     the caller follows exactly its own);
 #   * a pushed tag named linux-build/<anything> (works for any commit, before merge; the Windows
 #     script creates and removes it). Ordinary pushes never start or list a run.
 #
 # Built on Ubuntu 22.04 so the binary runs on glibc >= 2.35 distributions.
 name: Linux build
+run-name: Linux build ${{ inputs.token || github.ref_name }}
 
 on:
   workflow_dispatch:
+    inputs:
+      commit:
+        description: Full 40-character SHA to build (empty = the dispatched ref's head)
+        type: string
+        required: false
+        default: ""
+      token:
+        description: Caller's run token (names the run)
+        type: string
+        required: false
+        default: ""
   push:
     tags:
       - "linux-build/*"
 
 concurrency:
-  group: linux-build-${{ github.ref }}
+  group: linux-build-${{ inputs.token || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,6 +42,16 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+
+      - name: Verify the requested commit
+        if: ${{ inputs.commit != '' }}
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "commit must be a full 40-character SHA: $COMMIT"; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$COMMIT" ]] || { echo "checked out $(git rev-parse HEAD), not $COMMIT"; exit 1; }
 
       - uses: actions/setup-python@v5
         with:

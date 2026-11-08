@@ -312,7 +312,10 @@ staleness, failure and Foundry sequencing; `tests/test_build_runner_cancellation
 owner; `tests/test_github_remote_build.py` protects the GitHub Remote contract without contacting GitHub (the
 workflow builds only the requested commit with the canonical workers; a download is published only when it is that
 commit's whole, unaltered build; any failure keeps the previous payload; a stop cancels the real runs; installers
-package only validated builds whose inputs equal the built commit). These are source/resource proofs; fresh frozen size and installed rendering remain operator-build evidence.
+package only validated builds whose inputs equal the built commit; the optional Linux job builds the pinned commit
+while GitHub builds the Windows products, and a stop cancels its run); `tests/test_build_linux_declarations.py`
+(every platform) proves the Linux build reads every Windows Nuitka declaration, comments with quotes included.
+These are source/resource proofs; fresh frozen size and installed rendering remain operator-build evidence.
 `tests/test_clock_timezone_resolution.py` exercises the actual Clock resolver for local/UTC/explicit offsets,
 named DST and non-DST zones, persisted aliases, and the Troll/Casablanca cases that require the retained database.
 

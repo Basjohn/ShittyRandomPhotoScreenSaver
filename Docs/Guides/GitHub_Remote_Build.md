@@ -30,16 +30,18 @@ runner job), `tools/build_runner.py` (the tab). Normal and Repo Venv are unchang
    It warns when your local HEAD is not that commit (unpushed commits) or when you have uncommitted changes, which
    are not part of the remote build.
 4. Tick **Standard + Diagnostic (GitHub)**, **Media Center (GitHub)** or both. Optionally tick **Reddit Helper
-   (local)** (pre-selected when its fingerprint says it is stale) and the installers you want afterwards.
+   (local)** (pre-selected when its fingerprint says it is stale), the installers you want afterwards, and **Linux
+   (GitHub runner)**.
 5. **START SELECTED.** Both selected products are dispatched at once and build in parallel on separate runners. Each
    row shows `Queued`, `Building`, `Downloading`, `Validating`, `Publishing`; the progress line shows the runner's
    current step, and a **GitHub run** link opens the run in your browser. While GitHub builds, the Reddit Helper (if
-   selected) builds locally.
+   selected) builds locally, then the Linux build (if selected) starts its own Ubuntu run on the same pinned commit
+   and downloads its tarball into `release\linux` (`Docs/Guides/Linux_Guide.md` §7).
 6. When a run succeeds its artifact is downloaded, validated and published; then the selected installers compile
    locally. A typical run takes about as long as a local build (the runner has 4 cores); your machine stays idle.
 
-**EMERGENCY STOP** (or closing the window) cancels the real GitHub runs (`gh run cancel`), not just the local
-monitoring, and stops any local step. Already published products stay published; an interrupted download keeps the
+**EMERGENCY STOP** (or closing the window) cancels the real GitHub runs (`gh run cancel`, the Linux run included),
+not just the local monitoring, and stops any local step. Already published products stay published; an interrupted download keeps the
 previous payload.
 
 Headless (for scripts, or the lead when the operator asks for a build):
@@ -104,5 +106,7 @@ never packaged with another revision's assets. Commit and push them, or revert t
 - The repository is public: its Actions minutes on standard runners are free, and run logs and artifacts are
   visible to signed-in GitHub users until they expire (3 days; failure logs 7).
 - Each run reinstalls `requirements.txt` into a fresh `.venv`; Nuitka's compile cache is kept between runs.
-- No installer is compiled on GitHub, and Linux keeps its own job (`Docs/Guides/Linux_Guide.md` §7).
+- No installer is compiled on GitHub. The Linux job is the other tabs' own (`Docs/Guides/Linux_Guide.md` §7); here it
+  builds the pre-flight's commit, and its tarball is downloaded as is (no manifest validation like the Windows
+  products; the runner's smoke test is its gate).
 - Physical acceptance (installing and running the products) is still the operator's.

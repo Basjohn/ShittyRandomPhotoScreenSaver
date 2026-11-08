@@ -21,14 +21,21 @@
 
 .EXAMPLE
     .\scripts\linux\build_from_windows.ps1
+    -Commit <sha> builds exactly that pushed commit (it must be on origin/<Branch>): Dispatch passes it to the
+    workflow, which checks it out and verifies it; Tag tags it. Build Runner's GitHub Remote tab passes the commit
+    its pre-flight fixed, so the Linux build is the same commit as the Windows builds.
+
 .EXAMPLE
     .\scripts\linux\build_from_windows.ps1 -Branch claude/eager-carson-5da6ge -Mode Tag
+.EXAMPLE
+    .\scripts\linux\build_from_windows.ps1 -Branch main -Commit 0123456789abcdef0123456789abcdef01234567
 #>
 [CmdletBinding()]
 param(
     [string]$Branch = '',
     [ValidateSet('Auto', 'Dispatch', 'Tag')][string]$Mode = 'Auto',
-    [string]$OutDir = ''
+    [string]$OutDir = '',
+    [string]$Commit = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,7 +62,13 @@ try {
     $remoteSha = (Invoke-Checked git @('rev-parse', "origin/$Branch")).Trim()
     $localSha = (Invoke-Checked git @('rev-parse', 'HEAD')).Trim()
     $currentBranch = (Invoke-Checked git @('rev-parse', '--abbrev-ref', 'HEAD')).Trim()
-    if ($currentBranch -eq $Branch -and $localSha -ne $remoteSha) {
+    if ($Commit) {
+        if ($Commit -notmatch '^[0-9a-f]{40}$') { throw "-Commit must be a full 40-character SHA: $Commit" }
+        & git merge-base --is-ancestor $Commit "origin/$Branch" 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Commit $Commit is not on origin/$Branch (push it first)" }
+        $remoteSha = $Commit
+        Write-Host "[LINUX-BUILD] Building the requested commit $Commit"
+    } elseif ($currentBranch -eq $Branch -and $localSha -ne $remoteSha) {
         Write-Warning "Local $Branch ($localSha) differs from origin/$Branch ($remoteSha); GitHub builds the pushed commit."
     }
 
@@ -71,9 +84,13 @@ try {
 
     $started = (Get-Date).ToUniversalTime().AddSeconds(-5)
     $tag = $null
+    $token = $null
     if ($Mode -eq 'Dispatch') {
-        Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch"
-        Invoke-Checked gh @('workflow', 'run', $Workflow, '--ref', $Branch) | Out-Null
+        # The token names the run (the workflow's run-name), so exactly this dispatch is followed.
+        $token = 'srpss-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
+        Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch at $remoteSha (run token $token)"
+        Invoke-Checked gh @('workflow', 'run', $Workflow, '--ref', $Branch, '-f', "commit=$remoteSha",
+            '-f', "token=$token") | Out-Null
         $runEvent = 'workflow_dispatch'
     } else {
         $tag = 'linux-build/' + (Get-Date -Format 'yyyyMMdd-HHmmss')
@@ -86,9 +103,15 @@ try {
     $runId = $null
     for ($attempt = 0; $attempt -lt 30 -and -not $runId; $attempt++) {
         Start-Sleep -Seconds 4
-        $runs = Invoke-Checked gh @('run', 'list', '--workflow', $Workflow, '--commit', $remoteSha, '--event', $runEvent,
-            '--limit', '5', '--json', 'databaseId,createdAt') | ConvertFrom-Json
-        $runId = ($runs | Where-Object { [datetime]$_.createdAt -ge $started } | Select-Object -First 1).databaseId
+        if ($token) {
+            $runs = Invoke-Checked gh @('run', 'list', '--workflow', $Workflow, '--event', $runEvent,
+                '--limit', '20', '--json', 'databaseId,displayTitle') | ConvertFrom-Json
+            $runId = ($runs | Where-Object { $_.displayTitle -like "*$token*" } | Select-Object -First 1).databaseId
+        } else {
+            $runs = Invoke-Checked gh @('run', 'list', '--workflow', $Workflow, '--commit', $remoteSha, '--event', $runEvent,
+                '--limit', '5', '--json', 'databaseId,createdAt') | ConvertFrom-Json
+            $runId = ($runs | Where-Object { [datetime]$_.createdAt -ge $started } | Select-Object -First 1).databaseId
+        }
     }
     if (-not $runId) { throw 'The workflow run did not appear. Check the Actions tab on GitHub.' }
 

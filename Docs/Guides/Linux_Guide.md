@@ -93,8 +93,9 @@ scripts/linux/build.sh                            # release/linux/SRPSS-<version
 .venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-<version>-linux-x86_64
 ```
 
-The build reads its Nuitka declarations and Qt size exclusions from the Windows build scripts, so new
-Windows includes reach Linux automatically. A local build takes about an hour on four cores.
+The build reads its Nuitka declarations and Qt size exclusions from the Windows build scripts (comments
+skipped), so new Windows includes reach Linux automatically; `tests/test_build_linux_declarations.py` runs on
+Windows too and fails if any declaration stops being read. A local build takes about an hour on four cores.
 
 From Windows (no WSL, Hyper-V or Docker; needs only the GitHub CLI, `winget install GitHub.cli` then
 `gh auth login`): the Build Runner's optional **Linux** job, or directly
@@ -104,7 +105,8 @@ From Windows (no WSL, Hyper-V or Docker; needs only the GitHub CLI, `winget inst
 ```
 
 Both run `.github/workflows/linux-build.yml` on a GitHub Ubuntu 22.04 runner (build, smoke test) and download
-the tarball into `release\linux`. The branch must be pushed; GitHub builds the pushed commit.
+the tarball into `release\linux`. The branch must be pushed; GitHub builds the pushed commit (`-Commit <sha>` pins
+one; the Build Runner's GitHub Remote tab passes the commit its pre-flight fixed).
 
 ## 8. Develop and test on Linux
 
