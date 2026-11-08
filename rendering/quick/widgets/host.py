@@ -236,6 +236,8 @@ class RetainedOverlayWidget:
         ] | None = None
         self._input_state_handler: Callable[[object], bool] | None = None
         self._surface_material = "normal"
+        self._authored_geometry: OverlayWidgetGeometry | None = None
+        self._display_placement: Callable[[OverlayWidgetGeometry], OverlayWidgetGeometry] | None = None
         # A Python presentation wrapper must never outlive its QML-owned C++ root.
         # This event-driven edge has no polling/render cost and follows the widget
         # across display-host transfers because it consults ``self._host`` at the
@@ -276,8 +278,37 @@ class RetainedOverlayWidget:
         return self._model_identity
 
     def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
-        """Assign this widget's display-space rectangle."""
+        """Assign this widget's display-space rectangle (its authored one; a display placement, when set, maps it)."""
 
+        self._authored_geometry = geometry
+        placement = self._display_placement
+        self._apply_geometry(placement(geometry) if placement is not None else geometry)
+
+    @property
+    def authored_geometry(self) -> OverlayWidgetGeometry | None:
+        """The rectangle the layout last assigned (before any display placement)."""
+
+        return self._authored_geometry
+
+    def set_display_placement(
+        self, placement: Callable[[OverlayWidgetGeometry], OverlayWidgetGeometry] | None
+    ) -> None:
+        """Map the authored rectangle through ``placement`` (None: draw it as authored).
+
+        The expanded Visualizer's Volume OSD placement (``fullscreen_overlays.volume_osd``) uses it while the
+        display-wide card is drawn: the layout keeps assigning the ordinary rectangle, which stays the authored one
+        (ordinary Edit and CUSTOM never see the placement), and the item draws where the placement puts it.
+        """
+
+        self._display_placement = placement
+        authored = self._authored_geometry
+        if authored is None:
+            item = self.item
+            authored = OverlayWidgetGeometry(item.x(), item.y(), item.width(), item.height())
+            self._authored_geometry = authored
+        self._apply_geometry(placement(authored) if placement is not None else authored)
+
+    def _apply_geometry(self, geometry: OverlayWidgetGeometry) -> None:
         item = self.item
         # The retained QQuickItem is the geometry authority.  A refreshed
         # family snapshot must not reassign four unchanged coordinates, while

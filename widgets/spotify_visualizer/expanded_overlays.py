@@ -57,6 +57,10 @@ def resolve_expanded_overlay_config(section: Mapping[str, Any] | None, *, card_t
         "cardTextColor": surface_text_color() if card_text_color is None else card_text_color,
         "preset": overlay("preset"),
         "nowPlaying": overlay("now_playing"),
+        # The Volume OSD's placement over the expanded card (applied by the scene controller to the OSD's geometry).
+        "volumeOsd": {"offsetX": float(values["volume_osd"]["offset_x"]),
+                      "offsetY": float(values["volume_osd"]["offset_y"]),
+                      "scale": float(values["volume_osd"]["scale"])},
     }
 
 

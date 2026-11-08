@@ -20,6 +20,11 @@ when ``scale`` or the font size changes (as ordinary Edit's uniform scale keeps 
 Now Playing's artwork has ``artwork_width`` / ``artwork_height``, factors of its square size (``1`` = square), the image
 cropped like ordinary Edit's freeform artwork frame.
 
+The Volume OSD's placement over the expanded card (``volume_osd``; Fullscreen Edit, operator 8 Nov) mirrors the
+overlays' model: ``offset_x``/``offset_y`` in fractions of the safe area and ``scale``, both relative to where the OSD's
+ordinary layout puts it (zero offset and unit scale: exactly there). It applies only while the display-wide card is
+drawn; the OSD's ordinary placement (ordinary Edit, CUSTOM) is never changed by it. It has no Settings options.
+
 Pure and Qt-free: the settings model, Settings and the display runtime all read it.
 """
 from __future__ import annotations
@@ -34,6 +39,8 @@ from core.settings.default_contract import require_canonical_default
 FULLSCREEN_OVERLAYS_KEY = "widgets.spotify_visualizer.fullscreen_overlays"
 #: The two overlays, in their canonical order.
 OVERLAY_IDS = ("preset", "now_playing")
+#: The Volume OSD's placement over the expanded card (placement members only; not an overlay of its own).
+VOLUME_OSD_ID = "volume_osd"
 #: Anchor corners, in Settings' order.
 CORNERS = ("top_left", "top_right", "bottom_left", "bottom_right")
 FONT_SIZE_MIN, FONT_SIZE_MAX = 12, 72
@@ -47,7 +54,8 @@ TEXT_EXTENT_MAX = 60.0
 #: The placement members Fullscreen Edit writes, per overlay (the corner is Settings').
 PLACEMENT_KEYS = {"preset": ("offset_x", "offset_y", "scale", "text_width", "text_height"),
                   "now_playing": ("offset_x", "offset_y", "scale", "text_width", "text_height",
-                                  "artwork_scale", "artwork_width", "artwork_height")}
+                                  "artwork_scale", "artwork_width", "artwork_height"),
+                  VOLUME_OSD_ID: ("offset_x", "offset_y", "scale")}
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off"})
@@ -104,7 +112,7 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
     if "font_size" in value:
         size = _number(value.get("font_size"), float(result["font_size"]), FONT_SIZE_MIN, FONT_SIZE_MAX)
         result["font_size"] = int(round(size))
-    for overlay in OVERLAY_IDS:
+    for overlay in (*OVERLAY_IDS, VOLUME_OSD_ID):
         raw = value.get(overlay)
         if not isinstance(raw, Mapping):
             continue
@@ -156,6 +164,36 @@ def rebase_offset_for_corner(options: Mapping[str, Any], corner: str) -> dict[st
     return result
 
 
+def volume_osd_anchor(authored: tuple[float, float, float, float], scale: float) -> tuple[float, float]:
+    """Where the Volume OSD's top-left sits at a zero offset: its ordinary rectangle scaled about its own centre."""
+
+    x, y, width, height = (float(v) for v in authored)
+    factor = max(SCALE_MIN, min(SCALE_MAX, float(scale)))
+    return x + width * (1.0 - factor) / 2.0, y + height * (1.0 - factor) / 2.0
+
+
+def volume_osd_rect(authored: tuple[float, float, float, float], safe: tuple[float, float, float, float],
+                    offset_x: float, offset_y: float, scale: float) -> tuple[float, float, float, float]:
+    """The Volume OSD's rectangle over the expanded card (``volume_osd``), in the coordinates of ``authored``.
+
+    Its ordinary rectangle (``authored``) scaled about its centre by ``scale``, moved by the offset (fractions of the
+    safe area ``safe``: x, y, width, height) and kept inside the safe area, as the overlays are.
+    """
+
+    _x, _y, width, height = (float(v) for v in authored)
+    safe_x, safe_y, safe_width, safe_height = (float(v) for v in safe)
+    factor = max(SCALE_MIN, min(SCALE_MAX, float(scale)))
+    drawn_width, drawn_height = max(1.0, width * factor), max(1.0, height * factor)
+    anchor_x, anchor_y = volume_osd_anchor(authored, factor)
+
+    def clamp(value: float, low: float, high: float) -> float:
+        return max(low, min(max(low, high), value))
+
+    return (clamp(anchor_x + float(offset_x) * safe_width, safe_x, safe_x + safe_width - drawn_width),
+            clamp(anchor_y + float(offset_y) * safe_height, safe_y, safe_y + safe_height - drawn_height),
+            drawn_width, drawn_height)
+
+
 __all__ = [
     "CORNERS",
     "FONT_SIZE_MAX",
@@ -170,7 +208,10 @@ __all__ = [
     "SCALE_MIN",
     "TEXT_EXTENT_KEYS",
     "TEXT_EXTENT_MAX",
+    "VOLUME_OSD_ID",
     "canonical_fullscreen_overlays",
     "normalize_fullscreen_overlays",
     "rebase_offset_for_corner",
+    "volume_osd_anchor",
+    "volume_osd_rect",
 ]
