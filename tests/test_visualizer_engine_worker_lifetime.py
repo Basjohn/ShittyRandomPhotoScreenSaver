@@ -532,11 +532,14 @@ def test_the_first_configure_deadline_is_inert_on_a_half_retired_owner(qt_app, p
             controller = owner.controller
             monkeypatch.setattr(controller, "stop_logical_runtime", lambda: False)
             assert owner.retire() is False and not owner.is_retired
+            # Since checkpoint audit 10 (A10-L1) the link is retired before the join, so the failed join leaves none.
+            assert owner._worker is None and link._closed
             if not fenced:
-                owner._retiring = False                       # what the pre-fix deadline saw
+                owner._retiring = False                       # what the pre-fix deadline saw: no fence, the link set
+                owner._worker = link
             gate._event_loop_for(qt_app, 1.0)
         if fenced:
-            assert owner._worker is link and controller.logical_runtime is None
+            assert owner._worker is None and controller.logical_runtime is None
         else:
             assert owner._worker is None and controller.logical_runtime is not None
     finally:
@@ -546,6 +549,89 @@ def test_the_first_configure_deadline_is_inert_on_a_half_retired_owner(qt_app, p
             rig.owner.controller.stop_logical_runtime()
         rig.close()
         stand_in.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("join", ("fails", "raises"))
+def test_a_retire_whose_logical_join_fails_still_stops_the_session_and_releases_its_lease(qt_app, pcm, monkeypatch,
+                                                                                           join):
+    # Checkpoint audit 10, A10-L1: ``retire()`` returned (join failed) or propagated (join raised) before it retired
+    # the link, so the session's VIS_STOP was never sent and its lease kept the worker, and its session's cadence and
+    # capture, until the supervisor's shutdown. The link is retired before the join now (its retire never waits).
+    # Negative control: the pre-fix order (the link retired after the join) leaves the lease held and no VIS_STOP.
+    from core.process.types import MessageType
+    from tests.test_visualizer_owner_engine_worker_liveness import _HungSupervisor
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import engine_worker_lifetime as lifetime
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    monkeypatch.setattr(owner_module, "_ACTIVATION_TRANSACTION_DEADLINE_MS", 60_000)   # never fires in this test
+    monkeypatch.setattr(gate.OwnerRig, "settle", lambda self: None)
+    stand_in = _HungSupervisor()
+    rig = gate.OwnerRig("spectrum", worker=True, supervisor=stand_in, cadence="thread")
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
+            owner = rig.build()
+            link = owner._worker
+            assert link is not None and lifetime.describe()["leases"] == 1
+
+            def failing_join():
+                if join == "raises":
+                    raise RuntimeError("injected join failure")
+                return False
+
+            monkeypatch.setattr(owner.controller, "stop_logical_runtime", failing_join)
+            if join == "raises":
+                with pytest.raises(RuntimeError, match="injected join failure"):
+                    owner.retire()
+            else:
+                assert owner.retire() is False
+        assert not owner.is_retired and owner._worker is None and link._closed
+        assert lifetime.describe()["leases"] == 0
+        stops = [payload for message, payload in stand_in.sent if message == MessageType.VIS_STOP]
+        assert stops and stops[-1].get("mapping") == link.mapping_name
+    finally:
+        monkeypatch.undo()
+        rig.close()
+        stand_in.close()
+
+
+@pytest.mark.parametrize("raising", ("mailbox", "events"))
+def test_a_link_close_that_raises_still_releases_its_lease(monkeypatch, raising):
+    # A10-L1: ``close()`` released the lease last, after steps that can raise (the mailbox's ``SharedMemory.close()``
+    # raises ``BufferError`` while a view is exported); ``_closed`` is already set then, so no retry released it.
+    # Negative control: the pre-fix order leaves ``leases == 1``.
+    from widgets.spotify_visualizer import engine_worker_lifetime as lifetime
+    from widgets.spotify_visualizer.engine_worker_link import ACTIVATION_KEYS, EngineWorkerLink
+
+    class _Spawning(_Supervisor):
+        def register_worker_factory(self, *_args) -> None:
+            return None
+
+    supervisor, lane = _Spawning(running=False), _Lane(inline=False)
+    link = EngineWorkerLink(supervisor, on_lost=lambda *_args: None, thread_manager=lane)
+    link.configure(runtime_generation=1, mode="spectrum", bar_count=32,
+                   activation={key: None for key in ACTIVATION_KEYS}, on_configured=lambda _identity: None)
+    assert lifetime.describe()["leases"] == 1
+    mailbox = link.mailbox
+
+    def boom(*_args, **_kwargs):
+        raise BufferError("cannot close exported pointers exist")
+
+    if raising == "mailbox":
+        monkeypatch.setattr(mailbox, "close", boom)
+    else:
+        monkeypatch.setattr(link._events, "deleteLater", boom)
+    try:
+        with pytest.raises(BufferError):
+            link.close()
+        assert lifetime.describe()["leases"] == 0
+        link.close()                                                 # idempotent: nothing left to release
+        assert lifetime.describe()["leases"] == 0
+    finally:
+        monkeypatch.undo()
+        mailbox.close()
+        lane.tasks.clear()
 
 
 @pytest.mark.qt

@@ -2399,15 +2399,18 @@ class QuickDisplayVisualizerOwner:
             self._presentation_runtime.scene_controller.set_visualizer_viewport_config_sink(None)
             self._presentation_runtime.scene_controller.set_presentation_image_listener(None)
             self._controller.presentation_state._backdrop = None
-        joined = bool(self._controller.stop_logical_runtime())
-        if not joined:
-            return False
         if self._worker is not None:
             link, self._worker = self._worker, None
             # The session's stop is sent, never awaited (it ends in the worker in order: capture and its mapping view
-            # released), then the reader closes and the main process unlinks the mapping.
+            # released), then the reader closes and the main process unlinks the mapping. Before the logical join
+            # (checkpoint audit 10, A10-L1): a join that fails or raises returns before the rest of the retirement, and
+            # the link's retire never waits, so the session's VIS_STOP and its lease's release never depend on it (an
+            # owner on the worker normally has no logical runtime to join; one in process has no link).
             link.retire()
-        self._release_frame_completion()
+        self._release_frame_completion()          # its reader is closed (or there was none): nothing in flight
+        joined = bool(self._controller.stop_logical_runtime())
+        if not joined:
+            return False
         if self._engine_acquired:
             release = getattr(self._controller.engine, "release", None)
             if callable(release):

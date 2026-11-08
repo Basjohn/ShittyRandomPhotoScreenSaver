@@ -619,30 +619,34 @@ class EngineWorkerLink:
 
     def close(self) -> None:
         """Close the reader (its listener ends without reporting), drop the unanswered correlations and unlink the
-        mapping (idempotent)."""
+        mapping (idempotent). The session's lease is taken out first and released whatever the rest raises
+        (checkpoint audit 10, A10-L1: ``_closed`` is set first, so a close that raised is never retried, and a lease
+        left behind kept the worker, and possibly its session, until the supervisor's shutdown)."""
         if self._closed:
             return
         with self._emit_lock:
             self._closed = True
-        self._events.disarm()
-        pending, self._pending = self._pending, {}
-        for _message, _payload, correlation, _on_reply, _on_failed in pending.values():
-            if correlation:
-                try:
-                    self._supervisor.abandon_response(self._worker_type(), correlation, reason="link_closed")
-                except Exception:
-                    pass
-        self._outbox = None
-        self._close_sender()
-        mailbox, self._mailbox = self._mailbox, None
-        if mailbox is not None:
-            mailbox.close()
-        self._events.deleteLater()
         lease, self._lease = self._lease, None
-        if lease is not None:
-            from widgets.spotify_visualizer import engine_worker_lifetime
+        try:
+            self._events.disarm()
+            pending, self._pending = self._pending, {}
+            for _message, _payload, correlation, _on_reply, _on_failed in pending.values():
+                if correlation:
+                    try:
+                        self._supervisor.abandon_response(self._worker_type(), correlation, reason="link_closed")
+                    except Exception:
+                        pass
+            self._outbox = None
+            self._close_sender()
+            mailbox, self._mailbox = self._mailbox, None
+            if mailbox is not None:
+                mailbox.close()
+            self._events.deleteLater()
+        finally:
+            if lease is not None:
+                from widgets.spotify_visualizer import engine_worker_lifetime
 
-            engine_worker_lifetime.release(lease)
+                engine_worker_lifetime.release(lease)
 
     # -------------------------------------------------------------------------------------- session's end
 
