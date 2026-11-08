@@ -268,8 +268,10 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
     for overlay, keys in PLACEMENT_KEYS.items():
         assert {k: v for k, v in draft_value[overlay].items() if k not in keys} == {
             k: v for k, v in seeded[overlay].items() if k not in keys}
-        # The side handles really set every extent the script touched (each axis on its own).
-        assert all(draft_value[overlay][key] != seeded[overlay][key] for key in ("text_width", "text_height"))
+        # The side handles really set every extent the script touched (each axis on its own; the Volume OSD has none
+        # and this display has no OSD).
+        if "text_width" in keys:
+            assert all(draft_value[overlay][key] != seeded[overlay][key] for key in ("text_width", "text_height"))
     assert all(draft_value["now_playing"][key] != seeded["now_playing"][key]
                for key in ("artwork_width", "artwork_height"))
     assert edit.owner.fullscreen_draft_pending and edit.flips == [True]
@@ -1008,6 +1010,162 @@ def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(q
         runtime.close_runtime()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+# ----------------------------------------------------------------------- the Volume OSD (operator, 8 Nov, live)
+
+
+def _volume_osd(display, rect=(560.0, 600.0, 320.0, 60.0)):
+    """A Volume OSD on the hidden display, as the family binder creates it (its ordinary rectangle ``rect``)."""
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+    from rendering.quick.widgets.system_audio_osd import (
+        RetainedSystemAudioOSDPresentation,
+        SystemAudioOSDConfig,
+        SystemAudioOSDPresentationModel,
+    )
+
+    model = SystemAudioOSDPresentationModel(SystemAudioOSDConfig.from_widgets_mapping({"system_audio_osd": {}}),
+                                            runtime_generation=1)
+    return RetainedSystemAudioOSDPresentation(host=display.scene.ordinary_widget_host, model=model,
+                                              geometry=OverlayWidgetGeometry(*rect))
+
+
+def _osd_rect(osd) -> tuple[float, float, float, float]:
+    item = osd.item
+    return (item.x(), item.y(), item.width(), item.height())
+
+
+@pytest.mark.qt
+def test_the_volume_osd_is_moved_and_sized_in_fullscreen_edit_and_keeps_its_ordinary_place(display, tmp_path):
+    """Operator, 8 Nov (live): the Volume OSD shows during Fullscreen Edit but could not be moved or sized there. It is
+    a part of the same session (its frame, a move with snapping and one undo step, corner scaling, no side strips);
+    Save writes its placement over the expanded card (``volume_osd``, mirroring the overlays' model), the expanded
+    card draws it there, and its ordinary placement is never touched: collapsing returns it exactly."""
+    settings = _manager(tmp_path)
+    seeded = _seed(settings)
+    store = _store(settings)
+    osd = _volume_osd(display)
+    ordinary = _osd_rect(osd)
+    try:
+        _draw(display, media=_Media(), config=_projection(seeded))
+        _open(display)
+        _run(display, 60)
+        assert _osd_rect(osd) == ordinary                       # a zero offset and unit scale: exactly its place
+        edit = _Fullscreen(display, settings)
+        assert edit.start()
+        _shown_and_settled(display)
+        assert edit.row("volume_osd") >= 0
+        layer = display.scene.custom_layout_overlay.item
+        frames = {item.objectName(): item for item in _visual_items(layer)}
+        assert frames["customLayoutEditFrame-fullscreen_overlay.volume_osd"].isVisible()
+        assert frames["customLayoutResize-fullscreen_overlay.volume_osd-bottom_right"].isVisible()
+        strip = frames.get("customLayoutViewportEdge-fullscreen_overlay.volume_osd-right")
+        assert strip is None or not strip.isVisible()            # no single-axis extents
+        assert float(osd.item.property("fadeOpacity")) > 0.0 or osd.item.property("customLayoutInputBlocked")
+
+        before = QRect(edit.item("volume_osd").current_global_rect)
+        edit.drag("volume_osd", -260, -300)
+        _run(display, 60)
+        moved = QRect(edit.item("volume_osd").current_global_rect)
+        assert moved.topLeft() != before.topLeft() and moved.size() == before.size()
+        assert edit.owner.undo_last_change()                     # one step, exactly back
+        _run(display, 60)
+        assert edit.item("volume_osd").current_global_rect == before
+        edit.drag("volume_osd", -260, -300)
+        edit.corner("volume_osd", "bottom_right", 80, 30)       # grows; the opposite corner stays
+        _run(display, 60)
+        grown = QRect(edit.item("volume_osd").current_global_rect)
+        assert grown.width() > moved.width() and abs(grown.x() - moved.x()) <= 1 and abs(grown.y() - moved.y()) <= 1
+        drawn = _osd_rect(osd)
+        draft = edit.owner._fullscreen.draft_value()["volume_osd"]
+        assert draft["offset_x"] != 0.0 and draft["offset_y"] != 0.0 and draft["scale"] > 1.0
+
+        assert edit.owner.save()
+        _run(display, 120)
+        assert _value(settings)["volume_osd"] == draft
+        assert _store(settings) == store                         # the ordinary layout (CUSTOM) is untouched
+        display.scene.set_visualizer_expanded_overlay_config(_projection(_value(settings)))
+        assert _osd_rect(osd) == drawn                           # the committed value draws what the draft showed
+        authored = display.scene.ordinary_widget_host.presentation_for_model_identity(
+            "system_audio_osd").authored_geometry
+        assert (authored.x, authored.y, authored.width, authored.height) == ordinary   # its layout's own rectangle
+
+        display.scene.set_visualizer_expanded_overlays_drawn(False)   # collapsing: back to its ordinary place
+        _run(display, 60)
+        assert _osd_rect(osd) == ordinary
+        display.scene.set_visualizer_expanded_overlays_drawn(True)
+        _run(display, 60)
+        assert _osd_rect(osd) == drawn
+    finally:
+        if edit.owner.is_active:
+            edit.owner.cancel()
+        display.scene.set_visualizer_overlay_media_model(None)
+        osd.retire()
+
+
+# ------------------------------------------------------------- the text block drags (operator, 8 Nov, live)
+
+
+def _pointer_drag(display, edit: _Fullscreen, part: str, dx: int, dy: int, *, steps: int = 8) -> str:
+    """Drag ``part`` by its middle through the window as the operator does (press, moves, release on the Edit layer);
+    returns the name of the item that took the press."""
+    from PySide6.QtCore import QCoreApplication, QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+
+    rect = edit._local(edit.item(part).current_global_rect)
+    start = QPointF(rect.x() + rect.width() * 0.4, rect.center().y())
+
+    def send(kind, point: QPointF, button, buttons) -> None:
+        QCoreApplication.sendEvent(display.window, QMouseEvent(kind, point, point, point, button, buttons,
+                                                               Qt.KeyboardModifier.NoModifier))
+        _run(display, 1)
+
+    send(QEvent.Type.MouseButtonPress, start, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton)
+    grabber = display.window.mouseGrabberItem()
+    for step in range(1, steps + 1):
+        send(QEvent.Type.MouseMove, start + QPointF(dx * step / steps, dy * step / steps), Qt.MouseButton.NoButton,
+             Qt.MouseButton.LeftButton)
+    send(QEvent.Type.MouseButtonRelease, start + QPointF(dx, dy), Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton)
+    return grabber.objectName() if grabber is not None else ""
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("controls", [False, True])
+def test_dragging_now_playings_text_moves_it_through_the_edit_layer(display, tmp_path, controls):
+    """Operator, 8 Nov (live): "the metadata text cannot be moved". A drag on Now Playing's text block, delivered to
+    the window as real pointer events, is taken by its Edit frame and moves Now Playing as one (artwork and text),
+    publishes snapping guides while it runs, is one undo step, and Save keeps where it was dropped."""
+    settings = _manager(tmp_path)
+    _draw(display, media=_Media(), config=_projection(_seed(settings, now_playing={"media_controls": controls})))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    text, artwork = (QRect(edit.item(part).current_global_rect) for part in ("now_playing", "artwork"))
+    guides: list[tuple] = []
+    original = display.scene.set_custom_layout_guides
+    display.scene.set_custom_layout_guides = lambda **kw: guides.append(kw) or original(**kw)
+    try:
+        taker = _pointer_drag(display, edit, "now_playing", 240, -200)
+    finally:
+        display.scene.set_custom_layout_guides = original
+    assert taker == "customLayoutParentMoveArea-fullscreen_overlay.now_playing"
+    moved_text, moved_art = (QRect(edit.item(part).current_global_rect) for part in ("now_playing", "artwork"))
+    delta = moved_text.topLeft() - text.topLeft()
+    assert abs(delta.x() - 240) <= 12 and abs(delta.y() + 200) <= 12     # it followed the pointer (snaps allowed)
+    art_delta = moved_art.topLeft() - artwork.topLeft()                   # the artwork moved with it, as one
+    assert abs(art_delta.x() - delta.x()) <= 1 and abs(art_delta.y() - delta.y()) <= 1
+    assert guides                                                         # the move published its guides
+    assert edit.frames() == edit.drawn()
+    assert edit.owner.undo_last_change()
+    _run(display, 60)
+    assert edit.item("now_playing").current_global_rect == text
+    _pointer_drag(display, edit, "now_playing", 240, -200)
+    dropped = edit.frames()
+    assert edit.owner.save()
+    _run(display, 120)
+    display.scene.set_visualizer_expanded_overlay_config(_projection(_value(settings)))
+    assert edit.drawn() == dropped
 
 
 # ------------------------------------------------------------------------------ guides on the Edit layer

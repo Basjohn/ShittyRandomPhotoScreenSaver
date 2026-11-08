@@ -70,6 +70,16 @@ Item {
     }
     // Fullscreen Edit: an overlay's (or a part's) geometry changed; only emitted while editing.
     signal editGeometryChanged()
+    // The Volume OSD's placement over the expanded card (``volume_osd``) depends on the safe area and on the OSD being
+    // in its lane: Python (the scene controller) re-places it on these edges only.
+    signal volumeOsdPlacementChanged()
+    onSafeInsetChanged: volumeOsdPlacementChanged()
+    onSafeWidthChanged: volumeOsdPlacementChanged()
+    onSafeHeightChanged: volumeOsdPlacementChanged()
+    Connections {
+        target: overlays.osdHost
+        function onChildrenChanged() { overlays.volumeOsdPlacementChanged() }
+    }
     function noteEditGeometry() {
         if (editing)
             editGeometryChanged()
