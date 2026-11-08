@@ -161,9 +161,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
      ABI; the production owner delivers identical frames for every mode through it; the tick side imports QtCore
      only) and the worker (4: `WorkerType.VISUALIZER` under `ProcessSupervisor`; fed recorded post-DSP inputs it ticks
      frames identical to the in-process owner for all nine modes, and on every recording: 160/160 replayable pairs,
-     291k frames; live inputs are the lossless engine snapshot, `core/visualizer_engine/engine_snapshot.py`, whose
-     frames equal the in-process tick on production DSP for all nine modes, in process and across processes; the
-     cross-process wake and per-session label namespaces are built). Independent Fable audit, 8 Nov
+     291k frames; P2a's live input, the lossless engine snapshot, was deleted in 5.6 once P2b's live input replaced
+     it; the cross-process wake and per-session label namespaces are built). Independent Fable audit, 8 Nov
      (`Docs/Future_Work/Native_Core_P2_Audit.md`): its two critical findings (a lost cross-process wake that froze the
      display; the seqlock reader accepting torn slots) and H3a/H4/H6/M2 are fixed with failing-first tests. Next, in
      order (design doc work orders): 4c measured 8 Nov: the snapshot path saves nothing for Spectrum, Oscilloscope,
@@ -187,8 +186,14 @@ after the operator's yes on a question card; agents never run load (invisible ch
      presentation inputs the capture reads (view records, the mode's presentation-only controls) reach the worker with
      the framed view, the reflected wallpaper completes the frames on the main side, the Fullscreen Edit envelopes
      work on the worker, and every activation in the worker loads QtCore only; the view gate is identical for the
-     five 3D modes with a photograph, an orbit and a preset's Auto Rotate. Next: 5.3's rest (device changes), 5.6
-     (delete the snapshot layer, Bubble's own RNG), 5.7 (dormancy, diagnostics, frozen spawn), then 6 (gate 3).
+     five 3D modes with a photograph, an orbit and a preset's Auto Rotate. 5.6 built 8 Nov: the snapshot layer is
+     deleted and Bubble's spawn draws from its simulation's own generator (seeded per controller by gates and
+     replays, never the process RNG; identical frames to the process-RNG version seeded alike). Next: 5.3's rest
+     (device changes), 5.7 (dormancy, diagnostics, frozen spawn), then 6 (gate 3).
+     Side finding (5.6): `test_bubble_reactivity.py::test_group_drift_aligns_non_swirl_bubble_motion[random-x]`
+     holds for only ~61% of Random Group Drift draws (2,000 seeds; Diagonal for all); it had passed on the process-RNG
+     state earlier tests left behind and is seeded now. Open for Bubble's owner: what Random Group Drift should
+     guarantee (an aligned axis, or none), then assert that; no retune under Bubble Temporal Fidelity without it.
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 

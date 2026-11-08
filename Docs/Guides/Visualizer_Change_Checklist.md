@@ -127,6 +127,11 @@ paint acknowledgement, catch-up queue or display-rate divisor.
       - Wall time remains only for log epoch stamps that tools line up across files.
       - Regression bar: `tests/test_visualizer_authored_clock.py` replays every mode with −5 s / +60 s wall jumps; the
         frames must equal the steady replay.
+- [ ] **Random draws come from the mode's own generator (native core P2b 5.6).** Bubble's simulation owns a
+      `random.Random` (OS-seeded in production); gates and replays seed it per controller
+      (`VisualizerRuntimeController.seed_mode_generators`, `configure_offline_controller`'s `REPLAY_SEED`), never with
+      `random.seed`. A process-RNG draw on the tick is unseeded in every gate and fails them
+      (`tests/test_visualizer_engine_live.py`, `tests/test_bubble_own_generator.py`).
 
 ## 3. One presentation surface
 
