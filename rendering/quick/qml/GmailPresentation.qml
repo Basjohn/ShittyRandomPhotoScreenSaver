@@ -252,13 +252,13 @@ OverlayWidget {
 
             "normalizationTarget": gmailRoot
         })
-        return roles
         roles.push({"roleId": "timestamp", "targetSource": messageRepeater, "targetColumn": "timestamp",
                     "horizontalRail": true, "normalizationTarget": gmailRoot})
         roles.push({"roleId": "sender", "targetSource": messageRepeater, "targetColumn": "sender",
                     "horizontalRail": true, "normalizationTarget": gmailRoot})
         roles.push({"roleId": "subject", "targetSource": messageRepeater, "targetColumn": "subject",
                     "horizontalRail": true, "normalizationTarget": gmailRoot})
+        return roles
     }
 
     Column {

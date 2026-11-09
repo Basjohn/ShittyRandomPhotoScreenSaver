@@ -171,6 +171,24 @@ def scene(qt_app):
     for result in reversed(scenes): result.close()
 
 
+def test_retained_gmail_admits_every_column_rail_before_and_during_edit(scene):
+    live = scene("gmail")
+    def admitted():
+        roles = live.presentation.item.property("customEditableChildRoles").toVariant()
+        rails = {role["roleId"]: role for role in roles if role.get("horizontalRail")}
+        assert set(rails) == set(ROLES["gmail"])
+        for role_id, role in rails.items():
+            assert role["targetColumn"] == role_id
+            assert role["normalizationTarget"] is live.presentation.item
+            assert role["targetSource"].property("count") == 3
+        return rails
+    before = admitted()
+    live.enter()
+    assert admitted() == before
+    live.publish(2); live.settle()
+    assert admitted() == before
+
+
 @pytest.mark.parametrize("family", ROLES)
 def test_column_span_left_endpoint_changes_start_truncation_and_keeps_opposite_edge(scene, family):
     live = scene(family)
