@@ -47,8 +47,8 @@ What the link owns, once:
   device that fails to open is not the session's end (A7-L4): the session keeps running, reports it in later replies
   (``capture_failed``) and retries the device on the next edge that opens capture. Nor is a device that stops
   delivering while Media plays (slice 5.3): the session reopens it once on the current default output and reports its
-  reopens in later replies; the link logs the device state when a reply changes it (the worker logs nowhere the main
-  log can see).
+  reopens in later replies; the link logs changed device state and its detached STOP callback logs the final state.
+  The worker writes its own diagnostic file, whose path is recorded in the main log.
 - **The run's failure record** (``worker_disabled_for_run``): after a session failed twice for an owner (the reconfigure
   included), or failed once more after the run's ``MAX_RECOVERIES_PER_RUN`` recoveries (``claim_recovery_for_run``,
   A11-M1), the engine worker stays off for the rest of the run, and every later owner runs in process.
@@ -69,8 +69,11 @@ from typing import Any, Callable, Iterator, Mapping
 from PySide6.QtCore import QObject, Qt, Signal
 
 from core.logging.logger import get_logger
+from core.process.types import VISUALIZER_STOP_REPORT_PREFIX
 
 logger = get_logger(__name__)
+# Chronological process evidence must remain in the main log under --viz/--life.
+diagnostic_logger = get_logger('core.process.visualizer_diagnostics')
 
 #: ``stop`` / ``feed_for_testing``'s bounded wait (tests and tools only: the owner never waits on the worker).
 EDGE_TIMEOUT_MS = 30_000
@@ -299,11 +302,21 @@ class EngineWorkerLink:
         """True when the worker runs (requests go out now); otherwise its (re)start is submitted to an IO task and the
         requests wait in the outbox until it reports back."""
         from core.visualizer_engine.engine_worker import visualizer_worker_main
+        from core.logging.logger import worker_logging_bootstrap
+        from functools import partial
 
         from widgets.spotify_visualizer import engine_worker_lifetime
 
         supervisor, worker_type = self._supervisor, self._worker_type()
-        supervisor.register_worker_factory(worker_type, visualizer_worker_main)
+        diagnostics = worker_logging_bootstrap()
+        supervisor.register_worker_factory(worker_type, partial(visualizer_worker_main, diagnostics=diagnostics))
+        if diagnostics.log_directory is not None:
+            from pathlib import Path
+            directory = Path(diagnostics.log_directory)
+            diagnostic_logger.info('[ENGINE_WORKER] Child diagnostics: log=%s native_fault_directory=%s '
+                        'native_fault_capture=%s perf=%s viz=%s', directory/'worker_visualizer.log',
+                        directory/'worker_visualizer', diagnostics.native_fault_capture,
+                        diagnostics.profile.perf, diagnostics.profile.viz)
         # A worker being retired (its last lease went before this link's) is not reused: a fresh one is started after it.
         if supervisor.is_running(worker_type) and not engine_worker_lifetime.retiring():
             return True
@@ -433,9 +446,8 @@ class EngineWorkerLink:
 
     def _note_device_state_in(self, reply: Mapping[str, Any]) -> None:
         """Log the device state wherever the reply carries it (checkpoint audit 11, A11-L5): an edge's reply at its top
-        level, ``VIS_STOP``'s report under ``report["engine"]`` (``EngineSession.finish``). The owner's ``retire``
-        never receives the stop's reply (sent, never awaited, and the link closes at once), so only a stop that waits
-        for its report (``stop``: tests and tools) reaches this with it."""
+        level, ``VIS_STOP``'s report under ``report["engine"]`` (``EngineSession.finish``). A retirement's final
+        report uses the detached logging callback instead, after the GUI link may have been destroyed."""
         if "capture_failed" in reply:
             self._note_device_report(reply)
             return
@@ -448,8 +460,8 @@ class EngineWorkerLink:
         """The session's device state as a reply carries it (``EngineSession.device_report``, work order 5 slice 5.3),
         logged here when it changed: the worker process's own log lines never reach the main log, so this is where a
         device that did not open, the session's reopen of a device that stopped delivering, and the device delivering
-        again become visible (at the reply of the next edge after them; ``VIS_STOP``'s report only when the stop is
-        awaited, ``_note_device_state_in``). The owner does nothing else with it: a device problem is never the
+        again become visible (at the reply of the next edge after them, or the detached final STOP report).
+        The owner does nothing else with it: a device problem is never the
         session's end (as in process, the Visualizer shows the engine's idle frames until audio comes back)."""
         failed = bool(reply["capture_failed"])
         reopens = int(reply.get("capture_reopens", self.capture_reopens))
@@ -709,27 +721,43 @@ class EngineWorkerLink:
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Stop: %s", exc)
             return None
         self._note_device_state_in(response.payload or {})     # a reopen after the last edge (A11-L5)
+        _consume_stop_report(self.mapping_name, response)
         return (response.payload or {}).get("report")
 
     def retire(self) -> None:
-        """The owner's stop (retirement, or a failed session): ``VIS_STOP`` sent, never awaited (the worker ends the
-        session in order: a later configure follows it on the same queue), then the reader closed and the mapping
-        unlinked. Idempotent."""
+        """Send STOP without waiting, retain its detached log callback, close the GUI resources at once.
+
+        The report holds no link/Qt/mapping/lease; the supervisor completes or cancels it at worker retirement.
+        A later configure follows STOP on the same queue. Idempotent.
+        """
         from core.process.types import MessageType
+        from functools import partial
 
         if self._closed:
             return
         self._stopping = True
         if self._outbox is None and self._mailbox is not None:
+            supervisor, role = self._supervisor, self._worker_type()
+            correlation = VISUALIZER_STOP_REPORT_PREFIX + uuid.uuid4().hex
+            mappings = tuple(self._capacity_candidates or self._mailbox.mapping_candidates)
+            callback = partial(_consume_stop_report, mappings)
             try:
                 # Addressed to this session's mapping: a stop that lands after another session was configured is a
                 # no-op there (the worker hosts one session at a time).
-                self._send(MessageType.VIS_STOP, {"mapping": self.mapping_name,
-                                                  'mapping_candidates': (self._capacity_candidates
-                                                                         or self._mailbox.mapping_candidates)},
-                           on_failed=lambda _failure: None)
-            except EngineWorkerFailure:
-                pass
+                sent = supervisor.register_response_callback(role, correlation, callback, retain_until_stopped=True)
+                if sent:
+                    sent = supervisor.send_message(role, MessageType.VIS_STOP,
+                        {'mapping': self.mapping_name, 'mapping_candidates': mappings},
+                        correlation_id=correlation) is not None
+                if not sent:
+                    supervisor.abandon_response(role, correlation, reason='stop_not_sent')
+                    callback(None)
+            except Exception:
+                try:
+                    supervisor.abandon_response(role, correlation, reason='stop_send_failed')
+                except Exception:
+                    logger.exception('[SPOTIFY_VIS][ENGINE_WORKER] Stop correlation cancellation failed')
+                logger.exception('[SPOTIFY_VIS][ENGINE_WORKER] Stop report request failed mapping=%s', self.mapping_name)
         self.close()
 
     def close(self) -> None:
@@ -782,6 +810,35 @@ class EngineWorkerLink:
             return
         self._lost_reported = True
         self._on_lost(self, str(reason))
+
+
+def _consume_stop_report(mapping: str | tuple[str, ...], response: Any) -> None:
+    """Logging-only completion: safe after the entire GUI generation is gone."""
+    prefix = '[ENGINE_WORKER] Stop report'
+    if response is None:
+        diagnostic_logger.warning('%s unavailable mapping=%s (report not received before completion retired)', prefix, mapping)
+        return
+    if not response.success:
+        diagnostic_logger.error('%s failed mapping=%s: %s', prefix, mapping, response.error)
+        return
+    payload = response.payload or {}
+    if payload.get('stale'):
+        diagnostic_logger.info('%s stale mapping=%s (the addressed session already ended)', prefix, mapping)
+        return
+    report = payload.get('report')
+    if not isinstance(report, Mapping):
+        diagnostic_logger.warning('%s empty mapping=%s', prefix, mapping)
+        return
+    candidates = (mapping,) if isinstance(mapping, str) else mapping
+    if report.get('mapping') not in candidates:
+        diagnostic_logger.error('%s mapping mismatch expected=%s actual=%s', prefix, candidates, report.get('mapping'))
+        return
+    engine = report.get('engine') or {}
+    failed = report.get('failed')
+    write = diagnostic_logger.error if failed else diagnostic_logger.info
+    write('%s mapping=%s revision=%s failed=%s capture_failed=%s capture_reopens=%s capture_resumed=%s',
+          prefix, report['mapping'], report.get('revision'), failed, engine.get('capture_failed'),
+          engine.get('capture_reopens'), engine.get('capture_resumed'))
 
 
 def configure_presentation_side(

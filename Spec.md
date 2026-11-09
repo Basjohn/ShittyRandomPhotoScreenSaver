@@ -703,6 +703,13 @@ already-deleted Shiboken wrapper must be reported/fail-closed and can never abor
 `VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not own
 simulation cadence.
 
+With `--viz-engine-worker`, the supervisor-owned child owns the logical tick, DSP and audio capture; the main process
+consumes immutable shared-memory frames through the existing mailbox/wake path and retains presentation ownership.
+The child inherits the admitted logging profile and writes a bounded `worker_visualizer.log`; the main log names
+that file and consumes the mapping-addressed final STOP report after GUI retirement. Disabled logging remains
+disabled. `Docs/Future_Work/Native_Core_P2_Engine_Design.md` owns capacity, ABI, lifetime and diagnostic details;
+`Current_Plan.md` owns pending default-path admission and the remaining audit sequence.
+
 Visualizer geometry is capability-driven. Modes using the shared reflowing card policy use the canonical 1.5 baseline aspect.
 Every mode except Sphere offers content quarter-turns through the existing CUSTOM presentation owner in ordinary
 Edit and, where supported, Fullscreen Edit. Scene3D rotates its logical viewport and existing final composite at

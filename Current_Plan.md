@@ -271,35 +271,33 @@ after the operator's yes on a question card; agents never run load (invisible ch
      state earlier tests left behind and is seeded now. Open for Bubble's owner: what Random Group Drift should
      guarantee (an aligned axis, or none), then assert that; no retune under Bubble Temporal Fidelity without it.
    - **P2 phase-boundary audit (8 Nov, Opus 5.5 high; [Native_Core_P2_Phase_Boundary_Audit.md](Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md)):
-     verdict: do not make the worker the default until H1 and H2 are fixed. The operator admitted audit repairs
-     alongside the 9 Nov miscellaneous work; keep the order below.**
+     H1/H2 fixes are reviewed; keep the remaining order below. The operator admitted audit repairs alongside
+     the 9 Nov miscellaneous work.**
      **The worker-default change is built and waiting on branch `p2/worker-default`** (pushed to origin; 873b5387 code
      and tests, 3e428413 docs; based on 4248b8ab): the engine worker is the Windows default, `--viz-in-process` /
      `--viz-engine-worker` choose a path explicitly, Linux stays in process (Linux_Plan Phase 4), five tests that relied
      on the old default state their path, Spec/Contracts/Guardrails describe the process model. Merge it into main only
-     after H2 below is on main; rebase or merge main into it first (it predates 38c38862's gate 3 record and
+     as the next ordered step; rebase or merge main into it first (it predates 38c38862's gate 3 record and
      live-check PCM fix: use its `engine_worker_path(app_args)` in `tools/visualizer_live_check.py`, never
      `ENGINE_WORKER_ARG in app_args`). Any agent may check it out (`git fetch origin; git switch p2/worker-default`).
      **Order** (each step: failing-first test, its negative control, record in the audit doc's resolution section):
-     1. H2: the worker inherits the diagnostic flags and logs to its own file; the owner reads `VIS_STOP`'s report.
-     2. Merge `p2/worker-default` (worker is the Windows default).
-     3. M2 (first-configure deadline on slow machines) and L1 (ordered control edges never dropped).
-     4. M4: gates with non-default presets and settings; a gate 2 (no visual change) record.
-     5. H3 (operator, 8 Nov: there is no Linux machine to prove it on; assume it works with basic support): make the
+     1. Merge `p2/worker-default` (worker is the Windows default).
+     2. M2 (first-configure deadline on slow machines) and L1 (ordered control edges never dropped).
+     3. M4: gates with non-default presets and settings; a gate 2 (no visual change) record.
+     4. H3 (operator, 8 Nov: there is no Linux machine to prove it on; assume it works with basic support): make the
         worker the default on Linux too (the branch keeps Linux in process; flip `visualizer_engine_worker_platform_default`
         to every platform and update `Linux_Plan.md` Phase 4 and the platform tests). No Linux proving step.
-     6. M5, L2-L5 and what M3 still lacks.
-     7. P3's four decisions (listed last below) before P3's first slice.
-     M1/H1 are resolved in the audit's resolution section: source-free EB capture, activation-time capacity,
-     hidden remap, terminal overflow and simultaneous retained high-water payloads have focused data/IPC proof.
-     - [ ] H2: the worker gets no diagnostic flags and logs to a null handler: tick/DSP/device exceptions, `[PERF]`
-       and fail-closed reasons reach no log; the owner never reads `VIS_STOP`'s report (the design doc's claim is false).
+     5. M5, L2-L5 and what M3 still lacks.
+     6. P3's four decisions (listed last below) before P3's first slice.
+     M1/H1/H2 evidence is in the audit's resolution section: capture/capacity, hidden remap, terminal overflow,
+     retained high water, admitted child logging and bounded detached STOP reports have focused proof.
      - [ ] H3: the worker path has never run on Linux (forkserver on 3.14, POSIX wake path, Pulse capture). Operator,
        8 Nov: it cannot be proven (no Linux machine); assume basic support and make the worker the Linux default too
-       (step 5).
+       (step 4).
      - [ ] M2: the first configure's fixed 6 s deadline vs ~5 s measured under game60: slow machines would wait ~6 s
        hidden and run in process at startup and after every Settings close.
-     - [ ] M3: Spec/Contracts/Guardrails/Index do not describe the engine worker, the slot layout, lifetime or recovery.
+     - [ ] M3: reconcile Contracts/Guardrails and default-path documentation with the pending default merge;
+       Spec/Index route current opt-in ownership and diagnostics, and the design/audit own ABI/lifetime detail.
      - [ ] M4: every gate used default presets; gate 2 (no visual change) has no record.
      - [ ] M5: the in-process mode-cycling memory growth (gate 4 side finding) still hits the fallback and the Studios.
      - [ ] L1: a full request queue drops the oldest message (wrong for ordered control edges; a lost `VIS_SET_VIEW`

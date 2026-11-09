@@ -24,6 +24,7 @@ from core.constants.timing import (
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.default_contract import require_canonical_default
 from core.process.types import (
+    VISUALIZER_STOP_REPORT_PREFIX,
     HealthStatus,
     MessageType,
     WorkerMessage,
@@ -143,6 +144,9 @@ class ProcessSupervisor:
             WorkerType,
             dict[str, Callable[[Optional[WorkerResponse]], None]],
         ] = {wt: {} for wt in WorkerType}
+        # Logging-only visualizer STOP reports outlive their GUI link, through
+        # the listener-to-direct-drain handoff; never retain a runtime callback.
+        self._stop_report_correlations: set[tuple[WorkerType, str]] = set()
         self._response_listener_threads: dict[WorkerType, threading.Thread] = {}
         self._response_listener_stopping: set[WorkerType] = set()
         self._response_condition = threading.Condition(self._lock)
@@ -686,6 +690,8 @@ class ProcessSupervisor:
         worker_type: WorkerType,
         correlation_id: str,
         callback: Callable[[Optional[WorkerResponse]], None],
+        *,
+        retain_until_stopped: bool = False,
     ) -> bool:
         """Deliver one correlated application response without a pool waiter.
 
@@ -695,11 +701,19 @@ class ProcessSupervisor:
         when worker teardown/restart cancels an outstanding completion owner.
         Explicit ``abandon_response()`` removes the callback silently because
         the abandoning caller already owns its local cancellation cleanup.
+        ``retain_until_stopped`` is reserved for detached, logging-only
+        VISUALIZER STOP reports: they survive orderly listener shutdown and
+        complete during its bounded drain or cancel at final worker cleanup.
         """
         if not correlation_id or not callable(callback):
             return False
-
+        reserved_stop = (worker_type == WorkerType.VISUALIZER
+                         and correlation_id.startswith(VISUALIZER_STOP_REPORT_PREFIX))
+        if retain_until_stopped != reserved_stop:
+            raise ValueError('Only reserved visualizer STOP diagnostics may outlive the response listener')
         buffered: Optional[WorkerResponse] = None
+        registered = True
+        superseded: list[tuple[str, Callable[[Optional[WorkerResponse]], None]]] = []
         with self._lock:
             if self._shutdown or worker_type in self._response_listener_stopping:
                 return False
@@ -723,11 +737,25 @@ class ProcessSupervisor:
                 if not queued:
                     worker_buffer.pop(correlation_id, None)
             else:
+                if retain_until_stopped:
+                    # One worker hosts one session. A lost report must not
+                    # accumulate while reload holds keep that worker reusable.
+                    superseded = [(corr, old) for corr, old in callbacks.items()
+                                  if (worker_type, corr) in self._stop_report_correlations]
+                    for corr, _old in superseded:
+                        callbacks.pop(corr)
+                        self._stop_report_correlations.discard((worker_type, corr))
                 callbacks[correlation_id] = callback
+                if retain_until_stopped:
+                    self._stop_report_correlations.add((worker_type, correlation_id))
                 if not self._ensure_response_listener_locked(worker_type):
                     callbacks.pop(correlation_id, None)
-                    return False
+                    self._stop_report_correlations.discard((worker_type, correlation_id))
+                    registered = False
 
+        for corr, old in superseded:
+            self._invoke_response_callback(worker_type, corr, old, None,
+                                           cancellation_reason='newer_stop_report')
         if buffered is not None:
             self._invoke_response_callback(
                 worker_type,
@@ -735,7 +763,7 @@ class ProcessSupervisor:
                 callback,
                 buffered,
             )
-        return True
+        return registered
 
     def await_response(
         self,
@@ -1083,6 +1111,7 @@ class ProcessSupervisor:
         with self._lock:
             self._abandoned_correlations[worker_type][correlation_id] = reason
             self._response_callbacks[worker_type].pop(correlation_id, None)
+            self._stop_report_correlations.discard((worker_type, correlation_id))
             buffered = self._buffered_responses[worker_type].pop(
                 correlation_id,
                 [],
@@ -1394,7 +1423,8 @@ class ProcessSupervisor:
             thread = self._response_listener_threads.get(worker_type)
             response_queue = self._response_queues.get(worker_type)
             if thread is None:
-                callbacks = self._take_response_callbacks_locked(worker_type)
+                callbacks = self._take_response_callbacks_locked(
+                    worker_type, preserve_stop_reports=reason in ('worker_stopping', 'supervisor_shutdown'))
             else:
                 self._response_listener_stopping.add(worker_type)
                 callbacks = []
@@ -1423,7 +1453,8 @@ class ProcessSupervisor:
                 elif self._response_listener_threads.get(worker_type) is thread:
                     self._response_listener_threads.pop(worker_type, None)
                 self._response_listener_stopping.discard(worker_type)
-                callbacks = self._take_response_callbacks_locked(worker_type)
+                callbacks = self._take_response_callbacks_locked(
+                    worker_type, preserve_stop_reports=reason in ('worker_stopping', 'supervisor_shutdown'))
 
         for correlation_id, callback in callbacks:
             self._invoke_response_callback(
@@ -1437,10 +1468,15 @@ class ProcessSupervisor:
     def _take_response_callbacks_locked(
         self,
         worker_type: WorkerType,
+        *,
+        preserve_stop_reports: bool = False,
     ) -> list[tuple[str, Callable[[Optional[WorkerResponse]], None]]]:
         callbacks = self._response_callbacks[worker_type]
-        items = list(callbacks.items())
-        callbacks.clear()
+        items = [(corr, callback) for corr, callback in callbacks.items()
+                 if not preserve_stop_reports or (worker_type, corr) not in self._stop_report_correlations]
+        for corr, _callback in items:
+            callbacks.pop(corr)
+            self._stop_report_correlations.discard((worker_type, corr))
         return items
 
     def _invoke_response_callback(
@@ -1473,6 +1509,7 @@ class ProcessSupervisor:
         dropped: list[WorkerResponse] = []
         callback: Callable[[Optional[WorkerResponse]], None] | None = None
         abandoned_reason: str | None = None
+        unclaimed_stop_report = False
         with self._lock:
             abandoned_reason = self._abandoned_correlations[worker_type].pop(
                 corr_id,
@@ -1480,21 +1517,28 @@ class ProcessSupervisor:
             )
             if abandoned_reason is None:
                 callback = self._response_callbacks[worker_type].pop(corr_id, None)
+                self._stop_report_correlations.discard((worker_type, corr_id))
             if abandoned_reason is None and callback is None:
-                worker_buffer = self._buffered_responses[worker_type]
-                worker_buffer.setdefault(corr_id, []).append(response)
-                buffered_count = sum(len(items) for items in worker_buffer.values())
-                while buffered_count > self.MAX_BUFFERED_RESPONSES and worker_buffer:
-                    oldest_id = next(iter(worker_buffer))
-                    oldest_queue = worker_buffer[oldest_id]
-                    dropped.append(oldest_queue.pop(0))
-                    buffered_count -= 1
-                    if not oldest_queue:
-                        worker_buffer.pop(oldest_id, None)
-                self._response_condition.notify_all()
+                unclaimed_stop_report = (worker_type == WorkerType.VISUALIZER
+                                         and corr_id.startswith(VISUALIZER_STOP_REPORT_PREFIX))
+                if not unclaimed_stop_report:
+                    worker_buffer = self._buffered_responses[worker_type]
+                    worker_buffer.setdefault(corr_id, []).append(response)
+                    buffered_count = sum(len(items) for items in worker_buffer.values())
+                    while buffered_count > self.MAX_BUFFERED_RESPONSES and worker_buffer:
+                        oldest_id = next(iter(worker_buffer))
+                        oldest_queue = worker_buffer[oldest_id]
+                        dropped.append(oldest_queue.pop(0))
+                        buffered_count -= 1
+                        if not oldest_queue:
+                            worker_buffer.pop(oldest_id, None)
+                    self._response_condition.notify_all()
 
         if abandoned_reason is not None:
             self.dispose_response(response, reason=f"late_{abandoned_reason}")
+            return
+        if unclaimed_stop_report:
+            self.dispose_response(response, reason='unclaimed_stop_report')
             return
         if callback is not None:
             self._invoke_response_callback(
@@ -1555,7 +1599,12 @@ class ProcessSupervisor:
             if self._dispose_if_abandoned(worker_type, response):
                 continue
             if dispose_application:
-                self.dispose_response(response, reason=reason)
+                with self._lock:
+                    retained = (worker_type, response.correlation_id) in self._stop_report_correlations
+                if retained:
+                    self._buffer_response(worker_type, response)
+                else:
+                    self.dispose_response(response, reason=reason)
             else:
                 self._buffer_response(worker_type, response)
         return drained
@@ -1667,6 +1716,11 @@ class ProcessSupervisor:
             worker_type,
             reason="worker_cleanup_buffer",
         )
+        # Only detached STOP log callbacks can remain after listener shutdown.
+        # Cleanup is the final bound, including death/forced termination/no ACK.
+        for correlation, callback in self._take_response_callbacks_locked(worker_type):
+            self._invoke_response_callback(worker_type, correlation, callback, None,
+                                           cancellation_reason='worker_stopped_without_report')
 
         process = self._workers.pop(worker_type, None)
         if process is not None:

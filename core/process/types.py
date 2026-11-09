@@ -18,6 +18,12 @@ from core.constants.timing import (
 )
 
 
+# Reserved for detached, logging-only VIS_STOP completions. A late response in
+# this namespace is disposed rather than entering ordinary response buffering;
+# this requires no history/tombstones when a reused worker loses replies.
+VISUALIZER_STOP_REPORT_PREFIX = 'visualizer-stop-report:'
+
+
 class WorkerType(Enum):
     """Types of worker processes."""
     IMAGE = "image"           # foreground decode/prescale with path|scaled:WxH cache keys

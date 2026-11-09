@@ -142,7 +142,7 @@ class BaseWorker:
         """
         from queue import Empty as QueueEmpty
         
-        self._logger = setup_worker_logging(self.worker_type)
+        self._logger = self._setup_logging()
         self._logger.info(
             "Worker %s started (PID: %d)",
             self.worker_type.value,
@@ -305,6 +305,9 @@ class BaseWorker:
         Override in subclass for worker-specific cleanup.
         """
         pass
+
+    def _setup_logging(self) -> logging.Logger:
+        return setup_worker_logging(self.worker_type)
 
     def _teardown_logging(self) -> None:
         """Flush and detach worker-specific log handlers to release file handles."""

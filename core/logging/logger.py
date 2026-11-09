@@ -778,6 +778,81 @@ class LoggingBootstrapProfile:
     studio_trace: bool = False
 
 
+_ACTIVE_BOOTSTRAP_PROFILE = LoggingBootstrapProfile()
+
+
+@dataclass(frozen=True)
+class WorkerLoggingBootstrap:
+    """Explicit, spawn-safe admission; no child CLI or directory rediscovery."""
+
+    profile: LoggingBootstrapProfile
+    log_directory: str | None
+    native_fault_capture: bool = False
+
+
+def worker_logging_bootstrap() -> WorkerLoggingBootstrap:
+    from core.logging.crash_capture import is_crash_capture_enabled
+
+    return WorkerLoggingBootstrap(_ACTIVE_BOOTSTRAP_PROFILE,
+                                  str(_ACTIVE_LOG_DIR) if _ACTIVE_LOG_DIR is not None else None,
+                                  is_crash_capture_enabled())
+
+
+def _apply_bootstrap_profile(profile: LoggingBootstrapProfile) -> None:
+    global _ACTIVE_BOOTSTRAP_PROFILE, _VERBOSE, _PERF_METRICS_ENABLED, _USAGE_LOGGING_ENABLED
+    global _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED, _GEOMETRY_LOGGING_ENABLED
+    global _SETTINGS_LOGGING_ENABLED, _LIFECYCLE_LOGGING_ENABLED, _CACHE_LOGGING_ENABLED
+    global _STEAM_LOGGING_ENABLED, _FEEDS_LOGGING_ENABLED, _STUDIO_LOGGING_ENABLED
+
+    _ACTIVE_BOOTSTRAP_PROFILE = profile
+    _VERBOSE = profile.verbose
+    _PERF_METRICS_ENABLED = profile.perf
+    _USAGE_LOGGING_ENABLED = profile.usage or profile.handle_attribution
+    _VIZ_LOGGING_ENABLED = _VIZ_DIAGNOSTICS_ENABLED = profile.viz
+    _GEOMETRY_LOGGING_ENABLED = profile.geo
+    _SETTINGS_LOGGING_ENABLED = profile.settings_trace
+    _LIFECYCLE_LOGGING_ENABLED = profile.lifecycle
+    _CACHE_LOGGING_ENABLED = profile.cache_trace
+    _STEAM_LOGGING_ENABLED = profile.steam_trace
+    _FEEDS_LOGGING_ENABLED = profile.feeds_trace
+    _STUDIO_LOGGING_ENABLED = profile.studio_trace
+
+
+def setup_visualizer_worker_logging(bootstrap: WorkerLoggingBootstrap) -> logging.Logger:
+    """Child-only route: canonical gates and bounded writer, one private file."""
+    global _ACTIVE_LOG_DIR, _ACTIVE_LOGGING_CONTROLLER
+
+    previous = flush_and_close_logging()
+    if previous['active']:
+        raise RuntimeError('Previous worker logging writer did not stop')
+    _retire_closing_warning_handoff()
+    _apply_bootstrap_profile(bootstrap.profile)
+    root = logging.getLogger()
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+        handler.close()
+    _ACTIVE_LOG_DIR = Path(bootstrap.log_directory) if bootstrap.log_directory is not None else None
+    if _ACTIVE_LOG_DIR is None:
+        root.addHandler(logging.NullHandler())
+        root.setLevel(logging.CRITICAL + 10)
+        return logging.getLogger('worker.visualizer')
+    _ACTIVE_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    level = logging.DEBUG if bootstrap.profile.debug or bootstrap.profile.verbose else logging.INFO
+    root.setLevel(level)
+    handler = DeduplicatingRotatingFileHandler(_ACTIVE_LOG_DIR/'worker_visualizer.log',
+                                              maxBytes=2*1024*1024, backupCount=5, encoding='utf-8')
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    controller = _QueuedLoggingController([handler], main_handler=handler, capacity=_LOG_QUEUE_CAPACITY)
+    with _LOGGING_CONTROLLER_LOCK:
+        _ACTIVE_LOGGING_CONTROLLER = controller
+    root.addHandler(controller.ingress_handler)
+    logger = logging.getLogger('worker.visualizer')
+    logger.info('Worker diagnostics admitted perf=%s viz=%s verbose=%s',
+                is_perf_metrics_enabled(), is_viz_diagnostics_enabled(), is_verbose_logging())
+    return logger
+
+
 def resolve_logging_bootstrap_profile(
     argv: Iterable[str],
     *,
@@ -2825,17 +2900,11 @@ def setup_logging(
     # Previously these were only set True, so re-entering setup with e.g.
     # --feeds absent left the retired sidecar logically enabled and discarded
     # WARNING records explicitly destined for the central-log fallback.
-    _PERF_METRICS_ENABLED = bool(perf)
-    _USAGE_LOGGING_ENABLED = bool(usage or handle_attribution)
-    _VIZ_LOGGING_ENABLED = bool(viz)
-    _VIZ_DIAGNOSTICS_ENABLED = bool(viz)
-    _GEOMETRY_LOGGING_ENABLED = bool(geo)
-    _SETTINGS_LOGGING_ENABLED = bool(settings_trace)
-    _LIFECYCLE_LOGGING_ENABLED = bool(lifecycle)
-    _CACHE_LOGGING_ENABLED = bool(cache_trace)
-    _STEAM_LOGGING_ENABLED = bool(steam_trace)
-    _FEEDS_LOGGING_ENABLED = bool(feeds_trace)
-    _STUDIO_LOGGING_ENABLED = bool(studio_trace)
+    _apply_bootstrap_profile(LoggingBootstrapProfile(
+        debug=bool(debug), verbose=bool(verbose), perf=bool(perf), usage=bool(usage),
+        handle_attribution=bool(handle_attribution), viz=bool(viz), geo=bool(geo),
+        settings_trace=bool(settings_trace), lifecycle=bool(lifecycle), cache_trace=bool(cache_trace),
+        steam_trace=bool(steam_trace), feeds_trace=bool(feeds_trace), studio_trace=bool(studio_trace)))
 
     logging_disabled = _determine_logging_disabled(exe_path_valid)
     if diagnostic_build:

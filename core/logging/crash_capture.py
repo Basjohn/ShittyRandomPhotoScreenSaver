@@ -297,6 +297,12 @@ def enable_diagnostic_crash_capture(
         _atexit_registered = True
     return path
 
+
+def is_crash_capture_enabled() -> bool:
+    """Whether startup admitted and successfully installed the persistent stream."""
+    return _capture_enabled and _stream is not None and _owns_faulthandler
+
+
 def close_diagnostic_crash_capture() -> None:
     """Flush/release native-fault capture and restore any prior faulthandler state."""
 

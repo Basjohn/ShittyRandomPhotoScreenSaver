@@ -618,7 +618,7 @@ class EngineSession:
         commits since the cadence first started; A6-M1)."""
         if self._paced:
             self._stop_cadence()
-        report: dict = {"revision": self.mailbox.revision, "failed": self._failed}
+        report: dict = {"mapping": self.mapping_name, "revision": self.mailbox.revision, "failed": self._failed}
         if self._paced:
             commits = int(self._engine.get_authoritative_frame_commit_seq()) - int(self._commits_at_start or 0)
             report.update(cadence=self._cadence_record, cadence_s=self._cadence_s, capture=self.capture_counts)
@@ -853,9 +853,35 @@ class EngineSession:
 class VisualizerEngineWorker(BaseWorker):
     """``WorkerType.VISUALIZER``: one engine session at a time, driven by control messages."""
 
-    def __init__(self, request_queue, response_queue) -> None:
+    def __init__(self, request_queue, response_queue, *, diagnostics=None) -> None:
         super().__init__(request_queue, response_queue)
         self._session: Optional[EngineSession] = None
+        self._diagnostics = diagnostics
+
+    def _setup_logging(self):
+        from core.logging.logger import (WorkerLoggingBootstrap, LoggingBootstrapProfile,
+                                         setup_visualizer_worker_logging)
+        from core.logging.crash_capture import enable_diagnostic_crash_capture
+        from pathlib import Path
+
+        bootstrap = self._diagnostics or WorkerLoggingBootstrap(LoggingBootstrapProfile(), None)
+        logger = setup_visualizer_worker_logging(bootstrap)
+        if bootstrap.log_directory is not None and bootstrap.native_fault_capture:
+            path = enable_diagnostic_crash_capture(Path(bootstrap.log_directory)/'worker_visualizer',
+                                                   allow_runtime_capture=True)
+            if path is None:
+                logger.error('Worker native-fault capture admission failed')
+            else:
+                logger.info('Worker native-fault capture: %s', path)
+        return logger
+
+    def _teardown_logging(self) -> None:
+        from core.logging.logger import flush_and_close_logging
+        from core.logging.crash_capture import close_diagnostic_crash_capture
+
+        close_diagnostic_crash_capture()
+        flush_and_close_logging()
+        self._logger = None
 
     @property
     def worker_type(self) -> WorkerType:
@@ -892,6 +918,7 @@ class VisualizerEngineWorker(BaseWorker):
                 except Exception as exc:
                     # Fail closed (audit M2): a tick that raised left its controller half-updated, so the session
                     # ends; the owner treats it as a worker crash (fade, reconfigure once).
+                    _log().exception('VIS_INPUT failed; closing the engine session')
                     self._close_session()
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
                 return self._reply(msg, revision=revision)
@@ -910,6 +937,7 @@ class VisualizerEngineWorker(BaseWorker):
                         else:
                             session.set_playing(bool(msg.payload["playing"]))
                     except Exception as exc:
+                        _log().exception('%s failed; closing the engine session', msg.msg_type.value)
                         self._close_session()       # the edge may have half-applied: fail closed
                         return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}",
                                            session_closed=True)
@@ -926,6 +954,7 @@ class VisualizerEngineWorker(BaseWorker):
                     try:
                         committed = session.request_mode(mode, **payload)
                     except Exception as exc:
+                        _log().exception('VIS_SET_MODE failed; closing the engine session')
                         self._close_session()
                         return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}",
                                            session_closed=True)
@@ -939,6 +968,7 @@ class VisualizerEngineWorker(BaseWorker):
                     changed = self._session.set_display_power(bool(msg.payload["on"]))
                 except Exception as exc:
                     # The edge may have half-applied (capture reference, fence): fail closed, as a tick does.
+                    _log().exception('VIS_SET_DISPLAY_POWER failed; closing the engine session')
                     self._close_session()
                     return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}", session_closed=True)
                 return self._reply(msg, changed=changed, **self._session.device_report())
@@ -955,6 +985,7 @@ class VisualizerEngineWorker(BaseWorker):
                 try:
                     report = session.finish() if session is not None else None
                 except Exception as exc:
+                    _log().exception('VIS_STOP failed; closing the engine session')
                     error = f"{type(exc).__name__}: {exc}"
                     try:
                         self._close_session()           # drops the session first, then unwinds all it holds
@@ -966,6 +997,7 @@ class VisualizerEngineWorker(BaseWorker):
                 return self._reply(msg, report=report, qt_modules=sorted(name for name in sys.modules
                                                                          if name.startswith("PySide6.Qt")))
         except Exception as exc:   # reported to the owner, never a silent worker death
+            _log().exception('%s failed', msg.msg_type.value)
             return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}")
         return self._reply(msg, success=False, error=f"unsupported message {msg.msg_type}")
 
@@ -979,9 +1011,9 @@ class VisualizerEngineWorker(BaseWorker):
         super()._cleanup()
 
 
-def visualizer_worker_main(request_queue, response_queue) -> None:
+def visualizer_worker_main(request_queue, response_queue, *, diagnostics=None) -> None:
     """``ProcessSupervisor`` factory for ``WorkerType.VISUALIZER``."""
-    VisualizerEngineWorker(request_queue, response_queue).run()
+    VisualizerEngineWorker(request_queue, response_queue, diagnostics=diagnostics).run()
 
 
 def _log():

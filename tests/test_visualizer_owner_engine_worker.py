@@ -103,7 +103,7 @@ class _InProcessSupervisor:
 
     # The asynchronous surface (slice 5.5): the request is handled at once (deterministic order); its reply reaches
     # the registered callback, which the link turns into a queued event like the real listener's.
-    def register_response_callback(self, _worker_type, correlation_id, callback) -> bool:
+    def register_response_callback(self, _worker_type, correlation_id, callback, **_options) -> bool:
         self.callbacks = getattr(self, "callbacks", {})
         self.callbacks[correlation_id] = callback
         return True

@@ -921,15 +921,11 @@ are specified above.
        wake pipe stays open, so the owner sees no session end and nothing counts towards the two-strike rule.
      - *Reported to the owner.* Every reply that carried `capture_failed` now carries the session's device report
        (`EngineSession.device_report`: `capture_failed`, `capture_reopens`, `capture_resumed`), and `VIS_STOP`'s report
-       carries it nested under `report["engine"]`. The worker process's own log lines never reach the main log: a
-       worker logs nowhere unless perf metrics are on, and the session's module loggers not even then. So the link logs
-       the device state in the main log when a reply changes it (`EngineWorkerLink._note_device_report`, reached from
-       either shape by `_note_device_state_in` since checkpoint audit 11, A11-L5). A reopen between two edges reaches
-       the main log at the next edge's reply (Media's pause or play, display power, a mode or preset change, a view
-       change). **A reopen after the session's last edge never reaches it** (Media plays on until the Visualizer is
-       turned off, a display reload or the exit): the owner's `retire` sends `VIS_STOP` without awaiting it and closes
-       the link at once, so the stop's report is read only where a stop is awaited (`EngineWorkerLink.stop`: tests and
-       tools). For a long uninterrupted play the reopen line appears at the next pause. The owner does nothing else
+       carries it nested under `report["engine"]`. The link logs changed device state in the main log at the next
+       control reply (`EngineWorkerLink._note_device_report`), and its detached retirement callback logs the final
+       device state even after the GUI link closes. A reopen between edges reaches the next reply; one after the last
+       edge reaches the STOP report. The child separately records module/worker logs in `worker_visualizer.log` with
+       the parent's admitted flags (H2 below); the main log points to this file. The owner does nothing else
        with it: as in process, the Visualizer shows the engine's idle frames until the audio comes back (fade, never
        vanish: the bars go down through the existing silence decay, and the frames never stop).
      - *Measured* (evidence `.artifacts/evidence/architecture/native_core_p2/20261108_p2b_53_devices/
@@ -1299,9 +1295,9 @@ are specified above.
        `threads_app`). A named PID the cached tree does not know yet makes that sample a topology refresh (one Toolhelp
        snapshot, ctypes, GIL released) instead of waiting up to eight samples; with no worker (at rest) nothing changes:
        no per-tick psutil call, no new cadence. The logs: the supervisor's start/stop lines carry the PID, the
-       lifetime logs every retirement with it, and a session that failed closed reaches the main log as the owner's
-       session failure (its reason, the step's exception, is in `VIS_STOP`'s report; the worker process's own logging
-       stays as every worker's: `worker_visualizer.log` on perf runs only).
+       lifetime logs every retirement with it. H2's detached STOP callback records the addressed mapping, revision,
+       final device state and `failed` reason in the main log after GUI retirement. The child inherits admitted
+       diagnostic flags and uses its own `worker_visualizer.log`; logging disabled in the parent stays disabled.
      - *Supervisor (3a): a start retires what a dead role left.* `ProcessSupervisor.start` runs `_retire_dead_role`
        under the role's lifecycle lock: a registered process that died, or a listener with no process, has its
        response listener stopped (its callbacks cancelled with None: the link resends an unanswered configure once) and
@@ -1813,3 +1809,29 @@ are specified above.
   receipts.
 - **Latency:** at most one tick of extra control latency (applied at the next boundary) and one memcpy per frame on the
   read; frame age is measured at gate 3.
+
+### H2 diagnostic and STOP-report boundary
+
+The engine-worker factory carries the parent's admitted logging profile and resolved directory explicitly across
+spawn. The child sets its diagnostic gates before readiness and uses the existing bounded logging controller for
+a separate rotating `worker_visualizer.log`. The parent's files are never opened by the child; disabled logging is
+preserved. Existing `crash_capture` owns an admitted native-fault stream in `worker_visualizer/` beneath the resolved
+log directory, keeping its stable descriptor separate from the rotating Python log. Startup records in the main log
+point to those paths. Other process roles retain their current bootstrap.
+
+The owner consumes `VIS_STOP` asynchronously through a detached, mapping/correlation-scoped logging callback;
+closing the GUI link does not abandon it. Only that callback is retained through the supervisor's listener-to-drain
+shutdown handoff. There is at most one unanswered retained STOP callback per role: a newer STOP cancels the prior
+one with an unavailable warning, so reload holds cannot accumulate callbacks when replies are lost. The existing
+graceful deadline bounds collection at worker retirement; final cleanup cancels any remaining completion once.
+A delivered report records revision, `failed` and final capture/device state without calling back into a retired
+owner or extending mapping/lease lifetime. Its actual mapping must match the captured H1 old/new candidate tuple;
+a mismatch is logged and never applied to a replacement session. Ordinary callbacks still cancel when the listener
+stops; image-response disposal is unchanged. Detached STOP correlations use the shared reserved namespace from
+`core.process.types`; an unclaimed late reply is disposed immediately, without entering ordinary response buffering
+or retaining a per-reply tombstone history. The child-path announcement and final report use a chronological process
+logger that remains in the main file even with `--viz`/`--life` enabled. No new response clock/thread, transport,
+recovery rule or default admission is added. Admitted logging
+does start the canonical process-owned log writer in the child (one thread, 4096 queued records); normal producers
+only enqueue, and formatting/rotation remain writer-owned. Diagnostic gates stay off when absent. No frame payload,
+capacity, compute cadence or steady-state response traffic changes.

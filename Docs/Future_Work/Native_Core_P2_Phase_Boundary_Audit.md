@@ -444,6 +444,54 @@ portable frame (`564617 > 524216`), exit 1 as expected. Root separately reran th
 and terminal-failure gates: **3 passed**. This is bounded data/IPC proof only; no new load, rendering, build or device
 validation was run.
 
+### H2: admitted child diagnostics and consumed retirement reports
+
+The repair stays at the existing spawn, logging and response boundaries. The parent snapshots its canonical
+resolved logging flags, active log directory and native-fault admission into the visualizer factory. The child
+applies those flags before readiness and routes module/worker records through the canonical bounded queued writer
+to its own rotating `worker_visualizer.log`; it never opens the main process files. Explicitly disabled logging
+stays disabled. Native-fault capture reuses `crash_capture` in `worker_visualizer/` beneath the log directory so its
+stable descriptor never shares or follows a rotating Python log. The main log names both worker paths.
+
+Retirement sends the same mapping-addressed `VIS_STOP` and closes GUI resources immediately. A detached report
+callback captures only immutable session metadata, consumes `report.failed`, revision and final device state, and
+logs them in the parent. It owns no Qt object, mapping, lease, retry, timer or worker lifetime. The supervisor's
+existing shutdown handoff formerly cancelled callbacks before it directly drained responses; the repair explicitly
+retains only logging-only STOP callbacks through that bounded handoff. The final drain delivers them once, and
+cleanup cancels a missing report once. Ordinary response cancellation and image-payload disposal stay unchanged.
+Only one unanswered STOP callback is retained per visualizer role; a newer STOP cancels the prior completion with
+an unavailable warning. Thus a reused worker cannot accumulate callbacks when replies are lost. The report carries
+its actual mapping, which must belong to the immutable H1 old/new candidate tuple captured before GUI close.
+
+`tests/test_visualizer_engine_diagnostics.py` has **11 passing focused tests**: actual spawned admitted/ordinary/
+disabled profiles and a persisted module traceback; production factory snapshot; parent enabled-to-disabled
+re-entry; delayed report consumption after weak-reference-proven GUI link destruction; real STOP then SHUTDOWN;
+listener handoff, exactly-once cleanup and the one-report reuse bound. The callback's immutable tuple includes
+the H1 old/new mapping candidates; `EngineSession.finish` reports the actual mapping for validation.
+
+Independent Terra 6.1 High source review found one additional issue: superseded late STOP replies entered the
+ordinary response buffer, risking unrelated reply eviction. A shared reserved correlation namespace now identifies
+detached STOP reports; unclaimed late replies are disposed immediately with no accumulating tombstone history.
+The new delayed-old-report regression failed before this correction and now passes, preserving an ordinary buffered
+reply exactly. Self-review also caught the existing `--viz` family filter diverting the child-path INFO announcement
+from the main log. A chronological process logger now keeps the path and final report in the main file; a real
+logging/filter/production-factory subprocess regression failed before the change and now passes.
+
+Five initial focused cases failed before implementation (missing bootstrap and callback-retention API). Two negative
+controls fail independently: stripping admission from the real spawned target produces `perf=False viz=False` and
+fails the requested-flags assertion; restoring listener-time STOP cancellation delivers `None` before the drain and
+fails the retention assertion. Neither negative control changes production files. Focused canonical logging plus
+the new tests: **39 passed**; supervisor response/shutdown subset: **12 passed**; worker lifetime/fail-close/lease
+subset: **20 passed**; existing native-fault admission/ownership subset: **3 passed**. These checks open no window
+or audio device. The child gains the canonical single log writer only when logging is admitted (4096-record bound,
+2 MiB rotating file plus five backups); disabled profiles add neither files nor writer. Producers only enqueue;
+there is no new frame payload, cadence work or steady-state response traffic. The import-weight regression also
+passes (**1 passed**). No default admission, recovery policy, control-queue priority, build, load, frozen, Linux or visual
+acceptance belongs to this slice. After the two review corrections the focused H2 file passes **11 tests**.
+Terra's limited read-only recheck confirms that reserved-prefix disposal closes its finding and that the
+chronological logger avoids the visualizer filter's name/message classification; no new actionable finding. The
+independent reviewer did not run tests or native failure/shutdown scenarios.
+
 ## P3 readiness
 
 What ABI 2 already gives the native core:

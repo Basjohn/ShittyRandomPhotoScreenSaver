@@ -1250,6 +1250,14 @@ High-value permanent guards include:
   with simultaneous full Waveform history/cohort/burst/pulse buffers (product population and portable packet maximum),
   all DevCurve layers/nodes and Neon's maximum extended terrain plus event ring; a reduced-capacity negative control
   rejects the combined high-water payload.
+  `tests/test_visualizer_engine_diagnostics.py` proves admitted and disabled logging profiles across actual spawn,
+  persisted module exceptions in the child-only file, native-fault companion admission, enabled-to-disabled parent
+  re-entry, and the production factory snapshot. It also proves delayed STOP reports retain no GUI link/Qt object,
+  validate H1 mapping candidates, survive the supervisor's bounded listener/drain handoff, and remain bounded to one
+  unanswered report per reused worker with final cleanup cancellation. Negative controls strip the actual child
+  profile or restore STOP callback cancellation and fail the corresponding regression. No window/device is opened.
+  A late superseded STOP cannot enter/evict ordinary buffered replies or accumulate correlation tombstones; the
+  child-path announcement remains in the actual main log with visualizer sidecar routing enabled.
   `tests/test_usage_sampler.py` also pins the engine worker's labelled `--usage` breakdown (from the sample's own
   per-process pass; a topology refresh only when a named child is new, once per distinct PID even when the refresh
   cannot find it, forgotten once no longer named; a process the sample's own refresh added reports `na` CPU and stays
