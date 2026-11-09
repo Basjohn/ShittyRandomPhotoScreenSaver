@@ -701,11 +701,22 @@ top/bottom     -> viewport height
 Viewport resizing is part of the current CUSTOM contract, not optional QoL and not permission to stretch a
 rendered image. Save/Cancel and layout slots preserve scale and extent separately.
 
-Modes whose descriptor sets `content_rotation_capable` admit the shared CUSTOM **content quarter-turn** control. Orientation is layout/presentation state, not a Visualizer setting or preset value: a sparse `content_rotation_quarters_by_mode` map lives inside the existing CUSTOM `size_payload`, keyed by canonical mode ID, with missing/zero meaning 0°. A legacy global `content_rotation_quarters` scalar is interpretation-only compatibility input; new writes use the per-mode map. Odd quarter-turns swap the effective logical viewport axes before authored mode presentation and the shared render contract maps that logical world back into the unchanged physical card. This preserves stored X/Y/extent/uniform scale and avoids stretching finished pixels. Save/Cancel, layout slots, display transfer and Restore semantics remain in the existing CUSTOM owner. Rotation is event-driven and adds no timer, poller, alternate Visualizer cadence or per-frame Settings lookup. Modes without `content_rotation_capable` remain excluded through descriptor capability metadata, so the feature cannot couple an ineligible frameless mode back into the carded-mode contract.
+Modes whose descriptor sets `content_rotation_capable` admit the shared CUSTOM **content quarter-turn** control. Orientation is layout/presentation state, not a Visualizer setting or preset value: a sparse `content_rotation_quarters_by_mode` map lives inside the existing CUSTOM `size_payload`, keyed by canonical mode ID, with missing/zero meaning 0°. A legacy global `content_rotation_quarters` scalar is interpretation-only compatibility input; new writes use the per-mode map. Odd quarter-turns swap the effective logical viewport axes before authored mode presentation and the shared render contract maps that logical world back into the unchanged physical card. This preserves stored X/Y/extent/uniform scale and avoids stretching finished pixels. Save/Cancel, layout slots, display transfer and Restore semantics remain in the existing CUSTOM owner. Rotation is event-driven and adds no timer, poller, alternate Visualizer cadence or per-frame Settings lookup. Modes without `content_rotation_capable` remain excluded through descriptor capability metadata, so Sphere stays excluded and every mode retains its declared shell and geometry policy.
 
-Waveform Ribbon admits this content quarter-turn in ordinary and Fullscreen Edit, independently of its framed camera.
+Every mode except Voxel Sphere admits this content quarter-turn in ordinary Edit, independently of camera orbit;
+expansion-capable modes also offer it in Fullscreen Edit. Extruded Spectrum retains its frameless freeform extent.
 The Rotate Widget Content glyph depicts a quarter-turn around a content rectangle; Reset Camera retains its return
 arrow. Both actions keep their existing owners and Save/Cancel semantics.
+
+### Scene3D content orientation
+
+The existing Scene3D target renders a quarter-turned mode in an oriented logical viewport: odd turns swap its axes,
+with the same uniform pixel scale and immutable camera/geometry payload. The existing final composite maps integer
+texels rigidly back into the physical stage. No extra target, scene owner, render pass, sampler interpolation or camera
+roll setting is introduced. The physical card/freeform extent and clip stay fixed; the shared reach frame carries
+orientation through overflow. Ordinary 2D modes retain their existing vertex/UV quarter-turn mapping. Sphere declines
+rotation at the descriptor boundary. Legacy global quarter-turn scalars keep their historical mode admission; new
+per-mode maps can store every capable mode.
 
 ## 14A. Visualizer display admission / semantic mode + preset cycles
 
@@ -906,7 +917,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   the window (`reach_item_frame`). This overflow policy belongs to Extruded Spectrum; framed Neon Lake
   always clips its internal scene instead. Stacking: the Visualizer layer is
   above every widget and below only the OSD, Edit chrome and the context menu (`DisplayScene.qml`).
-- **CUSTOM quarter-turn** is not offered (Turn orbits the field instead).
+- **CUSTOM quarter-turn** turns the rendered field independently of camera orbit, through the shared Scene3D orientation.
 - **Live view pose:** Sphere, Extruded Spectrum and Neon Lake declare turn/tilt through
   `view_orbit_settings`. W/A/S/D holds one immutable `ViewOrbitMotion`; the logical capture evaluates it at its own
   timestamp, independent of OS key repeat. Held-left and Alt+left drags use the same orbit owner. The GUI owner settles the reached

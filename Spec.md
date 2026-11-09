@@ -700,8 +700,9 @@ already-deleted Shiboken wrapper must be reported/fail-closed and can never abor
 simulation cadence.
 
 Visualizer geometry is capability-driven. Modes using the shared reflowing card policy use the canonical 1.5 baseline aspect.
-Content quarter-turns follow the descriptor's capability in ordinary and Fullscreen Edit (Waveform Ribbon included),
-through the existing CUSTOM presentation owner. Fullscreen's Now Playing offers the shared Media transport bar or
+Every mode except Sphere offers content quarter-turns through the existing CUSTOM presentation owner in ordinary
+Edit and, where supported, Fullscreen Edit. Scene3D rotates its logical viewport and existing final composite at
+uniform pixel scale while preserving the camera and physical stage. Fullscreen's Now Playing offers the shared Media transport bar or
 floating glyphs and uses ordinary Media's metadata fitting/wrapping primitive; its detailed overlay contract is in
 `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` §G.
 

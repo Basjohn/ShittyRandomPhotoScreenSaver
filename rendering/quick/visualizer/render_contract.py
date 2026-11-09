@@ -127,6 +127,9 @@ class QuickVisualizerRenderFrame:
     matrix_values: tuple[float, ...]
     quad_vao: int
     trace_context: VisualizerModeTraceContext | None = None
+    # Scene3D's logical render frame only: its existing final composite restores the physical viewport.
+    scene_output_rotation: int = 0
+    scene_output_viewport: tuple[int, int, int, int] | None = None
 
     def __post_init__(self) -> None:
         if len(self.viewport) != 4 or min(self.viewport[2:]) <= 0:

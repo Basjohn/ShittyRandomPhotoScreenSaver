@@ -989,7 +989,8 @@ class WaveformStudioRenderer:
         return SimpleNamespace(snapshot=SimpleNamespace(logical=SimpleNamespace(mode_state=state),
                                                         presentation=presentation),
                                viewport=card.viewport, logical_size=card.logical_size,
-                               matrix_values=card.matrix_values, quad_vao=card.quad_vao)
+                               matrix_values=card.matrix_values, quad_vao=card.quad_vao,
+                               content_rotation_quarters=0, scene_output_rotation=0, scene_output_viewport=None)
 
     def _preview_layers(self, card: RenderCard) -> None:
         """Studio-only layer omission for rendered cards (``preview_hidden`` in the card style); the live

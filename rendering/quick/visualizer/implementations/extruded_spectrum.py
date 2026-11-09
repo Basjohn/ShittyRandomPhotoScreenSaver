@@ -32,7 +32,7 @@ from rendering.gl_programs.extruded_spectrum_program import (
 )
 from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, scene3d_detail
 from rendering.quick.scene3d.environment import BackdropEnvironment
-from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame
+from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame, orient_visualizer_scene_frame
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.shadows import directional_shadow_pass, directional_shadow_vector, extruded_shadow_length
 from rendering.quick.scene3d.stream import StreamRing
@@ -169,13 +169,14 @@ class QuickExtrudedSpectrumRenderer:
         """One unit of what this activation's first visible frame would otherwise compile or
         allocate (a program, the box mesh, the stream ring, the target, the backdrop copy), on a
         hidden frame; True once nothing is left."""
+        frame = orient_visualizer_scene_frame(frame)
         parameters = frame.snapshot.logical.mode_state.parameters
         samples, mirror = extruded_quality(parameters)
         target_frame = self._target_frame(frame, self._scene(frame))
         r = self._resources
         if not warm_programs([(r, "bars", EXTRUDED_VERTEX_SOURCE, EXTRUDED_FRAGMENT_SOURCE),
                               *((r, *program) for program in scene_target_programs(samples, False, False,
-                                                                                   overlay=True))]):
+                                                                                   overlay=True, rotation=frame.scene_output_rotation))]):
             return False
         if not r.has_mesh("box"):
             r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
@@ -189,6 +190,7 @@ class QuickExtrudedSpectrumRenderer:
         return True
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
+        frame = orient_visualizer_scene_frame(frame)
         snapshot = frame.snapshot
         logical = snapshot.logical
         mode_state = logical.mode_state
@@ -198,8 +200,6 @@ class QuickExtrudedSpectrumRenderer:
         count = min(_MAX_BARS, int(logical.common.bar_count))
         if count <= 0 or presentation.content_fade <= 0.0:
             return
-        if frame.content_rotation_quarters:
-            raise ValueError("Extruded Spectrum does not offer content rotation")
         levels, peaks = prepare_spectrum_shader_levels(logical.common.bars, mode_state.peaks, bar_count=count)
         scene = self._scene(frame)
         if scene is None:

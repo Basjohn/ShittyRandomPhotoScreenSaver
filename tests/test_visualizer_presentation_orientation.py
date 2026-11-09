@@ -58,12 +58,7 @@ def test_per_mode_rotation_map_is_sparse_capability_gated_and_legacy_safe() -> N
     assert resolve_content_rotation_for_mode(rotations, "sphere") == 0
     assert resolve_content_rotation_for_mode({}, "bubble", legacy_value=2) == 2
     migrated = content_rotation_map_from_legacy(2)
-    rotation_capable_modes = {
-        descriptor.mode_id
-        for descriptor in iter_all_visualizer_mode_descriptors()
-        if descriptor.presentation_policy.content_rotation_capable
-    }
-    assert migrated == {mode_id: 2 for mode_id in rotation_capable_modes}
+    assert migrated == {mode_id: 2 for mode_id in ("spectrum", "oscilloscope", "bubble", "devcurve")}
     assert all(
         get_visualizer_presentation_policy(mode_id).content_rotation_capable
         for mode_id in migrated
@@ -135,18 +130,17 @@ def test_rotation_changes_logical_domain_without_changing_physical_custom_geomet
     assert rotated.current_aspect_ratio == pytest.approx(280.0 / 630.0)
 
 
-def test_quarter_turn_capability_never_admits_frameless_scene() -> None:
+def test_content_rotation_admission_is_independent_of_shell_and_camera_except_sphere() -> None:
     from core.settings.visualizer_mode_registry import (
-        VisualizerShellPolicy,
         iter_visualizer_mode_descriptors,
     )
 
-    # Being carded is necessary, not sufficient: some framed 3D cards orbit
-    # their *contents* and must not receive the planar quarter-turn affordance.
     for descriptor in iter_visualizer_mode_descriptors():
         policy = descriptor.presentation_policy
-        if policy.content_rotation_capable:
-            assert policy.shell_policy is VisualizerShellPolicy.CARD, descriptor.mode_id
+        assert policy.content_rotation_capable is (descriptor.mode_id != "sphere")
+        if descriptor.mode_id in {"extruded_spectrum", "extruded_bubble", "shockwave_grid", "waveform_ribbon"}:
+            assert resolve_content_rotation_for_mode({}, descriptor.mode_id, legacy_value=2) == 0
+            assert resolve_content_rotation_for_mode({descriptor.mode_id: 1}, descriptor.mode_id) == 1
 
 
 def test_per_mode_rotation_roundtrip_stays_on_existing_custom_layout_owner() -> None:

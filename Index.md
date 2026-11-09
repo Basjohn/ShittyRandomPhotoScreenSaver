@@ -89,6 +89,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | current-screen Settings rows, physical saver/widget selection, absent-display lifecycle, monitor power/wake and saved CUSTOM replay | `Spec.md` → Visualizer display routing; `Docs/Contracts.md` → Saver display selection / Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md`; `Current_Plan.md` §5 |
 | current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for newly opened gates |
 | Visualizer planar/freeform CUSTOM geometry split and hot-swap contract | `Docs/Contracts.md`; `Spec.md` → Visualizer geometry; `Docs/Guides/Visualizer_Change_Checklist.md` §7A |
+| Visualizer content Rotate (every mode except Sphere), per-mode CUSTOM persistence and Scene3D output mapping | `Docs/Reference/Visualizer_Reference.md` → Scene3D content orientation; `Docs/Reference/Scene3D_Resources.md`; `widgets/spotify_visualizer/presentation_orientation.py` |
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer visual tuning: offscreen preview, side-by-side sheets, measurement, pixel-identity proof | `Docs/Guides/Visualizer_Visual_Tuning.md` |

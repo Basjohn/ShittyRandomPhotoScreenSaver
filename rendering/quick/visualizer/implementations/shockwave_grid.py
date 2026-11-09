@@ -30,7 +30,7 @@ from rendering.gl_programs.shockwave_grid_program import (
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, SHOCKWAVE_HALF_WIDTH,
     shockwave_idle, shockwave_wave_speed, shockwave_music_drive, shockwave_ridge_breath,
 )
-from rendering.quick.scene3d.frame import item_pixel_rect
+from rendering.quick.scene3d.frame import item_pixel_rect, orient_visualizer_scene_frame
 from rendering.quick.scene3d.heightfield import HeightfieldTexture
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.shafts import ShaftLight
@@ -145,21 +145,22 @@ class QuickShockwaveGridRenderer:
         return field, half_width, basin_view(parameters, field,
             aperture_scale=framed_aperture_scale(frame.snapshot.presentation, content=True)), maximum
 
-    def _programs(self, parameters, samples, bloom):
+    def _programs(self, parameters, samples, bloom, rotation=0):
         r = self._resources
         programs = [(r, "basin", NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE),
                     (r, "skyline", NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE)]
         if _sky_admitted(parameters):
             programs.append((r, "sky", NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE))
         programs.extend((r, *program) for program in scene_target_programs(samples, bloom, False, overlay=True,
-                                                                           shafts=_rays_admitted(parameters)))
+                                                                           shafts=_rays_admitted(parameters), rotation=rotation))
         return programs
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
+        frame = orient_visualizer_scene_frame(frame)
         parameters = frame.snapshot.logical.mode_state.parameters
         samples, glow, cells = shockwave_quality(parameters)
         r = self._resources
-        if not warm_programs(self._programs(parameters, samples, glow > 0.0)):
+        if not warm_programs(self._programs(parameters, samples, glow > 0.0, frame.scene_output_rotation)):
             return False
         self._adopt_terrain(parameter(parameters, "shockwave_grid_terrain"))
         if not r.has_mesh(_mesh_key((tuple(cells), self._lattice_extent))):
@@ -253,6 +254,7 @@ class QuickShockwaveGridRenderer:
         return position,size
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
+        frame = orient_visualizer_scene_frame(frame)
         snapshot = frame.snapshot
         logical = snapshot.logical
         mode_state = logical.mode_state
@@ -261,8 +263,6 @@ class QuickShockwaveGridRenderer:
         presentation = snapshot.presentation
         if presentation.content_fade <= 0.0:
             return
-        if frame.content_rotation_quarters:
-            raise ValueError("Neon Lake does not offer content rotation")
         if frame.logical_content_rect[2] <= 0.0 or frame.logical_content_rect[3] <= 0.0:
             return
         parameters = mode_state.parameters

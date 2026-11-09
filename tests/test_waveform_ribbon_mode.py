@@ -82,6 +82,7 @@ def frame_for(target, *, ready=True):
         outer_rect=(0.,0.,420.,280.),content_rect=(0.,0.,420.,280.),uniform_visual_scale=1.,
         shell_style=freeze_render_fields({'content_inset':0.,'authored_border_width':0.}))
     return SimpleNamespace(snapshot=SimpleNamespace(logical=SimpleNamespace(mode_state=state),presentation=presentation),
+        content_rotation_quarters=0,scene_output_rotation=0,
         viewport=(0,0,target.width,target.height),logical_size=(float(target.width),float(target.height)),
         matrix_values=(2/target.width,0,0,0,0,-2/target.height,0,0,0,0,1,0,-1,1,0,1),quad_vao=target.vao)
 

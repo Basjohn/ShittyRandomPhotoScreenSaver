@@ -221,6 +221,7 @@ def frame_of(target, state):
     from widgets.spotify_visualizer.render_state import freeze_render_fields
     presentation.shell_style = freeze_render_fields(presentation.shell_style)
     return SimpleNamespace(snapshot=SimpleNamespace(logical=SimpleNamespace(mode_state=state), presentation=presentation),
+        content_rotation_quarters=0, scene_output_rotation=0,
         viewport=(0, 0, target.width, target.height), logical_size=(float(target.width), float(target.height)),
         matrix_values=(2/target.width, 0, 0, 0, 0, -2/target.height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1), quad_vao=target.vao)
 

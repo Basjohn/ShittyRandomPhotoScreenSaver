@@ -3,7 +3,7 @@ from __future__ import annotations
 from core.waveform_ribbon_view import physical_view  # the camera owner; re-exported for its consumers
 from widgets.spotify_visualizer.render_state import WaveformRibbonFrame
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
-from rendering.quick.scene3d.frame import item_pixel_rect
+from rendering.quick.scene3d.frame import item_pixel_rect,orient_visualizer_scene_frame
 from rendering.quick.scene3d.waveform import WaveformScene
 from rendering.quick.scene3d.resources import warm_programs
 from rendering.quick.scene3d.target import scene_target_programs
@@ -25,6 +25,7 @@ class QuickWaveformRibbonRenderer:
     def has_resources(self):return self._scene.has_resources
 
     def prepare_step(self,frame):
+        frame=orient_visualizer_scene_frame(frame)
         state=frame.snapshot.logical.mode_state
         if not isinstance(state,WaveformRibbonFrame):raise TypeError('Waveform renderer requires its own mode frame')
         scene=self._scene;recipe=state.scene
@@ -37,7 +38,7 @@ class QuickWaveformRibbonRenderer:
             programs.extend(((scene.fog_resources,'fog medium',fog_inject_source(MEDIUM_GLSL)),
                              (scene.fog_resources,'sky',SKY_VERTEX,SKY_FRAGMENT)))
         programs.extend((scene.resources,*entry) for entry in scene_target_programs(4,recipe.bloom>0.,False,
-            overlay=True,oit=True,hdr=recipe.bloom>0.))
+            overlay=True,oit=True,hdr=recipe.bloom>0.,rotation=frame.scene_output_rotation))
         if not warm_programs(programs):return False
         if recipe.fog is not None:
             if not scene.field.prepare_step():return False
@@ -54,6 +55,7 @@ class QuickWaveformRibbonRenderer:
         return True
 
     def _draw(self,frame,opacity):
+        frame=orient_visualizer_scene_frame(frame)
         state=frame.snapshot.logical.mode_state
         if not isinstance(state,WaveformRibbonFrame):raise TypeError('Waveform renderer requires its own mode frame')
         if not state.ready:return

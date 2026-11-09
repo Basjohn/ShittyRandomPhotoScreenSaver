@@ -41,7 +41,7 @@ from core.settings.visualizer_paths import admit_path, world_point
 from rendering.gl_programs.scene3d import scene3d_detail
 from rendering.quick import gl_query
 from rendering.quick.scene3d.defocus import DefocusLayer
-from rendering.quick.scene3d.frame import item_pixel_rect
+from rendering.quick.scene3d.frame import item_pixel_rect, orient_visualizer_scene_frame
 from rendering.quick.scene3d.probe import SceneProbe
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
@@ -349,20 +349,21 @@ class QuickExtrudedBubbleRenderer:
             self._probe = SceneProbe("Extruded Bubble probe", size)
         return self._probe
 
-    def _programs(self, samples: int):
+    def _programs(self, samples: int, rotation: int = 0):
         r = self._resources
         return [*((r, *program) for _key,program in _PROGRAM_ROWS),
                 *((r, key, source) for key, source in _DRIFT_PROGRAMS),
                 *((r, *program) for program in scene_target_programs(samples, True, False, overlay=True,
-                                                                       background=True, oit=True, hdr=True))]
+                                                                       background=True, oit=True, hdr=True, rotation=rotation))]
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
         """One unit of what a first visible frame would otherwise compile or allocate (a program, the instance
         buffers, the shaft targets, the probe, the near layer, the scene target), on a hidden reveal frame; True
         once nothing is left."""
+        frame = orient_visualizer_scene_frame(frame)
         parameters = frame.snapshot.logical.mode_state.parameters
         samples = _scene_samples(parameters)
-        if not warm_programs(self._programs(samples)):
+        if not warm_programs(self._programs(samples, frame.scene_output_rotation)):
             return False
         if not self._shells.vao:
             self._allocate_instances()
@@ -379,14 +380,13 @@ class QuickExtrudedBubbleRenderer:
                                  background=True, oit=True, hdr=True)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
+        frame = orient_visualizer_scene_frame(frame)
         state = frame.snapshot.logical.mode_state
         if not isinstance(state, ExtrudedBubbleFrame):
             raise TypeError("Extruded Bubble renderer received another mode frame")
         presentation = frame.snapshot.presentation
         if presentation.content_fade <= 0.0:
             return
-        if frame.content_rotation_quarters:
-            raise ValueError("Extruded Bubble does not offer content rotation")
         x, y, width, height = item_pixel_rect(frame)
         if width <= 0 or height <= 0:
             return

@@ -340,10 +340,10 @@ after the operator's yes on a question card; agents never run load (invisible ch
 These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it.
 Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.7) in a separate checkpoint.
 
-- [ ] **1.0 Rotate (all modes except Sphere):** prove actual content rotation through every mode's renderer,
-  including Extruded Spectrum, EB, Neon Lake and Waveform, in every admitted ordinary/fullscreen context. State-only
-  capability/Edit gates are insufficient; keep the content quarter-turn distinct from camera orbit and prove the
-  drawn result at non-square extents. Then operator-check the rectangle/quarter-turn glyph against Reset Camera.
+- [~] **1.0 Awaiting Validation:** operator-check Rotate in every mode except Sphere in ordinary/fullscreen Edit,
+  including the rectangle/quarter-turn glyph against Reset Camera. Actual renderer pixels at non-square extents,
+  prepared Scene3D resources, per-mode Save/Cancel and all Studio frame builders have focused proof; the physical
+  stage and camera remain fixed. Extruded Spectrum retains its frameless overflow policy.
 - [ ] **1.1 Awaiting Logs:** no direct mode-switch cause in the supplied archive. On recurrence, correlate the
   reported time, prior/result mode, selected preset and runtime generation with the existing mode-transition owner
   and frame trace; distinguish explicit selection, enabled-mode normalization and Settings restoration first.

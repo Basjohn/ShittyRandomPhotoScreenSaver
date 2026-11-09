@@ -75,12 +75,13 @@ from OpenGL import GL as gl
 
 from rendering.quick import gl_query
 
-from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame, item_pixel_rect
+from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame, item_pixel_rect, scene_output_frame
 from .motion import MOTION_BLUR_PROGRAMS, MotionBlur
 from .post import BLOOM_PROGRAMS, FULLSCREEN_VERTEX_SOURCE, BloomChain
 from .shafts import SHAFT_PROGRAMS, SHAFT_SAMPLES_PROGRAMS, LightShafts, ShaftLight
 
 SCENE_TARGET_BUCKET = 64
+_ORIENTATION_UNIFORMS = ("uSceneRotation", "uOutputViewport")
 
 # The average of a multisampled texel's samples (what a resolve blit computes).
 _RESOLVE_GLSL = """
@@ -98,6 +99,25 @@ in vec2 vUv;
 out vec4 FragColor;
 uniform ivec2 uOrigin;
 uniform ivec2 uExtent;
+"""
+
+_ORIENTED_COMPOSITE_HEADER = """#version 460 core
+in vec2 vUv;
+out vec4 FragColor;
+uniform ivec2 uOrigin;
+uniform ivec2 uExtent;
+uniform int uSceneRotation;
+uniform ivec4 uOutputViewport;
+ivec2 sceneTexel() {
+    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    if (uSceneRotation != 0) {
+        pixel -= uOutputViewport.xy;
+        if (uSceneRotation == 1) pixel = ivec2(uOutputViewport.w - 1 - pixel.y, pixel.x);
+        else if (uSceneRotation == 2) pixel = uOutputViewport.zw - ivec2(1) - pixel;
+        else pixel = ivec2(pixel.y, uOutputViewport.z - 1 - pixel.x);
+    }
+    return pixel - uOrigin;
+}
 """
 
 # From a single-sample (or resolved) scene, with the glow added.
@@ -262,6 +282,17 @@ void main() {
 }
 """
 
+# Generated once from the same composites: ordinary sources and keys remain byte-identical. Only an active turn
+# links the oriented variant and binds its two uniforms; warm-up derives the same variant below.
+_ORIENTED_COMPOSITES = {
+    source: source.replace(_COMPOSITE_HEADER, _ORIENTED_COMPOSITE_HEADER).replace(
+        "ivec2 texel = ivec2(gl_FragCoord.xy) - uOrigin;", "ivec2 texel = sceneTexel();")
+    for source in (_COMPOSITE_FRAGMENT, _COMPOSITE_SAMPLES_FRAGMENT, _COMPOSITE_OVERLAY_FRAGMENT,
+                   _COMPOSITE_OVERLAY_SAMPLES_FRAGMENT, _COMPOSITE_OVERLAY_BLOOM_FRAGMENT,
+                   _COMPOSITE_OVERLAY_BLOOM_SAMPLES_FRAGMENT, _COMPOSITE_OVERLAY_SHAFTS_FRAGMENT,
+                   _COMPOSITE_OVERLAY_SHAFTS_SAMPLES_FRAGMENT)
+}
+
 # What has been drawn so far, captured mid-scope for later passes: colour, and the nearest depth (window depth).
 _BACKGROUND_FRAGMENT = """#version 460 core
 layout(location = 0) out vec4 Colour;
@@ -320,7 +351,7 @@ void main() {
 
 def scene_target_programs(samples: int, bloom: bool, motion: bool,
                           overlay: bool = False, shafts: bool = False, *, background: bool = False,
-                          oit: bool = False, hdr: bool = False) -> tuple[tuple[str, str, str], ...]:
+                          oit: bool = False, hdr: bool = False, rotation: int = 0) -> tuple[tuple[str, str, str], ...]:
     """(key, vertex, fragment) of every program ``end`` draws with for this setup, for a gradual
     warm-up. Keep in step with ``end`` (the warm-up bar renders a first frame that must compile
     nothing). With ``shafts`` (an overlay's light shafts) both the frames with a light and those
@@ -335,6 +366,8 @@ def scene_target_programs(samples: int, bloom: bool, motion: bool,
     for entry in _end_programs(multisampled, bloom, motion, overlay, shafts):
         if hdr and entry[0].startswith(("scene_overlay_bloom", "scene_overlay_shafts")):
             entry = (entry[0] + "_hdr", *entry[1:])
+        if rotation and entry[2] in _ORIENTED_COMPOSITES:
+            entry = (entry[0] + "_oriented", entry[1], _ORIENTED_COMPOSITES[entry[2]])
         programs.append(entry)
     return tuple(programs)
 
@@ -863,6 +896,8 @@ class SceneTarget:
         gl.glViewport(vx - x, vy - y, vw, vh)
 
     def end(self, frame: SceneFrame, resources, bloom: float = 0.0) -> None:
+        frame = scene_output_frame(frame)
+        rotation = getattr(frame, "scene_output_rotation", 0)
         x, y, width, height = self._rect
         allocated_width, allocated_height = self._key[0], self._key[1]
         multisampled = self._samples > 1
@@ -900,9 +935,13 @@ class SceneTarget:
         self._restore_inherited(frame)
         if self._overlay is not None:
             key = "scene_overlay_samples" if multisampled else "scene_overlay"
-            program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_OVERLAY_SAMPLES_FRAGMENT
-                                        if multisampled else _COMPOSITE_OVERLAY_FRAGMENT)
+            source = _COMPOSITE_OVERLAY_SAMPLES_FRAGMENT if multisampled else _COMPOSITE_OVERLAY_FRAGMENT
+            if rotation:
+                key, source = key + "_oriented", _ORIENTED_COMPOSITES[source]
+            program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, source)
             names = ("uMatrix", "uItemSize", "uOrigin", "uExtent", "uOpacity")
+            if rotation:
+                names += _ORIENTATION_UNIFORMS
             uniforms = resources.uniforms(key, names + (("uSceneSamples", "uSamples") if multisampled
                                                          else ("uScene",)))
             gl.glUseProgram(program)
@@ -916,19 +955,26 @@ class SceneTarget:
                 gl.glUniform1i(uniforms["uScene"], 0)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, scene)
         elif scene == self._names["colour"] and multisampled:
-            program = resources.program("scene_composite_samples", ITEM_QUAD_VERTEX_SOURCE,
-                                        _COMPOSITE_SAMPLES_FRAGMENT)
-            uniforms = resources.uniforms("scene_composite_samples", ("uMatrix", "uItemSize", "uOrigin", "uExtent",
-                                                                       "uSceneSamples", "uSamples"))
+            key, source = "scene_composite_samples", _COMPOSITE_SAMPLES_FRAGMENT
+            if rotation:
+                key, source = key + "_oriented", _ORIENTED_COMPOSITES[source]
+            program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, source)
+            uniforms = resources.uniforms(key, ("uMatrix", "uItemSize", "uOrigin", "uExtent",
+                                                "uSceneSamples", "uSamples")
+                                           + (_ORIENTATION_UNIFORMS if rotation else ()))
             gl.glUseProgram(program)
             gl.glUniform1i(uniforms["uSamples"], self._samples)
             gl.glUniform1i(uniforms["uSceneSamples"], 0)
             gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, scene)
         else:
-            program = resources.program("scene_composite", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_FRAGMENT)
-            uniforms = resources.uniforms("scene_composite", ("uMatrix", "uItemSize", "uScene", "uBloom", "uOrigin",
-                                                               "uExtent", "uBloomScale", "uBloomStrength"))
+            key, source = "scene_composite", _COMPOSITE_FRAGMENT
+            if rotation:
+                key, source = key + "_oriented", _ORIENTED_COMPOSITES[source]
+            program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, source)
+            uniforms = resources.uniforms(key, ("uMatrix", "uItemSize", "uScene", "uBloom", "uOrigin",
+                                                "uExtent", "uBloomScale", "uBloomStrength")
+                                           + (_ORIENTATION_UNIFORMS if rotation else ()))
             gl.glUseProgram(program)
             gl.glUniform2f(uniforms["uBloomScale"], 1.0 / allocated_width, 1.0 / allocated_height)
             gl.glUniform1f(uniforms["uBloomStrength"], float(bloom) if glow else 0.0)
@@ -942,6 +988,9 @@ class SceneTarget:
         gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
         gl.glUniform2i(uniforms["uOrigin"], x, y)
         gl.glUniform2i(uniforms["uExtent"], width, height)
+        if rotation:
+            gl.glUniform1i(uniforms["uSceneRotation"], rotation)
+            gl.glUniform4i(uniforms["uOutputViewport"], *frame.scene_output_viewport)
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         if scene == self._names["colour"] and multisampled:
@@ -1010,8 +1059,13 @@ class SceneTarget:
         # given one, so it keeps the linked default 0 (as drawn) with no per-frame uniform write.
         if self._exposure > 0.0:
             key += "_hdr"
+        rotation = getattr(frame, "scene_output_rotation", 0)
+        if rotation:
+            key, source = key + "_oriented", _ORIENTED_COMPOSITES[source]
         program = resources.program(key, ITEM_QUAD_VERTEX_SOURCE, source)
         names = ("uMatrix", "uItemSize", "uOrigin", "uExtent", "uOpacity", "uBloom", "uBloomScale", "uBloomStrength")
+        if rotation:
+            names += _ORIENTATION_UNIFORMS
         if self._exposure > 0.0:
             names += ("uHdrExposure",)
         if shafts:
@@ -1045,6 +1099,9 @@ class SceneTarget:
         gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
         gl.glUniform2i(uniforms["uOrigin"], x, y)
         gl.glUniform2i(uniforms["uExtent"], width, height)
+        if rotation:
+            gl.glUniform1i(uniforms["uSceneRotation"], rotation)
+            gl.glUniform4i(uniforms["uOutputViewport"], *frame.scene_output_viewport)
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendEquation(gl.GL_FUNC_ADD)
         gl.glBlendFuncSeparate(gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA)
@@ -1122,7 +1179,7 @@ class SceneTarget:
             gl.glColorMaski(2, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._inherited[0])
         gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._inherited[1])
-        gl.glViewport(*frame.viewport)
+        gl.glViewport(*(getattr(frame, "scene_output_viewport", None) or frame.viewport))
         if self._scissor:
             gl.glEnable(gl.GL_SCISSOR_TEST)
         else:

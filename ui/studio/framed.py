@@ -121,7 +121,7 @@ class QuickModeRenderer:
                                                         presentation=self._resolved(card)),
                                viewport=card.viewport, logical_size=card.logical_size,
                                matrix_values=card.matrix_values, quad_vao=card.quad_vao,
-                               content_rotation_quarters=0)
+                               content_rotation_quarters=0, scene_output_rotation=0, scene_output_viewport=None)
 
     def prepare(self, card: RenderCard, frame) -> bool:
         return bool(self._impl.prepare_step(self._frame(card, frame)))

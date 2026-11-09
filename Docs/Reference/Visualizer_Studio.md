@@ -93,6 +93,12 @@ reuses Settings' owners rather than restating them:
 An adapter supplies `schema()`, `scene_objects(values)`, `create_evaluator()` and `create_renderer()`; everything else
 is optional and defaults to "not offered":
 
+Studio preview frames explicitly declare zero CUSTOM content rotation (`content_rotation_quarters=0`,
+`scene_output_rotation=0`, `scene_output_viewport=None`). The Studio's camera authoring stays independent of desktop
+layout orientation. Adapters using `QuickVisualizerRenderFrame` receive these values from its canonical fields;
+the lightweight Waveform and shared Quick-mode frame builders declare the same fields before calling production
+preparation/rendering. Missing render-frame members are contract errors, never implicit runtime substitutions.
+
 - **Truthful evaluator.** `evaluate(time, values, exact=...)` returns an immutable frame from the mode's production
   logical owner (its own instance; never the desktop visualizer's runtime, history, engine or GL objects).
   Identical fixture, values and time give an identical frame; `exact=False` may approximate during a live gesture,

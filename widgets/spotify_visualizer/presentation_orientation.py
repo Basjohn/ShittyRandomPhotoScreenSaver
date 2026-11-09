@@ -2,7 +2,7 @@
 
 Orientation is CUSTOM layout/presentation state, not a Visualizer preset or
 technical setting.  Persisted ``viewport_extent`` remains the physical edited
-world; accepted carded modes derive an effective logical world from the same
+world; capable modes derive an effective logical world from the same
 extent when the content is quarter-turned.
 """
 from __future__ import annotations
@@ -17,6 +17,9 @@ from core.settings.visualizer_mode_registry import (
 
 CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY = "content_rotation_quarters"
 CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY = "content_rotation_quarters_by_mode"
+# Historical interpretation only: the old global token never turned orbiting scenes. Capability additions must not
+# reinterpret a saved layout. New writes use the per-mode map and have no dependency on this retired input shape.
+_LEGACY_GLOBAL_ROTATION_MODES = frozenset({"spectrum", "oscilloscope", "bubble", "devcurve"})
 
 
 def normalize_content_rotation_quarters(value: object) -> int:
@@ -35,11 +38,11 @@ def normalize_content_rotation_quarters(value: object) -> int:
 
 
 def content_rotation_map_from_legacy(value: object) -> dict[str, int]:
-    """Expand the former global token across every capable carded mode.
+    """Expand the former global token across its historical mode admission.
 
     This is a one-way compatibility interpretation only. The pre-per-mode token
-    applied to every accepted carded mode, including when Sphere temporarily hid
-    it, so migration must preserve that behavior before modes diverge.
+    applied only to the original planar modes; later camera-scene admission must
+    not reinterpret a saved scalar as a new orientation for those modes.
     """
 
     quarters = normalize_content_rotation_quarters(value)
@@ -48,7 +51,7 @@ def content_rotation_map_from_legacy(value: object) -> dict[str, int]:
     return {
         descriptor.mode_id: quarters
         for descriptor in iter_all_visualizer_mode_descriptors()
-        if descriptor.presentation_policy.content_rotation_capable
+        if descriptor.mode_id in _LEGACY_GLOBAL_ROTATION_MODES
     }
 
 
@@ -94,7 +97,7 @@ def resolve_content_rotation_for_mode(
         return 0
     if isinstance(value, Mapping) and canonical in value:
         return normalize_content_rotation_quarters(value.get(canonical))
-    return normalize_content_rotation_quarters(legacy_value)
+    return normalize_content_rotation_quarters(legacy_value) if canonical in _LEGACY_GLOBAL_ROTATION_MODES else 0
 
 
 def set_content_rotation_for_mode(

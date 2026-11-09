@@ -37,7 +37,7 @@ class VisualizerModePresentationPolicy:
     clip_policy: VisualizerClipPolicy
     viewport_resize_capable: bool
     # CUSTOM quarter-turn orientation is a presentation/layout capability.
-    # Carded modes opt in; freeform 3D modes use orbit instead of quarter-turn content rotation.
+    # Every mode except Sphere opts in; content orientation is independent of the internal camera orbit.
     content_rotation_capable: bool = False
 
 
@@ -327,7 +327,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
     # runtime implementation (bars, peaks, R-76 temporal treatment, the shape editor), while
     # owning its technical, bar, source-shaper and ghost profile. Frameless like Sphere (the 3D stands
     # over the wallpaper and may overflow its rectangle), reflowing with the viewport;
-    # CUSTOM quarter-turn content rotation is not offered (its Turn control orbits instead).
+    # CUSTOM quarter-turn rotates its composition independently of the internal Turn/tilt orbit.
     VisualizerModeDescriptor(
         "extruded_spectrum",
         "Extruded Spectrum",
@@ -337,6 +337,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
             shell_policy=VisualizerShellPolicy.FRAMELESS,
             clip_policy=VisualizerClipPolicy.VIEWPORT_RECT,
             viewport_resize_capable=True,
+            content_rotation_capable=True,
         ),
         frame_runtime_module="widgets.spotify_visualizer.spectrum_frame_runtime",
         frame_runtime_class="SpectrumFrameRuntime",
@@ -376,6 +377,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
             shell_policy=VisualizerShellPolicy.CARD,
             clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
             viewport_resize_capable=True,
+            content_rotation_capable=True,
         ),
         frame_runtime_module="widgets.spotify_visualizer.shockwave_frame_runtime",
         frame_runtime_class="ShockwaveGridFrameRuntime",
@@ -417,6 +419,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
             shell_policy=VisualizerShellPolicy.CARD,
             clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
             viewport_resize_capable=True,
+            content_rotation_capable=True,
         ),
         frame_runtime_module="widgets.spotify_visualizer.extruded_bubble_frame_runtime",
         frame_runtime_class="ExtrudedBubbleFrameRuntime",

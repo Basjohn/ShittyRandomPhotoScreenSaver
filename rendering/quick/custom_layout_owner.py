@@ -2453,7 +2453,7 @@ class QuickCustomLayoutOwner:
         }
         if extent is not None:
             payload["viewport_extent"] = [extent[0], extent[1]]
-        # Preserve all carded-mode orientations even when the currently selected
+        # Preserve all capable-mode orientations even when the currently selected
         # freeform 3D mode (for example Sphere) does not consume or expose them. Sphere
         # therefore renders at 0° without erasing dormant per-mode layout state.
         rotations = normalize_content_rotation_by_mode(

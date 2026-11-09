@@ -32,6 +32,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF
 from PySide6.QtQuick import QQuickItem
 
@@ -978,20 +979,21 @@ def test_a_mode_that_cannot_turn_its_content_gets_no_rotate_glyph(display, tmp_p
     settings = _manager(tmp_path)
     _draw(display, media=_Media(), config=_projection(_seed(settings)))
     _open(display)
-    edit = _Fullscreen(display, settings, _Visualizer("extruded_bubble", _ordinary_card("extruded_bubble")))
+    edit = _Fullscreen(display, settings, _Visualizer("sphere", _ordinary_card("sphere")))
     assert edit.start()
     assert {item.model_identity for item in edit.model._items} == {f"fullscreen_overlay.{p}" for p in PARTS}
     edit.owner.cancel()
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize("mode", ["spectrum", "waveform_ribbon"])
+@pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
 def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(qt_app, tmp_path, mode):
     """End to end on the production Visualizer owner (an unshown runtime, never shown): Fullscreen Edit's card turn
     reaches the owner through the scene's viewport/orientation seam, so the drawn display-wide card turns (same card
     rect) while nothing is committed; Cancel returns the committed orientation exactly; Save writes the turn into the
     Visualizer's CUSTOM entry and the live promotion (validated against the ordinary record, since the scene draws
     the display-wide one) commits it, so it stays after Edit ends and the collapsed card shows it at its own rect."""
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
     from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
     from rendering.quick.custom_layout_hydration import resolve_committed_visualizer_rect
     from rendering.quick.runtime import QuickDisplayRuntime
@@ -1000,6 +1002,8 @@ def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(q
     from tests._visualizer_presentation import make_visualizer_owner
     from widgets.spotify_visualizer.presentation_orientation import normalize_content_rotation_by_mode
 
+    descriptor = get_visualizer_mode_descriptor(mode)
+    fullscreen = descriptor.supports_expanded_display
     settings = _manager(tmp_path)
     _seed(settings)
     factory = QuickSceneFactory()
@@ -1008,6 +1012,10 @@ def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(q
                                   window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
     owner = make_visualizer_owner(runtime, bar_count=32, initial_mode=mode)
     controller = owner.controller
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
+    from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+
+    apply_presentation_vis_mode_kwargs(controller.presentation_state, frozen_visualizer_settings(mode))
     unit = SimpleNamespace(is_retired=False, screen_index=0, presenter=SimpleNamespace(bound_widget_ids=()),
                            runtime=runtime)
     edit = QuickCustomLayoutOwner(settings_manager=settings, participants_provider=lambda: (unit,),
@@ -1021,21 +1029,45 @@ def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(q
 
     def turn() -> None:
         model = scene.custom_layout_overlay.model
+        identity = "fullscreen_overlay.visualizer" if fullscreen else "spotify_visualizer"
         row = next(index for index, item in enumerate(model._items)
-                   if item.model_identity == "fullscreen_overlay.visualizer")
+                   if item.model_identity == identity)
+        qt_app.processEvents()
+        glyph = next(item for item in _visual_items(scene.custom_layout_overlay.item)
+                     if item.objectName() == f"customLayoutRotateContent-{identity}")
+        assert glyph.isVisible()
         assert model.rotateContent(row)
 
     try:
         owner.bind(engine_generation=1, activation_id=1)
         ordinary = drawn()
         extent = controller.committed_viewport_extent
-        assert owner.set_expanded_display(True)
+        if fullscreen:
+            assert owner.set_expanded_display(True)
         expanded = drawn()
-        assert expanded.outer_rect != ordinary.outer_rect and expanded.content_rotation_quarters == 0
+        assert (expanded.outer_rect != ordinary.outer_rect) is fullscreen
+        assert expanded.content_rotation_quarters == 0
         scene.set_visualizer_startup_reveal_opacity(1.0)
 
+        if mode == "sphere":
+            assert edit.start()
+            model = scene.custom_layout_overlay.model
+            row = next(index for index, item in enumerate(model._items) if item.model_identity == "spotify_visualizer")
+            assert not model._items[row].content_rotation_capable
+            qt_app.processEvents()
+            glyph = next(item for item in _visual_items(scene.custom_layout_overlay.item)
+                         if item.objectName() == "customLayoutRotateContent-spotify_visualizer")
+            assert not glyph.isVisible()
+            assert model.rotateContent(row) is False
+            assert drawn().content_rotation_quarters == 0
+            assert edit.cancel()
+            return
+
+        def start_edit():
+            return edit.start_fullscreen(unit, _value(settings)) if fullscreen else edit.start()
+
         # Turn, then Cancel: the display-wide card turns in place, nothing is committed; Cancel restores it exactly.
-        assert edit.start_fullscreen(unit, _value(settings))
+        assert start_edit()
         turn()
         turned = drawn()
         assert turned.content_rotation_quarters == 1 and turned.outer_rect == expanded.outer_rect
@@ -1045,7 +1077,7 @@ def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(q
         assert drawn() == expanded and controller.committed_content_rotation_quarters == 0
 
         # Turn, then Save: written into the Visualizer's CUSTOM entry at the card's own rect, promoted live.
-        assert edit.start_fullscreen(unit, _value(settings))
+        assert start_edit()
         binding = next(iter(edit._bindings.values()))
         turn()
         drawn()
@@ -1053,13 +1085,14 @@ def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(q
         assert edit.save()
         assert controller.committed_content_rotation_quarters == 1
         assert drawn().content_rotation_quarters == 1
-        entry = _visualizer_entry(settings, binding.screen)
+        entry = _visualizer_entry(settings, binding.screen, mode)
         assert normalize_content_rotation_by_mode(entry.size_payload.get("content_rotation_quarters_by_mode")) == {
             mode: 1}
         saved = resolve_committed_visualizer_rect(entry, binding.geometry.size())
         assert all(abs(a - b) <= 0.5 for a, b in zip(saved.getRect(), ordinary.outer_rect))
         # Collapsing shows the ordinary card turned, at its own rect.
-        assert owner.set_expanded_display(False)
+        if fullscreen:
+            assert owner.set_expanded_display(False)
         collapsed = drawn()
         assert collapsed.content_rotation_quarters == 1 and collapsed.outer_rect == ordinary.outer_rect
     finally:
