@@ -3,6 +3,7 @@ import "ColumnRailGeometry.js" as ColumnGeometry
 
 OverlayWidget {
     id: gmailRoot
+    cardSurfaceLegibilityInk: gmailModel.timestampColor
     objectName: "gmailPresentation"
 
 

@@ -151,15 +151,14 @@ def test_a_stored_selection_survives_its_themes_material_tag_change(tmp_path) ->
 
 
 @pytest.mark.parametrize("mode", NEW_MATERIALS)
-def test_the_non_windows_underlay_applies_the_materials_own_tint(mode) -> None:
+def test_the_non_windows_base_and_shared_window_fill_apply_material_tint_once(mode) -> None:
     from dataclasses import replace
-
     from ui.settings_material_underlay import DARK_MATERIAL_NEUTRAL, material_underlay
     from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME, NativeBackdropStyle, Rgba
     from ui.theme_semantics import composite_over
-
     theme = replace(DEFAULT_DARK_SETTINGS_THEME, backdrop=NativeBackdropStyle(mode=mode, tint=Rgba(40, 90, 160, 60)))
-    expected = composite_over(theme.backdrop.native_tint(), DARK_MATERIAL_NEUTRAL)
     underlay = material_underlay(theme)
-    assert underlay.a == 255
-    assert max(abs(underlay.r - expected.r), abs(underlay.g - expected.g), abs(underlay.b - expected.b)) <= 1
+    assert underlay == DARK_MATERIAL_NEUTRAL
+    expected = composite_over(theme.color("window.dialog_glass"), composite_over(theme.material_tint(), underlay))
+    actual = composite_over(theme.window_surface(), underlay)
+    assert max(abs(a-b) for a,b in zip(actual.as_tuple(), expected.as_tuple())) <= 1

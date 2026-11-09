@@ -1,4 +1,5 @@
 import QtQuick
+import "SurfaceContrast.js" as SurfaceContrast
 
 // One card's surface material (Docs/Architecture/Card_Surface_Materials.md). It samples
 // the display's one shared SurfaceBackdropSource through this card's rounded shape and
@@ -11,21 +12,23 @@ ShaderEffect {
 
     property var backdrop: null
     property string material: "acrylic"
+    property real opacityAdjust: 0.0
     property real cornerRadius: 8.0
     property real contentInset: 8.0
     property real borderWidth: 0.0
     property color normalColor: "#b3101010"
     property color tintColor: "#b3101010"
     property color textColor: "#ffffffff"
+    property color legibilityInk: Qt.rgba(textColor.r, textColor.g, textColor.b, textColor.a * 0.55)
 
-    // The card's legibility panel (2.5 px inside the border, concentric with the card's own
-    // radius) holds the card text colour at this luminance contrast. It is the one darker
-    // panel on the card, from above the header to below the last element; no per-line rows or
-    // per-run plates sit on it, so it also carries the faint runs (drawn at 55-76 % of the text
-    // colour: dates, age tags, PLAYING): 7:1 for the full colour is the measured value that
-    // keeps every faint small run at 4.5:1 or better (Card_Surface_Materials.md 3.3). It acts
-    // only where the blurred backdrop is bright.
-    readonly property real panelContrastFloor: 7.0
+    // One concentric panel carries the card's steady ink. The required reference
+    // ratio is derived from that ink's actual colour/effective alpha at style edges;
+    // the shader separately composes material density and enforces the linear-light
+    // ink floor. No per-line rows or per-run plates sit on the card itself.
+    readonly property real panelContrastFloor: SurfaceContrast.requiredReferenceContrast(textColor, legibilityInk)
+    readonly property var contrastLimits: SurfaceContrast.limits(textColor, panelContrastFloor)
+    readonly property vector4d panelLimits: Qt.vector4d(contrastLimits[0], contrastLimits[1],
+                                                       contrastLimits[2], contrastLimits[3])
     // A child control without text (Media's volume track) passes false: no darker panel, no
     // floor, so its material and backdrop read through.
     property bool legibilityPanel: true
@@ -33,18 +36,18 @@ ShaderEffect {
     // Presentation constants per material (one shader, different uniforms):
     //   blurTint        = (blur level 0 light .. 1 heavy, tint opacity at theme alpha 0, at 1, saturation)
     //   lightNoise      = (luminosity pull toward the tint, grain, haze toward white, smoke darkening)
-    //   glassLegibility = (edge highlight, refraction px, legibility shift, contrast floor)
+    //   glassLegibility = (edge highlight, refraction px, panel density relief, ink contrast floor)
     readonly property var parameters: ({
-        "acrylic": [Qt.vector4d(1.0, 0.42, 0.70, 1.35), Qt.vector4d(0.30, 0.030, 0.0, 0.0),
-                    Qt.vector4d(0.0, 0.0, 0.10, surface.panelContrastFloor)],
+        "acrylic": [Qt.vector4d(1.0, legibilityPanel ? 0.294 : 0.336, legibilityPanel ? 0.49 : 0.56, 1.35), Qt.vector4d(legibilityPanel ? 0.21 : 0.24, 0.030, 0.0, 0.0),
+                    Qt.vector4d(0.0, 0.0, 0.30, surface.panelContrastFloor)],
         "glass": [Qt.vector4d(0.0, 0.05, 0.28, 1.15), Qt.vector4d(0.0, 0.0, 0.0, 0.0),
-                  Qt.vector4d(0.20, 5.0, 0.14, surface.panelContrastFloor)],
-        "frosted": [Qt.vector4d(1.0, 0.20, 0.42, 0.80), Qt.vector4d(0.0, 0.045, 0.22, 0.0),
-                    Qt.vector4d(0.05, 0.0, 0.10, surface.panelContrastFloor)],
-        "mica": [Qt.vector4d(1.0, 0.72, 0.86, 0.70), Qt.vector4d(0.45, 0.0, 0.0, 0.0),
-                 Qt.vector4d(0.0, 0.0, 0.06, surface.panelContrastFloor)],
-        "smoked": [Qt.vector4d(0.45, 0.35, 0.58, 0.55), Qt.vector4d(0.0, 0.012, 0.0, 0.45),
-                   Qt.vector4d(0.06, 0.0, 0.08, surface.panelContrastFloor)]
+                  Qt.vector4d(0.20, legibilityPanel ? 4.5 : 5.0, 0.20, surface.panelContrastFloor)],
+        "frosted": [Qt.vector4d(1.0, legibilityPanel ? 0.16 : 0.20, legibilityPanel ? 0.336 : 0.42, 0.80), Qt.vector4d(0.0, 0.045, legibilityPanel ? 0.176 : 0.22, 0.0),
+                    Qt.vector4d(0.05, 0.0, 0.20, surface.panelContrastFloor)],
+        "mica": [Qt.vector4d(1.0, legibilityPanel ? 0.504 : 0.576, legibilityPanel ? 0.602 : 0.688, 0.70), Qt.vector4d(legibilityPanel ? 0.315 : 0.36, 0.0, 0.0, 0.0),
+                 Qt.vector4d(0.0, 0.0, 0.30, surface.panelContrastFloor)],
+        "smoked": [Qt.vector4d(0.45, legibilityPanel ? 0.245 : 0.28, legibilityPanel ? 0.406 : 0.464, 0.55), Qt.vector4d(0.0, 0.012, 0.0, legibilityPanel ? 0.315 : 0.36),
+                   Qt.vector4d(0.06, 0.0, 0.30, surface.panelContrastFloor)]
     })
     readonly property var resolvedParameters: parameters[material] || parameters["acrylic"]
 

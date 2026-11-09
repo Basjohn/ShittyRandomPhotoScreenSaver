@@ -1399,9 +1399,11 @@ def _build_mode_toggle_button_style() -> str:
         " }"
         "QPushButton:hover {"
         f" background-color: {_theme_qss_color('control.mode.hover_surface')};"
+        f" color: {render_qss_color(_SETTINGS_THEME.mode_state_ink('hover'))};"
         " }"
         "QPushButton:checked {"
         f" background-color: {_theme_qss_color('control.mode.checked_surface')};"
+        f" color: {render_qss_color(_SETTINGS_THEME.mode_state_ink('checked'))};"
         f" border-color: {_theme_qss_color('control.mode.checked_border')};"
         " }"
         "QPushButton:disabled {"
@@ -1431,9 +1433,11 @@ def _build_theme_link_button_style() -> str:
         " }"
         "QPushButton:hover {"
         f" background-color: {_theme_qss_color('control.mode.hover_surface')};"
+        f" color: {render_qss_color(_SETTINGS_THEME.mode_state_ink('hover'))};"
         " }"
         "QPushButton:checked {"
         f" background-color: {_theme_qss_color('control.mode.checked_surface')};"
+        f" color: {render_qss_color(_SETTINGS_THEME.mode_state_ink('checked'))};"
         f" border-color: {_theme_qss_color('control.mode.checked_border')};"
         " }"
         "QPushButton:disabled {"
@@ -1691,6 +1695,7 @@ _THEME_STYLE_BUILDERS = {
     "RSS_INPUT_STYLE": _build_rss_input_style,
     "SHADOW_DIRECTION_CELL_STYLE": _build_shadow_direction_cell_style,
     "MODE_TOGGLE_BUTTON_STYLE": _build_mode_toggle_button_style,
+    "THEME_LINK_BUTTON_STYLE": _build_theme_link_button_style,
     "TEXT_SECONDARY_COLOR_STYLE": _build_text_secondary_color_style,
     "SLIDER_STYLE": _build_slider_style,
     "CIRCLE_CHECKBOX_STYLE": _build_circle_checkbox_style,

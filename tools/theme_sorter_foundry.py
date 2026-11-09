@@ -244,7 +244,7 @@ class ThemeSorterFoundry(QMainWindow):
             title_text = _qss_rgba(theme.color('window.titlebar.text'))
             qss += f"""
                 QWidget#sorterRoot, QWidget#sorterPane {{ background: transparent; }}
-                QFrame#sorterShell {{ background: {_qss_rgba(theme.color('window.dialog_glass'))}; border: 2px solid {border}; border-radius: 10px; }}
+                QFrame#sorterShell {{ background: {_qss_rgba(theme.window_surface())}; border: 2px solid {border}; border-radius: 10px; }}
                 QLabel#sorterMuted {{ color: {helper}; }}
                 QLabel#sorterFaint {{ color: {helper}; font-size: 9pt; }}
                 QFrame#sorterGroup {{ background: {panel}; border: 1.5px solid {border}; border-radius: 10px; }}

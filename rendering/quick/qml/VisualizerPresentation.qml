@@ -253,6 +253,8 @@ Item {
     // (captured below z 20, never the Visualizer's pixels) and nothing runs per Visualizer
     // frame. Normal keeps this Loader inactive: no item, no node, the authored fill as before.
     property string cardSurfaceMaterial: "normal"
+    property real cardSurfaceOpacityAdjust: 0.0
+    property color cardNormalSurfaceColor: cardBackgroundColor
     property var cardSurfaceBackdrop: null
     property color cardSurfaceTextColor: "#ffffffff"
     readonly property bool cardSurfaceMaterialActive: cardShellEnabled
@@ -268,6 +270,7 @@ Item {
         sourceComponent: MaterialSurface {
             backdrop: visualizerPresentationRoot.cardSurfaceBackdrop
             material: visualizerPresentationRoot.cardSurfaceMaterial
+            opacityAdjust: visualizerPresentationRoot.cardSurfaceOpacityAdjust
             cornerRadius: visualizerPresentationRoot.cardCornerRadius
             contentInset: 0.0
             borderWidth: visualizerPresentationRoot.cardBorderWidth
@@ -283,7 +286,7 @@ Item {
         anchors.fill: parent
         visible: visualizerPresentationRoot.cardShellEnabled
             && !visualizerPresentationRoot.cardSurfaceMaterialActive
-        color: visualizerPresentationRoot.cardBackgroundColor
+        color: visualizerPresentationRoot.cardNormalSurfaceColor
         radius: visualizerPresentationRoot.cardCornerRadius
         z: 1
     }

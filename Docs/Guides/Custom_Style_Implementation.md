@@ -6,7 +6,7 @@ This document owns the durable relationship between Settings styling, runtime Wi
 
 Settings remains QWidget-based. Settings-window shadows under `ui/widgets/control_shadow.py` are Settings styling and are separate from runtime widget shadow authority.
 
-Settings visual values are owned by schema-v6 `SettingsThemeSpec`; the permanent native/theme architecture is `Docs/Architecture/Settings_Theme_Architecture.md`. The frameless translucent Settings top-level is a layered HWND on Windows. Acrylic and Glass remain accepted **Settings-window** backdrop modes: Acrylic uses the native tinted composition path, while Glass uses the untinted composition family and semantic Qt RGBA surfaces provide the visible palette/opacity.
+Settings visual values are owned by schema-v6 `SettingsThemeSpec`; the permanent native/theme architecture is `Docs/Architecture/Settings_Theme_Architecture.md`. The frameless translucent Settings top-level is a layered HWND on Windows. Acrylic and Glass remain accepted **Settings-window** backdrop modes: enabled materials use the untinted Accent blur family, while the shared resolved Qt window fill applies their material tint once. Glass has no material tint.
 
 Do not use native backdrop changes to compensate for QSS/semantic palette defects. `themes/dark.qss` is retired legacy structural stylesheet residue, not palette authority, and is **physically absent**. Settings/tray structure has narrow permanent owners and `SettingsThemeSpec` owns semantic visuals. Do not restore the file, add a fallback stylesheet loader, or introduce a replacement monolithic Settings QSS — even when the asset is absent.
 
@@ -59,6 +59,16 @@ The shipped `.srwtheme` is never mutated and all unedited values are preserved i
 Do not implement hidden per-property named-theme override inheritance on top of this state machine.
 
 ## Widgets -> General -> Style Overrides
+
+General Style Overrides also exposes Settings Opacity Adjust and Widget Opacity Adjust (-1..1, zero leaves the
+theme/material recipe in control). Both are persisted under `widgets.global`, outside both theme file schemas;
+`core/settings/surface_opacity.py` is the single admission/mapping authority. Adjust only semantic surface density,
+not root opacity, border or shadow. Settings derives any necessary semantic ink contrast correction after resolving
+the combined surface stack; the slider never fades text. Resetting theme colours does not erase these independent global overrides.
+On Normal widgets the override changes the main card/menu/Visualizer fill; child controls keep their authored
+Normal fills. On material widgets their child material surfaces inherit the same density override. Alpha-zero
+structural Settings roles remain empty rather than creating new painted layers. Existing save coalescing applies
+both sliders together, with one durable save after the input settles and an explicit flush on close.
 
 `Style Overrides` groups the card controls whose interactions users need to see together:
 

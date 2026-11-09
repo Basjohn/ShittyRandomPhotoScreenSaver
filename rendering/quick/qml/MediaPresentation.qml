@@ -3,6 +3,8 @@ import QtQuick.Effects
 
 OverlayWidget {
     id: mediaRoot
+    cardSurfaceLegibilityInk: Qt.rgba(playbackState.color.r, playbackState.color.g, playbackState.color.b,
+                                     playbackState.color.a * playbackState.opacity)
     objectName: "mediaPresentation"
 
 

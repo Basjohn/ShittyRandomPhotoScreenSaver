@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
 
+from core.settings.surface_opacity import settings_opacity_adjust
+
 
 SETTINGS_THEME_SCHEMA_VERSION = 6
 
@@ -143,11 +145,14 @@ class NativeBackdropStyle:
             )
 
     def native_tint(self) -> Rgba | None:
-        """The tint the native material lays over the blurred desktop, or None (Glass, Off: the desktop itself).
+        """The raw material tint recipe, or None for Glass/Off.
 
-        Frosted, Mica and Smoked are tinted AccentPolicy Acrylic with a tint derived from the authored one, so they
-        stay on the physically validated composition family (no DWM system backdrop; see
-        ``Docs/Architecture/Settings_Theme_Architecture.md``):
+        The shared runtime composition paints its resolved tint in Qt above
+        native untinted blur; this method remains the authoring recipe.
+
+        Frosted, Mica and Smoked derive distinct raw tint recipes from the
+        authored one. The runtime calibrates and composes these in Qt over the
+        shared native untinted blur (see Settings_Theme_Architecture.md):
 
         * ``frosted``: the tint mixed halfway to white, at least ``FROSTED_MIN_ALPHA``: a milky, heavier haze;
         * ``mica``: the tint itself at least ``MICA_MIN_ALPHA``: a near-solid theme surface, wallpaper-tinted;
@@ -250,6 +255,11 @@ class SettingsThemeSpec:
     shadows: Mapping[str, ShadowStyle]
     gradients: Mapping[str, GradientStyle] = field(default_factory=dict)
     schema_version: int = SETTINGS_THEME_SCHEMA_VERSION
+    # Bounded derived semantic cache: this immutable theme's finite surface-role
+    # and ink map at one admitted opacity value. Not a persistence or lifetime owner.
+    _surface_projection_cache: dict[str, Rgba] = field(default_factory=dict, init=False, compare=False, repr=False)
+    _surface_projection_adjustment: float | None = field(default=None, init=False, compare=False, repr=False)
+    _native_projection_tint: Rgba | None = field(default=None, init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -285,9 +295,43 @@ class SettingsThemeSpec:
         """Return one semantic colour or raise a useful error."""
 
         try:
-            return self.colors[token]
+            color = self.colors[token]
         except KeyError as exc:
             raise KeyError(f"Unknown Settings theme colour token: {token}") from exc
+        self._ensure_surface_projection_epoch()
+        return self._surface_projection_cache[token]
+
+    def _ensure_surface_projection_epoch(self) -> None:
+        adjustment = settings_opacity_adjust()
+        if adjustment != self._surface_projection_adjustment:
+            from ui.settings_surface_composition import project_settings_composition
+
+            colors, native = project_settings_composition(self, adjustment)
+            self._surface_projection_cache.clear()
+            self._surface_projection_cache.update(colors)
+            object.__setattr__(self, "_surface_projection_adjustment", adjustment)
+            object.__setattr__(self, "_native_projection_tint", native)
+
+    def material_tint(self) -> Rgba | None:
+        """The material tint painted once by the shared Qt window fill."""
+        self._ensure_surface_projection_epoch()
+        return self._native_projection_tint
+
+    def window_surface(self) -> Rgba:
+        """The shared Qt shell fill with material tint composed exactly once."""
+        self._ensure_surface_projection_epoch()
+        return self._surface_projection_cache["@window.composed"]
+
+    def native_backdrop_request(self) -> tuple[str, Rgba | None]:
+        from ui.settings_surface_composition import native_backdrop_request
+        return native_backdrop_request(self.backdrop.mode)
+
+    def mode_state_ink(self, state: str) -> Rgba:
+        """Cached readable ink for the existing mode control's checked/hover fill."""
+        if state not in ("checked", "hover"):
+            raise ValueError(f"Unknown mode control state: {state}")
+        self._ensure_surface_projection_epoch()
+        return self._surface_projection_cache[f"@control.mode.{state}"]
 
     def shadow(self, token: str) -> ShadowStyle:
         """Return one semantic shadow style or raise a useful error."""

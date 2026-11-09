@@ -534,6 +534,7 @@ class QuickSceneController(QObject):
         # The Visualizer card follows the Widget Theme baseline too (3.4); it adds demand
         # only while its presentation root exists on this display.
         self._visualizer_surface_material = "normal"
+        self._visualizer_surface_opacity_adjust = 0.0
         self._readiness = QuickSceneReadiness(
             screen_index=window.screen_index,
             runtime_generation=window.runtime_generation,
@@ -986,7 +987,7 @@ class QuickSceneController(QObject):
                 raise RuntimeError(f"DisplayScene.qml rejected context-menu property {name}")
         return True
 
-    def apply_context_menu_surface_material(self, material: str) -> bool:
+    def apply_context_menu_surface_material(self, material: str, opacity_adjust: float = 0.0) -> bool:
         """Project the Context Menu's surface material (the Widget Theme baseline)."""
 
         from .widgets.surface_material import normalize_surface_material
@@ -994,6 +995,13 @@ class QuickSceneController(QObject):
         root = self._scene_root
         if root is None or not self._readiness.admission_open:
             return False
+        root.setProperty("contextMenuSurfaceOpacityAdjust", opacity_adjust)
+        from core.settings.surface_opacity import adjusted_surface_density
+        for authored, projected in (("contextMenuSurfaceColor", "contextMenuNormalSurfaceColor"),
+                                    ("contextSubmenuSurfaceColor", "contextSubmenuNormalSurfaceColor")):
+            color = QColor(root.property(authored))
+            color.setAlphaF(adjusted_surface_density(color.alphaF(), opacity_adjust))
+            root.setProperty(projected, color)
         resolved = normalize_surface_material(material) or "normal"
         if root.property("contextMenuSurfaceMaterial") != resolved:
             if not root.setProperty("contextMenuSurfaceMaterial", resolved):
@@ -1003,7 +1011,7 @@ class QuickSceneController(QObject):
             self._on_surface_demand_changed()
         return True
 
-    def apply_visualizer_surface_material(self, material: str) -> bool:
+    def apply_visualizer_surface_material(self, material: str, opacity_adjust: float = 0.0) -> bool:
         """Project the Visualizer card's surface material (the Widget Theme baseline)."""
 
         from .widgets.surface_material import normalize_surface_material
@@ -1011,9 +1019,10 @@ class QuickSceneController(QObject):
         if self._scene_root is None or not self._readiness.admission_open:
             return False
         resolved = normalize_surface_material(material) or "normal"
-        if resolved == self._visualizer_surface_material:
+        if resolved == self._visualizer_surface_material and opacity_adjust == self._visualizer_surface_opacity_adjust:
             return True
         self._visualizer_surface_material = resolved
+        self._visualizer_surface_opacity_adjust = opacity_adjust
         self._project_visualizer_surface_material()
         self._on_surface_demand_changed()
         return True
@@ -1025,11 +1034,23 @@ class QuickSceneController(QObject):
         if root is None or not _qobject_is_alive(root):
             return
         material = self._visualizer_surface_material
+        root.setProperty("cardSurfaceOpacityAdjust", self._visualizer_surface_opacity_adjust)
+        self._project_visualizer_normal_surface()
         if material != "normal":
             root.setProperty("cardSurfaceTextColor", surface_text_color())
         if root.property("cardSurfaceMaterial") != material:
             if not root.setProperty("cardSurfaceMaterial", material):
                 raise RuntimeError("VisualizerPresentation.qml rejected its surface material")
+
+    def _project_visualizer_normal_surface(self) -> None:
+        from core.settings.surface_opacity import adjusted_surface_density
+
+        root = self._visualizer_root
+        if root is None or not _qobject_is_alive(root):
+            return
+        color = QColor(root.property("cardBackgroundColor"))
+        color.setAlphaF(adjusted_surface_density(color.alphaF(), self._visualizer_surface_opacity_adjust))
+        root.setProperty("cardNormalSurfaceColor", color)
 
     @property
     def surface_backdrop_owner(self) -> SurfaceBackdropOwner | None:
@@ -2480,6 +2501,7 @@ class QuickSceneController(QObject):
             "cardBackgroundColor",
             self._color_from_style(style["background_color"]),
         )
+        self._project_visualizer_normal_surface()
         root.setProperty(
             "cardBorderColor",
             self._color_from_style(style["border_color"]),

@@ -60,14 +60,16 @@ reuses Settings' owners rather than restating them:
 - **Rounded edge.** `StudioWindowEdge` paints `ui/settings_window_edge.py:paint_forged_window_edge`, the function
   `SettingsDialog.paintEvent` calls: the same radius, outer border (`chrome.outer_border`), backing and opaque corner
   caps (`window.titlebar.surface`), square when maximised. There is one forged edge, not one per window.
-- **Material.** Normal (`backdrop.mode` off) is an opaque window with no native call. Under a Glass or Acrylic theme
-  the window gets an alpha surface and, on first show, the theme's material through
-  `core/windows/dwm_blur.py:apply_backdrop`, the mode → AccentPolicy mapping Settings' own backdrop owner calls
-  (Acrylic: state 4 with the theme tint; Glass: untinted state 3). One window-level material, no per-panel blur or
-  capture. The window surface (`window.dialog_glass`) and title bar take the theme's translucent roles; the large
-  panels let the material through at the theme's polarity with an opacity floor (`PANEL_MATERIAL_FLOOR`, 0.88) so
-  dense instruments stay legible over any desktop; the viewport, toolbars and inputs stay opaque. The material is
-  chosen when the window opens (Settings is concealed while a Studio is open).
+- **Material.** Normal (`backdrop.mode` off) is opaque with no native material call. Every enabled Settings
+  material uses the shared `native_backdrop_request()` (untinted Accent state 3) on the existing window.
+  `SettingsThemeSpec.window_surface()` combines the calibrated material tint and semantic shell once in Qt;
+  Glass has no material tint. The title bar, panels, headers, tabs, tools, inputs and instrument wells use semantic
+  surfaces. A style-time guard checks their inks over the composed window and desktop poles; scene preview overlays
+  may retain a cheap opaque backing. The viewport and authored scene colours stay separate. Alpha is reserved before
+  native creation; Normal still paints opaque. The existing Settings-theme subscription updates QML tokens and the
+  native request on that same window. Enabled-material changes require only Qt tint/surface updates; Off removes
+  native blur once. No panel creates a blur/capture owner. This transparency contract does not establish native
+  rounded-corner clipping.
 - **Cards and sections.** Main panels, the response dock, the tab strip and the viewport frame are `StudioFrame`s:
   Settings' hard outside-only cast (`ui/widgets/control_shadow.py:cast_shadow_path`, the `panel.group` shadow role at
   half its offset, `SHADOW_SCALE`), the surface, and the border stroked once along one continuous path
@@ -79,8 +81,8 @@ reuses Settings' owners rather than restating them:
   the editor and its fill ghosted every row into an empty-looking panel (operator, 7 Nov;
   `tests/test_waveform_studio_editors.py`, pixel contrast with a negative control).
 - **Instrument wells.** Signal-trace cards, the response-curve box and the transport bar (with its time readout) sit
-  on the `well` role: the viewport tone while the theme's own text reads on it at 4.5:1 (every dark theme, unchanged),
-  else the theme's input surface (a light theme). Their inks (`wellText`, `wellDim`, `wellTrace1..3`) are the panel's
+  on the `well` role derived from the theme's input surface in both palette polarities. Their inks
+  (`wellText`, `wellDim`, `wellTrace1..3`) are the panel's
   text and trace colours checked on the well (`ui/studio/theme.py`).
 - **Viewport corners.** The viewport frame reaches 2 px past its column so the slot keeps its exact place and size
   (the scene's pixels are unchanged) while every slot corner lies inside the frame's rounded outline; the frame's

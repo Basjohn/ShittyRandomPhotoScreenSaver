@@ -58,6 +58,7 @@ from tools.foundry_chrome import (  # noqa: E402
     FoundryTitleBar, FoundryAppearanceDialog, apply_native_backdrop,
     configure_frameless_window, resolve_tool_theme, save_tool_theme_id,
 )
+from ui.settings_theme_qss import render_qss_rgba255
 from tools.godzip_foundry_theme import render_foundry_stylesheet  # noqa: E402
 
 from core.settings import visualizer_preset_file as _preset_file  # noqa: E402  (shape-preserving preset-file owner)
@@ -1117,7 +1118,7 @@ class VisualizerPresetRepairApp(QMainWindow):
         qss = render_foundry_stylesheet(theme, use_settings_controls=True)
         qss += f"""
             QWidget#presetRoot, QWidget#presetPane {{ background: transparent; }}
-            QFrame#presetShell {{ background: {rgba('window.dialog_glass')}; border: 2px solid {rgba('panel.border')}; border-radius: 10px; }}
+            QFrame#presetShell {{ background: {render_qss_rgba255(theme.window_surface())}; border: 2px solid {rgba('panel.border')}; border-radius: 10px; }}
             QFrame#presetGroup {{ background: {rgba('panel.group.surface')}; border: 1px solid {rgba('panel.border')}; border-radius: 10px; }}
             QLabel#presetMuted {{ color: {rgba('text.secondary')}; }}
             QLabel#presetHeading {{ font-weight: 700; }}

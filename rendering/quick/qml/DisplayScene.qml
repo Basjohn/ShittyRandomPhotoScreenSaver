@@ -41,6 +41,9 @@ Item {
     // the display's shared backdrop, bound by the scene controller only while some
     // surface is not Normal. The backdrop item itself is parented here by Python at z 2.
     property string contextMenuSurfaceMaterial: "normal"
+    property real contextMenuSurfaceOpacityAdjust: 0.0
+    property color contextMenuNormalSurfaceColor: contextMenuSurfaceColor
+    property color contextSubmenuNormalSurfaceColor: contextSubmenuSurfaceColor
     property var contextMenuSurfaceBackdrop: null
     property bool perfHudEnabled: false
     property string perfHudText: ""
@@ -360,6 +363,9 @@ Item {
         submenuIndicatorBorderColor: displayScene.contextSubmenuIndicatorBorderColor
         submenuIndicatorFillColor: displayScene.contextSubmenuIndicatorFillColor
         surfaceMaterial: displayScene.contextMenuSurfaceMaterial
+        surfaceOpacityAdjust: displayScene.contextMenuSurfaceOpacityAdjust
+        normalSurfaceColor: displayScene.contextMenuNormalSurfaceColor
+        normalSubmenuSurfaceColor: displayScene.contextSubmenuNormalSurfaceColor
         surfaceBackdrop: displayScene.contextMenuSurfaceBackdrop
         z: 300
     }

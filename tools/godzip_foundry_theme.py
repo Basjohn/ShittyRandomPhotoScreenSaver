@@ -138,7 +138,7 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec, *, use_settings_controls
     panel = _rgba(theme, "panel.group.surface")
     subsection = _rgba(theme, "panel.subsection.surface")
     border = _rgba(theme, "panel.border")
-    dialog = _rgba(theme, "window.dialog_glass")
+    dialog = render_qss_rgba255(theme.window_surface())
     titlebar = _rgba(theme, "window.titlebar.surface")
     title_text = _color(theme, "window.titlebar.text")
     tab_surface = _rgba(theme, "navigation.subtab.surface")

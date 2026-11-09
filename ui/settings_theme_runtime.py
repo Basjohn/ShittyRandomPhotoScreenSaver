@@ -62,7 +62,7 @@ def subscribe_settings_theme(
     return unsubscribe
 
 
-def set_active_settings_theme(theme: SettingsThemeSpec) -> bool:
+def set_active_settings_theme(theme: SettingsThemeSpec, *, force_refresh: bool = False) -> bool:
     """Activate ``theme`` and synchronously refresh subscribed renderers.
 
     Returns ``True`` when the active theme changed and ``False`` for an
@@ -75,7 +75,7 @@ def set_active_settings_theme(theme: SettingsThemeSpec) -> bool:
         raise TypeError("Active Settings theme must be a SettingsThemeSpec")
 
     previous = _active_theme
-    if theme == previous:
+    if theme == previous and not force_refresh:
         return False
 
     _active_theme = theme
@@ -123,6 +123,30 @@ def reset_active_settings_theme() -> bool:
     """Restore the built-in Default Dark theme through the normal live path."""
 
     return set_active_settings_theme(DEFAULT_DARK_SETTINGS_THEME)
+
+
+def apply_settings_opacity_adjust(value: object) -> bool:
+    """Refresh existing semantic renderers after a persisted surface override changes."""
+    from core.settings.surface_opacity import project_settings_opacity_adjust, settings_opacity_adjust
+
+    previous = settings_opacity_adjust()
+    if not project_settings_opacity_adjust(value):
+        return False
+    notified = []
+    try:
+        for listener in tuple(_listeners):
+            notified.append(listener)
+            listener(_active_theme)
+    except Exception:
+        project_settings_opacity_adjust(previous)
+        for listener in reversed(notified):
+            try:
+                listener(_active_theme)
+            except Exception:
+                logger.exception("Settings surface-opacity rollback renderer failed")
+        raise
+    logger.info("[SETTINGS_THEME] surface_opacity_adjust=%+.2f", settings_opacity_adjust())
+    return True
 
 
 def activate_settings_theme_file(

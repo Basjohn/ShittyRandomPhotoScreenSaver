@@ -252,16 +252,17 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
 - [~] **1.6 Awaiting Validation:** Achievement Pulse counted disabled provider fields as painted capsule rows;
   replaying the saved payload on Edit entry then changed the canvas. The enabled-row regression is green.
   Check child placement after Settings/fullscreen return with `--geo`; other families' extent floors are static.
-- [ ] **1.7 Materials (separate reversible slice):** inspect every supplied `assets/temp` comparison; reduce the
-  excessive widget/Settings card density by material while preserving the good volume surfaces, adjust Glass's
-  distortion/inset, and apply themed surfaces throughout Studio with legible controls. Then add Settings Opacity
-  Adjust and Widget Opacity Adjust (-1..1, neutral 0) in Style Overrides through existing semantic owners.
-  Correct the composed-stack legibility guard so underlying layers do not each demand the same text contrast and
-  defeat the transparency improvement; prove visible relief and readable text at its actual painted surface.
-  Actual-image validation uses the operator's `uwyTD.jpg` light wallpaper and `Usu_Underwater_Lab_1440p.png` dark
-  wallpaper under `C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET`. Migrate the proven native untinted-blur /
-  Qt semantic-tint composition through one owner across Settings, Studio and Foundry; repeat the four-case native
-  image matrix after focused off-screen checks. The old tinted Accent alpha sweep provided no visible light relief.
+- [~] **1.7 Awaiting Validation (separate reversible slice):** operator-compare the supplied widget material
+  screenshots with current cards, especially the good Glass/Frosted volume surfaces, Glass inset/distortion, and
+  Studio panels/tabs/headers/wells. Exercise Settings Opacity Adjust and Widget Opacity Adjust in Style Overrides
+  (-1..1, neutral 0). Contracts and evidence: `Docs/Architecture/Card_Surface_Materials.md`,
+  `Docs/Architecture/Settings_Theme_Architecture.md`, `Docs/Reference/Visualizer_Studio.md`.
+  Final native Settings checks use both exact operator wallpapers under
+  `C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET`; transparency is visible and sampled QLabel cores pass.
+  Final Studio renders are never-shown alpha compositions, without native DWM proof. Check live Studio material
+  switching/snap/resize and the remaining unsampled control/delegate inks. Small isolated GPU checks show an active
+  increase (largest raw whole-frame rise about 0.020 ms for Glass), not performance neutrality or load acceptance.
+  Native rounded corners remain open at 1.9; do not equate material transmission with a clipping fix.
 - [~] **1.8 Awaiting Validation:** operator-check Gmail and Reddit/Reddit2 column gestures: top grips reorder;
   solid-span endpoints change start/width and truncation. Retained-QML proof covers transformed opposite-edge
   stability, all-row updates, collision policy, Save/Cancel, Undo, slots and fresh-profile hydration.

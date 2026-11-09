@@ -88,7 +88,7 @@ def studio(qt_app):
     disable_per_call_gl_error_checking()
     opened = []
 
-    def open_mode(mode, *, renderer=None, theme=None):
+    def open_mode(mode, *, renderer=None, theme=None, transparent=False):
         adapter = create_adapter(mode)
         adapter.recorded_clips = lambda: ()
         if renderer is not None:
@@ -96,7 +96,7 @@ def studio(qt_app):
         surfaces = []
 
         def factory(controller):
-            surfaces.append(OffscreenStudioSurface(controller, size=(1600, 900), present_on_show=False))
+            surfaces.append(OffscreenStudioSurface(controller, size=(1600, 900), present_on_show=False, transparent=transparent))
             return surfaces[0]
         controller = StudioController(adapter, _Store(mode), _Presence(), factory,
                                       theme_provider=(lambda: studio_theme(theme)) if theme is not None else None)
@@ -190,14 +190,57 @@ def test_normal_and_materials_follow_the_active_theme(studio, monkeypatch, mode)
     try:
         window_surface.window.winId = lambda: 4242          # never create or show the native window
         assert window_surface.material == mode
-        assert (window_surface.window.format().alphaBufferSize() == 8) == (mode != "off")
+        assert window_surface.window.format().alphaBufferSize() == 8
         window_surface.apply_backdrop()
         window_surface.apply_backdrop()                      # once, like Settings' first show
-        assert calls == ([] if mode == "off" else [(mode, theme.backdrop.native_tint())])
+        assert calls == ([] if mode == "off" else [theme.native_backdrop_request()])
     finally:
         window_surface.host.retire()
         window_surface.window.deleteLater()
         window_surface.host.release_engine()
+
+
+def test_open_surface_reconciles_native_material_and_opacity_on_theme_notifications(studio, monkeypatch):
+    from dataclasses import replace
+    from core import platform_paths
+    from core.settings.surface_opacity import project_settings_opacity_adjust, settings_opacity_adjust
+    from ui.settings_theme_spec import NativeBackdropStyle
+    from ui.studio.surface import StudioWindowSurface
+
+    monkeypatch.setattr(platform_paths, "IS_WINDOWS", True)
+    calls = []
+    monkeypatch.setattr("core.windows.dwm_blur.apply_backdrop",
+                        lambda hwnd, mode, tint=None: calls.append((mode, tint)) or mode != "off")
+    theme = _theme_with_mode("glass")
+    controller, _surface = studio("waveform_ribbon")
+    surface = StudioWindowSurface(controller, theme=theme)
+    window = surface.window
+    before = settings_opacity_adjust()
+    try:
+        window.winId = lambda: 4242
+        surface.apply_backdrop()
+        acrylic = _theme_with_mode("acrylic")
+        surface.apply_settings_theme(acrylic)
+        first_surface = acrylic.window_surface()
+        project_settings_opacity_adjust(.4)
+        surface.apply_settings_theme(acrylic)
+        assert acrylic.window_surface() != first_surface
+        assert calls == [("glass", None)]
+        off = replace(theme, backdrop=NativeBackdropStyle("off", theme.backdrop.tint))
+        surface.apply_settings_theme(off)
+        surface.apply_settings_theme(off)
+        assert [mode for mode, _tint in calls] == ["glass", "off"]
+        assert surface.window is window and surface.material == "off" and not surface.backdrop_applied
+        surface.apply_settings_theme(theme)
+        assert calls[-1][0] == "glass" and surface.backdrop_applied
+        surface.apply_settings_theme(off)
+        surface.apply_settings_theme(off)
+        assert [mode for mode, _tint in calls] == ["glass", "off", "glass", "off"]
+    finally:
+        project_settings_opacity_adjust(before)
+        surface.host.retire()
+        window.deleteLater()
+        surface.host.release_engine()
 
 
 def test_settings_uses_the_same_backdrop_mapping(monkeypatch):
@@ -221,7 +264,7 @@ def test_settings_uses_the_same_backdrop_mapping(monkeypatch):
 
     theme = replace(DEFAULT_DARK_SETTINGS_THEME, backdrop=NativeBackdropStyle(mode="acrylic", tint=Rgba(1, 2, 3, 90)))
     assert _Dialog()._apply_native_backdrop_theme(theme) is True
-    assert calls == [(7, "acrylic")]
+    assert calls == [(7, theme.native_backdrop_request()[0])]
 
 
 # ----------------------------------------------------------------- one-path borders, no seams
@@ -367,9 +410,37 @@ def test_the_scene_keeps_its_place_and_size(studio):
 
 # ----------------------------------------------------------------- static chrome
 def test_chrome_paints_once_and_idles(studio):
+    import numpy as np
+    from dataclasses import replace
+    from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME, NativeBackdropStyle, Rgba
     from ui.studio.chrome import StudioFrame, StudioWindowEdge
-    controller, surface = studio("waveform_ribbon")
+    theme = replace(DEFAULT_DARK_SETTINGS_THEME,
+                    backdrop=NativeBackdropStyle("acrylic", Rgba(13, 32, 60, 100)),
+                    colors={**DEFAULT_DARK_SETTINGS_THEME.colors,
+                            "panel.group.surface": Rgba(35, 70, 110, 180)})
+    controller, surface = studio("waveform_ribbon", theme=theme, transparent=True)
     surface.pump(3)
+    panel, = _named(surface.host.root, "objectsPanel")
+    frame = next(item for item in _named(surface.host.root, "panelFrame")
+                 if abs(item.x()-panel.x()) < .1 and abs(item.y()-panel.y()) < .1)
+    origin = panel.mapToScene(QPointF(panel.width()*.5, panel.height()-30))
+    x, y = round(origin.x()), round(origin.y())
+    painted_pixel = surface.grab()[y, x].astype(float)
+    fill = frame.property("surfaceColor")
+    top = frame.property("surfaceTopColor")
+    # Negative control: keep the actual border/text, remove only the broad fill.
+    frame.setProperty("surfaceColor", QColor(0,0,0,0))
+    frame.setProperty("surfaceTopColor", QColor(0,0,0,0))
+    surface.pump(2)
+    background = surface.grab()[y, x].astype(float)
+    assert painted_pixel[3] > background[3] + 10
+    alpha = fill.alphaF()
+    expected = np.array([fill.redF()*255*alpha, fill.greenF()*255*alpha,
+                         fill.blueF()*255*alpha, 255*alpha]) + background*(1-alpha)
+    assert np.max(np.abs(painted_pixel-expected)) <= 2
+    frame.setProperty("surfaceColor", fill)
+    frame.setProperty("surfaceTopColor", top)
+    surface.pump(2)
     items = [i for i in _named(surface.host.root, "panelFrame") + _named(surface.host.root, "viewportFrameSurface")
              + _named(surface.host.root, "viewportFrameBorder") + _named(surface.host.root, "studioWindowEdge")]
     assert items and all(isinstance(i, (StudioFrame, StudioWindowEdge)) for i in items)

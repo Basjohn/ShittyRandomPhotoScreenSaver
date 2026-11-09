@@ -21,14 +21,19 @@ Item {
     // fill and keeps the Loader below inactive; any other material samples the display's
     // shared backdrop (set by the host only while some surface uses one).
     property string surfaceMaterial: "normal"
+    property real surfaceOpacityAdjust: 0.0
     property var surfaceBackdrop: null
     property color surfaceTextColor: "#ffffffff"
+    property color surfaceLegibilityInk: Qt.rgba(surfaceTextColor.r, surfaceTextColor.g,
+                                                surfaceTextColor.b, surfaceTextColor.a * 0.55)
     readonly property bool surfaceMaterialActive: shellEnabled
         && surfaceMaterial !== "normal" && surfaceBackdrop !== null
     // Read by text runs inside the card (ShadowedText's legibility plate): the same
     // per-material uniforms the surface uses.
     readonly property var surfaceMaterialParameters: surfaceMaterialLoader.item
         ? surfaceMaterialLoader.item.resolvedParameters : null
+    readonly property var surfaceMaterialLimits: surfaceMaterialLoader.item
+        ? surfaceMaterialLoader.item.panelLimits : Qt.vector4d(0, 1, 1, 1)
     // Card CONTENT paints only within the card at every point in its lifecycle.
     // Background, border and the external shadow remain separate/unclipped.
 
@@ -107,12 +112,14 @@ Item {
         sourceComponent: MaterialSurface {
             backdrop: card.surfaceBackdrop
             material: card.surfaceMaterial
+            opacityAdjust: card.surfaceOpacityAdjust
             cornerRadius: card.cornerRadius
             contentInset: card.padding
             borderWidth: card.borderWidth
             normalColor: card.backgroundColor
             tintColor: card.backgroundColor
             textColor: card.surfaceTextColor
+            legibilityInk: card.surfaceLegibilityInk
         }
     }
 

@@ -374,10 +374,11 @@ def persist_settings_theme_selection(
 
 def activate_catalog_theme(
     entry: SettingsThemeCatalogEntry,
+    *, force_refresh: bool = False,
 ) -> bool:
     """Activate one already-validated catalogue entry exactly once."""
 
-    return set_active_settings_theme(entry.theme)
+    return set_active_settings_theme(entry.theme, force_refresh=force_refresh)
 
 
 def activate_persisted_settings_theme(
@@ -398,9 +399,12 @@ def activate_persisted_settings_theme(
 
     global _current_settings_theme_catalog
 
+    from core.settings.surface_opacity import project_settings_opacity_adjust, resolve_opacity_adjust
+
+    opacity_changed = project_settings_opacity_adjust(resolve_opacity_adjust(settings.get("widgets"), "settings"))
     catalog = build_settings_theme_catalog(themes_directory)
     resolution = resolve_persisted_settings_theme(settings, catalog)
-    activate_catalog_theme(resolution.entry)
+    activate_catalog_theme(resolution.entry, force_refresh=opacity_changed)
     _current_settings_theme_catalog = catalog
     return SettingsThemeStartupResult(
         catalog=catalog,

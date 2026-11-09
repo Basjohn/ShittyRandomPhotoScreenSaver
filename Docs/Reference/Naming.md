@@ -131,7 +131,7 @@ Card surface materials (`widgets.global.surface_material` and per-widget overrid
 | Neon Lake **surface style** glass | `core/settings/visualizer_mode_settings.py` (`_BASIN_GLASS`) | a `shockwave_grid_*` value |
 | Extruded Bubble **Glass bucket** and Lit Glass | `core/settings/visualizer_mode_settings.py` | `extruded_bubble_*` keys |
 
-"Acrylic" is both a window backdrop (`enable_acrylic_blur`) and a card material; cards never borrow the Settings AccentPolicy stack (R-61, `Docs/Architecture/Card_Surface_Materials.md`).
+"Acrylic" names Settings semantic tint over shared native blur, and a scene-local card material; cards never borrow the Settings AccentPolicy stack (R-61, `Docs/Architecture/Card_Surface_Materials.md`). The exercised state-4 primitive is separate from the shared Settings composition request.
 
 ## Grep hazards
 

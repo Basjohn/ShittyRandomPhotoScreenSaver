@@ -5176,7 +5176,7 @@ class GodzipFoundryWindow(QMainWindow):
             hwnd = int(self.winId())
             from core.windows.dwm_blur import apply_backdrop
 
-            enabled = apply_backdrop(hwnd, backdrop.mode, backdrop.native_tint())
+            enabled = apply_backdrop(hwnd, *theme.native_backdrop_request())
             self._native_backdrop_mode = backdrop.mode
             self._backdrop_applied = backdrop.mode == "off" or bool(enabled)
             return bool(enabled)

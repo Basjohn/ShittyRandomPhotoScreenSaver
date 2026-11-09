@@ -127,9 +127,16 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
     if card_style is None:
         return style
     material = resolve_surface_material(widgets_config, widget_id)
-    if material == NORMAL and card_style.surface_material == NORMAL:
+    from core.settings.surface_opacity import adjusted_surface_density, resolve_opacity_adjust
+
+    adjustment = resolve_opacity_adjust(widgets_config, "widget")
+    if material == NORMAL and card_style.surface_material == NORMAL and adjustment == 0.0:
         return style
+    background = QColor(card_style.background_color)
+    if material == NORMAL:
+        background.setAlphaF(adjusted_surface_density(background.alphaF(), adjustment))
     updated = replace(card_style, surface_material=material,
+                      surface_opacity_adjust=adjustment, background_color=background,
                       surface_text_color=surface_text_color() if material != NORMAL
                       else card_style.surface_text_color)
     return replace(style, card_style=updated)

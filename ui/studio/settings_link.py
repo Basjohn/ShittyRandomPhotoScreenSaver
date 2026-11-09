@@ -628,6 +628,10 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
         current = session()
         if current is not None and current.bridge is not None:
             current.bridge.set_theme(theme)
+            update_surface = getattr(current.surface, "apply_settings_theme", None)
+            if callable(update_surface):
+                from ui.settings_theme_runtime import get_active_settings_theme
+                update_surface(get_active_settings_theme())
     unsubscribe = subscribe_studio_theme(set_theme)
 
     def finished(*_args) -> None:

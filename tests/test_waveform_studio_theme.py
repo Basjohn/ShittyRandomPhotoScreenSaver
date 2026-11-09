@@ -18,12 +18,24 @@ def _rgb(text):
 @pytest.mark.parametrize("path", THEMES, ids=lambda p: p.stem[:40])
 def test_every_theme_yields_readable_studio_chrome(path):
     from ui.settings_theme_io import load_settings_theme_file
-    skin = studio_theme(load_settings_theme_file(path))
+    theme = load_settings_theme_file(path)
+    skin = studio_theme(theme)
     panel = _rgb(skin["panel"])
     assert contrast(_rgb(skin["text"]), panel) >= 4.5
     assert contrast(_rgb(skin["accent"]), panel) >= 3.0
     assert contrast(_rgb(skin["focus"]), panel) >= 3.0
     assert contrast(_rgb(skin["accentText"]), _rgb(skin["accentSoft"])) >= 4.5
+    if theme.backdrop.enabled:
+        from PySide6.QtGui import QColor
+        window = QColor(skin["windowSurface"])
+        for pole in (0.0, 1.0):
+            base = (pole, pole, pole)
+            base = tuple(channel * window.alphaF() + below * (1 - window.alphaF())
+                         for channel, below in zip((window.redF(), window.greenF(), window.blueF()), base))
+            alpha = float(skin["panelAlpha"])
+            composed = tuple(channel * alpha + below * (1 - alpha) for channel, below in zip(panel, base))
+            assert contrast(_rgb(skin["text"]), composed) >= 4.5
+            assert contrast(_rgb(skin["textDim"]), composed) >= 3.0
 
 
 def test_chrome_follows_the_theme_not_hard_coded_colours():
@@ -64,12 +76,9 @@ def test_instrument_well_inks_read_on_their_well_in_every_theme(path):
     skin = studio_theme(theme)
     for name, minimum in WELL_INKS.items():
         assert contrast(_rgb(skin[name]), _rgb(skin["well"])) >= minimum, name
-    if not settings_theme_is_light(theme):
-        # A dark theme keeps its look: the well is the viewport tone and the inks are the panel's own.
-        assert skin["well"] == skin["viewportBg"]
-        for ink, former in (("wellText", "text"), ("wellDim", "textDim"), ("wellTrace1", "trace1"),
-                            ("wellTrace2", "trace2"), ("wellTrace3", "trace3")):
-            assert skin[ink] == skin[former], ink
+    # Instrument wells are UI semantic surfaces in every palette polarity; the
+    # viewport backing belongs exclusively to the authored scene.
+    assert _rgb(skin["well"]) == _rgb(skin["input"])
 
 
 def test_the_former_viewport_well_is_illegible_on_a_light_theme_negative_control():
@@ -144,7 +153,10 @@ def test_trace_cards_and_the_transport_readout_wear_the_well(qt_app):
         (readout,) = found["transportTime"]
         (scrub,) = found["scrubBar"]
         assert readout.property("color") == QColor(skin["wellDim"])
-        assert scrub.property("color") == QColor(skin["well"])
+        # The transport overlays the scene, so it keeps the well's RGB opaque.
+        transport_colour = QColor(skin["well"])
+        transport_colour.setAlpha(255)
+        assert scrub.property("color") == transport_colour
         traces = found.get("signalTrace", [])
         assert traces, "the open group shows no signal trace"
         assert all(t.property("color") == QColor(skin["well"]) for t in traces)

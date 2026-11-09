@@ -190,6 +190,7 @@ def main() -> int:
                         help="A production capture PNG to place beside the Studio's presented frame")
     parser.add_argument("--framing", default="", help="Viewport framing id (default: the mode's own default)")
     parser.add_argument("--theme", type=Path, default=None, help="A .srtheme to activate for this capture")
+    parser.add_argument("--transparent", action="store_true", help="Keep the existing hidden surface alpha for wallpaper composition evidence; no DWM")
     parser.add_argument("--tag", default="", help="Suffix for output names")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=JSON",
                         help="Override one value of the in-memory store (evidence only; nothing is saved)")
@@ -268,7 +269,7 @@ def main() -> int:
     surfaces = []
 
     def factory(controller):
-        surface = OffscreenStudioSurface(controller, size=(width, height), present_on_show=False)
+        surface = OffscreenStudioSurface(controller, size=(width, height), present_on_show=False, transparent=args.transparent)
         surfaces.append(surface)
         return surface
 
@@ -278,7 +279,8 @@ def main() -> int:
     surface = surfaces[0]
     bridge = controller.bridge
     record = {"mode": mode, "preset": store.label, "size": [width, height], "fixture": args.fixture,
-              "time": args.time, "card_extent": list(extent) if extent else "baseline", "border": args.border}
+              "time": args.time, "card_extent": list(extent) if extent else "baseline", "border": args.border,
+              "offscreen_transparent": args.transparent, "native_dwm": False}
     try:
         def settle():
             for _ in range(240):

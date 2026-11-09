@@ -183,6 +183,7 @@ class OverlayCardStyle:
     # today's fill; anything else samples the display's shared backdrop. The text
     # colour is the legibility layer's reference.
     surface_material: str = "normal"
+    surface_opacity_adjust: float = 0.0
     surface_text_color: QColor = field(
         default_factory=lambda: QColor(255, 255, 255, 230)
     )
@@ -206,6 +207,7 @@ _CARD_STYLE_BINDINGS: tuple[tuple[str, str], ...] = (
     ("cardShadowExtendRight", "shadow_extend_right"),
     ("cardShadowExtendBottom", "shadow_extend_bottom"),
     ("cardSurfaceMaterial", "surface_material"),
+    ("cardSurfaceOpacityAdjust", "surface_opacity_adjust"),
     ("cardSurfaceTextColor", "surface_text_color"),
 )
 

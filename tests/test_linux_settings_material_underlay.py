@@ -26,16 +26,14 @@ def test_glass_is_an_untinted_neutral_matching_palette_polarity() -> None:
     assert material_underlay(_theme("glass", light=True)) == LIGHT_MATERIAL_NEUTRAL
 
 
-def test_acrylic_applies_its_authored_tint_at_its_authored_strength() -> None:
-    tint = Rgba(200, 40, 120, 128)
-    weight = 128 / 255
-    expected = tuple(round(base + (over - base) * weight) for base, over in (
-        (DARK_MATERIAL_NEUTRAL.r, 200), (DARK_MATERIAL_NEUTRAL.g, 40), (DARK_MATERIAL_NEUTRAL.b, 120)))
-    underlay = material_underlay(_theme("acrylic", tint))
-    assert (underlay.r, underlay.g, underlay.b, underlay.a) == (*expected, 255)
-    # A stronger tint moves further from the neutral, toward the tint.
-    stronger = material_underlay(_theme("acrylic", replace(tint, a=230)))
-    assert abs(stronger.r - 200) < abs(underlay.r - 200)
+def test_acrylic_qt_window_fill_applies_tint_once_above_neutral_underlay() -> None:
+    from ui.theme_semantics import composite_over
+    theme = _theme("acrylic", Rgba(200, 40, 120, 128))
+    neutral = material_underlay(theme)
+    assert neutral == DARK_MATERIAL_NEUTRAL
+    expected = composite_over(theme.color("window.dialog_glass"), composite_over(theme.material_tint(), neutral))
+    actual = composite_over(theme.window_surface(), neutral)
+    assert max(abs(a-b) for a,b in zip(actual.as_tuple(), expected.as_tuple())) <= 1
 
 
 class _DialogStub:
@@ -68,17 +66,16 @@ def _forbid_native(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("mode", ["frosted", "mica", "smoked"])
-def test_the_newer_materials_apply_their_derived_native_tint(mode) -> None:
-    """Frosted, Mica and Smoked: the same neutral, under the material's own derived tint (never the authored one)."""
+def test_the_newer_materials_apply_derived_tint_in_shared_qt_window_fill(mode) -> None:
+    from ui.theme_semantics import composite_over
     theme = _theme(mode, Rgba(90, 30, 110, 120))
-    tint = theme.backdrop.native_tint()
+    tint = theme.material_tint()
     assert tint is not None and tint != theme.backdrop.tint
-    weight = tint.a / 255
-    expected = tuple(round(base + (over - base) * weight) for base, over in (
-        (DARK_MATERIAL_NEUTRAL.r, tint.r), (DARK_MATERIAL_NEUTRAL.g, tint.g), (DARK_MATERIAL_NEUTRAL.b, tint.b)))
-    underlay = material_underlay(theme)
-    assert (underlay.r, underlay.g, underlay.b, underlay.a) == (*expected, 255)
-    assert underlay != DARK_MATERIAL_NEUTRAL
+    neutral = material_underlay(theme)
+    assert neutral == DARK_MATERIAL_NEUTRAL
+    expected = composite_over(theme.color("window.dialog_glass"), composite_over(tint, neutral))
+    actual = composite_over(theme.window_surface(), neutral)
+    assert max(abs(a-b) for a,b in zip(actual.as_tuple(), expected.as_tuple())) <= 1
 
 
 @pytest.mark.parametrize("mode", ["glass", "acrylic", "frosted", "mica", "smoked"])
@@ -113,7 +110,7 @@ def _rgba(text: str) -> tuple[int, int, int, int]:
 
 def _window_role(theme) -> Rgba:
     try:
-        return theme.color("window.dialog_glass")
+        return theme.window_surface()
     except KeyError:
         return Rgba(60, 60, 60, 20)                 # the Studio theme owner's own fallback
 
@@ -161,7 +158,7 @@ def test_non_windows_studio_window_never_calls_the_native_backdrop(monkeypatch) 
 
     def surface(mode: str) -> SimpleNamespace:
         return SimpleNamespace(material=mode, backdrop_applied=False, theme=_theme(mode, Rgba(90, 30, 110, 120)),
-                               window=SimpleNamespace(winId=lambda: 4242))
+                               window=SimpleNamespace(winId=lambda: 4242), _applied_backdrop_request=None)
 
     monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
     for mode in ALL_MATERIALS:
@@ -171,4 +168,4 @@ def test_non_windows_studio_window_never_calls_the_native_backdrop(monkeypatch) 
     monkeypatch.setattr("core.platform_paths.IS_WINDOWS", True)
     for mode in ALL_MATERIALS:
         assert StudioWindowSurface.apply_backdrop(surface(mode)) is True
-    assert calls == list(ALL_MATERIALS)
+    assert calls == ["glass"] * len(ALL_MATERIALS)

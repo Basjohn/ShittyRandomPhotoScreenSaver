@@ -45,7 +45,9 @@ BUILTIN_SETTINGS_THEME_ID = "builtin:default-dark"
 
 
 def _rgba(theme: SettingsThemeSpec, token: str) -> Rgba:
-    return theme.color(token)
+    # Pack authoring projects authored palette data, never process-local surface
+    # calibration or the operator's current Settings opacity override.
+    return theme.colors[token]
 
 
 def _gradient_triplet(theme: SettingsThemeSpec) -> tuple[Rgba, Rgba, Rgba]:

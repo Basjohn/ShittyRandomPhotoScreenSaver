@@ -66,6 +66,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | light-theme font/shadow ownership, native comparisons and accepted rendering cost | `Docs/Contracts.md` → Shadow authority; `Docs/Audits/Light_Theme_Legibility_2026-10-26.md` |
 | Settings hierarchy connector rails and semantic annotations | `ui/widgets/bucket_tree.py`; `Docs/Architecture/Settings_Theme_Architecture.md` → bucket children |
 | runtime Widget Theme / style override ownership | `Docs/Guides/Custom_Style_Implementation.md` |
+| Settings/Widget Opacity Adjust, combined surface density and cached semantic ink | `core/settings/surface_opacity.py`; `ui/settings_surface_composition.py`; `Docs/Architecture/Settings_Theme_Architecture.md` |
 | safety / guardrail router | `Docs/Guardrails.md` |
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | wallpaper cache, speculative source batches and image-worker ownership | `Docs/Contracts.md` → Wallpaper image cache and prefetch |

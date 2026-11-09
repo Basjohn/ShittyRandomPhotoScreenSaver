@@ -215,11 +215,15 @@ GLASS_SENSES: tuple[tuple[str, str, Claim], ...] = (
 )
 
 ACRYLIC = Claim(
-    '"Acrylic" is both a window backdrop (`enable_acrylic_blur`) and a card material; cards never borrow the '
-    "Settings AccentPolicy stack (R-61, `Docs/Architecture/Card_Surface_Materials.md`)",
-    (_p("core/windows/dwm_blur.py", r"^def enable_acrylic_blur\b"),
+    '"Acrylic" names Settings semantic tint over shared native blur, and a scene-local card material; cards never '
+    "borrow the Settings AccentPolicy stack (R-61, `Docs/Architecture/Card_Surface_Materials.md`). The exercised "
+    "state-4 primitive is separate from the shared Settings composition request",
+    (_p("ui/settings_surface_composition.py", r"^def native_backdrop_request\b"),
+     _p("ui/settings_theme_spec.py", r"^    def window_surface\b"),
+     _p("core/windows/dwm_blur.py", r"^def enable_acrylic_blur\b"),
      _p("rendering/quick/widgets/surface_material.py", r'"acrylic"'),
      _p("Docs/Architecture/Card_Surface_Materials.md", r"R-61")))
+
 
 HAZARDS: tuple[Claim, ...] = (
     Claim('"shockwave" is also Neon Lake\'s **onset-wave concept** (`ShockwaveEvent`, `SHOCKWAVE_WAVE_GLSL`, '

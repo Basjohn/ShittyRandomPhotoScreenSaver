@@ -70,8 +70,7 @@ and the [bounded native validation record](../Audits/Light_Theme_Legibility_2026
 A complete `.srtheme` owns:
 
 - `backdrop.mode`: `off`, `acrylic`, `glass`, `frosted`, `mica` or `smoked`;
-- `backdrop.tint`: native tint payload; retained in the schema for all modes, but Glass does not use it as a native
-  tint. The tinted materials need non-zero alpha. Frosted, Mica and Smoked derive their native tint from it
+- `backdrop.tint`: material tint recipe payload; retained in the schema for all modes, but Glass does not apply it. The tinted materials need non-zero alpha. Frosted, Mica and Smoked derive their material tint from it
   (`NativeBackdropStyle.native_tint`, renderer constants in `ui/settings_theme_spec.py`): Frosted mixes it halfway to
   white at a heavier strength (a milky haze), Mica keeps it near-solid (the wallpaper only faintly through), Smoked
   desaturates and darkens it. They are the card materials' family (`Card_Surface_Materials.md` 3.5) on the Settings
@@ -178,20 +177,46 @@ meet that bar over a bright wallpaper; that is recorded in `Current_Plan.md`, no
 
 ## Proven Windows backdrop mapping
 
-Both translucent native materials use `SetWindowCompositionAttribute` / `WCA_ACCENT_POLICY`. This is intentional: both remain in the same composition family that physically works with the layered Qt Settings HWND.
+Material density calibration belongs to runtime semantic composition, not authored catalogue files.
+`core/settings/surface_opacity.py` owns the Settings Opacity Adjust mapping (-1..1; zero is the calibrated
+recipe, negative removes a fraction of density, positive fills remaining transparency). The cached projection in
+`ui/settings_surface_composition.py` applies calibration to the **combined native and Qt stack**, then solves each
+neutral overlay alpha against its already projected parent. A native underlay, window shell and group must not each
+claim an independent contrast floor for the same text. Acrylic, Frosted and Mica reduce combined density by their
+material calibration; Glass gains density; Smoked reduces dark surfaces only. Structural alpha-zero roles remain absent.
+Interaction fills retain their authored state distinction and receive the same mapping at their own layer.
+
+The same module owns the actual text/surface stack map used by the analytic legibility tool. After density is resolved,
+semantic ink keeps its authored RGB when raising ink alpha suffices; otherwise the smallest readable mix toward either black or white preserves hue and seeks the role's contrast bar.
+Encoded ink brightness alone does not choose polarity; the actual composed locations do.
+Mode buttons resolve checked and hover ink separately against those states, including styled subsection parents;
+the lock icon consumes the same checked/hover ink, with checked precedence. State inks are cached derivatives, never extra authored tokens. Faint 10–11px tertiary/helper ink reserves
+0.3 contrast headroom above 4.5 for actual antialiasing; mode-state ink reserves 5.1 for its small geometric icon/text. No extra panel density is invented when a very
+transparent stack cannot meet a conservative desktop bound. Native pixel evidence remains necessary for actual ink,
+blur and layered-window composition; the analytic model cannot prove every painted glyph or native AA sample.
+`SettingsThemeSpec.material_tint()` exposes the cached material tint, and `window_surface()` composes the existing
+window role over that tint once. `native_backdrop_request()` selects the existing untinted Accent state-3 blur for
+every enabled Settings material. This avoids Acrylic state 4's observed alpha-insensitive luminosity on light tints;
+Qt owns the controllable tint and haze. Glass has no material tint and retains its untinted primitive; Normal remains
+Off. The raw `NativeBackdropStyle.native_tint()` recipe and authoring files remain unchanged.
+
+Settings, Studio and Foundry chrome consume this shared native request and combined Qt window fill. The explicit
+non-Windows underlay represents only the neutral blurred-desktop base; the same Qt fill applies the tint once.
+Analytic tools model the material tint and semantic stack once. One bounded per-theme projection cache is invalidated
+by the admitted override, so paint-time lookups perform no contrast search. Native visual acceptance belongs in
+`Current_Plan.md`; this transparency contract does not establish native rounded-corner clipping.
+
+All enabled Settings materials use `SetWindowCompositionAttribute` / `WCA_ACCENT_POLICY` state 3 on the existing
+layered Qt HWND. The native adapter still exposes state 4 as a primitive, but the shared Settings composition request
+does not select it.
 
 ```text
-Off
-    -> ACCENT_DISABLED (state 0)
+Off -> ACCENT_DISABLED (state 0)
 
-Acrylic
-    -> ACCENT_ENABLE_ACRYLICBLURBEHIND (state 4)
-    -> theme backdrop.tint is the native tint/strength
-
-Glass
-    -> ACCENT_ENABLE_BLURBEHIND (state 3)
-    -> fresh zeroed AccentPolicy; no native GradientColor/tint
-    -> semantic Qt RGBA surfaces own visible Glass colour and opacity
+Glass/Acrylic/Frosted/Mica/Smoked
+    -> ACCENT_ENABLE_BLURBEHIND (state 3), zeroed native GradientColor
+    -> Qt window_surface applies the resolved material tint once (none for Glass)
+    -> remaining semantic Qt surfaces compose above it
 ```
 
 `ACCENT_ENABLE_BLURBEHIND` is the undocumented AccentPolicy state used through `SetWindowCompositionAttribute`. It is **not** the documented `DwmEnableBlurBehindWindow` API. Windows documentation about the latter must not be used to declare AccentPolicy state 3 equivalent, obsolete or unsupported.
@@ -227,11 +252,10 @@ publication before the live native-backdrop listeners receive the committed them
 
 The native mode is stateful but simple. Avoid compositor churn.
 
-- Glass -> Glass: native no-op; only semantic Qt surfaces refresh.
-- Acrylic -> Acrylic: reapply state 4 only when its native tint changes.
-- Acrylic <-> Glass: replace the AccentPolicy state directly; do not tear the shared mechanism down first unless a proven platform requirement appears. Frosted, Mica and Smoked are state 4 like Acrylic, so a change between any tinted materials is a tint change.
-- Any material -> Off: state 0 disables the AccentPolicy backdrop.
-- Off -> material: install the requested state once.
+- Enabled material -> enabled material: native no-op; only the cached Qt tint/surfaces change.
+- Any material -> Off: state 0 disables the AccentPolicy backdrop once.
+- Off -> material: install state 3 once.
+- Repeated Off is cached even though the adapter returns False to mean no material is active.
 
 No post-show retries, zero-delay timers, stylesheet replay, event-loop pumping or repeated native calls are part of this contract.
 
@@ -248,9 +272,9 @@ Native Glass/Acrylic exist only on Windows. On every other platform the dialog's
 (`SettingsDialog._apply_native_backdrop_theme`) never calls `core/windows/dwm_blur.py`; it paints one opaque
 underlay beneath the dialog content instead (`ui/settings_material_underlay.py`), announced once per process with
 `[PLATFORM]`. The underlay stands in for "the blurred desktop under the material": a neutral matched to the
-palette polarity (`settings_theme_is_light`), with the native tint (`backdrop.native_tint()`: Acrylic's authored
-tint, the other tinted materials' derived one) applied at its strength and Glass left untinted, exactly mirroring the native split above. Semantic surfaces paint over it unchanged and theme
-files carry no per-platform data. Mode `off` paints no underlay. Windows never paints it.
+palette polarity (`settings_theme_is_light`). The shared Qt `window_surface()` combines the resolved material tint
+and shell above this neutral exactly once, matching the Windows split between native untinted blur and Qt tint.
+Theme files carry no per-platform data. Mode `off` paints no underlay. Windows never paints it.
 The Studio window, which wears the same material, never calls `dwm_blur` off Windows either
 (`StudioWindowSurface.apply_backdrop`); its theme owner (`ui/studio/theme.py` `studio_theme`) composes the window
 surface over this same underlay, so the Studio is opaque there for every material. Off Windows, Settings text over

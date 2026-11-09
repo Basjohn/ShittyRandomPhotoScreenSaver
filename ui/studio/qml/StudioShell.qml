@@ -21,7 +21,8 @@ Rectangle {
     }
     function tc(name, fallback) { return (t && t[name]) ? t[name] : fallback }
     readonly property color cBg: tc("bg", "#0b0d14")
-    readonly property color cPanel: tc("panel", "#121621")
+    readonly property color cPanelBase: tc("panel", "#121621")
+    readonly property color cPanel: withAlpha(cPanelBase, panelAlpha)
     readonly property color cRaised: tc("panelRaised", "#181d2b")
     readonly property color cOutline: tc("outline", "#7a6248")
     readonly property color cOutlineSoft: tc("outlineSoft", "#3a3128")
@@ -41,7 +42,7 @@ Rectangle {
     readonly property color cTrace2: tc("trace2", "#b8b8c0")
     readonly property color cTrace3: tc("trace3", "#6aa9d9")
     // Instrument wells (trace cards, the response curve, the transport bar) and the inks checked on them
-    // (ui/studio/theme.py): the viewport tone on a dark theme, the theme's input surface on a light one.
+    // (ui/studio/theme.py): the theme's input surface in every palette polarity.
     readonly property color cWell: tc("well", cViewport)
     readonly property color cWellText: tc("wellText", cText)
     readonly property color cWellDim: tc("wellDim", cDim)
@@ -70,8 +71,8 @@ Rectangle {
     readonly property color cCloseHover: tc("closeHover", "#e81123")
     readonly property real panelAlpha: Number(tc("panelAlpha", "1"))
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, c.a * a) }
-    readonly property color cPanelFill: withAlpha(cPanel, panelAlpha)
-    readonly property color cPanelFillTop: withAlpha(cPanelTop, panelAlpha)
+    readonly property color cPanelFill: cPanel
+    readonly property color cPanelFillTop: cPanelTop
     readonly property color cShadow: tc("shadow", "#5a000000")
     readonly property real shadowX: Number(tc("shadowX", "3"))
     readonly property real shadowY: Number(tc("shadowY", "4"))
@@ -1527,9 +1528,9 @@ Rectangle {
         // Header ---------------------------------------------------------------------
         Rectangle {
             id: header
-            color: shell.translucent ? shell.withAlpha(shell.cHeader, shell.panelAlpha) : shell.cHeader
             readonly property bool wrapped: modeHeader.width + presetActions.width + 44 > width
             width: parent.width; height: wrapped ? 96 : 56
+            color: shell.cHeader
             gradient: shell.translucent ? null : headerGradient
             Gradient {
                 id: headerGradient
@@ -1785,7 +1786,7 @@ Rectangle {
                 x: (parent.width - tabRow.width - 8) / 2; y: (parent.height - 42) / 2
                 width: tabRow.width + 8 + shell.shadowX; height: 42 + shell.shadowY
                 radius: 9; strokeWidth: shell.cardBorder
-                surfaceColor: shell.withAlpha(Qt.darker(shell.cPanel, 1.15), shell.panelAlpha)
+                surfaceColor: Qt.darker(shell.cPanel, 1.15)
                 strokeColor: shell.cOutlineSoft
                 shadowColor: shell.cShadow; shadowX: shell.shadowX; shadowY: shell.shadowY
             }

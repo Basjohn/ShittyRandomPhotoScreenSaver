@@ -27,6 +27,7 @@ Loader {
     sourceComponent: MaterialSurface {
         backdrop: child.card.cardSurfaceBackdrop
         material: child.card.cardSurfaceMaterial
+        opacityAdjust: child.card.cardSurfaceOpacityAdjust
         cornerRadius: child.cornerRadius
         contentInset: 0.0
         // Negative: the panel spans the whole face, so there is no inner rim (the shaders'
@@ -37,5 +38,6 @@ Loader {
         tintColor: Qt.rgba(child.fillColor.r, child.fillColor.g, child.fillColor.b,
                            child.fillColor.a * child.tintAlphaScale)
         textColor: child.card.cardSurfaceTextColor
+        legibilityInk: child.card.cardSurfaceTextColor
     }
 }

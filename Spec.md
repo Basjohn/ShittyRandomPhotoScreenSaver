@@ -173,20 +173,24 @@ or restart the same visit through menu/Ctrl changes. Settings collection remains
 
 Settings remains a frameless translucent QWidget top-level. `SettingsThemeSpec` schema v6 is the semantic visual
 authority and compiled Default Dark is the unconditional no-file fallback. Complete `.srtheme` files may request
-`off`, `acrylic`, `glass`, `frosted`, `mica` or `smoked` and must pass strict whole-theme validation (Frosted, Mica
-and Smoked are AccentPolicy Acrylic with a tint derived from the authored one: `Docs/Architecture/Settings_Theme_Architecture.md`).
+`off`, `acrylic`, `glass`, `frosted`, `mica` or `smoked` and must pass strict whole-theme validation. The shared runtime
+composition derives material density and ink from the authored recipe without mutating it:
+`Docs/Architecture/Settings_Theme_Architecture.md`.
 Schema v6 owns `about.art.liquid`, the explicit Settings-only colour used to recolour only the masked liquid/background field in the two About artworks while preserving source shading, alpha and all unmasked artwork. Every shipped theme seeds this role from its own primary accent (`chrome.outer_border` RGB at full alpha); Nocturne Split therefore uses its pink-red primary accent while other themes use their own primary colour. Schema-v5 user themes migrate the new role from that same existing primary accent rather than failing whole-theme load.
 
-The current Windows Settings top-level is a layered HWND. Both translucent product materials therefore stay on the
-physically proven `SetWindowCompositionAttribute` AccentPolicy family:
+The current Windows Settings top-level is a layered HWND. Enabled materials use the proven
+`SetWindowCompositionAttribute` AccentPolicy blur family:
 
 ```text
-Acrylic -> ACCENT_ENABLE_ACRYLICBLURBEHIND (state 4) + theme native tint
-Glass   -> ACCENT_ENABLE_BLURBEHIND        (state 3) + no native tint
-Off     -> ACCENT_DISABLED                 (state 0)
+Glass/Acrylic/Frosted/Mica/Smoked -> ACCENT_ENABLE_BLURBEHIND (state 3), no native tint
+Off                             -> ACCENT_DISABLED        (state 0)
 ```
 
-Glass colour and opacity are owned by semantic Qt RGBA surfaces above the untinted native blur. AccentPolicy state 3 is
+`ui/settings_surface_composition.py` owns the cached combined-stack projection. `SettingsThemeSpec.window_surface()`
+composes the resolved material tint and semantic shell once in Qt; Glass has no material tint. Settings, Studio and
+Foundry share that fill and native request. Non-Windows uses an explicit neutral underlay with the same Qt fill.
+The native adapter retains its exercised state-4 primitive, but product composition does not select it.
+Native rounded-corner clipping remains a separate open acceptance gate. AccentPolicy state 3 is
 not the documented `DwmEnableBlurBehindWindow` API and must not be reasoned about as though those mechanisms were the
 same.
 
@@ -222,6 +226,12 @@ Settings-theme <-> Widget-theme linking is one persisted **bidirectional** stabl
 Live Settings theme publication must distinguish Python wrapper lifetime from C++ QObject lifetime. Registries may use weak references for ownership, but before applying live QSS they must verify that the PySide wrapper still owns a valid C++ QObject and prune stale wrappers. A stale deleted wrapper is cleanup, not a renderer failure; an exception from a still-live renderer remains transaction-fatal and rolls the theme back.
 
 Runtime card surfaces: **superseded decision (6 Nov 2026).** The Sep 2026 Glass/Acrylic card experiment stays rejected (no schema field in Widget Theme files, no card-material Loader, no background capture/layer, mask tree or material cadence callback; its record is `a36fd32d:Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`), and the wallpaper/transition render node stays directly composited under the display scene. Card surface materials returned through a different design, `Docs/Architecture/Card_Surface_Materials.md`: `Widgets -> General -> Style Overrides -> Surface Material` (Theme default, then Normal, Acrylic, Glass, Frosted, Mica, Smoked) is inherited by ordinary cards and the Context Menu, with an explicit `widgets.<id>.surface_material` winning. Theme follows the active Widget Theme's optional `surface_material` (Normal when it names none); a `.srwtheme` may name one since 6 Nov 2026 (superseded colour-only decision, Card_Surface_Materials.md section 4). Non-Normal surfaces sample one per-display backdrop that reads the already-drawn frame. Settings-window Glass/Acrylic is drawn by the native QWidget/HWND backdrop; a linked Widget mirror carries the same material as its `surface_material` (AC-17, 7 Nov 2026: cards follow the theme), so the runtime reads only the Widget theme.
+
+Settings Opacity Adjust and Widget Opacity Adjust live in General Style Overrides under `widgets.global`, each
+bounded to -1..1 with neutral zero. They adjust surface density through `core/settings/surface_opacity.py`, leaving
+text, borders, shadows and authored theme files independent. Settings solves combined layers before deriving readable
+semantic ink; widget materials retain their actual-ink contrast guard. One shared backdrop per display remains the
+only runtime card capture owner. Contract: `Docs/Guides/Custom_Style_Implementation.md`.
 
 The curated source pack contains Settings themes and deterministic Widget counterparts (semantic colours plus the pair's card material), including deliberately light/white-adjacent and silver/metal palettes. Catalogue discovery owns membership; documentation does not pin the editable pack count. Settings-theme filenames end with the pair's material tag (`[Glass]`, `[Acrylic]`, `[Frosted]`, `[Mica]` or `[Smoked]`; operator, 8 Nov 2026: one material per pair, the Settings window and the cards alike). Widget counterpart display names and filenames omit those tags (the Themes tab shows the material as a list tag) while preserving stable links back to the actual Settings-theme identity. Installed theme storage is the same machine-wide curated asset family as visualizer presets: source/dev reads `<repo-root>/themes`, while every frozen/installed flavour reads `%ProgramData%\SRPSS\themes` and Widget Themes live under its `widgets/` child. Normal and Media Center installers seed/clean-replace that tree; Nuitka may bundle the source pack for build completeness, but frozen runtime does not merge the bundled extraction/app-local copy into the active catalogue.
 

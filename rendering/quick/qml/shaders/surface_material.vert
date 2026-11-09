@@ -13,12 +13,14 @@ layout(std140, binding = 0) uniform buf {
     float cornerRadius;
     float contentInset;
     float borderWidth;
+    float opacityAdjust;
     vec4 normalColor;
     vec4 tintColor;
     vec4 textColor;
     vec4 blurTint;
     vec4 lightNoise;
     vec4 glassLegibility;
+    vec4 panelLimits;
 };
 out gl_PerVertex { vec4 gl_Position; };
 void main() {

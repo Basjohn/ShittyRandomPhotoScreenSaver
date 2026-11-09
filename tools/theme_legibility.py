@@ -8,7 +8,7 @@ those two (or 1:1 when the text's own luminance lies between them). A heavy blur
 
 * Settings: ``settings_theme_legibility`` -- each text role over the stack of surfaces it sits on
   (``SETTINGS_TEXT_STACKS``), over ``window.dialog_glass``, over the theme's material
-  (``NativeBackdropStyle.native_tint``: Glass and Off show the desktop itself; the tinted materials lay their
+  (``SettingsThemeSpec.native_tint``: Glass and Off show the desktop itself; the tinted materials lay their
   derived tint over it), over a black and a white desktop.
 * Widget cards: ``widget_theme_legibility`` -- each card text role over the card's own surfaces. On a material the
   wallpaper side is carried by the card's legibility panel, whose floor holds ``card.text`` at 7:1 against the
@@ -47,44 +47,7 @@ SMALL_TEXT = 4.5
 LARGE_TEXT = 3.0
 DESKTOPS = {"black": Rgba(0, 0, 0, 255), "white": Rgba(255, 255, 255, 255)}
 
-# Shell layers every Settings text sits on, bottom to top, above the material.
-_SHELL = ("window.dialog_glass",)
-_CONTENT = (*_SHELL, "content.surface")
-_GROUP = (*_CONTENT, "panel.group.surface")
-_SIDEBAR = (*_SHELL, "navigation.sidebar.surface")
-
-# (text role, surfaces it sits on, large text). Each role may sit on several stacks; the worst counts.
-SETTINGS_TEXT_STACKS: tuple[tuple[str, tuple[str, ...], bool], ...] = (
-    ("window.titlebar.text", (*_SHELL, "window.titlebar.surface"), True),
-    ("navigation.tab.text", (*_SIDEBAR, "navigation.tab.surface"), False),
-    ("navigation.tab.hover_text", (*_SIDEBAR, "navigation.tab.hover_surface"), False),
-    ("navigation.tab.selected_text", (*_SIDEBAR, "navigation.tab.selected_surface"), False),
-    ("navigation.subtab.text", (*_CONTENT, "navigation.subtab.surface"), False),
-    ("navigation.subtab.text", (*_CONTENT, "navigation.subtab.selected_surface"), False),
-    ("text.primary", _CONTENT, False),
-    ("text.primary", _GROUP, False),
-    ("text.secondary", _CONTENT, False),
-    ("text.secondary", _GROUP, False),
-    ("text.tertiary", _GROUP, False),
-    ("text.helper", _GROUP, False),
-    ("panel.group.text", _GROUP, False),
-    ("panel.group.title_text", _GROUP, False),
-    ("bucket.closed.text", (*_GROUP, "bucket.closed.surface"), False),
-    ("bucket.open.text", (*_GROUP, "bucket.open.surface"), False),
-    ("control.input.text", (*_GROUP, "control.input.surface"), False),
-    ("control.button.text", (*_GROUP, "control.button.surface"), False),
-    ("control.list.text", (*_GROUP, "control.list.surface"), False),
-    ("control.list.text", (*_GROUP, "control.list.surface", "control.list.selected_surface"), False),
-    ("control.checkbox.text", _GROUP, False),
-    ("control.mode.text", (*_GROUP, "control.mode.surface"), False),
-    ("control.mode.text", (*_GROUP, "control.mode.checked_surface"), False),
-    ("control.setup_action.text", (*_GROUP, "control.setup_action.surface"), False),
-    ("control.ghost_action.text", (*_GROUP, "control.ghost_action.surface"), False),
-    ("about.blurb.text", (*_CONTENT, "about.card.surface"), False),
-    ("about.hotkeys.text", (*_CONTENT, "about.card.surface"), False),
-    ("about.link.text", (*_CONTENT, "about.card.surface", "about.link.surface"), False),
-    ("about.notice.text", (*_CONTENT, "about.card.surface", "about.notice.surface"), False),
-)
+from ui.settings_surface_composition import SETTINGS_TEXT_STACKS, CONTROL_STATE_TEXT_STACKS
 
 # Widget card text roles and the opaque card surfaces they sit on (a mirror projects them from Settings roles).
 WIDGET_TEXT_SURFACES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -114,7 +77,7 @@ def _opaque(color: Rgba) -> Rgba:
 
 def settings_material_base(theme, desktop: Rgba) -> Rgba:
     """What the Settings window's semantic surfaces are composed over on ``desktop``."""
-    tint = theme.backdrop.native_tint()
+    tint = theme.material_tint()
     return desktop if tint is None else composite_over(tint, desktop)
 
 
@@ -125,13 +88,16 @@ def _role_text(theme, role: str) -> Rgba:
 def settings_theme_legibility(theme) -> dict[str, RoleResult]:
     """Worst contrast per Settings text role over every desktop, on the theme's own material."""
     results: dict[str, RoleResult] = {}
-    for role, stack, large in SETTINGS_TEXT_STACKS:
+    stacks = [(role, stack, large, theme.color(role)) for role, stack, large in SETTINGS_TEXT_STACKS]
+    stacks.extend((f"control.mode.{state}_text", stack, False, theme.mode_state_ink(state))
+                  for state, stack in CONTROL_STATE_TEXT_STACKS)
+    for role, stack, large, ink in stacks:
         bar = LARGE_TEXT if large else SMALL_TEXT
         for desktop_name, desktop in DESKTOPS.items():
             surface = settings_material_base(theme, desktop)
             for layer in stack:
                 surface = composite_over(theme.color(layer), surface)
-            text = composite_over(_role_text(theme, role), surface)
+            text = composite_over(ink, surface)
             ratio = contrast_ratio(text, surface)
             previous = results.get(role)
             if previous is None or ratio < previous.worst:

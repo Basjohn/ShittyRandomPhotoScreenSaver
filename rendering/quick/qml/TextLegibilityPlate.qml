@@ -44,6 +44,8 @@ ShaderEffect {
     readonly property real rowRadius: Math.min(height / 2.0, radiusOverride >= 0.0 ? Math.max(2.0, radiusOverride)
         : Math.max(4.0, cornerRadius - Math.max(0.0, contentInset - 4.0)))
     readonly property var parameters: card ? card.surfaceMaterialParameters : null
+    readonly property real opacityAdjust: card ? card.surfaceOpacityAdjust : 0.0
+    readonly property vector4d panelLimits: card ? card.surfaceMaterialLimits : Qt.vector4d(0, 1, 1, 1)
     readonly property vector4d blurTint: parameters ? parameters[0] : Qt.vector4d(0, 0, 0, 1)
     readonly property vector4d lightNoise: parameters ? parameters[1] : Qt.vector4d(0, 0, 0, 0)
     readonly property vector4d glassLegibility: parameters ? parameters[2] : Qt.vector4d(0, 0, 0, 1)

@@ -352,11 +352,10 @@ def apply_native_backdrop(window: QWidget, resolution: FoundryThemeResolution) -
     if os.name != "nt":
         return False
     try:
-        backdrop = resolution.theme.backdrop
         hwnd = int(window.winId())
         from core.windows.dwm_blur import apply_backdrop
 
-        return bool(apply_backdrop(hwnd, backdrop.mode, backdrop.native_tint()))
+        return bool(apply_backdrop(hwnd, *resolution.theme.native_backdrop_request()))
     except Exception:
         return False
 

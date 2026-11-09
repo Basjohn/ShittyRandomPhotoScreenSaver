@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSlider,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -952,6 +953,23 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     material_row.addWidget(tab.surface_material_combo)
     material_row.addStretch()
 
+    from core.settings.surface_opacity import resolve_opacity_adjust
+    widgets_config = tab._settings.get("widgets")
+    for target, label in (("settings", "Settings Opacity Adjust:"), ("widget", "Widget Opacity Adjust:")):
+        row, _ = add_aligned_row(style_overrides_layout, label, label_width=label_width, wrap=False)
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(-100, 100)
+        slider.setValue(round(resolve_opacity_adjust(widgets_config, target) * 100))
+        slider.setToolTip("-1 = maximum transparency, 0 = theme/material density, +1 = maximum density. Legibility may retain a surface floor; text, borders and shadows stay independent.")
+        value_label = QLabel(f"{slider.value() / 100:+.2f}")
+        value_label.setMinimumWidth(44)
+        slider.valueChanged.connect(lambda value, display=value_label: display.setText(f"{value / 100:+.2f}"))
+        slider.valueChanged.connect(lambda _value, owner=tab: owner._save_settings())
+        setattr(tab, f"{target}_opacity_adjust_slider", slider)
+        setattr(tab, f"{target}_opacity_adjust_label", value_label)
+        row.addWidget(slider, 1)
+        row.addWidget(value_label)
+
     button_row = QHBoxLayout()
     button_row.setContentsMargins(0, 6, 0, 0)
     button_row.setSpacing(12)
@@ -1105,6 +1123,13 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
     tab._global_surface_material = (THEME if stored is None
                                     else normalize_surface_material(stored, allow_theme=True) or NORMAL)
     _select_surface_material(tab, tab._global_surface_material)
+    from core.settings.surface_opacity import resolve_opacity_adjust
+    for target in ("settings", "widget"):
+        slider = getattr(tab, f"{target}_opacity_adjust_slider", None)
+        if slider is not None:
+            with QSignalBlocker(slider):
+                slider.setValue(round(resolve_opacity_adjust(widgets_config, target) * 100))
+            getattr(tab, f"{target}_opacity_adjust_label").setText(f"{slider.value() / 100:+.2f}")
     tab.widget_stacking_enabled.setChecked(stacking_enabled)
     if hasattr(tab, "widget_child_collision_enabled"):
         tab.widget_child_collision_enabled.setChecked(child_collision_enabled)
@@ -1172,4 +1197,9 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
             getattr(tab, "_global_surface_material", tab._widget_default("global", "surface_material"))
         ),
     }
+    from core.settings.surface_opacity import resolve_opacity_adjust
+    for target in ("settings", "widget"):
+        slider = getattr(tab, f"{target}_opacity_adjust_slider", None)
+        global_config[f"{target}_opacity_adjust"] = (slider.value() / 100 if slider is not None
+            else resolve_opacity_adjust(existing_widgets, target))
     return shadows_config, global_config

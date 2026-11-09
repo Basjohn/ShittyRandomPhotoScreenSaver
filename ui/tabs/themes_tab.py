@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Optional
 from dataclasses import replace
 from time import perf_counter_ns
-from PySide6.QtCore import QLineF, QSignalBlocker, QRectF, QSize, Qt
+from PySide6.QtCore import QEvent, QLineF, QSignalBlocker, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QLabel, QListWidget,
     QListWidgetItem, QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
@@ -63,7 +63,7 @@ class _ThemePillButton(QPushButton):
         return self.sizeHint()
 
 
-def _theme_link_icon(locked: bool) -> QIcon:
+def _theme_link_icon(locked: bool, *, hovered: bool = False) -> QIcon:
     """Create a small antialiased vector-style lock/unlock icon.
 
     The icon is drawn from geometry at a few target resolutions rather than
@@ -71,7 +71,9 @@ def _theme_link_icon(locked: bool) -> QIcon:
     follows the active Settings semantic mode-button text role.
     """
 
-    rgba = get_active_settings_theme().color("control.mode.text")
+    theme = get_active_settings_theme()
+    state = "checked" if locked else "hover" if hovered else None
+    rgba = theme.mode_state_ink(state) if state else theme.color("control.mode.text")
     color = QColor(rgba.r, rgba.g, rgba.b, rgba.a)
     icon = QIcon()
     for size in (16, 20, 24, 32):
@@ -121,6 +123,35 @@ def _theme_link_icon(locked: bool) -> QIcon:
     return icon
 
 
+class _ThemeLinkButton(QPushButton):
+    """Recolour the existing icon at normal local style and pointer edges."""
+
+    def _refresh_link_icon(self, *, hovered: bool | None = None):
+        locked = self.isChecked()
+        hovered = self.underMouse() if hovered is None else hovered
+        state = "checked" if locked else "hover" if hovered else None
+        theme = get_active_settings_theme()
+        ink = theme.mode_state_ink(state) if state else theme.color("control.mode.text")
+        key = (locked, state, ink.as_tuple())
+        if key == getattr(self, "_link_icon_key", None):
+            return
+        self._link_icon_key = key
+        self.setIcon(_theme_link_icon(locked, hovered=hovered))
+
+    def changeEvent(self, event):  # noqa: N802
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.StyleChange):
+            self._refresh_link_icon()
+
+    def enterEvent(self, event):  # noqa: N802
+        super().enterEvent(event)
+        self._refresh_link_icon(hovered=True)
+
+    def leaveEvent(self, event):  # noqa: N802
+        super().leaveEvent(event)
+        self._refresh_link_icon(hovered=False)
+
+
 class ThemesTab(QWidget):
     """Settings and runtime Widget theme catalogues with explicit linking."""
     def __init__(self, settings: SettingsManager, parent: Optional[QWidget]=None, *,
@@ -168,7 +199,7 @@ class ThemesTab(QWidget):
         return button
 
     def _make_link_button(self) -> QPushButton:
-        button=QPushButton()
+        button=_ThemeLinkButton()
         button.setCheckable(True)
         # Relationship affordance: deliberately ~20% smaller than the former
         # 300px general mode toggle while remaining comfortably clickable.
@@ -260,7 +291,6 @@ class ThemesTab(QWidget):
             else
             "Independent: Settings Themes and Widget Themes can be selected separately."
         )
-        icon=_theme_link_icon(linked)
         for name in ("settings_keep_synced","widget_keep_synced"):
             button=getattr(self,name,None)
             if button is None:
@@ -268,7 +298,7 @@ class ThemesTab(QWidget):
             blocker=QSignalBlocker(button)
             button.setChecked(linked)
             button.setText(text)
-            button.setIcon(icon)
+            button._refresh_link_icon()
             button.setToolTip(tooltip)
             del blocker
 

@@ -207,6 +207,8 @@ Item {
     }
     property alias cardBackgroundColor: card.backgroundColor
     property alias cardSurfaceMaterial: card.surfaceMaterial
+    property alias cardSurfaceOpacityAdjust: card.surfaceOpacityAdjust
+    property alias cardSurfaceLegibilityInk: card.surfaceLegibilityInk
     property alias cardSurfaceBackdrop: card.surfaceBackdrop
     property alias cardSurfaceTextColor: card.surfaceTextColor
     // Child controls with their own surface (Media's volume track and mute button) follow it.

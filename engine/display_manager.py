@@ -1551,10 +1551,12 @@ class DisplayManager(QObject):
         from rendering.quick.widgets.surface_material import resolve_global_surface_material
 
         baseline_material = resolve_global_surface_material(self._widgets_config_snapshot)
-        unit.runtime.scene_controller.apply_context_menu_surface_material(baseline_material)
+        from core.settings.surface_opacity import resolve_opacity_adjust
+        opacity_adjust = resolve_opacity_adjust(self._widgets_config_snapshot, "widget")
+        unit.runtime.scene_controller.apply_context_menu_surface_material(baseline_material, opacity_adjust)
         # The Visualizer card takes the same baseline (Card_Surface_Materials.md 3.4); its
         # authored Fill tints the material.
-        unit.runtime.scene_controller.apply_visualizer_surface_material(baseline_material)
+        unit.runtime.scene_controller.apply_visualizer_surface_material(baseline_material, opacity_adjust)
 
     def _quick_context_transition_state(
         self,

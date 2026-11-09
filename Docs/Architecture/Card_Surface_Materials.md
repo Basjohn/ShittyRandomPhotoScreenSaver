@@ -127,6 +127,27 @@ bound. While loaded, the card's `Rectangle` keeps its border and drops its fill 
 
 ### 3.3 Legibility
 
+**Material density and ink contrast.** Material density is composed from tint,
+luminosity pull and the legibility floor; lowering only the card colour alpha cannot correct an opaque-looking
+panel. The shared surface shader evaluates its floor in linear-light luminance, matching WCAG measurement,
+then applies the least polarity-preserving adjustment that meets it. Acrylic/Frosted card tint and Acrylic's
+textless children are calibrated separately; the accepted Glass/Frosted volume treatment stays independent of
+the text-bearing card panel. Glass's panel inset is 3 px and its refraction is reduced, with concentric corners.
+
+`Widgets -> General -> Style Overrides` adds `Settings Opacity Adjust` and `Widget Opacity Adjust`, each -1..1.
+Zero leaves the calibrated theme/material recipe in control. Negative values remove that fraction of a surface's
+density; positive values fill that fraction of its remaining transparency. These are persisted global overrides,
+never edits to theme files. The shared resolver in `core/settings/surface_opacity.py` owns admission and mapping.
+They affect surface fills/tints, never text, borders, shadow or whole-widget fade; material legibility remains the
+final floor. Widget adjustment reaches ordinary cards, material children, the Visualizer card and Context Menu.
+Endpoints express maximum transparency/density subject to legibility, not whole-card fade. `SurfaceContrast.js`
+derives each panel's reference ratio from its steady ink RGB/effective alpha at style edges, with headroom for grain
+and chromatic compositing; it does no per-frame/per-fragment search. Gmail supplies its timestamp ink and Media its
+playback-state ink (including the item's actual opacity); other cards conservatively admit faint themed ink.
+Text-bearing child controls use their full icon/text ink; textless volume surfaces omit the panel entirely. The former
+fixed 7:1 encoded-RGB calculation is historical evidence, not the current shader ratio. Settings resolves a combined surface-density target, then corrects actual semantic ink with small-text
+antialiasing headroom; its ink guard does not restore panel density. Pixel bars still enforce 4.5:1 for Gmail/Media faint runs.
+
 **One panel per card (acceptance pass, 7 Nov; supersedes the per-line rows and per-run plates of 6 Nov).** The
 operator, on a Glass desktop: Media's darker section "should go up and slightly above the header and slightly below
 the seek track", "that glass misplacement applies to every single widget", and the panels "shouldn't be sharp
@@ -142,12 +163,12 @@ block):
   step, so it reads as a deliberate panel with a thin rim of the bare material;
 - its corners are concentric with the card: the card's own configured corner radius (the Widget Settings value the
   card uses) minus that inset, never under 2 px, so a square or small-radius card still gets a rounded panel;
-- it applies a slight constant shift away from the text colour (darker under light text, which is every dark theme;
-  lighter under dark text on light themes), then a contrast floor that pushes further only where the blurred backdrop
-  would leave the theme's card text below **7:1** (`MaterialSurface.panelContrastFloor`; it was 3:1 while rows and
-  plates carried small text). 7:1 for the full text colour is what keeps the faint runs at 4.5:1 (below). The
-  backdrop is heavily blurred, so the adjustment is smooth, and it acts only where the backdrop is bright; the
-  direction follows the text so a dark-text light theme is never darkened under its own text.
+- it composes a polarity-matched density anchor with material relief (Glass/Frosted 20%, Acrylic/Mica/Smoked 30%),
+  then a separate linear-light contrast guard applies the minimum further correction required by its steady ink.
+  `SurfaceContrast.js` derives that guard at ink/style edges, with 4.5:1 small-text acceptance checked in rendered pixels.
+  The backdrop is heavily blurred, so correction stays smooth; dark-text light themes lift toward white rather than
+  darkening beneath their own text. Tint, haze, luminosity and smoke density are calibrated independently of textless
+  children: Glass/Frosted volume keeps its accepted recipe, Acrylic/Mica/Smoked volume removes 20% density.
 
 Nothing else darkens the card itself: no `LegibilityRow` sits on a card (Media, Reddit, Gmail, Feed list lines,
 Weather, the Abandonment and Achievement shelves lost theirs), and `ShadowedText` loads no plate of its own (the
@@ -159,7 +180,7 @@ the same rounded, concentric rule. It evaluates the identical surface, so where 
 floor for its colours it draws nothing: no double darkening. Bars: `tests/test_surface_material_style.py`,
 `tests/test_card_surface_panels.py`.
 
-**Faint runs (lead review, 7 Nov).** Runs drawn at 55-76 % of their colour (Gmail's dates and menu glyph,
+**Historical faint-run measurement (7 Nov, encoded-RGB floor; superseded by the actual-ink guard above).** Runs drawn at 55-76 % of their colour (Gmail's dates and menu glyph,
 Media's PLAYING, Feed sources and ages, System Stats' notes) have no plate of their own, so the panel's floor must
 carry them. Measured on Glass (Default Dark [Single], PERSONALSET 859804, 656207 and 670483; the run's colour
 composited at its effective opacity over the glyph-hidden frame, WCAG, 5th percentile over the glyph pixels; worst
@@ -357,6 +378,12 @@ Sep 2026 keys (`card_material_override`, `default_card_material_mode`) remain st
   `[~] AWAITING VALIDATION`.
 
 ## 6. Measurements (6 Nov 2026, RTX 4090)
+
+**9 Nov isolated current-shader qualification.** Sixteen bounded still-wallpaper samples of five cards at
+1600x900 used the existing `GL_TIME_ELAPSED` capture target. Current material whole-frame GPU times were
+0.0374–0.0527 ms, versus 0.0323–0.0369 ms with the old shader; the largest raw rise was about 0.020 ms for Glass.
+Active cost is not neutral. This does not prove game-load cost or native Settings/Studio transparency cost.
+The older tables below remain dated historical measurements, not current-shader results.
 
 **Cadence.** Worst case: a card drawn over a backdrop one full refresh interval old. Six transitions (Wipe, Slide,
 Block Spins, Glass Shatter, Cube Turn, Page Curl), five points each. The figure is the p99 of the per-pixel 8-bit

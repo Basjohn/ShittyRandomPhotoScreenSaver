@@ -14,18 +14,32 @@ layout(std140, binding = 0) uniform buf {
     float cornerRadius;
     float contentInset;
     float borderWidth;
+    float opacityAdjust;
     vec4 normalColor;
     vec4 tintColor;
     vec4 textColor;
     vec4 blurTint;
     vec4 lightNoise;
     vec4 glassLegibility;
+    vec4 panelLimits;
 };
 layout(binding = 1) uniform sampler2D source;
 
 // SURFACE BEGIN (identical in surface_material.frag, text_legibility.frag and
 // text_legibility.vert; tests/test_surface_materials.py checks it)
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+
+vec3 linearRgb(vec3 c) {
+    return mix(c / 12.92, pow(max((c + 0.055) / 1.055, vec3(0.0)), vec3(2.4)), step(vec3(0.04045), c));
+}
+vec3 encodedRgb(vec3 c) {
+    c = max(c, vec3(0.0));
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
+float adjustedDensity(float density) {
+    float amount = clamp(opacityAdjust, -1.0, 1.0);
+    return amount < 0.0 ? density * (1.0 + amount) : mix(density, 1.0, amount);
+}
 
 vec3 unpremultiply(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : c.rgb; }
 
@@ -65,11 +79,11 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
     vec3 text = unpremultiply(textColor);
     float l = luma(c);
     c = max(mix(vec3(l), c, blurTint.w), vec3(0.0));
-    c += (luma(tint) - luma(c)) * lightNoise.x;
-    c = mix(c, vec3(1.0), lightNoise.z);
-    c *= 1.0 - lightNoise.w;
+    c += (luma(tint) - luma(c)) * (lightNoise.x > 0.0 ? adjustedDensity(lightNoise.x) : 0.0);
+    c = mix(c, vec3(1.0), lightNoise.z > 0.0 ? adjustedDensity(lightNoise.z) : 0.0);
+    c *= 1.0 - (lightNoise.w > 0.0 ? adjustedDensity(lightNoise.w) : 0.0);
     float tintOpacity = mix(blurTint.y, blurTint.z, clamp(tintColor.a, 0.0, 1.0));
-    c = mix(c, tint, tintOpacity);
+    c = mix(c, tint, adjustedDensity(tintOpacity));
 
     if (glassLegibility.x > 0.0) {
         float edge = 1.0 - smoothstep(0.0, 6.0, -d);
@@ -85,25 +99,48 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
     // luminance-contrast floor against it where the backdrop is busy.
     // A negative border width (a child control drawing its own outline) puts the panel edge
     // just outside the shape: its whole face is the panel, with no inner rim.
-    float plateInset = borderWidth < 0.0 ? -1.0 : borderWidth + 2.5;
+    float plateInset = borderWidth < 0.0 ? -1.0 : borderWidth + (glassLegibility.y > 0.0 ? 3.0 : 2.5);
     vec2 plateHalf = max(halfSize - vec2(plateInset), vec2(1.0));
     vec2 plateNormal;
     float pd = roundedBox(p, plateHalf, max(2.0, r - plateInset), plateNormal);
     float plate = 1.0 - smoothstep(-1.0, 1.0, pd);
-    float textL = luma(text);
     float floorRatioCard = max(1.0, glassLegibility.w);
-    if (textL >= 0.5) {
-        c *= 1.0 - glassLegibility.z * plate;
-        float maxL = (textL + 0.05) / floorRatioCard - 0.05;
-        float cl = luma(c);
-        if (cl > maxL && cl > 0.0)
-            c *= mix(1.0, max(maxL, 0.0) / cl, plate);
-    } else {
-        c = mix(c, vec3(1.0), glassLegibility.z * plate);
-        float minL = floorRatioCard * (textL + 0.05) - 0.05;
-        float cl = luma(c);
-        if (cl < minL)
-            c = mix(c, vec3(1.0), plate * clamp((minL - cl) / max(1.0 - cl, 1e-3), 0.0, 1.0));
+    // Work in linear light: encoded-RGB luma made the contrast floor excessively
+    // dense (especially on Acrylic/Frosted). Encode only after the least adjustment.
+    // Semantic density is composed in the same encoded colour space as Qt's
+    // source-over surfaces. This anchor preserves the material family while its
+    // relief reveals the requested fraction of the unplated material. The WCAG
+    // ink guard is separate, in linear light below. Textless controls bypass it.
+    if (floorRatioCard > 1.0) {
+        float anchor = panelLimits.x;
+        bool lightInk = panelLimits.y > 0.5;
+        float currentL = luma(c);
+        vec3 dense = c;
+        if (lightInk && currentL > anchor && currentL > 0.0)
+            dense *= max(anchor, 0.0) / currentL;
+        else if (!lightInk && currentL < anchor)
+            dense = mix(dense, vec3(1.0), clamp((anchor - currentL) / max(1.0 - currentL, 1e-3), 0.0, 1.0));
+        float relief = 1.0 - adjustedDensity(1.0 - glassLegibility.z);
+        c = mix(c, mix(dense, c, relief), plate);
+    }
+    // Uniform limits come from the existing style/ink solver. A channel-wise
+    // encoded bound rejects already-readable pixels without pow; textless controls
+    // do no linear conversion. Encode only when the linear guard changes colour.
+    if (floorRatioCard > 1.0 && plate > 0.0) {
+        bool lightInk = panelLimits.y > 0.5;
+        bool mayNeedGuard = lightInk ? max(c.r, max(c.g, c.b)) > panelLimits.w
+                                     : min(c.r, min(c.g, c.b)) < panelLimits.w;
+        if (mayNeedGuard) {
+            vec3 linearSurface = linearRgb(clamp(c, 0.0, 1.0));
+            float cl = luma(linearSurface);
+            if (lightInk && cl > panelLimits.z && cl > 0.0) {
+                linearSurface *= mix(1.0, panelLimits.z / cl, plate);
+                c = encodedRgb(linearSurface);
+            } else if (!lightInk && cl < panelLimits.z) {
+                linearSurface = mix(linearSurface, vec3(1.0), plate * clamp((panelLimits.z - cl) / max(1.0 - cl, 1e-3), 0.0, 1.0));
+                c = encodedRgb(linearSurface);
+            }
+        }
     }
 
     // Light themes only: a defined edge over busy wallpaper. A dark hairline right inside

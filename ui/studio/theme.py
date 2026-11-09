@@ -20,7 +20,7 @@ RGB = tuple[float, float, float]
 # Settings' panel shadow offsets (6, 8) fill the Studio's 10 px gutters; half fits and still reads.
 SHADOW_SCALE = 0.5
 # The least opacity a large Studio panel keeps over Glass/Acrylic.
-PANEL_MATERIAL_FLOOR = 0.88
+PANEL_MATERIAL_FLOOR = 0.58
 
 
 def _rgb(colour) -> tuple[RGB, float]:
@@ -51,8 +51,11 @@ def _ensure(colour: RGB, against: RGB, minimum: float, light_theme: bool) -> RGB
     pole = (0.0, 0.0, 0.0) if light_theme else (1.0, 1.0, 1.0)
     out = colour
     for step in range(1, 21):
-        if contrast(out, against) >= minimum:
-            return out
+        # The emitted palette is 8-bit and the surface solver reserves .03
+        # contrast headroom; validate that same representation before returning.
+        quantized = tuple(round(channel * 255) / 255 for channel in out)
+        if contrast(quantized, against) >= minimum + .06:
+            return quantized
         out = _mix(colour, pole, step / 20.0)
     return out
 
@@ -60,6 +63,24 @@ def _ensure(colour: RGB, against: RGB, minimum: float, light_theme: bool) -> RGB
 def _hex(c: RGB, alpha: float = 1.0) -> str:
     r, g, b = (max(0, min(255, round(v * 255))) for v in c)
     return "#%02x%02x%02x" % (r, g, b) if alpha >= 1.0 else "#%02x%02x%02x%02x" % (round(alpha * 255), r, g, b)
+
+
+def _readable_alpha(colour: RGB, alpha: float, backgrounds, inks) -> float:
+    """Smallest chrome density carrying its inks over either desktop pole."""
+    def readable(amount):
+        return all(contrast(ink, _over(colour, amount, base)) >= minimum + .03
+                   for base in backgrounds for ink, minimum in inks)
+
+    if readable(alpha) or not readable(1.0):
+        return alpha
+    low, high = alpha, 1.0
+    for _ in range(9):
+        middle = (low + high) * .5
+        if readable(middle):
+            high = middle
+        else:
+            low = middle
+    return high
 
 
 def _saturation(c: RGB) -> float:
@@ -135,10 +156,9 @@ def studio_theme(theme=None) -> dict[str, str]:
     track = _mix(panel, text, .14)
     input_surface = surface("control.input.surface", over=panel)
     viewport = _mix(bg, (0.0, 0.0, 0.0), .65)
-    # Instrument wells (signal-trace cards, schematic cards, the response curve, the transport bar): the deep viewport
-    # tone while the theme's own text reads on it (every dark theme, unchanged), else the theme's input surface (a
-    # light theme: dark text on the dark viewport tone was illegible). Text and trace inks are then checked on it.
-    well = viewport if contrast(text, viewport) >= 4.5 else input_surface
+    # Every instrument well uses the theme's input surface. The viewport's fixed
+    # backing is reserved for authored scene pixels. Check text and trace inks here.
+    well = input_surface
     well_light = contrast(well, (0.0, 0.0, 0.0)) > contrast(well, (1.0, 1.0, 1.0))   # inks move away from it
     well_text = _ensure(text, well, 4.5, well_light)
     well_dim = _ensure(dim, well, 3.0, well_light)
@@ -159,7 +179,7 @@ def studio_theme(theme=None) -> dict[str, str]:
         return _hex(_over(colour, alpha, over))
 
     if translucent:
-        window_colour, window_alpha = token("window.dialog_glass", (60, 60, 60, 20))
+        window_colour, window_alpha = _rgb(theme.window_surface())
         from core import platform_paths
         if platform_paths.IS_WINDOWS:
             window_surface = _hex(window_colour, window_alpha)
@@ -174,6 +194,12 @@ def studio_theme(theme=None) -> dict[str, str]:
         titlebar = _hex(titlebar_colour, titlebar_alpha)
         _panel_colour, panel_alpha = token("panel.group.surface", (60, 60, 60, 120))
         panel_alpha = max(PANEL_MATERIAL_FLOOR, panel_alpha + window_alpha * (1.0 - panel_alpha))
+        chrome_bases = [_over(window_colour, window_alpha, (pole, pole, pole))
+                        for pole in (0.0, 1.0)]
+        panel_alpha = _readable_alpha(panel, panel_alpha, chrome_bases,
+            ((text, 4.5), (dim, 3.0), (accent, 3.0), (focus, 3.0)))
+        titlebar = _hex(titlebar_colour, _readable_alpha(titlebar_colour, titlebar_alpha,
+            chrome_bases, ((title_text, 4.5),)))
     else:
         window_surface = _hex(bg)
         titlebar = _hex(header)
@@ -181,6 +207,16 @@ def studio_theme(theme=None) -> dict[str, str]:
     outer_border = token("chrome.outer_border", (255, 255, 255, 255))
     shadow = theme.shadow("panel.group")
     shadow_rgb = (shadow.color.r / 255.0, shadow.color.g / 255.0, shadow.color.b / 255.0)
+    # Chrome uses semantic translucent fills instead of baking every region onto the opaque
+    # viewport backing. The viewport and its small scene overlays retain their own backing.
+    def chrome_surface(name: str, composed: RGB, inks=None, floor: float = PANEL_MATERIAL_FLOOR) -> str:
+        if not translucent:
+            return _hex(composed)
+        _colour, alpha = token(name, (60, 60, 60, 120))
+        alpha = _readable_alpha(composed, max(floor, alpha), chrome_bases,
+            inks if inks is not None else ((text, 4.5), (dim, 3.0)))
+        return _hex(composed, alpha)
+
     return {
         "backdrop": mode, "windowSurface": window_surface, "titlebar": titlebar,
         "titlebarText": _hex(title_text),
@@ -192,14 +228,15 @@ def studio_theme(theme=None) -> dict[str, str]:
         # Settings' panel cast (panel.group), scaled to the Studio's tight gutters; hard and static, like Settings'.
         "shadow": _hex(shadow_rgb, shadow.color.a / 255.0),
         "shadowX": "%.2f" % (shadow.offset_x * SHADOW_SCALE), "shadowY": "%.2f" % (shadow.offset_y * SHADOW_SCALE),
-        "bg": _hex(bg), "header": _hex(header), "panel": _hex(panel), "panelRaised": _hex(raised),
+        "bg": _hex(bg), "header": chrome_surface("window.titlebar.surface", header),
+        "panel": _hex(panel), "panelRaised": chrome_surface("control.button.surface", raised),
         "viewportBg": _hex(viewport), "outline": _hex(outline), "outlineSoft": _hex(outline_soft),
         "accent": _hex(accent), "accentSoft": _hex(accent_soft), "accentText": _hex(accent_text),
         "track": _hex(track), "text": _hex(text), "textDim": _hex(dim), "textDisabled": _hex(disabled),
-        "input": _hex(input_surface), "inputText": _hex(_ensure(text, input_surface, 4.5, light)),
+        "input": chrome_surface("control.input.surface", input_surface), "inputText": _hex(_ensure(text, input_surface, 4.5, light)),
         "focus": _hex(focus), "danger": _hex(danger), "light": "true" if light else "false",
         "trace1": _hex(accent), "trace2": _hex(_mix(text, panel, .25)), "trace3": _hex(focus),
-        "well": _hex(well), "wellText": _hex(well_text), "wellDim": _hex(well_dim),
+        "well": chrome_surface("control.input.surface", well, ((well_text, 4.5), (well_dim, 3.0))), "wellText": _hex(well_text), "wellDim": _hex(well_dim),
         "wellTrace1": _hex(_ensure(accent, well, 3.0, well_light)),
         "wellTrace2": _hex(_ensure(_mix(text, panel, .25), well, 3.0, well_light)),
         "wellTrace3": _hex(_ensure(focus, well, 3.0, well_light)),

@@ -355,7 +355,7 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     color: %(label_disabled_text)s;
                 }
     """ % {
-        "dialog_glass": _theme_rgba(theme, "window.dialog_glass"),
+        "dialog_glass": render_qss_rgba255(theme.window_surface()),
         "titlebar_surface": _theme_rgba(theme, "window.titlebar.surface"),
         "titlebar_text": _theme_rgba(theme, "window.titlebar.text"),
         "titlebar_button_surface": _theme_rgba(

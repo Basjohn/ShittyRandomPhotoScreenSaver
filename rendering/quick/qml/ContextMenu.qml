@@ -34,6 +34,9 @@ Item {
     // Surface material (Docs/Architecture/Card_Surface_Materials.md): the Widget Theme
     // baseline; Normal keeps both Loaders below inactive.
     property string surfaceMaterial: "normal"
+    property real surfaceOpacityAdjust: 0.0
+    property color normalSurfaceColor: surfaceColor
+    property color normalSubmenuSurfaceColor: submenuSurfaceColor
     property var surfaceBackdrop: null
     readonly property bool surfaceMaterialActive: surfaceMaterial !== "normal" && surfaceBackdrop !== null
     readonly property real shadowBaseLeft: Math.max(0.0, -shadowOffsetX)
@@ -121,7 +124,7 @@ Item {
                 menuRoot.height - height - 4.0
             )
         )
-        color: menuRoot.surfaceMaterialActive ? "transparent" : menuRoot.surfaceColor
+        color: menuRoot.surfaceMaterialActive ? "transparent" : menuRoot.normalSurfaceColor
         radius: 10.0
         border.color: menuRoot.borderColor
         border.width: 3.0
@@ -135,6 +138,7 @@ Item {
             sourceComponent: MaterialSurface {
                 backdrop: menuRoot.surfaceBackdrop
                 material: menuRoot.surfaceMaterial
+                opacityAdjust: menuRoot.surfaceOpacityAdjust
                 cornerRadius: menuSurface.radius
                 contentInset: 6.0
                 normalColor: menuRoot.surfaceColor
@@ -330,7 +334,7 @@ Item {
                         width: 244.0
                         height: submenuColumn.implicitHeight + 12.0
                         color: menuRoot.surfaceMaterialActive
-                            ? "transparent" : menuRoot.submenuSurfaceColor
+                            ? "transparent" : menuRoot.normalSubmenuSurfaceColor
                         radius: 8.0
                         border.color: menuRoot.submenuBorderColor
                         border.width: 3.0
@@ -347,6 +351,7 @@ Item {
                             sourceComponent: MaterialSurface {
                                 backdrop: menuRoot.surfaceBackdrop
                                 material: menuRoot.surfaceMaterial
+                                opacityAdjust: menuRoot.surfaceOpacityAdjust
                                 cornerRadius: submenuSurface.radius
                                 contentInset: 4.0
                                 normalColor: menuRoot.submenuSurfaceColor

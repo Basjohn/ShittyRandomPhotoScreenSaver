@@ -160,14 +160,17 @@ class StudioWindowSurface(QObject):
         self.theme = theme or get_active_settings_theme()
         self.material = material_mode(self.theme)
         window.setFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
+        # A live Settings notification can enable a material later on this same
+        # native window. Reserve alpha before creation; Normal still paints opaque.
+        surface_format = window.requestedFormat()
+        surface_format.setAlphaBufferSize(8)
+        window.setFormat(surface_format)
         if self.material != "off":
-            surface_format = window.requestedFormat()
-            surface_format.setAlphaBufferSize(8)
-            window.setFormat(surface_format)
             window.setColor(Qt.GlobalColor.transparent)
         else:
             window.setColor(Qt.GlobalColor.black)
         self.backdrop_applied = False
+        self._applied_backdrop_request = None
         self.maximized = False
         self._normal_geometry: QRect | None = None
         # Settings may be in a modal exec(); the Studio must not be blocked by it, and it is the sole
@@ -199,20 +202,34 @@ class StudioWindowSurface(QObject):
         self.window.requestActivate()
 
     def apply_backdrop(self) -> bool:
-        """The theme's native material, once, on first show (as Settings applies its own): the shared
-        mode -> AccentPolicy mapping in ``core.windows.dwm_blur``. Normal applies nothing."""
-        if self.material == "off" or self.backdrop_applied:
+        """Apply a changed semantic material request through the existing native owner."""
+        request = self.theme.native_backdrop_request()
+        if request == self._applied_backdrop_request:
+            return self.backdrop_applied
+        if self.material == "off" and self._applied_backdrop_request is None:
             return False
         from core import platform_paths
         if not platform_paths.IS_WINDOWS:
             return False
         try:
             from core.windows.dwm_blur import apply_backdrop
-            self.backdrop_applied = bool(apply_backdrop(int(self.window.winId()), self.material,
-                                                        self.theme.backdrop.native_tint()))
+            applied = bool(apply_backdrop(int(self.window.winId()), *request))
+            # apply_backdrop reports whether a material is ON; a completed Off
+            # request deliberately returns False after disabling AccentPolicy.
+            if applied or self.material == "off":
+                self._applied_backdrop_request = request
+            self.backdrop_applied = applied and self.material != "off"
         except Exception:
             logger.debug("[STUDIO] Native backdrop not available", exc_info=True)
         return self.backdrop_applied
+
+    def apply_settings_theme(self, theme) -> None:
+        """Reconcile chrome and native tint at the existing theme notification edge."""
+        self.theme = theme
+        self.material = material_mode(theme)
+        self.window.setColor(Qt.GlobalColor.transparent if self.material != "off" else Qt.GlobalColor.black)
+        if self.window.isVisible() or self._applied_backdrop_request is not None:
+            self.apply_backdrop()
 
     # Window chrome (the shell's title bar and edges) ---------------------------------
     def start_move(self) -> None:

@@ -872,6 +872,10 @@ class SettingsDialog(QDialog):
 
     def _on_settings_capability_changed(self, key: str, _value: object) -> None:
         if str(key or "") == "widgets" or str(key or "").startswith("widgets."):
+            from core.settings.surface_opacity import resolve_opacity_adjust
+            from ui.settings_theme_runtime import apply_settings_opacity_adjust
+
+            apply_settings_opacity_adjust(resolve_opacity_adjust(self._settings.get("widgets"), "settings"))
             self._refresh_visualizers_tab_eligibility()
     
     def _setup_window(self) -> None:
@@ -951,16 +955,16 @@ class SettingsDialog(QDialog):
             hwnd = int(self.winId())
             backdrop = theme.backdrop
             mode = backdrop.mode
-            tint = backdrop.native_tint()
+            native_mode, tint = theme.native_backdrop_request()
             previous_mode = self._native_backdrop_mode
 
             if (
-                mode == "glass"
-                and previous_mode == "glass"
+                native_mode == "glass"
+                and previous_mode not in (None, "off")
                 and self._backdrop_applied
             ):
                 logger.info(
-                    "Native Settings backdrop unchanged (glass -> glass); "
+                    "Native Settings blur request unchanged; "
                     "skipping redundant AccentPolicy rewrite"
                 )
                 native_enabled = True
@@ -968,7 +972,7 @@ class SettingsDialog(QDialog):
                 # The one mode -> AccentPolicy mapping, shared with the Studio window.
                 from core.windows.dwm_blur import apply_backdrop
 
-                native_enabled = apply_backdrop(hwnd, mode, tint)
+                native_enabled = apply_backdrop(hwnd, native_mode, tint)
 
             applied = mode == "off" or bool(native_enabled)
             self._backdrop_applied = applied
