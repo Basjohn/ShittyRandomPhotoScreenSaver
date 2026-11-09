@@ -71,6 +71,25 @@ def test_media_center_wildcard_is_the_single_app_payload_copy() -> None:
     assert explicit_exe not in source
 
 
+def test_installed_preset_data_is_modifiable_without_granting_binary_write_access() -> None:
+    """Atomic preset replacement needs more than parent-folder file creation."""
+    target = r'{commonappdata}\SRPSS\presets\visualizer_modes'
+    for path in (STANDARD, MEDIA_CENTER):
+        section = ""
+        grants = {}
+        for raw in _text(path).splitlines():
+            line = raw.strip()
+            if line.startswith("[") and line.endswith("]"):
+                section = line
+            if section == "[Dirs]" and line.startswith('Name: "'):
+                name = line.split('"', 2)[1]
+                grants[name] = line.partition("Permissions:")[2].strip()
+        assert grants.get(target) == "users-modify", path.name
+        assert all("modify" not in rights and "full" not in rights
+                   for name, rights in grants.items()
+                   if name.startswith(("{app}", "{sys}")) or name.endswith(r"\helper"))
+
+
 def test_build_foundry_discovers_inno_7_and_keeps_6_compatibility() -> None:
     source = _text(BUILD_RUNNER)
     for token in (

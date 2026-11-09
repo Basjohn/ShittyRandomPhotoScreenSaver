@@ -355,6 +355,9 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
   pose without unrelated draft artwork; ordinary hydration preserves live XYZ. Focused file-integrity and real
   Settings round-trip tests are green. Evidence: `logs/evidence_chest/logsf158e7bdd4.zip`; durable save contract:
   `Docs/Reference/Visualizer_Studio.md`.
+  Installed ACL inspection found shipped preset files read-only to ordinary users despite parent-folder Write.
+  Verify the next Standard/MC installer grants Modify only on the shared preset data tree, then Save over an
+  installed preset and Save As as an ordinary user. No build/installed ACL mutation was performed by this task.
 - [~] **1.4-1.5 Awaiting Validation:** check Fullscreen Mode's Media Bar/Floating Glyphs styles, long metadata
   fitting, multiline Edit boxes and optional album. Both styles use the same admitted Media actions; every metadata
   row uses Media's shared fitting primitive. Focused Settings, input, text-layout and Edit gates are green.
@@ -365,6 +368,11 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
   excessive widget/Settings card density by material while preserving the good volume surfaces, adjust Glass's
   distortion/inset, and apply themed surfaces throughout Studio with legible controls. Then add Settings Opacity
   Adjust and Widget Opacity Adjust (-1..1, neutral 0) in Style Overrides through existing semantic owners.
+- [ ] **1.8 Gmail/Reddit column editing:** retain each column grip's reorder gesture and use the shared solid
+  span/end regions to adjust its start and width (therefore truncation). Prove Gmail first, then Reddit/Reddit2,
+  through the existing descriptor/child-geometry/Edit/persistence owners, including reload, Undo and Save/Cancel.
+- [ ] **Side defect:** Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1012`)
+  and a test requires it. Replace that tool override with explicit CLI/sidecar admission when opening its owner.
 - [ ] **Awaiting Validation:** after focused proofs, operator checks the changed glyphs, saves in the frozen build,
   camera/child placement round trips, long fullscreen metadata, controls and material comparisons on native pixels.
 

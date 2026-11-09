@@ -75,11 +75,13 @@ Source: ".\..\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; F
 Source: ".\..\resources\jedimodeyall.mp3"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 
 [Dirs]
-; Keep normal inherited ProgramData ACLs. Add only the ordinary rights each
-; user-session helper directory actually needs.
+; Keep normal inherited ProgramData ACLs except the explicitly mutable data
+; and user-session helper directories below.
 Name: "{commonappdata}\SRPSS"
 Name: "{commonappdata}\SRPSS\helper"; Permissions: users-readexec
 Name: "{commonappdata}\SRPSS\presets"
+; Presets are operator-authored data; atomic Save must replace existing files.
+Name: "{commonappdata}\SRPSS\presets\visualizer_modes"; Permissions: users-modify
 Name: "{commonappdata}\SRPSS\themes"
 Name: "{commonappdata}\SRPSS\sounds"
 Name: "{commonappdata}\SRPSS\url_queue"; Permissions: users-modify

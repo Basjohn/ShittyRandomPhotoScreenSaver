@@ -70,6 +70,11 @@ application tree. This installer policy is separate from runtime/import ownershi
 retirement. Build Foundry validates source JSON without writing it. `tools/regenerate_visualizer_shipped_presets.py`
 explicitly refreshes the release mirror; `--check`/`--dry-run` compare directory entries and bytes without writes.
 
+Both installers grant ordinary users Modify on the shared `SRPSS/presets/visualizer_modes` data directory and its
+descendants. Studio's atomic sibling-file replacement needs modification/deletion rights on existing shipped presets,
+not just permission to create a file in their parent. The installed application/helper binaries and other ProgramData
+trees retain their existing permissions. Runtime never changes ACLs or redirects failed saves to a second catalogue.
+
 ## Focused proof
 
 `tests/test_visualizer_preset_repair_eb.py` crosses real repair/import/reindex/swap/Undo boundaries with test-owned

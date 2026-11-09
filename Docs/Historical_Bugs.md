@@ -1,6 +1,6 @@
 # Historical Bugs — single archive index
 
-**Updated:** 2026-11-08. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
+**Updated:** 2026-11-09. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
 
 **Admission bar:** retain costly, elusive, multi-tool investigations and architectural, resource, timing, scheduling or performance failures. A quickly fixed one-off UI/test/routing defect is not archival merely because it happened. Historical data records what was true *then*, never an instruction to revive retired QWidget/GL infrastructure. Current behavior is in `Spec.md`, `Docs/Contracts.md`, current reference/guardrail documents and tests. `Current_Plan.md` owns actual remaining work.
 
@@ -16,6 +16,7 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 
 | Record | Historical classification | Retention |
 | --- | --- | --- |
+| [R-182 / Installed preset files lacked ordinary-user Modify permission](Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md) | Installer source repair / ordinary-user installation validation open | Standard |
 | [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](Historical_Bugs/R-02_Reddit_Helper_Link_Handoff.md) | Archived investigation | **STRONG** |
 | [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](Historical_Bugs/R-03_Sine_Idle_Paused_Motion.md) | Archived investigation | Standard |
 | [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](Historical_Bugs/R-04_Visualizer_Curated_Preset_Custom_Authority.md) | Archived investigation | Standard |

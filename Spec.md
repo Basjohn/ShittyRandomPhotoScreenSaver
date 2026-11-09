@@ -718,7 +718,8 @@ it is an activation input, never a second persistent live camera or renderer ove
 Studio's explicit Save writes the selected preset/Custom slot; Save Camera writes the evaluated starting camera
 without unrelated draft artwork. Camera-capable descriptors share the metadata schema through the existing view
 owner. Ordinary hydration preserves the live framed Camera Position, while explicit preset activation seeds it.
-Frozen saves use the canonical ProgramData preset tree and report read-only failures without an alternate root.
+Frozen saves use the canonical ProgramData preset tree (installed with ordinary-user Modify on that data tree)
+and report read-only failures without an alternate root.
 `Docs/Reference/Visualizer_Studio.md` owns save/draft details.
 
 Every registered descriptor must explicitly declare how it supports the two CUSTOM operations:

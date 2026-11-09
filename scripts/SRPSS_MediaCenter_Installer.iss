@@ -78,6 +78,10 @@ Source: "..\release\media_center\themes\*"; DestDir: "{commonappdata}\SRPSS\them
 Source: "..\release\media_center\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 Source: "..\release\media_center\resources\jedimodeyall.mp3"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 
+[Dirs]
+; Shared operator-authored data, never the executable/helper installation tree.
+Name: "{commonappdata}\SRPSS\presets\visualizer_modes"; Permissions: users-modify
+
 [Registry]
 ; When the 5.0.0 migration-reset task is selected, delete the pre-JSON MC QSettings tree too.
 ; Deleting only settings_v2.json would otherwise let first launch re-import these legacy values.
