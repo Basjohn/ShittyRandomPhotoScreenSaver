@@ -454,6 +454,10 @@ an existing helper merely to claim reuse.
 
 Ordinary CUSTOM semantics are divided between family-owned retained QML paint/reflow and the shared session-owned Edit/persistence path. A semantic child-role list declares stable identity and real paint targets, not live normalization values, visibility or provider snapshots. The selected Edit delegate resolves the current family-owned normalization and paints through the actual retained transform/clip chain; a change in size or readiness must not replace a selected role delegate. Repeated content exposes meaningful editing units, not overlapping per-primitive handles: System Stats uses header, top separator and one complete metric stack; Friend Pulse uses grouped row/grid representatives. No parallel geometry owner, polling, normal-render Edit observer or per-pointer Settings writes are allowed.
 
+Gmail and Reddit/Reddit2 expose widget-wide semantic columns: top grips reorder, while the solid spans' endpoints
+adjust text start/width and truncation through shared child geometry. The existing CUSTOM transaction retains both
+order and geometry across Save/Cancel, Undo and layout slots. `Docs/Guides/Custom_Child_Geometry.md` owns the contract.
+
 ```text
 provider/backend/runtime/cadence/actions
 -> stable presentation model/state

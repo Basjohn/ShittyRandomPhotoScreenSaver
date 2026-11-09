@@ -1690,7 +1690,7 @@ Item {
                                     }
                                 }
                                 MouseArea {
-                                    anchors.fill: parent
+                                    width: parent.width; height: 17
                                     cursorShape: Qt.SizeHorCursor
                                     property real pressedX: 0.0
                                     onPressed: function(mouse) {
@@ -1730,7 +1730,9 @@ Item {
                                             const ownCenter = columnGrip.x + columnGrip.width / 2.0
                                             const targetCenter = nearest.x + nearest.width / 2.0
                                             if (Math.abs(released - ownCenter)
-                                                    >= Math.abs(targetCenter - ownCenter) / 2.0)
+                                                    >= Math.abs(targetCenter - ownCenter) / 2.0
+                                                    && childRoleLoader.item
+                                                    && childRoleLoader.item.admitColumnSwap(columnGrip.railId, nearest.railId))
                                                 customLayoutOverlay.sessionModel.swapColumnRails(
                                                     editFrame.index, columnGrip.railId, nearest.railId)
                                         }
@@ -2002,6 +2004,61 @@ Item {
                                     - Math.max(a.y, b.y)
                             )
                             return width * height
+                        }
+
+                        function admitColumnSwap(source, target) {
+                            try {
+                                const project = editFrame.presentationItem.customColumnRailSwapRects
+                                if (typeof project !== "function")
+                                    throw new Error("Semantic column projection is unavailable")
+                                const specs = project(source, target)
+                                if (!specs)
+                                    throw new Error("Semantic column projection is unavailable")
+                                const candidates = {}, frames = {}
+                                for (let i = 0; i < childRoleRepeater.count; ++i) {
+                                    const frame = childRoleRepeater.itemAt(i)
+                                    if (frame && frame.visible && frame.horizontalRail) frames[frame.roleId] = frame
+                                }
+                                if (specs.length < 2 || specs.length !== Object.keys(frames).length)
+                                    throw new Error("Semantic column projection must match the admitted column roles")
+                                for (let i = 0; i < specs.length; ++i) {
+                                    const spec = specs[i], frame = frames[spec.roleId]
+                                    if (!frame || candidates[spec.roleId] || !spec.target || !spec.rect)
+                                        throw new Error("Semantic column projection has a missing or duplicate role")
+                                    const r = spec.rect, points = [
+                                        spec.target.mapToItem(editFrame, r.x, r.y),
+                                        spec.target.mapToItem(editFrame, r.x + r.width, r.y),
+                                        spec.target.mapToItem(editFrame, r.x, r.y + r.height),
+                                        spec.target.mapToItem(editFrame, r.x + r.width, r.y + r.height)]
+                                    const x = Math.min.apply(null, points.map(p => p.x))
+                                    const y = Math.min.apply(null, points.map(p => p.y))
+                                    const width = Math.max.apply(null, points.map(p => p.x)) - x
+                                    const height = Math.max.apply(null, points.map(p => p.y)) - y
+                                    if (![x, y, width, height].every(isFinite) || width <= 0 || height <= 0)
+                                        throw new Error("Semantic column projection is not a finite painted rectangle")
+                                    candidates[spec.roleId] = {x:x, y:y, width:width, height:height}
+                                }
+                                for (const role in candidates) {
+                                    const frame = frames[role], candidate = candidates[role]
+                                    const surface = childContainmentRect(frame)
+                                    if (candidate.x < surface.x - 0.01 || candidate.y < surface.y - 0.01
+                                            || candidate.x + candidate.width > surface.x + surface.width + 0.01
+                                            || candidate.y + candidate.height > surface.y + surface.height + 0.01)
+                                        return false
+                                    const current = occupiedRectAt(frame, frame.x, frame.y, frame.width, frame.height)
+                                    const obstacles = obstacleRects(frame, false, "horizontal")
+                                    for (let i = 0; i < obstacles.length; ++i) {
+                                        const obstacle = obstacles[i]
+                                        const after = candidates[obstacle.roleId] || obstacle
+                                        if (overlapArea(candidate, after) > overlapArea(current, obstacle) + 0.01)
+                                            return false
+                                    }
+                                }
+                                return true
+                            } catch (error) {
+                                console.error("[CUSTOM_LAYOUT] Semantic column reorder refused: " + error)
+                                return false
+                            }
                         }
 
                         function occupiedRectAt(frame, candidateX, candidateY,
@@ -3122,8 +3179,9 @@ Item {
                                         const count = source.count
                                         const sourceModel = source.model
                                         const index = Number(modelData.targetIndex || 0)
-                                        return sourceModel !== undefined && count > index
-                                            ? source.itemAt(index) : null
+                                        const row = sourceModel !== undefined && count > index ? source.itemAt(index) : null
+                                        return row && modelData.targetColumn
+                                            ? row.columnTargets[modelData.targetColumn] : row
                                     }
                                     if (modelData.alternateTarget)
                                         return modelData.target && modelData.target.visible
@@ -3137,8 +3195,10 @@ Item {
                                 // Edit-only declaration, not a saved layout key.
                                 // Some children have a smaller legal surface than
                                 // the widget root (Media card vs external volume).
+                                readonly property bool horizontalRail: modelData.horizontalRail === true
                                 readonly property var containmentTarget:
-                                    modelData.containmentTarget || null
+                                    modelData.containmentTarget
+                                        || (horizontalRail && targetItem ? targetItem.customEditContainmentTarget : null)
                                 readonly property bool centeredResize:
                                     modelData.centeredResize === true
                                 readonly property var resizeReflowRoleIds:
@@ -3195,9 +3255,19 @@ Item {
                                         || "childNormalizationWidth"
                                     const live = source ? source[propertyName] : 0.0
                                     const preferred = source && !live ? source.preferredContentWidth : 0.0
-                                    return Math.max(1.0, Number(
+                                    const logical = Math.max(1.0, Number(
                                         modelData.normalizationWidth || live || preferred
                                             || (editFrame.width / Math.max(1.0e-6, editFrame.resizeScale))))
+                                    if (!horizontalRail || targetItem === null) return logical
+                                    // Column starts use their authored normalization box, painted through the actual
+                                    // retained content transform. It can differ from the session's outer resizeScale
+                                    // after card fit/reflow. Give the existing Python resolver the equivalent box,
+                                    // so a left endpoint holds the opposite painted edge without parent clipping.
+                                    const dependency = mappingDependency
+                                    const a = targetItem.mapToItem(editFrame, 0.0, 0.0)
+                                    const b = targetItem.mapToItem(editFrame, 1.0, 0.0)
+                                    return logical * Math.hypot(b.x - a.x, b.y - a.y)
+                                        / Math.max(1.0e-6, editFrame.resizeScale)
                                 }
                                 readonly property real normalizationHeight: {
                                     const source = modelData.normalizationTarget || null
@@ -3375,10 +3445,19 @@ Item {
                                     anchors.fill: parent
                                     z: 1
                                     color: "transparent"
+                                    visible: !childRoleFrame.horizontalRail
                                     border.width: childRoleFrame.semanticAnchor.length > 0 ? 2 : 1
                                     border.color: childRoleFrame.semanticAnchor.length > 0
                                         ? "#dc7a8088" : "#a85f656d"
                                     radius: 2
+                                }
+
+                                Rectangle {
+                                    objectName: "customLayoutColumnSpan-" + editFrame.widgetId + "-" + childRoleFrame.roleId
+                                    visible: childRoleFrame.horizontalRail
+                                    x: 0; y: Math.max(20.0, parent.height - 5.0)
+                                    width: parent.width; height: 2
+                                    color: "#df9ba1a9"
                                 }
 
                                 // A 1-3px separator is not a viable move
@@ -3388,7 +3467,7 @@ Item {
                                 // edit-only; it is never a child size, collision
                                 // obstacle, paint target or persisted geometry.
                                 readonly property bool thinMoveTarget:
-                                    childRoleFrame.movable
+                                    childRoleFrame.movable && !childRoleFrame.horizontalRail
                                     && (childRoleFrame.height < 28.0
                                         || childRoleFrame.width < 44.0)
                                 Rectangle {
@@ -3434,7 +3513,7 @@ Item {
                                     height: childRoleFrame.thinMoveTarget
                                         ? thinChildMoveGrip.height : childRoleFrame.height
                                     z: childRoleFrame.thinMoveTarget ? 5 : 2
-                                    enabled: childRoleFrame.movable
+                                    enabled: childRoleFrame.movable && !childRoleFrame.horizontalRail
                                     cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                                     propagateComposedEvents: false
 
@@ -3601,6 +3680,7 @@ Item {
                                     model: {
                                         if (!customLayoutOverlay.sessionModel)
                                             return []
+                                        if (childRoleFrame.horizontalRail) return []
                                         const handles = customLayoutOverlay.sessionModel.childResizeHandles(
                                             editFrame.index, childRoleFrame.roleId
                                         )
@@ -3738,13 +3818,21 @@ Item {
                                         property real startY: 0.0
                                         property real startWidth: 0.0
                                         property real startHeight: 0.0
-                                        z: 2
-                                        width: horizontalEdge ? 10.0 : Math.max(0.0, childRoleFrame.width - 20.0)
-                                        height: horizontalEdge ? Math.max(0.0, childRoleFrame.height - 20.0) : 10.0
+                                        z: childRoleFrame.horizontalRail ? 3 : 2
+                                        width: childRoleFrame.horizontalRail ? 8.0
+                                            : (horizontalEdge ? 10.0 : Math.max(0.0, childRoleFrame.width - 20.0))
+                                        height: childRoleFrame.horizontalRail ? 16.0
+                                            : (horizontalEdge ? Math.max(0.0, childRoleFrame.height - 20.0) : 10.0)
                                         x: edge === "left" ? -width / 2.0
                                            : (edge === "right" ? childRoleFrame.width - width / 2.0 : 10.0)
-                                        y: edge === "top" ? -height / 2.0
-                                           : (edge === "bottom" ? childRoleFrame.height - height / 2.0 : 10.0)
+                                        y: childRoleFrame.horizontalRail ? Math.max(18.0, childRoleFrame.height - 12.0)
+                                           : (edge === "top" ? -height / 2.0
+                                              : (edge === "bottom" ? childRoleFrame.height - height / 2.0 : 10.0))
+                                        Rectangle {
+                                            visible: childRoleFrame.horizontalRail
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            y: 3; width: 2; height: 8; color: "#efc5c9ce"
+                                        }
 
                                         MouseArea {
                                             objectName: "customLayoutChildResizeEdge-"

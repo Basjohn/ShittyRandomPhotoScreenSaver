@@ -50,6 +50,31 @@ Admitted role patterns and future extensions:
 
 The framework should make future widgets opt in declaratively by role/axis/policy rather than requiring a new controller per family. Freeform artwork geometry uses the shared `freeform_artwork_child_role(...)` contract so Achievement, Abandonment, Media and FEEDS repeated artwork can opt into the same X/Y frame semantics without sharing or waking their provider/image owners.
 
+### Repeated list columns
+
+Gmail's Timestamp/Sender/Subject and Reddit/Reddit2's Age/Ago/Title are widget-wide semantic columns, not
+individual message/post rows. Their small top grips keep the existing discrete reorder gesture. A solid horizontal
+span below each grip exposes separate left/right endpoints: the left endpoint changes the text's starting point
+and width while retaining its opposite edge; the right endpoint changes width. The span's middle is not a second
+move/reorder hit region. The shared horizontal child-role chrome owns these endpoint gestures through the existing
+child-resize admission and `size_payload.child_geometry`; column order remains `size_payload.column_rails`.
+The selected mapper accounts for the actual retained content transform when passing the normalization box to the
+existing resize resolver, so fit/outer-scale differences cannot move the opposite painted edge.
+A swap commits once for the whole list, preserves both header-flip orientations and never uses per-row positions,
+repeated delegate rebuilds or a second persisted column map.
+
+One normalized record applies to every retained row, including new provider rows. Text truncates inside the edited
+column rectangle; artwork/settings ratios, source data and the parent card's extent remain owned by their existing
+systems. The family retains its authored column baselines and uses the common column projection helper for painted
+geometry and a candidate reordered geometry. No extra runtime item, recurring observer, provider wake or layout
+solver is created. Only selected Edit projects the first painted row into the shared handles.
+
+Column endpoint gestures use the same parent containment and optional child-collision policy as other children.
+At a discrete reorder release, the selected child layer checks the candidate projected rectangles through that same
+policy: existing overlap may be reduced or retained, but a collision-enabled edit cannot introduce or worsen it.
+Malformed candidate projection is logged and refused. Save/Cancel, Undo, layout slots, source refresh and recreation
+retain both order and normalized geometry through the existing CUSTOM owner, preserving unknown future role records.
+
 ### Child-handle admission
 
 Do **not** show every child handle merely because global Edit mode is active. The default interaction is two-stage: global Edit mode exposes the ordinary parent frame; clicking/selecting that parent enters child-edit focus for that widget and reveals only its admitted child-role handles. Clicking another parent transfers focus; leaving Edit mode clears it. This keeps dense widgets readable, bounds hit-testing to one family at a time, and avoids persistent overlay clutter/cost. Child handles should be visibly smaller than outer-widget handles while preserving a practical pointer target, preferably by separating the drawn handle size from its transparent hit target. No polling or hover scan is required; selection is event-owned retained state. Prefer one active child-handle layer/Loader for the selected parent rather than instantiating hidden child handles for every widget in Edit mode.
@@ -157,17 +182,3 @@ checking painted bounds rather than model visibility. When a test passes but a
 physical flipped widget fails, its gate is insufficient and must be revised.
 Look for matching off-rail/clip/churn failure in other families, but do not apply
 a universal QML rewrite without family-level paint and owner-lifecycle proof.
-
-
-### Repeated list-column edit authority
-
-
-A semantic rail swap must reorder **all rows of one retained list** using one
-widget-scoped order in the existing CUSTOM owner and payload. Reddit's age
-value, title and AGO are distinct semantic columns;
-Gmail has sender, subject and timestamp. Do not simulate swaps with per-row
-child positions, a second persisted column map, repeated-delegate rebuilds or
-new runtime observers. Commit one discrete reorder action, preserve both flip
-orientations and untouched-axis reflow, and prove Undo/Save/Reset/layout slots
-and fresh-generation paint before accepting it. The rail UI is Edit-only;
-ordinary runtime must not construct rail targets or watch their geometry.

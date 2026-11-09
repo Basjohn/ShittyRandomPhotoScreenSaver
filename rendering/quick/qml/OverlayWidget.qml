@@ -35,6 +35,8 @@ Item {
     property var customEditableChildRoles: []
     // Edit-only semantic list columns; each entry references an existing retained target.
     property var customColumnRailSpecs: []
+    // Optional candidate geometry, evaluated only at an Edit reorder release by the shared child layer.
+    property var customColumnRailSwapRects: null
     // Optional selected-parent-only collision surfaces that are not themselves
     // editable roles (for example Media metadata or its separate mute control).
     // The edit overlay reads these only while this parent is selected. Normal

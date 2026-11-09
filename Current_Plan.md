@@ -365,9 +365,9 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
   excessive widget/Settings card density by material while preserving the good volume surfaces, adjust Glass's
   distortion/inset, and apply themed surfaces throughout Studio with legible controls. Then add Settings Opacity
   Adjust and Widget Opacity Adjust (-1..1, neutral 0) in Style Overrides through existing semantic owners.
-- [ ] **1.8 Gmail/Reddit column editing:** retain each column grip's reorder gesture and use the shared solid
-  span/end regions to adjust its start and width (therefore truncation). Prove Gmail first, then Reddit/Reddit2,
-  through the existing descriptor/child-geometry/Edit/persistence owners, including reload, Undo and Save/Cancel.
+- [~] **1.8 Awaiting Validation:** operator-check Gmail and Reddit/Reddit2 column gestures: top grips reorder;
+  solid-span endpoints change start/width and truncation. Retained-QML proof covers transformed opposite-edge
+  stability, all-row updates, collision policy, Save/Cancel, Undo, slots and fresh-profile hydration.
 - [ ] **1.9 Settings outer border:** inspect/refine bleed and clipping with native corner evidence for dark and
   light themes against both dark and light backgrounds. Accept only after all four combinations show the intended
   rounded surface, border and shadow boundaries; keep this refinement separate from the material-density slice.

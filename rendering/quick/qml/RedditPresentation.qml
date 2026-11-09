@@ -1,4 +1,5 @@
 import QtQuick
+import "ColumnRailGeometry.js" as ColumnGeometry
 
 OverlayWidget {
     id: redditRoot
@@ -57,6 +58,13 @@ OverlayWidget {
             return []
         const targets = first.columnTargets
         return order.map(function(role) { return {"roleId": role, "target": targets[role]} })
+    }
+
+    customColumnRailSwapRects: function(source, target) {
+        const first = postRepeater.count > 0 ? postRepeater.itemAt(0) : null
+        if (!first || !first.visible)
+            throw new Error("Semantic column row is unavailable")
+        return first.columnSwapProjection(ColumnGeometry.swapped(redditRoot.visualColumnOrder, source, target))
     }
 
 
@@ -176,6 +184,12 @@ OverlayWidget {
 
             "normalizationTarget": redditRoot
         })
+        roles.push({"roleId": "age", "targetSource": postRepeater, "targetColumn": "age",
+                    "horizontalRail": true, "normalizationTarget": redditRoot})
+        roles.push({"roleId": "ago", "targetSource": postRepeater, "targetColumn": "ago",
+                    "horizontalRail": true, "normalizationTarget": redditRoot})
+        roles.push({"roleId": "title", "targetSource": postRepeater, "targetColumn": "title",
+                    "horizontalRail": true, "normalizationTarget": redditRoot})
         return roles
     }
 
@@ -357,32 +371,31 @@ OverlayWidget {
                 readonly property var columnTargets: ({"age": ageValueText,
                                                        "ago": ageAgoText,
                                                        "title": titleText})
-                readonly property real ageRailWidth: ageValueText.width
-                readonly property real agoRailWidth: ageAgoText.width
-                readonly property real semanticGapTotal: {
-                    const order = redditRoot.visualColumnOrder
-                    return postRow.columnGap(order[0], order[1])
-                        + postRow.columnGap(order[1], order[2])
+                readonly property real authoredAgeWidth: Math.max(44.0, redditRoot.redditModel.ageFontSize * 4.4)
+                readonly property real authoredAgoWidth: Math.max(30.0, ageAgoText.implicitWidth)
+                readonly property real ageRailWidth: columnWidth("age")
+                readonly property real agoRailWidth: columnWidth("ago")
+                function projectColumns(order) {
+                    const gaps = {defaultGap: redditRoot.titleAgeGap,
+                                  "age:ago": redditRoot.ageValueAgoGap,
+                                  "ago:age": redditRoot.ageValueAgoGap}
+                    const totalGap = order.reduce(function(sum, role, i) {
+                        if (i + 1 === order.length) return sum
+                        const pair = role + ":" + order[i + 1]
+                        return sum + (gaps[pair] !== undefined ? gaps[pair] : gaps.defaultGap)
+                    }, 0.0)
+                    return ColumnGeometry.project(order,
+                        {age: authoredAgeWidth, ago: authoredAgoWidth,
+                         title: Math.max(1.0, width - authoredAgeWidth - authoredAgoWidth - totalGap)},
+                        gaps, redditRoot.childGeometry, redditRoot.childNormalizationWidth, width)
                 }
-                function columnGap(left, right) {
-                    return (left === "age" && right === "ago")
-                        || (left === "ago" && right === "age")
-                        ? redditRoot.ageValueAgoGap : redditRoot.titleAgeGap
-                }
-                function columnWidth(role) {
-                    if (role === "age") return ageRailWidth
-                    if (role === "ago") return agoRailWidth
-                    return Math.max(1.0, width - ageRailWidth - agoRailWidth - semanticGapTotal)
-                }
-                function columnX(role) {
-                    const order = redditRoot.visualColumnOrder
-                    let left = 0.0
-                    for (let i = 0; i < order.length; ++i) {
-                        if (order[i] === role) return left
-                        left += columnWidth(order[i])
-                        if (i < order.length - 1) left += columnGap(order[i], order[i + 1])
-                    }
-                    return 0.0
+                readonly property var projectedColumns: projectColumns(redditRoot.visualColumnOrder)
+                function columnWidth(role) { return projectedColumns[role].width }
+                function columnX(role) { return projectedColumns[role].x }
+                function columnSwapProjection(order) {
+                    const projected = projectColumns(order)
+                    return order.map(function(role) { return {roleId: role, target: postRow,
+                        rect: Qt.rect(projected[role].x, 0.0, projected[role].width, postRow.height)} })
                 }
 
                 width: contentColumn.width
@@ -442,9 +455,10 @@ OverlayWidget {
                     ShadowedText {
                         id: ageValueText
                         objectName: "redditPostAgeValue_" + postRow.index
+                        readonly property var customEditContainmentTarget: postRow
                         x: postRow.columnX("age") - ageText.x
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(44.0, redditRoot.redditModel.ageFontSize * 4.4)
+                        width: postRow.columnWidth("age")
                         height: parent.height
                         text: ageText.valueText
                         color: redditRoot.redditModel.ageColor
@@ -467,13 +481,15 @@ OverlayWidget {
                     ShadowedText {
                         id: ageAgoText
                         objectName: "redditPostAgeAgo_" + postRow.index
+                        readonly property var customEditContainmentTarget: postRow
                         // Flipped reading order is POST TITLE | 01HR | AGO.
                         // Never mirror the actual text/glyphs.
                         x: postRow.columnX("ago") - ageText.x
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(30.0, implicitWidth)
+                        width: postRow.columnWidth("ago")
                         height: parent.height
                         text: "AGO"
+                        elide: Text.ElideRight
                         color: redditRoot.redditModel.ageColor
                         font.family: redditRoot.redditModel.fontFamily
                         font.pointSize: redditRoot.redditModel.ageFontSize
@@ -492,6 +508,7 @@ OverlayWidget {
                 ShadowedText {
                     id: titleText
                     objectName: "redditPostTitle_" + postRow.index
+                    readonly property var customEditContainmentTarget: postRow
                     x: postRow.columnX("title")
                     // One variable-width title rail follows the same discrete
                     // semantic permutation on EVERY row, including after reflow.

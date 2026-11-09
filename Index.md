@@ -82,7 +82,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | Bubble drawn-radius release and remaining judder evidence | `Current_Plan.md` §5; `Docs/Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md`; `Docs/Reference/Harness_Index.md` |
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
-| ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Guides/Custom_Child_Geometry.md` and `Docs/Guides/Custom_Child_Placement_And_Headers.md` |
+| ordinary CUSTOM geometry, Gmail/Reddit column endpoints/reorder, Edit-only keyboard controls and reset | `Docs/Guides/Custom_Child_Geometry.md` and `Docs/Guides/Custom_Child_Placement_And_Headers.md` |
 | R154 display-owner retirement callback; historical diagnostic preset collision, superseded by R155 unified runtime root | `Docs/Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md` |
 | R156 missing Diagnostic frame-trace evidence; native Windows CLI admission and writer-failure receipts | `Docs/Guides/Qt_QML_Observability.md` |
 | R155 cross-display Media shortcuts and compiled Diagnostic shared preset authority | `Docs/Guardrails/Visualizer_Presentation.md`; `Spec.md` → Media transport / Visualizer preset catalogue |

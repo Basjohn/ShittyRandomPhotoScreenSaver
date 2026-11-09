@@ -1766,7 +1766,16 @@ CLOCK_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     ),
 )
 
+def _column_child_roles(*role_ids: str) -> tuple[CustomChildRoleDescriptor, ...]:
+    """Repeated semantic text columns share normalized width/start and the ordinary child-resize owner."""
+    return tuple(CustomChildRoleDescriptor(
+        role_id, axes=("horizontal",), minimum_scale=(0.25, 1.0), maximum_scale=(4.0, 1.0),
+        movable=True,
+    ) for role_id in role_ids)
+
+
 REDDIT_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
+    *_column_child_roles("age", "ago", "title"),
     CustomChildRoleDescriptor(
         "header", axes=("horizontal", "vertical"),
         minimum_scale=(0.65, 0.65), maximum_scale=(1.85, 1.85),
@@ -1780,6 +1789,7 @@ REDDIT_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     ),
 )
 GMAIL_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
+    *_column_child_roles("timestamp", "sender", "subject"),
     CustomChildRoleDescriptor(
         "header", axes=("horizontal", "vertical"),
         minimum_scale=(0.65, 0.65), maximum_scale=(1.85, 1.85),

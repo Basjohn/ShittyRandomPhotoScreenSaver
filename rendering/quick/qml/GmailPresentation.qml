@@ -1,4 +1,5 @@
 import QtQuick
+import "ColumnRailGeometry.js" as ColumnGeometry
 
 OverlayWidget {
     id: gmailRoot
@@ -57,6 +58,13 @@ OverlayWidget {
         return order.map(function(role) { return {"roleId": role, "target": targets[role]} })
     }
 
+
+    customColumnRailSwapRects: function(source, target) {
+        const first = messageRepeater.count > 0 ? messageRepeater.itemAt(0) : null
+        if (!first || !first.visible)
+            throw new Error("Semantic column row is unavailable")
+        return first.columnSwapProjection(ColumnGeometry.swapped(gmailRoot.visualColumnOrder, source, target))
+    }
 
     function childRecord(roleId) {
         return childGeometry ? childGeometry[roleId] : null
@@ -245,6 +253,12 @@ OverlayWidget {
             "normalizationTarget": gmailRoot
         })
         return roles
+        roles.push({"roleId": "timestamp", "targetSource": messageRepeater, "targetColumn": "timestamp",
+                    "horizontalRail": true, "normalizationTarget": gmailRoot})
+        roles.push({"roleId": "sender", "targetSource": messageRepeater, "targetColumn": "sender",
+                    "horizontalRail": true, "normalizationTarget": gmailRoot})
+        roles.push({"roleId": "subject", "targetSource": messageRepeater, "targetColumn": "subject",
+                    "horizontalRail": true, "normalizationTarget": gmailRoot})
     }
 
     Column {
@@ -447,6 +461,12 @@ OverlayWidget {
                         "sender": senderText, "subject": subjectText})
 
                 width: contentColumn.width
+                function columnSwapProjection(order) {
+                    const projected = openArea.projectColumns(order)
+                    return order.map(function(role) { return {roleId: role, target: openArea,
+                        rect: Qt.rect(projected[role].x, 0.0, projected[role].width, openArea.height)} })
+                }
+
                 visible: index < gmailRoot.effectiveVisibleCount
                 height: visible ? boundary.height + gmailRoot.extentRowHeight : 0.0
 
@@ -500,21 +520,16 @@ OverlayWidget {
                                 * gmailRoot.gmailModel.senderSubjectRatio)
                         readonly property real subjectWidth: Math.max(1.0,
                             width - stampWidth - senderWidth - semanticGap * 2.0)
-                        function columnWidth(role) {
-                            if (role === "timestamp") return stampWidth
-                            if (role === "sender") return senderWidth
-                            return subjectWidth
-                        }
-                        function columnX(role) {
-                            const order = gmailRoot.visualColumnOrder
-                            let left = 0.0
-                            for (let i = 0; i < order.length; ++i) {
-                                if (order[i] === role) return left
-                                left += columnWidth(order[i]) + semanticGap
-                            }
-                            return 0.0
+                        function projectColumns(order) {
+                            return ColumnGeometry.project(order,
+                                {timestamp: stampWidth, sender: senderWidth, subject: subjectWidth},
+                                {defaultGap: semanticGap}, gmailRoot.childGeometry,
+                                gmailRoot.childNormalizationWidth, width)
                         }
                         readonly property real envelopeGap: envelope.visible ? 6.0 : 0.0
+                        readonly property var projectedColumns: projectColumns(gmailRoot.visualColumnOrder)
+                        function columnWidth(role) { return projectedColumns[role].width }
+                        function columnX(role) { return projectedColumns[role].x }
                         x: gmailRoot.headerFlipped
                             ? menuButton.width + 6.0 : envelope.width + envelopeGap
                         width: Math.max(1.0, parent.width - menuButton.width
@@ -550,13 +565,14 @@ OverlayWidget {
                             id: timestampText
                             objectName: "gmailTimestamp_" + messageRow.index
                             x: openArea.columnX("timestamp")
+                            readonly property var customEditContainmentTarget: openArea
                             anchors.verticalCenter: parent.verticalCenter
                             horizontalAlignment: gmailRoot.headerFlipped
                                 ? Text.AlignRight : Text.AlignLeft
-                            // Fixed column sized to the widest date (measured, not
-                            // guessed) so full dates never elide; kept constant across
-                            // rows to align the sender edge.
-                            width: openArea.stampWidth
+                            // The authored timestamp rail fits the widest measured date.
+                            // A CUSTOM column width/start may intentionally narrow it and elide;
+                            // the one shared geometry still aligns every retained row.
+                            width: openArea.columnWidth("timestamp")
                             height: parent.height
                             text: messageRow.messageTimestamp
                             color: gmailRoot.gmailModel.timestampColor
@@ -584,8 +600,9 @@ OverlayWidget {
                                 id: senderText
                                 objectName: "gmailSender_" + messageRow.index
                                 x: openArea.columnX("sender")
+                                readonly property var customEditContainmentTarget: openArea
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: openArea.senderWidth
+                                width: openArea.columnWidth("sender")
                                 height: parent.height
                                 text: messageRow.messageSender
                                     + (messageRow.messageCount > 1
@@ -609,7 +626,8 @@ OverlayWidget {
                                 id: subjectText
                                 objectName: "gmailSubject_" + messageRow.index
                                 x: openArea.columnX("subject")
-                                width: openArea.subjectWidth
+                                readonly property var customEditContainmentTarget: openArea
+                                width: openArea.columnWidth("subject")
                                 anchors.verticalCenter: parent.verticalCenter
                                 height: parent.height
                                 text: messageRow.messageSubject
