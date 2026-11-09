@@ -8,7 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal, QSize
 from PySide6.QtGui import QPixmap, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog, QGridLayout, QGroupBox,
+    QAbstractItemView, QApplication, QCheckBox, QComboBox, QFileDialog, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
     QPlainTextEdit, QProgressBar, QPushButton, QSizePolicy, QScrollArea, QFrame, QSpinBox, QSplitter,
     QVBoxLayout, QWidget,
@@ -47,12 +47,19 @@ class DropList(QListWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
-        self.setDragDropMode(QListWidget.DragDropMode.DropOnly)
+        # Accept external file drops AND genuine internal drag-reordering.
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+        self.setDragEnabled(True)
+        self.setDropIndicatorShown(True)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setAlternatingRowColors(True)
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.setToolTip("Drop WebP, PNG, GIF, JPEG, or ZIP files here. Multiple files supported.")
+        self.setToolTip("Drop images to add them; drag an existing row to change playback order. Alt+Up/Down also moves a row.")
 
     def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.source() is self:
+            super().dragEnterEvent(event)
+            return
         if event.mimeData().hasUrls() and any(
             u.isLocalFile() and Path(u.toLocalFile()).suffix.lower() in SUPPORTED_SUFFIXES | {".zip"}
             for u in event.mimeData().urls()
@@ -62,15 +69,36 @@ class DropList(QListWidget):
             event.ignore()
 
     def dragMoveEvent(self, event):
+        if event.source() is self:
+            super().dragMoveEvent(event)
+            return
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dropEvent(self, event: QDropEvent):
+        if event.source() is self:
+            # Qt moves QListWidgetItems with their UserRole (full source path) intact.
+            super().dropEvent(event)
+            return
         paths = [u.toLocalFile() for u in event.mimeData().urls() if u.isLocalFile()]
         self.pathsDropped.emit(paths)
         event.acceptProposedAction()
+
+    def keyPressEvent(self, event):
+        if event.modifiers() == Qt.KeyboardModifier.AltModifier and event.key() in (
+            Qt.Key.Key_Up, Qt.Key.Key_Down
+        ):
+            row = self.currentRow()
+            dest = row + (-1 if event.key() == Qt.Key.Key_Up else 1)
+            if 0 <= row < self.count() and 0 <= dest < self.count():
+                moved = self.takeItem(row)
+                self.insertItem(dest, moved)
+                self.setCurrentRow(dest)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class Processor(QThread):
@@ -199,6 +227,10 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.remove_btn)
         actions.addWidget(self.clear_btn)
         queue_layout.addLayout(actions)
+        queue_hint = QLabel("Drag rows to reorder · Top → bottom is slideshow playback order · Alt+↑/↓ also works")
+        queue_hint.setObjectName("muted")
+        queue_hint.setWordWrap(True)
+        queue_layout.addWidget(queue_hint)
         left_layout.addWidget(queue_group, 2)
 
         output_group = QGroupBox("2  ·  OUTPUT")
@@ -409,13 +441,20 @@ class MainWindow(QMainWindow):
         """)
 
     def on_mode_changed(self, enabled: bool):
+        # A 4K still-image slideshow has far more information than a single still.
+        # Give slideshow batches a useful 25% floor while preserving the regular
+        # tool's existing 50% floor and any manual edits in either mode.
+        if not hasattr(self, "_scale_mode"):
+            self._scale_mode = False
+            self._min_scale_by_mode = {False: self.scale_min.value(), True: 25}
+        if enabled != self._scale_mode:
+            self._min_scale_by_mode[self._scale_mode] = self.scale_min.value()
+            self.scale_min.setValue(self._min_scale_by_mode[enabled])
+            self._scale_mode = enabled
         for widget in (self.hold_ms, self.fade_ms, self.slide_fps, self.loop_back):
             widget.setEnabled(enabled)
         self.still_format.setEnabled(not enabled)
-        if enabled:
-            self.start_btn.setText("Build slideshow")
-        else:
-            self.start_btn.setText("Process queue")
+        self.start_btn.setText("Build slideshow" if enabled else "Process queue")
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls() and any(

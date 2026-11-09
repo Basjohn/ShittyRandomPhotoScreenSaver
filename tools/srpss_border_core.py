@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import io
 import json
-import math
 import re
 import tempfile
 import zipfile
@@ -309,7 +308,7 @@ def _iter_qualities(pref: int, floor: int):
     return qualities
 
 
-def _check_border_alpha(fr: Image.Image):
+def _check_border_alpha(fr: Image.Image, *, max_outline_rgb: int = 38):
     """Validate full perimeter, not just the four corner pixels."""
     w, h = fr.size
     a = fr.getchannel("A")
@@ -320,7 +319,7 @@ def _check_border_alpha(fr: Image.Image):
     for x,y in ((w//2,2),(w//2,3),(w//2,h-3),(w//2,h-4),
                 (2,h//2),(3,h//2),(w-3,h//2),(w-4,h//2)):
         r,g,b,alpha = rgb.getpixel((x,y))
-        if alpha < 245 or max(r,g,b) > 38:
+        if alpha < 245 or max(r,g,b) > max_outline_rgb:
             raise AssetError("Border verification failed: black outline damaged after encoding.")
 
 
@@ -382,120 +381,187 @@ def _sample_indices(total: int) -> set[int]:
     return {0, total // 4, total // 2, (total * 3) // 4, total - 1}
 
 
-def _collapse_identical_frames(frames: list[Image.Image], durations: list[int]) -> tuple[list[Image.Image], list[int]]:
-    if len(frames) != len(durations):
-        raise AssetError("Internal frame/duration mismatch while collapsing slideshow frames.")
-    if not frames:
-        return [], []
-    collapsed_frames = [frames[0].copy()]
-    collapsed_durations = [durations[0]]
-    previous_bytes = frames[0].tobytes()
-    previous_size = frames[0].size
-    for frame, duration in zip(frames[1:], durations[1:]):
-        current_bytes = frame.tobytes()
-        if frame.size == previous_size and current_bytes == previous_bytes:
-            collapsed_durations[-1] += duration
-        else:
-            collapsed_frames.append(frame.copy())
-            collapsed_durations.append(duration)
-            previous_bytes = current_bytes
-            previous_size = frame.size
-    return collapsed_frames, collapsed_durations
-
-
-def _compose_slideshow_bordered_frames(
+def _stream_slideshow_webp(
     infos: list[SourceInfo],
-    slideshow: SlideshowSettings,
+    target_size: tuple[int, int],
+    slide_cfg: SlideshowSettings,
+    quality: int,
+    output_path: Path,
     notify: Callable[[str], None],
     cancelled: Callable[[], bool],
-) -> tuple[list[Image.Image], list[int], tuple[int, int], list[dict], bytes | None]:
-    if len(infos) < 2:
-        raise AssetError("Slideshow mode requires at least two still images.")
-    for info in infos:
-        if info.frame_count != 1:
-            raise AssetError(f"{info.name}: slideshow mode accepts still images only.")
+) -> tuple[int, int]:
+    """Encode frames as they are produced, never retaining a frame-sequence in RAM.
 
-    trim0 = 4 if infos[0].border_present else 0
-    target_size = (infos[0].width - 2 * trim0, infos[0].height - 2 * trim0)
-    if target_size[0] < 4 or target_size[1] < 4:
-        raise AssetError("First slideshow image becomes too small after border removal.")
-    notify(f"Slideshow normalization target: {target_size[0]}×{target_size[1]} content from first source.")
+    Pillow's public save_all API expands append_images into a list before encoding.
+    Pillow 12's own WebP encoder is incremental; use its low-level animation entry
+    point to preserve bounded memory, with a deliberately small compatibility seam.
+    A held still is ONE frame with a long timestamp, not FPS * hold seconds copies.
+    """
+    try:
+        from PIL import _webp
+    except ImportError as exc:
+        raise AssetError("Pillow's animated WebP encoder is unavailable.") from exc
+    if not hasattr(_webp, "WebPAnimEncoder"):
+        raise AssetError("This Pillow version lacks the incremental WebP encoder; use the SRPSS-pinned Pillow 12.0.0.")
 
-    normalized_contents: list[Image.Image] = []
-    normalization_report: list[dict] = []
-    icc_profile = infos[0].icc_profile
-    for idx, info in enumerate(infos, 1):
+    hold_ms = slide_cfg.hold_ms
+    fade_durations = _duration_sequence(slide_cfg.fade_ms, slide_cfg.fps)
+    transitions = len(infos) if slide_cfg.loop_back_to_first else len(infos) - 1
+    expected_frame_count = len(infos) * int(hold_ms > 0) + transitions * len(fade_durations)
+    if expected_frame_count < 2:
+        raise AssetError("Slideshow requires at least two displayed frames; increase hold/crossfade duration.")
+    if expected_frame_count > 10_000:
+        raise AssetError("Slideshow exceeds 10,000 encoded frames. Reduce FPS or fade duration.")
+    if fade_durations and min(fade_durations) < 11:
+        raise AssetError("Fade FPS/duration produces frames shorter than 11 ms; lower FPS or increase fade duration.")
+
+    loop_count = 0 if slide_cfg.loop_back_to_first else 1
+    encoder = _webp.WebPAnimEncoder(
+        (target_size[0] + 8, target_size[1] + 8),
+        0, loop_count, False, 3, 5, False, False,
+    )
+    timestamp = 0
+    submitted = 0
+    current = None
+    next_frame = None
+    try:
+        current = _new_border(_prepare_content_frame(infos[0], target_size, replace_existing_border=True))
+        for index, info in enumerate(infos):
+            if cancelled():
+                raise Cancelled("Slideshow cancelled; no output published.")
+            if hold_ms > 0:
+                encoder.add(current.getim(), timestamp, False, quality, 100, 2)
+                timestamp += hold_ms
+                submitted += 1
+            has_next = index + 1 < len(infos) or slide_cfg.loop_back_to_first
+            if has_next:
+                next_index = (index + 1) % len(infos)
+                next_frame = _new_border(
+                    _prepare_content_frame(infos[next_index], target_size, replace_existing_border=True)
+                )
+                for j, duration in enumerate(fade_durations, 1):
+                    if cancelled():
+                        raise Cancelled("Slideshow cancelled; no output published.")
+                    # Intermediate transition colors only, not fake duplicate hold frames.
+                    frame = Image.blend(current, next_frame, j / (len(fade_durations) + 1))
+                    try:
+                        encoder.add(frame.getim(), timestamp, False, quality, 100, 2)
+                    finally:
+                        frame.close()
+                    timestamp += duration
+                    submitted += 1
+                current.close()
+                current, next_frame = next_frame, None
+            notify(f"  Encoded image {index + 1}/{len(infos)} ({submitted} source frames, {timestamp / 1000:.2f}s)")
         if cancelled():
-            raise Cancelled("Processing cancelled; no final output was published.")
-        content = _prepare_content_frame(info, target_size, replace_existing_border=True)
-        normalized_contents.append(content)
-        normalization_report.append({
-            "source": info.name,
-            "input_size": [info.width, info.height],
-            "trimmed_border": bool(info.border_present),
-            "normalized_content_size": [content.width, content.height],
-        })
-        notify(f"  Normalized {idx}/{len(infos)}: {info.name}")
-
-    bordered_stills = [_new_border(content) for content in normalized_contents]
-    hold_durations = _duration_sequence(slideshow.hold_ms, slideshow.fps)
-    fade_durations = _duration_sequence(slideshow.fade_ms, slideshow.fps)
-    if not hold_durations and not fade_durations:
-        raise AssetError("Slideshow mode needs a non-zero hold or fade duration.")
-
-    frames: list[Image.Image] = []
-    durations: list[int] = []
-    total_transitions = len(bordered_stills) if slideshow.loop_back_to_first else len(bordered_stills) - 1
-
-    for i, base_frame in enumerate(bordered_stills):
-        if cancelled():
-            raise Cancelled("Processing cancelled; no final output was published.")
-        for duration in hold_durations:
-            frames.append(base_frame.copy())
-            durations.append(duration)
-        if total_transitions <= 0:
-            continue
-        if i == len(bordered_stills) - 1 and not slideshow.loop_back_to_first:
-            continue
-        next_frame = bordered_stills[(i + 1) % len(bordered_stills)]
-        fade_count = len(fade_durations)
-        if fade_count:
-            for fade_index, duration in enumerate(fade_durations, 1):
-                blend = fade_index / (fade_count + 1)
-                frames.append(Image.blend(base_frame, next_frame, blend))
-                durations.append(duration)
-
-    if not frames:
-        raise AssetError("Slideshow assembly produced zero frames.")
-    if len(frames) > 10_000:
-        raise AssetError("Slideshow assembly would exceed the 10,000 frame safety limit.")
-    return frames, durations, target_size, normalization_report, icc_profile
+            raise Cancelled("Slideshow cancelled; no output published.")
+        # Pillow's public WebP writer uses the same libwebp flush/assemble sequence.
+        encoder.add(None, timestamp, False, quality, 100, 0)
+        data = encoder.assemble(infos[0].icc_profile or b"", b"", b"")
+        if not data:
+            raise AssetError("Incremental WebP encoder returned no animation.")
+        output_path.write_bytes(data)
+        return timestamp, submitted
+    finally:
+        if current is not None:
+            current.close()
+        if next_frame is not None:
+            next_frame.close()
 
 
-def _verify_visual_samples(reference_frames: list[Image.Image], encoded_path: Path, strict_visual_check: bool):
-    verify = Image.open(encoded_path)
-    sampled_indices = _sample_indices(len(reference_frames))
+def _validate_slideshow(
+    output_path: Path,
+    infos: list[SourceInfo],
+    content_size: tuple[int, int],
+    slide_cfg: SlideshowSettings,
+    intended_ms: int,
+    strict_visual_check: bool,
+    cancelled: Callable[[], bool],
+) -> tuple[list[int], int, list[float]]:
+    """Validate timeline, every frame's border and selected real still/fade images."""
+    from bisect import bisect_right
+
+    durations, loop = webp_timeline(output_path.read_bytes())
+    expected_loop = 0 if slide_cfg.loop_back_to_first else 1
+    if len(durations) < 2:
+        raise AssetError("WebP animation collapsed to a single frame; the selected stills show no distinct motion.")
+    if sum(durations) != intended_ms:
+        raise AssetError(f"WebP duration mismatch: expected {intended_ms} ms, got {sum(durations)} ms.")
+    if loop != expected_loop:
+        raise AssetError(f"WebP loop mismatch: expected {expected_loop}, got {loop}.")
+    if any(d < 11 or d > 0xFFFFFF for d in durations):
+        raise AssetError("Encoded WebP contains an invalid or too-short frame duration.")
+
+    checkpoints: list[tuple[int, int, int | None, float]] = []
+    elapsed = 0
+    transitions = len(infos) if slide_cfg.loop_back_to_first else len(infos) - 1
+    fade_durations = _duration_sequence(slide_cfg.fade_ms, slide_cfg.fps)
+    for index in range(len(infos)):
+        if slide_cfg.hold_ms:
+            checkpoints.append((elapsed + slide_cfg.hold_ms // 2, index, None, 0.0))
+            elapsed += slide_cfg.hold_ms
+        if index < transitions and fade_durations:
+            middle = len(fade_durations) // 2
+            checkpoints.append((elapsed + sum(fade_durations[:middle]) + fade_durations[middle] // 2,
+                                index, (index + 1) % len(infos), (middle + 1) / (len(fade_durations) + 1)))
+            elapsed += sum(fade_durations)
+    if elapsed != intended_ms:
+        raise AssetError("Internal slideshow timeline calculation mismatch.")
+
+    ends = []
+    cursor = 0
+    for duration in durations:
+        cursor += duration
+        ends.append(cursor)
+    selected: dict[int, list[tuple[int, int | None, float]]] = {}
+    if strict_visual_check:
+        for at_ms, first, second, alpha in checkpoints:
+            frame_index = bisect_right(ends, at_ms)
+            if frame_index >= len(durations):
+                frame_index = len(durations) - 1
+            selected.setdefault(frame_index, []).append((first, second, alpha))
+
     visual_diffs: list[float] = []
-    for idx, reference in enumerate(reference_frames):
-        verify.seek(idx)
-        decoded = verify.convert("RGBA")
-        _check_border_alpha(decoded)
-        if strict_visual_check and idx in sampled_indices:
-            region = (4, 4, reference.width - 4, reference.height - 4)
-            reference_region = reference.crop(region)
-            actual_region = decoded.crop(region)
-            black = Image.new("RGBA", reference_region.size, (0, 0, 0, 255))
-            reference_rgb = Image.alpha_composite(black, reference_region).convert("RGB")
-            actual_rgb = Image.alpha_composite(black, actual_region).convert("RGB")
-            stats = ImageStat.Stat(ImageChops.difference(reference_rgb, actual_rgb))
-            mean_abs = sum(stats.mean) / 3
-            visual_diffs.append(round(mean_abs, 3))
-            if mean_abs > 15:
-                verify.close()
-                raise AssetError(f"Visible image-difference check failed (frame {idx}, mean error {mean_abs:.1f}). "
-                                 "Output rejected; try a higher quality or smaller dimensions.")
-    verify.close()
-    return visual_diffs
+    with Image.open(output_path) as verify:
+        expected_size = (content_size[0] + 8, content_size[1] + 8)
+        if verify.size != expected_size:
+            raise AssetError(f"WebP dimensions changed unexpectedly: {verify.size} vs {expected_size}.")
+        if getattr(verify, "n_frames", 1) != len(durations):
+            raise AssetError("WebP decoder and RIFF frame counts disagree.")
+        if infos[0].icc_profile and verify.info.get("icc_profile") != infos[0].icc_profile:
+            raise AssetError("WebP encoding discarded the first source's ICC profile.")
+        for index in range(len(durations)):
+            if cancelled():
+                raise Cancelled("Slideshow validation cancelled; no output published.")
+            verify.seek(index)
+            frame = verify.convert("RGBA")
+            _check_border_alpha(frame, max_outline_rgb=64)
+            for first_index, second_index, alpha in selected.get(index, ()):
+                ref_a = _new_border(_prepare_content_frame(infos[first_index], content_size, True))
+                if second_index is None:
+                    ref = ref_a
+                else:
+                    ref_b = _new_border(_prepare_content_frame(infos[second_index], content_size, True))
+                    ref = Image.blend(ref_a, ref_b, alpha)
+                    ref_a.close()
+                    ref_b.close()
+                try:
+                    region = (4, 4, content_size[0] + 4, content_size[1] + 4)
+                    black = Image.new("RGBA", (content_size[0], content_size[1]), (0, 0, 0, 255))
+                    expected = Image.alpha_composite(black, ref.crop(region)).convert("RGB")
+                    actual = Image.alpha_composite(black, frame.crop(region)).convert("RGB")
+                    mean = sum(ImageStat.Stat(ImageChops.difference(expected, actual)).mean) / 3
+                    visual_diffs.append(round(mean, 3))
+                    if mean > 15:
+                        raise AssetError(f"Slideshow source/fade visual check failed at encoded frame {index}: "
+                                         f"mean RGB difference {mean:.1f}.")
+                finally:
+                    ref.close()
+                    black.close()
+                    expected.close()
+                    actual.close()
+            frame.close()
+    return durations, loop, visual_diffs
 
 
 def process_asset(source_path: str | Path, destination: str | Path,
@@ -743,7 +809,7 @@ def process_slideshow(source_paths: list[str | Path], destination: str | Path,
                       slideshow: SlideshowSettings | None = None,
                       notify: Callable[[str], None] | None = None,
                       cancelled: Callable[[], bool] | None = None) -> dict:
-    """Build one bordered animated WebP from a queue of still images."""
+    """Create one bounded-memory crossfade WebP from an ordered queue of stills."""
     cfg = settings or Settings()
     slide_cfg = slideshow or SlideshowSettings(enabled=True)
     cfg.validate()
@@ -752,21 +818,34 @@ def process_slideshow(source_paths: list[str | Path], destination: str | Path,
         raise AssetError("Slideshow settings must be enabled for slideshow processing.")
     if not features.check("webp"):
         raise AssetError("This Pillow build lacks libwebp support.")
-    notify = notify or (lambda msg: None)
+    notify = notify or (lambda _message: None)
     cancelled = cancelled or (lambda: False)
 
     def check_cancel():
         if cancelled():
-            raise Cancelled("Processing cancelled; no final output was published.")
+            raise Cancelled("Slideshow cancelled; no final output was published.")
 
     if len(source_paths) < 2:
-        raise AssetError("Slideshow mode requires at least two sources.")
-
-    infos = [inspect_source(path) for path in source_paths]
-    for info in infos:
+        raise AssetError("Slideshow mode requires at least two still images.")
+    infos = []
+    for path in source_paths:
+        check_cancel()
+        info = inspect_source(path)
         if info.frame_count != 1:
-            raise AssetError(f"{info.name}: slideshow mode only accepts still images.")
-    notify(f"Queue slideshow mode: {len(infos)} still images → one animated WebP.")
+            raise AssetError(f"{info.name}: slideshow mode accepts still images only.")
+        infos.append(info)
+    notify(f"Queue slideshow: {len(infos)} still images → one streaming animated WebP.")
+
+    trim = 4 if infos[0].border_present else 0
+    base_size = (infos[0].width - trim * 2, infos[0].height - trim * 2)
+    if min(base_size) < 4:
+        raise AssetError("First image is too small after border removal.")
+    fade_durations = _duration_sequence(slide_cfg.fade_ms, slide_cfg.fps)
+    transition_count = len(infos) if slide_cfg.loop_back_to_first else len(infos) - 1
+    intended_ms = slide_cfg.hold_ms * len(infos) + slide_cfg.fade_ms * transition_count
+    logical_frames = len(infos) * int(slide_cfg.hold_ms > 0) + len(fade_durations) * transition_count
+    notify(f"  Timeline: {intended_ms / 1000:.3f}s, {logical_frames} generated frames "
+           f"({len(infos)} holds use one frame each).")
 
     dest = Path(destination).expanduser().resolve()
     dest.mkdir(parents=True, exist_ok=True)
@@ -777,208 +856,128 @@ def process_slideshow(source_paths: list[str | Path], destination: str | Path,
         final_file = _unique_path(final_file.with_name(final_file.stem + "_v2" + final_file.suffix))
         final_zip = final_file.with_suffix(".zip")
 
-    preferred_scales = list(range(cfg.scale_percent, cfg.min_scale_percent - 1, -cfg.scale_step_percent))
-    if preferred_scales[-1] != cfg.min_scale_percent:
-        preferred_scales.append(cfg.min_scale_percent)
+    scales = list(range(cfg.min_scale_percent, cfg.scale_percent + 1, cfg.scale_step_percent))
+    if scales[-1] != cfg.scale_percent:
+        scales.append(cfg.scale_percent)
+    scales = sorted(set(scales))
+    attempts: list[dict] = []
+    selected_quality: int | None = None
+    selected_scale: int | None = None
+    content_size: tuple[int, int] | None = None
+    durations: list[int] = []
+    loop_count = 0
+    visual_diffs: list[float] = []
 
-    with tempfile.TemporaryDirectory(prefix="srpss_border_slideshow_") as td:
+    with tempfile.TemporaryDirectory(prefix="srpss_slideshow_") as td:
         candidate = Path(td) / "candidate.webp"
-        logs = []
-        selected_quality = None
-        selected_scale = None
-        skip_scales_above = cfg.scale_percent
-        final_reference_frames: list[Image.Image] | None = None
-        final_durations: list[int] | None = None
-        final_content_size: tuple[int, int] | None = None
-        normalization_report: list[dict] | None = None
-        icc_profile: bytes | None = None
+        chosen = Path(td) / "chosen.webp"
+        chosen_size: tuple[int, int] | None = None
 
-        for scale in preferred_scales:
+        def encode_attempt(scale: int, quality: int) -> bool:
+            nonlocal selected_scale, selected_quality, chosen_size
             check_cancel()
-            if scale > skip_scales_above:
-                notify(f"Skipping {scale}% after file-size projection (image quality priority).")
-                continue
-
-            if scale != 100:
-                # Temporarily rescale the first source dimensions by wrapping the slideshow assembly.
-                # We scale AFTER normalization target selection to preserve queue layout.
-                base_trim = 4 if infos[0].border_present else 0
-                base_target = (infos[0].width - 2 * base_trim, infos[0].height - 2 * base_trim)
-                scaled_target = (max(4, round(base_target[0] * scale / 100)), max(4, round(base_target[1] * scale / 100)))
-            else:
-                base_trim = 4 if infos[0].border_present else 0
-                scaled_target = (infos[0].width - 2 * base_trim, infos[0].height - 2 * base_trim)
-            if scaled_target[0] < 4 or scaled_target[1] < 4:
-                continue
-
-            predicted_frames = len(_duration_sequence(slide_cfg.hold_ms, slide_cfg.fps)) * len(infos)
-            predicted_frames += len(_duration_sequence(slide_cfg.fade_ms, slide_cfg.fps)) * (len(infos) if slide_cfg.loop_back_to_first else len(infos) - 1)
-            predicted = (scaled_target[0] + 8) * (scaled_target[1] + 8) * 4 * max(1, predicted_frames)
-            if predicted > MAX_ESTIMATED_RGBA_BYTES:
-                notify(f"Skipping {scale}%: estimated decoded frames exceed 1.5 GB safety cap.")
-                logs.append({"scale_percent": scale, "skipped": "memory safety"})
-                continue
-
-            # Build a scaled clone of the info set by temporarily overriding the first-target logic.
-            patched_infos: list[SourceInfo] = []
-            for idx, info in enumerate(infos):
-                if idx == 0:
-                    patched_infos.append(SourceInfo(
-                        info.name,
-                        scaled_target[0] + (4 if info.border_present else 0) * 2,
-                        scaled_target[1] + (4 if info.border_present else 0) * 2,
-                        info.frame_count,
-                        info.durations_ms,
-                        info.loop,
-                        info.bytes_size,
-                        info.source_format,
-                        info.border_present,
-                        info.icc_profile,
-                        info.payload,
-                    ))
-                else:
-                    patched_infos.append(info)
-
-            notify(f"Preparing slideshow at {scaled_target[0]}×{scaled_target[1]} content ({scale}%).")
-            frames, durations, content_size, norm_report, icc_profile = _compose_slideshow_bordered_frames(
-                patched_infos, slide_cfg, notify, cancelled
+            size = tuple(max(4, round(length * scale / 100)) for length in base_size)
+            # Allow a handful of large working surfaces, not FPS * hold seconds
+            # independent buffers. The encoder streams compressed frames.
+            working_bytes = (size[0] + 8) * (size[1] + 8) * 4 * 12
+            if working_bytes > MAX_ESTIMATED_RGBA_BYTES:
+                notify(f"Skipping {scale}%: single working-set estimate exceeds 1.5 GB.")
+                attempts.append({"scale_percent": scale, "skipped": "working set safety"})
+                return False
+            notify(f"Streaming {size[0]}×{size[1]} slideshow ({scale}%, q{quality})...")
+            actual_ms, submitted = _stream_slideshow_webp(
+                infos, size, slide_cfg, quality, candidate, notify, cancelled
             )
-            final_frame_size = (content_size[0] + 8, content_size[1] + 8)
-            check_cancel()
-            if len(frames) != len(durations):
-                raise AssetError("Internal slideshow frame/duration mismatch.")
+            actual_bytes = candidate.stat().st_size
+            attempts.append({"scale_percent": scale, "quality": quality, "bytes": actual_bytes,
+                             "submitted_frames": submitted})
+            notify(f"  q{quality}: {actual_bytes:,} bytes (budget {cfg.max_bytes:,})")
+            if actual_ms != intended_ms:
+                raise AssetError("Slideshow generator changed the intended timeline.")
+            if actual_bytes > cfg.max_bytes:
+                return False
+            # Keep the best fitting candidate while subsequent attempts probe.
+            # Don't publish or expose anything until all verification completes.
+            import shutil
+            shutil.copyfile(candidate, chosen)
+            selected_quality, selected_scale, chosen_size = quality, scale, size
+            return True
 
-            selected_quality = None
-            if cfg.prefer_quality_over_pixels and scale > cfg.min_scale_percent:
-                candidates = [cfg.preferred_quality]
+        if cfg.prefer_quality_over_pixels:
+            # A large batch of 4K stills can take minutes to encode at 90%, only
+            # to discover it cannot possibly meet a 10 MB cap. Probe the minimum
+            # permitted size first, then binary-search UP for the largest fitting
+            # dimensions at the preferred quality. Decrease quality only if even
+            # the permitted minimum cannot fit at that quality.
+            smallest = scales[0]
+            if encode_attempt(smallest, cfg.preferred_quality):
+                low, high = 1, len(scales) - 1
+                while low <= high:
+                    middle = (low + high) // 2
+                    if encode_attempt(scales[middle], cfg.preferred_quality):
+                        low = middle + 1
+                    else:
+                        high = middle - 1
             else:
-                candidates = _iter_qualities(cfg.preferred_quality, cfg.minimum_quality)
-            most_recent_encoded_size = None
-            for quality in candidates:
-                check_cancel()
-                notify(f"  Encoding slideshow quality {quality}, scale {scale}%...")
-                args = {
-                    "format": "WEBP",
-                    "quality": quality,
-                    "method": 3,
-                    "exact": True,
-                    "save_all": True,
-                    "append_images": frames[1:],
-                    "duration": durations,
-                    "loop": 0 if slide_cfg.loop_back_to_first else 1,
-                    "minimize_size": False,
-                }
-                if icc_profile:
-                    args["icc_profile"] = icc_profile
-                frames[0].save(candidate, **args)
-                length = candidate.stat().st_size
-                most_recent_encoded_size = length
-                notify(f"  q{quality}: {length:,} bytes")
-                logs.append({"scale_percent": scale, "quality": quality, "bytes": length})
-                if length <= cfg.max_bytes:
-                    selected_quality = quality
-                    selected_scale = scale
-                    final_reference_frames = frames
-                    final_durations = durations
-                    final_content_size = content_size
-                    normalization_report = norm_report
-                    break
-            if selected_quality is not None:
-                break
-            if cfg.prefer_quality_over_pixels and most_recent_encoded_size and scale > cfg.min_scale_percent:
-                projected = int(scale * (cfg.max_bytes / most_recent_encoded_size) ** 0.5 * 0.98)
-                projected = max(cfg.min_scale_percent, min(scale - cfg.scale_step_percent, projected))
-                permitted = [s for s in preferred_scales if s <= projected]
-                skip_scales_above = max(permitted) if permitted else cfg.min_scale_percent
-                notify(f"  Too large at q{cfg.preferred_quality}; next projected scale: {skip_scales_above}%.")
+                for quality in _iter_qualities(cfg.preferred_quality, cfg.minimum_quality)[1:]:
+                    if encode_attempt(smallest, quality):
+                        break
         else:
-            raise AssetError("No slideshow result fits within the byte cap above your minimum scale/quality. "
-                             "Lower minimum scale, adjust quality floor, or shorten the slideshow.")
+            # For users who prefer pixels over quality, try largest to smallest;
+            # each permitted resolution receives quality attempts before shrinking.
+            for scale in reversed(scales):
+                for quality in _iter_qualities(cfg.preferred_quality, cfg.minimum_quality):
+                    if encode_attempt(scale, quality):
+                        break
+                if selected_quality is not None:
+                    break
 
-        if not final_reference_frames or not final_durations or not final_content_size or normalization_report is None:
-            raise AssetError("Slideshow assembly did not produce a publishable candidate.")
+        if selected_quality is None or chosen_size is None or selected_scale is None:
+            raise AssetError("The animation exceeds your size cap at the minimum allowed scale/quality. "
+                             "Lower Minimum size or Minimum WebP quality, or increase Max file size. "
+                             "All frames were encoded incrementally; this was a file-size limit, not RAM exhaustion.")
         check_cancel()
-        collapsed_reference_frames, collapsed_durations = _collapse_identical_frames(final_reference_frames, final_durations)
-        encoded_bytes = candidate.read_bytes()
-        actual_durations, actual_loop = webp_timeline(encoded_bytes)
-        if len(actual_durations) != len(collapsed_durations):
-            raise AssetError(f"Encoder changed slideshow frame structure unexpectedly: {len(collapsed_durations)} expected encoded frames, got {len(actual_durations)}. Output rejected.")
-        expected_loop = 0 if slide_cfg.loop_back_to_first else 1
-        if actual_durations != list(collapsed_durations) or actual_loop != expected_loop:
-            notify("  Encoder changed slideshow timestamp metadata: repairing timestamps WITHOUT re-encoding frames.")
-            encoded_bytes = patch_webp_timeline(encoded_bytes, list(collapsed_durations), expected_loop)
-            candidate.write_bytes(encoded_bytes)
-            confirm_durations, confirm_loop = webp_timeline(candidate.read_bytes())
-            if confirm_durations != list(collapsed_durations) or confirm_loop != expected_loop:
-                raise AssetError("Slideshow frame timing repair failed; output rejected.")
-        if candidate.stat().st_size > cfg.max_bytes:
-            raise AssetError("Validated slideshow output crossed the size limit; output rejected.")
+        durations, loop_count, visual_diffs = _validate_slideshow(
+            chosen, infos, chosen_size, slide_cfg, intended_ms, cfg.strict_visual_check, cancelled
+        )
+        content_size = chosen_size
+        with final_file.open("xb") as out:
+            out.write(chosen.read_bytes())
 
-        verify = Image.open(candidate)
-        if verify.size != (final_content_size[0] + 8, final_content_size[1] + 8):
-            raise AssetError("Slideshow output resolution changed unexpectedly.")
-        if getattr(verify, "n_frames", 1) != len(collapsed_durations):
-            raise AssetError("Slideshow decoder frame count mismatch in final result.")
-        if icc_profile and verify.info.get("icc_profile") != icc_profile:
-            raise AssetError("ICC color profile could not be retained in slideshow output; output rejected.")
-        verify.close()
-        visual_diffs = _verify_visual_samples(collapsed_reference_frames, candidate, cfg.strict_visual_check)
-        check_cancel()
-
-        with final_file.open("xb") as stream:
-            stream.write(candidate.read_bytes())
-        report = {
-            "tool": "SRPSS Border Studio",
-            "mode": "queue_slideshow",
-            "sources": [
-                {
-                    "name": info.name,
-                    "source_size_bytes": info.bytes_size,
-                    "source_format": info.source_format,
-                    "size": [info.width, info.height],
-                    "existing_srpss_border_detected": info.border_present,
-                }
-                for info in infos
-            ],
-            "normalization": {
-                "strategy": "normalize every source into the first source's trimmed content size using aspect-ratio-preserving fit",
-                "per_source": normalization_report,
-            },
-            "output_file": final_file.name,
-            "output_size_bytes": final_file.stat().st_size,
-            "content_size": [final_content_size[0], final_content_size[1]],
-            "final_size": [final_content_size[0] + 8, final_content_size[1] + 8],
-            "scale_percent": selected_scale,
-            "quality": selected_quality,
-            "logical_generated_frame_count": len(final_durations),
-            "frame_count": len(collapsed_durations),
-            "duration_ms": sum(collapsed_durations),
-            "frame_durations_ms": list(collapsed_durations),
-            "loop": expected_loop,
-            "slideshow": {
-                "hold_ms_per_image": slide_cfg.hold_ms,
-                "crossfade_ms": slide_cfg.fade_ms,
-                "fps": slide_cfg.fps,
-                "loop_back_to_first": slide_cfg.loop_back_to_first,
-            },
-            "border": {"padding_px": 2, "black_outline_px": 2, "radius_px": 3},
-            "mean_absolute_rgb_diffs": visual_diffs,
-            "attempts": logs,
-            "validation": "PASS: strict count, timings, loop, transparent perimeter and black outline",
-        }
-        if cfg.make_zip:
-            try:
-                with zipfile.ZipFile(final_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=5) as archive:
-                    archive.write(final_file, arcname=final_file.name)
-                    archive.writestr("PROCESSING_REPORT.json", json.dumps(report, indent=2))
-                with zipfile.ZipFile(final_zip) as archive:
-                    if archive.testzip() is not None:
-                        raise AssetError("Output ZIP CRC verification failed.")
-            except Exception:
-                final_zip.unlink(missing_ok=True)
-                final_file.unlink(missing_ok=True)
-                raise
-            report["zip_path"] = str(final_zip)
-        report["output_path"] = str(final_file)
-        notify("PASS: slideshow frame count, timing, looping, border and ZIP verified.")
-        return report
+    report = {
+        "tool": "SRPSS Border Studio", "mode": "queue_slideshow",
+        "sources": [{"name": info.name, "source_size_bytes": info.bytes_size,
+                     "source_format": info.source_format, "size": [info.width, info.height],
+                     "existing_srpss_border_detected": info.border_present}
+                    for info in infos],
+        "normalization": {
+            "strategy": "aspect-ratio preserving centered fit into the first image's trimmed content size",
+            "source_order": [info.name for info in infos],
+        },
+        "output_file": final_file.name, "output_size_bytes": final_file.stat().st_size,
+        "content_size": list(content_size), "final_size": [content_size[0] + 8, content_size[1] + 8],
+        "scale_percent": selected_scale, "quality": selected_quality,
+        "logical_generated_frame_count": logical_frames, "frame_count": len(durations),
+        "duration_ms": sum(durations), "frame_durations_ms": durations, "loop": loop_count,
+        "slideshow": {"hold_ms_per_image": slide_cfg.hold_ms, "crossfade_ms": slide_cfg.fade_ms,
+                      "fps": slide_cfg.fps, "loop_back_to_first": slide_cfg.loop_back_to_first},
+        "border": {"padding_px": 2, "black_outline_px": 2, "radius_px": 3},
+        "mean_absolute_rgb_diffs": visual_diffs, "attempts": attempts,
+        "validation": "PASS: total timing, loop, ordered still/fade samples, every frame border, size",
+    }
+    if cfg.make_zip:
+        try:
+            with zipfile.ZipFile(final_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=5) as archive:
+                archive.write(final_file, arcname=final_file.name)
+                archive.writestr("PROCESSING_REPORT.json", json.dumps(report, indent=2))
+            with zipfile.ZipFile(final_zip) as archive:
+                if archive.testzip() is not None:
+                    raise AssetError("Output ZIP CRC verification failed.")
+        except Exception:
+            final_zip.unlink(missing_ok=True)
+            final_file.unlink(missing_ok=True)
+            raise
+        report["zip_path"] = str(final_zip)
+    report["output_path"] = str(final_file)
+    notify("PASS: streaming slideshow, ordered frames, timing, border and ZIP verified.")
+    return report
