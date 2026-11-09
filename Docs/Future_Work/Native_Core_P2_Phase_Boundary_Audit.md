@@ -527,6 +527,44 @@ fences. The negative control restores `count_for_run=False` in memory and fails 
 the existing unanswered-configure and half-retired-owner deadline cases: **5 passed**. Terra's focused read-only
 review found no additional M2 defect; the reviewer did not run tests. No device/window/build/load gate was run.
 
+### L1: ordered admission and synchronous serialization
+
+CLIENT_RESTARTED_ROLES application sends now refuse a full queue without evicting any earlier edge, and serialize
+exactly once before admission. The queue carries inert bytes; the existing visualizer worker loop decodes that
+snapshot. Internal heartbeat/shutdown dictionaries and other roles keep their existing consumers/policy. A failed
+serialization raises synchronously; queue refusal returns None; both reach the link's existing queued failure event.
+No edge waits for a worker reply and no new transport, lifecycle owner or retry is added.
+
+Windows pipe duplication uses the exact supervised process's open Process.sentinel handle, held under the same
+supervisor lock as queue admission. The duplicate belongs to that child even if never decoded; child exit reclaims it.
+Only a never-submitted duplicate is stolen back/closed through that same process handle; no PID lookup or late close
+of a possibly consumed/reused handle occurs. On serialization/enqueue refusal, other Connection reductions locally
+remove/close only registrations created by this serialization whose IDs have never escaped. This narrow adapter is
+pinned to CPython 3.14's private resource-sharer _id, _cache, _address and registration _lock contract, checked
+before registration. Unsupported shapes fail loudly. It never requests detach()/an unbounded sharer handshake,
+mutates accepted entries, stops the global service, or assumes its registration lock fences _serve.
+
+**Actionable inherited POSIX orphan finding:** after admission, POSIX Connection transfers retain supported stdlib
+ownership. CPython 3.14 Queue._feed already ForkingPickler-serializes the Connection through DupFd, whose
+resource-sharer registration owns an os.dup until receiver detach. A worker dying before decode can leave that
+sender registration alive. Serializing once before put creates the same single registration earlier, widening the
+exposure window before the old feeder would have serialized it; inert bytes create no second registration. This
+slice does not resolve that orphan class. A future bounded POSIX transfer-lifetime design must handle already-pending
+service requests; private accepted-entry pop is unsafe because _serve pops without the registration lock. No ACK
+protocol or global service cancellation is added. Linux actual execution remains unproven on this Windows host.
+
+The initial full-queue/unpickleable tests fail on the baseline. Focused proof covers real BaseWorker wake transfer,
+unshown link failure delivery, one payload reduction through the real queue feeder, other-role dictionaries, repeated
+Windows refusal rollback, accepted-unread child death with parent handle count, actual socket-sharer rollback leaving
+unrelated IDs, pure adapter idempotence/address fencing, and unsupported shape refusal. Terra independently verified
+the baseline/candidate source distinction and found no additional concrete defect in the final narrow delta; that
+read-only review did not rerun tests. The final focused L1/supervisor/H2/M2 gate is **67 passed** (17 new L1 cases),
+independently rerun by the lead with the same result.
+In-memory negative controls restore baseline send (both ordered/refusal checks fail), sender-owned duplication
+(worker-death handle count grows), and skipped rollback (all four refusal-cleanup checks fail). Compilation of the
+four changed/new Python files and scoped whitespace checks pass. No build, load, device, render or Linux runtime
+proof was run.
+
 ## P3 readiness
 
 What ABI 2 already gives the native core:

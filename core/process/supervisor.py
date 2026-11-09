@@ -620,6 +620,22 @@ class ProcessSupervisor:
                     worker_type.value,
                 )
                 return None
+
+            if worker_type in self.CLIENT_RESTARTED_ROLES:
+                from core.process.control_messages import EncodedControl
+                process = self._workers[worker_type]
+                # Queue's feeder must never serialize user payloads: that can
+                # fail after the caller already accepted an ordered edge.
+                encoded = EncodedControl(message.to_dict(), process)
+                try:
+                    req_queue.put_nowait(encoded.data)
+                except Exception as exc:
+                    encoded.close_unsubmitted()
+                    logger.warning('Ordered %s control %s refused without evicting an earlier edge: %s',
+                                   worker_type.value, msg_type.value, type(exc).__name__)
+                    return None
+                encoded.submitted()
+                return corr_id
             
             try:
                 req_queue.put_nowait(message.to_dict())

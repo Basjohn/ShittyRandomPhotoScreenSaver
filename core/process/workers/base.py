@@ -182,6 +182,9 @@ class BaseWorker:
                     
                     # Parse message
                     try:
+                        if self.worker_type == WorkerType.VISUALIZER and isinstance(msg_data, bytes):
+                            from core.process.control_messages import decode_control
+                            msg_data = decode_control(msg_data)
                         msg = WorkerMessage.from_dict(msg_data)
                     except Exception as e:
                         self._logger.error("Failed to parse message: %s", e)

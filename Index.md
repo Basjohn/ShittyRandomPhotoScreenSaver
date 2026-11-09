@@ -67,6 +67,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Settings hierarchy connector rails and semantic annotations | `ui/widgets/bucket_tree.py`; `Docs/Architecture/Settings_Theme_Architecture.md` → bucket children |
 | runtime Widget Theme / style override ownership | `Docs/Guides/Custom_Style_Implementation.md` |
 | Settings/Widget Opacity Adjust, combined surface density and cached semantic ink | `core/settings/surface_opacity.py`; `ui/settings_surface_composition.py`; `Docs/Architecture/Settings_Theme_Architecture.md` |
+| ordered visualizer controls, synchronous admission and transferred wake-handle ownership | `core/process/control_messages.py`; `Docs/Contracts.md` → Process path; `Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md` → L1 |
 | safety / guardrail router | `Docs/Guardrails.md` |
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | wallpaper cache, speculative source batches and image-worker ownership | `Docs/Contracts.md` → Wallpaper image cache and prefetch |

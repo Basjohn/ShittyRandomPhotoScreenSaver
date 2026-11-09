@@ -543,6 +543,14 @@ per owner construction by `core.diagnostics.experiment_flags.visualizer_engine_w
 or the diagnostic argv tokens `--viz-in-process` (the A/B control; it wins) and `--viz-engine-worker`; never an
 environment flag. Design and gates: `Docs/Future_Work/Native_Core_P2_Engine_Design.md`.
 
+Ordered application controls for `CLIENT_RESTARTED_ROLES` never evict an earlier edge. The supervisor serializes each
+snapshot once before queue admission; refusal returns None and serialization failure raises into the link's existing
+queued failure path. Only the visualizer worker decodes these bytes; other roles and internal controls retain their
+existing dictionary protocol. Windows wake-pipe transfers belong to the exact supervised process handle. Cleanup
+reclaims only never-submitted transfers; the CPython 3.14 private sharer adapter must not cancel accepted entries or
+block on the sharer service. Accepted POSIX unread-transfer retention remains an explicit audit follow-up.
+A first-configure deadline miss disables the worker for that run, so later owners do not repeat the cold wait.
+
 Bar-count reconfiguration must leave controller authority, the shared engine generation and the controller-owned logical
 display-bar mirror/freshness state coherent. Legacy overlay-only mirrors get no Quick successor unless an exact retained
 consumer exists. Do not move every legacy widget field into the logical controller merely because the widget historically

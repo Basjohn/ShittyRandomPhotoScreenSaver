@@ -174,23 +174,21 @@ after the operator's yes on a question card; agents never run load (invisible ch
      automatic fallbacks warn/error with their reason, while capacity violations remain terminal. Linux stays in
      process for this slice. Default-merge and H1/H2 evidence live in the audit's resolution section.
      **Order** (each step: failing-first test, its negative control, record in the audit doc's resolution section):
-     1. L1 (ordered control edges never dropped).
-     2. M4: gates with non-default presets and settings; a gate 2 (no visual change) record.
-     3. H3 (operator, 8 Nov: there is no Linux machine to prove it on; assume it works with basic support): make the
+     1. M4: gates with non-default presets and settings; a gate 2 (no visual change) record.
+     2. H3 (operator, 8 Nov: there is no Linux machine to prove it on; assume it works with basic support): make the
         worker the default on Linux too (flip `visualizer_engine_worker_platform_default`
         to every platform and update `Linux_Plan.md` Phase 4 and the platform tests). No Linux proving step.
-     4. M5 and L2-L5.
-     5. P3's four decisions (listed last below) before P3's first slice.
-     M1/M2/H1/H2 evidence lives in the audit's resolution section. A first-configure timeout disables the worker
+     3. M5 and L2-L5, plus the inherited POSIX transfer-lifetime finding below.
+     4. P3's four decisions (listed last below) before P3's first slice.
+     M1/M2/L1/H1/H2 evidence lives in the audit's resolution section. A first-configure timeout disables the worker
      for the run; later owners do not repeat the six-second cold wait. Capacity, logging and detached STOP reports
-     retain their focused proof. Load reveal-latency sizing remains an operator gate.
+     retain their focused proof; ordered controls refuse rather than evict and serialize before admission.
+     Load reveal-latency sizing remains an operator gate.
      - [ ] H3: the worker path has never run on Linux (forkserver on 3.14, POSIX wake path, Pulse capture). Operator,
        8 Nov: it cannot be proven (no Linux machine); assume basic support and make the worker the Linux default too
-        (step 3).
+        (step 2).
      - [ ] M4: every gate used default presets; gate 2 (no visual change) has no record.
      - [ ] M5: the in-process mode-cycling memory growth (gate 4 side finding) still hits the fallback and the Studios.
-     - [ ] L1: a full request queue drops the oldest message (wrong for ordered control edges; a lost `VIS_SET_VIEW`
-       silently stops Edit's orbit reaching the worker).
      - [ ] L2: gate 3's "GIL share" fields are wall time, not GIL hold; "revisions waiting 0/0" is zero by
        construction on the worker path; the worker's audio feed differs from a real device.
      - [ ] L3: `--usage` costs ~13 ms more per 15 s sample with the worker (see §5's usage-sample hitch).
@@ -198,6 +196,11 @@ after the operator's yes on a question card; agents never run load (invisible ch
        forwarded silently; a blocked tick thread whose loop still answers heartbeats freezes undetected.
      - [ ] L5: reconcile remaining historical qualification: gate 4's worker memory predates R-179; the earlier
        "next frozen build" wording is already answered by frozen check 2; audit the remaining writer overstatement.
+     - [ ] POSIX transfer lifetime: design bounded ownership for an accepted Connection never decoded because its
+       worker dies. The inherited stdlib sharer can retain one sender descriptor; synchronous serialization creates
+       it earlier. Do not cancel accepted registrations through the private cache or block GUI on a sharer handshake.
+       Boundary/source evidence: phase-boundary audit L1. Linux runtime remains unverified; this is a source repair
+       task, separate from the operator-waived Linux proving step.
      - [ ] P3 decisions before its first slice: the native reader vs the GUI thread closing the mapping mid-copy; a
        single consumer and a non-consuming head read for the Python owner; EB geometry once per revision, not per
        frame; EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check scans
@@ -252,6 +255,9 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
 - [~] **1.6 Awaiting Validation:** Achievement Pulse counted disabled provider fields as painted capsule rows;
   replaying the saved payload on Edit entry then changed the canvas. The enabled-row regression is green.
   Check child placement after Settings/fullscreen return with `--geo`; other families' extent floors are static.
+- [ ] **1.7a Studio legibility follow-up:** the panel guard raises broad light surfaces nearly opaque to carry
+  accent/focus marks. Resolve intended density once, then minimally correct runtime semantic ink against its actual
+  composed locations; retain authored/scene colours and prove controls/traces on final off-screen wallpaper renders.
 - [~] **1.7 Awaiting Validation (separate reversible slice):** operator-compare the supplied widget material
   screenshots with current cards, especially the good Glass/Frosted volume surfaces, Glass inset/distortion, and
   Studio panels/tabs/headers/wells. Exercise Settings Opacity Adjust and Widget Opacity Adjust in Style Overrides
