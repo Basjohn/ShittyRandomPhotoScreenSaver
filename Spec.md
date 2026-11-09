@@ -700,6 +700,10 @@ already-deleted Shiboken wrapper must be reported/fail-closed and can never abor
 simulation cadence.
 
 Visualizer geometry is capability-driven. Modes using the shared reflowing card policy use the canonical 1.5 baseline aspect.
+Content quarter-turns follow the descriptor's capability in ordinary and Fullscreen Edit (Waveform Ribbon included),
+through the existing CUSTOM presentation owner. Fullscreen's Now Playing offers the shared Media transport bar or
+floating glyphs and uses ordinary Media's metadata fitting/wrapping primitive; its detailed overlay contract is in
+`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` §G.
 
 A bordered/framed 3D Visualizer uses the normal card shell with an orbitable 3D scene **inside** it. CARD / CARD_INTERIOR
 keeps the scene inside the border at every pose, scale, viewport and Edit state; orbit rotates the scene, not the card.

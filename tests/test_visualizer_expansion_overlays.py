@@ -61,7 +61,7 @@ class _Media(QObject):
     def __init__(self, **values) -> None:
         super().__init__()
         self.values = dict(hasTrack=True, title="Track One", artist="Artist One", artworkSource="",
-                           playbackState="playing", canPrevious=True, canNext=True, canPlayPause=True)
+                           album="", showAlbum=False, playbackState="playing", canPrevious=True, canNext=True, canPlayPause=True)
         self.values.update(values)
 
     def update(self, **values) -> None:
@@ -74,6 +74,8 @@ class _Media(QObject):
     hasTrack = _value("hasTrack", bool)
     title = _value("title", str)
     artist = _value("artist", str)
+    album = _value("album", str)
+    showAlbum = _value("showAlbum", bool)
     artworkSource = _value("artworkSource", str)
     playbackState = _value("playbackState", str)
     canPrevious = _value("canPrevious", bool)
@@ -686,12 +688,17 @@ def _click(display, item) -> None:
 
 
 @pytest.mark.qt
-def test_media_controls_emit_one_semantic_request_only_while_admitted(display):
+@pytest.mark.parametrize("style", ["bar", "floating"])
+def test_media_controls_emit_one_semantic_request_only_while_admitted(display, style):
     media = _Media()
-    _draw(display, media=media, config=_config(now_playing={"media_controls": True, "always_show": True}))
+    _draw(display, media=media, config=_config(now_playing={"media_controls": True, "media_controls_style": style, "always_show": True}))
     _open(display)
     slot = _slot(display, "expandedOverlayNowPlaying")
     _settle(display, lambda: _prop(slot, "presence") >= 1.0)
+    bar = _named(_root(display), "expandedOverlayMediaControls")
+    assert bar.property("floatingGlyphs") is (style == "floating")
+    if style == "floating":
+        assert bar.property("color").alpha() == 0
     requests = []
     display.scene.visualizer_overlay_transport_requested.connect(requests.append)
     root = _root(display)
@@ -712,6 +719,46 @@ def test_media_controls_emit_one_semantic_request_only_while_admitted(display):
 def _qml_type(item) -> str:
     """The QML component an item instantiates (``Name_QMLTYPE_n`` -> ``Name``)."""
     return item.metaObject().className().split("_QMLTYPE_", 1)[0]
+
+
+@pytest.mark.qt
+def test_long_metadata_uses_media_fitting_and_allotted_lines_for_every_row(display):
+    from PySide6.QtQml import QQmlEngine, QQmlExpression
+
+    def qml_value(item, expression):
+        query = QQmlExpression(QQmlEngine.contextForObject(item), item, expression)
+        result, undefined = query.evaluate()
+        assert not undefined and not query.hasError(), query.error()
+        return result
+
+    media = _Media(title="An Unusually Long Track Name For A Narrow Text Box",
+                   artist="A Very Long Artist Credit Featuring Several Other Artists",
+                   album="A Long Album Name For The Same Narrow Text Box", showAlbum=True)
+    _draw(display, media=media, config=_config(now_playing={"always_show": True, "text_width": 9.0}))
+    _open(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    _settle(display, lambda: _prop(slot, "presence") >= 1.0)
+    layer = _layer(display)
+    rows = [_named(layer, "expandedOverlay" + role) for role in ("Title", "Artist", "Album")]
+    assert all(_qml_type(row) == "MediaMetadataText" for row in rows)
+    roles = slot.property("customEditableChildRoles").toVariant()
+    assert next(role for role in roles if role["roleId"] == "album")["target"] is rows[2]
+    for row in rows:
+        main = row.findChild(QQuickItem, "shadowedTextMain")
+        assert main is not None and row.property("fontSizeMode") != 0
+        # The engine's effective font shrinks, rather than just clipping an unchanged large font.
+        assert qml_value(main, "fontInfo.pixelSize") < row.property("font").pixelSize()
+    display.scene.set_visualizer_expanded_overlay_config(_config(
+        now_playing={"always_show": True, "text_width": 9.0, "text_height": 12.0}))
+    _run(display, 180)
+    for row in rows:
+        assert row.property("maximumLineCount") > 1
+        main = row.findChild(QQuickItem, "shadowedTextMain")
+        assert main.property("lineCount") > 1
+        assert main.property("contentWidth") <= row.width() + 1.0
+    assert _prop(slot, "contentAlbum") == media.values["album"]
+    media.update(album="A Different Album With The Same Track And Artist")
+    _settle(display, lambda: _prop(slot, "contentAlbum") == media.values["album"])
 
 
 @pytest.mark.qt

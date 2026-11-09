@@ -844,14 +844,30 @@ Item {
                     border.width: 1
                     border.color: customLayoutOverlay.closeButtonBorderColor
 
-                    Text {
+                    Canvas {
                         anchors.centerIn: parent
-                        text: "↻"
-                        color: customLayoutOverlay.closeButtonGlyphColor
-                        font.pixelSize: Math.round(rotateContentControl.width * 0.68)
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+                        width: parent.width * 0.72
+                        height: width
+                        readonly property color ink: customLayoutOverlay.closeButtonGlyphColor
+                        onInkChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.scale(width / 20, height / 20)
+                            ctx.strokeStyle = ink
+                            ctx.lineWidth = 1.5
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            ctx.strokeRect(4, 9, 7, 8)
+                            ctx.beginPath()
+                            ctx.moveTo(4, 6)
+                            ctx.bezierCurveTo(10, 0, 18, 4, 17, 11)
+                            ctx.moveTo(14, 8)
+                            ctx.lineTo(17, 11)
+                            ctx.lineTo(19, 7)
+                            ctx.stroke()
+                        }
                     }
 
                     MouseArea {

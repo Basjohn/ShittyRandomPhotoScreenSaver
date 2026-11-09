@@ -16,5 +16,6 @@ AbandonmentIssuesPresentation 1.0 AbandonmentIssuesPresentation.qml
 FriendPulsePresentation 1.0 FriendPulsePresentation.qml
 SystemStatsPresentation 1.0 SystemStatsPresentation.qml
 MediaMetadataColumn 1.0 MediaMetadataColumn.qml
+MediaMetadataText 1.0 MediaMetadataText.qml
 
 RefreshStateGlyph 1.0 RefreshStateGlyph.qml

@@ -431,6 +431,19 @@ next admitted edge). The checklist below stays as its review list.
 - [ ] HUD does not steal focus, suppress visualizer drag/camera wheel or intercept double/middle clicks beyond its explicitly visible supported controls.
 - [ ] Honour user-selected settings to suppress HUD, reduce motion/animations and font readability where applicable; no duplicate theme colour hardcodes in the policy layer.
 
+### Fullscreen presentation options
+
+Now Playing's existing Media Controls switch enables one transport owner. Its persisted
+`now_playing.media_controls_style` selects `bar` (the shared Media card bar) or `floating`
+(the same glyphs and input owner with the bar's surface, border, separators and shadow withdrawn).
+Fullscreen Mode edits this member in the existing `fullscreen_overlays` value; Edit preserves it.
+
+Ordinary Media and fullscreen title, artist and album use `MediaMetadataText.qml`: horizontal fitting to the shared
+minimum followed by elision, with wrapping inside an explicitly allotted multiline row. Fullscreen Edit's text height
+allots additional lines to each metadata row; the album follows Media's Show Album option and has its own
+ordinary child-edit role when visible. These are the latched track's
+strings and retain the existing reveal/swap fence. Text layout adds no provider, timer or persistence owner.
+
 ## H. Milestones with live checklists and explicit completion gates
 
 Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-A (AC-02) precedes M2.

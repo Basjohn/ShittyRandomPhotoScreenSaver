@@ -138,6 +138,16 @@ def test_a_well_formed_value_round_trips_and_unknown_members_are_dropped():
         assert normalize_fullscreen_overlays({"now_playing": {"corner": corner}})["now_playing"]["corner"] == corner
 
 
+@pytest.mark.parametrize("style", ["bar", "floating"])
+def test_transport_style_survives_normalization_and_runtime_projection(style):
+    from widgets.spotify_visualizer.expanded_overlays import resolve_expanded_overlay_config
+
+    value = normalize_fullscreen_overlays({"now_playing": {"media_controls_style": style}})
+    assert value["now_playing"]["media_controls_style"] == style
+    projected = resolve_expanded_overlay_config({"fullscreen_overlays": value})
+    assert projected["nowPlaying"]["mediaControlsStyle"] == style
+
+
 @pytest.mark.parametrize("raw", [None, "garbage", 3, [], {"preset": "x", "now_playing": None, "font_family": "  "}])
 def test_malformed_values_fall_back_to_the_canonical_default(raw):
     assert normalize_fullscreen_overlays(raw) == canonical_fullscreen_overlays()
@@ -323,7 +333,7 @@ def test_now_playings_part_records_are_ordinary_child_geometry_and_old_values_re
 
     canonical = canonical_fullscreen_overlays()
     roles = {role.role_id: role for role in NOW_PLAYING_CHILD_ROLES}
-    assert {"artwork", "title", "artist", "controls"} == set(roles)
+    assert {"artwork", "title", "artist", "album", "controls"} == set(roles)
     assert all(role.movable for role in roles.values())
     assert CHILD_GEOMETRY_KEY in PLACEMENT_KEYS["now_playing"] and CHILD_GEOMETRY_KEY not in canonical["preset"]
     # The canonical value holds no record: every part where today's layout puts it.

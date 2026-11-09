@@ -18,6 +18,8 @@ Rectangle {
     property bool interactionEnabled: false
     property bool playing: false
     property bool transportVisible: true
+    // Fullscreen's floating choice retains these exact glyphs and action handlers.
+    property bool floatingGlyphs: false
 
     // ---- look
     property color surfaceColor: "#b3101010"
@@ -50,14 +52,14 @@ Rectangle {
 
     radius: 12.0
     // On a surface material the bar is material too, tinted by its fill.
-    color: material.active ? "transparent" : bar.surfaceColor
+    color: floatingGlyphs || material.active ? "transparent" : bar.surfaceColor
     clip: false
 
     // Transport bar uses the same global direction with 15% more
     // displacement and a deliberately small cached blur.
     RectangularShadow {
         anchors.fill: parent
-        visible: bar.shadowEnabled
+        visible: bar.shadowEnabled && !bar.floatingGlyphs
         color: bar.shadowColor
         blur: bar.shadowBlur
         radius: parent.radius
@@ -69,6 +71,7 @@ Rectangle {
 
     ChildMaterialSurface {
         id: material
+        visible: !bar.floatingGlyphs
         objectName: "mediaControlsRowMaterial"
         card: bar.materialCard
         fillColor: bar.surfaceColor
@@ -98,7 +101,7 @@ Rectangle {
             width: bar.separatorWidth
             height: parent.height * 0.7
             y: (parent.height - height) / 2.0
-            color: bar.separatorColor
+            color: bar.floatingGlyphs ? "transparent" : bar.separatorColor
         }
 
         TransportButton {
@@ -115,7 +118,7 @@ Rectangle {
             width: bar.separatorWidth
             height: parent.height * 0.7
             y: (parent.height - height) / 2.0
-            color: bar.separatorColor
+            color: bar.floatingGlyphs ? "transparent" : bar.separatorColor
         }
 
         TransportButton {

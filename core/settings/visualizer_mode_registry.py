@@ -449,7 +449,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
     VisualizerModeDescriptor(
         'waveform_ribbon','Waveform Ribbon','_waveform_ribbon_preset_slider',('waveform_ribbon_',),
         VisualizerModePresentationPolicy(shell_policy=VisualizerShellPolicy.CARD,
-            clip_policy=VisualizerClipPolicy.CARD_INTERIOR,viewport_resize_capable=True),
+            clip_policy=VisualizerClipPolicy.CARD_INTERIOR,viewport_resize_capable=True,content_rotation_capable=True),
         frame_runtime_module='widgets.spotify_visualizer.waveform_ribbon_frame_runtime',
         frame_runtime_class='WaveformRibbonFrameRuntime',
         renderer_module='rendering.quick.visualizer.implementations.waveform_ribbon',

@@ -885,7 +885,8 @@ def _visualizer_entry(settings, screen, mode: str = "spectrum"):
 
 
 @pytest.mark.qt
-def test_the_expanded_card_offers_rotate_widget_content_through_the_one_edit_session(display, tmp_path):
+@pytest.mark.parametrize("mode", ["spectrum", "waveform_ribbon"])
+def test_the_expanded_card_offers_rotate_widget_content_through_the_one_edit_session(display, tmp_path, mode):
     """Ordinary Edit's Visualizer frame offers Rotate Widget Content for a mode that turns its content; Fullscreen
     Edit's expanded card does too: the same glyph and ``rotateContent`` route, one undo step per turn, the draft
     orientation previewed through the Visualizer's viewport/orientation seam, Cancel restoring exactly (nothing
@@ -899,7 +900,7 @@ def test_the_expanded_card_offers_rotate_widget_content_through_the_one_edit_ses
     _draw(display, media=_Media(), config=_projection(seeded))
     _open(display)
     ordinary = _ordinary_card()
-    visualizer = _Visualizer("spectrum", ordinary)
+    visualizer = _Visualizer(mode, ordinary)
     edit = _Fullscreen(display, settings, visualizer)
     published: list[tuple] = []
     display.scene.set_visualizer_viewport_config_sink(
@@ -932,12 +933,12 @@ def test_the_expanded_card_offers_rotate_widget_content_through_the_one_edit_ses
 
         card = edit.row("visualizer")
         assert edit.model.rotateContent(card)
-        assert published[-1] == (extent, {"spectrum": 1})          # the expanded card previews the turn
+        assert published[-1] == (extent, {mode: 1})          # the expanded card previews the turn
         assert edit.owner.fullscreen_draft_pending and edit.flips == [True]
         assert edit.owner.undo_last_change()                         # one step, exactly back
         assert published[-1] == (None, {}) and not edit.owner.fullscreen_draft_pending   # committed truth again
         assert edit.model.rotateContent(card) and edit.model.rotateContent(card)
-        assert published[-1] == (extent, {"spectrum": 2})
+        assert published[-1] == (extent, {mode: 2})
         assert edit.owner.cancel()
         assert published[-1] == (None, {})                           # the preview retired: committed truth again
         assert _store(settings) == store and visualizer.promoted == []
@@ -955,7 +956,7 @@ def test_the_expanded_card_offers_rotate_widget_content_through_the_one_edit_ses
         entry = _visualizer_entry(settings, binding.screen)
         assert entry is not None
         assert normalize_content_rotation_by_mode(entry.size_payload.get("content_rotation_quarters_by_mode")) == {
-            "spectrum": 1}
+            mode: 1}
         from rendering.quick.custom_layout_hydration import resolve_committed_visualizer_rect
 
         saved = resolve_committed_visualizer_rect(entry, binding.geometry.size())
@@ -963,7 +964,7 @@ def test_the_expanded_card_offers_rotate_widget_content_through_the_one_edit_ses
         assert saved.getRect() == (round(x), round(y), round(width), round(height))   # the card's rect, unchanged
         assert visualizer.promoted == [{"local_rect": (float(round(x)), float(round(y)), float(round(width)),
                                                        float(round(height))),
-                                        "viewport_extent": extent, "content_rotation_by_mode": {"spectrum": 1}}]
+                                        "viewport_extent": extent, "content_rotation_by_mode": {mode: 1}}]
         assert published[-1] == (None, {}) and edit.reloads == []
     finally:
         if edit.owner.is_active:
@@ -984,7 +985,8 @@ def test_a_mode_that_cannot_turn_its_content_gets_no_rotate_glyph(display, tmp_p
 
 
 @pytest.mark.qt
-def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(qt_app, tmp_path):
+@pytest.mark.parametrize("mode", ["spectrum", "waveform_ribbon"])
+def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(qt_app, tmp_path, mode):
     """End to end on the production Visualizer owner (an unshown runtime, never shown): Fullscreen Edit's card turn
     reaches the owner through the scene's viewport/orientation seam, so the drawn display-wide card turns (same card
     rect) while nothing is committed; Cancel returns the committed orientation exactly; Save writes the turn into the
@@ -1004,7 +1006,7 @@ def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(q
     runtime = QuickDisplayRuntime(screen_index=0, runtime_generation=778, screen=qt_app.primaryScreen(),
                                   scene_factory=factory,
                                   window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
-    owner = make_visualizer_owner(runtime, bar_count=32, initial_mode="spectrum")
+    owner = make_visualizer_owner(runtime, bar_count=32, initial_mode=mode)
     controller = owner.controller
     unit = SimpleNamespace(is_retired=False, screen_index=0, presenter=SimpleNamespace(bound_widget_ids=()),
                            runtime=runtime)
@@ -1053,7 +1055,7 @@ def test_the_production_owner_previews_saves_and_cancels_a_turn_while_expanded(q
         assert drawn().content_rotation_quarters == 1
         entry = _visualizer_entry(settings, binding.screen)
         assert normalize_content_rotation_by_mode(entry.size_payload.get("content_rotation_quarters_by_mode")) == {
-            "spectrum": 1}
+            mode: 1}
         saved = resolve_committed_visualizer_rect(entry, binding.geometry.size())
         assert all(abs(a - b) <= 0.5 for a, b in zip(saved.getRect(), ordinary.outer_rect))
         # Collapsing shows the ordinary card turned, at its own rect.

@@ -22,7 +22,7 @@ cropped like ordinary Edit's freeform artwork frame.
 
 Now Playing's parts (Fullscreen Edit's child editing, operator 8 Nov: "I should be able to move every element around in
 that block and change it"): ``now_playing.child_geometry`` is ordinary Edit's CUSTOM ``child_geometry`` carrier for the
-block's children (:data:`NOW_PLAYING_CHILD_ROLES`: the artwork, the title, the artist line and the Media Controls bar),
+block's children (:data:`NOW_PLAYING_CHILD_ROLES`: the artwork, title, artist, optional album and Media Controls bar),
 one record per moved or sized part (``width_scale``/``height_scale`` of its own drawn size, ``x_offset``/``y_offset``
 in fractions of :data:`CHILD_NORMALIZATION_EMS` ems of the overlay's font); ``{}`` (the canonical default) is today's
 layout, so a value stored before it reads as it always drew (no bridge). It is parsed by ordinary Edit's own
@@ -57,6 +57,7 @@ OVERLAY_IDS = ("preset", "now_playing")
 VOLUME_OSD_ID = "volume_osd"
 #: Anchor corners, in Settings' order.
 CORNERS = ("top_left", "top_right", "bottom_left", "bottom_right")
+MEDIA_CONTROLS_STYLES = ("bar", "floating")
 FONT_SIZE_MIN, FONT_SIZE_MAX = 12, 72
 OFFSET_MIN, OFFSET_MAX = -1.0, 1.0
 SCALE_MIN, SCALE_MAX = 0.5, 3.0
@@ -76,6 +77,8 @@ NOW_PLAYING_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     CustomChildRoleDescriptor("title", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
                               maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
     CustomChildRoleDescriptor("artist", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
+                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
+    CustomChildRoleDescriptor("album", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
                               maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
     CustomChildRoleDescriptor("controls", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
                               maximum_scale=(2.50, 2.50), uniform_scale=False, movable=True),
@@ -155,6 +158,9 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
             item = raw[key]
             if key == CHILD_GEOMETRY_KEY:
                 target[key] = normalize_now_playing_children(item)
+            elif key == "media_controls_style":
+                if isinstance(item, str) and item.strip().lower() in MEDIA_CONTROLS_STYLES:
+                    target[key] = item.strip().lower()
             elif key == "corner":
                 if isinstance(item, str) and item.strip().lower() in CORNERS:
                     target[key] = item.strip().lower()

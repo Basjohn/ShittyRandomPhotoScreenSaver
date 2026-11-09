@@ -1307,6 +1307,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                                                             'corner': 'bottom_left',
                                                                             'hover_reveal': False,
                                                                             'media_controls': False,
+                                                                            'media_controls_style': 'bar',
                                                                             'offset_x': 0.0,
                                                                             'offset_y': 0.0,
                                                                             'scale': 1.0,

@@ -157,6 +157,29 @@ def test_a_reload_shows_the_stored_value(manager):
     _destroy(dialog)
 
 
+def test_transport_style_survives_save_reload_and_keeps_edit_placement(manager):
+    dialog, tab = _dialog(manager)
+    try:
+        page = tab._fullscreen_page
+        value = canonical_fullscreen_overlays()
+        value["now_playing"].update(media_controls=True, media_controls_style="bar", offset_x=0.125,
+                                    child_geometry={"title": {"x_offset": 0.04}})
+        manager.set(FULLSCREEN_OVERLAYS_KEY, value)
+        tab.load_from_settings()
+        before = deepcopy(page.values())
+        assert page.now_playing_controls_style.isEnabled()
+        page.now_playing_controls_style.setCurrentIndex(page.now_playing_controls_style.findData("floating"))
+        _flush(tab)
+        expected = deepcopy(before)
+        expected["now_playing"]["media_controls_style"] = "floating"
+        assert _stored(manager) == expected
+        tab.load_from_settings()
+        assert page.now_playing_controls_style.currentData() == "floating"
+        assert page.values() == expected
+    finally:
+        _destroy(dialog)
+
+
 def test_its_buckets_start_closed_one_opens_at_a_time_and_settings_reopens_on_it(manager):
     from core.settings.ui_bucket_state import project_settings_bucket_context
     from ui.settings_tabs import settings_tab_descriptor

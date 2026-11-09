@@ -343,16 +343,18 @@ after the operator's yes on a question card; agents never run load (invisible ch
 These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it.
 Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.7) in a separate checkpoint.
 
-- [ ] **1.0 Rotate:** trace the earlier glyph implementation in Git, restore content rotation wherever the mode
-  supports it (Waveform included, ordinary and fullscreen), and distinguish its glyph from Reset Camera.
-- [ ] **1.1 Mode persistence:** inspect the Settings return path; fix only a directly evidenced cause. Otherwise
-  retain as Awaiting Logs and use the next reported occurrence's trace, without speculative state machinery.
+- [~] **1.0 Awaiting Validation:** check Waveform's Rotate Widget Content in ordinary/fullscreen Edit and its
+  rectangle/quarter-turn glyph against Reset Camera; the capability and shared CUSTOM regression gates are green.
+- [ ] **1.1 Awaiting Logs:** no direct mode-switch cause in the supplied archive. On recurrence, correlate the
+  reported time, prior/result mode, selected preset and runtime generation with the existing mode-transition owner
+  and frame trace; distinguish explicit selection, enabled-mode normalization and Settings restoration first.
 - [ ] **1.2 Studio saves:** expose Save for the selected preset/Custom slot and Save Camera for its starting view
   through the canonical file/settings and camera owners; prove installed-root and read-only failure behavior.
 - [ ] **1.3 Camera persistence:** inspect `logs/evidence_chest/logsf158e7bdd4.zip`; keep preset Starting Camera as
   activation data and Last Known Camera presentation-owned across Settings and normal/fullscreen transitions.
-- [ ] **1.4 Fullscreen controls:** offer the shared Media bar or floating transport glyphs through Fullscreen Mode.
-- [ ] **1.5 Fullscreen metadata:** reuse ordinary Media's text fitting/wrapping for long title/artist/album values.
+- [~] **1.4-1.5 Awaiting Validation:** check Fullscreen Mode's Media Bar/Floating Glyphs styles, long metadata
+  fitting, multiline Edit boxes and optional album. Both styles use the same admitted Media actions; every metadata
+  row uses Media's shared fitting primitive. Focused Settings, input, text-layout and Edit gates are green.
 - [~] **1.6 Awaiting Validation:** Achievement Pulse counted disabled provider fields as painted capsule rows;
   replaying the saved payload on Edit entry then changed the canvas. The enabled-row regression is green.
   Check child placement after Settings/fullscreen return with `--geo`; other families' extent floors are static.

@@ -703,6 +703,10 @@ rendered image. Save/Cancel and layout slots preserve scale and extent separatel
 
 Modes whose descriptor sets `content_rotation_capable` admit the shared CUSTOM **content quarter-turn** control. Orientation is layout/presentation state, not a Visualizer setting or preset value: a sparse `content_rotation_quarters_by_mode` map lives inside the existing CUSTOM `size_payload`, keyed by canonical mode ID, with missing/zero meaning 0°. A legacy global `content_rotation_quarters` scalar is interpretation-only compatibility input; new writes use the per-mode map. Odd quarter-turns swap the effective logical viewport axes before authored mode presentation and the shared render contract maps that logical world back into the unchanged physical card. This preserves stored X/Y/extent/uniform scale and avoids stretching finished pixels. Save/Cancel, layout slots, display transfer and Restore semantics remain in the existing CUSTOM owner. Rotation is event-driven and adds no timer, poller, alternate Visualizer cadence or per-frame Settings lookup. Modes without `content_rotation_capable` remain excluded through descriptor capability metadata, so the feature cannot couple an ineligible frameless mode back into the carded-mode contract.
 
+Waveform Ribbon admits this content quarter-turn in ordinary and Fullscreen Edit, independently of its framed camera.
+The Rotate Widget Content glyph depicts a quarter-turn around a content rectangle; Reset Camera retains its return
+arrow. Both actions keep their existing owners and Save/Cancel semantics.
+
 ## 14A. Visualizer display admission / semantic mode + preset cycles
 
 Current product semantics admit one visualizer instance. Python orchestration resolves the requested monitor against actual

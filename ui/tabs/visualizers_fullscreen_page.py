@@ -93,6 +93,18 @@ class FullscreenModePage(QWidget):
             now_playing_layout, "Media Controls", "now_playing", "media_controls",
             "Previous, play/pause and next beside the track. They control the Media widget's player and need "
             "Interaction Mode (or Ctrl held), like every widget control.")
+        controls_row = add_aligned_row(now_playing_layout, "Controls Style:")[0]
+        self.now_playing_controls_style = StyledComboBox(size_variant="hero")
+        self.now_playing_controls_style.addItem("Media Bar", "bar")
+        self.now_playing_controls_style.addItem("Floating Glyphs", "floating")
+        self.now_playing_controls_style.setToolTip("Use the Media card's bar or its transport glyphs without a surface.")
+        self.now_playing_controls_style.setEnabled(self.now_playing_media_controls.isChecked())
+        self.now_playing_media_controls.toggled.connect(self.now_playing_controls_style.setEnabled)
+        self.now_playing_controls_style.currentIndexChanged.connect(
+            lambda _index: self._set_value(("now_playing", "media_controls_style"),
+                                          str(self.now_playing_controls_style.currentData())))
+        controls_row.addWidget(self.now_playing_controls_style)
+        controls_row.addStretch()
         self.now_playing_card = self._check(
             now_playing_layout, "Card", "now_playing", "card",
             "Show the track on a card with the theme's border and surface, like the widgets. The artwork keeps "
@@ -197,6 +209,10 @@ class FullscreenModePage(QWidget):
                     check.setChecked(bool(values[overlay][key]))
             with QSignalBlocker(self.font_combo):
                 self.font_combo.setCurrentFont(QFont(str(values["font_family"])))
+            with QSignalBlocker(self.now_playing_controls_style):
+                self.now_playing_controls_style.setCurrentIndex(
+                    self.now_playing_controls_style.findData(values["now_playing"]["media_controls_style"]))
+            self.now_playing_controls_style.setEnabled(bool(values["now_playing"]["media_controls"]))
             with QSignalBlocker(self.font_size):
                 self.font_size.setValue(int(values["font_size"]))
         finally:

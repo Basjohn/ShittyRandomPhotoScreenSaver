@@ -94,7 +94,7 @@ Item {
         // is visible immediately instead of being hidden under an opaque sibling.
         z: 1
 
-        ShadowedText {
+        MediaMetadataText {
             objectName: "mediaTitle"
             width: currentColumn.width
             horizontalAlignment: metadataFade.textAlignment === "right"
@@ -105,11 +105,7 @@ Item {
             font.family: metadataFade.mediaModel.fontFamily
             font.pointSize: metadataFade.mediaModel.fontSize * 1.12
             font.bold: true
-            wrap: false
-            fontSizeMode: Text.HorizontalFit
-            minimumPointSize: 6.0
             maximumLineCount: 1
-            elide: Text.ElideRight
             shadowEnabled: metadataFade.mediaModel.textShadowEnabled
             shadowSoft: metadataFade.mediaModel.textShadowSoft
             shadowColor: metadataFade.mediaModel.textShadowColor
@@ -123,7 +119,7 @@ Item {
             visible: metadataFade._currentArtist.length > 0
             height: visible ? currentArtistText.implicitHeight : 0.0
 
-            ShadowedText {
+            MediaMetadataText {
                 id: currentArtistText
                 objectName: "mediaArtist"
                 visible: currentArtistSlot.visible
@@ -141,11 +137,7 @@ Item {
                 font.family: metadataFade.mediaModel.fontFamily
                 font.pointSize: metadataFade.mediaModel.fontSize
                 font.bold: true
-                wrap: false
-                fontSizeMode: Text.HorizontalFit
-                minimumPointSize: 6.0
                 maximumLineCount: 1
-                elide: Text.ElideRight
                 shadowEnabled: metadataFade.mediaModel.textShadowEnabled
                 shadowSoft: metadataFade.mediaModel.textShadowSoft
                 shadowColor: metadataFade.mediaModel.textShadowColor
@@ -154,7 +146,7 @@ Item {
             }
         }
 
-        ShadowedText {
+        MediaMetadataText {
             objectName: "mediaAlbum"
             visible: metadataFade.mediaModel.showAlbum && text.length > 0
             width: currentColumn.width
@@ -167,11 +159,7 @@ Item {
             font.family: metadataFade.mediaModel.fontFamily
             font.pointSize: metadataFade.mediaModel.fontSize * 0.82
             font.italic: true
-            wrap: false
-            fontSizeMode: Text.HorizontalFit
-            minimumPointSize: 6.0
             maximumLineCount: 1
-            elide: Text.ElideRight
             shadowEnabled: metadataFade.mediaModel.textShadowEnabled
             shadowSoft: metadataFade.mediaModel.textShadowSoft
             shadowColor: metadataFade.mediaModel.textShadowColor
@@ -187,7 +175,7 @@ Item {
         spacing: metadataFade.rowSpacing
         z: 0
 
-        ShadowedText {
+        MediaMetadataText {
             width: outgoingColumn.width
             horizontalAlignment: metadataFade.textAlignment === "right"
                 ? Text.AlignRight : Text.AlignLeft
@@ -197,11 +185,7 @@ Item {
             font.family: metadataFade.mediaModel.fontFamily
             font.pointSize: metadataFade.mediaModel.fontSize * 1.12
             font.bold: true
-            wrap: false
-            fontSizeMode: Text.HorizontalFit
-            minimumPointSize: 6.0
             maximumLineCount: 1
-            elide: Text.ElideRight
             shadowEnabled: metadataFade.mediaModel.textShadowEnabled
             shadowSoft: metadataFade.mediaModel.textShadowSoft
             shadowColor: metadataFade.mediaModel.textShadowColor
@@ -215,7 +199,7 @@ Item {
             visible: metadataFade._outgoingArtist.length > 0
             height: visible ? outgoingArtistText.implicitHeight : 0.0
 
-            ShadowedText {
+            MediaMetadataText {
                 id: outgoingArtistText
                 objectName: "mediaOutgoingArtist"
                 visible: outgoingArtistSlot.visible
@@ -233,11 +217,7 @@ Item {
                 font.family: metadataFade.mediaModel.fontFamily
                 font.pointSize: metadataFade.mediaModel.fontSize
                 font.bold: true
-                wrap: false
-                fontSizeMode: Text.HorizontalFit
-                minimumPointSize: 6.0
                 maximumLineCount: 1
-                elide: Text.ElideRight
                 shadowEnabled: metadataFade.mediaModel.textShadowEnabled
                 shadowSoft: metadataFade.mediaModel.textShadowSoft
                 shadowColor: metadataFade.mediaModel.textShadowColor
@@ -246,7 +226,7 @@ Item {
             }
         }
 
-        ShadowedText {
+        MediaMetadataText {
             visible: metadataFade.mediaModel.showAlbum && text.length > 0
             width: outgoingColumn.width
             horizontalAlignment: metadataFade.textAlignment === "right"
@@ -258,11 +238,7 @@ Item {
             font.family: metadataFade.mediaModel.fontFamily
             font.pointSize: metadataFade.mediaModel.fontSize * 0.82
             font.italic: true
-            wrap: false
-            fontSizeMode: Text.HorizontalFit
-            minimumPointSize: 6.0
             maximumLineCount: 1
-            elide: Text.ElideRight
             shadowEnabled: metadataFade.mediaModel.textShadowEnabled
             shadowSoft: metadataFade.mediaModel.textShadowSoft
             shadowColor: metadataFade.mediaModel.textShadowColor

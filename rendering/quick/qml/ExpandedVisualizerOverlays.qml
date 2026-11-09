@@ -147,7 +147,8 @@ Item {
 
     // ---- events
     readonly property string liveTrackKey: mediaModel && mediaModel.hasTrack
-        ? String(mediaModel.artist) + "\u001f" + String(mediaModel.title) : ""
+        ? String(mediaModel.artist) + "\u001f" + String(mediaModel.title) + "\u001f"
+          + (mediaModel.album !== undefined ? String(mediaModel.album) : "") : ""
     property bool entered: false
     // The Media model's own playback state (the one the Visualizer binds); its paused -> playing edge is an event.
     readonly property string livePlaybackState: mediaModel ? String(mediaModel.playbackState).toLowerCase() : ""
@@ -301,7 +302,8 @@ Item {
         // The text block's height with a one-line title (Media Controls included): what the artwork's size follows,
         // so a set text height (more title lines) never resizes the artwork.
         readonly property real titleLineHeight: Math.max(1.0, Math.ceil(titleMetrics.height))
-        readonly property real naturalTextHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistText.implicitHeight)
+        readonly property real naturalTextHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistMetrics.height)
+            + (albumShown ? textColumn.spacing + Math.ceil(albumMetrics.height) : 0.0)
             + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controlsHeight : 0.0)
         readonly property real artBase: Math.max(Math.round(fontSize * 3.1),
                                                  Math.ceil(boxHeight > 0.0 ? naturalTextHeight : textColumn.height))
@@ -310,18 +312,23 @@ Item {
         readonly property real gap: Math.round(fontSize * 0.55)
         readonly property real textWidthLimit: Math.max(48.0, maxContentWidth - artWidth - gap)
         // The text block: a set width replaces the natural one (every line elides in it; never narrower than the
-        // Media Controls); a set height is at least the natural block and gives the title the extra lines that fit
-        // (it wraps, then elides), the block centred in it. Unset, it is today's block.
+        // Media Controls); a set height is at least the natural block and shares extra lines between the metadata
+        // rows. Each row uses Media's fitting policy; additional lines wrap before elision.
         readonly property real naturalTextWidth: Math.min(textWidthLimit,
-            Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth, controlsShown ? controlsWidth : 0.0)))
+            Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth,
+                              albumShown ? albumText.implicitWidth : 0.0, controlsShown ? controlsWidth : 0.0)))
         readonly property real boxWidth: setTextWidth > 0.0
             ? Math.round(Math.min(Math.max(1.0, maxBoxWidth - artWidth - gap),
                                   Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0, setTextWidth)))
             : 0.0
         readonly property real boxHeight: setTextHeight > 0.0
             ? Math.round(Math.min(maxBoxHeight, Math.max(naturalTextHeight, setTextHeight))) : 0.0
-        readonly property int titleLines: boxHeight > 0.0
-            ? 1 + Math.max(0, Math.floor((boxHeight - naturalTextHeight + 0.5) / titleLineHeight)) : 1
+        readonly property int metadataLines: boxHeight > 0.0
+            ? 1 + Math.max(0, Math.floor((boxHeight - naturalTextHeight + 0.5)
+                                       / (titleLineHeight + artistMetrics.height + (albumShown ? albumMetrics.height : 0)))) : 1
+        readonly property int titleLines: metadataLines
+        readonly property bool albumShown: !!overlays.mediaModel && overlays.mediaModel.showAlbum === true
+            && contentAlbum.length > 0
         readonly property bool playing: !!overlays.mediaModel
             && String(overlays.mediaModel.playbackState).toLowerCase() === "playing"
 
@@ -363,6 +370,8 @@ Item {
              "geometryDependencies": [textBlock, textColumn]},
             {"roleId": "artist", "target": artistText, "normalizationTarget": nowPlayingSlot,
              "geometryDependencies": [textBlock, textColumn]},
+            {"roleId": "album", "target": albumText, "normalizationTarget": nowPlayingSlot,
+             "geometryDependencies": [textBlock, textColumn]},
             {"roleId": "controls", "target": controls, "normalizationTarget": nowPlayingSlot,
              "geometryDependencies": [textBlock, textColumn]}
         ]
@@ -372,12 +381,14 @@ Item {
         property string contentKey: ""
         property string contentTitle: ""
         property string contentArtist: ""
+        property string contentAlbum: ""
         onSwapContent: {
             const model = overlays.mediaModel
             contentKey = overlays.liveTrackKey
             const placeholder = contentKey.length === 0 && overlays.editing
             contentTitle = placeholder ? overlays.editTitlePlaceholder : (model ? String(model.title) : "")
             contentArtist = placeholder ? overlays.editArtistPlaceholder : (model ? String(model.artist) : "")
+            contentAlbum = !placeholder && model && model.album !== undefined ? String(model.album) : ""
         }
         // Identity fence: the model's artwork is shown only for the latched track, never under another's text.
         readonly property string artSource: contentKey.length > 0 && contentKey === overlays.liveTrackKey
@@ -485,6 +496,8 @@ Item {
             id: titleMetrics
             font: titleText.effectiveFont
         }
+        FontMetrics { id: artistMetrics; font: artistText.effectiveFont }
+        FontMetrics { id: albumMetrics; font: albumText.effectiveFont }
         // The text block (what the block's side handles set): the column at its natural size or in a set box.
         Item {
             id: textBlock
@@ -509,14 +522,16 @@ Item {
                 width: textBlock.width
                 readonly property real spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
                 readonly property real naturalHeight: titleText.height + spacing + artistText.height
+                    + (nowPlayingSlot.albumShown ? spacing + albumText.height : 0.0)
                     + (nowPlayingSlot.controlsShown ? 2.0 * spacing + controlsSpacer.height + nowPlayingSlot.controlsHeight
                        : 0.0)
                 readonly property real slack: nowPlayingSlot.boxHeight > 0.0
                     ? Math.max(0.0, nowPlayingSlot.boxHeight - naturalHeight) : 0.0
-                readonly property real gapExtra: slack / (nowPlayingSlot.controlsShown ? 2.0 : 1.0)
+                readonly property real gapExtra: slack / (1.0 + (nowPlayingSlot.controlsShown ? 1.0 : 0.0)
+                                                         + (nowPlayingSlot.albumShown ? 1.0 : 0.0))
                 height: naturalHeight + slack
 
-                ShadowedText {
+                MediaMetadataText {
                     id: titleText
                     objectName: "expandedOverlayTitle"
                     // A part of the block (``title``): scaled whole (its layout keeps today's size) and moved, kept
@@ -545,9 +560,6 @@ Item {
                     font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize))
                     font.weight: Font.DemiBold
                     color: nowPlayingSlot.textColor
-                    elide: Text.ElideRight
-                    wrap: nowPlayingSlot.titleLines > 1
-                    breakLongWords: true
                     maximumLineCount: nowPlayingSlot.titleLines
                     horizontalAlignment: nowPlayingSlot.rightSide ? Text.AlignRight : Text.AlignLeft
                     shadowSoft: true
@@ -555,7 +567,7 @@ Item {
                     shadowOffsetX: 0.0
                     shadowOffsetY: overlays.textShadowOffset
                 }
-                ShadowedText {
+                MediaMetadataText {
                     id: artistText
                     objectName: "expandedOverlayArtist"
                     y: titleText.height + textColumn.spacing + textColumn.gapExtra
@@ -578,6 +590,7 @@ Item {
                     x: nowPlayingSlot.rightSide ? textColumn.width - width : 0.0
                     width: Math.min(Math.ceil(implicitWidth), textColumn.width)
                     text: nowPlayingSlot.contentArtist
+                    maximumLineCount: nowPlayingSlot.metadataLines
                     font.family: overlays.fontFamily
                     font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize * 0.74))
                     color: nowPlayingSlot.textColor
@@ -589,11 +602,48 @@ Item {
                     shadowOffsetX: 0.0
                     shadowOffsetY: overlays.textShadowOffset
                 }
+                MediaMetadataText {
+                    id: albumText
+                    objectName: "expandedOverlayAlbum"
+                    visible: nowPlayingSlot.albumShown
+                    readonly property real partScale: nowPlayingSlot.childWidthScale("album")
+                    transform: [
+                        Scale { id: albumScale; xScale: albumText.partScale; yScale: albumText.partScale },
+                        Translate {
+                            id: albumShift
+                            x: nowPlayingSlot.containX(
+                                   nowPlayingSlot.columnX + albumText.x + nowPlayingSlot.childOffsetX("album"),
+                                   albumText.width * albumText.partScale) - nowPlayingSlot.columnX - albumText.x
+                            y: nowPlayingSlot.containY(
+                                   nowPlayingSlot.columnY + albumText.y + nowPlayingSlot.childOffsetY("album"),
+                                   albumText.height * albumText.partScale) - nowPlayingSlot.columnY - albumText.y
+                        }
+                    ]
+                    readonly property string customEditMappingDependency: [albumScale.xScale, albumScale.yScale,
+                                                                          albumShift.x, albumShift.y].join(",")
+                    x: nowPlayingSlot.rightSide ? textColumn.width - width : 0.0
+                    y: artistText.y + artistText.height + textColumn.spacing + textColumn.gapExtra
+                    width: Math.min(Math.ceil(implicitWidth), textColumn.width)
+                    height: visible ? implicitHeight : 0.0
+                    text: nowPlayingSlot.contentAlbum
+                    font.family: overlays.fontFamily
+                    font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize * 0.74 * 0.82))
+                    font.italic: true
+                    maximumLineCount: nowPlayingSlot.metadataLines
+                    color: nowPlayingSlot.textColor
+                    opacity: 0.75
+                    horizontalAlignment: nowPlayingSlot.rightSide ? Text.AlignRight : Text.AlignLeft
+                    shadowSoft: true
+                    shadowColor: overlays.textShadowColor
+                    shadowOffsetX: 0.0
+                    shadowOffsetY: overlays.textShadowOffset
+                }
                 // Media Controls (default off): a small version of the Media card's own transport bar (the one
                 // MediaTransportBar, its look from the Media model), on the Media card's own transport owner.
                 Item {
                     id: controlsSpacer
-                    y: artistText.y + artistText.height + textColumn.spacing
+                    y: (nowPlayingSlot.albumShown ? albumText.y + albumText.height : artistText.y + artistText.height)
+                        + textColumn.spacing
                     width: textColumn.width
                     height: Math.round(nowPlayingSlot.fontSize * 0.25)
                     visible: nowPlayingSlot.controlsShown
@@ -620,7 +670,8 @@ Item {
                     readonly property real drawnFactor: nowPlayingSlot.controlsFactor
                         * Math.min(nowPlayingSlot.childWidthScale("controls"), nowPlayingSlot.childHeightScale("controls"))
                     radius: 12.0 * drawnFactor
-                    border.width: Math.max(1.0, 1.5 * drawnFactor)
+                    floatingGlyphs: nowPlayingSlot.options.mediaControlsStyle === "floating"
+                    border.width: floatingGlyphs ? 0.0 : Math.max(1.0, 1.5 * drawnFactor)
                     border.color: overlays.mediaLook("borderColor", "#ffffffff")
 
                     canPrevious: !!model && model.canPrevious === true
