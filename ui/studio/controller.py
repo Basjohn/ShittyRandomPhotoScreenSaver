@@ -1084,6 +1084,14 @@ class StudioBridge(QObject):
             self._viewport_status, self._viewport_error = status, error
             self.viewportChanged.emit()
 
+    @Slot(int, bool, bool)
+    def navigationKey(self, key: int, pressed: bool, shifted: bool) -> None:
+        self._c.navigation_key(key, pressed, shifted)
+
+    @Slot()
+    def releaseNavigationKeys(self) -> None:
+        self._c.release_navigation_keys()
+
     @Slot(float, float)
     def orbitBy(self, dx: float, dy: float) -> None:
         self._c.orbit_by(dx, dy)
@@ -1351,7 +1359,8 @@ class StudioController(QObject):
     def __init__(self, adapter: StudioModeAdapter, store: CanonicalStore, presence, surface_factory,
                  *, theme_provider: Callable[[], Mapping[str, str]] | None = None,
                  mode_switcher: Callable[[str], tuple] | None = None,
-                 modes: Callable[[], tuple] | None = None) -> None:
+                 modes: Callable[[], tuple] | None = None,
+                 initial_pose: Mapping[str, Any] | None = None) -> None:
         super().__init__()
         self.adapter = adapter
         self.store = store
@@ -1368,7 +1377,12 @@ class StudioController(QObject):
         self.viewport = None
         self.state = "idle"           # idle -> opening -> presented -> closed
         self._eval_dirty = True
-        self._pose: dict[str, float] = {}
+        self._pose: dict[str, Any] = {}
+        self._initial_pose = dict(initial_pose or {})
+        self._navigation_keys: set[str] = set()
+        self._navigation_shift = False
+        self._navigation_wall: float | None = None
+        self._navigation_flight = None
         self.content_rotation_quarters = 0
         self._unsubscribe = None
         self._clip_jobs: dict[str, Any] = {}
@@ -1414,6 +1428,12 @@ class StudioController(QObject):
         try:
             self.capabilities = self.adapter.capabilities()
             self.session = StudioEditSession(self.adapter.schema(), self.store)
+            # Live view handoff is *presentation-only*. Preserve the selected
+            # curated preset and its authored camera policy; do not auto-save.
+            from copy import deepcopy
+            self._pose = {key: tuple(value) if isinstance(value, list) else deepcopy(value)
+                          for key, value in self._initial_pose.items() if key in self.session.values}
+            self._initial_pose.clear()
             self.evaluator = self.adapter.create_evaluator()
             budget = getattr(self.evaluator, "set_frame_budget", None)
             if callable(budget):
@@ -1489,6 +1509,7 @@ class StudioController(QObject):
             if self.bridge is not None:
                 self.bridge.notify(f"Could not change preset: {exc}")
             return
+        self.release_navigation_keys()
         self._pose = {}
         self.session.hydrate()
         if self.bridge is not None:
@@ -1516,6 +1537,7 @@ class StudioController(QObject):
             if self.bridge is not None:
                 self.bridge.notify(f"Could not switch preset: {exc}")
             return
+        self.release_navigation_keys()
         self._pose = {}
         self.session.hydrate()
         if self.bridge is not None:
@@ -1538,6 +1560,7 @@ class StudioController(QObject):
             return
         if self.state not in ("opening", "presented"):
             return
+        self.release_navigation_keys()             # settle the held view before swapping its owner
         if not self.settle_draft(interactive=True):     # the next mode's page replaces this one's widgets
             return
         try:
@@ -1761,6 +1784,9 @@ class StudioController(QObject):
         """Quick frame start (GUI thread): advance playback, evaluate at most once."""
         if self.state not in ("opening", "presented") or self.transport.stopped:
             return
+        # The Studio frame clock also drives held camera keys. Nothing is
+        # scheduled by navigation when there are no keys; paused audio still moves.
+        self._advance_navigation(time.perf_counter())
         if self.bridge is not None:
             self.bridge.apply_pending_previews()     # a drag's newest value, once per frame
         if getattr(self.evaluator, "converging", False) and self.transport.playing:
@@ -2222,6 +2248,76 @@ class StudioController(QObject):
             self.bridge.transportChanged.emit()
 
     # --------------------------------------------------------------- camera
+    _NAVIGATION_KEY_NAMES = {
+        int(Qt.Key.Key_W): "w", int(Qt.Key.Key_A): "a",
+        int(Qt.Key.Key_S): "s", int(Qt.Key.Key_D): "d",
+        int(Qt.Key.Key_Q): "q", int(Qt.Key.Key_E): "e",
+    }
+
+    def navigation_key(self, key: int, pressed: bool, shifted: bool) -> None:
+        """GUI key edge only; movement uses the Studio's frame clock, not OS repeats."""
+        if self.state not in ("opening", "presented") or self.navigation() is None:
+            return
+        if int(key) == int(Qt.Key.Key_R) and pressed:
+            self.release_navigation_keys()
+            self.reset_camera()
+            return
+        if int(key) == int(Qt.Key.Key_Shift):
+            shifted = pressed
+            name = None
+        else:
+            name = self._NAVIGATION_KEY_NAMES.get(int(key))
+        if name is None and int(key) != int(Qt.Key.Key_Shift):
+            return
+        next_keys = set(self._navigation_keys)
+        if name is not None:
+            (next_keys.add if pressed else next_keys.discard)(name)
+        if next_keys == self._navigation_keys and bool(shifted) == self._navigation_shift:
+            return
+        now = time.perf_counter()
+        self._advance_navigation(now)
+        self._navigation_keys = next_keys
+        self._navigation_shift = bool(shifted)
+        self._navigation_wall = now if next_keys else None
+        self._navigation_flight = None
+        if next_keys:
+            from ui.studio.camera_keyboard import make_flight
+            self._navigation_flight = make_flight(self.adapter.mode_id, self.evaluation_values(),
+                                                 frozenset(next_keys), self._navigation_shift, now)
+            self._invalidate()
+        else:
+            self.end_orbit()
+
+    def _advance_navigation(self, now: float) -> None:
+        if not self._navigation_keys or self._navigation_wall is None or self.session is None:
+            return
+        wall, self._navigation_wall = self._navigation_wall, now
+        dt = max(0.0, min(0.1, now - wall))
+        if dt <= 0.0:
+            return
+        if self._navigation_flight is not None:
+            from ui.studio.camera_keyboard import flight_pose
+            moved = flight_pose(self._navigation_flight, now)
+        else:
+            from ui.studio.camera_keyboard import orbit_pose
+            moved = orbit_pose(self.adapter.mode_id, self.evaluation_values(),
+                               frozenset(self._navigation_keys), dt)
+        if moved:
+            self._pose.update(moved)
+            if self.bridge is not None:
+                self.bridge.on_session_changed("pose")
+            self._invalidate()
+
+    def release_navigation_keys(self) -> None:
+        if not self._navigation_keys:
+            return
+        self._advance_navigation(time.perf_counter())
+        self._navigation_keys.clear()
+        self._navigation_flight = None
+        self._navigation_wall = None
+        self._navigation_shift = False
+        self.end_orbit()
+
     def navigation(self):
         """The mode's camera navigation, or None when the mode declares no camera (2D / camera-less)."""
         caps = getattr(self, "capabilities", None)
@@ -2331,6 +2427,10 @@ class StudioController(QObject):
                                "preset's camera checkbox")
 
     def reset_camera(self) -> None:
+        self._navigation_keys.clear()
+        self._navigation_flight = None
+        self._navigation_wall = None
+        self._navigation_shift = False
         self._pose = {}
         if self.bridge is not None:
             self.bridge.on_session_changed("pose")
@@ -2339,6 +2439,7 @@ class StudioController(QObject):
 
     # ---------------------------------------------------------------- close
     def close(self) -> None:
+        self.release_navigation_keys()
         self.close_from("close()")
 
     def _on_bridge_close(self) -> None:
@@ -2359,6 +2460,7 @@ class StudioController(QObject):
         hidden, and the controller always ends closed."""
         if self.state not in ("opening", "presented"):
             return
+        self.release_navigation_keys()  # a window close can arrive without a physical key-up event
         if not self.settle_draft(interactive=source in self.INTERACTIVE_CLOSES):
             logger.info("[STUDIO] close via %s kept open: unsaved preset changes not settled", source)
             return

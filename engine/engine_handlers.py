@@ -534,6 +534,12 @@ def _open_settings_after_runtime_destroyed(
             init_ms,
             since_request_ms,
         )
+        # Studio is admitted only after Settings has been built and the old
+        # QQuickWindow has crossed the native destruction barrier. A queued
+        # GUI turn begins it after the modal Settings window becomes visible.
+        if str(target).startswith("studio:") and callable(getattr(dialog, "open_initial_studio", None)):
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, dialog.open_initial_studio)
         exec_start = time.perf_counter()
         logger.info(
             "Entering settings dialog exec (%.1f ms since request)",

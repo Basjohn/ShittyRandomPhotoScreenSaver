@@ -1674,6 +1674,23 @@ class SettingsDialog(QDialog):
         state = self._tab_state_cache.get(str(tab_key), {}).get("view_state", {})
         return dict(state) if isinstance(state, dict) else None
 
+    def open_initial_studio(self) -> None:
+        """One-shot deferred Studio launch after Settings is visible and the runtime is destroyed."""
+        target = self._launch_target
+        if target is None or not target.studio_mode or self._closing:
+            return
+        tab = self.__dict__.get("visualizers_tab")
+        if tab is None or not tab.isEnabled():
+            logger.warning("Studio launch target has no available Visualizers page: %s", target.studio_mode)
+            return
+        try:
+            if tab._get_active_visualizer_mode() != target.studio_mode:
+                tab._select_mode_page(target.studio_mode)
+            from ui.studio.settings_link import open_mode_studio
+            open_mode_studio(tab, target.studio_mode, initial_pose=target.studio_pose)
+        except Exception:
+            logger.exception("Could not open Studio from runtime for %s", target.studio_mode)
+
     def _apply_initial_launch_target_focus(self) -> None:
         """Focus a semantic target only after its lazy page has been constructed."""
 

@@ -699,6 +699,7 @@ Item {
             hovered: visualizerInteractionHover.hovered
             canRestore: true
             canRotate: false
+            canStudio: true
             canTransferLeft: visualizerPresentationRoot.displayTransferLeftAvailable
             canTransferRight: visualizerPresentationRoot.displayTransferRightAvailable
             canLock: false

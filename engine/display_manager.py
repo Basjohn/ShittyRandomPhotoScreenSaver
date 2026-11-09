@@ -2535,7 +2535,7 @@ class DisplayManager(QObject):
         """
         if (
             self._retired or source.is_retired or source not in self.displays
-            or action not in {"close", "restore", "rotate", "lock", "transfer_left", "transfer_right"}
+            or action not in {"close", "restore", "rotate", "lock", "studio", "transfer_left", "transfer_right"}
         ):
             return False
         if widget_id == "spotify_visualizer" and _takeover_blocks_layout(self):
@@ -2549,6 +2549,40 @@ class DisplayManager(QObject):
             or not state.always_show_glyphs
         ):
             return False
+        if action == "studio":
+            # A Studio is a separate Settings-owned lifetime, not a CUSTOM Edit
+            # operation. Hand off primitive camera values while the live owner
+            # exists, then use the established deferred full teardown path.
+            visualizer = self._quick_visualizer_owner
+            if (widget_id != "spotify_visualizer" or source is not self._quick_visualizer_unit
+                    or visualizer is None or visualizer.is_retired or not visualizer.is_started):
+                return False
+            mode = str(visualizer.controller.mode_id)
+            from ui.studio.registry import has_studio
+            if not has_studio(mode):
+                return False
+            from core.authored_clock import authored_now
+            from core.settings.framed_camera import spec_for_mode
+            from widgets.spotify_visualizer.view_orbit import (view_pose_values, FramedFlightMotion,
+                                                                framed_flight_position)
+            from ui.settings_launch_targets import make_studio_launch_target
+
+            state = visualizer.controller.presentation_state
+            now = authored_now()
+            values = view_pose_values(state, mode, now)
+            spec = spec_for_mode(mode)
+            if spec is not None:
+                position_key = spec.key("camera_position")
+                motion = getattr(state, "_view_framed_flight_motion", None)
+                position = (framed_flight_position(motion, now)
+                            if isinstance(motion, FramedFlightMotion) and motion.mode_id == mode
+                            else getattr(state, "_" + position_key))
+                values[position_key] = list(position)
+                values[spec.key("camera_fov")] = getattr(state, "_" + spec.key("camera_fov"))
+            # No QtWidgets imports: the engine resolves Settings/Studio only
+            # after retiring this entire QQuickWindow generation.
+            self.settings_target_requested.emit(make_studio_launch_target(mode, values))
+            return True
         owner = self._quick_custom_layout_owner
         transfer_direction = action.removeprefix("transfer_") if action.startswith("transfer_") else None
         if transfer_direction is not None:

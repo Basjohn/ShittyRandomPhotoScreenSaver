@@ -95,6 +95,17 @@ Rectangle {
         }
     }
 
+    function cameraKey(key) {
+        return key === Qt.Key_W || key === Qt.Key_A || key === Qt.Key_S || key === Qt.Key_D
+            || key === Qt.Key_Q || key === Qt.Key_E || key === Qt.Key_Shift || key === Qt.Key_R
+    }
+    onActiveFocusChanged: if (!activeFocus) studio.releaseNavigationKeys()
+    Keys.onReleased: function(event) {
+        if (shell.caps.camera === true && cameraKey(event.key)) {
+            studio.navigationKey(event.key, false, (event.modifiers & Qt.ShiftModifier) !== 0)
+            event.accepted = true
+        }
+    }
     Keys.onPressed: function(event) {
         if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Z) {
             if (event.modifiers & Qt.ShiftModifier) studio.redo(); else studio.undo();
@@ -107,6 +118,11 @@ Rectangle {
             viewportExpanded = !viewportExpanded; event.accepted = true
         } else if (event.key === Qt.Key_F1 || event.key === Qt.Key_Question) {
             helpOverlay.open = !helpOverlay.open; event.accepted = true
+        } else if (shell.caps.camera === true && cameraKey(event.key)
+                   && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+            if (!event.isAutoRepeat)
+                studio.navigationKey(event.key, true, (event.modifiers & Qt.ShiftModifier) !== 0)
+            event.accepted = true
         } else if (event.key === Qt.Key_B && !(event.modifiers & Qt.ControlModifier) && shell.caps.brush === true) {
             studio.setBrushActive(!(studio.brushState.active === true)); event.accepted = true
         } else if (event.key === Qt.Key_Escape && studio.brushState.painting === true) {

@@ -44,22 +44,22 @@
         "extruded_bubble_ray_modulation": 1.0,
         "extruded_bubble_ray_shimmer": 0.3,
         "extruded_bubble_large_bubbles": [
-          8,
-          17
+          3,
+          8
         ],
         "extruded_bubble_mid_bubbles": [
-          45,
-          72
+          27,
+          55
         ],
         "extruded_bubble_bead_chains": [
           6,
           10
         ],
-        "extruded_bubble_large_size": 0.7,
-        "extruded_bubble_small_size": 0.85,
-        "extruded_bubble_bead_size": 1.3,
-        "extruded_bubble_bead_scatter": 0.35,
-        "extruded_bubble_stream_lanes": 1.0,
+        "extruded_bubble_large_size": 0.6171079429735233,
+        "extruded_bubble_small_size": 0.615071283095723,
+        "extruded_bubble_bead_size": 1.3319755600814664,
+        "extruded_bubble_bead_scatter": 1.0,
+        "extruded_bubble_stream_lanes": 0.9171758316361166,
         "extruded_bubble_wake_trails": 0.3740665308893414,
         "extruded_bubble_wake_tint": 0.6,
         "extruded_bubble_doublets": 0.0,
@@ -127,11 +127,11 @@
         ],
         "extruded_bubble_collision_scope": "All",
         "extruded_bubble_camera_position": [
-          0.771333,
-          3.261451,
-          -0.911033
+          1.156335,
+          0.644476,
+          0.126949
         ],
-        "extruded_bubble_camera_fov": 35,
+        "extruded_bubble_camera_fov": 22,
         "extruded_bubble_auto_rotate": false,
         "extruded_bubble_auto_rotate_after": 20,
         "extruded_bubble_auto_rotate_speed": 6,
@@ -178,7 +178,7 @@
         "extruded_bubble_particle_bands": true,
         "extruded_bubble_band_contrast": 1.0,
         "extruded_bubble_band_gather": 1.0,
-        "extruded_bubble_focus": 0.2939579090291921,
+        "extruded_bubble_focus": 0.11337406653088933,
         "extruded_bubble_aperture": 0.09436524100475217,
         "extruded_bubble_exposure": 0.7803801765105227,
         "extruded_bubble_hero_shell": 0.0,
@@ -196,11 +196,11 @@
     }
   },
   "starting_view": {
-    "extruded_bubble_turn": -0.156296296296296,
-    "extruded_bubble_tilt": 0.15111111111111108,
+    "extruded_bubble_turn": -0.4392592592592592,
+    "extruded_bubble_tilt": -0.18777777777777793,
     "extruded_bubble_scene_scale": 0.42409761837248494,
-    "extruded_bubble_scene_pan_x": 0.23454545454545453,
-    "extruded_bubble_scene_pan_y": -0.19589041095890408
+    "extruded_bubble_scene_pan_x": 0.5,
+    "extruded_bubble_scene_pan_y": -0.3930817610062894
   },
   "description": "Saved from current Settings state."
 }

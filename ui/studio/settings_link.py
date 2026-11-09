@@ -583,7 +583,8 @@ def _scroll_bar(tab):
     return area.verticalScrollBar() if area is not None else None
 
 
-def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, presence=None):
+def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, presence=None,
+                     initial_pose=None):
     """Open (or raise) the single Studio for ``mode_id`` from its Settings owner."""
     from ui.studio.controller import StudioController
     from ui.studio.presence import WindowPresence
@@ -616,7 +617,8 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
                      if not enabled or entry.mode_id in enabled)
 
     controller = StudioController(adapter or studio_adapter(mode_id), store, presence, surface_factory,
-                                  theme_provider=studio_theme, mode_switcher=switcher, modes=modes)
+                                  theme_provider=studio_theme, mode_switcher=switcher, modes=modes,
+                                  initial_pose=initial_pose)
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance()
     # Everything below outlives the session's own references (theme listeners, and slots Qt holds strongly on the
