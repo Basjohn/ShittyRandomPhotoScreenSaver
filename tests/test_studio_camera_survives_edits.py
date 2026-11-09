@@ -249,3 +249,23 @@ def test_the_former_aim_rule_resets_the_camera_negative_control(qt_app, mode_dia
     with pytest.raises(AssertionError, match="the camera moved"):
         _assert_same_view(session.view(), moved, f"{mode} under the former rule")
     assert _committed_orbit(session) != pytest.approx(orbit)
+
+
+@pytest.mark.parametrize("mode", CAMERA_MODES)
+def test_save_camera_persists_actual_custom_camera_and_later_edits_keep_it(
+        qt_app, mode_dialog, no_gl_checks, mode):
+    from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
+    from core.settings import visualizer_presets as vp
+    tab = mode_dialog(mode, "custom")
+    session = Session(tab, mode)
+    controller = session.controller
+    controller.store.set_include_view(False)
+    moved = session.move_camera()
+    controller.bridge.saveCamera()
+    keys = get_visualizer_view_pose_keys(mode)
+    persisted = tab._settings.get("widgets.spotify_visualizer")
+    assert {key: persisted[key] for key in keys} == pytest.approx({key: moved[key] for key in keys})
+    session.drag_unrelated_slider()
+    _assert_same_view(session.view(), moved, "after Save Camera and a later edit")
+    resolved = vp.resolve_visualizer_activation_payload(tab._settings.get("widgets.spotify_visualizer")).resolved_config
+    assert {key: resolved[key] for key in keys} == pytest.approx({key: moved[key] for key in keys})

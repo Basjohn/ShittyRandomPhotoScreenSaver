@@ -81,11 +81,29 @@ def test_invalid_or_foreign_camera_metadata_is_rejected(bad):
                                  {**_payload(),'starting_view':bad},MODE)
 
 
-def test_unframed_mode_cannot_acquire_camera_metadata():
+@pytest.mark.parametrize("mode", ("sphere", "extruded_spectrum"))
+def test_free_orbit_starting_view_seeds_only_explicit_activation(tmp_path, monkeypatch, mode):
+    keys = get_visualizer_view_pose_keys(mode)
+    home = dict(zip(keys, (.12, .24)))
+    live = dict(zip(keys, (-.2, .1)))
+    folder = tmp_path / mode
+    folder.mkdir()
+    (folder / "preset_1_test.json").write_text(json.dumps({
+        "mode": mode, "name": "Camera", "preset_index": 0,
+        "settings": {"mode": mode}, "starting_view": home}), encoding="utf8")
+    for name in ('_PRESETS','_PRESET_SOURCE_PATHS','_PRESET_SOURCE_SLOTS','_LOADED_SOURCE_PATHS'):
+        monkeypatch.setattr(vp, name, dict(getattr(vp, name)))
+    monkeypatch.setattr(vp, "_presets_root", lambda: tmp_path)
+    monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: tmp_path / "overrides")
+    vp.reload_presets(mode)
+    assert validate_visualizer_starting_view(mode, home) == home
+    selected = vp.apply_preset_starting_view(mode, 0, {"mode": mode, **live})
+    assert {key: selected[key] for key in keys} == home
+    section = {"mode": mode, f"preset_{mode}": 0, **live}
+    resolved = vp.resolve_visualizer_activation_payload(section).resolved_config
+    assert {key: resolved[key] for key in keys} == live
     with pytest.raises(ValueError):
-        validate_visualizer_starting_view('sphere',HOME)
-    section={'mode':'sphere','sphere_turn':.3}
-    assert vp.apply_preset_starting_view('sphere',0,section)==section
+        validate_visualizer_starting_view(mode, HOME)
 
 
 def test_runtime_cycle_seeds_target_home_and_custom_does_not_become_a_pose_cache(catalog):
@@ -192,3 +210,40 @@ def test_actual_save_as_writes_optional_home_and_reload_reads_it(body,catalog,mo
     repaired,_=repair._build_clean_payload(path,payload,MODE,cleaned)
     assert repaired.get('starting_view')==payload.get('starting_view')
     assert {k:manager.get('widgets.spotify_visualizer')[k] for k in KEYS}=={k:before[k] for k in KEYS}
+
+
+@pytest.mark.parametrize("authored_position", (False, True))
+def test_framed_flight_position_survives_settings_and_runtime_hydration(catalog, qt_app, tmp_path, authored_position):
+    from core.settings.settings_manager import SettingsManager
+    from ui.tabs.visualizers_tab import VisualizersTab
+    from core.settings.framed_camera import spec_for_mode
+    camera = spec_for_mode(MODE)
+    position = camera.key("camera_position")
+    payload = _payload()
+    if authored_position:
+        payload["settings"][position] = [0., 0., 0.]
+    path = catalog / "preset_1_landscape.json"
+    path.write_text(json.dumps(payload), encoding="utf8")
+    vp.reload_presets(MODE)
+    manager = SettingsManager(application="CameraRoundTrip", storage_base_dir=tmp_path / "profile")
+    moved = [.1, .2, .15]
+    config = _section()
+    config[position] = moved
+    manager.set("widgets", {"spotify_visualizer": config})
+    tab = VisualizersTab(manager)
+    tab._select_mode_page(MODE)
+    try:
+        hydrated = tab._prepare_mode_hydration_config(MODE)
+        assert hydrated[position] == pytest.approx(moved)
+        tab._save_settings_now()
+        persisted = manager.get("widgets.spotify_visualizer")
+        assert persisted[position] == pytest.approx(moved)
+        runtime = vp.resolve_visualizer_activation_payload(persisted).resolved_config
+        assert runtime[position] == pytest.approx(moved)
+        explicit = vp.apply_preset_starting_view(MODE, 0, runtime)
+        expected = [0., 0., 0.] if authored_position else require_canonical_default("widgets.spotify_visualizer." + position)
+        assert explicit[position] == expected
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
+        assert manager.flush(timeout=5.)

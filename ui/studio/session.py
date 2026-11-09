@@ -118,6 +118,13 @@ class StudioEditSession:
         """The canonical values the session opened with (reversible starting points use these)."""
         return self._baseline
 
+    def accept_saved_values(self, values: Mapping[str, Any]) -> None:
+        """Adopt an explicit store save of presentation values while keeping unrelated edit history."""
+        for key, value in values.items():
+            if key in self._schema.keys:
+                self._committed[key] = deepcopy(value)
+        self._changed("saved")
+
     def set_many(self, changes: dict[Path, Any], label: str) -> bool:
         """Several values as ONE committed, undoable action (e.g. a material starting point)."""
         self.begin_gesture(label)

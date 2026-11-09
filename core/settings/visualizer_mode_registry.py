@@ -538,7 +538,7 @@ def get_visualizer_view_pose_keys(mode_id: str) -> tuple[str, ...]:
 
     View authoring persists in the live mode-scoped visualizer settings, never
     inside curated or Custom artwork snapshots or CUSTOM stage rectangles.
-    Optional framed-preset starting_view metadata may seed these same keys once.
+    Optional camera-preset starting_view metadata may seed these same keys once.
     """
     descriptor = get_visualizer_mode_descriptor(mode_id)
     return tuple((*descriptor.view_orbit_settings, *descriptor.scene_transform_settings))

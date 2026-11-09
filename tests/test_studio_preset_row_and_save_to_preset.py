@@ -440,3 +440,135 @@ def test_setting_changes_patch_every_loaded_section_in_place_and_add_nothing_els
     original["snapshot"]["widgets"]["spotify_visualizer"][keys[0]] = 9
     original["settings"]["widgets.spotify_visualizer." + keys[0]] = 9
     assert payload == original and key_order(payload) == key_order(original)
+
+
+def test_explicit_save_overwrites_current_curated_without_another_prompt(
+        real_dialog, offscreen_launch, preset_copy, popups):
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    bridge.saveCurrent()
+    assert not popups
+    assert vp.get_preset_settings(MODE, curated)[key] == pytest.approx(target)
+    assert not offscreen_launch[-1].store.holds_draft()
+    assert _slider(tab, MODE).preset_index() == curated
+
+
+def test_explicit_save_on_custom_keeps_custom_and_curated_file_unchanged(
+        real_dialog, offscreen_launch, preset_copy, popups):
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    controller.store.draft_to_custom()
+    before = path.read_bytes()
+    bridge.saveCurrent()
+    assert not popups and path.read_bytes() == before
+    assert _slider(tab, MODE).preset_index() == _slider(tab, MODE).custom_index()
+    assert _stored_section(tab)[key] == pytest.approx(target)
+
+
+def test_save_camera_captures_full_preview_and_keeps_unrelated_curated_draft(
+        real_dialog, offscreen_launch, preset_copy, popups):
+    from core.settings.framed_camera import spec_for_mode
+    from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    store = controller.store
+    before = vp.get_preset_settings(MODE, curated)[key]
+    store.set_include_view(False)                         # Save Camera is an explicit camera request
+    controller.orbit_by(90., 25.)
+    controller.zoom_by(1.)
+    controller.zoom_by(1., dolly=True)
+    controller.pan_by(30., 20., 600., 400.)
+    controller.end_orbit()
+    actual = deepcopy(controller.evaluation_values())
+    bridge.saveCamera()
+    pose_keys = get_visualizer_view_pose_keys(MODE)
+    camera = spec_for_mode(MODE)
+    assert not popups
+    assert vp.get_presets(MODE)[curated].starting_view == {k: actual[k] for k in pose_keys}
+    assert vp.get_preset_settings(MODE, curated)[key] == before    # unrelated edit remains held
+    assert store.holds_draft() and store.snapshot()[key] == pytest.approx(target)
+    for suffix in ("camera_position", "camera_fov"):
+        camera_key = camera.key(suffix)
+        assert vp.get_preset_settings(MODE, curated)[camera_key] == actual[camera_key]
+    # A subsequent unrelated edit and Settings save cannot bring the old preview camera back.
+    bridge.commitValue(key, 0, before)
+    after = controller.evaluation_values()
+    assert {k: after[k] for k in pose_keys} == pytest.approx({k: actual[k] for k in pose_keys})
+    tab._save_settings_now()
+    restored = vp.resolve_visualizer_activation_payload(_stored_section(tab)).resolved_config
+    assert {k: restored[k] for k in pose_keys} == pytest.approx({k: actual[k] for k in pose_keys})
+
+
+def test_explicit_save_read_only_preserves_draft_and_file(
+        real_dialog, offscreen_launch, preset_copy, popups):
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    before = path.read_bytes()
+    os.chmod(path, stat.S_IREAD)
+    try:
+        bridge.saveCurrent()
+    finally:
+        os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+    assert [p["icon"] for p in popups] == ["error"]
+    assert path.read_bytes() == before and offscreen_launch[-1].store.holds_draft()
+
+
+@pytest.mark.parametrize("read_only", (False, True))
+def test_frozen_explicit_save_targets_shared_programdata_and_never_bundle(
+        tmp_path, monkeypatch, real_dialog, offscreen_launch, popups, read_only):
+    bundled = tmp_path / "bundle"
+    shared = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
+    shutil.copytree(vp.get_visualizer_presets_dir(MODE), bundled / MODE)
+    shutil.copytree(bundled, shared)
+    bundle_before = {p.name: p.read_bytes() for p in (bundled / MODE).glob("*.json")}
+    for name in ('_PRESETS','_PRESET_SOURCE_PATHS','_PRESET_SOURCE_SLOTS','_LOADED_SOURCE_PATHS'):
+        monkeypatch.setattr(vp, name, dict(getattr(vp, name)))
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: True)
+    monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled)
+    monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared)
+    monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: tmp_path / "overrides")
+    vp.reload_presets(MODE)
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    assert path.is_relative_to(shared)
+    before = path.read_bytes()
+    if read_only:
+        os.chmod(path, stat.S_IREAD)
+    try:
+        bridge.saveCurrent()
+    finally:
+        os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+    if read_only:
+        assert path.read_bytes() == before
+        assert [p["icon"] for p in popups] == ["error"]
+        assert offscreen_launch[-1].store.holds_draft()
+    else:
+        assert vp.get_preset_settings(MODE, curated)[key] == pytest.approx(target)
+        assert not popups
+    assert {p.name: p.read_bytes() for p in (bundled / MODE).glob("*.json")} == bundle_before
+
+
+def test_save_camera_live_persistence_failure_reports_saved_preset_and_keeps_draft(
+        real_dialog, offscreen_launch, preset_copy, monkeypatch):
+    from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    controller.store.set_include_view(False)
+    controller.orbit_by(90., 25.)
+    controller.end_orbit()
+    actual = deepcopy(controller.evaluation_values())
+    before = path.read_bytes()
+    errors = []
+    monkeypatch.setattr(controller.store, "_popup", lambda title, message, icon, **kwargs:
+                        errors.append((title, message, icon)))
+
+    def fail_live_save(*args):
+        raise OSError("test live camera write failure")
+
+    monkeypatch.setattr(tab, "save_visualizer_camera", fail_live_save)
+    bridge.saveCamera()
+    assert path.read_bytes() != before
+    keys = get_visualizer_view_pose_keys(MODE)
+    assert vp.get_presets(MODE)[curated].starting_view == {k: actual[k] for k in keys}
+    assert controller.store.holds_draft()
+    assert controller.store.snapshot()[key] == pytest.approx(target)
+    assert len(errors) == 1 and errors[0][2] == "error"
+    assert "saved into" in errors[0][1] and "live camera could not be saved" in errors[0][1]
+    assert "test live camera write failure" in errors[0][1]

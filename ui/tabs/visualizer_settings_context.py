@@ -378,6 +378,28 @@ class VisualizerSettingsContextMixin:
     def _extract_visualizer_snapshot(self, mode_key: str, spotify_vis_config: dict) -> dict:
         return extract_visualizer_snapshot(mode_key, spotify_vis_config)
 
+    def save_visualizer_camera(self, mode_key: str, values: Mapping[str, Any]) -> None:
+        """Persist an explicit Studio camera through Settings' live-view transaction, without draft artwork."""
+        from core.settings.framed_camera import spec_for_mode
+        from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
+        from core.settings.visualizer_view_orbit import resolve_visualizer_view_orbit
+        keys = get_visualizer_view_pose_keys(mode_key)
+        config, cache = resolve_visualizer_view_orbit(
+            self._settings.get("widgets.spotify_visualizer"),
+            self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {}),
+            mode=mode_key, values={key: values[key] for key in keys})
+        camera_keys = set(keys)
+        camera = spec_for_mode(mode_key)
+        if camera is not None:
+            for suffix in ("camera_position", "camera_fov"):
+                key = camera.key(suffix)
+                config[key] = deepcopy(values[key])
+                camera_keys.add(key)
+        self._settings.replace_visualizer_runtime_preset_state(config, cache)
+        logger.info("[VIS_ORBIT] Studio camera saved mode=%s preset=%s view=%s", mode_key,
+                    self._resolve_visualizer_preset_index(mode_key, config),
+                    {key: values[key] for key in sorted(camera_keys)})
+
     def build_visualizer_preset_payload(self, mode_key: str) -> dict[str, Any]:
         """Construct a lean curated-preset payload from current settings."""
         widgets_cfg = self._settings.get('widgets')
@@ -425,7 +447,7 @@ class VisualizerSettingsContextMixin:
             },
         }
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor, get_visualizer_view_pose_keys
-        if get_visualizer_mode_descriptor(mode_key).scene_transform_settings:
+        if get_visualizer_mode_descriptor(mode_key).view_orbit_settings:
             from core.settings.visualizer_view_orbit import validate_visualizer_starting_view
             payload["starting_view"] = validate_visualizer_starting_view(
                 mode_key, {key: normalized_live[key] for key in get_visualizer_view_pose_keys(mode_key)})

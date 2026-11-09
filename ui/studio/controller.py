@@ -244,6 +244,39 @@ class StudioBridge(QObject):
         if notice:
             self.notify(notice)
 
+    @Slot()
+    def saveCurrent(self) -> None:
+        self._save_action("save_current")
+
+    @Slot()
+    def saveCamera(self) -> None:
+        self._save_action("save_camera", camera=True)
+
+    def _save_action(self, method: str, *, camera: bool = False) -> None:
+        action = getattr(self._c.store, method, None)
+        if not callable(action):
+            return
+        self._c.session.end_gesture()
+        try:
+            values = self._c.evaluation_values() if camera else None
+            notice = action(values) if camera else action()
+            if camera and notice:
+                from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
+                from core.settings.framed_camera import spec_for_mode
+                keys = set(get_visualizer_view_pose_keys(self._c.adapter.mode_id))
+                spec = spec_for_mode(self._c.adapter.mode_id)
+                if spec is not None:
+                    keys.update((spec.key("camera_position"), spec.key("camera_fov")))
+                self._c.session.accept_saved_values({key: values[key] for key in keys})
+                for key in keys:
+                    self._c._pose.pop(key, None)
+        except Exception as exc:
+            logger.exception("[STUDIO] %s failed", method)
+            notice = f"Could not save: {exc}"
+        self.headerChanged.emit()
+        if notice:
+            self.notify(notice)
+
     def _dirty(self) -> bool:
         return self._c.session.dirty
 
@@ -2223,6 +2256,8 @@ class StudioController(QObject):
 
     def set_pose(self, key: str, value: float) -> None:
         """A live view-pose value (navigation): rendered at once, never an ordinary committed edit."""
+        if key in self.session.schema.keys:
+            value = self.session.schema.admit(key, value, self.session.values[key])
         self._pose[key] = float(value)
         if self.bridge is not None:
             self.bridge.on_session_changed("pose")

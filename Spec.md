@@ -715,6 +715,11 @@ For framed 3D modes these operations affect internal scene turn/tilt/pan/scale o
 geometry or viewport. The canonical view-pose owner persists them separately from art presets and CUSTOM geometry.
 Save Preset As can capture the settled pose as optional `starting_view` metadata, outside its artwork snapshot;
 it is an activation input, never a second persistent live camera or renderer override.
+Studio's explicit Save writes the selected preset/Custom slot; Save Camera writes the evaluated starting camera
+without unrelated draft artwork. Camera-capable descriptors share the metadata schema through the existing view
+owner. Ordinary hydration preserves the live framed Camera Position, while explicit preset activation seeds it.
+Frozen saves use the canonical ProgramData preset tree and report read-only failures without an alternate root.
+`Docs/Reference/Visualizer_Studio.md` owns save/draft details.
 
 Every registered descriptor must explicitly declare how it supports the two CUSTOM operations:
 

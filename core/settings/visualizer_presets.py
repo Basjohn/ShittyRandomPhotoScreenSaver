@@ -1067,10 +1067,10 @@ def apply_preset_starting_view(mode: str, index: int, config: Dict[str, Any]) ->
     """Seed the ONE live pose on explicit preset selection, never ordinary hydration.
 
     Missing optional metadata selects canonical mode defaults. Custom art and
-    unframed modes preserve the current view. Nothing is cached or written here.
+    modes without a camera preserve the current view. Nothing is cached or written here.
     """
     from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-    if not get_visualizer_mode_descriptor(mode).scene_transform_settings or index == get_custom_preset_index(mode):
+    if not get_visualizer_mode_descriptor(mode).view_orbit_settings or index == get_custom_preset_index(mode):
         return config
     from core.settings.visualizer_view_orbit import (
         resolve_visualizer_view_orbit, validate_visualizer_starting_view,
@@ -1083,7 +1083,13 @@ def apply_preset_starting_view(mode: str, index: int, config: Dict[str, Any]) ->
         values = {key: require_canonical_default(f"widgets.spotify_visualizer.{key}")
                   for key in get_visualizer_view_pose_keys(mode)}
     values = validate_visualizer_starting_view(mode, values)
-    return resolve_visualizer_view_orbit(config, {}, mode=mode, values=values)[0]
+    seeded = resolve_visualizer_view_orbit(config, {}, mode=mode, values=values)[0]
+    from core.settings.framed_camera import spec_for_mode
+    camera = spec_for_mode(mode)
+    if camera is not None:
+        key = camera.key("camera_position")
+        seeded[key] = deepcopy(preset.settings.get(key, require_canonical_default(f"widgets.spotify_visualizer.{key}")))
+    return seeded
 
 
 def apply_preset_to_config(mode: str, index: int, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -1112,8 +1118,13 @@ def apply_preset_to_config(mode: str, index: int, config: Dict[str, Any]) -> Dic
     prefixes = MODE_KEY_PREFIXES.get(mode, [])
     cleaned = dict(config)
 
+    # Framed translation is saved by the live-view owner too. Ordinary hydration must not replace a
+    # camera flown away from its preset home; explicit selection seeds it in apply_preset_starting_view.
+    from core.settings.framed_camera import spec_for_mode
+    camera = spec_for_mode(mode)
+    position_key = camera.key("camera_position") if camera is not None else None
     # First: CLEAR mode-owned preset keys, never persistent view pose.
-    view_keys = frozenset(get_visualizer_view_pose_keys(mode))
+    view_keys = frozenset((*get_visualizer_view_pose_keys(mode), position_key))
     for key in list(cleaned.keys()):
         if key in view_keys or key in preset_settings:
             continue
@@ -1122,6 +1133,8 @@ def apply_preset_to_config(mode: str, index: int, config: Dict[str, Any]) -> Dic
     
     # Then: APPLY preset settings
     for key, value in preset_settings.items():
+        if key == position_key and key in config:
+            continue
         cleaned[key] = deepcopy(value)
     
     return cleaned

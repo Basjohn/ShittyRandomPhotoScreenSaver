@@ -291,7 +291,7 @@ class VisualizerSettingsStore:
             if answer == "new" and self.save_as_new_preset():
                 return True
 
-    def _write_preset(self, changes, starting_view) -> bool:
+    def _write_preset(self, changes, starting_view, *, settled_keys=None) -> bool:
         """Write the session's changes into the origin preset's own file (shape preserved, nothing else touched),
         reload the presets and settle the draft. Failures are shown with Settings' prompt."""
         from core.settings import visualizer_preset_file as preset_file
@@ -301,6 +301,7 @@ class VisualizerSettingsStore:
             result = preset_file.save_changes_to_preset(self._mode, self._origin, changes,
                                                         starting_view=starting_view)
         except preset_file.PresetFileReadOnly as exc:
+            logger.warning("[STUDIO] Preset save refused: read-only path=%s", exc.path)
             self._popup("Preset Is Read-Only", self._read_only_text(exc.path), "error")
             return False
         except Exception as exc:
@@ -312,8 +313,8 @@ class VisualizerSettingsStore:
         slider = self._tab._get_visualizer_preset_slider(self._mode)
         if slider is not None:
             slider.refresh_preset_catalog(reload=False)    # the owner reloaded it; the slot stays as it is
-        self._draft = False
-        self._edited = set()
+        self._edited = set() if settled_keys is None else self._edited - set(settled_keys)
+        self._draft = self._draft and bool(self._edited)
         return True
 
     def save_as_new_preset(self) -> bool:
@@ -452,6 +453,64 @@ class VisualizerSettingsStore:
         if not 0 <= self._origin < len(names) - 1 or get_preset_file_path(self._mode, self._origin) is None:
             return ""
         return names[self._origin]
+
+    def save_current(self) -> str:
+        """The explicit Save action targets the selected slot; the click authorizes its overwrite."""
+        curated = self._curated_index()
+        if curated is None:
+            self._tab.flush_pending_changes()
+            self._tab._save_settings_now()
+            return "Saved Custom"
+        self._origin = curated
+        changes, starting_view = self._pending_preset_changes()
+        if not changes and starting_view is None:
+            return f"{self.preset_label()} already holds these settings"
+        if not self._write_preset(changes, starting_view):
+            return ""
+        return f"Saved {self.preset_label()}"
+
+    def save_camera(self, values: Mapping[str, Any]) -> str:
+        """Save exactly the evaluated camera, independently of Include View or unrelated draft edits."""
+        from copy import deepcopy
+        from core.settings.framed_camera import spec_for_mode
+        from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
+        from core.settings.visualizer_view_orbit import validate_visualizer_starting_view
+        from core.settings import visualizer_preset_file as preset_file
+        keys = set(get_visualizer_view_pose_keys(self._mode))
+        camera = spec_for_mode(self._mode)
+        camera_settings = set()
+        if camera is not None:
+            camera_settings = {camera.key("camera_position"), camera.key("camera_fov")}
+        curated = self._curated_index()
+        preset_saved = False
+        if curated is not None:
+            self._origin = curated
+            starting_view = validate_visualizer_starting_view(self._mode, {key: values[key] for key in keys})
+            # Camera Position and lens are the preset's existing camera setting fields. Preserve the file's shape.
+            payload = {"mode": self._mode, "settings": {key: deepcopy(values[key]) for key in camera_settings}}
+            changes = preset_file.preset_setting_changes(self._mode, curated, payload, camera_settings)
+            if not self._write_preset(changes, starting_view, settled_keys=()):
+                return ""
+            preset_saved = True
+        try:
+            self._tab.save_visualizer_camera(self._mode, values)
+            current = self.snapshot()
+            current.update({key: values[key] for key in keys | camera_settings})
+            self._load_into_settings(current)
+            self._edited -= keys | camera_settings
+            self._draft = self._draft and bool(self._edited)
+        except Exception as exc:
+            if preset_saved:
+                logger.exception("[STUDIO] Save Camera partially saved mode=%s preset=%s: preset file saved, "
+                                 "live camera transaction failed", self._mode, curated)
+                message = (f"The camera was saved into {self.preset_label()}'s preset file, but the live camera "
+                           f"could not be saved. Your Studio draft is still available.\n{exc}")
+            else:
+                logger.exception("[STUDIO] Save Camera failed mode=%s", self._mode)
+                message = f"Could not save the current camera.\n{exc}"
+            self._popup("Save Failed", message, "error")
+            return ""
+        return f"Saved camera for {self.preset_label()}"
 
     def save_to_preset(self) -> str:
         """Save To <Preset>: after an explicit confirmation, write the settings edited in this session that

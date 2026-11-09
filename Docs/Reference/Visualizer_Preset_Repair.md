@@ -20,7 +20,8 @@ as existing artwork, and so do the audio-analysis (technical) keys: they are spe
   Reindex and Swap change filename slots and index/name metadata only; they do not sanitize artwork.
 - Repair keeps each file's own shape: key order, top-level metadata, indentation, escaping and line endings.
   The merge, in-place patching and formatting live in `core/settings/visualizer_preset_file.py`, shared with the
-  Studio's Save To <Preset> (which writes only edited keys and removes nothing).
+  Studio's Save and Save To <Preset> (which write only edited keys and remove nothing).
+  Save Camera uses the same patcher for the current evaluated starting view and its lens/Camera Position.
   A section key is removed only when it is a visualizer setting the shared migration retired, renamed or ruled
   foreign; inert authored entries (the view pose inside the artwork, `preset_<mode>` slot metadata, notes) stay.
   A missing control goes to its sorted place in a key-sorted section, otherwise right after its nearest registry

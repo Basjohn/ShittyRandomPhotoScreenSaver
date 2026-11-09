@@ -1607,8 +1607,8 @@ Rectangle {
                     Keys.onDownPressed: if (interactive) presetMenu.open()
                     FocusRing { visible: presetPill.activeFocus }
                     C.ToolTip.visible: pillMouse.containsMouse && !presetMenu.opened
-                    C.ToolTip.text: "Choose the preset to edit. Studio edits are always saved to Custom; switching "
-                                    + "to a curated preset keeps your Custom settings."
+                    C.ToolTip.text: "Choose the preset to edit. Save writes the selected preset; unsaved edits are "
+                                    + "settled before switching."
                     C.ToolTip.delay: 600
                     C.Popup {
                         id: presetMenu
@@ -1745,10 +1745,17 @@ Rectangle {
                                checked: helpOverlay.open
                                tip: "How the Studio works: workspaces and gestures (F1)"
                                onClicked: helpOverlay.open = !helpOverlay.open }
-                StudioButton { text: "Save Preset As…"; tip: "Save the current Custom settings as a preset file"
+                StudioButton { objectName: "saveCameraButton"; text: "Save Camera"; enabledState: shell.caps.camera === true
+                               tip: shell.caps.camera ? "Save the current preview camera as this preset's starting camera"
+                                                      : "This visualizer has no camera"
+                               onClicked: studio.saveCamera() }
+                StudioButton { text: "Save Preset As…"; tip: "Save the current settings as a new preset file"
                                onClicked: studio.savePresetAs() }
+                StudioButton { objectName: "saveCurrentButton"; text: "Save"; icon: "save"
+                               tip: "Save changes into the currently selected preset or Custom slot"
+                               onClicked: studio.saveCurrent() }
                 StudioButton { objectName: "closeButton"; text: "Close"; primary: true
-                               tip: "Close the Studio and return to Settings (edits are already saved to Custom)"
+                               tip: "Close the Studio and return to Settings; choose what to do with unsaved preset edits"
                                onClicked: Qt.callLater(studio.requestCloseFrom, "close button") }
             }
         }

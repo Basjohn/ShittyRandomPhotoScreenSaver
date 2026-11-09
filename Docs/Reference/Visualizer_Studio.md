@@ -336,6 +336,9 @@ is optional and defaults to "not offered":
   than the card), **Live Card** (the card exactly, letterboxed), and 16:9 / 21:9 cards containing the live card's
   world. An empty tuple fills the viewport with no letterbox.
 - **Navigation and camera saving.** `navigation()` maps orbit/zoom/dolly/pan onto the mode's own camera values.
+  Preview navigation passes through the existing schema admission, so the displayed lens is a value the camera can
+  save exactly. Save Camera explicitly captures every supported axis; the gesture and Keep View policies below still
+  govern navigation that has not been explicitly saved.
   `saved_with_camera_policy` keys persist only when the store's camera policy allows; `saved_on_keep` keys persist on
   Keep View; anything else is preview only.
 - **Previews.** `preset_preview` (starting-point tiles) and `card_preview` (rendered cards at the Quiet or Peak
@@ -425,6 +428,23 @@ control.
   back and the preview camera snapped to it ("studios reset the camera every slider change";
   `tests/test_studio_camera_survives_edits.py`). The preview view (`_pose`: dolly, pan, and the orbit while it is not
   committed) is the controller's and changes only by navigation, a camera row, Reset, or a preset or mode switch.
+- **Explicit saves.** Every Studio offers **Save** in its header. It overwrites the currently selected
+  curated preset through the same shape-preserving file patcher as Save To, or saves the currently selected
+  Custom slot through Settings' canonical save. This explicit action needs no second overwrite prompt. The
+  Save To menu keeps its existing confirmation and origin-preset target. **Save Camera** is offered on
+  camera-capable Studios (disabled with a hint for flat modes) and captures the evaluated view the preview currently uses, including orbit, lens,
+  dolly, pan and framed Camera Position. On a curated preset it writes that starting camera without saving
+  unrelated artwork edits; on Custom it persists the live camera through Settings. This explicit camera
+  action is independent of the Include Camera View checkbox. File failures leave drafts available and show
+  the existing clear failure/read-only message; no alternate save root is used. If the preset file was saved
+  before the live camera transaction fails, the error and log state that partial result explicitly and retain
+  the Studio draft.
+- **Live camera round-trip.** Framed Camera Position, like turn and tilt, is a live presentation value.
+  Ordinary preset resolution, opening Settings and runtime reconstruction preserve its last saved value.
+  Explicit curated-preset selection initializes Camera Position from that preset; its optional starting-view
+  record initializes the remaining live pose. Free-orbit modes use that same metadata with their own two-key
+  orbit schema; modes without a camera reject it. Neither navigation nor an ordinary Settings save edits a
+  curated preset file.
 - **Preset menu.** The header's preset picker offers Settings' own preset-row actions: Move To Custom (on a curated
   preset), Save Preset As… (on Custom, Settings' own file dialog) and, for authoring the curated presets themselves,
   **Save To <Preset>**. This replaced Settings' Edit Preset (the preset file opened in the OS editor), deleted on

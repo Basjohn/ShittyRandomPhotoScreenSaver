@@ -1,7 +1,7 @@
 """Settle 3D view pose without granting visualizer presets geometry authority.
 
 Orbit and optional internal pan/scale remain canonical, mode-specific live settings.
-Framed curated presets may supply a validated starting view on explicit activation. Only this
+Camera-capable curated presets may supply a validated starting view on explicit activation. Only this
 live-view owner applies/persists poses; ordinary reloads preserve user adjustments.
 A finished gesture makes one settings commit; no per-frame writes.
 """
@@ -19,12 +19,12 @@ def validate_visualizer_starting_view(mode: str, values: Mapping[str, Any]) -> D
     """Validate optional preset metadata using the live owner's exact pose schema.
 
     Legacy pose leaves inside artwork remain inert. This complete metadata record
-    is opt-in for framed modes only; malformed records fail loudly at preset input.
+    is opt-in for modes declaring a camera orbit; malformed records fail loudly at preset input.
     Composition admission remains with the existing presentation/configure path.
     """
     from core.settings.visualizer_mode_settings import require_mode_settings
-    if not get_visualizer_mode_descriptor(mode).scene_transform_settings:
-        raise ValueError(f"{mode} does not support a framed starting view")
+    if not get_visualizer_mode_descriptor(mode).view_orbit_settings:
+        raise ValueError(f"{mode} does not support a starting view")
     keys = get_visualizer_view_pose_keys(mode)
     if not isinstance(values, Mapping) or set(values) != set(keys):
         raise ValueError(f"{mode} starting_view requires exactly {keys}")
@@ -79,10 +79,6 @@ def starting_camera_pose(mode: str, preset_index: int) -> Dict[str, float]:
     from core.settings.default_contract import require_canonical_default
     from core.settings.visualizer_presets import get_custom_preset_index, get_presets
     keys = get_visualizer_view_pose_keys(mode)
-    if not get_visualizer_mode_descriptor(mode).scene_transform_settings:
-        # A freeform orbit (Sphere, Extruded Spectrum): its presets author no starting view (that metadata is a
-        # framed-mode record), so every preset's home is the canonical turn/tilt.
-        return {key: float(require_canonical_default(f"widgets.spotify_visualizer.{key}")) for key in keys}
     values = None
     presets = get_presets(mode)
     if 0 <= preset_index < len(presets) and preset_index != get_custom_preset_index(mode):

@@ -343,15 +343,18 @@ after the operator's yes on a question card; agents never run load (invisible ch
 These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it.
 Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.7) in a separate checkpoint.
 
-- [~] **1.0 Awaiting Validation:** check Waveform's Rotate Widget Content in ordinary/fullscreen Edit and its
-  rectangle/quarter-turn glyph against Reset Camera; the capability and shared CUSTOM regression gates are green.
+- [ ] **1.0 Rotate (all modes except Sphere):** prove actual content rotation through every mode's renderer,
+  including Extruded Spectrum, EB, Neon Lake and Waveform, in every admitted ordinary/fullscreen context. State-only
+  capability/Edit gates are insufficient; keep the content quarter-turn distinct from camera orbit and prove the
+  drawn result at non-square extents. Then operator-check the rectangle/quarter-turn glyph against Reset Camera.
 - [ ] **1.1 Awaiting Logs:** no direct mode-switch cause in the supplied archive. On recurrence, correlate the
   reported time, prior/result mode, selected preset and runtime generation with the existing mode-transition owner
   and frame trace; distinguish explicit selection, enabled-mode normalization and Settings restoration first.
-- [ ] **1.2 Studio saves:** expose Save for the selected preset/Custom slot and Save Camera for its starting view
-  through the canonical file/settings and camera owners; prove installed-root and read-only failure behavior.
-- [ ] **1.3 Camera persistence:** inspect `logs/evidence_chest/logsf158e7bdd4.zip`; keep preset Starting Camera as
-  activation data and Last Known Camera presentation-owned across Settings and normal/fullscreen transitions.
+- [~] **1.2-1.3 Awaiting Validation:** check Studio Save/Save Camera in a frozen build (writable and read-only
+  ProgramData paths), and a moved camera after Settings/fullscreen return. Save Camera captures the actual evaluated
+  pose without unrelated draft artwork; ordinary hydration preserves live XYZ. Focused file-integrity and real
+  Settings round-trip tests are green. Evidence: `logs/evidence_chest/logsf158e7bdd4.zip`; durable save contract:
+  `Docs/Reference/Visualizer_Studio.md`.
 - [~] **1.4-1.5 Awaiting Validation:** check Fullscreen Mode's Media Bar/Floating Glyphs styles, long metadata
   fitting, multiline Edit boxes and optional album. Both styles use the same admitted Media actions; every metadata
   row uses Media's shared fitting primitive. Focused Settings, input, text-layout and Edit gates are green.

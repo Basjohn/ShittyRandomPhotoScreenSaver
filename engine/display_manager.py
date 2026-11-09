@@ -1322,16 +1322,18 @@ class DisplayManager(QObject):
         config, cache = resolve_visualizer_view_orbit(
             section, custom_presets, mode=mode_id, values=values
         )
+        saved_view = dict(values)
         from core.settings.framed_camera import spec_for_mode
         spec = spec_for_mode(mode_id)
         if spec is not None:
             # Persistent camera translation belongs to live view, never a curated preset.
             position_key = spec.key('camera_position')
             config[position_key] = list(getattr(owner.controller.presentation_state, '_' + position_key))
+            saved_view[position_key] = config[position_key]
         settings.replace_visualizer_runtime_preset_state(config, cache)
         self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(config)
         self._refresh_all_quick_context_menus()
-        logger.info("[VIS_ORBIT] Saved mode=%s view=%s", mode_id, values)
+        logger.info("[VIS_ORBIT] Saved mode=%s view=%s", mode_id, saved_view)
 
     def _quick_custom_layout_active(self) -> bool:
         # Edit's own keys (undo, lock, Save/Cancel) belong to Edit, never to a direct gesture.
