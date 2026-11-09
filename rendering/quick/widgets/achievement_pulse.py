@@ -703,7 +703,7 @@ class AchievementPulsePresentationModel(QObject):
         # The canvas reserves a rail for every capsule shown: the field group is
         # anchored to the bottom, so a capsule the canvas did not make room for
         # would push the group up into the artwork and metric column.
-        self._capsule_rows = len(rows)
+        self._capsule_rows = self._field_model.rowCount()
         unlocks_changed = self._unlock_model.replace_rows(card.latest_unlocks)
         snapshot = replace(
             self._snapshot,

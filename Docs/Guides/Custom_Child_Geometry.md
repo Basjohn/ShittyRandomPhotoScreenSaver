@@ -91,6 +91,9 @@ The family must consume child geometry through its existing layout flow. Collisi
 - Each child is clamped to its family-declared painted containment within the existing parent card. Resizing or moving a child **must not publish an outer-extent growth request**, including when the family’s internal authored content is wider than a compact parent.
 - The family reflows neighboring content on its own authored rails while preserving the committed parent rectangle. Shared collision admission may refuse an overlapping/overflowing gesture; it does not repair the painted QML by silently enlarging the parent.
 - Only the outer CUSTOM side/corner controls may change `content_extent`. Their current geometry owner preserves the authored minimum and any existing parent-specific constraints. In particular, Achievement Pulse and Abandonment Issues expose `customEditableChildRequirementTarget: null`; their retired child-driven requirement object must not be restored.
+- Achievement Pulse's authored capsule rails count the enabled rows actually retained by `SteamCardFieldListModel`.
+  Disabled provider fields do not reserve rails or change the child's normalization baseline when cached/live data
+  arrives. Replaying the same committed payload on entry to Edit must leave the painted layout unchanged.
 - The editor may read selected child target geometry for mapping and containment, but no child-size listener or QML preferred-width binding may write the parent extent. Repeated event-loop settlement must leave the committed outer rectangle and authored baseline unchanged.
 - Side-axis `content_extent`, optional diagonal two-axis content reflow, and square-corner/wheel whole-card scale remain gestures on the **same** outer CUSTOM sizing authority.
 

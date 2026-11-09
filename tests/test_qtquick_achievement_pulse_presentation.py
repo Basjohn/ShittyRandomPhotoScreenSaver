@@ -1443,3 +1443,66 @@ def test_pulse_trimmed_extent_rehydrates_only_after_header_flip_and_unflipped_fl
     })
     assert rebound.customHeaderAlignment != "right"
     assert rebound.authoredWidth == pytest.approx(width)
+
+
+@pytest.mark.qt
+def test_disabled_capsules_do_not_move_saved_children_when_data_arrives(qt_app) -> None:
+    """Cold hydration and Edit replay must resolve the same enabled capsule rails."""
+    visibility = {"total": True, "playtime": True, "previous": True,
+                  "latest": True, "source": False, "selected": False}
+    model = _model(config=_config(
+        field_visibility=tuple(visibility.items()), progress_pulse=True,
+        double_capsules=True, shelf_style=True,
+    ))
+    model.activate()
+    width, height = model.baseAuthoredWidth, model.baseAuthoredHeight
+    payload = {
+        "content_extent": [width + 137, height + 12],
+        "child_geometry": {
+            "badge": {"width_scale": 1.1, "height_scale": 1.1,
+                      "x_offset": 0.2, "y_offset": 0.1},
+            "progress_circle": {"width_scale": 1.2, "height_scale": 1.2,
+                                "x_offset": -0.02, "y_offset": -0.17},
+            "field_group": {"width_scale": 1.3, "height_scale": 1.0},
+        },
+    }
+    carrier = object.__new__(RetainedAchievementPulsePresentation)
+    carrier._model = model
+    carrier._apply_custom_layout_size_payload(payload)
+    engine, component, item = _create_qml_item(model)
+
+    def geometry():
+        return tuple(
+            (part.x(), part.y(), part.width(), part.height(), part.scale())
+            for name in ("achievementLatestArtworkFrame", "achievementProgressPulse",
+                         "achievementFieldGroup")
+            if (part := _find_visual_item(item, name)) is not None
+        )
+
+    try:
+        card = build_mock_steam_view_model("achievement_pulse")
+        from widgets.steam_card_models import SteamCardField
+        card = replace(card, fields=tuple(
+            SteamCardField(field_id, field_id, "test value", visibility[field_id])
+            for field_id in ("total", "playtime", "previous", "source", "selected")
+        ))
+        model.on_achievement_presentation(
+            AchievementPulsePreparedPresentation(model=card), animate=False,
+        )
+        qt_app.processEvents()
+        assert model._capsule_rows == model.field_model.rowCount()
+        assert model.baseAuthoredHeight == height
+        before = geometry()
+        assert len(before) == 3
+        # Edit admission replays this exact carrier; it must not repair a stale
+        # normal-runtime baseline or change the saved canvas's effective size.
+        carrier._apply_custom_layout_size_payload(payload)
+        qt_app.processEvents()
+        assert geometry() == before
+        assert model.authoredHeight == height + 12
+    finally:
+        model.retire()
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        qt_app.processEvents()
