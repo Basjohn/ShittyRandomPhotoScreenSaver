@@ -105,3 +105,23 @@ def test_settings_backdrop_is_native_dwm_without_an_underlay(monkeypatch, window
     assert calls == [4242]
     assert dialog._material_underlay is None and dialog.updates == 0
 
+
+def test_the_visualizer_runs_on_the_engine_worker_by_default(windows_platform) -> None:
+    # Native core P2: the engine worker is the Windows default (operator, 8 Nov); --viz-in-process states the
+    # in-process control and wins over --viz-engine-worker.
+    from core.diagnostics import experiment_flags as ef
+
+    saved = ef.active_experiment_flags()
+    try:
+        ef.override_active_flags_for_testing(None)
+        assert ef.visualizer_engine_worker_platform_default() is True
+        assert ef.visualizer_engine_worker_admitted() is True
+        ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", "/s"]))
+        assert ef.visualizer_engine_worker_admitted() is True
+        ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", "--viz-in-process", "/s"]))
+        assert ef.visualizer_engine_worker_admitted() is False
+        ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", "--viz-engine-worker", "--viz-in-process"]))
+        assert ef.visualizer_engine_worker_admitted() is False
+    finally:
+        ef.override_active_flags_for_testing(saved)
+

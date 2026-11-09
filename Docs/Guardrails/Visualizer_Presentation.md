@@ -73,6 +73,12 @@ The canonical resolved technical cache is also split by consumer:
 
 Needing the shared BeatEngine is not a reason to retain a QWidget owner.
 
+On the default process path (the engine worker, Windows; `Docs/Contracts.md` "Process path") the same controller-owned
+boundaries live in the `WorkerType.VISUALIZER` process: its session configures them from the host binding's own
+activation and `presentation_kwargs`, and the main side keeps only the presentation state (kept current to the worker
+by `VIS_SET_VIEW`) and the reflected wallpaper. The in-process path (fallback, `--viz-in-process`, Linux) runs them
+here exactly as described above; the two paths publish identical frames (`tests/test_visualizer_owner_engine_worker.py`).
+
 **Spectrum DSP shaper ownership:** only descriptors for Spectrum (`spectrum`), Extruded Spectrum (`extruded_spectrum`) and Neon Lake (`shockwave_grid`) may enter authored Spectrum-node/lane interpolation. Bubble (`bubble`) and Voxel Sphere (`sphere`) preserve raw FFT, bass/mid/high, pre-AGC, transient and floor/drop history; Spline Curve (`devcurve`) owns a distinct layer shaper and must retain its musical-energy inputs without inheriting Spectrum shape nodes. Differential Bubble PCM tests compare actual consumed outputs against the historical shaping-enabled route at tight tolerance. See `Docs/Reference/Visualizer_Reference.md`; no parallel BeatEngine or engine-per-mode fallback.
 
 Accepted audio-analysis ownership is one persistent serial `visualizer.audio_analysis` compute lane: one packet executing, at most one newest pending source replacement, retained detached DSP state across ordinary frames, explicit config/activation/reset epoch invalidation, and stale-result rejection across an epoch boundary. There is no generic per-frame Future/task fallback. Preserve the small stable previous-bars packet snapshot unless a replacement correctness proof removes the live-list mutation race.

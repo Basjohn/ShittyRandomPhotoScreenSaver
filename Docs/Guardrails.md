@@ -6,9 +6,14 @@ This is the **short preflight**, not a second documentation authority. Use the f
 
 - Work from the operator-provided tree; never reset or overwrite unrelated changes, authored presets, themes or mutable Settings.
 - **Mutable authored content is never a test golden.** Test functionality, code-owned contracts, schema, SSOT, test-owned inputs and round-trips, never current authored values; code-owned geometry may warrant exact checks. No routine GUI/style tests for subjective side tools.
-- Physical display owns one standalone `QQuickWindow` and retained Qt Quick scene; **Settings is Qt Widgets**. The only Qt Quick window opened from Settings is the Visualizer Studio, which saves through Settings' own Custom path and always restores the same Settings window ([Visualizer Studio](Reference/Visualizer_Studio.md)). No retired presenter fallback, duplicated scene authority or new presentation polling loop.
+- Physical display owns one standalone `QQuickWindow` and retained Qt Quick scene; **Settings is Qt Widgets**. The only Qt Quick window opened from Settings is the Visualizer Studio, which saves through Settings' canonical preset/Custom authority and always restores the same Settings window ([Visualizer Studio](Reference/Visualizer_Studio.md)). No retired presenter fallback, duplicated scene authority or new presentation polling loop.
 - Qt Quick owns scheduling; preserve latest-wins state, transition admission, render-thread safety and bounded lifetime. No unnecessary dormant work or GUI blocking.
 - Keep visualizers musically faithful and geometrically correct. Performance changes cannot reduce authored fidelity.
+- **The Visualizer runs in the engine worker by default (Windows):** capture, DSP and the tick live in
+  `WorkerType.VISUALIZER`; in process is the bounded automatic fallback, the `--viz-in-process` A/B control and the
+  current Linux path. Automatic fallbacks warn/error with their reason; capacity violations never fall back.
+  One owner of logical state: never keep a main-side engine or tick copy beside the worker, never block the
+  GUI on a worker reply, and keep the worker importing QtCore only ([Contracts](Contracts.md) "Process path").
 - **Graphics backend (decided 5 Nov 2026, [decision](Future_Work/Graphics_Backend_Decision_2026-11-05.md)):** when Vulkan
   (or any non-GL API) is admitted, it is a **native (compiled) render core behind `QSGRenderNode`, hosted by Qt Quick on
   its RHI backend**: that is better than today (no GIL on the render thread; DLSS/FSR via the RHI native handles). A

@@ -492,6 +492,26 @@ Terra's limited read-only recheck confirms that reserved-prefix disposal closes 
 chronological logger avoids the visualizer filter's name/message classification; no new actionable finding. The
 independent reviewer did not run tests or native failure/shutdown scenarios.
 
+### Windows worker-default integration
+
+After H1/H2 acceptance, root integrated the prepared `p2/worker-default` tip `3e428413` (code `873b5387`) with current
+main. Windows now chooses the engine worker without a token; `--viz-in-process` wins in either argument order, and
+Linux remains in process for this slice. The current Linux/default audit order and H1 terminal-capacity exception
+take precedence over stale branch prose. The live-check helper retains main's audible-PCM receipt and gate-three
+caveats. H1/H2 implementation and contracts remain intact; no later audit finding is declared closed by this merge.
+
+Root's merged-runtime gate: **18 passed, 1 skipped** (Linux-host-only test on Windows), including real default-owner
+Spectrum/EB parity without devices or shown windows, H1 hidden remaps/terminal overflow and all eleven H2 cases.
+Ten additional current-source platform/token combinations pass for both platform decisions. The two recorded-PCM
+receipt contracts and two real main-log fallback checks pass (**4 passed**). The fallback audit found one quiet edge:
+new construction after the run was disabled logged only INFO; it now logs WARNING with the mode and run-disabled
+reason. Its regression failed before the fix and fails again when downgraded to INFO, because the actual
+`--viz`/`--life` main-log routing contains no fallback record. Other automatic fallback edges already warn/error.
+H1 capacity violations never take that fallback. Disabled logging admission and recovery policy are unchanged.
+
+These are focused data/IPC/logging checks. No build, load, device, Linux runtime or native visual proof was added;
+the remaining ordered audit and operator gates stay in `Current_Plan.md`.
+
 ## P3 readiness
 
 What ABI 2 already gives the native core:

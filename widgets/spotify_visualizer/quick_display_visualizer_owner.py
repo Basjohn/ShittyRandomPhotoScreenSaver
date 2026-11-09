@@ -7,15 +7,15 @@ already owns mode/settings, the shared BeatEngine/source, the authored
 ``VisualizerLogicalRuntime`` and controller-owned logical tick state, viewport
 configuration and render-bridge publication.
 
-Native core P2b (work order 5 slice 5.2): admitted by ``experiment_flags.visualizer_engine_worker_admitted`` (read
-once per construction, default OFF), the owner runs its Visualizer on the engine worker instead
-(``engine_worker_link``): the controller keeps no beat engine and runs no tick; each control edge below is sent to the
-``WorkerType.VISUALIZER`` session, and the worker's frames reach the same presentation path through the controller's
-logical mailbox (the session's frame mapping, read side). A worker that fails to configure or start leaves that
-activation in process; a session that ends later is replaced once (the held frame fades out, the new session fades
-in), and a second failure before that replacement is revealed, or a failure once the run's recoveries are spent
-(``engine_worker_link.MAX_RECOVERIES_PER_RUN``), keeps the owner in process for the run. Off, every edge runs in process
-exactly as before.
+Native core P2b (work order 5): by default on Windows (``experiment_flags.visualizer_engine_worker_admitted``, read
+once per construction; ``--viz-in-process`` and Linux keep the in-process path), the owner runs its Visualizer on the
+engine worker (``engine_worker_link``): the controller keeps no beat engine and runs no tick; each control edge below
+is sent to the ``WorkerType.VISUALIZER`` session, and the worker's frames reach the same presentation path through the
+controller's logical mailbox (the session's frame mapping, read side). A worker that cannot run (no process
+supervisor) or fails to configure or start leaves that activation in process; a session that ends later is replaced
+once (the held frame fades out, the new session fades in), and a second failure before that replacement is revealed,
+or a failure once the run's recoveries are spent (``engine_worker_link.MAX_RECOVERIES_PER_RUN``), keeps the owner in
+process for the run. In process, every edge runs here: the controller's beat engine, capture, DSP and the tick.
 """
 
 from __future__ import annotations
@@ -106,6 +106,28 @@ def _shared_beat_engine(bar_count: int) -> Any:
 # The canonical descriptor wiring's frame-runtime factory (one owner: ``logical_edges``).
 _mode_runtime_factory = mode_runtime_factory
 
+_in_process_path_noted = False
+
+
+def _note_in_process_path() -> None:
+    """Say once per process why the Visualizer runs in process when the engine worker is the product's default:
+    the current platform/audit stage (``[PLATFORM]``: Linux keeps it in process until the later H3 default change)
+    or the diagnostic ``--viz-in-process`` choice. The worker's own fallbacks log at their failure."""
+    global _in_process_path_noted
+    if _in_process_path_noted:
+        return
+    _in_process_path_noted = True
+    from core.diagnostics.experiment_flags import (
+        active_experiment_flags,
+        visualizer_engine_worker_platform_default,
+    )
+
+    if active_experiment_flags().visualizer_engine_worker is False:
+        logger.info("[SPOTIFY_VIS][ENGINE_WORKER] --viz-in-process: the Visualizer runs in process for this run")
+    elif not visualizer_engine_worker_platform_default():
+        logger.info("[PLATFORM] Visualizer engine worker: Windows default at the current audit stage; "
+                    "this platform runs in process pending the later H3 default change")
+
 
 class QuickDisplayVisualizerOwner:
     """Own + bind one visualizer controller for one Quick display generation."""
@@ -118,7 +140,7 @@ class QuickDisplayVisualizerOwner:
     _takeover: "_TakeoverFade | None" = None
     _expanded_source: Any = None
     _expanded_overlays_drawn = False
-    # Engine-worker path defaults (in process); __init__ reads the admission and the worker path owns the values.
+    # Engine-worker path class defaults (in process until __init__ reads the path); the worker path owns the values.
     _engine_worker_admitted = False
     _retiring = False            # set first by retire(), joined or not (A9-L1)
     _worker: Any = None
@@ -247,13 +269,16 @@ class QuickDisplayVisualizerOwner:
         # The full-display overlays (plan 01 §G, M3b) exist only while the display-wide card is drawn and the displays
         # are on; the last value projected to the scene, so it is written at its edges only.
         self._expanded_overlays_drawn = False
-        # Native core P2b slice 5.2: the engine-worker admission, read once per construction (never an environment
-        # flag). ``_worker`` is the live ``engine_worker_link.EngineWorkerLink`` while this owner runs on the worker
-        # (None: in process); ``_worker_identity`` its engine's (generation, activation id); ``_activation_inputs`` the
-        # current activation's resolved inputs (a reconfigure or the in-process fallback re-applies them).
+        # Native core P2b: the process path, read once per construction (never an environment flag): the engine worker
+        # by default on Windows, in process on Linux or when ``--viz-in-process`` chose it. ``_worker`` is the live
+        # ``engine_worker_link.EngineWorkerLink`` while this owner runs on the worker (None: in process);
+        # ``_worker_identity`` its engine's (generation, activation id); ``_activation_inputs`` the current
+        # activation's resolved inputs (a reconfigure or the in-process fallback re-applies them).
         from core.diagnostics.experiment_flags import visualizer_engine_worker_admitted
 
         self._engine_worker_admitted = bool(visualizer_engine_worker_admitted())
+        if not self._engine_worker_admitted:
+            _note_in_process_path()
         self._worker: Any = None
         self._worker_identity: tuple[int, int] | None = None
         self._worker_failures = 0
@@ -1792,8 +1817,8 @@ class QuickDisplayVisualizerOwner:
         controller = self._controller
         supervisor = self._configure_services.get("process_supervisor")
         if link_module.worker_disabled_for_run():
-            logger.info("[SPOTIFY_VIS][ENGINE_WORKER] Off for this run after two failures; mode=%s runs in process",
-                        controller.mode_id)
+            logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Engine worker disabled for this run after earlier failures; "
+                           "mode=%s runs in process", controller.mode_id)
             return False
         try:
             link = self._open_engine_worker_session(inputs, supervisor)

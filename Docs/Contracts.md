@@ -528,6 +528,21 @@ and terminal stop force-stops only the registry's engine. A controller gets its 
 shared engine, Studio/offline/replay controllers inject theirs, and a controller with neither raises. The logical tick
 never resolves a process service (`tests/test_beat_engine_single_authority.py`).
 
+**Process path (native core P2).** On Windows the production owner runs the chain above from
+the beat engine to the logical frame in the engine worker (`WorkerType.VISUALIZER` under the engine's
+`ProcessSupervisor`: capture, DSP and the tick in one process per run, leased by the owner and retired with its last
+lease or held across a display reload): the main process keeps no beat engine and runs no tick, sends control edges
+(`engine_worker_link`, never awaited) and presents the worker's frames from a shared-memory seqlock mailbox through
+the same presentation synchronization owner. In process is the fallback, never a second copy of logical state: a
+worker that cannot run (no supervisor, a failed configure or start) leaves that activation in process; a lost session
+is replaced once and the run's recoveries are capped (`MAX_RECOVERIES_PER_RUN`), then the run stays in process.
+Every automatic fallback logs its reason at WARNING/ERROR. H1 capacity violations instead fail closed without a
+worker recovery or in-process retry. Linux runs in process for this slice; its later default change follows the
+remaining audit order, with no Linux proving prerequisite (`Linux_Plan.md`). The path is chosen once
+per owner construction by `core.diagnostics.experiment_flags.visualizer_engine_worker_admitted`: the platform default,
+or the diagnostic argv tokens `--viz-in-process` (the A/B control; it wins) and `--viz-engine-worker`; never an
+environment flag. Design and gates: `Docs/Future_Work/Native_Core_P2_Engine_Design.md`.
+
 Bar-count reconfiguration must leave controller authority, the shared engine generation and the controller-owned logical
 display-bar mirror/freshness state coherent. Legacy overlay-only mirrors get no Quick successor unless an exact retained
 consumer exists. Do not move every legacy widget field into the logical controller merely because the widget historically

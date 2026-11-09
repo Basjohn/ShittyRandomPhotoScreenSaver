@@ -478,7 +478,8 @@ def test_transferred_manager_resolves_target_profile_on_current_display():
 
 @pytest.mark.qt
 @pytest.mark.parametrize("mode", ("spectrum", "extruded_spectrum", "shockwave_grid", "sphere"))
-def test_production_manager_startup_hydrates_exact_named_profile_before_first_retained_publish(qt_app, monkeypatch, mode):
+def test_production_manager_startup_hydrates_exact_named_profile_before_first_retained_publish(
+        qt_app, monkeypatch, visualizer_in_process, mode):   # the patched engine's first publish, in this process
     from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
     from engine.display_manager import DisplayManager
     from rendering.quick.display_unit import QuickDisplayUnit

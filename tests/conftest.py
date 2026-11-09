@@ -469,6 +469,23 @@ def windows_platform(monkeypatch):
 
 
 @pytest.fixture
+def visualizer_in_process():
+    """State the Visualizer's in-process path (``--viz-in-process``) for a test whose owner must tick in this process
+    (a patched beat engine or tick, the logical runtime's own thread). The engine worker is the product's default on
+    Windows; a test that builds the owner through the host binding without stating a path follows the platform."""
+    import dataclasses
+
+    from core.diagnostics import experiment_flags
+
+    saved = experiment_flags.active_experiment_flags()
+    experiment_flags.override_active_flags_for_testing(dataclasses.replace(saved, visualizer_engine_worker=False))
+    try:
+        yield
+    finally:
+        experiment_flags.override_active_flags_for_testing(saved)
+
+
+@pytest.fixture
 def settings_manager(tmp_path):
     """Create SettingsManager instance for testing."""
     from core.settings import SettingsManager

@@ -51,6 +51,15 @@ Hard: one accelerated runtime surface per selected display; standalone `QQuickWi
 Quick scene graph; Settings may remain QWidget; business/runtime ownership remains Python; transition+visualizer GL
 remains inline in the one Quick scene; no permanent old/software presenter fallback.
 
+Visualizer process model (native core P2): on Windows the Visualizer's audio capture, DSP and
+logical tick run in one engine worker process (`WorkerType.VISUALIZER`, leased by the display's Visualizer owner and
+retired with it); the main process sends control edges and presents the worker's frames from shared memory, so the
+tick no longer holds the main process's GIL. In process is the bounded fallback when the worker cannot run or keeps
+failing, and the `--viz-in-process` diagnostic control. Automatic fallbacks log their reason at WARNING/ERROR;
+capacity-contract violations remain terminal. Linux stays in process for this slice; its later default change is
+ordered in `Current_Plan.md` and `Linux_Plan.md` without a Linux proving prerequisite.
+Contract: `Docs/Contracts.md` "Process path".
+
 The dependency floor is PySide6/Qt 6.11.2. Production requests OpenGL 4.6 Core and uses GLSL 460 core;
 OpenGL is the sole production graphics API. The existing render-context initialization boundary records actual
 GL/GLSL, vendor, renderer and required capabilities, and rejects unsupported contexts. Validation is scoped to
@@ -703,12 +712,11 @@ already-deleted Shiboken wrapper must be reported/fail-closed and can never abor
 `VisualizerLogicalRuntime` remains sole mode-general authored visualizer clock. Quick presentation does not own
 simulation cadence.
 
-With `--viz-engine-worker`, the supervisor-owned child owns the logical tick, DSP and audio capture; the main process
-consumes immutable shared-memory frames through the existing mailbox/wake path and retains presentation ownership.
-The child inherits the admitted logging profile and writes a bounded `worker_visualizer.log`; the main log names
+The engine-worker frame path uses the existing mailbox/wake and presentation owners. The child inherits the admitted
+logging profile and writes a bounded `worker_visualizer.log`; the main log names
 that file and consumes the mapping-addressed final STOP report after GUI retirement. Disabled logging remains
 disabled. `Docs/Future_Work/Native_Core_P2_Engine_Design.md` owns capacity, ABI, lifetime and diagnostic details;
-`Current_Plan.md` owns pending default-path admission and the remaining audit sequence.
+`Current_Plan.md` owns the remaining audit sequence.
 
 Visualizer geometry is capability-driven. Modes using the shared reflowing card policy use the canonical 1.5 baseline aspect.
 Every mode except Sphere offers content quarter-turns through the existing CUSTOM presentation owner in ordinary

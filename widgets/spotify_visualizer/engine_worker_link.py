@@ -1,8 +1,9 @@
 """The production Visualizer owner on the engine worker, main-process side (native core P2b, work order 5 slices 5.2 and
 5.5).
 
-Admitted by ``core.diagnostics.experiment_flags.visualizer_engine_worker_admitted`` (``--viz-engine-worker``, default
-OFF), read once per owner construction. Off, nothing here is imported and no worker process exists. On, the owner
+The default path on Windows (``core.diagnostics.experiment_flags.visualizer_engine_worker_admitted``, read once per
+owner construction; ``--viz-in-process`` and Linux run in process). In process, nothing here is imported and no worker
+process exists. On the worker path, the owner
 (``quick_display_visualizer_owner.QuickDisplayVisualizerOwner``) keeps no beat engine and runs no tick: one
 ``EngineWorkerLink`` per session sends the ``logical_edges`` control edges to the ``WorkerType.VISUALIZER`` process
 (``core.visualizer_engine.engine_worker``: ``VIS_CONFIGURE`` with the host binding's own resolved activation and
@@ -113,7 +114,7 @@ def next_label_namespace() -> int:
 #: reopen) would fade out, rebuild a session and fade in for the whole run. A count, not a span: a failure minutes after
 #: each reveal outlives any "ran long enough" threshold, and a count needs no timer. Three: an isolated failure (a
 #: device change, a crash) still recovers on the worker a few times in a run; past that the worker path has shown it is
-#: not healthy for this run and the in-process path (the default, the known-good one) takes over.
+#: not healthy for this run and the in-process path (the known-good fallback) takes over.
 MAX_RECOVERIES_PER_RUN = 3
 
 _run_lock = threading.Lock()

@@ -2,7 +2,8 @@
 
 The REAL owner, built by the host binding's own ``construct`` on an unshown runtime (``tools/visualizer_replay/
 owner_worker_gate.py``'s rig: no window is shown), admitted onto the engine worker by the code-level admission
-(``experiment_flags.visualizer_engine_worker_admitted``). No test opens a device: worker sessions take the shipped
+(``experiment_flags.visualizer_engine_worker_admitted``: the default on Windows; every rig states its path). No test
+opens a device: worker sessions take the shipped
 clip's PCM through the link's test-only control (``engine_worker_link.recorded_capture_for_testing``; the session
 refuses the device for its life), and the device-path tests run the session in process with the device constructor
 replaced. Most tests drive a real ``WorkerType.VISUALIZER`` process; the edge-order tests (the park's reader clear, a
@@ -130,26 +131,34 @@ def _pump(rig, seconds: float, until=None) -> None:
 # ------------------------------------------------------------------------------------------------ the admission
 
 
-def test_the_admission_is_off_by_default_and_admitted_only_from_argv():
+def test_the_path_follows_the_platform_unless_argv_chooses_it():
+    # No token: the platform default (the engine worker on Windows: tests/test_platform_selection.py; in process on
+    # Linux: tests/test_linux_runtime_branches.py). --viz-engine-worker / --viz-in-process choose; in process wins.
     from core.diagnostics import experiment_flags as ef
 
-    assert ef.parse_experiment_flags(["main.py", "/s"]).visualizer_engine_worker is False
-    flags = ef.parse_experiment_flags(["main.py", "--viz-engine-worker", "/s"])
-    assert flags.visualizer_engine_worker is True
-    assert "--viz-engine-worker" in ef.experiment_flag_tokens(["main.py", "--viz-engine-worker", "/s"])
+    assert ef.parse_experiment_flags(["main.py", "/s"]).visualizer_engine_worker is None
+    worker = ef.parse_experiment_flags(["main.py", "--viz-engine-worker", "/s"])
+    in_process = ef.parse_experiment_flags(["main.py", "--viz-in-process", "/s"])
+    assert worker.visualizer_engine_worker is True and in_process.visualizer_engine_worker is False
+    assert ef.parse_experiment_flags(["--viz-in-process", "--viz-engine-worker"]).visualizer_engine_worker is False
+    for token in ("--viz-engine-worker", "--viz-in-process"):
+        assert ef.experiment_flag_tokens(["main.py", token, "/s"]) == (token,)
     saved = ef.active_experiment_flags()
     try:
         ef.override_active_flags_for_testing(None)
-        assert ef.visualizer_engine_worker_admitted() is False
-        ef.activate_experiment_flags(flags)
+        assert ef.visualizer_engine_worker_admitted() is ef.visualizer_engine_worker_platform_default()
+        ef.activate_experiment_flags(worker)
         assert ef.visualizer_engine_worker_admitted() is True
+        ef.activate_experiment_flags(in_process)
+        assert ef.visualizer_engine_worker_admitted() is False
     finally:
         ef.override_active_flags_for_testing(saved)
 
 
 @pytest.mark.qt
-def test_admission_off_builds_the_in_process_owner_and_never_reaches_the_worker(qt_app, monkeypatch):
-    # Off: no link is built, the supervisor is never asked for the worker, the controller holds its engine.
+def test_the_in_process_path_builds_the_in_process_owner_and_never_reaches_the_worker(qt_app, monkeypatch):
+    # In process (stated): no link is built, the supervisor is never asked for the worker, the controller holds its
+    # engine.
     from widgets.spotify_visualizer import engine_worker_link
 
     asked = []

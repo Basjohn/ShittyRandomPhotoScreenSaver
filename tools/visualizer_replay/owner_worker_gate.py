@@ -5,8 +5,9 @@
 
 Every run builds the REAL ``QuickDisplayVisualizerOwner`` through the host binding's own ``VisualizerHostBinding
 .construct`` on an unshown ``QuickDisplayRuntime`` (the stub host of ``owner_production_replay``: no window is shown,
-created or mapped), with the production presentation kwargs; the worker side admits the owner's engine-worker path
-(``experiment_flags``' admission, set for the run) and drives a real ``WorkerType.VISUALIZER`` process. No device is
+created or mapped), with the production presentation kwargs; each side states its process path (``experiment_flags``'
+``visualizer_engine_worker``, set for the run; the worker is the product's default on Windows, in process its fallback)
+and the worker side drives a real ``WorkerType.VISUALIZER`` process. No device is
 opened: the worker side's sessions take the shipped clip's PCM through ``engine_worker_link
 .recorded_capture_for_testing`` (the session refuses the device for its life); the in-process side's live engine refuses
 it too and takes the same PCM through ``RecordedCaptureBackend``.
@@ -152,16 +153,23 @@ def activation_inputs(widgets: dict, mode: str) -> dict:
 class OwnerRig:
     """The real owner built by the host binding on an unshown runtime (``owner_production_replay``'s host).
 
-    ``worker``: admit the engine-worker path (``supervisor`` hosts the process). In process, ``engine="live"`` gives
+    ``worker``: the owner's process path, stated: True the engine worker (``supervisor`` hosts the process), False in
+    process, None the product's default left as the platform resolves it (no override; ``worker`` then holds what it
+    resolved to). In process, ``engine="live"`` gives
     the controller the live ``_SpotifyBeatEngine`` on recorded capture (``RecordedCaptureBackend``; the device refused)
     and ``cadence="manual"`` keeps the owner's installed cadence step without its thread (``steps``); ``"thread"``
     runs the real cadence thread with ``paced`` audio delivered before each step (the session's paced step).
     """
 
-    def __init__(self, mode: str, *, worker: bool, supervisor: Any = None, playing: bool = True,
+    def __init__(self, mode: str, *, worker: bool | None, supervisor: Any = None, playing: bool = True,
                  clock: list | None = None, cadence: str = "manual", paced: Any = None, extra_modes=()) -> None:
         self.mode = mode
-        self.worker = worker
+        self.default_path = worker is None
+        if worker is None:
+            from core.diagnostics.experiment_flags import visualizer_engine_worker_admitted
+
+            worker = visualizer_engine_worker_admitted()
+        self.worker = bool(worker)
         self.supervisor = supervisor
         self.playing = [bool(playing)]
         self.clock = clock
@@ -336,8 +344,9 @@ class OwnerRig:
             return real_start(controller, step=paced_step, interval_s=interval_s)
 
         flags = experiment_flags.active_experiment_flags()
-        experiment_flags.override_active_flags_for_testing(
-            dataclasses.replace(flags, visualizer_engine_worker=bool(self.worker)))
+        if not self.default_path:
+            experiment_flags.override_active_flags_for_testing(
+                dataclasses.replace(flags, visualizer_engine_worker=bool(self.worker)))
         try:
             with mock.patch.object(owner_module, "QuickDisplayVisualizerOwner", build_owner), \
                     mock.patch.object(VisualizerRuntimeController, "start_logical_runtime", start_runtime):
@@ -351,6 +360,9 @@ class OwnerRig:
         self._stack.callback(patcher.stop)
         self.owner = record["owner"]
         self._stack.callback(self._retire)
+        if bool(self.owner._engine_worker_admitted) != self.worker:
+            raise RuntimeError(f"the owner read the {'worker' if self.owner._engine_worker_admitted else 'in-process'} "
+                               f"path, the rig stated {'worker' if self.worker else 'in process'}")
         if self.worker:
             self.settle()                               # the configure's and start's replies (never awaited)
         if self.worker and self.owner._worker is None:
@@ -409,8 +421,10 @@ class OwnerRig:
             raise RuntimeError("the in-process analysis never settled")
 
 
-def identity_run(mode: str, script, *, worker: bool, supervisor: Any = None, namespace: int | None = None) -> dict:
-    """One owner through ``script``; the digests of the logical frames it published to its render bridge."""
+def identity_run(mode: str, script, *, worker: bool | None, supervisor: Any = None,
+                 namespace: int | None = None) -> dict:
+    """One owner through ``script``; the digests of the logical frames it published to its render bridge. ``worker``
+    as ``OwnerRig`` states it (None: the product's default path, as the platform resolves it)."""
     import itertools
 
     import tools.expanded_visualizer_evidence as evidence
@@ -424,6 +438,7 @@ def identity_run(mode: str, script, *, worker: bool, supervisor: Any = None, nam
     partner = next((value for kind, value in script if kind == "mode"), None)
     rig = OwnerRig(mode, worker=worker, supervisor=supervisor, playing=bool(first.playing), clock=clock,
                    extra_modes=(partner,) if partner else ())
+    worker = rig.worker
     stream = CaptureHistoryStream()
     saved_revisions = extruded_bubble_drift_log._REVISIONS
     report: dict = {"mode": mode, "worker": worker}
@@ -496,9 +511,13 @@ def identity_run(mode: str, script, *, worker: bool, supervisor: Any = None, nam
     return report
 
 
-def identity_gate(mode: str, clip_frames, supervisor: Any) -> dict:
+def identity_gate(mode: str, clip_frames, supervisor: Any, *, default_path: bool = False) -> dict:
+    """The owner on the worker against the same owner in process (stated). ``default_path``: the worker side is the
+    product's default path, not overridden (it must resolve to the worker: Windows)."""
     script = identity_script(clip_frames, mode)
-    worker = identity_run(mode, script, worker=True, supervisor=supervisor)
+    worker = identity_run(mode, script, worker=None if default_path else True, supervisor=supervisor)
+    if not worker["worker"]:
+        raise RuntimeError("the default path resolved in process here: the worker side needs the worker")
     in_process = identity_run(mode, script, worker=False, namespace=worker["namespace"])
     a, b = worker["digests"], in_process["digests"]
     first = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), None)

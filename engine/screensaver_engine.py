@@ -364,7 +364,7 @@ class ScreensaverEngine(QObject):
         self._process_supervisor: Optional[ProcessSupervisor] = None
         self._workers_waiting_for_display = False
         self._image_sources_waiting_for_display = False
-        # The Visualizer's engine worker held across a display reload (engine_lifecycle; --viz-engine-worker only).
+        # The Visualizer's engine worker held across a display reload (engine_lifecycle; engine-worker path only).
         self._engine_worker_reload_hold: int | None = None
 
         logger.info("ScreensaverEngine created")

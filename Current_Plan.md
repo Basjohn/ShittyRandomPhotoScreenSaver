@@ -273,31 +273,24 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - **P2 phase-boundary audit (8 Nov, Opus 5.5 high; [Native_Core_P2_Phase_Boundary_Audit.md](Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md)):
      H1/H2 fixes are reviewed; keep the remaining order below. The operator admitted audit repairs alongside
      the 9 Nov miscellaneous work.**
-     **The worker-default change is built and waiting on branch `p2/worker-default`** (pushed to origin; 873b5387 code
-     and tests, 3e428413 docs; based on 4248b8ab): the engine worker is the Windows default, `--viz-in-process` /
-     `--viz-engine-worker` choose a path explicitly, Linux stays in process (Linux_Plan Phase 4), five tests that relied
-     on the old default state their path, Spec/Contracts/Guardrails describe the process model. Merge it into main only
-     as the next ordered step; rebase or merge main into it first (it predates 38c38862's gate 3 record and
-     live-check PCM fix: use its `engine_worker_path(app_args)` in `tools/visualizer_live_check.py`, never
-     `ENGINE_WORKER_ARG in app_args`). Any agent may check it out (`git fetch origin; git switch p2/worker-default`).
+     **Windows defaults to the engine worker.** Explicit `--viz-in-process` / `--viz-engine-worker` choose the path;
+     automatic fallbacks warn/error with their reason, while capacity violations remain terminal. Linux stays in
+     process for this slice. Default-merge and H1/H2 evidence live in the audit's resolution section.
      **Order** (each step: failing-first test, its negative control, record in the audit doc's resolution section):
-     1. Merge `p2/worker-default` (worker is the Windows default).
-     2. M2 (first-configure deadline on slow machines) and L1 (ordered control edges never dropped).
-     3. M4: gates with non-default presets and settings; a gate 2 (no visual change) record.
-     4. H3 (operator, 8 Nov: there is no Linux machine to prove it on; assume it works with basic support): make the
-        worker the default on Linux too (the branch keeps Linux in process; flip `visualizer_engine_worker_platform_default`
+     1. M2 (first-configure deadline on slow machines) and L1 (ordered control edges never dropped).
+     2. M4: gates with non-default presets and settings; a gate 2 (no visual change) record.
+     3. H3 (operator, 8 Nov: there is no Linux machine to prove it on; assume it works with basic support): make the
+        worker the default on Linux too (flip `visualizer_engine_worker_platform_default`
         to every platform and update `Linux_Plan.md` Phase 4 and the platform tests). No Linux proving step.
-     5. M5, L2-L5 and what M3 still lacks.
-     6. P3's four decisions (listed last below) before P3's first slice.
+     4. M5 and L2-L5.
+     5. P3's four decisions (listed last below) before P3's first slice.
      M1/H1/H2 evidence is in the audit's resolution section: capture/capacity, hidden remap, terminal overflow,
      retained high water, admitted child logging and bounded detached STOP reports have focused proof.
      - [ ] H3: the worker path has never run on Linux (forkserver on 3.14, POSIX wake path, Pulse capture). Operator,
        8 Nov: it cannot be proven (no Linux machine); assume basic support and make the worker the Linux default too
-       (step 4).
+        (step 3).
      - [ ] M2: the first configure's fixed 6 s deadline vs ~5 s measured under game60: slow machines would wait ~6 s
        hidden and run in process at startup and after every Settings close.
-     - [ ] M3: reconcile Contracts/Guardrails and default-path documentation with the pending default merge;
-       Spec/Index route current opt-in ownership and diagnostics, and the design/audit own ABI/lifetime detail.
      - [ ] M4: every gate used default presets; gate 2 (no visual change) has no record.
      - [ ] M5: the in-process mode-cycling memory growth (gate 4 side finding) still hits the fallback and the Studios.
      - [ ] L1: a full request queue drops the oldest message (wrong for ordered control edges; a lost `VIS_SET_VIEW`
@@ -307,8 +300,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
      - [ ] L3: `--usage` costs ~13 ms more per 15 s sample with the worker (see §5's usage-sample hitch).
      - [ ] L4: the wake listener takes the GIL every frame (unmeasured); presentation inputs holding a Qt type are not
        forwarded silently; a blocked tick thread whose loop still answers heartbeats freezes undetected.
-     - [ ] L5: doc drift: gate 4's worker memory predates R-179; Current_Plan's "next frozen build" is already shown by
-       frozen check 2; `test_visualizer_engine_import_weight.py` missing from TestSuite; the writer comment overstates.
+     - [ ] L5: reconcile remaining historical qualification: gate 4's worker memory predates R-179; the earlier
+       "next frozen build" wording is already answered by frozen check 2; audit the remaining writer overstatement.
      - [ ] P3 decisions before its first slice: the native reader vs the GUI thread closing the mapping mid-copy; a
        single consumer and a non-consuming head read for the Python owner; EB geometry once per revision, not per
        frame; EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check scans
@@ -421,9 +414,8 @@ answers.
   90° cap and visually the same as before (`.artifacts/evidence/architecture/framed_camera/20261108_scale_repair/`).
   45° on that card needs about 2.11 px per world unit (a 280-unit world). Decide: bound the framed aperture (or the
   vertical view) as well, or leave it to Edit (Restore Size, wheel up, side drag back to the wanted width).
-- **§1 8b P2 (8 Nov, decision):** gates 3 and 4 are measured (design doc step 6, Gate 3 / Gate 4 records): decide
-  whether the engine worker becomes the default (then the phase-boundary audit), and whether to size the frame-age
-  gain with a matched-GPU repeat game60 pair.
+- **§1 8b P2:** decide whether to size the frame-age gain with a matched-GPU repeat game60 pair; gates 3/4 and their
+  measurement limits are in the design record. The Windows default and H1/H2 repairs are already integrated.
 - **§7.1 Waveform:** Preset 4 trade-offs of the fixed-scale v7 (sign off or ask for the tag's exact dynamics);
   Preset 7 and the Reaction Modes; Breathing; four-ribbon Preset 3; Particles; Strands; Colour/floor/mist; Fixed
   response; Floor Give; Pulse Rim; swell visibility; Travel Direction; Unified atmosphere.

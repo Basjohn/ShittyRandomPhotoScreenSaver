@@ -1122,12 +1122,20 @@ High-value permanent guards include:
   each fail it, and (shown by reverting) so do a binding that drops `activation=` and a paced session that does not
   restart its cadence after a switch. `tests/test_visualizer_host_binding.py` also pins that the binding hands the
   owner's `configure` the resolved activation (model, activation, technical cache; A6-L4).
-  `tests/test_visualizer_owner_production_path.py` (A6-L5): the product's own configure-and-start path
+  `tests/test_visualizer_owner_production_path.py` (A6-L5; both process paths since the engine worker became the
+  default, 8 Nov): the product's own configure-and-start path on the in-process fallback, stated
   (`tools/visualizer_replay/owner_production_replay.py`: the binding's `construct` on an unshown runtime, the recorded
   engine at the binding's bar count, the owner's installed cadence step once per frame, no thread) ticks the offline
   replay's frames (`owner_replay(..., bar_count=)`) for every mode; dropping the logical, engine or presentation kwargs
   from the configure fails it (frame-neutral steps, the activation record and a cold engine's fence, are the parity
-  and binding tests'). The same replay at `32f28d4f^` gave identical digests for all nine modes. The fresh-spawn probe in
+  and binding tests'). The same replay at `32f28d4f^` gave identical digests for all nine modes. The default path
+  (Windows; no path stated, the admission cleared) builds the owner through the same binding on a real
+  `WorkerType.VISUALIZER` process and, per mode, presents the same owner's in-process frames frame for frame through
+  `owner_worker_gate`'s identity script, never falling back (the gate refuses a default that resolves in process). The
+  path selection itself: `tests/test_platform_selection.py` (the worker by default on Windows, `--viz-in-process` wins),
+  `tests/test_linux_runtime_branches.py` (Linux in process; `--viz-engine-worker` still chooses the worker),
+  `tests/test_live_check_resources.py` (the live check reads the path as the saver resolves it). Tests whose owner must
+  tick in this process state it with the `visualizer_in_process` fixture (`tests/conftest.py`). The fresh-spawn probe in
   `tests/test_visualizer_engine_worker.py` ticks one live input per mode and pins QtCore/QtGui only (it caught the
   Spectrum DSP importing the Settings shape editor); it also reports the worker's Qt modules at spawn (QtCore at most)
   and after its first activation (QtCore and QtGui today: the presentation config's `QColor`s, A5-L2; work order 5
@@ -1149,11 +1157,13 @@ High-value permanent guards include:
   reentry / switch, `--order`, `--stress`; `--paced` for 5.1) and cost: `tools/visualizer_replay/live_engine_gate.py`,
   `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
   `tests/test_visualizer_owner_engine_worker.py` (work order 5 slice 5.2 and the core of 5.3: the production owner on
-  the engine worker, admitted by `--viz-engine-worker`): the REAL owner built by the host binding's `construct` on an
+  the engine worker, the default on Windows since 8 Nov; each rig states its path): the REAL owner built by the host
+  binding's `construct` on an
   unshown runtime (`tools/visualizer_replay/owner_worker_gate.py`'s rig), the worker side a real
   `WorkerType.VISUALIZER` process on the shipped clip's PCM (`engine_worker_link.recorded_capture_for_testing`, the
-  device refused; no test opens a device). Pinned: the admission (off by default, argv only); off, no link and no
-  supervisor call; on, the main process makes no beat engine and runs no tick; the identity gate per mode (the owner on
+  device refused; no test opens a device). Pinned: the path (the platform default unless argv chooses it,
+  `--viz-in-process` winning); in process, no link and no supervisor call; on the worker, the main process makes no
+  beat engine and runs no tick; the identity gate per mode (the owner on
   the worker publishes to its render bridge exactly the frames the same owner publishes in process on the live engine
   in production read order, through configure/start, play, a warm pause, park/unpark and a mode switch through the
   owner's crossfade; a one-tick drift fails it); real time for Spectrum and Extruded Bubble (the worker's cadence within
@@ -1258,6 +1268,9 @@ High-value permanent guards include:
   profile or restore STOP callback cancellation and fail the corresponding regression. No window/device is opened.
   A late superseded STOP cannot enter/evict ordinary buffered replies or accumulate correlation tombstones; the
   child-path announcement remains in the actual main log with visualizer sidecar routing enabled.
+  `tests/test_visualizer_worker_fallback_logging.py` exercises initial missing-supervisor and run-disabled fallback
+  through the production owner and real log filters, preserving one WARNING reason in the main file under `--viz` /
+  `--life`. Capacity-contract failure is independently required to remain terminal by the H1 gates.
   `tests/test_usage_sampler.py` also pins the engine worker's labelled `--usage` breakdown (from the sample's own
   per-process pass; a topology refresh only when a named child is new, once per distinct PID even when the refresh
   cannot find it, forgotten once no longer named; a process the sample's own refresh added reports `na` CPU and stays
