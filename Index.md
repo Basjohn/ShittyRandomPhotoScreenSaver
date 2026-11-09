@@ -62,6 +62,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | card surface materials (Acrylic, Glass, Frosted, Mica, Smoked; shared per-display backdrop) | `Docs/Architecture/Card_Surface_Materials.md` |
 | Qt/OpenGL production floor | `Spec.md` → Accepted runtime presentation; `rendering/quick/bootstrap.py` |
 | Settings theme / Acrylic / Glass / palette previews / favourites / Theme Foundry | `Docs/Architecture/Settings_Theme_Architecture.md` |
+| Settings native outer-corner bleed/clipping evidence and four-case desktop gate | `Docs/Architecture/Settings_Theme_Architecture.md` → native Settings corner acceptance; `tools/settings_native_corners.py` |
 | light-theme font/shadow ownership, native comparisons and accepted rendering cost | `Docs/Contracts.md` → Shadow authority; `Docs/Audits/Light_Theme_Legibility_2026-10-26.md` |
 | Settings hierarchy connector rails and semantic annotations | `ui/widgets/bucket_tree.py`; `Docs/Architecture/Settings_Theme_Architecture.md` → bucket children |
 | runtime Widget Theme / style override ownership | `Docs/Guides/Custom_Style_Implementation.md` |

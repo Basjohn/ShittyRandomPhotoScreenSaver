@@ -293,6 +293,22 @@ nearly clear and hid the defect, light themes author them nearly opaque and lost
 (fixed 8 Nov 2026; bar: `tests/test_settings_forged_edge_over_content.py`). `SettingsDialog.paintEvent` paints only
 the non-Windows material underlay (`paint_material_underlay`), beneath the content.
 
+Native Settings corner acceptance requires desktop captures of dark and light themes on both dark and light
+backgrounds. The forged edge is not a native composition clip: on the layered AccentPolicy HWND, an installed
+window region clips Qt painting but does not remove the Accent material in excluded corner pixels. A QWidget mask
+therefore cannot establish a clean rounded native silhouette. Keep native material residue distinct from the
+renderer stroke, and inspect antialiasing, clipping and seams as well as outside-radius coverage. Product outer-shadow
+coverage is zero; assess any OS-owned DWM shadow separately outside the HWND. Offscreen QWidget captures can test
+edge ownership and lifecycle but cannot close this native composition gate. The Studio's separate Quick window
+is outside this Settings-only acceptance scope.
+
+`tools/settings_native_corners.py` captures this gate from the Windows desktop after `DwmFlush`, using an isolated
+profile and controlled backgrounds; never substitute its offscreen functional checks for those pixels. The rejected
+logical-mask and post-Accent physical-region evidence is under `.artifacts/evidence/settings/native_outer_border/`
+(`20261109_border_before`, `20261109_border_candidate`, `20261109_region_diagnostic`,
+`20261109_physical_region_diagnostic`). [Microsoft's rounded-corner guidance](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-rounded-corners)
+also excludes per-pixel alpha layering and window regions from system rounding, including the opt-in API.
+
 Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies their semantic visual parameters. Runtime screensaver widget shadow authority is separate.
 
 Rounded borders on action buttons (every `OutlinedButton` role: compact, standard and the Sources look, each keeping

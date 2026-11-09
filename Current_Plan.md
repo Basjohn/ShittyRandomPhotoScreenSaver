@@ -374,9 +374,11 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
 - [~] **1.8 Awaiting Validation:** operator-check Gmail and Reddit/Reddit2 column gestures: top grips reorder;
   solid-span endpoints change start/width and truncation. Retained-QML proof covers transformed opposite-edge
   stability, all-row updates, collision policy, Save/Cancel, Undo, slots and fresh-profile hydration.
-- [ ] **1.9 Settings outer border:** inspect/refine bleed and clipping with native corner evidence for dark and
-  light themes against both dark and light backgrounds. Accept only after all four combinations show the intended
-  rounded surface, border and shadow boundaries; keep this refinement separate from the material-density slice.
+- [ ] **1.9 Settings native corner clipping:** find a composition treatment that actually clips Accent material
+  at the rounded silhouette. Both Qt and post-Accent native regions were rejected and reverted: all four native
+  dark/light theme/background combinations retain outside-radius material pixels at 150% DPI. Keep a separate
+  reversible fix and repeat the four-case corner/border/shadow gate before claiming improvement. Reproducer and
+  evidence: `tools/settings_native_corners.py`; `Docs/Architecture/Settings_Theme_Architecture.md`.
 - [ ] **Side defect:** Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1012`)
   and a test requires it. Replace that tool override with explicit CLI/sidecar admission when opening its owner.
 - [ ] **Awaiting Validation:** after focused proofs, operator checks the changed glyphs, saves in the frozen build,
