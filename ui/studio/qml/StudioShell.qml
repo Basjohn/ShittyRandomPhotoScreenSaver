@@ -1527,8 +1527,9 @@ Rectangle {
         // Header ---------------------------------------------------------------------
         Rectangle {
             id: header
-            width: parent.width; height: 56
             color: shell.translucent ? shell.withAlpha(shell.cHeader, shell.panelAlpha) : shell.cHeader
+            readonly property bool wrapped: modeHeader.width + presetActions.width + 44 > width
+            width: parent.width; height: wrapped ? 96 : 56
             gradient: shell.translucent ? null : headerGradient
             Gradient {
                 id: headerGradient
@@ -1538,14 +1539,17 @@ Rectangle {
             Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: shell.cOutlineSoft }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: shell.cOutlineSoft }
             Row {
+                id: modeHeader
                 anchors.left: parent.left; anchors.leftMargin: 18
                 anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: header.wrapped ? -22 : 0
                 spacing: 12
                 Text { objectName: "studioTitle"; text: studio.title; color: shell.cText; font.pixelSize: 19
                        visible: studio.modes.length <= 1; anchors.verticalCenter: parent.verticalCenter }
                 // Mode switcher: every registered Studio mode (one shell, one save path per mode).
                 C.ComboBox {
                     id: modeBox
+                    objectName: "studioModePicker"
                     visible: studio.modes.length > 1
                     anchors.verticalCenter: parent.verticalCenter
                     width: 190; height: 30
@@ -1577,15 +1581,20 @@ Rectangle {
                 }
             }
             Row {
+                id: presetActions
                 anchors.right: parent.right; anchors.rightMargin: 14
                 anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: header.wrapped ? 22 : 0
                 spacing: 8
                 // Preset picker: opens a list of the mode's presets; only an explicit pick switches.
                 Rectangle {
                     id: presetPill
                     objectName: "presetPill"
                     readonly property bool interactive: studio.presets.length > 0
-                    height: 34; width: presetText.implicitWidth + 52; radius: 6
+                    height: 34
+                    width: Math.min(presetText.implicitWidth + 52,
+                                    Math.max(100, header.width - 28 - headerButtons.width - presetActions.spacing))
+                    radius: 6
                     color: pillMouse.containsMouse && interactive ? Qt.lighter(shell.cRaised, 1.15) : shell.cRaised
                     border.width: presetMenu.opened ? 2 : 1
                     border.color: presetMenu.opened ? shell.cAccent : shell.cOutline
@@ -1595,6 +1604,7 @@ Rectangle {
                     Row {
                         anchors.centerIn: parent; spacing: 10
                         Text { id: presetText; text: studio.presetLabel; color: shell.cText; font.pixelSize: shell.fontBase + 1
+                               width: Math.min(implicitWidth, presetPill.width - 52); elide: Text.ElideRight
                                anchors.verticalCenter: parent.verticalCenter }
                         StudioIcon { name: "chevron-down"; width: 14; height: 14; color: shell.cDim; visible: presetPill.interactive
                                      anchors.verticalCenter: parent.verticalCenter }
@@ -1725,38 +1735,45 @@ Rectangle {
                         }
                     }
                 }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: studio.dirty
-                    text: "● Modified"
-                    color: shell.cAccent; font.pixelSize: shell.fontBase - 1; font.bold: true
-                    Accessible.name: "Modified since the Studio opened"
+                Row {
+                    id: headerButtons
+                    spacing: 8
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: studio.dirty
+                        text: "● Modified"
+                        color: shell.cAccent; font.pixelSize: shell.fontBase - 1; font.bold: true
+                        Accessible.name: "Modified since the Studio opened"
+                    }
+                    StudioButton { icon: "undo"; iconSize: 18; width: 36; enabledState: studio.canUndo
+                                   tip: studio.canUndo ? "Undo " + studio.undoText + " (Ctrl+Z)" : "Nothing to undo"
+                                   onClicked: studio.undo() }
+                    StudioButton { icon: "redo"; iconSize: 18; width: 36; enabledState: studio.canRedo
+                                   tip: studio.canRedo ? "Redo " + studio.redoText + " (Ctrl+Y)" : "Nothing to redo"
+                                   onClicked: studio.redo() }
+                    StudioButton { icon: "reset"; iconSize: 18; width: 36; enabledState: studio.dirty
+                                   tip: "Revert: restore everything to the state the Studio opened with (undoable)"
+                                   onClicked: studio.revertAll() }
+                    StudioButton { objectName: "helpButton"; icon: "help"; iconSize: 18; width: 34
+                                   checked: helpOverlay.open
+                                   tip: "How the Studio works: workspaces and gestures (F1)"
+                                   onClicked: helpOverlay.open = !helpOverlay.open }
+                    StudioButton { objectName: "saveCameraButton"; text: "Save Camera"
+                                   enabledState: shell.caps.camera === true && studio.canSaveCamera
+                                   tip: !shell.caps.camera ? "This visualizer has no camera"
+                                        : studio.canSaveCamera ? "Save the current preview camera as this preset's starting camera"
+                                                               : "Camera saving is not available for this store"
+                                   onClicked: studio.saveCamera() }
+                    StudioButton { objectName: "savePresetAsButton"; text: "Save Preset As…"; tip: "Save the current settings as a new preset file"
+                                   onClicked: studio.savePresetAs() }
+                    StudioButton { objectName: "saveCurrentButton"; text: "Save"; icon: "save"; enabledState: studio.canSave
+                                   tip: studio.canSave ? "Save changes into the currently selected preset or Custom slot"
+                                                       : "Saving is not available for this store"
+                                   onClicked: studio.saveCurrent() }
+                    StudioButton { objectName: "closeButton"; text: "Close"; primary: true
+                                   tip: "Close the Studio and return to Settings; choose what to do with unsaved preset edits"
+                                   onClicked: Qt.callLater(studio.requestCloseFrom, "close button") }
                 }
-                StudioButton { icon: "undo"; iconSize: 18; width: 36; enabledState: studio.canUndo
-                               tip: studio.canUndo ? "Undo " + studio.undoText + " (Ctrl+Z)" : "Nothing to undo"
-                               onClicked: studio.undo() }
-                StudioButton { icon: "redo"; iconSize: 18; width: 36; enabledState: studio.canRedo
-                               tip: studio.canRedo ? "Redo " + studio.redoText + " (Ctrl+Y)" : "Nothing to redo"
-                               onClicked: studio.redo() }
-                StudioButton { icon: "reset"; iconSize: 18; width: 36; enabledState: studio.dirty
-                               tip: "Revert: restore everything to the state the Studio opened with (undoable)"
-                               onClicked: studio.revertAll() }
-                StudioButton { objectName: "helpButton"; icon: "help"; iconSize: 18; width: 34
-                               checked: helpOverlay.open
-                               tip: "How the Studio works: workspaces and gestures (F1)"
-                               onClicked: helpOverlay.open = !helpOverlay.open }
-                StudioButton { objectName: "saveCameraButton"; text: "Save Camera"; enabledState: shell.caps.camera === true
-                               tip: shell.caps.camera ? "Save the current preview camera as this preset's starting camera"
-                                                      : "This visualizer has no camera"
-                               onClicked: studio.saveCamera() }
-                StudioButton { text: "Save Preset As…"; tip: "Save the current settings as a new preset file"
-                               onClicked: studio.savePresetAs() }
-                StudioButton { objectName: "saveCurrentButton"; text: "Save"; icon: "save"
-                               tip: "Save changes into the currently selected preset or Custom slot"
-                               onClicked: studio.saveCurrent() }
-                StudioButton { objectName: "closeButton"; text: "Close"; primary: true
-                               tip: "Close the Studio and return to Settings; choose what to do with unsaved preset edits"
-                               onClicked: Qt.callLater(studio.requestCloseFrom, "close button") }
             }
         }
 

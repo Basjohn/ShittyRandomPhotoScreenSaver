@@ -244,6 +244,11 @@ class StudioBridge(QObject):
         if notice:
             self.notify(notice)
 
+    canSave = Property(bool, lambda self: callable(getattr(self._c.store, "save_current", None)),
+                       notify=headerChanged)
+    canSaveCamera = Property(bool, lambda self: callable(getattr(self._c.store, "save_camera", None)),
+                             notify=headerChanged)
+
     @Slot()
     def saveCurrent(self) -> None:
         self._save_action("save_current")
@@ -255,6 +260,8 @@ class StudioBridge(QObject):
     def _save_action(self, method: str, *, camera: bool = False) -> None:
         action = getattr(self._c.store, method, None)
         if not callable(action):
+            self.notify("Camera saving is not available for this store" if camera
+                        else "Saving is not available for this store")
             return
         self._c.session.end_gesture()
         try:

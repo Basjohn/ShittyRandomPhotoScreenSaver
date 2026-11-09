@@ -428,6 +428,10 @@ control.
   back and the preview camera snapped to it ("studios reset the camera every slider change";
   `tests/test_studio_camera_survives_edits.py`). The preview view (`_pose`: dolly, pan, and the orbit while it is not
   committed) is the controller's and changes only by navigation, a camera row, Reset, or a preset or mode switch.
+- **Header access.** At the native minimum (960 × 600), the existing mode/title and action rows move onto
+  two lines when their natural widths would collide. Preset names elide within the action row's remaining
+  space; every save and close action retains its full hit area. A store without the corresponding save action
+  exposes a disabled button with a clear hint, never an enabled inert save action.
 - **Explicit saves.** Every Studio offers **Save** in its header. It overwrites the currently selected
   curated preset through the same shape-preserving file patcher as Save To, or saves the currently selected
   Custom slot through Settings' canonical save. This explicit action needs no second overwrite prompt. The
