@@ -1240,6 +1240,16 @@ High-value permanent guards include:
   `tests/test_visualizer_engine_frame_codec.py::test_encoding_and_decoding_leave_nothing_for_the_cyclic_collector`
   (R-179): with the collector off and `DEBUG_SAVEALL`, round trips and both refusal paths leave no codec closure for
   the collector (before the fix: 30 for 10 round trips).
+  `tests/test_extruded_bubble_frame_drift_boundary.py` keeps CPU-reference arrays out of canonical captured frames,
+  preserving renderer bytes/digests and descriptor reuse through capacity growth and edits without cyclic retention.
+  `tests/test_visualizer_engine_frame_capacity.py` covers non-default/schema-maximum controls in every mode, maximum
+  EB geometry/step/wake/body payload, activation-time admission, matching hidden-edge remaps and read quiescence,
+  stale/failed/retired mappings, initial IPC allocation cleanup, and terminal overflow reporting without execution-path
+  fallback. Its real-owner IPC checks require native wake-pipe access and refuse audio devices.
+  `tests/test_visualizer_engine_frame_capacity_high_water.py` crosses actual producer/capture/codec/mailbox boundaries
+  with simultaneous full Waveform history/cohort/burst/pulse buffers (product population and portable packet maximum),
+  all DevCurve layers/nodes and Neon's maximum extended terrain plus event ring; a reduced-capacity negative control
+  rejects the combined high-water payload.
   `tests/test_usage_sampler.py` also pins the engine worker's labelled `--usage` breakdown (from the sample's own
   per-process pass; a topology refresh only when a named child is new, once per distinct PID even when the refresh
   cannot find it, forgotten once no longer named; a process the sample's own refresh added reports `na` CPU and stays

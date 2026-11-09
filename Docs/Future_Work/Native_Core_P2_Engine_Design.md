@@ -48,7 +48,8 @@ header (64 bytes, little-endian, fixed):
   u32 magic 'SRVZ'   u16 abi_version   u16 header_bytes
   u32 runtime_generation   u32 engine_generation   u32 activation_id
   u32 slot_count (3)   u32 slot_bytes   u32 mode_code
-  u64 latest_sequence (writer)   u64 consumed_sequence (reader-owned acknowledgement)   pad to 64
+  u64 latest_sequence (writer)   u64 consumed_sequence (reader-owned acknowledgement)
+  u64 rejected_payload_bytes (writer, terminal capacity violation; 0 = none)   pad to 64
 slot[i] (slot_bytes each):
   u64 sequence_begin   (seqlock: odd while the writer fills the slot)
   u32 payload_bytes    u32 payload_schema (per mode, versioned)
@@ -76,6 +77,14 @@ is on the main process's own trace clock. The worker stamps only while the main 
 (the configure's `publish_stamps`); the main side then records the trace's `LOGICAL_PUBLISH` for each frame it takes,
 at the worker's publish time (`PacketMailbox`). Nothing is stamped or recorded at rest.
 
+**Capacity failure (phase-boundary H1):** header bytes 48-55, formerly reserved zero padding, carry one aligned
+little-endian u64 `rejected_payload_bytes` (0: no violation). An oversized writer stores the actual encoded payload
+length before closing its existing wake pipe; it changes no slot or sequence. The owner reads the single word after
+EOF and gets capacity from the already-validated `slot_bytes` header. This uses the ABI's existing x86 store order;
+there is no multiword diagnostic snapshot to tear. The append is zero-neutral, moves no field and changes no shape,
+so ABI 2 readers that ignore the reserved bytes remain valid. It is a terminal admission-contract failure, logged
+once with actual/capacity bytes, with no worker recovery, in-process retry or reconstruction loop.
+
 - **Writer (worker):** picks the slot that is neither the newest nor being read, bumps `sequence_begin` to odd,
   writes, sets `sequence_end`, publishes `latest_sequence`. Never blocks on the reader.
 - **Reader (main, at sync):** reads `latest_sequence`, copies the slot, accepts it only if `sequence_begin ==
@@ -97,6 +106,28 @@ snapshots; capture projects to a memoized source-free descriptor before both in-
 encoding. The projection shares geometry bytes and does not copy arrays per tick. CPU-reference tools/tests consume
 the simulation snapshot explicitly. Geometry transport must distinguish capacity growth within a revision, because
 the stable seeded prefix grows without changing `revision`; revision alone is not a sufficient cache key.
+
+### Activation-time frame capacity
+
+`frame_capacity.required_slot_bytes` is the single capacity authority. It consumes the activation's resolved logical
+controls before the parent creates a mapping. Other modes retain the 1 MiB non-geometry envelope. Active Extruded
+Bubble drift families add their canonical maximum packed geometry (clouds can reach their full caps despite smaller
+authored emission endpoints); at the full family caps this is 8,063,616 bytes per aligned slot. No authorable value
+is duplicated into this transport rule. The maximum/non-default codec gate lives in
+`tests/test_visualizer_engine_frame_capacity.py`.
+`tests/test_visualizer_engine_frame_capacity_high_water.py` also covers simultaneous complete Waveform ribbon,
+cohort, burst and pulse buffers (current four-ribbon Dynamics and the conservative eight-ribbon packet-producer
+ceiling), all DevCurve layers at maximum authored node count, and Neon's maximum extended terrain with a full event
+ring. These are producer/capture/codec gates; their byte counts are recorded in the phase-boundary audit resolution.
+
+A hidden `VIS_SET_MODE` activation that needs more capacity stages one parent-owned mapping. Its `capacity_change`
+names the previous and replacement mappings. After `commit_logical_activation` stops and joins the producer, the
+same mailbox attaches its writer to the replacement and writes the committed header identity before restarting the
+cadence. The reply echoes the attached mapping; only a matching reply swaps the parent reader under its existing
+decode lock and releases the old mapping. The same mailbox/wake pipe/listener/lease/session stay in place. Retirement
+addresses either candidate of an unanswered remap and releases both parent mappings. Smaller activations keep the
+allocation until retirement; no resize or allocation runs on a tick. P3 must still supply native-reader quiescence
+before replacing the Python decode lock.
 
 ## Control: main -> worker (rare, latest wins, sequenced)
 
@@ -154,8 +185,9 @@ shipped clip round-trips to the identical `repr` and re-encodes to the identical
 So the main process pays at most about .4 ms and one slot copy per presented frame for the *frame read*; with live
 inputs as engine snapshots it also pays the capture (.20-.25 ms p50) and pickle (.06-.09 ms) per tick, which for
 Spectrum, Oscilloscope, Sphere and Extruded Spectrum (ticks of .33-.45 ms) is more than the tick it stops running
-(audit, H1: measure per mode before work order 5). 1 MiB slots (3 MiB per generation) hold every mode, so a mode
-switch never remaps.
+(audit, H1: measure per mode before work order 5). Those measurements used default settings; the phase-boundary H1
+audit disproved the original 1 MiB universal-capacity claim. Activation-time capacity and bounded hidden-edge remaps
+are specified above.
 
 ## Work order
 

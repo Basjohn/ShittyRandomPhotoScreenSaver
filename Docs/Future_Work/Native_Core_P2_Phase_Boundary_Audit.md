@@ -338,9 +338,111 @@ projection to avoid a self-reference cache on an already source-free descriptor,
 (**2 passed**). Changed Python files compile and `git diff --check` passes. This proves transport/data parity; no native
 visual, build, device or load acceptance is claimed.
 
-Geometry transport remains open for H1. A revision alone cannot key an immutable side record: `DriftLog.admit` keeps
+Geometry still travels per frame; H1 below bounds it without adding a side record. A revision alone cannot key an
+immutable side record: `DriftLog.admit` keeps
 the revision when capacity grows. Any later transport must account for capacity as well as revision and session
 identity. No geometry protocol, slot sizing, default admission, recovery behavior or renderer change is part of this slice.
+
+### H1: bounded activation-time capacity and a hidden-edge remap
+
+H1 sizes the existing parent-owned mapping before `VIS_CONFIGURE` from the activation's resolved logical
+controls. Every other mode keeps the 1 MiB slot envelope. Extruded Bubble reserves that same non-geometry envelope
+plus any admitted free-drift geometry: clouds are bounded by `(SPECKS_FULL + SNOW_FULL) * CLOUD_GEOMETRY_BYTES`
+(6,992,000 bytes), chains by `drawable_chains(bead_chains) * CHAIN_GEOMETRY_BYTES` (at most 23,040 bytes). A nonzero
+particle range can reach the full cloud cap because its musical follower can overshoot; sizing at the authored
+endpoint or the first frame is unsound. The 1 MiB remainder covers the bounded 128 x 24-float64 step history
+(24,576 bytes), 384 x 50-float32 live/retiring wake records (76,800 bytes), 192 x 8-float64 bubbles (12,288 bytes),
+cluster records, descriptors, canonical parameter tree and publication envelope. Slot bytes include the ABI's
+72-byte overhead and are rounded to 16-byte alignment. Source-free geometry and every non-geometry byte remain exact.
+
+Capacity grows only at an explicit hidden activation. The existing `PacketMailbox` stages one larger mapping;
+`VIS_SET_MODE` carries its old/new mapping identity. The production activation commit stops and joins the old logical
+producer before its mailbox writer reattaches, then restarts the same cadence. The reply names the mapping it
+attached; the parent validates that identity and swaps the reader under the existing decode lock before closing the
+old mapping. The same mailbox object, wake pipe, listener, controller, lease and session remain owners. A smaller
+activation retains the allocation until session retirement; there is no tick-time resize/retry loop. Failure,
+late/mismatched replies and retirement must release staged candidates without adopting them.
+
+Focused gates must drive each mode with independent non-default and schema-maximum controls (including offered
+size-affecting choices), plus a complete maximum EB geometry/step/wake frame. They must reproduce the old overflow,
+prove packet/header identity and byte parity after remap, reject stale edges, cover failed staging/commit/retirement,
+and prove that reader close waits for its existing decode lock. No default flip, H2 diagnostic-file work, GPU geometry
+cache, native-reader lifetime promise, load run or build belongs to this slice. P3 still owes its explicit native
+read-side quiescence decision before replacing the Python lock.
+
+The hidden-edge gate proves the old producer is joined at writer attachment; the
+same mailbox and wake listener survive, the replacement header matches the committed identity, and the old mapping
+is released. The maximum EB geometry/step/wake/body fixture encodes to 7,138,141 bytes under its test-owned controls:
+the old 1 MiB slot refuses it; the admitted 8,063,616-byte slot round-trips every byte. Independent non-default and
+schema-maximum numeric/choice/toggle controls run every mode through actual owner publication and the real packet
+mailbox. Pure gates cover failed allocation, stale writer/ack identities, staging abort/retirement, and quiescence
+under the reader's existing lock.
+
+An unexpected envelope violation is an aligned u64 actual-length store at reserved header offset 48, before EOF on
+the existing wake pipe (ABI 2, zero-neutral append; no existing field moved). The cadence fails closed immediately;
+the owner logs actual/capacity bytes, retires the session and leaves the activation failed, retaining the last
+rendered frame. It never enters ordinary worker recovery, in-process retry or reconstruction. A real oversized publish
+in the never-shown recorded-PCM owner proves that path. This is not a general worker diagnostic route (H2 remains).
+
+Negative controls: forcing admission back to the old 1 MiB envelope fails the full-geometry gate with
+`7138141 > 1048504`; skipping writer attachment fails the remap gate with `100039 > 65464`; bypassing the terminal
+capacity guard fails its real-owner gate. Each exits 1 as expected. Initial capacity/remap tests failed before their
+implementation. Focused results so far: the capacity/maximum-mode gate **23 passed**; extended pure admission/ABI
+gates **22 passed**; real hidden-activation and terminal-failure gates **2 passed**; five existing owner control,
+binding, retirement and recovery regressions **5 passed**. Native IPC tests need IPC access: the restricted host's
+`multiprocessing.Pipe` is denied (WinError 5); the same tests pass with native IPC access.
+Final combined capacity/ABI/selected-owner run: **48 passed**. The hidden-edge proof was then extended to both a mode
+change and an independently authored same-mode settings change from dormant drift to maximum controls: **2 passed**.
+The expanded pure gate (including a candidate writer failing before its ack) passed again: **22 passed**. Changed
+Python compiles and `git diff --check` passes.
+
+Side defect found and repaired at initial admission: a refused wake pipe previously left an already-created mapping
+and exported views unclosed. Initial configure now opens the pipe first; a mapping-allocation failure closes both
+ends, and a denied pipe creates no mapping (focused regression). Normal steady-state publication gains no new work;
+capacity calculation/allocation occurs only at configure/hidden activation. Active EB may reserve up to about 23 MiB
+across three slots; other modes retain their original 3 MiB mapping until an EB activation needs growth. No native
+performance/load, real-device, rendered-pixel, frozen or Linux validation is claimed.
+
+#### H1 review: simultaneous retained high-water payloads
+
+Root's read-only review and independent Terra 6.1 High audit found no actionable remap/EOF defect in their focused
+source/test scope. Root requested a stronger admission gate before acceptance: the short schema-maximum replays
+did not prove simultaneous retained-buffer high water. `tests/test_visualizer_engine_frame_capacity_high_water.py`
+now completes the real Waveform Dynamics history preparation, admits actual cohort/burst producer records and passes
+their combined snapshot through canonical capture, codec and packet mailbox. It also exercises the portable
+`RibbonRing` maximum with real `append`/`packet`, `RibbonStrandCohorts.update` and `RibbonBursts.admit` outputs.
+Current product Dynamics uses `RIBBON_CAPACITY = 4`; the reusable packet/ring contract admits `MAX_RIBBONS = 8`.
+Those are deliberately separate cases. A first successful event already publishes the complete fixed-capacity
+cohort/4096-record burst buffers; the proof measures all retained bytes together, not an impossible claim that every
+burst record is simultaneously live.
+
+| Captured frame | Combined retained bytes before metadata | Complete publication payload |
+| --- | ---: | ---: |
+| Waveform Dynamics, 4 ribbons x 256 knots + cohorts + bursts + pulse | 82,176 + 65,536 + 262,144 + 1,540 | 416,905 |
+| Portable ring, 8 ribbons x 256 knots + cohorts + bursts + pulse | 164,352 + 131,072 + 262,144 + 1,540 | 564,617 |
+| DevCurve, all four 96-sample layers, five authored nodes/layer, three specular slots | fixed layer/parameter records | 7,762 |
+| Neon Lake, 257 x 257 RG32F extended terrain plus all 48 retained events | 528,392 terrain bytes + event/parameter records | 538,704 |
+
+Every row is exact after codec round-trip through its admitted mailbox. DevCurve's actual solver retains one
+previous 96-sample curve per layer; capture publishes the four current curves and no ghost/history arrays
+(`devcurve_frame_runtime` explicitly preserves that visual contract). Node counts use the Studio's `node_limits`;
+output samples use `DEVCURVE_SAMPLE_COUNT`. Neon uses `HEIGHTFIELD_MAX_SIZE`, canonical heightfield normalization/
+packing, and `record_onsets` at its real gap/memory limits to fill `SHOCKWAVE_EVENT_RING`. No foreign byte arrays or
+authored preset/default values are substituted for these producer outputs.
+
+Other retained-payload bounds reviewed at source: Spectrum/Extruded Spectrum hold one bars/peaks/ghost array per
+admitted bar (schema maximum 96), rather than a frame history; Sphere validates at most four particle cohorts;
+Oscilloscope validates at most 16 traces x 384 xy float32 points (49,152 point bytes); Bubble's
+`BUBBLE_RENDER_CAPACITY` is 110, with four position + four extra + nine trail floats per hero, plus at most 192
+six-float ambient points and 110 four-float occluders. Bubble Ghost reuses that three-sample trail. The shared
+sample-consuming frame copies the engine's 256-sample waveform, not its capture-history buffer. EB's larger
+geometry/128-step/live-retiring-wake envelope is covered separately above. None of these histories grows with elapsed
+playback. The 1 MiB non-EB admission remains sufficient, including the conservative eight-ribbon producer case.
+
+High-water gate: **4 passed** (7.51 s). Its negative control cuts Waveform admission to 512 KiB and rejects the full
+portable frame (`564617 > 524216`), exit 1 as expected. Root separately reran the real hidden remap/settings-change
+and terminal-failure gates: **3 passed**. This is bounded data/IPC proof only; no new load, rendering, build or device
+validation was run.
 
 ## P3 readiness
 

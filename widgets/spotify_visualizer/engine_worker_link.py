@@ -247,6 +247,8 @@ class EngineWorkerLink:
         self._lost_reported = False
         self.label_namespace = 0
         self.mapping_name: str | None = None
+        self.capacity_failure_report: dict | None = None
+        self._capacity_candidates: tuple[str, ...] = ()
         self.configured = False                   # the configure's reply arrived
         self.bar_count: int | None = None         # the session's bar count, from its configure and commit replies
         self.capture_failed = False               # the newest reply said the session's device did not open (A7-L4)
@@ -478,12 +480,20 @@ class EngineWorkerLink:
 
         from core.process.types import MessageType
         from core.visualizer_engine.packet_mailbox import PacketMailbox
+        from core.visualizer_engine.frame_capacity import required_slot_bytes
 
         missing = [key for key in ACTIVATION_KEYS if key not in activation]
         if missing:
             raise EngineWorkerFailure(f"incomplete activation inputs: {missing}")
-        mailbox = PacketMailbox(role="reader")
+        slot_bytes = required_slot_bytes(str(mode), activation['logical_kwargs'])
         receiver, sender = multiprocessing.Pipe(duplex=False)
+        try:
+            mailbox = PacketMailbox(role="reader", slot_bytes=slot_bytes)
+        except BaseException:
+            receiver.close()
+            sender.close()
+            raise
+        logger.info('[SPOTIFY_VIS][ENGINE_WORKER] Frame capacity admitted mode=%s slot_bytes=%d', mode, slot_bytes)
         self.label_namespace = next_label_namespace()
         payload: dict[str, Any] = {
             "mapping": mailbox.mapping_name, "mode": str(mode), "runtime_generation": int(runtime_generation),
@@ -619,13 +629,46 @@ class EngineWorkerLink:
         ``adopt_presentation_inputs``); a failure calls ``on_failed`` (the session closes on a failed apply, A6-M2)."""
         from core.process.types import MessageType
 
+        from core.visualizer_engine.frame_capacity import required_slot_bytes
+
+        change = self._mailbox.stage_capacity(required_slot_bytes(str(mode), activation['logical_kwargs']))
+        if change is not None:
+            self._capacity_candidates = (change['previous_mapping'], change['mapping'])
+
         def committed(reply: dict) -> None:
+            if change is not None:
+                if reply.get('mapping') != change['mapping']:
+                    failed(EngineWorkerFailure('capacity activation acknowledged a different mapping'))
+                    return
+                try:
+                    self._mailbox.commit_capacity(change)
+                except Exception as exc:
+                    failed(EngineWorkerFailure(f'capacity commit failed: {exc}'))
+                    return
+                self.mapping_name = self._mailbox.mapping_name
+                self._capacity_candidates = ()
             on_committed((int(reply["engine_generation"]), int(reply["activation_id"])),
                          dict(reply.get("view_records") or {}))
 
-        self._send(MessageType.VIS_SET_MODE, {
-            "mode": str(mode), "activation": {key: activation[key] for key in ACTIVATION_KEYS}, "at_once": True},
-            on_reply=committed, on_failed=on_failed)
+        def failed(failure):
+            if self._mailbox is not None:
+                self.capacity_failure_report = self._mailbox.capacity_failure
+            if change is not None and self._mailbox is not None:
+                self._mailbox.abort_capacity(change)
+            on_failed(failure)
+
+        payload = {'mode': str(mode), 'activation': {key: activation[key] for key in ACTIVATION_KEYS}, 'at_once': True}
+        if change is not None:
+            payload['capacity_change'] = change
+            logger.info('[SPOTIFY_VIS][ENGINE_WORKER] Frame capacity growth admitted mode=%s old_slot_bytes=%d '
+                        'required_slot_bytes=%d', mode, self._mailbox.slot_bytes,
+                        required_slot_bytes(str(mode), activation['logical_kwargs']))
+        try:
+            self._send(MessageType.VIS_SET_MODE, payload, on_reply=committed, on_failed=failed)
+        except BaseException:
+            if change is not None:
+                self._mailbox.abort_capacity(change)
+            raise
 
     def _await(self, message: Any, payload: Mapping[str, Any], *, timeout_ms: int) -> Any:
         """Tests and tools only: send and wait for the reply on the calling thread (the owner never does)."""
@@ -657,7 +700,11 @@ class EngineWorkerLink:
             return None
         self._stopping = True
         try:
-            response = self._await(MessageType.VIS_STOP, {"mapping": self.mapping_name}, timeout_ms=timeout_ms)
+            response = self._await(MessageType.VIS_STOP,
+                                   {"mapping": self.mapping_name,
+                                    'mapping_candidates': (self._capacity_candidates
+                                                           or self._mailbox.mapping_candidates)},
+                                   timeout_ms=timeout_ms)
         except EngineWorkerFailure as exc:
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Stop: %s", exc)
             return None
@@ -677,7 +724,10 @@ class EngineWorkerLink:
             try:
                 # Addressed to this session's mapping: a stop that lands after another session was configured is a
                 # no-op there (the worker hosts one session at a time).
-                self._send(MessageType.VIS_STOP, {"mapping": self.mapping_name}, on_failed=lambda _failure: None)
+                self._send(MessageType.VIS_STOP, {"mapping": self.mapping_name,
+                                                  'mapping_candidates': (self._capacity_candidates
+                                                                         or self._mailbox.mapping_candidates)},
+                           on_failed=lambda _failure: None)
             except EngineWorkerFailure:
                 pass
         self.close()
@@ -718,6 +768,13 @@ class EngineWorkerLink:
     def _session_ended(self) -> None:
         """The listener thread saw the wake pipe end while the reader was open: the session is gone."""
         if not self._stopping:
+            failure = self._mailbox.capacity_failure if self._mailbox is not None else None
+            if failure is not None:
+                self.capacity_failure_report = failure
+                self.capacity_failure_reason = (f"frame capacity violation: actual_bytes={failure['actual_bytes']} "
+                                                f"capacity_bytes={failure['capacity_bytes']}")
+                self._emit('ended', self.capacity_failure_reason)
+                return
             self._emit("ended", "the engine worker's session ended (closed after a failure, or the process died)")
 
     def _deliver_end(self, reason: str) -> None:

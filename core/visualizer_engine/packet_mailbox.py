@@ -26,6 +26,7 @@ from typing import Any, Callable, Literal, Optional
 from core.authored_clock import authored_now
 from core.performance.frame_trace import FrameTraceEvent, logical_timestamp_ns
 from core.visualizer_engine import frame_codec
+from core.visualizer_engine.frame_capacity import BASE_SLOT_BYTES
 from core.visualizer_engine.packet_abi import (
     FIRST_SEQUENCE,
     FLAG_CHANGED,
@@ -43,8 +44,8 @@ from widgets.spotify_visualizer.logical_runtime import (
     _coalesce_protected_state,
 )
 
-#: 1 MiB slots hold every mode's frame (Extruded Bubble's ~617 KiB is the largest; P2 design, measured 8 Nov).
-DEFAULT_SLOT_BYTES = 1 << 20
+#: Base non-geometry envelope; production admission adds active EB families before creating/attaching a mapping.
+DEFAULT_SLOT_BYTES = BASE_SLOT_BYTES
 
 
 def publication_flags(state: Any) -> int:
@@ -138,6 +139,7 @@ class PacketMailbox(LatestStateMailbox):
         else:
             self._memory = SharedMemory(name=attach)
         self._owner = attach is None
+        self._staged_memory: SharedMemory | None = None
         self._writer = FramePacketWriter(self._memory.buf) if role in ("both", "writer") else None
         self._reader = FramePacketReader(self._memory.buf) if role in ("both", "reader") else None
         # Producer side: the newest publication not yet acknowledged (its edges carry into the next one).
@@ -367,6 +369,90 @@ class PacketMailbox(LatestStateMailbox):
     # ----------------------------------------------------------------------------------------------- lifetime
 
     @property
+    def slot_bytes(self) -> int:
+        with self._lock:
+            return (self._reader or self._writer)._slot_bytes
+
+    @property
+    def capacity_failure(self) -> dict | None:
+        with self._lock:
+            if self._closed or self._reader is None:
+                return None
+            if self._staged_memory is not None:
+                reader = FramePacketReader(self._staged_memory.buf)
+                try:
+                    failed = reader.capacity_failure
+                finally:
+                    reader.release()
+                if failed is not None:
+                    return failed
+            return self._reader.capacity_failure
+
+    @property
+    def mapping_candidates(self) -> tuple[str, ...]:
+        """Retirement addresses either side of an unanswered remap (the control queue is ordered)."""
+        with self._lock:
+            return ((self.mapping_name, self._staged_memory.name) if self._staged_memory is not None
+                    else (self.mapping_name,))
+
+    def stage_capacity(self, slot_bytes: int) -> dict | None:
+        """Parent, hidden edge only: reserve one larger mapping; keep reading the current one until its ack."""
+        with self._lock:
+            if self._closed or self._writer is not None or not self._owner:
+                raise RuntimeError('only an open parent reader stages capacity')
+            if self._staged_memory is not None:
+                raise RuntimeError('a capacity edge is already in flight')
+            if slot_bytes <= self._reader._slot_bytes:
+                return None
+            generation, engine_generation, activation_id, code = self._reader.read_identity()
+            memory = create_frame_mapping(generation=generation, engine_generation=engine_generation,
+                                          activation_id=activation_id, mode_code=code, slot_bytes=slot_bytes,
+                                          token=uuid.uuid4().hex[:12])
+            self._staged_memory = memory
+            return {'previous_mapping': self.mapping_name, 'mapping': memory.name}
+
+    def abort_capacity(self, change: dict) -> None:
+        with self._lock:
+            memory = self._staged_memory
+            if memory is None or memory.name != change['mapping']:
+                return
+            self._staged_memory = None
+            memory.close()
+            memory.unlink()
+
+    def commit_capacity(self, change: dict) -> None:
+        """Parent, matching writer ack only: existing decode lock quiesces Python reads before releasing old views."""
+        with self._lock:
+            memory = self._staged_memory
+            if (self._closed or memory is None or memory.name != change['mapping']
+                    or self.mapping_name != change['previous_mapping']):
+                raise ValueError('stale capacity commit')
+            reader = FramePacketReader(memory.buf)
+            old = self._memory
+            self._reader.release()
+            self._memory, self._reader, self._staged_memory = memory, reader, None
+            self._peeked = self._last_taken = None
+            old.close()
+            old.unlink()
+
+    def attach_capacity(self, change: dict) -> None:
+        """Worker, after logical producer joined: attach once, retaining this mailbox and its wake pipe."""
+        with self._lock:
+            if self._closed or self._owner or self._writer is None or self.mapping_name != change['previous_mapping']:
+                raise ValueError('stale writer capacity edge')
+            memory = SharedMemory(name=change['mapping'])
+            try:
+                writer = FramePacketWriter(memory.buf)
+            except BaseException:
+                memory.close()
+                raise
+            old = self._memory
+            self._writer.release()
+            self._memory, self._writer = memory, writer
+            self._unread = None
+            old.close()
+
+    @property
     def mapping_name(self) -> str:
         return self._memory.name
 
@@ -376,6 +462,10 @@ class PacketMailbox(LatestStateMailbox):
             if self._closed:
                 return
             self._closed = True
+            memory, self._staged_memory = self._staged_memory, None
+            if memory is not None:
+                memory.close()
+                memory.unlink()
             with self._wake_lock:
                 sender, self._wake_sender = self._wake_sender, None
             for end in (self._wake_receiver, sender):

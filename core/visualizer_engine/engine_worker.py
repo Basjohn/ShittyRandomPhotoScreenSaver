@@ -546,6 +546,11 @@ class EngineSession:
         try:
             self._paced_step_body(now)
         except Exception as exc:
+            from core.visualizer_engine.packet_abi import FrameCapacityError
+
+            if isinstance(exc, FrameCapacityError):
+                self._fail_closed(f"frame capacity violation: {exc}")
+                raise
             self._failed_steps += 1
             if self._failed_steps >= self.FAILED_STEPS_BEFORE_CLOSE:
                 self._fail_closed(f"{self._failed_steps} consecutive steps failed (last: {type(exc).__name__}: {exc})")
@@ -702,7 +707,7 @@ class EngineSession:
         return {attr: getattr(state, attr, None) for attr in VIEW_RECORD_ATTRS}
 
     def request_mode(self, mode: str, *, preset: int = 0, settings: Any = None, activation: Any = None,
-                     at_once: bool = False) -> tuple[int, int] | None:
+                     at_once: bool = False, capacity_change: dict | None = None) -> tuple[int, int] | None:
         """An in-session activation, applied at the next tick boundary (the newest request wins): the owner's
         activation commit (``logical_edges.commit_logical_activation``) on the existing engine and controller, never a
         rebuild. Another mode is a mode activation; the current mode with its ``preset`` / ``settings`` is the
@@ -711,7 +716,10 @@ class EngineSession:
         once on a worker-paced session or with ``at_once`` (the owner's request between two inputs: the same tick
         boundary); then the committed (generation, activation id), else None."""
         self.validate_mode_request(mode)
-        self._pending_mode = (str(mode), int(preset), settings, None if activation is None else dict(activation))
+        if capacity_change is not None and self.mapping_name != capacity_change['previous_mapping']:
+            raise ValueError('stale capacity activation')
+        self._pending_mode = (str(mode), int(preset), settings, None if activation is None else dict(activation),
+                              capacity_change)
         if self._paced or at_once:
             # The owner's activation stops its runtime (the tick boundary), commits and restarts it: at once, as the
             # owner does on the GUI thread. A failure here may have half-applied (the runtime stopped, the engine
@@ -735,13 +743,18 @@ class EngineSession:
 
         if self._pending_mode is None:
             return None
-        mode, preset, settings, activation = self._pending_mode
+        mode, preset, settings, activation, capacity_change = self._pending_mode
         self._pending_mode = None
         controller = self._controller
         request = activation if activation is not None else offline_activation_request(mode, preset, None, settings)
         generation, activation_id = commit_logical_activation(
             controller, kind="preset" if mode == self.mode else "mode", target=mode, **request,
         )
+        if capacity_change is not None:
+            # commit_logical_activation joined the previous producer; no writer can still access the old mapping.
+            self.mailbox.attach_capacity(capacity_change)
+            self.mailbox.write_identity(runtime_generation=self._controller.runtime_generation,
+                                        engine_generation=generation, activation_id=activation_id, mode=mode)
         # Render admission for the committed identity (the owner binds it into its scene).
         controller.begin_render_activation(engine_generation=generation, activation_id=activation_id)
         self.mode = mode
@@ -920,6 +933,7 @@ class VisualizerEngineWorker(BaseWorker):
                         return self._reply(msg)
                     return self._reply(msg, engine_generation=committed[0], activation_id=committed[1],
                                        bar_count=session.bar_count, view_records=session.view_records,
+                                        mapping=session.mapping_name,
                                        **session.device_report())
                 try:
                     changed = self._session.set_display_power(bool(msg.payload["on"]))
@@ -935,7 +949,8 @@ class VisualizerEngineWorker(BaseWorker):
                 # slice 5.5) leaves the current session alone.
                 session = self._session
                 addressed = (msg.payload or {}).get("mapping")
-                if addressed is not None and (session is None or session.mapping_name != addressed):
+                candidates = (msg.payload or {}).get('mapping_candidates', (addressed,))
+                if addressed is not None and (session is None or session.mapping_name not in candidates):
                     return self._reply(msg, report=None, stale=True)
                 try:
                     report = session.finish() if session is not None else None

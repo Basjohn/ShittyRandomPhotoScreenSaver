@@ -13,6 +13,7 @@ header (HEADER_BYTES):
    20  u32 slot_count           24  u32 slot_bytes          28 u32 mode_code
    32  u64 latest_sequence       (written by the writer last, after the slot is whole)
    40  u64 consumed_sequence     (written by the reader: the newest sequence it accepted)
+   48  u64 rejected_payload_bytes (writer: 0 until a terminal capacity violation, before wake-pipe EOF)
 slot i at HEADER_BYTES + i * slot_bytes:
     0  u64 sequence_begin        (seqlock: odd while the writer fills the slot)
     8  u32 payload_bytes         12 u32 payload_schema (the mode codec's own version)
@@ -104,6 +105,7 @@ _IDENTITY = struct.Struct("<III")                 # runtime_generation, engine_g
 _U32 = struct.Struct("<I")
 _IDENTITY_OFFSET, _MODE_CODE_OFFSET = 8, 28
 _LATEST_OFFSET, _CONSUMED_OFFSET = 32, 40
+_REJECTED_PAYLOAD_OFFSET = 48  # reserved ABI 2 bytes; zero-neutral append, existing offsets/layout unchanged
 
 
 def _u32(value: int) -> int:
@@ -117,6 +119,10 @@ assert _U64.size + _SLOT_HEAD_REST.size == _SLOT_HEAD.size
 
 class PacketAbiError(ValueError):
     """The mapping is not a frame buffer this build can read (magic, version or shape)."""
+
+
+class FrameCapacityError(ValueError):
+    """The published frame violated its activation-time capacity envelope; retry cannot make it fit."""
 
 
 @dataclass(frozen=True)
@@ -204,7 +210,10 @@ class FramePacketWriter:
         if not 0 <= publish_ns <= 0xFFFFFFFFFFFFFFFF:
             raise ValueError(f"publish time {publish_ns} does not fit a u64")
         if len(payload) > self.capacity:
-            raise ValueError(f"frame payload of {len(payload)} bytes exceeds the slot's {self.capacity}")
+            # One aligned native u64 store, before EOF on the existing wake pipe; x86 store order is the ABI's
+            # existing target. No slot or latest sequence changes. Zero remains neutral for older/native readers.
+            _U64.pack_into(self._view, _REJECTED_PAYLOAD_OFFSET, len(payload))
+            raise FrameCapacityError(f"frame payload of {len(payload)} bytes exceeds the slot's {self.capacity}")
         identity = (_u32(runtime_generation), _u32(engine_generation), _u32(activation_id), _u32(mode_code))
         consumed = _U64.unpack_from(self._view, _CONSUMED_OFFSET)[0]
         self._edges = [entry for entry in self._edges if entry[0] > consumed and entry[2] == identity]
@@ -266,6 +275,12 @@ class FramePacketReader:
     def read_identity(self) -> tuple[int, int, int, int]:
         """The header's configure-time identity: (runtime generation, engine generation, activation id, mode code)."""
         return (*_IDENTITY.unpack_from(self._view, _IDENTITY_OFFSET), _U32.unpack_from(self._view, _MODE_CODE_OFFSET)[0])
+
+    @property
+    def capacity_failure(self) -> dict | None:
+        actual = _U64.unpack_from(self._view, _REJECTED_PAYLOAD_OFFSET)[0]
+        return ({'actual_bytes': actual, 'capacity_bytes': self._slot_bytes-SLOT_OVERHEAD}
+                if actual else None)
 
     def read_latest(self) -> FramePacket | None:
         """The newest whole frame newer than the last accepted one, or None (nothing new, or torn: keep the previous
