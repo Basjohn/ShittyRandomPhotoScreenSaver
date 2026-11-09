@@ -89,6 +89,15 @@ at the worker's publish time (`PacketMailbox`). Nothing is stamped or recorded a
   and drawing do not change in P2; P3's native core reads the same bytes without Python.
 - `abi_version` bumps on any layout change; reader and writer refuse a mismatch (fail closed, logged once).
 
+### Extruded Bubble's drift descriptor boundary
+
+The canonical captured frame carries only each family's renderer inputs: identity/rebase/first step, capacity,
+packed geometry and carry, plus the unchanged step log. `DriftFamily.source` is CPU-oracle data retained on simulation
+snapshots; capture projects to a memoized source-free descriptor before both in-process presentation and worker
+encoding. The projection shares geometry bytes and does not copy arrays per tick. CPU-reference tools/tests consume
+the simulation snapshot explicitly. Geometry transport must distinguish capacity growth within a revision, because
+the stable seeded prefix grows without changing `revision`; revision alone is not a sufficient cache key.
+
 ## Control: main -> worker (rare, latest wins, sequenced)
 
 A duplex pipe (the supervisor's message queue) carries only edges, never per-frame data: versioned Settings snapshots

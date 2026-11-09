@@ -317,6 +317,31 @@ and the operator always runs `--usage`. This is recorded (`Current_Plan` §5).
 - The ABI text "picks the slot that is neither the newest nor being read" (`:79`) is wrong: the writer avoids only the
   newest slot (`packet_abi.py:215`) and cannot know the reader's.
 
+## Resolution work
+
+### M1: CPU reference data at the publication boundary
+
+The first slice removes `DriftFamily.source` from the canonical frame at `logical_frame_capture`, before either
+in-process presentation or worker encoding. The simulation keeps the float64 source for the CPU oracle; each immutable
+descriptor memoizes one source-free render descriptor, sharing its exact geometry bytes. Repeated ticks do not copy
+arrays or geometry. The CPU oracle consumes simulation snapshots directly, never a source-stripped published frame.
+`tests/test_extruded_bubble_frame_drift_boundary.py` exercises the real owner/capture path with independent non-default
+controls and all three drift families: source is absent, geometry bytes are the same object, every other descriptor
+field and step byte matches, renderer digests remain identical, and codec round trips are exact and smaller. The
+second test covers descriptor reuse, geometry edits, capacity growth within a revision and reference-counted release
+without a cyclic-GC wait. Both tests failed before implementation. Restoring the old boundary in memory by making
+`DriftFamily.render_descriptor` return `self` fails the capture test at "CPU reference arrays crossed the publication
+boundary" (the negative control, exit 1).
+
+Focused run: boundary, frame-codec (every mode) and CPU-passage-ingress tests: **20 passed**. After tightening the
+projection to avoid a self-reference cache on an already source-free descriptor, the boundary tests passed again
+(**2 passed**). Changed Python files compile and `git diff --check` passes. This proves transport/data parity; no native
+visual, build, device or load acceptance is claimed.
+
+Geometry transport remains open for H1. A revision alone cannot key an immutable side record: `DriftLog.admit` keeps
+the revision when capacity grows. Any later transport must account for capacity as well as revision and session
+identity. No geometry protocol, slot sizing, default admission, recovery behavior or renderer change is part of this slice.
+
 ## P3 readiness
 
 What ABI 2 already gives the native core:

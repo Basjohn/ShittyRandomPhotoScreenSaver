@@ -24,7 +24,7 @@ def test_every_published_frame_round_trips_exactly(qt_app, monkeypatch, mode):
         payload = frame_codec.encode(logical)
         back = frame_codec.decode(payload)
         assert repr(back) == repr(logical), mode
-        assert frame_codec.encode(back) == payload        # every field, incl. those repr hides (EB drift sources)
+        assert frame_codec.encode(back) == payload        # every field, including those hidden from repr
         seen.append(len(payload))
         return digest(logical)
 

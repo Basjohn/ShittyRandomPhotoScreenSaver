@@ -13,7 +13,7 @@ is checked against.
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import itertools
 import math
 
@@ -42,7 +42,8 @@ class DriftFamily:
     """One active drift family's geometry. ``revision`` is globally unique; ``rebase_from`` names the revision
     this one continues from after a geometry edit (0: fresh history). ``first_serial`` is the step that began
     this revision. ``capacity`` is the number of geometry rows; ``source`` keeps the float64 arrays for the CPU
-    reference (never mutated)."""
+    reference (never mutated). Canonical logical capture uses ``render_descriptor`` so those arrays remain on the
+    simulation side of both in-process and worker presentation."""
 
     family: str
     revision: int
@@ -52,6 +53,17 @@ class DriftFamily:
     geometry: bytes
     carry: float = 0.0
     source: tuple = field(default=(), repr=False)
+
+    @property
+    def render_descriptor(self) -> DriftFamily:
+        """One source-free descriptor per immutable geometry snapshot; its packed bytes are shared, never copied."""
+        if not self.source:
+            return self
+        descriptor = self.__dict__.get('_render_descriptor')
+        if descriptor is None:
+            descriptor = replace(self, source=())
+            object.__setattr__(self, '_render_descriptor', descriptor)
+        return descriptor
 
 
 def pack_geometry(family: str, geometry) -> bytes:

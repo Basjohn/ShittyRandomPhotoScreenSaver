@@ -272,7 +272,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
      guarantee (an aligned axis, or none), then assert that; no retune under Bubble Temporal Fidelity without it.
    - **P2 phase-boundary audit (8 Nov, Opus 5.5 high; [Native_Core_P2_Phase_Boundary_Audit.md](Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md)):
      verdict: do not make the worker the default until H1 and H2 are fixed. Awaiting the operator's go-ahead for the
-     audit work (nothing started).**
+     audit work is admitted alongside the 9 Nov miscellaneous repairs; keep the order below.**
      **The worker-default change is built and waiting on branch `p2/worker-default`** (pushed to origin; 873b5387 code
      and tests, 3e428413 docs; based on 4248b8ab): the engine worker is the Windows default, `--viz-in-process` /
      `--viz-engine-worker` choose a path explicitly, Linux stays in process (Linux_Plan Phase 4), five tests that relied
@@ -281,8 +281,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
      live-check PCM fix: use its `engine_worker_path(app_args)` in `tools/visualizer_live_check.py`, never
      `ENGINE_WORKER_ARG in app_args`). Any agent may check it out (`git fetch origin; git switch p2/worker-default`).
      **Order** (each step: failing-first test, its negative control, record in the audit doc's resolution section):
-     1. M1 then H1: drop EB's unread `DriftFamily.source` arrays (and per-revision-constant geometry where safe) from
-        the frame, then make an oversized frame impossible or graceful (size-aware slots or a remap; never a silent
+     1. H1: make an oversized frame impossible or graceful (size-aware slots or a remap; never a silent
         fade to in process), proven with non-default and maximum settings for every mode.
      2. H2: the worker inherits the diagnostic flags and logs to its own file; the owner reads `VIS_STOP`'s report.
      3. Merge `p2/worker-default` (worker is the Windows default).
@@ -293,16 +292,14 @@ after the operator's yes on a question card; agents never run load (invisible ch
         to every platform and update `Linux_Plan.md` Phase 4 and the platform tests). No Linux proving step.
      7. M5, L2-L5 and what M3 still lacks.
      8. P3's four decisions (listed last below) before P3's first slice.
-     - [ ] H1: the 1 MiB frame slot overflows for Extruded Bubble at non-default settings (Particles at its schema
-       default range: 1.8 MiB; every control at the top: 17.9 MiB): the mailbox refuses the frame, the worker path
-       fades and drops in process for the run; in process works. Root cause M1.
+     - [ ] H1: the 1 MiB frame slot still overflows for Extruded Bubble at non-default/max settings after the
+       CPU-reference arrays were removed at capture. Admit sufficient capacity on the hidden activation edge;
+       never fade silently to in process. M1 evidence is in the audit's resolution section.
      - [ ] H2: the worker gets no diagnostic flags and logs to a null handler: tick/DSP/device exceptions, `[PERF]`
        and fail-closed reasons reach no log; the owner never reads `VIS_STOP`'s report (the design doc's claim is false).
      - [ ] H3: the worker path has never run on Linux (forkserver on 3.14, POSIX wake path, Pulse capture). Operator,
        8 Nov: it cannot be proven (no Linux machine); assume basic support and make the worker the Linux default too
        (step 6).
-     - [ ] M1: EB ships `DriftFamily.source` CPU-reference arrays (482 KiB) and per-revision-constant geometry in every
-       frame; production never reads `source` (default frame 609 -> 138 KiB, decode 0.56 -> 0.34 ms).
      - [ ] M2: the first configure's fixed 6 s deadline vs ~5 s measured under game60: slow machines would wait ~6 s
        hidden and run in process at startup and after every Settings close.
      - [ ] M3: Spec/Contracts/Guardrails/Index do not describe the engine worker, the slot layout, lifetime or recovery.
@@ -340,6 +337,31 @@ after the operator's yes on a question card; agents never run load (invisible ch
 10. **§6 Shared 3D architecture** and **§7 Visualizer modes** (Reactive Liquid / Melt Pool → Concrete Rain → Usu
    Moonscape, lab-first per §7.0) resume after Expanded Visualizer acceptance and its full-display measurements, under
    the port-readiness rules; if a trigger fires first, the native Vulkan core precedes them.
+
+## 1A. Miscellaneous repair slices (operator, 9 Nov)
+
+These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it.
+Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.7) in a separate checkpoint.
+
+- [ ] **1.0 Rotate:** trace the earlier glyph implementation in Git, restore content rotation wherever the mode
+  supports it (Waveform included, ordinary and fullscreen), and distinguish its glyph from Reset Camera.
+- [ ] **1.1 Mode persistence:** inspect the Settings return path; fix only a directly evidenced cause. Otherwise
+  retain as Awaiting Logs and use the next reported occurrence's trace, without speculative state machinery.
+- [ ] **1.2 Studio saves:** expose Save for the selected preset/Custom slot and Save Camera for its starting view
+  through the canonical file/settings and camera owners; prove installed-root and read-only failure behavior.
+- [ ] **1.3 Camera persistence:** inspect `logs/evidence_chest/logsf158e7bdd4.zip`; keep preset Starting Camera as
+  activation data and Last Known Camera presentation-owned across Settings and normal/fullscreen transitions.
+- [ ] **1.4 Fullscreen controls:** offer the shared Media bar or floating transport glyphs through Fullscreen Mode.
+- [ ] **1.5 Fullscreen metadata:** reuse ordinary Media's text fitting/wrapping for long title/artist/album values.
+- [~] **1.6 Awaiting Validation:** Achievement Pulse counted disabled provider fields as painted capsule rows;
+  replaying the saved payload on Edit entry then changed the canvas. The enabled-row regression is green.
+  Check child placement after Settings/fullscreen return with `--geo`; other families' extent floors are static.
+- [ ] **1.7 Materials (separate reversible slice):** inspect every supplied `assets/temp` comparison; reduce the
+  excessive widget/Settings card density by material while preserving the good volume surfaces, adjust Glass's
+  distortion/inset, and apply themed surfaces throughout Studio with legible controls. Then add Settings Opacity
+  Adjust and Widget Opacity Adjust (-1..1, neutral 0) in Style Overrides through existing semantic owners.
+- [ ] **Awaiting Validation:** after focused proofs, operator checks the changed glyphs, saves in the frozen build,
+  camera/child placement round trips, long fullscreen metadata, controls and material comparisons on native pixels.
 
 ## 2. Awaiting the operator (eyes, ears, hardware, decisions; details stay at the item)
 

@@ -69,13 +69,24 @@ def test_non_pcm_replay_uses_same_body_passage_authority_without_historical_scal
 
 @pytest.mark.parametrize('block', (256, 512, 1024))
 def test_live_equivalent_pcm_drives_zero_minimum_ranges_and_releases_without_shared_scalar(scaled_recording, block):
+    from widgets.spotify_visualizer.extruded_bubble_simulation import ExtrudedBubbleSimulation
+
     settings = {**frozen_visualizer_settings('extruded_bubble'),
         'extruded_bubble_audio_block_size': block,
         'extruded_bubble_large_bubbles': [1, 1], 'extruded_bubble_mid_bubbles': [1, 1],
         'extruded_bubble_collision_scope': 'Off', 'extruded_bubble_drift': [0., 1.],
         'extruded_bubble_drift_chains': [0., .5], 'extruded_bubble_bead_chains': [1., 1.],
         'extruded_bubble_particles': [0., 0.], 'extruded_bubble_sway': 0.}
-    with reanalyzed_bubble_bands(), patch.object(ReplayBeatEngine, 'get_musical_intensity',
+    snapshots = []
+    advance = ExtrudedBubbleSimulation.advance
+
+    def reference_snapshot(sim, *args, **kwargs):
+        snapshot = advance(sim, *args, **kwargs)
+        snapshots.append(snapshot)
+        return snapshot
+
+    with patch.object(ExtrudedBubbleSimulation, 'advance', reference_snapshot), \
+            reanalyzed_bubble_bands(), patch.object(ReplayBeatEngine, 'get_musical_intensity',
             side_effect=AssertionError('shared historical intensity reached EB')):
         frames = replay_clip(scaled_recording, 'extruded_bubble', settings=settings)['logical_series']
     origin = scaled_recording.frames[0].timestamp_us
@@ -91,8 +102,11 @@ def test_live_equivalent_pcm_drives_zero_minimum_ranges_and_releases_without_sha
     from widgets.spotify_visualizer.extruded_bubble_drift_log import MaterialDriftReference
     reference = MaterialDriftReference()
     active_paths = []
-    for frame, feature in zip(frames, scaled_recording.frames):
-        chains = reference.apply(frame.mode_state.drift_families, frame.mode_state.drift_steps).get('chains', b'')
+    assert len(snapshots) == len(frames)
+    for frame, snapshot, feature in zip(frames, snapshots, scaled_recording.frames):
+        # The float64 CPU oracle belongs to the simulation snapshot; publication retains only the GPU inputs.
+        assert snapshot.drift_steps == frame.mode_state.drift_steps
+        chains = reference.apply(snapshot.drift_families, snapshot.drift_steps).get('chains', b'')
         if 7. <= (feature.timestamp_us - origin) / 1e6 < 8. and chains:
             active_paths.append(np.frombuffer(chains, dtype='f4').reshape(-1, 4)[:, :3])
     assert active_paths and max(np.max(np.linalg.norm(paths, axis=-1)) for paths in active_paths) > .01
