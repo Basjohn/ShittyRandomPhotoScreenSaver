@@ -24,7 +24,7 @@ def test_every_theme_yields_readable_studio_chrome(path):
     assert contrast(_rgb(skin["text"]), panel) >= 4.5
     assert contrast(_rgb(skin["accent"]), panel) >= 3.0
     assert contrast(_rgb(skin["focus"]), panel) >= 3.0
-    assert contrast(_rgb(skin["accentText"]), _rgb(skin["accentSoft"])) >= 4.5
+    assert contrast(_rgb(skin["accentText"]), _rgb(skin["accent"])) >= 4.5
     if theme.backdrop.enabled:
         from PySide6.QtGui import QColor
         window = QColor(skin["windowSurface"])
@@ -36,6 +36,36 @@ def test_every_theme_yields_readable_studio_chrome(path):
             composed = tuple(channel * alpha + below * (1 - alpha) for channel, below in zip(panel, base))
             assert contrast(_rgb(skin["text"]), composed) >= 4.5
             assert contrast(_rgb(skin["textDim"]), composed) >= 3.0
+
+
+@pytest.mark.parametrize("parent_alpha", [53, 173])
+@pytest.mark.parametrize("child_alpha", [74, 201])
+def test_panel_passes_its_own_density_to_the_guard_above_the_existing_window(parent_alpha, child_alpha, monkeypatch):
+    from dataclasses import replace
+    import ui.studio.theme as material
+    from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME, NativeBackdropStyle, Rgba
+    # Both opacity recipes and the guard are test-owned here: this boundary
+    # proves composition ownership, independently of any catalogue calibration.
+    theme = replace(DEFAULT_DARK_SETTINGS_THEME,
+                    backdrop=NativeBackdropStyle("glass", Rgba(20, 40, 60, 100)),
+                    colors={**DEFAULT_DARK_SETTINGS_THEME.colors,
+                            "window.dialog_glass": Rgba(18, 36, 54, parent_alpha),
+                            "panel.group.surface": Rgba(30, 60, 90, child_alpha)})
+    monkeypatch.setattr(material, "PANEL_MATERIAL_FLOOR", .43)
+    admitted = []
+    def guard(colour, alpha, backgrounds, inks):
+        admitted.append((alpha, tuple(backgrounds)))
+        return alpha
+    monkeypatch.setattr(material, "_readable_alpha", guard)
+    skin = material.studio_theme(theme)
+    expected = max(.43, theme.color("panel.group.surface").a / 255)
+    assert float(skin["panelAlpha"]) == pytest.approx(expected, abs=.00051)
+    assert admitted[0][0] == expected
+    # The parent is already represented in the guard's actual backdrop poles.
+    window = theme.window_surface()
+    expected_bases = [tuple(channel/255*(window.a/255) + pole*(1-window.a/255)
+                            for channel in (window.r, window.g, window.b)) for pole in (0, 1)]
+    assert admitted[0][1] == tuple(expected_bases)
 
 
 def test_chrome_follows_the_theme_not_hard_coded_colours():

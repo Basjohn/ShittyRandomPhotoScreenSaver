@@ -46,17 +46,41 @@ def contrast(a: RGB, b: RGB) -> float:
     return (la + .05) / (lb + .05)
 
 
+def _ensure_on_surfaces(colour: RGB, backgrounds, minimum: float, light_theme: bool) -> RGB:
+    """Smallest 8-bit hue-preserving ink movement across actual finite surfaces."""
+    def admitted(candidate):
+        return tuple(round(channel*255)/255 for channel in candidate)
+    def quality(candidate):
+        return min(contrast(candidate, surface) for surface in backgrounds)
+    original = admitted(colour)
+    target = minimum + .06  # emitted 8-bit ink and surface-alpha quantization
+    if quality(original) >= target:
+        return original
+    candidates = []
+    best, best_score = original, quality(original)
+    poles = ((0.,0.,0.), (1.,1.,1.)) if light_theme else ((1.,1.,1.), (0.,0.,0.))
+    for pole in poles:
+        for step in range(1, 256):
+            candidate = admitted(_mix(colour, pole, step/255))
+            score = quality(candidate)
+            if score > best_score:
+                best, best_score = candidate, score
+            if score >= target:
+                distance = sum((a-b)**2 for a,b in zip(candidate, original))
+                candidates.append((distance, candidate))
+                break
+    return min(candidates, key=lambda entry: entry[0])[1] if candidates else best
+
+
 def _ensure(colour: RGB, against: RGB, minimum: float, light_theme: bool) -> RGB:
-    """Move ``colour`` toward the readable pole until it reaches ``minimum`` contrast."""
-    pole = (0.0, 0.0, 0.0) if light_theme else (1.0, 1.0, 1.0)
+    """Preserve the existing opaque-palette derivation and quantized headroom."""
+    pole = (0.,0.,0.) if light_theme else (1.,1.,1.)
     out = colour
     for step in range(1, 21):
-        # The emitted palette is 8-bit and the surface solver reserves .03
-        # contrast headroom; validate that same representation before returning.
-        quantized = tuple(round(channel * 255) / 255 for channel in out)
+        quantized = tuple(round(channel*255)/255 for channel in out)
         if contrast(quantized, against) >= minimum + .06:
             return quantized
-        out = _mix(colour, pole, step / 20.0)
+        out = _mix(colour, pole, step/20)
     return out
 
 
@@ -193,17 +217,48 @@ def studio_theme(theme=None) -> dict[str, str]:
                                         (underlay.r / 255.0, underlay.g / 255.0, underlay.b / 255.0)))
         titlebar = _hex(titlebar_colour, titlebar_alpha)
         _panel_colour, panel_alpha = token("panel.group.surface", (60, 60, 60, 120))
-        panel_alpha = max(PANEL_MATERIAL_FLOOR, panel_alpha + window_alpha * (1.0 - panel_alpha))
+        # The retained panel paints above window_surface, which already owns
+        # the window/tint density. Start from this child fill's own alpha only.
+        panel_alpha = max(PANEL_MATERIAL_FLOOR, panel_alpha)
         chrome_bases = [_over(window_colour, window_alpha, (pole, pole, pole))
                         for pole in (0.0, 1.0)]
-        panel_alpha = _readable_alpha(panel, panel_alpha, chrome_bases,
-            ((text, 4.5), (dim, 3.0), (accent, 3.0), (focus, 3.0)))
+        # Resolve ink on intended translucent stacks before considering any
+        # body-only density bound. Decorative/control accent never plates a panel.
+        def projected_bases(colour, alpha):
+            return [_over(colour, alpha, base) for base in chrome_bases]
+        def own_alpha(role):
+            return max(PANEL_MATERIAL_FLOOR, token(role, (60,60,60,120))[1])
+        panel_bases = projected_bases(panel, panel_alpha)
+        header_bases = projected_bases(header, own_alpha("window.titlebar.surface"))
+        raised_bases = projected_bases(raised, own_alpha("control.button.surface"))
+        input_bases = projected_bases(input_surface, own_alpha("control.input.surface"))
+        ink_bases = panel_bases + header_bases + raised_bases + input_bases
+        solid_ink_bases = (panel, header, raised, input_surface, accent_soft)
+        text = _ensure_on_surfaces(text, (*ink_bases, *solid_ink_bases), 4.5, light)
+        dim = _ensure_on_surfaces(dim, (*ink_bases, *solid_ink_bases), 3.0, light)
+        panel_alpha = _readable_alpha(panel, panel_alpha, chrome_bases, ((text,4.5), (dim,3.0)))
+        panel_bases = projected_bases(panel, panel_alpha)
+        ink_bases = panel_bases + header_bases + raised_bases + input_bases
+        accent = _ensure_on_surfaces(accent, (*ink_bases, *solid_ink_bases), 4.5, light)
+        focus = _ensure_on_surfaces(focus, (*ink_bases, *solid_ink_bases), 3.0, light)
+        outline = _ensure_on_surfaces(outline, (*panel_bases, panel), 1.6, light)
+        well_text = _ensure_on_surfaces(well_text, (*input_bases, well), 4.5, well_light)
+        well_dim = _ensure_on_surfaces(well_dim, (*input_bases, well), 3.0, well_light)
         titlebar = _hex(titlebar_colour, _readable_alpha(titlebar_colour, titlebar_alpha,
             chrome_bases, ((title_text, 4.5),)))
     else:
         window_surface = _hex(bg)
         titlebar = _hex(header)
         panel_alpha = 1.0
+    if translucent:
+        accent_text = max((text, (1.,1.,1.), (0.,0.,0.)), key=lambda ink: contrast(ink, accent))
+        accent_text = _ensure(accent_text, accent, 4.5, _luminance(accent) > .5)
+        trace_bases = (*panel_bases, *input_bases, well)
+        trace2 = _ensure_on_surfaces(_mix(text, panel, .25), trace_bases, 3.0, well_light)
+        well_trace2 = trace2
+    else:
+        trace2 = _mix(text, panel, .25)
+        well_trace2 = _ensure(trace2, well, 3.0, well_light)
     outer_border = token("chrome.outer_border", (255, 255, 255, 255))
     shadow = theme.shadow("panel.group")
     shadow_rgb = (shadow.color.r / 255.0, shadow.color.g / 255.0, shadow.color.b / 255.0)
@@ -235,10 +290,10 @@ def studio_theme(theme=None) -> dict[str, str]:
         "track": _hex(track), "text": _hex(text), "textDim": _hex(dim), "textDisabled": _hex(disabled),
         "input": chrome_surface("control.input.surface", input_surface), "inputText": _hex(_ensure(text, input_surface, 4.5, light)),
         "focus": _hex(focus), "danger": _hex(danger), "light": "true" if light else "false",
-        "trace1": _hex(accent), "trace2": _hex(_mix(text, panel, .25)), "trace3": _hex(focus),
+        "trace1": _hex(accent), "trace2": _hex(trace2), "trace3": _hex(focus),
         "well": chrome_surface("control.input.surface", well, ((well_text, 4.5), (well_dim, 3.0))), "wellText": _hex(well_text), "wellDim": _hex(well_dim),
         "wellTrace1": _hex(_ensure(accent, well, 3.0, well_light)),
-        "wellTrace2": _hex(_ensure(_mix(text, panel, .25), well, 3.0, well_light)),
+        "wellTrace2": _hex(well_trace2),
         "wellTrace3": _hex(_ensure(focus, well, 3.0, well_light)),
     }
 

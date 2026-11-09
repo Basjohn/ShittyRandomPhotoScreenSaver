@@ -125,7 +125,7 @@ def _surface(tint, colors, stack, pole):
 
 
 def _correct_ink(ink, locations):
-    """Smallest alpha increase, then hue-preserving pole mix; never alter fills."""
+    """Raise alpha, then correct contrast without reversing authored ink polarity."""
     def quality(candidate):
         return min(contrast_ratio(composite_over(candidate, surface), surface) / bar
                    for surface, bar in locations)
@@ -142,32 +142,35 @@ def _correct_ink(ink, locations):
             else:
                 low = middle + 1
         return Rgba(ink.r, ink.g, ink.b, low)
-    # Test both hue-preserving paths. Encoded midtone ink alone cannot identify
-    # its intended polarity: a light surface may require the darker path.
-    # At most 512 8-bit candidates, only once per theme/override cache epoch.
-    # Precompute surface luminance; opaque candidate checks need no compositing.
+
+    # The same text can sit above both black and white desktops. An unconstrained
+    # worst-case solver can turn authored white-on-dark ink into a mid-grey (or
+    # dark ink into light grey) just to balance those extreme samples. Preserve
+    # whichever polarity the authored ink already supports most strongly.
     luminances = [(relative_luminance(surface), bar) for surface, bar in locations]
+    ink_luminance = relative_luminance(opaque)
+    reference_luminance = max(
+        luminances,
+        key=lambda entry: (max(ink_luminance, entry[0]) + .05)
+                          / (min(ink_luminance, entry[0]) + .05),
+    )[0]
+    pole = 255 if ink_luminance >= reference_luminance else 0
     def opaque_quality(candidate):
         light = relative_luminance(candidate)
         return min(((max(light, background) + .05) / (min(light, background) + .05)) / bar
                    for background, bar in luminances)
-    passing = []
-    best, best_quality = opaque, opaque_quality(opaque)
-    for pole in (0, 255):
-        for amount in range(1, 256):
-            candidate = Rgba(*(round(channel + (pole - channel) * amount / 255)
-                               for channel in (ink.r, ink.g, ink.b)))
-            score = opaque_quality(candidate)
-            if score > best_quality:
-                best, best_quality = candidate, score
-            if score >= 1.0:
-                distance = sum((channel - source) ** 2 for channel, source in
-                               zip((candidate.r, candidate.g, candidate.b), (ink.r, ink.g, ink.b)))
-                passing.append((distance, candidate))
-                break
-    # If neither path can satisfy all locations, expose the best analytic ink;
-    # never restore an opaque panel to hide the material or claim acceptance.
-    return min(passing, key=lambda entry: entry[0])[1] if passing else best
+
+    # Retain useful corrections for truly light/dark surfaces, without ever
+    # crossing to the opposite foreground polarity. No surface fills are edited.
+    for amount in range(1, 256):
+        candidate = Rgba(*(round(channel + (pole - channel) * amount / 255)
+                           for channel in (ink.r, ink.g, ink.b)))
+        if opaque_quality(candidate) >= 1.0:
+            return candidate
+    # If the requested contrast cannot coexist with the theme's ink polarity,
+    # return its authored RGB at full alpha. The background owner, not an
+    # unintended text recolouring, must resolve any remaining contrast failure.
+    return opaque
 
 
 def project_settings_composition(theme, adjustment):

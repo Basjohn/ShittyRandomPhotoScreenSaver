@@ -64,7 +64,12 @@ reuses Settings' owners rather than restating them:
   material uses the shared `native_backdrop_request()` (untinted Accent state 3) on the existing window.
   `SettingsThemeSpec.window_surface()` combines the calibrated material tint and semantic shell once in Qt;
   Glass has no material tint. The title bar, panels, headers, tabs, tools, inputs and instrument wells use semantic
-  surfaces. A style-time guard checks their inks over the composed window and desktop poles; scene preview overlays
+  surfaces. A panel starts from its own projected alpha and the Studio floor; its already-painted window parent's
+  alpha is not folded into it again. Runtime inks are minimally mixed toward a readable pole, preserving hue,
+  against their actual panel/header/raised/input/well stacks and opaque checked fills. Accent/focus do not raise the
+  whole panel's density; only an unavoidable body-ink bound may require additional child density. Toggle glyph ink
+  is checked on its accent fill; checked-button text is checked on the separate selected fill. Trace inks are checked
+  on the composed instrument well. All of this runs at the existing style projection edge. Scene preview overlays
   may retain a cheap opaque backing. The viewport and authored scene colours stay separate. Alpha is reserved before
   native creation; Normal still paints opaque. The existing Settings-theme subscription updates QML tokens and the
   native request on that same window. Enabled-material changes require only Qt tint/surface updates; Off removes

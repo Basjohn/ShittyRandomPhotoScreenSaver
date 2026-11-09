@@ -438,6 +438,11 @@ def test_chrome_paints_once_and_idles(studio):
     expected = np.array([fill.redF()*255*alpha, fill.greenF()*255*alpha,
                          fill.blueF()*255*alpha, 255*alpha]) + background*(1-alpha)
     assert np.max(np.abs(painted_pixel-expected)) <= 2
+    # A second parent-alpha contribution would thicken this retained panel.
+    duplicated_alpha = alpha + background[3]/255*(1-alpha)
+    duplicate = np.array([fill.redF()*255*duplicated_alpha, fill.greenF()*255*duplicated_alpha,
+                          fill.blueF()*255*duplicated_alpha, 255*duplicated_alpha]) + background*(1-duplicated_alpha)
+    assert np.max(np.abs(painted_pixel-duplicate)) > 3
     frame.setProperty("surfaceColor", fill)
     frame.setProperty("surfaceTopColor", top)
     surface.pump(2)
