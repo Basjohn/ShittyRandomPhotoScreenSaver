@@ -369,6 +369,10 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
   Adjust and Widget Opacity Adjust (-1..1, neutral 0) in Style Overrides through existing semantic owners.
   Correct the composed-stack legibility guard so underlying layers do not each demand the same text contrast and
   defeat the transparency improvement; prove visible relief and readable text at its actual painted surface.
+  Actual-image validation uses the operator's `uwyTD.jpg` light wallpaper and `Usu_Underwater_Lab_1440p.png` dark
+  wallpaper under `C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET`. Migrate the proven native untinted-blur /
+  Qt semantic-tint composition through one owner across Settings, Studio and Foundry; repeat the four-case native
+  image matrix after focused off-screen checks. The old tinted Accent alpha sweep provided no visible light relief.
 - [~] **1.8 Awaiting Validation:** operator-check Gmail and Reddit/Reddit2 column gestures: top grips reorder;
   solid-span endpoints change start/width and truncation. Retained-QML proof covers transformed opposite-edge
   stability, all-row updates, collision policy, Save/Cancel, Undo, slots and fresh-profile hydration.
@@ -377,6 +381,9 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
   dark/light theme/background combinations retain outside-radius material pixels at 150% DPI. Keep a separate
   reversible fix and repeat the four-case corner/border/shadow gate before claiming improvement. Reproducer and
   evidence: `tools/settings_native_corners.py`; `Docs/Architecture/Settings_Theme_Architecture.md`.
+  The same defect reproduces on both operator wallpapers. An inset native-child blur candidate was rejected by
+  Windows before pixels; no candidate product edge/child code ships. This needs a viable rounded composition host,
+  including input, resize/DPI, activation and lifetime proof; material transparency alone cannot close it.
 - [ ] **Side defect:** Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1012`)
   and a test requires it. Replace that tool override with explicit CLI/sidecar admission when opening its owner.
 - [ ] **Awaiting Validation:** after focused proofs, operator checks the changed glyphs, saves in the frozen build,
