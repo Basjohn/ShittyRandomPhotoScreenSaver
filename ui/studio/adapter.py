@@ -49,6 +49,7 @@ class RenderCard:
     quad_vao: int                             # a unit quad for item-space composition
     extent: tuple[float, float] | None = None # the world extent presented (letterboxed), when framed
     style: tuple = ()                         # the framing's (key, value) presentation style (e.g. card chrome)
+    content_rotation_quarters: int = 0        # preview presentation only; never an authored/camera value
 
 
 @dataclass(frozen=True)

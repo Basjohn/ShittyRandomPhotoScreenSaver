@@ -344,6 +344,10 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
   including the rectangle/quarter-turn glyph against Reset Camera. Actual renderer pixels at non-square extents,
   prepared Scene3D resources, per-mode Save/Cancel and all Studio frame builders have focused proof; the physical
   stage and camera remain fixed. Extruded Spectrum retains its frameless overflow policy.
+- [~] **1.0b Awaiting Validation:** operator-check Studio's Rotate control (every mode except Sphere), upright
+  handle labels and rotated brush/drag feel. Off-screen proofs cover non-square production pixels, input transforms,
+  preparation barriers and canonical saves. Preview orientation is per-open state, separate from camera/artwork
+  and desktop CUSTOM orientation; Copy Frame captures it.
 - [ ] **1.1 Awaiting Logs:** no direct mode-switch cause in the supplied archive. On recurrence, correlate the
   reported time, prior/result mode, selected preset and runtime generation with the existing mode-transition owner
   and frame trace; distinguish explicit selection, enabled-mode normalization and Settings restoration first.
@@ -365,6 +369,8 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
   excessive widget/Settings card density by material while preserving the good volume surfaces, adjust Glass's
   distortion/inset, and apply themed surfaces throughout Studio with legible controls. Then add Settings Opacity
   Adjust and Widget Opacity Adjust (-1..1, neutral 0) in Style Overrides through existing semantic owners.
+  Correct the composed-stack legibility guard so underlying layers do not each demand the same text contrast and
+  defeat the transparency improvement; prove visible relief and readable text at its actual painted surface.
 - [~] **1.8 Awaiting Validation:** operator-check Gmail and Reddit/Reddit2 column gestures: top grips reorder;
   solid-span endpoints change start/width and truncation. Retained-QML proof covers transformed opposite-edge
   stability, all-row updates, collision policy, Save/Cancel, Undo, slots and fresh-profile hydration.
@@ -422,10 +428,10 @@ answers.
 
 ## 3. Lead and agents: active, paused and queued work
 
-**Agents (operator, 6 Nov evening):** at most one Opus 5.5 high and one Opus 5.5 medium subagent at once, with the
-lead as reviewer/orchestrator. Agents that already hold unfinished work may exceed this until they finish (their
-context is valuable). Slots need not always be full: when the right agent is not free, queue the item here. The
-one-time audit and review agents (6-7 Nov) are done; the cap applies again once no existing agent holds loaded work.
+**Agents (operator, 9 Nov):** Sol 6.1+ Extra High is orchestrator and final reviewer; all agent results pass that
+review before acceptance. Reuse loaded agents for useful independent slices, with Sol 6.1+ High admitted alongside
+the audit/native-worker work. Default focused auditor is Terra 6.1+ High. Wait for agent reports without status polling;
+new visual tests render off-screen whenever the tested boundary permits it.
 
 **Merged 7 Nov (lead fix audit: every regression bar fails on its pre-fix code for the reported reason):** R-174
 cross-mode preset write (fails closed and logs every preset-file write), the Studio controller leak, drag controls

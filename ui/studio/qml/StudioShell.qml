@@ -2022,7 +2022,8 @@ Rectangle {
                         id: busyChip
                         objectName: "previewBusy"
                         property string shownText: ""
-                        x: 10; y: toolbarLeft.y + toolbarLeft.height + 6; z: 2
+                        x: 10; y: Math.max(toolbarLeft.y + toolbarLeft.height,
+                                          toolbarRightBacking.y + toolbarRightBacking.height) + 6; z: 2
                         width: busyText.implicitWidth + 20; height: busyText.implicitHeight + 10
                         radius: 6; color: shell.opaque(shell.cPanel)
                         border.width: shell.cardBorder; border.color: shell.cOutlineSoft
@@ -2035,13 +2036,18 @@ Rectangle {
                                color: shell.cText; font.pixelSize: shell.fontBase - 1 }
                     }
                     Rectangle {
+                        id: toolbarRightBacking
                         objectName: "toolbarBacking"
-                        anchors.right: parent.right; anchors.rightMargin: 10; y: 8; z: 2
+                        anchors.right: parent.right; anchors.rightMargin: 10
+                        y: toolbarLeft.width + width + 30 > parent.width
+                           ? toolbarLeft.y + toolbarLeft.height + 6 : 8
+                        z: 2
                         width: toolbarRight.width + 8; height: toolbarRight.height + 8
                         radius: 8; color: shell.opaque(shell.cPanel)
                         border.width: shell.cardBorder; border.color: shell.cOutlineSoft
                         Row {
                             id: toolbarRight
+                            objectName: "viewToolbar"
                             x: 4; y: 4
                             spacing: 8; z: 2
                             Repeater {
@@ -2062,6 +2068,12 @@ Rectangle {
                                            tip: "Keep View: save the previewed lens (FOV); the orbit saves only when the "
                                                 + "preset's camera checkbox is on; dolly and pan stay previews"
                                            onClicked: studio.keepView() }
+                            StudioButton { icon: "rotate-content"; iconSize: 20; width: 36
+                                           objectName: "rotateContentButton"; visible: studio.canRotateContent
+                                           checked: studio.contentRotationQuarters !== 0
+                                           tip: "Rotate preview clockwise 90° (currently "
+                                                + studio.contentRotationQuarters * 90 + "°); camera and saves are unchanged"
+                                           onClicked: studio.rotateContent() }
                             Rectangle { width: 1; height: 24; color: shell.cOutlineSoft; anchors.verticalCenter: parent.verticalCenter }
                             StudioButton { icon: shell.overlaysHidden ? "eye-off" : "eye"; iconSize: 20; width: 36
                                            objectName: "overlaysButton"; visible: shell.caps.handles === true
@@ -2108,6 +2120,9 @@ Rectangle {
                         property real frameY: 0
                         property real frameWidth: width
                         property real frameHeight: height
+                        readonly property bool contentTurned: studio.contentRotationQuarters % 2 !== 0
+                        readonly property real logicalFrameWidth: contentTurned ? frameHeight : frameWidth
+                        readonly property real logicalFrameHeight: contentTurned ? frameWidth : frameHeight
                         Rectangle {
                             x: viewportSlot.frameX - 1; y: viewportSlot.frameY - 1
                             width: viewportSlot.frameWidth + 2; height: viewportSlot.frameHeight + 2
@@ -2153,8 +2168,10 @@ Rectangle {
                             id: handleLayer
                             objectName: "handleLayer"
                             visible: shell.caps.handles === true && !shell.overlaysHidden
-                            x: viewportSlot.frameX; y: viewportSlot.frameY
-                            width: viewportSlot.frameWidth; height: viewportSlot.frameHeight
+                            x: viewportSlot.frameX + (viewportSlot.frameWidth - width) / 2
+                            y: viewportSlot.frameY + (viewportSlot.frameHeight - height) / 2
+                            width: viewportSlot.logicalFrameWidth; height: viewportSlot.logicalFrameHeight
+                            rotation: studio.contentRotationQuarters * 90
                             readonly property var outline: studio.handles.outline || []
                             readonly property var items: studio.handles.handles || []
                             Canvas {
@@ -2244,6 +2261,8 @@ Rectangle {
                                         rotation: 0
                                     }
                                     Rectangle {      // label (live value while hovered / dragged)
+                                        objectName: "sceneHandleLabel"
+                                        rotation: -studio.contentRotationQuarters * 90
                                         x: modelData.id === "width" ? -width - 4 : (modelData.axis === "x" ? 50 : (handle.combined ? 30 : 26))
                                         y: modelData.axis === "x" ? 2 : (handle.combined ? 22 : -10)
                                         opacity: hMouse.containsMouse || handle.dragging ? 1 : .8
@@ -2252,8 +2271,10 @@ Rectangle {
                                         Text { id: hText; anchors.centerIn: parent; color: "white"; font.pixelSize: shell.fontBase - 2
                                                text: modelData.label + (hMouse.containsMouse || handle.dragging
                                                      ? (handle.combined
-                                                        ? "  ↔ " + Number(shell.endpointValue(modelData.property, modelData.endpoint)).toFixed(2)
-                                                          + "  ↕ " + Number(shell.endpointValue(modelData.propertyY, modelData.endpoint)).toFixed(2)
+                                                        ? (viewportSlot.contentTurned ? "  ↕ " : "  ↔ ")
+                                                          + Number(shell.endpointValue(modelData.property, modelData.endpoint)).toFixed(2)
+                                                          + (viewportSlot.contentTurned ? "  ↔ " : "  ↕ ")
+                                                          + Number(shell.endpointValue(modelData.propertyY, modelData.endpoint)).toFixed(2)
                                                         : "  " + Number(shell.endpointValue(modelData.property, modelData.endpoint)).toFixed(3))
                                                      : "") }
                                     }
@@ -2264,7 +2285,8 @@ Rectangle {
                                         hoverEnabled: true
                                         preventStealing: true
                                         cursorShape: handle.combined ? Qt.SizeAllCursor
-                                                     : (modelData.axis === "x" ? Qt.SizeHorCursor : Qt.SizeVerCursor)
+                                                     : ((modelData.axis === "x") !== viewportSlot.contentTurned
+                                                        ? Qt.SizeHorCursor : Qt.SizeVerCursor)
                                         property real startValue: 0
                                         property real startValueY: 0
                                         property real startX: 0
@@ -2312,8 +2334,10 @@ Rectangle {
                             id: brushLayer
                             objectName: "brushLayer"
                             visible: shell.caps.brush === true && studio.brushState.active === true
-                            x: viewportSlot.frameX; y: viewportSlot.frameY
-                            width: viewportSlot.frameWidth; height: viewportSlot.frameHeight
+                            x: viewportSlot.frameX + (viewportSlot.frameWidth - width) / 2
+                            y: viewportSlot.frameY + (viewportSlot.frameHeight - height) / 2
+                            width: viewportSlot.logicalFrameWidth; height: viewportSlot.logicalFrameHeight
+                            rotation: studio.contentRotationQuarters * 90
                             readonly property var rings: studio.brushCursor
                             Canvas {
                                 id: brushCanvas
@@ -2363,7 +2387,8 @@ Rectangle {
                             id: brushPanel
                             objectName: "brushPanel"
                             visible: brushLayer.visible
-                            x: 10; y: 56; z: 3
+                            x: 10; y: Math.max(toolbarLeft.y + toolbarLeft.height,
+                                              toolbarRightBacking.y + toolbarRightBacking.height) + 6; z: 3
                             width: 286; height: brushColumn.implicitHeight + 20
                             radius: 8; color: shell.opaque(shell.cPanel)
                             border.width: shell.cardBorder; border.color: shell.cOutlineSoft

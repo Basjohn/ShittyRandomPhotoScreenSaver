@@ -133,6 +133,7 @@ class StudioRenderNode(QSGRenderNode):
         self._logical_size = (0.0, 0.0)
         self._extent: tuple[float, float] | None = None
         self._style: tuple = ()
+        self._content_rotation_quarters = 0
         self._prepared = False
         self._last_error = ""
         self._released = False
@@ -140,19 +141,26 @@ class StudioRenderNode(QSGRenderNode):
         self._snapshot_job = None
         self._snapshot_renderer: Any = None
         self._snapshot_prepared = False
+        self._snapshot_rotation_quarters = 0
         self._snapshot_target = _SnapshotTarget()
 
     # Sync phase (GUI blocked) -------------------------------------------------
     def synchronize(self, frame: Any, serial: int, logical_size: tuple[float, float],
-                    extent: tuple[float, float] | None = None, style: tuple = ()) -> None:
+                    extent: tuple[float, float] | None = None, style: tuple = (), content_rotation_quarters: int = 0) -> None:
         self._extent = extent
         self._style = style
+        if self._content_rotation_quarters != content_rotation_quarters:
+            self._prepared = False       # prepare the oriented composite/target before the visible draw
+        self._content_rotation_quarters = content_rotation_quarters
         self._frame = frame
         self._frame_serial = serial
         self._logical_size = (max(0.0, float(logical_size[0])), max(0.0, float(logical_size[1])))
 
     def take_snapshot_job(self, job) -> None:
         if job is not None and self._snapshot_job is None:
+            if self._snapshot_rotation_quarters != job[-1]:
+                self._snapshot_prepared = False
+                self._snapshot_rotation_quarters = job[-1]
             self._snapshot_job = job
 
     @property
@@ -214,7 +222,8 @@ class StudioRenderNode(QSGRenderNode):
                 self._renderer = self._factory()
             card = RenderCard(viewport=viewport, logical_size=self._logical_size,
                               matrix_values=tuple(float(v) for v in matrix.data()),
-                              quad_vao=self._quad.ensure(), extent=self._extent, style=self._style)
+                              quad_vao=self._quad.ensure(), extent=self._extent, style=self._style,
+                              content_rotation_quarters=self._content_rotation_quarters)
             inherited = InheritedGlState.capture_render_host()
             try:
                 gl.glEnable(gl.GL_BLEND)
@@ -254,7 +263,7 @@ class StudioRenderNode(QSGRenderNode):
 
     def _render_snapshot(self) -> None:
         """One requested snapshot: second renderer, private framebuffer, one small readback."""
-        key, frame, width, height, logical, extent, style = self._snapshot_job
+        key, frame, width, height, logical, extent, style, quarters = self._snapshot_job
         from rendering.quick.visualizer.gl_state import InheritedGlState
         inherited = InheritedGlState.capture_render_host()
         prior_draw = _int_state(gl.GL_DRAW_FRAMEBUFFER_BINDING)
@@ -266,7 +275,7 @@ class StudioRenderNode(QSGRenderNode):
             # Item pixels (y down) -> clip space for a target exactly the item's size.
             matrix = (2.0 / lw, 0.0, 0.0, 0.0, 0.0, -2.0 / lh, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0)
             card = RenderCard(viewport=(0, 0, width, height), logical_size=(lw, lh), matrix_values=matrix,
-                              quad_vao=self._quad.ensure(), extent=extent, style=style)
+                              quad_vao=self._quad.ensure(), extent=extent, style=style, content_rotation_quarters=quarters)
             fbo = self._snapshot_target.ensure(width, height)
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
             gl.glViewport(0, 0, width, height)
@@ -343,6 +352,7 @@ class StudioViewportItem(QQuickItem):
         self._base_extent: tuple[float, float] | None = None
         self._fill = False
         self._slot_size = (0.0, 0.0)
+        self.content_rotation_quarters = 0
         self._style: tuple = ()
         self._bound_window: QQuickWindow | None = None
         self._snapshot_jobs: list = []
@@ -355,6 +365,11 @@ class StudioViewportItem(QQuickItem):
         self._bind_window(self.window())       # constructed inside a window: windowChanged already fired
 
     # GUI thread ------------------------------------------------------------------
+    def set_content_rotation(self, quarters: int) -> None:
+        if self.content_rotation_quarters != quarters:
+            self.content_rotation_quarters = quarters
+            self.update()
+
     def set_frame(self, frame: Any) -> int:
         self._frame = frame
         self._serial += 1
@@ -362,10 +377,11 @@ class StudioViewportItem(QQuickItem):
         return self._serial
 
     def request_snapshot(self, key: str, frame: Any, size: tuple[int, int], logical: tuple[float, float],
-                         extent: tuple[float, float] | None, style: tuple = ()) -> None:
+                         extent: tuple[float, float] | None, style: tuple = (), *, content_rotation_quarters: int = 0) -> None:
         """Render ``frame`` once into a ``size`` pixel image (``logical`` item size) on the render thread;
         the result arrives as ``snapshotReady``. Requests are served one per frame, in order."""
-        self._snapshot_jobs.append((key, frame, int(size[0]), int(size[1]), logical, extent, tuple(style)))
+        self._snapshot_jobs.append((key, frame, int(size[0]), int(size[1]), logical, extent, tuple(style),
+                                    content_rotation_quarters))
         self.update()
 
     @Slot()
@@ -442,7 +458,8 @@ class StudioViewportItem(QQuickItem):
 
     def updatePaintNode(self, old_node: QSGNode | None, _data: QQuickItem.UpdatePaintNodeData) -> QSGNode:
         node = old_node if isinstance(old_node, StudioRenderNode) else StudioRenderNode(self._factory, self)
-        node.synchronize(self._frame, self._serial, (self.width(), self.height()), self._extent, self._style)
+        node.synchronize(self._frame, self._serial, (self.width(), self.height()), self._extent, self._style,
+                         self.content_rotation_quarters)
         if self._snapshot_jobs and not node.snapshot_busy:
             node.take_snapshot_job(self._snapshot_jobs.pop(0))
         with self._lock:

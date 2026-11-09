@@ -873,10 +873,14 @@ aspect, import and native compatibility contract. This changes no Bubble audio o
 A Visualizer mode with a registered Studio adapter (`ui/studio/registry.py`) is edited in the reusable in-process
 Qt Quick Studio opened from its Custom body. The Studio previews the mode's production logical owner through its
 production renderer (own instances, never the live visualizer's), edits canonical settings through one typed session
-and saves only through Settings' own Custom save path. Settings stays alive and is concealed only after the Studio's
+and saves through Settings' canonical preset/Custom authority. Settings stays alive and is concealed only after the Studio's
 first frame; every exit path reveals and refreshes the same Settings window. The framework is mode-neutral; a mode
 contributes only an adapter. A mode whose controls are all Studio-edited shows only its preset row and the Studio
 launcher in Settings. `Docs/Reference/Visualizer_Studio.md` owns the contract.
+
+Studio Rotate follows production capability admission (all current modes except Sphere). It turns the preview and
+its editing coordinates through the shared render contract, independently of camera/artwork and desktop CUSTOM
+state; reopening starts at zero. Copy Frame includes the preview orientation.
 
 ## Visualizer preset catalogue ownership
 

@@ -134,6 +134,7 @@ class StudioBridge(QObject):
     themeChanged = Signal()
     closeRequested = Signal()
     framingChanged = Signal()
+    contentRotationChanged = Signal()
     measurementsChanged = Signal()
     responseChanged = Signal()
     busyChanged = Signal()
@@ -308,6 +309,19 @@ class StudioBridge(QObject):
         return self._c.capabilities.as_map()
 
     capabilities = Property("QVariantMap", _capabilities, constant=True)
+
+    def _can_rotate_content(self) -> bool:
+        from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+        return self._c.capabilities.viewport and get_visualizer_presentation_policy(
+            self._c.adapter.mode_id).content_rotation_capable
+
+    canRotateContent = Property(bool, _can_rotate_content, constant=True)
+    contentRotationQuarters = Property(int, lambda self: self._c.content_rotation_quarters,
+                                       notify=contentRotationChanged)
+
+    @Slot()
+    def rotateContent(self) -> None:
+        self._c.rotate_content()
 
     def _mode_id(self) -> str:
         return self._c.adapter.mode_id
@@ -1355,6 +1369,7 @@ class StudioController(QObject):
         self.state = "idle"           # idle -> opening -> presented -> closed
         self._eval_dirty = True
         self._pose: dict[str, float] = {}
+        self.content_rotation_quarters = 0
         self._unsubscribe = None
         self._clip_jobs: dict[str, Any] = {}
         self._clip_analysis: dict[str, str] = {}   # clip id -> the analysis values its loaded inputs were made under
@@ -1767,7 +1782,7 @@ class StudioController(QObject):
                 if callable(spatial):
                     # A mode whose logical step reads the card's world extent (Bubble's domain) is evaluated at
                     # the extent actually presented.
-                    spatial(self.presented_extent())
+                    spatial(self.logical_presented_extent())
                 playing = getattr(self.evaluator, "set_playing", None)
                 if callable(playing):
                     # While playing, a change whose exact replay would chase the moving instant restarts the pass.
@@ -1865,7 +1880,9 @@ class StudioController(QObject):
         """(presented-frame size, the live card's world extent, the framing's card style) of the viewport: what
         handles and the brush project through."""
         framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
-        return ((self.viewport.width(), self.viewport.height()), self.presented_extent(),
+        from widgets.spotify_visualizer.presentation_orientation import oriented_size
+        return (oriented_size((self.viewport.width(), self.viewport.height()), self.content_rotation_quarters),
+                self.logical_presented_extent(),
                 framing.style if framing else ())
 
     def brush_scene(self):
@@ -1917,7 +1934,8 @@ class StudioController(QObject):
         self.viewport.request_snapshot(self._copy_key, self.last_frame,
                                        (max(1, int(width * ratio)), max(1, int(height * ratio))),
                                        (float(width), float(height)), self.presented_extent(),
-                                       framing.style if framing else ())
+                                       framing.style if framing else (),
+                                       content_rotation_quarters=self.content_rotation_quarters)
         if self.surface is not None:
             self.surface.request_frame()
 
@@ -1938,6 +1956,27 @@ class StudioController(QObject):
             return self.viewport.extent
         framing = next((f for f in self.framings if f.id == getattr(self.bridge, "framingId", "")), None)
         return framing.extent if framing else None
+
+    def logical_presented_extent(self) -> tuple[float, float] | None:
+        from widgets.spotify_visualizer.presentation_orientation import oriented_size
+        extent = self.presented_extent()
+        return oriented_size(extent, self.content_rotation_quarters) if extent is not None else None
+
+    def rotate_content(self) -> None:
+        if self.bridge is None or self.viewport is None or not self.bridge.canRotateContent:
+            return
+        if self.session.gesture_active or (self.bridge.brush is not None and self.bridge.brush.painting):
+            self.bridge.notify("Finish the current edit before rotating the preview")
+            return
+        from widgets.spotify_visualizer.presentation_orientation import rotate_quarters_clockwise
+        self.content_rotation_quarters = rotate_quarters_clockwise(self.content_rotation_quarters)
+        self.viewport.set_content_rotation(self.content_rotation_quarters)
+        self.bridge.contentRotationChanged.emit()
+        if self.bridge.brush is not None:
+            self.bridge.brush.hover(None)
+            self.bridge.brushCursorChanged.emit()
+        self._invalidate()
+        self.refresh_handles()
 
     def select_framing(self, framing_id: str) -> None:
         framing = next((f for f in self.framings if f.id == framing_id), None)

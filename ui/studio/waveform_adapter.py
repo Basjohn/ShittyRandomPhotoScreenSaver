@@ -978,19 +978,17 @@ class WaveformStudioRenderer:
 
         Same resolver the runtime uses, so ``framed_aperture_scale`` (lens aperture, edge-resize
         reveal/crop) is production's. Card chrome (border/inset) is not drawn by the Studio."""
-        key = (card.logical_size, card.extent, card.style)
+        key = (card.logical_size, card.extent, card.style, card.content_rotation_quarters)
         if key != self._presentation_key:
-            self._presentation = studio_presentation(card.logical_size, card.extent, card.style)
+            from ui.studio.framed import presentation
+            self._presentation = presentation(MODE, card.logical_size, card.extent, card.style,
+                                               content_rotation_quarters=card.content_rotation_quarters)
             self._presentation_key = key
         return self._presentation
 
     def _frame(self, card: RenderCard, state):
-        presentation = self._resolved_presentation(card)
-        return SimpleNamespace(snapshot=SimpleNamespace(logical=SimpleNamespace(mode_state=state),
-                                                        presentation=presentation),
-                               viewport=card.viewport, logical_size=card.logical_size,
-                               matrix_values=card.matrix_values, quad_vao=card.quad_vao,
-                               content_rotation_quarters=0, scene_output_rotation=0, scene_output_viewport=None)
+        from ui.studio.framed import render_frame
+        return render_frame(card, state, self._resolved_presentation(card))
 
     def _preview_layers(self, card: RenderCard) -> None:
         """Studio-only layer omission for rendered cards (``preview_hidden`` in the card style); the live

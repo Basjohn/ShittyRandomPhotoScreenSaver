@@ -93,11 +93,18 @@ reuses Settings' owners rather than restating them:
 An adapter supplies `schema()`, `scene_objects(values)`, `create_evaluator()` and `create_renderer()`; everything else
 is optional and defaults to "not offered":
 
-Studio preview frames explicitly declare zero CUSTOM content rotation (`content_rotation_quarters=0`,
-`scene_output_rotation=0`, `scene_output_viewport=None`). The Studio's camera authoring stays independent of desktop
-layout orientation. Adapters using `QuickVisualizerRenderFrame` receive these values from its canonical fields;
-the lightweight Waveform and shared Quick-mode frame builders declare the same fields before calling production
-preparation/rendering. Missing render-frame members are contract errors, never implicit runtime substitutions.
+The viewport's Rotate control advances content clockwise by one quarter-turn in every mode whose production
+presentation policy admits it (all current modes except Sphere). This is per-open Studio preview state, initially
+zero; it does not change camera/art values, preset saves or desktop CUSTOM orientation. The viewport carries the
+selected turn explicitly through `RenderCard`, the production presentation resolver and `QuickVisualizerRenderFrame`.
+Production shader/Scene3D orientation owns rendering, including the swapped logical extent at odd turns; the physical
+viewport remains unchanged. Handle and terrain-brush layers use the same logical basis with a matching quarter-turn
+item transform, so pointer input maps back into the authored scene. Copy Frame captures the selected orientation;
+inspector tiles retain their authored orientation. Missing render-frame members are contract errors, never implicit
+runtime substitutions. No Studio view-state persistence owner exists; reopening starts a fresh preview view.
+Changing orientation re-enters bounded preparation on the existing live/snapshot renderer before its first turned
+draw. Handle labels stay upright while gizmo axes and hit mapping turn; view controls move below input controls
+when both toolbar groups cannot fit side by side.
 
 - **Truthful evaluator.** `evaluate(time, values, exact=...)` returns an immutable frame from the mode's production
   logical owner (its own instance; never the desktop visualizer's runtime, history, engine or GL objects).

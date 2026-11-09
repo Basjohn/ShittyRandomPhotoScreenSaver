@@ -8,12 +8,13 @@ of carrying their own copies.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from ui.studio.adapter import NavAxis, RenderCard, StudioFraming, StudioNavigation
 
 
-def presentation(mode_id: str, logical_size, extent, style, *, dpr: float = 1.0):
+def presentation(mode_id: str, logical_size, extent, style, *, dpr: float = 1.0, content_rotation_quarters: int = 0):
     """The production presentation of ``extent`` (the live card's world extent) at a Studio frame size.
 
     The Studio frame is the live card uniformly scaled down, chrome included: the card's border and inset
@@ -30,6 +31,7 @@ def presentation(mode_id: str, logical_size, extent, style, *, dpr: float = 1.0)
     return resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy(mode_id), display_size=(width, height), dpr=float(dpr),
         viewport_extent=extent, uniform_visual_scale=scale,
+        content_rotation_quarters=content_rotation_quarters,
         border_width=float(style.get("border_width", 0.0)) * scale, corner_radius=0.0,
         content_inset=float(style.get("content_inset", 0.0)) * scale, background_color=(0, 0, 0, 0),
         border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
@@ -99,6 +101,26 @@ def orbit_navigation(mode_id: str) -> StudioNavigation:
                             saved_with_camera_policy=frozenset({orbit_h.key, orbit_v.key}))
 
 
+@dataclass(frozen=True)
+class StudioRenderSnapshot:
+    """Studio evaluators supply their own immutable frame; presentation remains replaceable by Scene3D."""
+    logical: Any
+    presentation: Any
+
+
+def render_frame(card: RenderCard, state, resolved):
+    """The same production frame contract for every Studio renderer."""
+    from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
+    from widgets.spotify_visualizer.render_state import VisualizerLogicalFrame, VisualizerRenderSnapshot
+    if isinstance(state, VisualizerLogicalFrame):
+        snapshot = VisualizerRenderSnapshot(logical_revision=1, logical=state, presentation=resolved)
+    else:
+        snapshot = StudioRenderSnapshot(logical=SimpleNamespace(mode_state=state), presentation=resolved)
+    return QuickVisualizerRenderFrame(snapshot=snapshot, viewport=tuple(int(v) for v in card.viewport),
+                                      logical_size=tuple(float(v) for v in card.logical_size),
+                                      matrix_values=tuple(card.matrix_values), quad_vao=int(card.quad_vao))
+
+
 class QuickModeRenderer:
     """Render-thread adapter around a mode's production Quick renderer (its own scene instance): the frame
     is handed over exactly as the runtime hands it (mode state + resolved presentation + item mapping)."""
@@ -110,18 +132,15 @@ class QuickModeRenderer:
         self._presentation = None
 
     def _resolved(self, card: RenderCard):
-        key = (card.logical_size, card.extent, card.style)
+        key = (card.logical_size, card.extent, card.style, card.content_rotation_quarters)
         if key != self._key:
-            self._presentation = presentation(self._mode_id, card.logical_size, card.extent, card.style)
+            self._presentation = presentation(self._mode_id, card.logical_size, card.extent, card.style,
+                                               content_rotation_quarters=card.content_rotation_quarters)
             self._key = key
         return self._presentation
 
     def _frame(self, card: RenderCard, state):
-        return SimpleNamespace(snapshot=SimpleNamespace(logical=SimpleNamespace(mode_state=state),
-                                                        presentation=self._resolved(card)),
-                               viewport=card.viewport, logical_size=card.logical_size,
-                               matrix_values=card.matrix_values, quad_vao=card.quad_vao,
-                               content_rotation_quarters=0, scene_output_rotation=0, scene_output_viewport=None)
+        return render_frame(card, state, self._resolved(card))
 
     def prepare(self, card: RenderCard, frame) -> bool:
         return bool(self._impl.prepare_step(self._frame(card, frame)))
@@ -148,19 +167,12 @@ class ContractModeRenderer(QuickModeRenderer):
 
     def _resolved(self, card: RenderCard):
         dpr = self.pixel_ratio(card)
-        key = (card.logical_size, card.extent, card.style, round(dpr, 4))
+        key = (card.logical_size, card.extent, card.style, round(dpr, 4), card.content_rotation_quarters)
         if key != self._key:
-            self._presentation = presentation(self._mode_id, card.logical_size, card.extent, card.style, dpr=dpr)
+            self._presentation = presentation(self._mode_id, card.logical_size, card.extent, card.style, dpr=dpr,
+                                               content_rotation_quarters=card.content_rotation_quarters)
             self._key = key
         return self._presentation
-
-    def _frame(self, card: RenderCard, state):
-        from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
-        logical = state if hasattr(state, "mode_state") else SimpleNamespace(mode_state=state)
-        snapshot = SimpleNamespace(logical=logical, presentation=self._resolved(card))
-        return QuickVisualizerRenderFrame(snapshot=snapshot, viewport=tuple(int(v) for v in card.viewport),
-                                          logical_size=tuple(float(v) for v in card.logical_size),
-                                          matrix_values=tuple(card.matrix_values), quad_vao=int(card.quad_vao))
 
     def prepare(self, card: RenderCard, frame) -> bool:
         step = getattr(self._impl, "prepare_step", None)

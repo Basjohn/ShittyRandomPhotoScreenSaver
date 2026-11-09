@@ -623,9 +623,9 @@ Item {
                 width: 22
                 height: 22
                 radius: width / 2
-                // Freeform-3D has no quarter-turn content action. Put Orbit in
-                // the same stable parent-glyph row beside Restore instead of
-                // chasing the moving projected content envelope.
+                // Keep Orbit in the stable parent-glyph row beside Restore,
+                // independently of the bottom-right content Rotate action,
+                // instead of chasing the moving projected content envelope.
                 x: restoreSizeControl.visible
                     ? restoreSizeControl.x + restoreSizeControl.width + 6 : 10
                 y: restoreSizeControl.visible
