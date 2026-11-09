@@ -39,10 +39,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
 **Now (in flight):**
 
 1. **Operator-reported defects first:**
-   - Card surfaces (operator screenshot, 7 Nov): the Visualizer card takes the theme's material (Spectrum, Spline
-     Curve, Oscilloscope); one rounded legibility panel per card (2.5 px inset, radius-following, 7:1 floor so
-     faint runs keep 4.5:1); Media's transport bar, volume and mute on the material; vector transport glyphs.
-     Lead-audited; merged after its gate.
+   - Material density, composed-stack readability and Studio surfaces: active section 1A, item 1.7. Native
+     Settings corners: open item 1.9. Keep their acceptance and reversible checkpoints separate.
    - **Studio stall, clip selection and sidecar log (merged 7 Nov after lead review):** while playing, a change whose
      replay would chase the moving instant restarts the pass (`exact_replay.PassRestart`, every Studio-backed mode),
      and the transport waits for a converging replay ("Updating…"). A clip pick names itself "analysing" at once and
@@ -133,9 +131,9 @@ after the operator's yes on a question card; agents never run load (invisible ch
 **Next (admitted, in this order):**
 
 4. Settings round-trip native residual (about 2.5-6 MB per open/close) and the Studio's about 1-2 MB per session.
-5. Card legibility: 40 untouched linked mirrors below 4.5:1 (`widget.accent` on the card surfaces), and light-theme
-   shadows. Theme legibility: 59 untouched dark Glass/Acrylic Settings themes fall under 4.5:1 over a bright
-   wallpaper (`python tools/theme_legibility.py` lists both; details at §4 Widget card surfaces).
+5. Card/theme legibility beyond item 1.7: rerun `tools/theme_legibility.py` against final composed surfaces,
+   retain concrete failing palette roles and fix light-theme shadows. Raw linked widget mirrors remain an authoring
+   concern; runtime ink correction does not make raw exports pass. Details at section 4.
 6. Hygiene: the hidden cross-test `tmp_path` dependency (§3), the AC-13 remainder and AC-14..AC-16.
 7. One measurement session of at most 10 minutes under game60, only after the operator's yes. Owed: a second
    Waveform round, a clean Waveform P4 GC run, a Settings round-trip run, the alternated Glass/Normal pair, and the
@@ -146,130 +144,27 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 8b. **Universal visualizer performance architecture** (operator, 7 Nov; the Decision's addendum), started once the
    current set of fixes and optimisations lands:
-   - P1: GO with conditions (7 Nov, `Docs/Future_Work/Native_Core_P1_Spike.md`, sources `native/spike_p1/`): a
-     native abi3 module built against Qt 6.11.2 draws through QRhi on D3D11/D3D12/Vulkan/OpenGL standalone and
-     inside Qt Quick's frame, bound to PySide6's Qt DLLs; a native render thread is unaffected by a GIL-holding Python
-     thread. Part B (a C++ `QSGRenderNode` + QML type on a separate render thread) verified 8 Nov on all four
-     backends. The Nuitka standalone probe passed 8 Nov on every part and backend, pixel-identical to the unfrozen
-     runs (P1 doc). P1 has no open condition left besides the MSVC-runtime build guard for the production core.
-   - P2: an out-of-process visualizer engine for every mode (byte-identical packets; the logical tick leaves the main
-     process's GIL). Designed 7 Nov (`Docs/Future_Work/Native_Core_P2_Engine_Design.md`): P2a moves the tick and mode
-     runtimes into one `WorkerType.VISUALIZER` per generation (capture and DSP stay until measured), frames cross a
-     versioned C-readable seqlock triple buffer in shared memory that P3 reads directly. Landed: the packet ABI and
-     the exact frame codec (work orders 1-2; every mode's production frames round-trip byte-identically; main-thread
-     decode at most ~.4 ms per frame) and the in-process loopback (3: `PacketMailbox`, the logical mailbox over the
-     ABI; the production owner delivers identical frames for every mode through it; the tick side imports QtCore
-     only) and the worker (4: `WorkerType.VISUALIZER` under `ProcessSupervisor`; fed recorded post-DSP inputs it ticks
-     frames identical to the in-process owner for all nine modes, and on every recording: 160/160 replayable pairs,
-     291k frames; P2a's live input, the lossless engine snapshot, was deleted in 5.6 once P2b's live input replaced
-     it; the cross-process wake and per-session label namespaces are built). Independent Fable audit, 8 Nov
-     (`Docs/Future_Work/Native_Core_P2_Audit.md`): its two critical findings (a lost cross-process wake that froze the
-     display; the seqlock reader accepting torn slots) and H3a/H4/H6/M2 are fixed with failing-first tests. Next, in
-     order (design doc work orders): 4c measured 8 Nov: the snapshot path saves nothing for Spectrum, Oscilloscope,
-     Sphere, Extruded Spectrum and Neon Lake (its capture + pickle + take cost about their whole tick) and ~1.0-1.3 ms
-     for the four heavy modes, while moving DSP too would save ~.7-2.2 ms for every mode, so **P2b goes first**: the
-     worker owns audio capture, DSP and the tick, the snapshot layer is deleted. Built 8 Nov: P2b slice 1 (the live
-     engine on recorded PCM through its own capture callback, identical in process and in the worker) and slice 2
-     (pause/resume, warm re-entry and in-session mode switch in production read order, 126 pairs, 0 mismatching;
-     `VIS_SET_MODE` / `VIS_SET_DISPLAY_POWER`; per-slot identity under the seqlock, ABI 2), each audited. The Vulkan
-     core's needs are in the design doc (4V); compute shaders are SPIR-V-gated by test. Work order 5 (production
-     wiring): 5.1 (the worker paces its own ticks) and 5.2 with 5.3's core built 8 Nov: the production owner runs its
-     Visualizer on the worker behind the code-level admission `--viz-engine-worker` (default off; off is today's path),
-     the worker opens the loopback device itself, and the owner's frames on the worker equal its in-process frames for
-     every mode through configure, play/pause, park/unpark and a mode switch (first gate-3 data point: the main
-     process's CPU per step 0.7-1.2 ms on the worker vs 1.7-5.0 ms in process; the GUI's take+decode per presentation
-     rises .2-.6 ms). 5.5 built 8 Nov with checkpoint audit 7's failure items: no control edge waits on the worker
-     (replies are events; the spawn is off the GUI thread; a hung worker's edges cost 0.2 ms instead of 21.9 s), a dead
-     or hung worker reaches the failure path by an event (the pipe's end, the supervisor's heartbeat), the recovery is
-     bounded (one fallback in process, then faded out with requests admitted), a full wake pipe never blocks the tick,
-     a device that fails to open no longer counts as a worker failure. 5.4 built 8 Nov with audit 7's A7-M1/A7-M2: the
-     presentation inputs the capture reads (view records, the mode's presentation-only controls) reach the worker with
-     the framed view, the reflected wallpaper completes the frames on the main side, the Fullscreen Edit envelopes
-     work on the worker, and every activation in the worker loads QtCore only; the view gate is identical for the
-     five 3D modes with a photograph, an orbit and a preset's Auto Rotate. 5.6 built 8 Nov: the snapshot layer is
-     deleted and Bubble's spawn draws from its simulation's own generator (seeded per controller by gates and
-     replays, never the process RNG; identical frames to the process-RNG version seeded alike). 5.7 built 8 Nov with
-     checkpoint audit 9's A9-L1..L3: the worker process lives while an owner leases it (retired at the end of the GUI
-     turn that released the last lease; held across a CUSTOM commit or a monitor change until the replacement adopts
-     it; parked it costs ~0 CPU), the link is the role's one starter (the heartbeat only retires, fenced by identity),
-     a session whose steps keep failing fails closed into the recovery, the supervisor reaches the display manager
-     before the Visualizer is admitted, `--usage` labels the worker's CPU/RSS/threads, and every build family
-     compiles the worker's package. Checkpoint audit 10's findings are fixed (8 Nov): every worker role (image workers
-     included) skips `main.py`'s application imports, so an idle, unconfigured spawn from the production entry is
-     ready in 0.29 s with 32 MB RSS (was 1.6 s / 112 MB, Qt GUI stack loaded); in use the engine worker saves about
-     0.7 s to its first configure (about 0.6 s of the imports moved into it: 1.69-1.72 s against 1.03-1.16 s) and
-     about 40 MB in a session, while the image workers keep nearly all of it (their first Qt-path decode adds QtCore
-     and QtGui, ~0.1 s / ~12 MB). Checkpoint audit 11's findings are fixed (8 Nov): at most three engine-worker
-     recoveries per run, then in process for the run. 5.3's rest built 8 Nov: on the worker, a capture that publishes nothing for 180
-     cadence steps (~2 s) while Media plays (a default-output switch the player follows, an unplugged or stale device)
-     is reopened once on the current default output through the audio worker's own stale-capture restart; digital
-     silence and a pause never count; a reopen that fails is a device failure, never a worker failure; the main log
-     shows the device state at the next edge's reply (never a reopen after the session's last edge: the owner's
-     retire does not await `VIS_STOP`'s report). Gate 4 (dormancy and lifecycle) passed 8 Nov (design doc, Gate 4
-     record): 20 Settings round trips and 20 mode switches with no process, mapping, handle or thread growth, the worker
-     retired at each Settings open and respawned at its close, the Visualizer-off run and the overhead baseline
-     identical with the admission on and off; it first found and fixed R-178 (every display reload under the
-     admission timed its destruction barrier out and the saver exited). Gate 3 measured 8 Nov (design doc, step 6
-     "Gate 3 record"; one game60 pair, Waveform Ribbon P1, the operator's yes): main's per-frame Visualizer GIL share
-     0.85 -> 0.08 (the tick runs in the worker at the full 90/s, its GIL its own), consumed age at sync no worse (6.9
-     -> 6.3 ms), publish -> swap 41.5 -> 25.8 ms, HUD age 60.9 -> 35.0 ms; CPU conditions matched, the GPU state not
-     established equal (the frame-age magnitude is not sized; a matched repeat pair is the operator's call). The worker
-     path's remaining hitches (6.96/min) are main-side: 13 of 23 the 15 s `--usage` sample (§5), the rest an image
-     change and the startup tail. The live check's recorded-PCM check is path-aware (rendered worker frames are the
-     receipt on the worker path). **Gates 3 and 4 are measured: P2 is ready for the operator's decision on making the
-     worker the default, then the phase-boundary audit.**
-     The first frozen check ran 8 Nov (lead, build of `5fb8dab7`; design doc, step 6 "Frozen check"): first configure
-     1.62 s inside the 6 s bound, a Waveform Ribbon switch committed on the worker; it found Nuitka's PySide6 icon hook
-     loading QtGui and QtWidgets in every worker (R-176's frozen half, fixed by a build plugin plus a frozen-audit
-     refusal) and the frame codec's per-frame cycles (R-179: the worker's Waveform Ribbon sawtooth, fixed). Next, a
-     confirming GitHub Remote build of a commit with both fixes and R-178: the build log's `srpss-worker-qt: Removed`
-     line and the audit's Qt line for both families; the same sampled run with the engine worker on `qt6core.dll` only,
-     the image workers on `qt6core.dll` and `qt6gui.dll`, the engine worker's memory flat through Waveform Ribbon, the
-     window and `.scr` icons unchanged; one Settings round trip on the worker.
-     Frozen check 2 (operator, build of `098b3f0e`; design doc, step 6 "Frozen check 2") found R-180: the first Neon
-     Lake switch of a new build froze every display ~7 s on the basin program's cold driver link and the overdue 6 s
-     activation deadline then reloaded the displays for a live target (in process too). The reload is fixed (the
-     deadline reads the target's render progress), and so is the freeze after a machine's first link: the app-owned
-     program binary cache (`<LOCALAPPDATA>/SRPSS/gl_program_cache/`, keyed by source and driver, shared with source
-     runs; R-180 "Follow-up: the freeze"). The next frozen run should show, at its first Neon Lake switch, either
-     `[GL_PROGRAM_CACHE] Neon Lake basin linked cold ... saved` with `Activation slow but alive` (a machine that never
-     linked these sources with this driver) or no cold-link line and no clock gap (one that has, a source run
-     included); never `MODE_ACTIVATION_FAIL` or a `visualizer_activation_failed` reload. A second run of the same
-     build must show no cold link at all.
-     Operator checks for 6: the 5.3 device checks on a real device (design doc, 5.3 record: default switch, a pinned player, a
-     USB/Bluetooth unplug, the only output unplugged, the in-process control, Media playing with nothing rendered
-     here (Spotify Connect or casting, a player pinned elsewhere from the start, network buffering: one PortAudio
-     re-init per silent run and per capture edge), and a second app on the old default hiding a switch). Known
-     limit: a reopen's cost on a real device is unmeasured (whether PyAudioWPatch holds the GIL in
-     `Pa_Terminate`/`Pa_Initialize`); time it in the worker with the cadence's step dt across it.
-     Side finding (gate 4's in-process control, 8 Nov; not the worker path): cycling modes in process grows the main
-     process's private bytes about 150-250 MB a lap of nine switches, lap after lap (20 switches: same mode, first ->
-     last lap, median +371 MB; RSS only +42). Not Python (a collection at each switch frees under 1 MB; tracked objects
-     plateau after the first lap), not the heaps (+30 / +45 / +17 MB heap / heap_large / arenas a lap): the native map's
-     `private_other` (VirtualAlloc outside the heaps, mostly not resident) rises at Extruded Bubble and Waveform Ribbon
-     (629 -> 1376 MB) and only partly returns (940 at Bubble on lap 2 against 601 on lap 1). On the worker path the main
-     process's private bytes stay flat and the worker plateaus at ~110 MB. Evidence
-     `.artifacts/evidence/architecture/native_core_p2/20261108_gate4_dormancy/` (`modes20_flag_off`,
-     `modes_census_flag_off`, `modes_map_flag_off`). Next: attribute the allocations (the map's diff by owner between
-     two laps, or allocation-size buckets per switch).
-     Open (5.3, in-process parity; operator's call, after the 5.3 device checks): in process, a mid-song default-output
-     switch, an unplugged device or a stale stream leaves the Visualizer at rest until Media's next pause and play,
-     display park or an activation (the loopback stays on the dead endpoint). The worker's delivery watch
-     (`EngineSession._watch_device_delivery` with `restart_stale_capture`) could run in the owner's in-process cadence
-     step too; it would change the default path's capture behaviour, so it waits for the physical check.
-     Side finding (audit 10 fixes): the negative-control half of
-     `test_visualizer_owner_engine_worker.py::test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`
-     (`run(False)`) failed once in a combined run of the four owner suites and passed alone and in its own file (not
-     investigated; probably a presentation landing during `rig.settle()` forwards the view through `_forward_view`
-     even with the metrics observer off). Make the control independent of presentation timing.
-     General follow-up (checkpoint audit 9, A9-L3; not a P2b item): a reconstruction that never reveals reloads about
-     every 6 s with no cap, and a refused reload leaves the owner `failed` at fade 0 with its runtime running (both as
-     in process): decide a per-run reconstruction cap, or a `failed` owner that stops its runtime when its reload is
-     refused.
-     Side finding (5.6): `test_bubble_reactivity.py::test_group_drift_aligns_non_swirl_bubble_motion[random-x]`
-     holds for only ~61% of Random Group Drift draws (2,000 seeds; Diagonal for all); it had passed on the process-RNG
-     state earlier tests left behind and is seeded now. Open for Bubble's owner: what Random Group Drift should
-     guarantee (an aligned axis, or none), then assert that; no retune under Bubble Temporal Fidelity without it.
+   - P1 is accepted; native/frozen proof and the production MSVC-runtime guard live in
+     `Docs/Future_Work/Native_Core_P1_Spike.md`.
+   - **P2 current contract:** the Windows visualizer runs in a supervised engine worker owning capture, DSP and the
+     logical tick. Explicit path switches remain; automatic fallback warns/errors with its reason, and capacity
+     violations fail closed. Linux remains in process until H3 below. Packet headers are C-readable; native-core
+     payload layout remains a P3 decision. Contracts: `Spec.md`, `Docs/Contracts.md`; implementation/gate evidence:
+     `Docs/Future_Work/Native_Core_P2_Engine_Design.md`. Remaining checks outside the ordered audit repairs:
+     - [~] **Awaiting Validation, frozen:** next requested build: QtCore-only engine workers, expected image-worker
+       Qt dependencies, flat worker memory, unchanged icons and one Settings round trip. First Neon Lake activation:
+       logged cold link with live progress or cache hit, never an activation-failure reload; second run: cache hit.
+     - [~] **Awaiting Validation, audio devices (design 5.3):** default switch, pinned player, USB/Bluetooth or sole
+       output unplug, silent/remote playback and another player masking the old endpoint; include in-process control
+       and time capture reopen against cadence. No device/load run without the operator.
+     - [ ] After device checks, decide whether the in-process owner should use the existing worker delivery watch
+       to recover stale loopback streams; it currently waits for a later playback/activation edge.
+     - [ ] Make the framed-view negative control independent of presentation timing
+       (`test_visualizer_owner_engine_worker.py::test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`).
+     - [ ] Decide bounded reconstruction for a target that never reveals, including stopping a failed owner's runtime
+       on refused reload; the existing loop can retry every six seconds.
+     - [ ] Bubble owner: define Random Group Drift's guarantee before retuning or asserting alignment;
+       `test_bubble_reactivity.py::test_group_drift_aligns_non_swirl_bubble_motion[random-x]` depends on the draw.
    - **P2 phase-boundary audit (8 Nov, Opus 5.5 high; [Native_Core_P2_Phase_Boundary_Audit.md](Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md)):
      H1/H2 fixes are reviewed; keep the remaining order below. The operator admitted audit repairs alongside
      the 9 Nov miscellaneous work.**
@@ -404,9 +299,7 @@ answers.
 - **§4 Displays off:** the overnight check with the power plan's display timeout (`--frame-trace --usage`).
 - **§4 Spline Curve (`devcurve`) "more alive":** eyes after the lead's review.
 - **§4 Frozen builds:** open a Studio from a fresh build.
-- **§4 Widget card surfaces:** eyes on the rows, the inner rim, the mute position and the 15 material themes.
-- **§4 Theme materials (8 Nov):** eyes on the Settings window under the new Frosted / Mica / Smoked themes (41
-  pairs, all 7 light themes reworked) and on the light themes' forged corners over a dark desktop.
+- **Materials/Studio:** native operator comparison at section 1A, item 1.7; Settings corners remain open at item 1.9.
 - **§4 Extruded Bubble Deep Red Ocean (Preset 9):** eyes on the second pass.
 - **Framed aperture on the saver card (8 Nov, decision):** the writer is fixed (R-181: the Visualizer's uniform-scale
   minimum is absolute, and settings load lifts stored cards to it). That alone does not restore the saver card's 45°
@@ -501,31 +394,14 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - Manual Floor's low is 0.0 everywhere.
   - Technical tooltips use the registry names.
 
-- **Card surface acceptance pass: merged 7 Nov (afcb022a).**
-  Rule: `Docs/Architecture/Card_Surface_Materials.md` 3.3 and 3.4. Each card's one legibility panel is the
-  material's inner panel (2.5 px inside the border, the card's own radius less the inset, never under 2 px, floor
-  7:1, which holds faint runs at 4.5:1); card-level rows and per-run plates are gone; rows stay only inside
-  tiles/capsules/stats panels (2 px inside, concentric). The Visualizer card takes the baseline material with its
-  Fill as tint; Media's transport bar, mute button (no inner rim) and a more transparent volume track take the card's
-  material; the transport glyphs are vectors. Achievement Pulse's canvas reserves a rail for every capsule shown.
-  Evidence: `.artifacts/evidence/widgets/card_surfaces/20261107_sheets/` and `20261107_controls_sheets/`.
-  Side defects found (not fixed here):
-  - The shared Steam mock (`build_mock_steam_view_model("achievement_pulse")`) uses field ids the card does not
-    define (rarity, session); the real ids are total, latest, playtime, previous, source, selected. Fixtures built
-    on it exercise capsules the runtime never emits.
-  - Order pollution: run together, the 33 scene/display test files fail 4 tests (Achievement Pulse config, Gmail
-    semantic actions, Media config projection, `test_baseline_follows_the_theme...`: an active theme leaks to
-    'glass'); each passes alone, and main fails the same 4 in the same run.
-  - The Visualizer's and the Context Menu's material are projected once per display generation
-    (`_configure_quick_auxiliary`); check whether a live Style Overrides or theme change reaches them before the
-    next generation as it reaches the ordinary cards.
-  - The faint-run measurement covered the dark theme only; light themes (dark text, the floor lightens) are unmeasured.
-- **AC-17 (theme material): landed 7 Nov (cc5b61f0).** Operator's
-  choice: cards follow the theme. A linked Widget mirror now carries its Settings theme's backdrop material
-  (`widget_counterpart_for_settings_theme` projects it; 98 shipped mirrors got the one key by a fill, nothing else
-  changed). Visible change: every profile on a linked "[Glass]"/"[Acrylic]" pair with Style Overrides on Theme,
-  fresh profiles included, now draws that material; the Themes tab tags Widget theme names with their material.
-  Rule: `Docs/Architecture/Card_Surface_Materials.md` section 4.
+- [ ] Repair the shared Achievement Pulse mock field IDs (`build_mock_steam_view_model`): it emits rarity/session,
+  while the card accepts total/latest/playtime/previous/source/selected. Existing fixtures can test impossible rows.
+- [ ] Isolate active Widget Theme state between scene/display tests: the combined 33-file run fails four tests that
+  pass alone (Achievement Pulse config, Gmail actions, Media projection and baseline theme material).
+- [~] **Awaiting Validation:** live Style Overrides/theme changes must reach Visualizer and Context Menu material
+  in the current display generation (`_configure_quick_auxiliary`), including the new global opacity override.
+- [ ] Extend actual faint-run pixel checks to light widget themes beyond the sampled Gmail/Media cards. Keep
+  authoring-mirror failures separate from runtime material guards; contract: `Docs/Architecture/Card_Surface_Materials.md`.
 - [~] **Spectrum presets 2-15: re-authored by the lead (7 Nov), awaiting the operator's eyes.** The first agent
   round failed the fidelity gate (operator: "awful"). Its looks were opaque clip-art blocks, its per-bar patterns
   turned to checkerboard and tartan, its ghost trails read as soot, and Union Jack read as tartan. That round is not
@@ -1047,47 +923,17 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
   closure and prunes only the other Controls styles. `test_every_shipped_qml_import_survives_the_frozen_prune` walks
   every shipped import's module and DLL closure against the prune. Open: open a Studio from a fresh build.
-- [~] **Widget card surfaces: Acrylic, Glass, Frosted, Mica, Smoked (operator 6 Nov) - built and merged, awaiting the
-  live check and the operator's eyes.** Design, failure analysis, invariants, cost tables and the 6 Nov style pass
-  (inner legibility panel 2.5 px inside the border, full rounded rows on every list card, the Media bar's shadow and
-  mute position, light-theme legibility 4.5:1+ on every material, Widget Themes naming a `surface_material` with
-  Style Overrides defaulting to **Theme**, 15 new material themes): `Docs/Architecture/Card_Surface_Materials.md`
-  (sections 1-6). `Widgets -> General -> Style Overrides -> Surface Material` (Normal default; all-Normal creates
-  nothing; the Visualizer card and the System Volume OSD stay Normal). Evidence
-  `.artifacts/evidence/widgets/surfaces/20261106_surfaces/` and `.artifacts/evidence/widgets/surfaces_style/20261106_surfaces_style/`
-  (before/after crops, theme contact sheets `theme_sheet_*.png`).
-  Left:
-  1. **Live check under the lead-scheduled game load**, materials on, a transition-heavy run, and Normal as the
-     control.
-  2. **Operator's eyes:** the rows (light themes draw them as lighter bands, dark themes mostly nothing), the inner
-     panel's thin rim, the mute position, the 15 new themes (contact sheets `theme_sheet_*.png`). Normal changes
-     only where intended: the Media bar/artwork shadows, the mute button and Friend Pulse on light themes.
-  3. **Side defect found (not caused here):** light themes keep the weather detail icons white (asset images),
-     faint on pale cards; a themed icon tint would fix it. (The `tests/test_surface_materials.py` access violation
-     found in the same pass is fixed: R-173, the hidden scene's GL context freed before its render control.)
-  4. **Field defects (operator 7 Nov, not high priority):**
-     - **The theme's material doesn't reach the cards: root cause fixed by AC-17 (on its branch).** The chain
-       never lost the value: a linked "[Glass]" pair's Widget mirror named no material. Mirrors now carry it
-       (binder-level bar: `tests/test_theme_pair_surface_material.py`). Left: confirm it in the running app
-       during live check 1 (a "[Glass]" pair, Keep Synced, override on Theme, and the running card draws Glass).
-     - **Side defect (found by AC-17, not caused by it):** 18 of the 98 linked material mirrors sit under the
-       4.5:1 authoring bar the 15 material themes meet, mostly `widget.accent` on `widget.panel` (3 are the header
-       label on its fill). Their colours are unchanged; only their material is new. Judge them on the live
-       renders, and re-author the ones that read badly on Glass/Acrylic.
-     - **Theme materials and light themes (8 Nov, agent branch, awaiting the lead's merge and the operator's
-       eyes).** The Settings forged edge now paints over the content (light themes' shell covered it: square pale
-       corners, no border). Settings takes Frosted, Mica and Smoked (AccentPolicy Acrylic with a derived tint; the
-       DWM system backdrop stays rejected); a pair keeps one material. 41 pairs moved: all 7 light themes to
-       Frosted (4) or Mica (3) with a translucent shell, 26 dark to Mica, 8 dark to Smoked; every text role of
-       those holds 4.5:1 / 3:1 on its material over any wallpaper (`tests/test_theme_material_legibility_contract.py`).
-       Left: a native look at Frosted/Mica/Smoked on the real HWND (offscreen renders model the blur and tint
-       only), and the light themes' corner caps: they take the opaque pale title-bar colour, which shows as a
-       small pale corner speck over a dark desktop (the documented camouflage rule; dark themes show the mirror
-       case over a bright one). Side defects recorded at item 5 of §1: 59 untouched dark Glass/Acrylic themes
-       under 4.5:1 over a bright wallpaper, 40 untouched mirrors' `widget.accent` under 4.5:1 on the card.
-     - **Light themes:** the widget shadows still make widgets largely unreadable. The 4.5:1 legibility check
-       measured text against its panel but not the shadow's effect. Fix the shadows, then judge the result on
-       live renders.
+- [~] **Widget/Settings material appearance: Awaiting Validation.** The active density/composition work and native
+  evidence are routed through section 1A, items 1.7/1.9. Durable owners: `Docs/Architecture/Card_Surface_Materials.md`
+  and `Docs/Architecture/Settings_Theme_Architecture.md`. Operator-check the inner rim, transport/mute/volume,
+  dark/light palettes and linked material choice in the running app.
+- [~] **Awaiting Validation, material cost under load:** a lead-scheduled transition-heavy material/Normal pair,
+  only within the separately approved measurement session. Small off-screen GPU timings do not replace it.
+- [ ] Theme the Weather detail asset icons: they remain white and become faint on pale cards.
+- [ ] Re-author raw linked Widget Theme roles that fail `tools/theme_legibility.py`, especially widget.accent on
+  widget.panel/header surfaces; do not equate runtime ink correction with a corrected raw mirror export.
+- [ ] Fix light-theme widget shadows, then inspect actual faint text over the resulting cards; analytic panel
+  contrast alone does not account for the shadow's effect.
 - [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
   pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
   Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,
@@ -1605,20 +1451,11 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     jump, empty, or re-start its motion; (2) Rag Doll has no steady beat, so its seam is the least certain: judge it
     first; (3) the clips now start and end mid-song at the loop points chosen (Human and Growing Pains on their
     groove), not at the earlier quiet-to-hot windows; say if the quiet-to-hot arc matters more than the seam.
-- [~] **Studio chrome matches Settings (6 Nov), awaiting the operator's look**(all Studios: one shell;
-  `Docs/Reference/Visualizer_Studio.md` "Chrome and theme"). Frameless window with Settings' title bar and forged
-  rounded edge, the theme's Glass/Acrylic material, 1.5 px one-path card borders, Settings' panel casts at half
-  offset, viewport corners rounded over the scene. Hidden-render evidence `.artifacts/evidence/studio/chrome/20261107_chrome/`
-  (before/after, Default Dark Acrylic, Matte Graphite Normal, Pearl Blush light Glass; 8x crops). Operator to check
-  on screen: the live Glass/Acrylic composition of the Qt Quick window (first use of the AccentPolicy material on an
-  alpha OpenGL window; the evidence only simulates the blur), snap/resize/maximise by hand, and the panel opacity
-  floor (0.88) and shadow strength on light themes. Light-theme instrument wells (trace cards, response curve,
-  transport bar) now sit on the theme's input surface (evidence `.artifacts/evidence/studio/followups/20261107_followups/legibility/`,
-  Pearl Blush and Default Dark, before/after): operator look pending. Operator (6 Nov, not urgent): the material is
-  missing from most Studio areas (workspace tabs, the panels under the preview, their section headers). Apply the
-  theme's Glass/Acrylic to them with a slightly darker layer behind every control so it stays legible. Controls laid
-  over the preview (transport chips, aspect chips, the source notice) keep a translucent dark solid: blurring the live
-  scene behind them would cost GPU time every frame and skew what the preview shows about performance.
+- [~] **Studio chrome: Awaiting Validation.** Operator-check the shared semantic material on panels, workspace
+  tabs, section headers, tools and instrument wells, plus native snap/resize/maximise and light-theme shadows.
+  Active material work is section 1A, item 1.7; rounded native corners remain open at item 1.9. Contract:
+  `Docs/Reference/Visualizer_Studio.md` (Chrome and theme). Off-screen Studio evidence cannot establish native DWM
+  composition; preview-overlay backing stays cheap and scene colours stay independent of chrome.
 - [~] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.**Drags preview once per frame and
   re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
   `.artifacts/evidence/studio/drag/20261106_drag/` (per move 56 ms -> 0.07 ms on Waveform). Side defect (not measured): Bubble's,
