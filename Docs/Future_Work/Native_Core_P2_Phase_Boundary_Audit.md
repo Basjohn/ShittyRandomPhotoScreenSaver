@@ -512,6 +512,21 @@ H1 capacity violations never take that fallback. Disabled logging admission and 
 These are focused data/IPC/logging checks. No build, load, device, Linux runtime or native visual proof was added;
 the remaining ordered audit and operator gates stay in `Current_Plan.md`.
 
+### M2: one first-configure deadline miss per run
+
+M2 retains the existing six-second first-configure bound, including queued startup/import/session work. A miss now
+uses the existing disable/fallback owner to leave the worker disabled for this run; later owners/Settings reopens
+run in process with a warning instead of repeating the cold wait. Normal, stale, late and retired-owner callbacks
+remain fenced by the existing configured/namespace/retirement identities. A fresh process/run resets admission.
+No progress protocol, new timer or recovery counter is added. Reveal-latency sizing against in process under load
+remains **Awaiting Validation**; this slice makes no claim to increase the first deadline's margin.
+
+The new real-owner regression fails before the repair at `worker_disabled_for_run()`. It now proves fallback,
+late callback fencing, no configure retry by a later owner, reset admission for a new run, and stale/normal reply
+fences. The negative control restores `count_for_run=False` in memory and fails at the same assertion. Together with
+the existing unanswered-configure and half-retired-owner deadline cases: **5 passed**. Terra's focused read-only
+review found no additional M2 defect; the reviewer did not run tests. No device/window/build/load gate was run.
+
 ## P3 readiness
 
 What ABI 2 already gives the native core:

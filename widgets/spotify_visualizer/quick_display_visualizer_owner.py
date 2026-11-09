@@ -1847,18 +1847,19 @@ class QuickDisplayVisualizerOwner:
                                   int(link.label_namespace))
 
     def _on_first_configure_deadline(self, namespace: int) -> None:
-        """The first configure's reply never came: this activation runs in process (not counted for the run), as a
-        first configure that failed does. Inert once it was answered or the session was replaced or left."""
+        """One cold configure timeout leaves the worker disabled for this run. The existing six-second bound
+        includes startup; normal/stale/retired replies remain fenced and cannot disable a healthy successor."""
         link = self._worker
         # ``_retiring`` (A9-L1): a retire whose logical join failed returns before ``_retired`` with its routes already
         # detached; its first configure's deadline must not fall back and start a runtime on that half-retired owner.
         if (self._retired or self._retiring or link is None or link.configured
                 or int(link.label_namespace) != int(namespace)):
             return
-        logger.error("[SPOTIFY_VIS][ENGINE_WORKER] The first configure was not answered in %d ms; this activation "
-                     "runs in process mode=%s", _ACTIVATION_TRANSACTION_DEADLINE_MS, self._controller.mode_id)
+        logger.error("[SPOTIFY_VIS][ENGINE_WORKER] The first configure was not answered in %d ms; disabling the worker "
+                     "for this run and running in process mode=%s",
+                     _ACTIVATION_TRANSACTION_DEADLINE_MS, self._controller.mode_id)
         self._fall_back_in_process(f"configure unanswered in {_ACTIVATION_TRANSACTION_DEADLINE_MS} ms",
-                                   count_for_run=False)
+                                   count_for_run=True)
 
     def _open_engine_worker_session(self, inputs: dict[str, Any], supervisor: Any) -> Any:
         """A session for the controller's current mode and ``inputs``: its configure sent (closed again if sending

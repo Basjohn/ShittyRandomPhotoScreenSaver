@@ -772,7 +772,7 @@ class _HungSupervisor(_InProcessSupervisor):
 @pytest.mark.parametrize("bounded", (True, False))
 def test_a_first_configure_that_is_never_answered_is_bounded(qt_app, pcm, monkeypatch, bounded):
     # Checkpoint audit 8, A8-L5: the first configure has its own deadline (the recovery's one-shot): unanswered, the
-    # activation runs in process (not counted for the run), its in-process identity bound and its runtime running.
+    # activation runs in process (worker disabled for the run), its identity bound and its runtime running.
     # Negative control (no deadline: the pre-fix owner, which waited for the heartbeat, twice, or for ever): the owner
     # stays on the unanswering worker with its render binding deferred, nothing presented.
     from widgets.spotify_visualizer import engine_worker_link
@@ -799,7 +799,7 @@ def test_a_first_configure_that_is_never_answered_is_bounded(qt_app, pcm, monkey
             assert owner._worker is not None and not owner._worker.configured
             assert owner._bind_deferred and owner.render_identity is None
             return
-        assert owner._worker is None and not engine_worker_link.worker_disabled_for_run()
+        assert owner._worker is None and engine_worker_link.worker_disabled_for_run()
         engine = owner.controller.engine
         identity = owner.render_identity
         assert (identity.engine_generation, identity.activation_id) == (engine.get_generation_id(),

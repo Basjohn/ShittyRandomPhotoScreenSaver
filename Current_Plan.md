@@ -157,6 +157,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
      - [~] **Awaiting Validation, audio devices (design 5.3):** default switch, pinned player, USB/Bluetooth or sole
        output unplug, silent/remote playback and another player masking the old endpoint; include in-process control
        and time capture reopen against cadence. No device/load run without the operator.
+     - [~] **Awaiting Validation, M2 latency:** size first reveal against in process in a separately approved load
+       session. The cold configure bound remains six seconds; later owners skip it after a deadline miss this run.
      - [ ] After device checks, decide whether the in-process owner should use the existing worker delivery watch
        to recover stale loopback streams; it currently waits for a later playback/activation edge.
      - [ ] Make the framed-view negative control independent of presentation timing
@@ -172,20 +174,19 @@ after the operator's yes on a question card; agents never run load (invisible ch
      automatic fallbacks warn/error with their reason, while capacity violations remain terminal. Linux stays in
      process for this slice. Default-merge and H1/H2 evidence live in the audit's resolution section.
      **Order** (each step: failing-first test, its negative control, record in the audit doc's resolution section):
-     1. M2 (first-configure deadline on slow machines) and L1 (ordered control edges never dropped).
+     1. L1 (ordered control edges never dropped).
      2. M4: gates with non-default presets and settings; a gate 2 (no visual change) record.
      3. H3 (operator, 8 Nov: there is no Linux machine to prove it on; assume it works with basic support): make the
         worker the default on Linux too (flip `visualizer_engine_worker_platform_default`
         to every platform and update `Linux_Plan.md` Phase 4 and the platform tests). No Linux proving step.
      4. M5 and L2-L5.
      5. P3's four decisions (listed last below) before P3's first slice.
-     M1/H1/H2 evidence is in the audit's resolution section: capture/capacity, hidden remap, terminal overflow,
-     retained high water, admitted child logging and bounded detached STOP reports have focused proof.
+     M1/M2/H1/H2 evidence lives in the audit's resolution section. A first-configure timeout disables the worker
+     for the run; later owners do not repeat the six-second cold wait. Capacity, logging and detached STOP reports
+     retain their focused proof. Load reveal-latency sizing remains an operator gate.
      - [ ] H3: the worker path has never run on Linux (forkserver on 3.14, POSIX wake path, Pulse capture). Operator,
        8 Nov: it cannot be proven (no Linux machine); assume basic support and make the worker the Linux default too
         (step 3).
-     - [ ] M2: the first configure's fixed 6 s deadline vs ~5 s measured under game60: slow machines would wait ~6 s
-       hidden and run in process at startup and after every Settings close.
      - [ ] M4: every gate used default presets; gate 2 (no visual change) has no record.
      - [ ] M5: the in-process mode-cycling memory growth (gate 4 side finding) still hits the fallback and the Studios.
      - [ ] L1: a full request queue drops the oldest message (wrong for ordered control edges; a lost `VIS_SET_VIEW`
