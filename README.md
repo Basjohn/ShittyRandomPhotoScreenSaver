@@ -1,12 +1,16 @@
 
 # ShittyRandomPhotoScreenSaver (SRPSS)
-<img width="50%" alt="SRPSS_logo_blue_purple_slow_smooth" src="https://github.com/user-attachments/assets/c9917e3d-44f9-41b3-ab76-d308908d9c95" />
+
+<img width="45%" alt="Logo" src="https://github.com/user-attachments/assets/282b2fc6-a21a-46b5-ab45-22c602537e1d" />
+
+
+
 
 
 ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows 10/11 screensaver that is surprisingly less shit than the majority of ancient decrepit screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
 
 
-<img width="1153" height="655" alt="513Cross" src="https://github.com/user-attachments/assets/38aafc0e-f4b8-4a3d-a8bb-12a0f7486e73" />
+<img width="80%" alt="You're Hovering Aren't You?" src="https://github.com/user-attachments/assets/cb4709b9-585a-4d74-82da-022a343b99a6" />
 
 
 
@@ -55,8 +59,10 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
 - **Properly adjustable 3D views like it's 2002:** Orbit the applicable 3D visualizers, move or resize their stage and preserve your poorly chosen viewpoint. Alt-Left to rotate, Alt-Scroll to resize and Alt-Right to drag 3D Visualizers.
 - **System Audio OSD:** Optional reminder that you are always being watched when this pops up from small sound adjustments.
 
-<img width="434" height="252" alt="srpss_eb_preset1_240p_bordered_CORRECTED" src="https://github.com/user-attachments/assets/9f1f37d6-755e-4d80-9903-603a96298ebe" />
-<img width="50%" alt="20261108_waveform_p1_nightsolong_bordered_90pct" src="https://github.com/user-attachments/assets/24619baa-7fb2-46ba-856b-11a59b81904c" />
+
+<img width="40%" alt="visualizer_extruded_bubble_preset_9_deep_red_ocean_2_SRPSS_Bordered" src="https://github.com/user-attachments/assets/af1781f3-3be8-408a-bd17-6a21e250ea7f" />
+<img width="45%" alt="20261108_waveform_p1_nightsolong_bordered_90pct" src="https://github.com/user-attachments/assets/24619baa-7fb2-46ba-856b-11a59b81904c" />
+
 
 
 
