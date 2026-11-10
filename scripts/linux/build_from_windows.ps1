@@ -85,6 +85,28 @@ try {
         Write-Warning "Local $Branch ($localSha) differs from origin/$Branch ($remoteSha); GitHub builds the pushed commit."
     }
 
+    # GitHub Actions builds the pushed commit, not the locally edited files driving this launcher.
+    # In particular an MC-tag against an old Linux workflow silently builds the screensaver,
+    # succeeds, and uploads only srpss-linux. Check both remote-commit owners *before* any push/dispatch.
+    if ($Profile -eq 'mc') {
+        $sourceWorkflow = (& git show "$($remoteSha):.github/workflows/linux-build.yml" 2>$null | Out-String)
+        $workflowReadExit = $LASTEXITCODE
+        $sourceBuilder = (& git show "$($remoteSha):tools/linux_build.py" 2>$null | Out-String)
+        $builderReadExit = $LASTEXITCODE
+        $hasMcWorkflow = ($workflowReadExit -eq 0 -and
+            $sourceWorkflow.Contains('refs/tags/linux-build/mc-') -and
+            $sourceWorkflow.Contains('--profile "$BUILD_PROFILE"') -and
+            $sourceWorkflow.Contains('srpss-linux-mc'))
+        $hasMcBuilder = ($builderReadExit -eq 0 -and
+            $sourceBuilder.Contains('main_mc.py') -and
+            $sourceBuilder.Contains('--profile') -and
+            $sourceBuilder.Contains('PROFILES'))
+        if (-not $hasMcWorkflow -or -not $hasMcBuilder) {
+            throw "[LINUX-BUILD] MC unavailable at pushed commit $remoteSha (branch $Branch): the GitHub workflow or Linux Nuitka builder there lacks MC support. Commit and push the Linux MC implementation, then rerun GitHub Remote against the NEW pushed SHA. A temporary tag cannot turn the old screensaver workflow into an MC build. No workflow was started."
+        }
+        Write-Host "[LINUX-BUILD] Pinned GitHub commit has the MC-capable workflow and builder: $remoteSha"
+    }
+
     if ($Mode -eq 'Auto') {
         & gh workflow view $Workflow *> $null
         if ($LASTEXITCODE -ne 0) {
