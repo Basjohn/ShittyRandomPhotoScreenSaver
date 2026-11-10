@@ -63,3 +63,89 @@ def test_no_studio_navigation_clocks_or_widgets_in_runtime_target_module():
     source = inspect.getsource(targets)
     assert "PySide6" not in source and "QtWidgets" not in source
     assert "QTimer" not in source
+
+@pytest.mark.qt
+def test_runtime_studio_launch_builds_the_lazy_mode_body_before_save_camera(qt_app, tmp_path, monkeypatch):
+    """The live S route restores a mode id but not its Settings body; Save Camera must still work.
+
+    The real Settings dialog, VisualizersTab, Studio entry and Store are exercised. Only the actual Studio
+    QQuickWindow is replaced by a non-rendering controller, so no GL context or authored preset file is touched.
+    """
+    from copy import deepcopy
+    from PySide6.QtCore import QObject, Signal
+    from core.animation import AnimationManager
+    from core.settings.capability_activation import set_widget_family_activated
+    from core.settings.settings_manager import SettingsManager
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+    from core.settings.visualizer_presets import get_custom_preset_index
+    from ui.settings_dialog import SettingsDialog
+    from ui.studio import controller as studio_controller
+    from ui.studio import theme as studio_theme_module
+
+    mode = "shockwave_grid"
+    spec = spec_for_mode(mode)
+    manager = SettingsManager(organization="SRPSSFocusedTests", application="RuntimeStudioLazyCamera",
+                              storage_base_dir=tmp_path / "profile")
+    widgets = deepcopy(manager.get("widgets", {}))
+    visual = dict(widgets.get("spotify_visualizer", {}))
+    visual.update({"enabled": True, "visualizers_enabled": True, "mode": mode,
+                   "mode_activation": build_visualizer_mode_activation([mode]),
+                   f"preset_{mode}": get_custom_preset_index(mode)})
+    widgets["spotify_visualizer"] = visual
+    for family in ("media", "visualizers"):
+        set_widget_family_activated(widgets, family, True)
+    manager.set("widgets", widgets)
+    launch_pose = {spec.key("camera_position"): [0.3, -0.2, 0.4], spec.key("camera_fov"): 63.0}
+    target = make_studio_launch_target(mode, launch_pose)
+
+    opened = []
+
+    class QuietStudio(QObject):
+        closed = Signal()
+        failed = Signal(str)
+
+        @staticmethod
+        def active():
+            return None
+
+        def __init__(self, _adapter, store, _presence, _surface_factory, **kwargs):
+            super().__init__()
+            self.store = store
+            self.initial_pose = kwargs.get("initial_pose")
+            opened.append(self)
+
+        def open(self):
+            pass
+
+        def close_for_settings_gone(self, *_args):
+            pass
+
+        def close_for_quit(self, *_args):
+            pass
+
+    monkeypatch.setattr(studio_controller, "StudioController", QuietStudio)
+    monkeypatch.setattr(studio_theme_module, "subscribe_studio_theme", lambda _callback: (lambda: None))
+    dialog = SettingsDialog(manager, AnimationManager(), initial_target=target)
+    try:
+        tab = dialog.visualizers_tab
+        assert tab._get_active_visualizer_mode() == mode
+        assert not tab._vis_body_host.is_constructed(mode)  # the actual runtime-entry failure precondition
+        dialog.open_initial_studio()
+        assert len(opened) == 1
+        assert tab._vis_body_host.is_constructed(mode)
+        assert tab._vis_body_host.selected_mode == mode
+        assert isinstance(getattr(tab, "_shockwave_grid_lazy_values"), dict)
+        assert opened[0].initial_pose[spec.key("camera_fov")] == 63.0
+
+        values = opened[0].store.snapshot()
+        values[spec.key("camera_position")] = [0.3, -0.2, 0.4]
+        values[spec.key("camera_fov")] = 63.0
+        assert "Saved camera" in opened[0].store.save_camera(values)
+        assert manager.get(f"widgets.spotify_visualizer.{spec.key('camera_fov')}") == pytest.approx(63.0)
+    finally:
+        if opened:
+            opened[0].closed.emit()
+        dialog.close()
+        dialog.deleteLater()
+        qt_app.processEvents()
+        assert manager.flush(timeout=5.0)

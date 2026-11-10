@@ -8,7 +8,6 @@ Item {
     property bool hovered: false
     property bool canRestore: false
     property bool canRotate: false
-    property bool canStudio: false
     property bool canLock: false
     property bool canTransferLeft: false
     property bool canTransferRight: false
@@ -68,19 +67,17 @@ Item {
         Repeater {
             // Stable delegate identities: eligibility changes without rebuilding
             // the Repeater model or losing native QObject/action hit targets.
-            model: ["lock", "restore", "rotate", "studio", "close"]
+            model: ["lock", "restore", "rotate", "close"]
             delegate: Rectangle {
                 required property string modelData
                 readonly property string actionKind: modelData
                 readonly property string tipText: actionKind === "lock" ? "TOGGLE CHILD LOCK"
                     : actionKind === "restore" ? "RESTORE WIDGET SIZE"
                     : actionKind === "rotate" ? "ROTATE WIDGET CONTENT"
-                    : actionKind === "studio" ? "OPEN VISUALIZER STUDIO"
                     : "CLOSE & DISABLE WIDGET"
                 readonly property bool eligible: actionKind === "lock" ? chrome.canLock
                     : actionKind === "restore" ? chrome.canRestore
-                    : actionKind === "rotate" ? chrome.canRotate
-                    : actionKind === "studio" ? chrome.canStudio : true
+                    : actionKind === "rotate" ? chrome.canRotate : true
                 objectName: "hoverEditGlyph-" + actionKind
                 visible: eligible
                 width: visible ? 24 : 0
@@ -92,35 +89,13 @@ Item {
                 z: 10
                 Text {
                     anchors.centerIn: parent
-                    visible: actionKind === "restore" || actionKind === "rotate"
+                    visible: actionKind !== "lock" && actionKind !== "close"
                     text: (actionKind === "restore" ? "↶" : "↻")
                     // Increase the close X artwork, not its 24px button/hitbox.
                     font.pixelSize: actionKind === "restore" ? 17 : 15
                     anchors.verticalCenterOffset: 0
                     font.bold: true
                     color: "#f2f4f7"
-                }
-                // The Studio S is drawn on the same 20px local canvas as the X/lock.
-                // Bezier strokes avoid font-dependent cap height and baseline drift.
-                Canvas {
-                    anchors.centerIn: parent
-                    width: 20
-                    height: 20
-                    visible: actionKind === "studio"
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        ctx.strokeStyle = chrome.buttonInk
-                        ctx.lineWidth = 2.35
-                        ctx.lineCap = "round"
-                        ctx.lineJoin = "round"
-                        ctx.beginPath()
-                        ctx.moveTo(15.35, 5.3)
-                        ctx.bezierCurveTo(12.6, 2.4, 6.1, 3.3, 5.2, 7.4)
-                        ctx.bezierCurveTo(4.5, 10.0, 14.7, 9.5, 14.7, 12.8)
-                        ctx.bezierCurveTo(14.5, 16.5, 8.1, 18.0, 4.7, 14.8)
-                        ctx.stroke()
-                    }
                 }
                 // Draw a centred, larger X independent of font baseline and DPI.
                 Canvas {

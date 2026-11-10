@@ -998,6 +998,14 @@ class DisplayManager(QObject):
         runtime.input_controller.set_framed_flight_enabled(physical)
         runtime.scene_controller.set_visualizer_camera_reset_available(
             bool(admitted and mode and visualizer_camera_reset_offered(mode)))
+        # This is *mode* availability, not 3D orbit admission: Studio and content rotation
+        # also belong to Spectrum, Bubble and Oscilloscope (the orbit bit is false there).
+        from ui.studio.registry import has_studio
+        active = bool(owner is not None and owner.is_started and not owner.is_retired and mode)
+        runtime.scene_controller.set_visualizer_studio_rotate_glyphs(
+            bool(active and has_studio(mode)),
+            bool(active and owner.controller.presentation_policy.content_rotation_capable),
+        )
         runtime.scene_controller.set_visualizer_control_hints_available(framed)
         runtime.input_controller.set_scene_transform_enabled(framed, mode_id=mode)
 
@@ -2538,7 +2546,8 @@ class DisplayManager(QObject):
             or action not in {"close", "restore", "rotate", "lock", "studio", "transfer_left", "transfer_right"}
         ):
             return False
-        if widget_id == "spotify_visualizer" and _takeover_blocks_layout(self):
+        if (widget_id == "spotify_visualizer" and action not in {"studio", "rotate"}
+                and _takeover_blocks_layout(self)):
             return False
         scene = source.runtime.scene_controller
         state = getattr(scene, "_input_state", None)
@@ -2581,8 +2590,33 @@ class DisplayManager(QObject):
                 values[spec.key("camera_fov")] = getattr(state, "_" + spec.key("camera_fov"))
             # No QtWidgets imports: the engine resolves Settings/Studio only
             # after retiring this entire QQuickWindow generation.
-            self.settings_target_requested.emit(make_studio_launch_target(mode, values))
+            target = make_studio_launch_target(mode, values)
+            logger.info("[STUDIO] Live glyph accepted mode=%s camera_keys=%s; requesting Settings teardown",
+                        mode, tuple(sorted(values)))
+            self.settings_target_requested.emit(target)
             return True
+        if action == "rotate" and widget_id == "spotify_visualizer" and _takeover_blocks_layout(self):
+            if source is not self._quick_visualizer_unit:
+                return False
+            visualizer = self._quick_visualizer_owner
+            if (visualizer is None or visualizer.is_retired or not visualizer.is_started
+                    or not visualizer.controller.presentation_policy.content_rotation_capable):
+                return False
+            coordinator = _takeover_coordinator(self)
+            from core.expanded_visualizer_takeover import Phase
+            if coordinator is None or coordinator.phase is not Phase.EXPANDED:
+                return False
+            if not self._start_quick_custom_layout_session():
+                return False
+            layout = self._quick_custom_layout_owner
+            if not layout.is_fullscreen:
+                return False
+            from rendering.quick.fullscreen_overlay_edit import is_card_item
+            model = source.runtime.scene_controller.custom_layout_overlay.model
+            row = next((index for index, item in enumerate(model._items) if is_card_item(item)), -1)
+            if row < 0:
+                return False
+            return bool(model.rotateContent(row))
         owner = self._quick_custom_layout_owner
         transfer_direction = action.removeprefix("transfer_") if action.startswith("transfer_") else None
         if transfer_direction is not None:

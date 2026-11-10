@@ -61,11 +61,9 @@ Item {
     // never reaches the right-hand controls.
     readonly property real maxContentWidth: stage ? Math.max(48.0, stage.safeWidth * 0.45 - 2.0 * padding) : 48.0
 
-    // Fullscreen Edit's single-axis extents (its side handles; ordinary Edit's content box): the text box's width and
-    // height in ems of this overlay's font, so the box keeps its shape under the uniform scale and the font size. Zero
-    // (the default) is the natural size; a set extent replaces it on its own axis only and the content reflows into
-    // it (the caller elides, wraps and floors it). A set box may use the whole safe area (the 45 % cap above is only
-    // how far the natural size grows by itself).
+    // Legacy text-box extents in ems of this overlay's font (zero = natural size). The preset toast's
+    // parent Edit handles change these; Now Playing's parent handles change its artwork border instead,
+    // while its saved text extents remain readable and independently projected. The box may use the safe area.
     readonly property real setTextWidth: {
         const value = Number(options.textWidth)
         return isFinite(value) && value > 0 ? value * fontSize : 0.0
@@ -128,6 +126,8 @@ Item {
     // --------------------------------------------------------------------------------------------- visibility
     property real presence: 0.0
     property real contentOpacity: 1.0
+    // An actual track/preset event crossfades content; a replay/hover must never swap unchanged artwork.
+    property bool swapOnCycle: true
     // Holds this overlay's place in its corner from its reveal until its fade-out ends.
     property bool shown: false
     // Appearance order (a newer overlay sits nearer the corner's edge); set when it appears, not on a content swap.
@@ -143,8 +143,12 @@ Item {
     readonly property bool interactive: presence > 0.6 && osdYield > 0.6 && !!stage && stage.inputAdmitted
 
     function reveal() {
+        editPresenceFade.stop()
+        editContentFade.stop()
         cycle.stop()
         hideAnimation.stop()
+        swapOnCycle = true
+        swapOut.to = 0.0
         // Read the stage, not the derived binding: an edit edge reveals from the stage's own handler, possibly before
         // this slot's ``editing`` binding has re-evaluated.
         const holding = alwaysShow || hoverHeld || (!!stage && stage.editing === true)
@@ -165,6 +169,30 @@ Item {
         cycle.start()
     }
 
+    // Fullscreen Edit is a visibility hold, NOT a new track or preset event.  Re-running reveal()
+    // would fade the already-visible artwork to zero through swapOut and then fade it back in.
+    // Keep its latched content and current opacity when it is already showing; complete a partial fade
+    // without resetting it. A hidden or stale overlay still uses the normal reveal to latch its content.
+    function holdForEdit(needsContentSwap) {
+        if (presence <= 0.001 || !shown || needsContentSwap) {
+            reveal()
+            return
+        }
+        cycle.stop()
+        hideAnimation.stop()
+        editPresenceFade.stop()
+        editContentFade.stop()
+        shown = true
+        if (presence < 1.0) {
+            editPresenceFade.duration = Math.max(1, Math.round(fadeInMs * (1.0 - presence)))
+            editPresenceFade.start()
+        }
+        if (contentOpacity < 1.0) {
+            editContentFade.duration = Math.max(1, Math.round(swapInMs * (1.0 - contentOpacity)))
+            editContentFade.start()
+        }
+    }
+
     // Playback resumed: show again like an event, without swapping the (unchanged) content. An overlay already up
     // keeps showing: Always Show is untouched, a showing one just holds its window again from now.
     function resume() {
@@ -176,6 +204,8 @@ Item {
     // Show Again from where it is, without swapping the content: the reveal's own one finite cycle (fade in, hold,
     // fade out), holding at full instead while something holds it (Always Show, Edit, the pointer resting on it).
     function _showAgain() {
+        editPresenceFade.stop()
+        editContentFade.stop()
         cycle.stop()
         hideAnimation.stop()
         const showing = presence > 0.001
@@ -184,6 +214,8 @@ Item {
             contentOpacity = 1.0
         }
         shown = true
+        swapOnCycle = false
+        swapOut.to = contentOpacity  // keep the existing latched art/text; no zero-opacity transition
         const holdsNow = alwaysShow || hoverHeld || (!!stage && stage.editing === true)
         const makeRoom = !showing && !!stage && stage.cornerPeerShowing(slot)
         swapOut.duration = 0
@@ -233,6 +265,8 @@ Item {
     }
 
     function conceal() {
+        editPresenceFade.stop()
+        editContentFade.stop()
         cycle.stop()
         if (presence <= 0.0) {
             shown = false
@@ -253,11 +287,26 @@ Item {
             shown = false
     }
 
+    NumberAnimation {
+        id: editPresenceFade
+        target: slot
+        property: "presence"
+        to: 1.0
+        easing.type: Easing.InOutSine
+    }
+    NumberAnimation {
+        id: editContentFade
+        target: slot
+        property: "contentOpacity"
+        to: 1.0
+        easing.type: Easing.InOutSine
+    }
+
     SequentialAnimation {
         id: cycle
         NumberAnimation { id: swapOut; target: slot; property: "contentOpacity"; to: 0.0
             easing.type: Easing.InOutSine }
-        ScriptAction { script: slot._swap() }
+        ScriptAction { script: { if (slot.swapOnCycle) slot._swap() } }
         PauseAnimation { id: settle }
         ParallelAnimation {
             NumberAnimation { id: fadeIn; target: slot; property: "presence"; to: 1.0

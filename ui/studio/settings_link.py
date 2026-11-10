@@ -593,6 +593,13 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
     if active is not None:
         active.raise_surface()
         return active
+    # A runtime -> Settings handoff restores the chosen *mode id* without constructing that mode's lazy
+    # Settings body.  The Studio can render using persisted data in this state, but Save Camera then reaches
+    # a missing ``_<mode>_lazy_values`` cache.  Select through the existing mode-pill authority *before*
+    # creating the store; this also repairs direct callers which did not first display the mode page.
+    host = getattr(tab, "_vis_body_host", None)
+    if host is not None and (host.selected_mode != mode_id or not host.is_constructed(mode_id)):
+        tab._select_mode_page(mode_id)
     dialog = tab.window()
     store = VisualizerSettingsStore(tab, mode_id)
     if presence is None:

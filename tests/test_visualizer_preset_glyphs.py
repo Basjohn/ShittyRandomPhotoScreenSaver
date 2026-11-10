@@ -90,6 +90,53 @@ def test_preset_glyphs_click_both_directions_and_delay_tooltips(qt_app, qtbot, e
         qt_app.processEvents()
 
 
+def test_studio_and_rotate_glyph_clicks_use_one_shared_qml_signal(qt_app, qtbot):
+    engine = QQmlEngine()
+    component, root = _load(engine, "VisualizerPresentation.qml")
+    root.setWidth(660)
+    root.setHeight(380)
+    for key, value in dict(presentationActive=True, widgetGlowAdmitted=True, volumeWheelEnabled=True,
+                           cameraResetAvailable=True, expandGlyphAvailable=True,
+                           studioGlyphAvailable=True, contentRotateGlyphAvailable=True).items():
+        root.setProperty(key, value)
+    window = QQuickWindow()
+    window.resize(750, 490)
+    root.setParentItem(window.contentItem())
+    actions = []
+    root.hoverEditGlyphRequested.connect(actions.append)
+    window.show()
+    assert QTest.qWaitForWindowExposed(window)
+    try:
+        # Native QQuickWindow pointer delivery, not an isolated Python payload test.
+        QTest.mouseMove(window, QPoint(330, 230))
+        for name, action in (("visualizerStudioGlyph", "studio"),
+                             ("visualizerRotateGlyph", "rotate")):
+            glyph = _quick_items_named(root, name)[0]
+            qtbot.waitUntil(lambda: glyph.isEnabled() and glyph.isVisible(), timeout=2500)
+            point = glyph.mapToScene(glyph.boundingRect().center()).toPoint()
+            QTest.mouseMove(window, point)
+            QTest.mouseClick(window, Qt.LeftButton, pos=point)
+            assert actions[-1] == action
+        assert actions == ["studio", "rotate"]
+        root.setProperty("expandedDisplay", True)
+        QTest.mouseMove(window, QPoint(330, 230))
+        for name, action in (("visualizerStudioGlyph", "studio"),
+                             ("visualizerRotateGlyph", "rotate")):
+            glyph = _quick_items_named(root, name)[0]
+            assert glyph.isVisible()
+            point = glyph.mapToScene(glyph.boundingRect().center()).toPoint()
+            QTest.mouseMove(window, point)
+            QTest.mouseClick(window, Qt.LeftButton, pos=point)
+            assert actions[-1] == action
+        assert actions == ["studio", "rotate", "studio", "rotate"]
+    finally:
+        root.setParentItem(None)
+        root.deleteLater()
+        window.close()
+        window.deleteLater()
+        qt_app.processEvents()
+
+
 def test_default_visualizer_model_resolves_default_mode_and_first_preset():
     from core.settings.default_contract import require_canonical_default
     from core.settings.models import SpotifyVisualizerSettings

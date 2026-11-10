@@ -463,6 +463,8 @@ class QuickSceneController(QObject):
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_startup_reveal_opacity = 1.0
         self._visualizer_camera_reset_available = False
+        self._visualizer_studio_glyph_available = False
+        self._visualizer_content_rotate_glyph_available = False
         self._visualizer_display_transfer_available = (False, False)
         self._visualizer_expand_glyph = (False, False)
         # The full-display overlays (M3b), retained for a lazily created root: whether the display-wide card is drawn
@@ -855,7 +857,7 @@ class QuickSceneController(QObject):
             or not state.always_show_glyphs
         ):
             return
-        if action not in {"close", "restore", "rotate", "lock", "transfer_left", "transfer_right"}:
+        if action not in {"close", "restore", "rotate", "lock", "studio", "transfer_left", "transfer_right"}:
             return
         self.hover_edit_glyph_requested.emit(action, model_identity)
 
@@ -1465,8 +1467,8 @@ class QuickSceneController(QObject):
         text = stage.findChild(QQuickItem, "expandedOverlayNowPlayingText")
         if text is None:
             return None
-        # Each overlay's text box (what its side handles set): the toast's is its frame inside the card padding; Now
-        # Playing's is its text block, beside its artwork (``beside``: the artwork's authored width and the gap).
+        # The toast's side handles set text extents. Now Playing's parent handles instead size its actual
+        # artwork border; its text box and authored artwork dimensions are reported separately for the editor.
         for name, slot in slots.items():
             x, y, width, height = slot["rect"]
             pad = slot["padding"]
@@ -1475,6 +1477,8 @@ class QuickSceneController(QObject):
         now_playing = stage.findChild(QQuickItem, "expandedOverlayNowPlaying")
         slots["now_playing"]["text"] = rect(text)
         slots["now_playing"]["beside"] = float(now_playing.property("artWidth")) + float(now_playing.property("gap"))
+        slots["now_playing"]["artwork_size"] = (float(now_playing.property("artWidth")),
+                                                   float(now_playing.property("artHeight")))
         # The Edit parts: the preset toast and Now Playing's block (its whole overlay; its parts are the block's
         # children, edited by ordinary Edit's child editor through the slot as the block's presentation).
         parts = {"preset": slots["preset"]["rect"], "now_playing": slots["now_playing"]["rect"]}
@@ -2543,6 +2547,18 @@ class QuickSceneController(QObject):
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("cameraResetAvailable", bool(available))
 
+    def set_visualizer_studio_rotate_glyphs(self, studio: bool, rotate: bool) -> None:
+        """Mode-edge capabilities for the ordinary and expanded card's single control row."""
+        next_values = bool(studio), bool(rotate)
+        if (self._visualizer_studio_glyph_available,
+                self._visualizer_content_rotate_glyph_available) == next_values:
+            return
+        self._visualizer_studio_glyph_available, self._visualizer_content_rotate_glyph_available = next_values
+        root = self._visualizer_root
+        if root is not None:
+            root.setProperty("studioGlyphAvailable", next_values[0])
+            root.setProperty("contentRotateGlyphAvailable", next_values[1])
+
     def set_visualizer_display_transfer_available(self, left: bool, right: bool) -> None:
         value = bool(left), bool(right)
         if value == self._visualizer_display_transfer_available:
@@ -2934,6 +2950,8 @@ class QuickSceneController(QObject):
         )
         root.setProperty("volumeWheelEnabled", self._custom_layout_session is None)
         root.setProperty("cameraResetAvailable", self._visualizer_camera_reset_available)
+        root.setProperty("studioGlyphAvailable", self._visualizer_studio_glyph_available)
+        root.setProperty("contentRotateGlyphAvailable", self._visualizer_content_rotate_glyph_available)
         root.setProperty("displayTransferLeftAvailable", self._visualizer_display_transfer_available[0])
         root.setProperty("displayTransferRightAvailable", self._visualizer_display_transfer_available[1])
         root.setProperty("expandGlyphAvailable", self._visualizer_expand_glyph[0])

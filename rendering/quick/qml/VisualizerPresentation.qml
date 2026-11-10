@@ -14,6 +14,8 @@ Item {
     property var editContentEnvelope: ({ admitted: false })
     signal appVolumeStepRequested(int direction)
     property bool cameraResetAvailable: false
+    property bool studioGlyphAvailable: false
+    property bool contentRotateGlyphAvailable: false
     signal cameraResetRequested()
     // Expanded Visualizer (plan 01 §B1): offered for a capable mode outside Edit; the takeover coordinator
     // publishes both values at its event edges. expandedDisplay turns the glyph into the collapse.
@@ -37,17 +39,18 @@ Item {
     signal expandedOverlayEditGeometryChanged()
     // The bottom-right glyph row (operator, 8 Nov: "the rotate glyph should be on the same line as the bottom right
     // glyphs, heck let's put expansion there too"). One Row (glyphRow below) places every card control of that
-    // corner, on the ordinary and the display-wide card alike. Left to right: the preset steps, Edit's Rotate Widget
-    // Content (Edit layer, see CustomLayoutOverlay's editGlyphRow), Reset Camera, expand / collapse at the far corner.
+    // corner, on the ordinary and the display-wide card alike. Left to right: the preset steps,
+    // Studio, Rotate Content, Reset Camera and expand / collapse at the far corner. Edit owns a separate
+    // rotation control on its draft card and suppresses these two normal-mode actions.
     // A member takes its place while it is offered (its own availability) and the row skips the rest, so there is
     // never a gap; the shared input admission is the row's, so admission never moves a member and hover only fades.
     // These values are the row's one geometry source: Edit's controls on this card read them too.
     readonly property real glyphSize: 26
     readonly property real glyphSpacing: 5
     readonly property real glyphRowInset: Math.max(12, cardBorderWidth + 6)
-    // The widest row there can be (both preset steps, Rotate Widget Content, Reset Camera, expand): a card too
-    // narrow or too short for it scales the whole row down about its bottom-right corner instead of overflowing.
-    readonly property int glyphRowSlots: 5
+    // Worst case: preset steps + Studio + Rotate + camera reset + expand. The same one-row fit rule
+    // scales it uniformly on narrow cards, rather than clipping or overlapping its glyph hitboxes.
+    readonly property int glyphRowSlots: 6
     readonly property real glyphRowFullWidth: glyphRowSlots * glyphSize + (glyphRowSlots - 1) * glyphSpacing
     readonly property real glyphRowScale: Math.max(0.0, Math.min(1.0,
         (width - 2 * glyphRowInset) / glyphRowFullWidth, (height - 2 * glyphRowInset) / glyphSize))
@@ -486,6 +489,117 @@ Item {
             }
         }
 
+        // Normal and expanded modes share the same controls. Studio and Rotate are NOT
+        // ordinary-card hover Edit glyphs: those are intentionally absent when expanded.
+        Item {
+            id: studioActionsSlot
+            objectName: "visualizerStudioActionsSlot"
+            visible: visualizerPresentationRoot.volumeWheelEnabled
+                && visualizerPresentationRoot.widgetGlowAdmitted
+                && visualizerPresentationRoot.visible
+                && (visualizerPresentationRoot.studioGlyphAvailable
+                    || visualizerPresentationRoot.contentRotateGlyphAvailable)
+            width: studioActions.width
+            height: visualizerPresentationRoot.glyphSize
+            Row {
+                id: studioActions
+                objectName: "visualizerStudioActions"
+                spacing: visualizerPresentationRoot.glyphSpacing
+                Repeater {
+                    model: ["studio", "rotate"]
+                    delegate: Rectangle {
+                        required property string modelData
+                        readonly property string actionKind: modelData
+                        readonly property string tipText: actionKind === "studio"
+                            ? "OPEN VISUALIZER STUDIO" : "ROTATE WIDGET CONTENT"
+                        objectName: actionKind === "studio"
+                            ? "visualizerStudioGlyph" : "visualizerRotateGlyph"
+                        visible: actionKind === "studio"
+                            ? visualizerPresentationRoot.studioGlyphAvailable
+                            : visualizerPresentationRoot.contentRotateGlyphAvailable
+                        width: visible ? visualizerPresentationRoot.glyphSize : 0
+                        height: visualizerPresentationRoot.glyphSize
+                        radius: width / 2
+                        color: cameraResetGlyph.color
+                        border.width: cameraResetGlyph.border.width
+                        border.color: cameraResetGlyph.border.color
+                        opacity: (visualizerPresentationRoot.alwaysShowGlyphs && cameraResetHover.hovered)
+                            ? 0.92 : 0.0
+                        enabled: visible && visualizerPresentationRoot.volumeWheelEnabled
+                            && visualizerPresentationRoot.widgetGlowAdmitted
+                            && visualizerPresentationRoot.alwaysShowGlyphs
+                            && cameraResetHover.hovered && opacity > 0.05
+                        Behavior on opacity {
+                            NumberAnimation { duration: cameraResetHover.hovered ? 700 : 1200;
+                                              easing.type: Easing.InOutSine }
+                        }
+                        Canvas {
+                            anchors.centerIn: parent
+                            width: 20
+                            height: 20
+                            readonly property color ink: "#f2f4f7"
+                            onInkChanged: requestPaint()
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.strokeStyle = ink
+                                ctx.lineCap = "square"
+                                ctx.lineJoin = "miter"
+                                if (modelData === "studio") {
+                                    // Smaller, blocky S, five strictly straight strokes. Centre stays (10,10).
+                                    ctx.lineWidth = 2.6
+                                    ctx.beginPath()
+                                    ctx.moveTo(14.3, 5.4)
+                                    ctx.lineTo(5.9, 5.4)
+                                    ctx.lineTo(5.9, 9.8)
+                                    ctx.lineTo(14.1, 9.8)
+                                    ctx.lineTo(14.1, 14.6)
+                                    ctx.lineTo(5.8, 14.6)
+                                    ctx.stroke()
+                                } else {
+                                    // Reuse Edit's stylized quarter-turn pictogram, centred at 20px.
+                                    ctx.lineWidth = 1.65
+                                    ctx.strokeRect(4, 9, 7, 8)
+                                    ctx.beginPath()
+                                    ctx.moveTo(4, 6)
+                                    ctx.bezierCurveTo(10, 0, 18, 4, 17, 11)
+                                    ctx.moveTo(14, 8)
+                                    ctx.lineTo(17, 11)
+                                    ctx.lineTo(19, 7)
+                                    ctx.stroke()
+                                }
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: parent.enabled
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            propagateComposedEvents: false
+                            readonly property bool consumesDoubleClick: true
+                            onEntered: {
+                                visualizerPresentationRoot.cameraActionTip = tipText
+                                visualizerPresentationRoot.cameraActionTipX = visualizerPresentationRoot.glyphRowPointX(
+                                    studioActionsSlot.x + parent.x + parent.width)
+                                cameraResetTipReveal.restart()
+                            }
+                            onExited: {
+                                if (visualizerPresentationRoot.cameraActionTip !== tipText) return
+                                cameraResetTipReveal.stop()
+                                visualizerPresentationRoot.cameraResetTipProgress = 0.0
+                            }
+                            onPressed: function(mouse) { mouse.accepted = true }
+                            onDoubleClicked: function(mouse) { mouse.accepted = true }
+                            onClicked: function(mouse) {
+                                mouse.accepted = true
+                                visualizerPresentationRoot.hoverEditGlyphRequested(actionKind)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // In the row while offered.
         Item {
             id: cameraResetSlot
@@ -662,7 +776,8 @@ Item {
         objectName: "visualizerPresetTooltip"
         z: 14
         enabled: false
-        visible: presetControls.enabled && opacity > 0.0
+        visible: visualizerPresentationRoot.widgetGlowAdmitted && opacity > 0.0
+            && (presetControls.enabled || studioActionsSlot.visible || cameraResetGlyph.enabled)
         opacity: Math.max(0.0, Math.min(1.0,
             (visualizerPresentationRoot.cameraResetTipProgress - 0.56) / 0.44))
         width: resetTooltipText.implicitWidth + 18
@@ -699,7 +814,6 @@ Item {
             hovered: visualizerInteractionHover.hovered
             canRestore: true
             canRotate: false
-            canStudio: true
             canTransferLeft: visualizerPresentationRoot.displayTransferLeftAvailable
             canTransferRight: visualizerPresentationRoot.displayTransferRightAvailable
             canLock: false

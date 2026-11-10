@@ -456,3 +456,27 @@ def test_chrome_paints_once_and_idles(studio):
     assert [i.paints for i in items] == painted              # nothing repainted while idle
     assert surface.frame_requests == 0                      # and nothing asked for another frame
     assert controller.evaluations == evaluations             # the viewport did not re-evaluate for the chrome
+
+
+@pytest.mark.qt
+def test_studio_window_inherits_explicit_native_icon_without_widget_chrome(studio, qt_app):
+    """The custom QML title glyph isn't the HWND/taskbar icon; the top-level QQuickWindow needs its own."""
+    from PySide6.QtGui import QIcon, QPixmap
+    from ui.studio.surface import StudioWindowSurface
+
+    original_icon = qt_app.windowIcon()
+    image = QPixmap(32, 32)
+    image.fill(QColor(190, 95, 55))
+    qt_app.setWindowIcon(QIcon(image))
+    window_surface = None
+    try:
+        controller, _hidden = studio("waveform_ribbon")
+        window_surface = StudioWindowSurface(controller)
+        assert not window_surface.window.icon().isNull()
+        assert not window_surface.window.isVisible()  # No native taskbar presence created by this test.
+    finally:
+        if window_surface is not None:
+            window_surface.host.retire()
+            window_surface.window.deleteLater()
+            window_surface.host.release_engine()
+        qt_app.setWindowIcon(original_icon)

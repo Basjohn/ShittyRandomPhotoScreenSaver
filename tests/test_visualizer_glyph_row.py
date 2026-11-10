@@ -37,8 +37,8 @@ from tests.test_visualizer_expansion_overlays import (
     _visual,
 )
 
-CARD_ROW = ("visualizerPreviousPresetGlyph", "visualizerNextPresetGlyph", "visualizerCameraResetGlyph",
-            "visualizerExpandGlyph")
+CARD_ROW = ("visualizerPreviousPresetGlyph", "visualizerNextPresetGlyph", "visualizerStudioGlyph",
+            "visualizerRotateGlyph", "visualizerCameraResetGlyph", "visualizerExpandGlyph")
 
 
 @pytest.fixture
@@ -66,10 +66,12 @@ def _ordinary(display, *, mode: str = "spectrum", extent: tuple[float, float] | 
     return presentation
 
 
-def _offer(display, *, reset: bool, expand: bool, admitted: bool = True) -> None:
+def _offer(display, *, reset: bool, expand: bool, admitted: bool = True,
+           studio: bool = False, rotate: bool = False) -> None:
     root = display.scene._visualizer_root
     for name, value in (("alwaysShowGlyphs", True), ("widgetGlowAdmitted", admitted),
-                        ("cameraResetAvailable", reset), ("expandGlyphAvailable", expand)):
+                        ("cameraResetAvailable", reset), ("expandGlyphAvailable", expand),
+                        ("studioGlyphAvailable", studio), ("contentRotateGlyphAvailable", rotate)):
         root.setProperty(name, value)
     _run(display, 60)                               # a frame or two: the rows lay out at the frame's polish
 
@@ -137,6 +139,25 @@ def test_the_cards_bottom_right_glyphs_are_one_row(display, card, reset, expand)
     assert _row(display, CARD_ROW) == []
     _offer(display, reset=reset, expand=expand)
     assert _row(display, CARD_ROW) == members
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("card", ["ordinary", "expanded"])
+@pytest.mark.parametrize("studio,rotate", [(True, False), (False, True), (True, True)])
+def test_studio_and_rotate_are_the_same_glyph_row_on_ordinary_and_expanded_cards(display, card, studio, rotate):
+    if card == "expanded":
+        _expanded_card(display)
+    else:
+        _ordinary(display)
+    _offer(display, reset=True, expand=True, studio=studio, rotate=rotate)
+    expected = ("visualizerPreviousPresetGlyph", "visualizerNextPresetGlyph") + (
+        ("visualizerStudioGlyph",) if studio else ()) + (
+        ("visualizerRotateGlyph",) if rotate else ()) + (
+        "visualizerCameraResetGlyph", "visualizerExpandGlyph")
+    members = _row(display, CARD_ROW)
+    _assert_one_row(members, _card_rect(display), expected)
+    _offer(display, reset=True, expand=True, studio=studio, rotate=rotate, admitted=False)
+    assert not _row(display, CARD_ROW)
 
 
 @pytest.mark.qt

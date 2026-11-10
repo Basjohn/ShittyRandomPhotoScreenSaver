@@ -155,7 +155,8 @@ class StudioWindowSurface(QObject):
         window.setTitle(controller.adapter.title or "Studio")
         # The QML titlebar's icon is artwork, not the native HWND/taskbar icon.
         # Explicitly set the GUI application's icon on this standalone QQuickWindow.
-        icon = QGuiApplication.windowIcon()
+        app = QGuiApplication.instance()
+        icon = app.windowIcon() if app is not None else QIcon()
         if icon.isNull():
             # A frozen build ships the same file beside its entrypoint; source mode
             # uses the repository root. No QtWidgets dependency in Studio/worker.

@@ -1684,8 +1684,8 @@ class SettingsDialog(QDialog):
             logger.warning("Studio launch target has no available Visualizers page: %s", target.studio_mode)
             return
         try:
-            if tab._get_active_visualizer_mode() != target.studio_mode:
-                tab._select_mode_page(target.studio_mode)
+            # The central Studio entry point admits and constructs the selected lazy body, even when
+            # Settings already restored this mode's id without materialising its value cache.
             from ui.studio.settings_link import open_mode_studio
             open_mode_studio(tab, target.studio_mode, initial_pose=target.studio_pose)
         except Exception:

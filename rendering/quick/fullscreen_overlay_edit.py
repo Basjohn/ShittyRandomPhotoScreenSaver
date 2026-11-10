@@ -36,19 +36,17 @@ This module is what differs about those items:
 * **Scaling.** Corner handles and the wheel scale the preset toast and Now Playing's block by ``scale`` (their font;
   every part follows). A corner drag uses the drag-to-scale gesture of ordinary Edit and keeps the frame's opposite
   corner where it was; the wheel and Restore Size keep its top centre (as ordinary Edit does).
-* **Single-axis sizing** (ordinary Edit's ``content_extent``: every part declares both content axes, so the same Edit
-  layer draws the same side strips and, on the selected part, the same two-axis diagonal corners). A side handle
-  changes only its axis: the text box's ``text_width`` / ``text_height`` (ems of the overlay's font; the text elides,
-  or wraps into a taller box). Now Playing's block is its artwork beside its text box, so its side handles set the
-  text box that makes the block that size. The dragged edge follows the cursor under the ordinary resize rule
+* **Single-axis sizing** uses the existing ordinary Edit side strips and two-axis diagonal handles. Preset-toast
+  handles still resize its authored text extents. **Now Playing's parent** X/Y handles instead resize the actual
+  artwork border through the existing ``artwork_width`` / ``artwork_height`` factors. Text remains a compact
+  vertically centred group beside it; wrapping only responds to genuine changes in available text width. Per-child
+  editing still independently sizes/moves artwork, title, artist, album and transport without altering the parent. The dragged edge follows the cursor under the ordinary resize rule
   (``edge_resize_rect``, bounded by the safe area) and snaps with ``resolve_resize_edge_snap`` (the safe area's
   centre, the other overlay's edges), the opposite edge staying put. The untouched axis keeps its member exactly
   (natural stays natural); the stored extent is the one the overlay really drew (its floors and the safe area
-  included). A uniform scale keeps the box (its extents are font-relative), as ordinary Edit's does; Restore Size
-  returns the part's scale and extents to their canonical values and clears its children's records, as ordinary
-  Edit drops ``content_extent`` and restores authored child geometry. (``artwork_scale`` / ``artwork_width`` /
-  ``artwork_height``, M3c's artwork sizing before the artwork became a child, keep drawing as stored; only Restore
-  Size returns them to canonical.)
+  included). A uniform scale keeps the authored text extents and artwork factors unchanged; Restore Size returns
+  scale, text extents and artwork factors to their canonical values and clears child geometry records. Nothing
+  implicitly changes a user's individual child placement or position.
 * **Save** writes exactly the placement members into the one value; nothing else is in the session, so the ordinary
   layout and CUSTOM cannot change. Cancel restores the baseline (the committed value) through the session's own
   ``restore_baseline``.
@@ -110,7 +108,7 @@ PARTS: dict[str, tuple[str, tuple[str, ...]]] = {
 #: The size factor each part's corner handles and wheel change.
 SCALE_KEY = {"preset": "scale", "now_playing": "scale", "volume_osd": "scale"}
 #: The (horizontal, vertical) extents each part's side handles change (ordinary Edit's content axes).
-EXTENT_KEYS = {"preset": ("text_width", "text_height"), "now_playing": ("text_width", "text_height"),
+EXTENT_KEYS = {"preset": ("text_width", "text_height"), "now_playing": ("artwork_width", "artwork_height"),
                "volume_osd": ()}
 #: Every part declares both content axes: the Edit layer draws its side strips and two-axis diagonal corners.
 CONTENT_AXES = frozenset({"horizontal", "vertical"})
@@ -232,6 +230,10 @@ class _ResizeOrigin:
     cursor: QPoint
     scale: float
     handle: str
+    # Frozen artwork axes at pointer-down: resize is absolute from the gesture origin, not the
+    # mutable current text width (which can reflow while the user drags a handle).
+    artwork_size: tuple[float, float] = (0.0, 0.0)
+    artwork_factors: tuple[float, float] = (1.0, 1.0)
 
 
 class FullscreenOverlayEdit:
@@ -579,8 +581,17 @@ class FullscreenOverlayEdit:
         if handle not in _CORNER_HANDLES and not EXTENT_KEYS[part]:
             return False        # no single-axis extents (the Volume OSD): corners and the wheel only
         payload = item.current_size_payload
+        art = (0.0, 0.0)
+        factors = (1.0, 1.0)
+        if part == "now_playing":
+            snapshot = self._geometry()
+            if snapshot is None:
+                return False
+            art = tuple(snapshot["slots"]["now_playing"]["artwork_size"])
+            factors = (float(payload["artwork_width"]), float(payload["artwork_height"]))
         self._resize_origins[item.source_key] = _ResizeOrigin(
-            QRect(item.current_global_rect), QPoint(cursor), float(payload.get(SCALE_KEY[part], 1.0)), handle)
+            QRect(item.current_global_rect), QPoint(cursor), float(payload.get(SCALE_KEY[part], 1.0)), handle,
+            art, factors)
         return True
 
     def update_resize(self, item: CustomLayoutSessionItem, handle: str, cursor: QPoint, finalize: bool) -> bool:
@@ -660,15 +671,33 @@ class FullscreenOverlayEdit:
                 _qrect(slot["rect"]).translated(-safe.x(), -safe.y())
                 for name, slot in snapshot["slots"].items() if name != overlay], min_size=QSize(1, 1))
         target = resolution.rect
-        changed = self._set_members(item, self._extents_for(
-            part, target.width() if horizontal_edge else None, target.height() if vertical_edge else None,
-            snapshot))
-        # WYSIWYG: keep the extent the part really drew (its floors and the safe area applied), as offsets are.
-        drawn = self._geometry()
-        if drawn is not None:
-            settled = self._drawn_extents(part, horizontal_edge is not None, vertical_edge is not None, drawn)
-            if settled != {k: item.current_size_payload.get(k) for k in settled}:
-                changed = self._set_members(item, settled) or changed
+        if part == "now_playing":
+            # The parent frame is artwork + gap + an independently laid-out text group. Delta-based axis sizing
+            # turns the exact pointer displacement into artwork width/height, without feeding metadata reflow
+            # back into the gesture. A visible card border is the artwork frame itself.
+            from rendering.quick.fullscreen_artwork_resize import artwork_factor_after_frame_delta
+
+            members = {}
+            for key, touched, new_frame_size, old_frame_size, old_art_size, old_factor in (
+                ("artwork_width", horizontal_edge is not None, target.width(), origin.rect.width(),
+                 origin.artwork_size[0], origin.artwork_factors[0]),
+                ("artwork_height", vertical_edge is not None, target.height(), origin.rect.height(),
+                 origin.artwork_size[1], origin.artwork_factors[1]),
+            ):
+                if touched and old_art_size > 0.0:
+                    members[key] = artwork_factor_after_frame_delta(
+                        old_factor, old_art_size, new_frame_size - old_frame_size)
+            changed = self._set_members(item, members)
+        else:
+            changed = self._set_members(item, self._extents_for(
+                part, target.width() if horizontal_edge else None, target.height() if vertical_edge else None,
+                snapshot))
+            # The toast uses its actual drawn text extents: it floors them when the text cannot shrink more.
+            drawn = self._geometry()
+            if drawn is not None:
+                settled = self._drawn_extents(part, horizontal_edge is not None, vertical_edge is not None, drawn)
+                if settled != {k: item.current_size_payload.get(k) for k in settled}:
+                    changed = self._set_members(item, settled) or changed
         # The opposite edge stays where it was.
         fixed = ("bottom" if vertical_edge == "top" else "top") + ("_right" if horizontal_edge == "left" else "_left")
         self._keep(item, origin.rect, fixed)

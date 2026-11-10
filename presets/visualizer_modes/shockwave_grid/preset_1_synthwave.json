@@ -13131,8 +13131,8 @@
     }
   },
   "starting_view": {
-    "shockwave_grid_turn": 0.08,
-    "shockwave_grid_tilt": 0.22,
+    "shockwave_grid_turn": 0.08222222222222247,
+    "shockwave_grid_tilt": 0.203,
     "shockwave_grid_scene_scale": 1.2,
     "shockwave_grid_scene_pan_x": 0.1,
     "shockwave_grid_scene_pan_y": 0.0

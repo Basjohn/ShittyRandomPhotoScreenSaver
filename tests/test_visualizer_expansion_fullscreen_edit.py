@@ -321,8 +321,14 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
             k: v for k, v in seeded[overlay].items() if k not in keys}
         # The side handles really set every extent the script touched (each axis on its own; the Volume OSD has none
         # and this display has no OSD).
-        if "text_width" in keys:
-            assert all(draft_value[overlay][key] != seeded[overlay][key] for key in ("text_width", "text_height"))
+        if overlay == "preset":
+            assert all(draft_value[overlay][key] != seeded[overlay][key]
+                       for key in ("text_width", "text_height"))
+        elif overlay == "now_playing":
+            assert all(draft_value[overlay][key] != seeded[overlay][key]
+                       for key in ("artwork_width", "artwork_height"))
+            assert (draft_value[overlay]["text_width"], draft_value[overlay]["text_height"]) == (
+                seeded[overlay]["text_width"], seeded[overlay]["text_height"])
     # Now Playing's parts moved and sized through the child editor are records of its child_geometry.
     assert set(draft_value["now_playing"]["child_geometry"]) == {"title", "artwork", "artist"}
     assert edit.owner.fullscreen_draft_pending and edit.flips == [True]
@@ -653,9 +659,8 @@ SIDES = {"right": 90, "left": -90, "top": -60, "bottom": 60}
 @pytest.mark.parametrize("part", PARTS)
 @pytest.mark.parametrize("handle", tuple(SIDES))
 def test_a_side_handle_changes_only_its_own_axis(display, tmp_path, part, handle):
-    """Ordinary Edit's single-axis content-extent semantics: a side strip changes one dimension and one extent member;
-    the other dimension and member stay exactly; the opposite edge stays where it was. Now Playing's block is its
-    artwork beside its text box: its side strips set the text box that makes the block that size."""
+    """Preset sides resize text extents; Now Playing sides change its artwork border, not its text.
+    The untouched artwork axis and the uniform scale persist, including after editing the parent."""
     from rendering.quick.fullscreen_overlay_edit import EXTENT_KEYS, SCALE_KEY
 
     settings = _manager(tmp_path)
@@ -674,8 +679,15 @@ def test_a_side_handle_changes_only_its_own_axis(display, tmp_path, part, handle
     horizontal = handle in ("left", "right")
     grown, kept = ((after.width(), before.width()), (after.height(), before.height())) if horizontal else (
         (after.height(), before.height()), (after.width(), before.width()))
-    assert grown[0] >= grown[1] + abs(SIDES[handle]) // 2, (before, after)     # its axis followed the drag
-    assert kept[0] == kept[1], (before, after)                                   # the other axis did not move
+    if part == "preset":
+        assert grown[0] >= grown[1] + abs(SIDES[handle]) // 2, (before, after)
+    else:
+        # At its minimum the artwork may be shorter than the *natural* text stack: the parent cannot
+        # visually shrink below the text's height. The border itself still changes on exactly one axis.
+        art = _root(display).findChild(QQuickItem, "expandedOverlayArtwork")
+        assert art is not None and art.width() > 0 and art.height() > 0
+        assert grown[0] != grown[1] or handle == "top", (before, after)
+    assert kept[0] == kept[1], (before, after)
     fixed = {"right": before.left() == after.left() and before.top() == after.top(),
              "left": before.right() == after.right() and before.top() == after.top(),
              "top": before.bottom() == after.bottom() and before.left() == after.left(),
@@ -690,9 +702,8 @@ def test_a_side_handle_changes_only_its_own_axis(display, tmp_path, part, handle
 
 
 @pytest.mark.qt
-def test_a_set_extent_reflows_the_text_and_crops_the_artwork(display, tmp_path):
-    """A narrower text box elides; a taller one gives the text more lines (it wraps); a non-square artwork frame (the
-    artwork sized on one axis as Now Playing's child) crops the image into it (the ordinary freeform artwork frame)."""
+def test_parent_axes_resize_the_artwork_border_not_the_metadata_text_box(display, tmp_path):
+    """Now Playing X/Y are actual border-geometry handles. Preset toast extents keep their own text semantics."""
     settings = _manager(tmp_path)
     _draw(display, media=_Media(title="A Longer Track Title"),
           preset="A Longer Preset Name", config=_projection(_seed(settings)))
@@ -709,41 +720,44 @@ def test_a_set_extent_reflows_the_text_and_crops_the_artwork(display, tmp_path):
 
     preset, title = main("expandedOverlayPresetText"), main("expandedOverlayTitle")
     assert not preset.property("truncated") and int(preset.property("lineCount")) == 1
-    edit.side("preset", "right", -WIDTH)                       # as narrow as it draws: it elides
+    edit.side("preset", "right", -WIDTH)
     _run(display, 60)
     assert preset.property("truncated") and int(preset.property("lineCount")) == 1
-    edit.side("preset", "bottom", 120)                         # taller: the name wraps onto more lines
+    edit.side("preset", "bottom", 120)
     _run(display, 60)
     assert int(preset.property("lineCount")) >= 2
 
-    assert int(title.property("lineCount")) == 1
-    edit.side("now_playing", "right", -WIDTH)
-    _run(display, 60)
-    assert title.property("truncated")
     art_item = layer.findChild(QQuickItem, "expandedOverlayArtwork")
-    artwork_before = (art_item.width(), art_item.height())
-    edit.side("now_playing", "top", -140)                       # the title gets the extra lines, the artwork stays
+    border = layer.findChild(QQuickItem, "expandedOverlayArtworkBorder")
+    text_block = layer.findChild(QQuickItem, "expandedOverlayNowPlayingText")
+    before_art = (art_item.width(), art_item.height())
+    before_text = (text_block.width(), text_block.height(), title.property("lineCount"))
+    before_value = dict(edit.item("now_playing").current_size_payload)
+    edit.side("now_playing", "right", 90)
     _run(display, 60)
-    assert int(title.property("lineCount")) >= 2
-    assert (art_item.width(), art_item.height()) == artwork_before
+    assert art_item.width() > before_art[0] and art_item.height() == before_art[1]
+    assert abs(border.width() - art_item.width()) <= 1
+    assert edit.item("now_playing").current_size_payload["text_width"] == before_value["text_width"]
+    assert edit.item("now_playing").current_size_payload["text_height"] == before_value["text_height"]
+    edit.side("now_playing", "bottom", 60)
+    _run(display, 60)
+    assert art_item.height() > before_art[1] and abs(border.height() - art_item.height()) <= 1
+    assert (text_block.width(), title.property("lineCount")) == before_text[0::2]
 
     edit.open_children()
+    child_before = art_item.width()
     edit.child_resize("artwork", "right", 80)
     _run(display, 60)
-    assert art_item.width() > art_item.height()
+    assert art_item.width() > child_before
     image = layer.findChild(QQuickItem, "expandedOverlayArtworkImage")
-    assert int(image.property("fillMode")) == 2                 # Image.PreserveAspectCrop: never distorted
+    assert int(image.property("fillMode")) == 2
     assert edit.frames() == edit.drawn()
     edit.owner.cancel()
 
-
 @pytest.mark.qt
 @pytest.mark.parametrize("controls", [False, True])
-def test_the_artist_line_follows_the_text_box_in_the_draft_and_after_save(display, tmp_path, controls):
-    """Operator, 8 Nov (live): the X/Y side handles on Now Playing did not move the artist line with the box (the
-    rows stayed bunched in its middle: a stale gap above and below). Every box the side handles make draws the title
-    at the box's top and the last row (the artist, or the Media Controls) at its bottom, the artist always below the
-    title and never overlapping it; Save keeps exactly what the draft showed."""
+def test_metadata_stays_compact_and_centred_during_parent_artwork_resize(display, tmp_path, controls):
+    """Artwork edits change the bordered artwork, never manufacture gaps between title, artist and controls."""
     settings = _manager(tmp_path)
     _draw(display, media=_Media(title="A Considerably Longer Track Title", artist="Some Artist With A Long Name"),
           config=_projection(_seed(settings, now_playing={"media_controls": controls, "always_show": True})))
@@ -754,7 +768,7 @@ def test_the_artist_line_follows_the_text_box_in_the_draft_and_after_save(displa
     _centred(edit)
     root = _root(display)
     names = ("expandedOverlayNowPlayingText", "expandedOverlayTitle", "expandedOverlayArtist",
-             "expandedOverlayMediaControls")
+             "expandedOverlayArtwork", "expandedOverlayMediaControls")
 
     def rows() -> dict[str, QRectF]:
         _run(display, 60)
@@ -762,24 +776,24 @@ def test_the_artist_line_follows_the_text_box_in_the_draft_and_after_save(displa
 
     def check(label: str) -> dict[str, QRectF]:
         drawn = rows()
-        box, title, artist = (drawn[name] for name in names[:3])
-        last = drawn["expandedOverlayMediaControls"] if controls else artist
-        assert abs(title.top() - box.top()) <= 1.0, label
-        assert abs(last.bottom() - box.bottom()) <= 1.0, (label, last.bottom(), box.bottom())
-        assert artist.top() >= title.bottom() - 0.5, label                 # below the title, never over it
+        box, title, artist, artwork, transport = (drawn[name] for name in names)
+        assert artist.top() >= title.bottom() - 0.5, label
         if controls:
-            assert drawn["expandedOverlayMediaControls"].top() >= artist.bottom() - 0.5, label
+            assert transport.top() >= artist.bottom() - 0.5, label
+        assert abs(box.center().y() - artwork.center().y()) <= 1.0, label
         return drawn
 
-    for handle, delta in (("bottom", 90), ("right", -120), ("top", -60), ("right", 260), ("bottom", -50)):
+    original = check("original")
+    for handle, delta in (("bottom", 60), ("right", 90), ("top", -35), ("right", -45), ("bottom", -20)):
         edit.side("now_playing", handle, delta)
         check(f"{handle} {delta}")
     draft = check("draft")
+    # Existing text-box geometry remains the same unless the actual available width constrains a long title.
+    assert draft["expandedOverlayNowPlayingText"].height() == original["expandedOverlayNowPlayingText"].height()
     assert edit.owner.save()
     _run(display, 300)
     saved = rows()
     assert {name: saved[name].getRect() for name in names} == {name: draft[name].getRect() for name in names}
-
 
 @pytest.mark.qt
 def test_a_side_change_undoes_exactly_and_restore_size_returns_the_natural_box(display, tmp_path):
@@ -1626,3 +1640,105 @@ def test_the_draft_value_carries_exactly_the_placement_members():
         untouched = {k: v for k, v in committed[overlay].items() if k not in keys}
         assert {k: v for k, v in value[overlay].items() if k not in keys} == untouched
     assert (value["font_family"], value["font_size"]) == (committed["font_family"], committed["font_size"])
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("corner", ("top_left", "top_right", "bottom_left", "bottom_right"))
+@pytest.mark.parametrize("controls", (False, True))
+def test_now_playing_defaults_group_inwards_and_keep_metadata_by_artwork(display, tmp_path, corner, controls):
+    """Presentation-only corner mirroring, compact vertical alignment and separate transport ownership."""
+    settings = _manager(tmp_path)
+    config = _seed(settings, now_playing={"corner": corner, "always_show": True,
+                                          "media_controls": controls})
+    _draw(display, media=_Media(), config=_projection(config))
+    _open(display)
+    _run(display, 200)
+    root = _root(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    art = _rect(root.findChild(QQuickItem, "expandedOverlayArtwork"), root)
+    text = _rect(root.findChild(QQuickItem, "expandedOverlayNowPlayingText"), root)
+    title = _rect(root.findChild(QQuickItem, "expandedOverlayTitle"), root)
+    artist = _rect(root.findChild(QQuickItem, "expandedOverlayArtist"), root)
+    assert abs(text.center().y() - art.center().y()) <= 1.0, (corner, art, text)
+    if corner.endswith("right"):
+        assert text.right() < art.left(), (corner, text, art)
+        assert title.right() <= text.right() + 1.0
+    else:
+        assert art.right() < text.left(), (corner, art, text)
+        assert title.left() >= text.left() - 1.0
+    assert artist.top() >= title.bottom() - 0.5
+    if controls:
+        transport = _rect(root.findChild(QQuickItem, "expandedOverlayMediaControls"), root)
+        assert transport.top() >= artist.bottom() - 0.5
+        assert transport.left() >= text.left() - 1.0 and transport.right() <= text.right() + 1.0
+    assert slot.width() > art.width() and slot.height() >= art.height()
+
+
+@pytest.mark.qt
+def test_parent_artwork_axes_do_not_overwrite_authored_child_geometry(display, tmp_path):
+    """Saved user child edits always override default corner rails and survive parent border resizing."""
+    settings = _manager(tmp_path)
+    child = {"artist": {"x_offset": -0.1, "y_offset": 0.08},
+             "artwork": {"width_scale": 0.85, "x_offset": 0.06}}
+    committed = _seed(settings, now_playing={"corner": "top_right", "always_show": True,
+                                             "media_controls": True, "child_geometry": child})
+    _draw(display, media=_Media(), config=_projection(committed))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    initial = deepcopy(edit.item("now_playing").current_size_payload["child_geometry"])
+    edit.side("now_playing", "right", 95)
+    edit.side("now_playing", "bottom", 70)
+    assert edit.item("now_playing").current_size_payload["child_geometry"] == initial
+    assert edit.owner.save()
+    assert _value(settings)["now_playing"]["child_geometry"] == committed["now_playing"]["child_geometry"]
+
+@pytest.mark.qt
+@pytest.mark.parametrize("corner,offset,expected_right", [
+    ("bottom_left", 0.70, True),
+    ("top_left", 0.70, True),
+    ("bottom_right", -0.70, False),
+    ("top_right", -0.70, False),
+])
+def test_now_playing_mirrors_after_crossing_the_display_midpoint_not_just_on_corner_selection(
+        display, tmp_path, corner, offset, expected_right):
+    """Fullscreen Edit's placement offset can cross the screen without changing the saved anchor corner."""
+    settings = _manager(tmp_path)
+    config = _seed(settings, now_playing={"corner": corner, "offset_x": offset,
+                                          "always_show": True, "media_controls": True})
+    _draw(display, media=_Media(), config=_projection(config))
+    _open(display)
+    _run(display, 250)
+    root = _root(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    art = _rect(root.findChild(QQuickItem, "expandedOverlayArtwork"), root)
+    text = _rect(root.findChild(QQuickItem, "expandedOverlayNowPlayingText"), root)
+    assert (slot.x() + slot.width() / 2.0 > WIDTH / 2.0) is expected_right
+    assert bool(slot.property("contentRightSide")) is expected_right
+    if expected_right:
+        assert text.right() < art.left(), (art, text)
+    else:
+        assert art.right() < text.left(), (art, text)
+    assert abs(art.center().y() - text.center().y()) < 1.5
+    assert _value(settings)["now_playing"]["corner"] == corner  # presentation never rewrites the anchor
+
+
+@pytest.mark.qt
+def test_entering_fullscreen_edit_does_not_refade_already_visible_now_playing_content(display, tmp_path):
+    """Opening Edit holds the existing title and artwork rather than running the track-swap crossfade."""
+    settings = _manager(tmp_path)
+    config = _seed(settings, now_playing={"always_show": True})
+    _draw(display, media=_Media(), config=_projection(config))
+    _open(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    _settle(display, lambda: float(slot.property("presence")) >= 1.0
+            and float(slot.property("contentOpacity")) >= 1.0)
+    _run(display, 60)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    samples = []
+    _run(display, 100, lambda: samples.append(float(slot.property("contentOpacity"))))
+    assert samples and min(samples) >= 0.999, samples
+    assert float(slot.property("presence")) >= 0.999
+    assert edit.owner.cancel()

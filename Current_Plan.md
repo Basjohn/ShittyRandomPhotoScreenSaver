@@ -249,9 +249,19 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
   Installed ACL inspection found shipped preset files read-only to ordinary users despite parent-folder Write.
   Verify the next Standard/MC installer grants Modify only on the shared preset data tree, then Save over an
   installed preset and Save As as an ordinary user. No build/installed ACL mutation was performed by this task.
+  **9 Nov live S-launch follow-up:** the deferred Settings target restored the mode ID without constructing its lazy
+  Settings body, so Save Camera failed on `_shockwave_grid_lazy_values`. The shared Studio entry now selects/constructs
+  that body before store creation; an end-to-end non-rendering Qt regression covers Neon Lake and the camera save.
+  Physical Standard/MC confirmation is still pending; see
+  `Docs/Audits/Studio_Camera_And_Fullscreen_Overlay_Self_Audit_2026-11-09.md`.
 - [~] **1.4-1.5 Awaiting Validation:** check Fullscreen Mode's Media Bar/Floating Glyphs styles, long metadata
   fitting, multiline Edit boxes and optional album. Both styles use the same admitted Media actions; every metadata
   row uses Media's shared fitting primitive. Focused Settings, input, text-layout and Edit gates are green.
+  **9 Nov fullscreen follow-up:** parent artwork-axis resizing is in place, but left/right mirroring originally read
+  the configured corner rather than the block's actual screen position. Presentation mirroring now follows the
+  block's displayed midpoint, with authored child offsets and persisted corner untouched. Fullscreen Edit now holds
+  already-displayed artwork instead of restarting the track-swap fade; hidden overlays still reveal for editing.
+  Added real Quick tests for crossing the midpoint and for edit-entry opacity; awaiting Windows execution.
 - [~] **1.6 Awaiting Validation:** Achievement Pulse counted disabled provider fields as painted capsule rows;
   replaying the saved payload on Edit entry then changed the canvas. The enabled-row regression is green.
   Check child placement after Settings/fullscreen return with `--geo`; other families' extent floors are static.
