@@ -131,7 +131,7 @@ def main(argv: list[str]) -> int:
         blank = work / "blank_xvfb.png"
         lh.grab_screen(display, blank)
         shots = out / "shots"
-        shots.mkdir(exist_ok=True)
+        shots.mkdir(parents=True, exist_ok=True)
         diagnostics = []
         rendered_scene = False
         with frozen_output.open("wb") as stdout_file:

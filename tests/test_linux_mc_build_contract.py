@@ -279,8 +279,7 @@ def test_linux_smoke_uses_pixels_not_frozen_logs(monkeypatch, tmp_path: Path, bi
     product.mkdir()
     (product / binary).write_bytes(b"frozen product stand-in")
     (product / "install.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    out = tmp_path / "evidence"
-    out.mkdir()
+    out = tmp_path / "evidence"  # Matches redirect_output(): scratch/out is not pre-created.
     processes = []
     profiles = []
     screenshots = []
