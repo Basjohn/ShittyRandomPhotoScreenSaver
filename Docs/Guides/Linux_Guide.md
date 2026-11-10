@@ -89,8 +89,10 @@ On Linux:
 
 ```bash
 scripts/linux/setup.sh --system-deps --build
-scripts/linux/build.sh                            # release/linux/SRPSS-<version>-linux-x86_64(.tar.gz)
+scripts/linux/build.sh                             # default screensaver, unchanged
+scripts/linux/build.sh --profile mc                # interactive MC, main_mc.py entry point
 .venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-<version>-linux-x86_64
+.venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-<version>-linux-mc-x86_64
 ```
 
 The build reads its Nuitka declarations and Qt size exclusions from the Windows build scripts (comments
@@ -98,14 +100,20 @@ skipped), so new Windows includes reach Linux automatically; `tests/test_build_l
 Windows too and fails if any declaration stops being read. A local build takes about an hour on four cores.
 
 From Windows (no WSL, Hyper-V or Docker; needs only the GitHub CLI, `winget install GitHub.cli` then
-`gh auth login`): the Build Runner's optional **Linux** job, or directly
+`gh auth login`): the GitHub Remote tab's optional **Linux (GitHub runner)** and **Linux Media Center (GitHub runner)** jobs, or directly
 
 ```powershell
-.\scripts\linux\build_from_windows.ps1            # -Mode Auto: dispatch if possible, else a temporary tag
+.\scripts\linux\build_from_windows.ps1                 # default screensaver
+.\scripts\linux\build_from_windows.ps1 -Profile mc     # interactive Media Center
 ```
 
 Both run `.github/workflows/linux-build.yml` on a GitHub Ubuntu 22.04 runner (build, smoke test) and download
-the tarball into `release\linux`. The branch must be pushed; GitHub builds the pushed commit (`-Commit <sha>` pins
+the distinct tarballs into `release\linux` (`SRPSS-<version>-linux-x86_64.tar.gz` and
+`SRPSS-<version>-linux-mc-x86_64.tar.gz`). Both Linux builds can run concurrently with Windows jobs;
+there is no local Linux compiler. On Linux the MC installer uses `~/.local/opt/srpss-mc` and
+`~/.local/bin/srpss-mc` with its own desktop entries, leaving the screensaver install intact.
+Both profiles share curated presets/themes but keep separate settings (`SRPSS` versus `SRPSS_MC`).
+The branch must be pushed; GitHub builds the pushed commit (`-Commit <sha>` pins
 one and is the only dispatch that sends the workflow's `commit`/`token` inputs, so a branch whose workflow predates
 them still dispatches without it; the Build Runner's GitHub Remote tab passes the commit its pre-flight fixed).
 

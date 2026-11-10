@@ -34,7 +34,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 app = QApplication([])
 from core.settings import SettingsManager
-settings = SettingsManager()
+settings = SettingsManager(application=sys.argv[4])
 settings.set("sources.folders", [sys.argv[1]])
 settings.set("timing.interval", int(sys.argv[2]))
 for widget in sys.argv[3].split(",") if sys.argv[3] else ():
@@ -140,7 +140,8 @@ def generate_images(folder: Path, count: int) -> None:
 
 
 def seed_profile(env: dict[str, str], images: Path, interval: int,
-                 disabled_widgets: tuple[str, ...] = DEFAULT_DISABLED_WIDGETS) -> None:
+                 disabled_widgets: tuple[str, ...] = DEFAULT_DISABLED_WIDGETS,
+                 application: str = "Screensaver") -> None:
     """Write the isolated profile's folder source, interval and disabled widgets.
 
     Runs on the harness's own (already started) display: saving Settings records
@@ -150,7 +151,7 @@ def seed_profile(env: dict[str, str], images: Path, interval: int,
     """
 
     subprocess.run(
-        [sys.executable, "-c", PROFILE_SCRIPT, str(images), str(interval), ",".join(disabled_widgets)],
+        [sys.executable, "-c", PROFILE_SCRIPT, str(images), str(interval), ",".join(disabled_widgets), application],
         cwd=REPO,
         env=env,
         capture_output=True,

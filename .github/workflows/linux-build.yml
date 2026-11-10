@@ -13,7 +13,7 @@
 #
 # Built on Ubuntu 22.04 so the binary runs on glibc >= 2.35 distributions.
 name: Linux build
-run-name: Linux build ${{ inputs.token || github.ref_name }}
+run-name: Linux ${{ (inputs.profile == 'mc' || startsWith(github.ref, 'refs/tags/linux-build/mc-')) && 'MC' || 'Screensaver' }} ${{ inputs.token || github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -28,6 +28,14 @@ on:
         type: string
         required: false
         default: ""
+      profile:
+        description: Linux product to build
+        type: choice
+        required: true
+        default: screensaver
+        options:
+          - screensaver
+          - mc
   push:
     tags:
       - "linux-build/*"
@@ -39,6 +47,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      BUILD_PROFILE: ${{ (inputs.profile == 'mc' || startsWith(github.ref, 'refs/tags/linux-build/mc-')) && 'mc' || 'screensaver' }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -70,15 +80,22 @@ jobs:
         run: scripts/linux/setup.sh --python "$(command -v python)" --build
 
       - name: Build
-        run: .venv-linux/bin/python tools/linux_build.py --jobs 4 --output release/linux
+        run: .venv-linux/bin/python tools/linux_build.py --jobs 4 --output release/linux --profile "$BUILD_PROFILE"
 
       - name: Smoke test (Xvfb, Settings + saver)
         run: |
           sudo apt-get install -y -q xvfb mesa-utils libgl1-mesa-dri
-          .venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-*-linux-x86_64
+          if [[ "$BUILD_PROFILE" == "mc" ]]; then
+            products=(release/linux/SRPSS-*-linux-mc-x86_64)
+          else
+            products=(release/linux/SRPSS-*-linux-x86_64)
+          fi
+          [[ ${#products[@]} == 1 && -d "${products[0]}" ]] || { echo "Expected one $BUILD_PROFILE product"; exit 1; }
+          .venv-linux/bin/python tools/linux_smoke_dist.py "${products[0]}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: srpss-linux
-          path: release/linux/*.tar.gz
+          name: ${{ env.BUILD_PROFILE == 'mc' && 'srpss-linux-mc' || 'srpss-linux' }}
+          path: ${{ env.BUILD_PROFILE == 'mc' && 'release/linux/SRPSS-*-linux-mc-x86_64.tar.gz' || 'release/linux/SRPSS-*-linux-x86_64.tar.gz' }}
+          if-no-files-found: error
           retention-days: 14

@@ -5,7 +5,8 @@
 
 ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows 10/11 screensaver that is surprisingly less shit than the majority of ancient decrepit screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
 
-<img width="1608" height="908" alt="SRPSS_Nine_Screens_Showcase_1600w_Border_FIXED" src="https://github.com/user-attachments/assets/0d80a20c-611b-4ca2-8c78-f6270e2dc662" />
+
+<img width="1153" height="655" alt="513Cross" src="https://github.com/user-attachments/assets/38aafc0e-f4b8-4a3d-a8bb-12a0f7486e73" />
 
 
 
@@ -53,6 +54,11 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
   - **Waveform Ribbon** (3D)
 - **Properly adjustable 3D views like it's 2002:** Orbit the applicable 3D visualizers, move or resize their stage and preserve your poorly chosen viewpoint. Alt-Left to rotate, Alt-Scroll to resize and Alt-Right to drag 3D Visualizers.
 - **System Audio OSD:** Optional reminder that you are always being watched when this pops up from small sound adjustments.
+
+<img width="434" height="252" alt="srpss_eb_preset1_240p_bordered_CORRECTED" src="https://github.com/user-attachments/assets/9f1f37d6-755e-4d80-9903-603a96298ebe" />
+<img width="50%" alt="20261108_waveform_p1_nightsolong_bordered_90pct" src="https://github.com/user-attachments/assets/24619baa-7fb2-46ba-856b-11a59b81904c" />
+
+
 
 ### Widgets, feeds and everything else
 

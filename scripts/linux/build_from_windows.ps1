@@ -5,7 +5,8 @@
 .DESCRIPTION
     The build runs on a GitHub-hosted Ubuntu runner (.github/workflows/linux-build.yml);
     this script triggers it for a pushed branch, follows it, and downloads the
-    resulting SRPSS-<version>-linux-x86_64.tar.gz into -OutDir.
+    resulting profile-specific tarball into -OutDir. -Profile mc builds main_mc.py; the
+    default -Profile screensaver remains unchanged.
 
     Requirements: the GitHub CLI (`winget install GitHub.cli`, then `gh auth login`)
     and the branch pushed to GitHub. Nothing is built or virtualised locally.
@@ -32,13 +33,16 @@
     .\scripts\linux\build_from_windows.ps1 -Branch claude/eager-carson-5da6ge -Mode Tag
 .EXAMPLE
     .\scripts\linux\build_from_windows.ps1 -Branch main -Commit 0123456789abcdef0123456789abcdef01234567
+.EXAMPLE
+    .\scripts\linux\build_from_windows.ps1 -Profile mc
 #>
 [CmdletBinding()]
 param(
     [string]$Branch = '',
     [ValidateSet('Auto', 'Dispatch', 'Tag')][string]$Mode = 'Auto',
     [string]$OutDir = '',
-    [string]$Commit = ''
+    [string]$Commit = '',
+    [ValidateSet('screensaver', 'mc')][string]$Profile = 'screensaver'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -61,27 +65,43 @@ Invoke-Checked gh @('auth', 'status') | Out-Null
 Push-Location $Root
 try {
     if (-not $Branch) { $Branch = (Invoke-Checked git @('rev-parse', '--abbrev-ref', 'HEAD')).Trim() }
-    Invoke-Checked git @('fetch', 'origin', $Branch) | Out-Null
-    $remoteSha = (Invoke-Checked git @('rev-parse', "origin/$Branch")).Trim()
     $localSha = (Invoke-Checked git @('rev-parse', 'HEAD')).Trim()
     $currentBranch = (Invoke-Checked git @('rev-parse', '--abbrev-ref', 'HEAD')).Trim()
     if ($Commit) {
+        # GitHub Remote already pinned and checked the pushed SHA. Avoid concurrent git fetch ref locks when
+        # the user selects both Linux profiles; the two workers share this same checkout.
         if ($Commit -notmatch '^[0-9a-f]{40}$') { throw "-Commit must be a full 40-character SHA: $Commit" }
-        & git merge-base --is-ancestor $Commit "origin/$Branch" 2>$null
-        if ($LASTEXITCODE -ne 0) { throw "Commit $Commit is not on origin/$Branch (push it first)" }
+        & git cat-file -e "$Commit^{commit}" 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Commit $Commit is not present locally" }
+        $head = @(Invoke-Checked git @('ls-remote', '--heads', 'origin', $Branch))
+        if (-not $head) { throw "origin/$Branch does not exist (push the branch first)" }
         $remoteSha = $Commit
-        Write-Host "[LINUX-BUILD] Building the requested commit $Commit"
-    } elseif ($currentBranch -eq $Branch -and $localSha -ne $remoteSha) {
+        Write-Host "[LINUX-BUILD] Building the requested commit $Commit ($Profile)"
+    } else {
+        Invoke-Checked git @('fetch', 'origin', $Branch) | Out-Null
+        $remoteSha = (Invoke-Checked git @('rev-parse', "origin/$Branch")).Trim()
+    }
+    if (-not $Commit -and $currentBranch -eq $Branch -and $localSha -ne $remoteSha) {
         Write-Warning "Local $Branch ($localSha) differs from origin/$Branch ($remoteSha); GitHub builds the pushed commit."
     }
 
     if ($Mode -eq 'Auto') {
         & gh workflow view $Workflow *> $null
-        if ($LASTEXITCODE -eq 0) {
-            $Mode = 'Dispatch'
-        } else {
-            Write-Warning "[LINUX-BUILD] $Workflow is not on the default branch yet; using a temporary linux-build/* tag instead of dispatch."
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "[LINUX-BUILD] $Workflow is not registered on the default branch yet; using a temporary linux-build/* tag."
             $Mode = 'Tag'
+        } elseif ($Profile -eq 'mc') {
+            # GitHub's workflow_dispatch input contract is versioned by the workflow already on the default branch.
+            # Until MC's input is merged, tag the pinned SHA so the branch's workflow can build MC on its own.
+            $defaultWorkflow = (& git show 'origin/main:.github/workflows/linux-build.yml' 2>$null | Out-String)
+            if ($LASTEXITCODE -ne 0 -or $defaultWorkflow -notmatch '(?m)^\s+profile:\s*$') {
+                Write-Host '[LINUX-BUILD] Default workflow has no MC input yet; using the profile-specific tag route.'
+                $Mode = 'Tag'
+            } else {
+                $Mode = 'Dispatch'
+            }
+        } else {
+            $Mode = 'Dispatch'
         }
     }
 
@@ -89,22 +109,24 @@ try {
     $tag = $null
     $token = $null
     if ($Mode -eq 'Dispatch') {
+        $dispatchArgs = @('workflow', 'run', $Workflow, '--ref', $Branch)
         if ($Commit) {
-            # The Remote tab's pinned commit: the workflow checks it out and verifies it, and the token names the
-            # run (the workflow's run-name), so exactly this dispatch is followed. Only with -Commit: GitHub refuses
-            # a dispatch whose inputs the ref's linux-build.yml does not declare (HTTP 422), so a branch cut before
-            # the inputs existed keeps the plain dispatch below on the other tabs.
-            $token = 'srpss-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
-            Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch at $remoteSha (run token $token)"
-            Invoke-Checked gh @('workflow', 'run', $Workflow, '--ref', $Branch, '-f', "commit=$remoteSha",
-                '-f', "token=$token") | Out-Null
-        } else {
-            Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch at $remoteSha"
-            Invoke-Checked gh @('workflow', 'run', $Workflow, '--ref', $Branch) | Out-Null
+            # Pinned, uniquely identified dispatch: no ambiguity when Standard and MC build concurrently.
+            $token = 'srpss-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + $Profile
+            $dispatchArgs += @('-f', "commit=$remoteSha", '-f', "token=$token")
         }
+        if ($Profile -eq 'mc') { $dispatchArgs += @('-f', 'profile=mc') }
+        if ($token) {
+            Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch at $remoteSha (run token $token)"
+        } else {
+            Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch at $remoteSha ($Profile)"
+        }
+        Invoke-Checked gh $dispatchArgs | Out-Null
         $runEvent = 'workflow_dispatch'
     } else {
-        $tag = 'linux-build/' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+        # Existing linux-build/* trigger also accepts mc- prefixed tag names, including before workflow merge.
+        $stamp = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6)
+        $tag = 'linux-build/' + $(if ($Profile -eq 'mc') { 'mc-' } else { '' }) + $stamp
         Write-Host "[LINUX-BUILD] Pushing temporary tag $tag at origin/$Branch ($remoteSha)"
         Invoke-Checked git @('push', 'origin', "$($remoteSha):refs/tags/$tag") | Out-Null
         $runEvent = 'push'
@@ -118,6 +140,10 @@ try {
             $runs = Invoke-Checked gh @('run', 'list', '--workflow', $Workflow, '--event', $runEvent,
                 '--limit', '20', '--json', 'databaseId,displayTitle') | ConvertFrom-Json
             $runId = ($runs | Where-Object { $_.displayTitle -like "*$token*" } | Select-Object -First 1).databaseId
+        } elseif ($tag) {
+            $runs = Invoke-Checked gh @('run', 'list', '--workflow', $Workflow, '--event', 'push',
+                '--limit', '30', '--json', 'databaseId,headBranch') | ConvertFrom-Json
+            $runId = ($runs | Where-Object { $_.headBranch -eq $tag } | Select-Object -First 1).databaseId
         } else {
             $runs = Invoke-Checked gh @('run', 'list', '--workflow', $Workflow, '--commit', $remoteSha, '--event', $runEvent,
                 '--limit', '5', '--json', 'databaseId,createdAt') | ConvertFrom-Json
@@ -131,8 +157,22 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Linux build run $runId failed: gh run view $runId --log-failed" }
 
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-    Invoke-Checked gh @('run', 'download', $runId, '--name', 'srpss-linux', '--dir', $OutDir) | Out-Null
-    Get-ChildItem -LiteralPath $OutDir -Filter '*.tar.gz' | ForEach-Object { Write-Host "[LINUX-BUILD] $($_.FullName)" }
+    $artifact = if ($Profile -eq 'mc') { 'srpss-linux-mc' } else { 'srpss-linux' }
+    $pattern = if ($Profile -eq 'mc') { 'SRPSS-*-linux-mc-x86_64.tar.gz' } else { 'SRPSS-*-linux-x86_64.tar.gz' }
+    $staging = Join-Path $OutDir ('.linux-download-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $staging | Out-Null
+    try {
+        Invoke-Checked gh @('run', 'download', $runId, '--name', $artifact, '--dir', $staging) | Out-Null
+        $files = @(Get-ChildItem -LiteralPath $staging -Filter $pattern -File)
+        if ($files.Count -ne 1 -or $files[0].Length -le 0) {
+            throw "Expected one nonempty $pattern from GitHub artifact $artifact, found $($files.Count)"
+        }
+        $destination = Join-Path $OutDir $files[0].Name
+        Move-Item -LiteralPath $files[0].FullName -Destination $destination -Force
+        Write-Host "[LINUX-BUILD] $destination"
+    } finally {
+        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
     Write-Host '[LINUX-BUILD] On Linux: tar xzf <archive> && ./SRPSS-*/install.sh'
 } finally {
     if ($tag) {

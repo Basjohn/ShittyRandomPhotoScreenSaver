@@ -40,8 +40,10 @@ def main(argv: list[str]) -> int:
     if len(argv) != 1:
         raise SystemExit(__doc__)
     product = Path(argv[0]).resolve()
-    if not (product / "srpss").is_file() or not (product / "install.sh").is_file():
-        return _fail(f"{product} is not a built SRPSS Linux product folder")
+    binary = "srpss-mc" if "-linux-mc-" in product.name else "srpss"
+    app_profile = "Screensaver_MC" if binary == "srpss-mc" else "Screensaver"
+    if not (product / binary).is_file() or not (product / "install.sh").is_file():
+        return _fail(f"{product} lacks expected {binary} or install.sh")
 
     # Logs are published as evidence; home, profile and images stay in the scratch run (deleted on success).
     from types import SimpleNamespace
@@ -57,7 +59,7 @@ def main(argv: list[str]) -> int:
     env = lh.child_env(display, profile, logs)
     env["HOME"] = str(home)
     subprocess.run([str(product / "install.sh")], env=env, check=True)
-    installed = home / ".local" / "opt" / "srpss" / "srpss"
+    installed = home / ".local" / "opt" / binary / binary
     data = profile / "data" / "SRPSS"
     for required in (installed, data / "themes", data / "presets" / "visualizer_modes", data / "sounds"):
         if not required.exists():
@@ -69,7 +71,7 @@ def main(argv: list[str]) -> int:
     xvfb = lh.start_xvfb(display)
     try:
         lh.copy_repo_images(work / "images")
-        lh.seed_profile(env, work / "images", 4)
+        lh.seed_profile(env, work / "images", 4, application=app_profile)
 
         run = subprocess.run([str(installed), "/s", "--exit-after", "20", lh.log_dir_arg(logs)], env=env,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
@@ -81,6 +83,8 @@ def main(argv: list[str]) -> int:
         for marker in (READY, GL_OK):
             if marker not in text:
                 return _fail(f"/s log lacks {marker!r}", log)
+        if binary == "srpss-mc" and "entrypoint=main_mc" not in text:
+            return _fail("MC product did not start through main_mc", log)
         errors = [line for line in text.splitlines() if re.search(r"\b(ERROR|CRITICAL)\b", line)]
         if errors:
             return _fail("ERROR/CRITICAL in /s log:\n" + "\n".join(errors[:20]), log)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the SRPSS Linux product (Nuitka standalone folder + install.sh + tarball).
-#   scripts/linux/build.sh [--output DIR] [--jobs N] [--dry-run]
+#   scripts/linux/build.sh [--profile screensaver|mc] [--output DIR] [--jobs N] [--dry-run]
 # Prerequisites: scripts/linux/setup.sh --system-deps --build
 # From Windows (no WSL/Hyper-V/Docker): scripts/linux/build_from_windows.ps1
 # Smoke-test the result: .venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-*-linux-x86_64

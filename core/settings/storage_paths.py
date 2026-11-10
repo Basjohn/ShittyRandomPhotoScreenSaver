@@ -85,6 +85,7 @@ def detect_current_profile(default: str = "Screensaver") -> str:
             or "srpss media center" in probe
             or "srpss_media_center" in probe
             or "main_mc.py" in probe
+            or Path(argv0).name in {"srpss-mc", "srpss-mc.exe"}
         ):
             return "Screensaver_MC"
     except Exception:

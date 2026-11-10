@@ -810,10 +810,9 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
     """GitHub Remote: the two Nuitka products build on GitHub (the venv workers, same outputs); the Reddit Helper
     and the installers stay local and are the venv mode's own jobs, unchanged: an installer compiles whatever
     ``release/`` holds, exactly as on the venv tab (operator, 8 Nov: "It's supposed to be local, github has no say"),
-    after this run's GitHub products are published when they are selected. The optional Linux build is the
-    other tabs' own job (a GitHub Ubuntu runner, followed by ``scripts/linux/build_from_windows.ps1``), here on the
-    commit the pre-flight fixed (``_job_arguments``), on its own thread from the pipeline's start, beside the Windows
-    runs (``BuildRunnerApp._github_pipeline_worker``)."""
+    after this run's GitHub products are published when they are selected. The optional Linux screensaver and
+    GitHub-only Linux Media Center jobs each use the same ``scripts/linux/build_from_windows.ps1`` with a separate
+    profile, artifact and GitHub run, on the pre-flight's pinned commit (``_job_arguments``)."""
     by_key = {job.key: job for job in jobs_for_mode("venv", repo_root)}
     workflow = repo_root / ".github" / "workflows" / "windows-build.yml"
     return (
@@ -823,14 +822,26 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
         replace(by_key["standard_installer"], name="Standard Installer (local)"),
         replace(by_key["media_center_installer"], name="Media Center Installer (local)"),
         by_key["linux"],
+        Job(
+            "linux_mc",
+            "Linux Media Center (GitHub runner)",
+            "powershell",
+            repo_root / "scripts" / "linux" / "build_from_windows.ps1",
+            repo_root / "release" / "linux",
+            repo_root / "release" / "linux" / f"SRPSS-{APP_VERSION}-linux-mc-x86_64.tar.gz",
+            default_selected=False,
+        ),
     )
 
 
 def _job_arguments(job: Job, preflight: PreflightResult) -> list[str]:
     """Worker arguments a job takes from the pre-flight: the Linux build on GitHub Remote builds the pinned commit."""
     commit = preflight.remote_commit
-    if job.key == "linux" and commit is not None:
-        return ["-Branch", str(commit.branch), "-Commit", str(commit.sha)]
+    if job.key in {"linux", "linux_mc"}:
+        arguments = ["-Profile", "mc"] if job.key == "linux_mc" else []
+        if commit is not None:
+            arguments += ["-Branch", str(commit.branch), "-Commit", str(commit.sha)]
+        return arguments
     return []
 
 
@@ -940,7 +951,7 @@ def _github_preflight(result: PreflightResult, jobs: Sequence[Job], repo_root: P
     from tools import github_remote_build as remote
 
     # The Linux build is a GitHub run too (its worker follows it): the same CLI, sign-in, policy and commit apply.
-    remote_jobs = {job.key for job in jobs if job.kind == "github" or job.key == "linux"}
+    remote_jobs = {job.key for job in jobs if job.kind == "github" or job.key in {"linux", "linux_mc"}}
     if shutil.which("gh") is None:
         result.errors.append("GitHub Remote: GitHub CLI (gh) not found; winget install GitHub.cli, then gh auth login")
         result.unavailable_jobs.update(remote_jobs)
@@ -1106,9 +1117,10 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
     if mode == "github":
         _github_preflight(result, jobs, repo_root)
 
-    if any(job.key == "linux" for job in jobs) and shutil.which("gh") is None:
-        result.unavailable_jobs.add("linux")
-        result.warnings.append("Linux (GitHub runner): GitHub CLI (gh) not found; winget install GitHub.cli")
+    linux_jobs = {job.key for job in jobs if job.key in {"linux", "linux_mc"}}
+    if linux_jobs and shutil.which("gh") is None:
+        result.unavailable_jobs.update(linux_jobs)
+        result.warnings.append("Linux GitHub builds: GitHub CLI (gh) not found; winget install GitHub.cli")
 
     if not (repo_root / ".venv").is_dir():
         result.warnings.append(
@@ -1648,7 +1660,7 @@ def run_job(
             log_handle.write(footer.encode("utf-8", errors="replace"))
         if aborted:
             detail = "Aborted by operator"
-            if job.key == "linux":
+            if job.key in {"linux", "linux_mc"}:
                 cleanup = _stop_linux_github_run(log_path)
                 if cleanup:
                     detail += f"; {cleanup}"
@@ -2914,18 +2926,16 @@ class BuildRunnerApp:
         """GitHub Remote: dispatch the selected products together, build the Reddit Helper locally while GitHub
         works, retrieve and validate each download, then compile the opted-in installers for validated builds.
 
-        The optional Linux build (its own GitHub run, followed by its worker for 30-60 min) runs from the start on its
-        own thread with a ``dependent`` process owner, so it never holds up the Windows runs' polling, retrieval,
-        publishing or failure reports, nor the installers (checkpoint audit 11, A11-L2). The pipeline's cancel reaches
-        it through that owner (its worker is ended and ``run_job`` cancels its GitHub run); the pipeline reports
-        ``pipeline_done`` only after it has ended."""
+        Each selected Linux profile has its own GitHub run and dependent process owner; both may run alongside the
+        Windows products without holding up their polling, retrieval, publishing or local installer steps. Cancelling
+        the pipeline also cancels each Linux run. Completion waits for both Linux results."""
         from tools import github_remote_build as remote
 
         by_key = {job.key: job for job in jobs}
         local_results: dict[str, JobResult] = {}
         linux_results: dict[str, JobResult] = {}
         remote_results: dict = {}
-        linux_thread: threading.Thread | None = None
+        linux_threads: list[threading.Thread] = []
         done: tuple | None = None
         try:
             commit = preflight.remote_commit
@@ -2952,22 +2962,25 @@ class BuildRunnerApp:
                 results[job.key] = result
                 self._events.put(("job_done", job.key, result))
 
-            if "linux" in selected and "linux" in by_key:
+            for linux_key in ("linux", "linux_mc"):
+                if linux_key not in selected or linux_key not in by_key:
+                    continue
                 linux_owner = process_owner.dependent()
-                linux_job = by_key["linux"]
+                linux_job = by_key[linux_key]
 
-                def run_linux() -> None:
+                def run_linux(job: Job = linux_job, owner: BuildProcessOwner = linux_owner) -> None:
                     try:
-                        run_local(linux_job, linux_owner, linux_results)
-                    except Exception as exc:          # never leave its row running
-                        result = JobResult(1, f"Linux job failed: {exc}", LOG_DIR, linux_job.output_dir)
-                        linux_results[linux_job.key] = result
-                        self._events.put(("job_done", linux_job.key, result))
+                        run_local(job, owner, linux_results)
+                    except Exception as exc:  # every selected row reaches a terminal state
+                        result = JobResult(1, f"Linux job failed: {exc}", LOG_DIR, job.output_dir)
+                        linux_results[job.key] = result
+                        self._events.put(("job_done", job.key, result))
                     finally:
-                        linux_owner.shutdown()
+                        owner.shutdown()
 
-                linux_thread = threading.Thread(target=run_linux, name="foundry-linux-build", daemon=True)
-                linux_thread.start()
+                thread = threading.Thread(target=run_linux, name=f"foundry-{linux_key}-build", daemon=True)
+                linux_threads.append(thread)
+                thread.start()
 
             def local_helper() -> None:
                 # While the Windows runs build on GitHub: the Reddit Helper locally.
@@ -3004,8 +3017,8 @@ class BuildRunnerApp:
                     self._events.put(("job_cancelled", key))
                     continue
                 run_local(job)                      # the venv tab's own installer job: local, GitHub has no say
-            if linux_thread is not None:
-                linux_thread.join()                 # the Linux build follows its own run; nothing else waits on it
+            for thread in linux_threads:
+                thread.join()                      # both Linux runs complete before pipeline_done
             aborted = process_owner.cancellation_requested
             all_ok = all(result.returncode == 0 for result in (
                 *remote_results.values(), *local_results.values(), *linux_results.values()))
@@ -3026,8 +3039,8 @@ class BuildRunnerApp:
             # Also cancels a Linux job still running after a failure (its owner is a dependent), which then cancels
             # its GitHub run; the pipeline is done only once it has ended.
             process_owner.shutdown()
-            if linux_thread is not None:
-                linux_thread.join()
+            for thread in linux_threads:
+                thread.join()
             if done is not None:
                 self._events.put(done)
 

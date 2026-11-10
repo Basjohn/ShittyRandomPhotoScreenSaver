@@ -31,20 +31,21 @@ runner job), `tools/build_runner.py` (the tab). Normal and Repo Venv are unchang
    are not part of the remote build.
 4. Tick **Standard + Diagnostic (GitHub)**, **Media Center (GitHub)** or both. **Reddit Helper (local)** is
    pre-selected when its fingerprint says it is stale, and the two installers are pre-selected as on the venv tab;
-   optionally tick **Linux (GitHub runner)**.
+   optionally tick **Linux (GitHub runner)**, **Linux Media Center (GitHub runner)**, or both.
 5. **START SELECTED.** Both selected products are dispatched at once and build in parallel on separate runners. Each
    row shows `Queued`, `Building`, `Downloading`, `Validating`, `Publishing`; the progress line shows the runner's
-   current step, and a **GitHub run** link opens the run in your browser. The Linux build (if selected) starts first,
-   beside them: it dispatches its own Ubuntu run on the same pinned commit, follows it (typically 30-60 minutes) and
-   downloads its tarball into `release\linux` (`Docs/Guides/Linux_Guide.md` §7). While GitHub builds, the Reddit
+   current step, and a **GitHub run** link opens the run in your browser. Each selected Linux profile also starts
+   a separate Ubuntu run on the same pinned commit and downloads its separately named tarball into `release\linux`
+   (`Docs/Guides/Linux_Guide.md` §7). Their local monitoring runs independently from the Windows pipeline. While
+   GitHub builds, the Reddit
    Helper (if selected) builds locally.
 6. When a Windows run succeeds its artifact is downloaded, validated and published; then the selected installers
    compile locally. None of this waits for the Linux run: it has its own process owner on its own thread, so a
-   Windows product is published (or its failure reported) as soon as its run ends. The pipeline reports done once the
-   Linux build has ended too. A typical run takes about as long as a local build (the runner has 4 cores); your
+   Windows product is published (or its failure reported) as soon as its run ends. The pipeline reports done once all
+   selected Linux builds have ended too. A typical run takes about as long as a local build (the runner has 4 cores); your
    machine stays idle.
 
-**EMERGENCY STOP** (or closing the window) cancels the real GitHub runs (`gh run cancel`, the Linux run included),
+**EMERGENCY STOP** (or closing the window) cancels the real GitHub runs (`gh run cancel`, both Linux profiles included),
 not just the local monitoring, and stops any local step. The Linux job's process owner follows the pipeline's, so one
 stop ends both. A Linux job stopped before it began following its run still cancels it: the run is found by the run
 token its log names (or, for a temporary `linux-build/*` tag, by the tag, which is also deleted). Already published
@@ -102,6 +103,9 @@ retrieval leaves in place. The Standard installer packages `release\reddit_helpe
 - GitHub builds pushed commits only. Uncommitted work needs a commit and push first (a local build covers it).
 - The runner's toolchain is GitHub's `windows-2025` image (Visual Studio 2022 MSVC) with Python 3.14 from
   `actions/setup-python`, not this machine's Build Tools; the requirement pins and Nuitka version are identical.
+- The Linux Media Center artifact uses `srpss-linux-mc` and publishes `SRPSS-<version>-linux-mc-x86_64.tar.gz`;
+  Linux Screensaver retains `srpss-linux` and `SRPSS-<version>-linux-x86_64.tar.gz`. Both are smoke-tested in Xvfb;
+  a full frozen build on GitHub and physical Linux acceptance are still required after this change.
 - The repository is public: its Actions minutes on standard runners are free, and run logs and artifacts are
   visible to signed-in GitHub users until they expire (3 days; failure logs 7).
 - Each run reinstalls `requirements.txt` into a fresh `.venv`; Nuitka's compile cache is kept between runs.
