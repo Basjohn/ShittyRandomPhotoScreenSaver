@@ -184,3 +184,38 @@ def test_linux_build_publishes_separate_profile_tarballs_without_interference(tm
     assert outputs["screensaver"] != outputs["mc"]
     assert (outputs["screensaver"] / "srpss").is_file()
     assert (outputs["mc"] / "srpss-mc").is_file()
+
+
+def test_mc_smoke_seeds_an_available_xvfb_display(monkeypatch, tmp_path: Path) -> None:
+    """MC's display-2 default must not create a falsely headless one-monitor smoke run."""
+    from tools import linux_headless as lh
+    from core.settings.display_selection import enabled_monitor_numbers
+
+    assert enabled_monitor_numbers([2], 1) == frozenset()
+    assert enabled_monitor_numbers("ALL", 1) == frozenset({1})
+    recorded = {}
+
+    def capture(argv, *, cwd, env, capture_output, check):
+        recorded["argv"] = argv
+        assert cwd == lh.REPO and capture_output and check
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(lh.subprocess, "run", capture)
+    lh.seed_profile({"DISPLAY": ":95"}, tmp_path, 4, application="Screensaver_MC")
+    script = recorded["argv"][2]
+    assert 'settings.set("display.show_on_monitors", "ALL")' in script
+    assert recorded["argv"][-1] == "Screensaver_MC"
+
+
+def test_linux_smoke_failure_includes_child_diagnostics(tmp_path: Path, capsys) -> None:
+    """An Xvfb smoke failure must expose logs AND the frozen child's captured output."""
+    from tools import linux_smoke_dist
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "screensaver_qml.log").write_text("QML trace", encoding="utf-8")
+    assert linux_smoke_dist._fail("missing ready marker", logs / "screensaver.log", stdout=b"crash details") == 1
+    output = capsys.readouterr().out
+    assert "Main log missing" in output
+    assert "screensaver_qml.log" in output
+    assert "crash details" in output

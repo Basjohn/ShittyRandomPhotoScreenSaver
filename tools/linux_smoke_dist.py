@@ -28,10 +28,20 @@ READY = "Quick startup display ready"
 GL_OK = "[QUICK_GL] validated"
 
 
-def _fail(message: str, log: Path | None = None) -> int:
-    print(f"[SMOKE] FAIL: {message}")
-    if log is not None and log.is_file():
-        print("".join(log.read_text(encoding="utf-8", errors="replace").splitlines(True)[-60:]))
+def _fail(message: str, log: Path | None = None, *, stdout: bytes = b"") -> int:
+    print(f"[SMOKE] FAIL: {message}", flush=True)
+    if log is not None:
+        if log.is_file():
+            lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+            print(f"[SMOKE] Main log: {log} ({len(lines)} lines)")
+            print("\n".join(lines[-60:]))
+        else:
+            print(f"[SMOKE] Main log missing: {log}")
+        available = sorted(path.name for path in log.parent.glob("*.log"))
+        print(f"[SMOKE] Available log files: {available}")
+    if stdout:
+        print("[SMOKE] Child stdout/stderr tail:")
+        print(stdout.decode(errors="replace")[-4000:])
     return 1
 
 
@@ -78,16 +88,15 @@ def main(argv: list[str]) -> int:
         log = logs / "screensaver.log"
         text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
         if run.returncode != 0:
-            print(run.stdout.decode(errors="replace")[-4000:])
-            return _fail(f"/s exited {run.returncode}", log)
+            return _fail(f"/s exited {run.returncode}", log, stdout=run.stdout)
         for marker in (READY, GL_OK):
             if marker not in text:
-                return _fail(f"/s log lacks {marker!r}", log)
+                return _fail(f"/s log lacks {marker!r}", log, stdout=run.stdout)
         if binary == "srpss-mc" and "entrypoint=main_mc" not in text:
-            return _fail("MC product did not start through main_mc", log)
+            return _fail("MC product did not start through main_mc", log, stdout=run.stdout)
         errors = [line for line in text.splitlines() if re.search(r"\b(ERROR|CRITICAL)\b", line)]
         if errors:
-            return _fail("ERROR/CRITICAL in /s log:\n" + "\n".join(errors[:20]), log)
+            return _fail("ERROR/CRITICAL in /s log:\n" + "\n".join(errors[:20]), log, stdout=run.stdout)
 
         settings = subprocess.Popen([str(installed), "/c", lh.log_dir_arg(logs)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         time.sleep(12)
