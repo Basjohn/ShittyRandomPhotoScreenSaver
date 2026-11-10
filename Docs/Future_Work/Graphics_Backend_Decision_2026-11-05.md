@@ -3,11 +3,19 @@
 **Status:** DECIDED by the lead at the operator's request ("ideally you should render that decision"), 5 Nov 2026.
 Supersedes the open question in `Future_Work.md` §2 / §2.5 and `Current_Plan.md` §0 step 4. The operator may overrule.
 
+**Current implementation note (10 Nov 2026):** This document records the **dated** decision and its later
+P1/P2/P3 addendum, not an assertion that every phase below is still future. P1's C++/QRhi spike is proven;
+P2's supervised Python Visualizer engine worker is the Windows default; P3's universal C++/QRhi custom
+renderer is not a production implementation yet. `Current_Plan.md` §8b controls the remaining work/order.
+The intended post-port default is Vulkan through QRhi, with the same core supporting an OpenGL fallback.
+The old phrase "No Vulkan backend now" below describes the 5 Nov decision, not an indefinite ban on modernization.
+
 ## Decision
 
 1. **Next large series: SMP & Full Display**, in the order its own plans set: Expanded Visualizer
-   (`Docs/Future_Work/SRPSS_Expanded_Visualizer_and_SMP_Implementation_Plans_2026-11-05.zip`, plan 01) after Waveform
-   acceptance, then ShittyMusicPlayer (plan 02).
+   (`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`) after Waveform
+   acceptance, then ShittyMusicPlayer
+   (`Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`).
 2. **No Vulkan backend now.** A Vulkan backend is the right *eventual* direction, but only in one form: a **native (C++)
    render core behind the existing `QSGRenderNode` boundary, hosted by Qt Quick on its Vulkan RHI backend**, never a
    Python-driven Vulkan port. It starts when one of the measured triggers below fires, and if it starts it precedes any

@@ -77,7 +77,11 @@ both sliders together, with one durable save after the input settles and an expl
 - **Header Fill** — theme-owned shared branded-header fill; editing a named Widget Theme forks to `Custom`;
 - **Reset All Colours to Theme** — explicit operator action that normalizes ordinary family colour/card-alpha compatibility overrides to canonical Inherit values; never runs at startup and never touches Visualizer-authored colours;
 - **Card Border Width** — global card geometry style, outside Widget Theme schema;
-- **Surface Material** — global card and Context Menu surface (Normal default, Acrylic, Glass, Frosted, Mica, Smoked), outside Widget Theme schema; an explicit `widgets.<id>.surface_material` wins.
+- **Surface Material** — global card and Context Menu selector (**Theme default**, resolving to Normal only
+  when the Widget Theme does not name a material); explicit Normal, Acrylic, Glass, Frosted, Mica and Smoked choices
+  override the theme. An explicit `widgets.<id>.surface_material` still wins. The selected Widget Theme's
+  optional `surface_material` is part of schema v3; the global override is separate persisted Settings state.
+  Material-aware borders and a neutral-centred border-opacity adjustment are planned, not present.
 
 Superseded decision (6 Nov 2026): this guide used to say there is no runtime surface material control because the Sep 2026 card-backdrop experiments were physically rejected. Those mechanisms stay rejected; materials returned through `Docs/Architecture/Card_Surface_Materials.md`.
 

@@ -127,6 +127,18 @@ bound. While loaded, the card's `Rectangle` keeps its border and drops its fill 
 
 ### 3.3 Legibility
 
+**Proposed, not landed:** The current ordinary card still paints a plain
+`Rectangle` border over the existing single-pass material fill. `Current_Plan.md` §1A proposes deriving a
+material border **ring from the same backdrop sampler/shader pass**; the separate Rectangle supplies fallback
+for Normal or overridden flat borders. The border's material follows the selected surface by default, with a
+Style Overrides selector (Inherit Surface / Flat / Acrylic / Glass / Frosted / Mica / Smoked) and
+an independent neutral-0 opacity adjustment. An explicit border recipe uses the **same** backdrop
+and card shader for the ring, without acquiring another sampler owner. Preserve the existing authored
+border colour/width, anti-aliasing and silhouette; do not introduce another backdrop source or per-border blur.
+This is a candidate, not a measured performance improvement or evidence that material borders already ship.
+
+### 3.3 Legibility
+
 **Material density and ink contrast.** Material density is composed from tint,
 luminosity pull and the legibility floor; lowering only the card colour alpha cannot correct an opaque-looking
 panel. The shared surface shader evaluates its floor in linear-light luminance, matching WCAG measurement,

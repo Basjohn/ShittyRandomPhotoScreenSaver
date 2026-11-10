@@ -112,12 +112,28 @@ Runtime Widget Themes are a separate semantic colour authority over retained Wid
 Widget Theme (.srwtheme schema v3)
     -> stable Widget theme identity
     -> explicit linked Settings-theme identity
-    -> semantic runtime colours
+    -> semantic runtime colours + optional card surface material
 ```
 
-**Runtime card surfaces (superseded decision, 6 Nov 2026).** The 2 Sep 2026 rule "runtime cards are ordinary RGBA Quick surfaces; no material recommendation, Surface Style override, card-material Loader/capture path or Settings-HWND backdrop reuse" is superseded for card surface materials by `Docs/Architecture/Card_Surface_Materials.md`. What that rule rejected stays rejected: capturing, layering or redirecting the wallpaper/transition renderer, per-card material Loaders/masks/captures, material state in Widget Theme files, and any reuse of the Settings HWND/AccentPolicy stack (Settings Glass/Acrylic remains owned exclusively by the Settings theme/native-window stack above).
+**Runtime card materials (current contract, 10 Nov 2026).** The September 2026 rejection of
+layering, redirecting or independently re-rendering the wallpaper/transition renderer remains binding. The
+accepted November design in `Docs/Architecture/Card_Surface_Materials.md` is different: one display-local
+`SurfaceBackdropSource` reads the **already-drawn** window target and supplies a shared blur texture to cards
+and the Context Menu, without capturing the wallpaper again per card. Each material-enabled card loads one
+`MaterialSurface` shader item; Normal cards retain their ordinary Qt Quick fill and border. With no active
+material consumers the backdrop is dormant. Material-only refresh occurs at existing presentation edges;
+there is no independent material timer or frame clock.
 
-Current contract: Normal is the default and is today's RGBA fill. A non-Normal surface (Acrylic, Glass, Frosted, Mica, Smoked) samples one per-display `SurfaceBackdropSource` (z 2, above wallpaper and dimming, below every widget) that copies the already-drawn window target and blurs it once; `BackgroundRenderItem` stays directly under the scene root at z 0 and is never redirected or re-dirtied. The owner exists only from the first non-Normal surface in a generation; when the last goes Normal it is parked (GL freed, never traversed). Refreshes ride existing edges (image published, transition set/cleared, dimming, geometry) and, during a transition, frames the display renders anyway, bounded per material; no timer and no frame request. A surface samples in screen space from its own vertex position and shows exactly its Normal fill until the first refresh. The backdrop is the wallpaper layer only (never other cards or the Visualizer); the Visualizer card and the System Volume OSD stay Normal. On a material, each `ShadowedText` run gets a local legibility plate from the same backdrop (4.5:1 small text, 3:1 large, against its own colour; nothing where the surface already meets it) and loses the light-theme soft halo; Normal runs are untouched. Every card family declares `surface_material: inherit` and shows a Surface Material row. Bars: `tests/test_surface_materials.py`, `tests/test_widget_theme_no_material_contract.py`.
+Widget Theme schema v3 **may name an optional surface material**. The global Style Overrides selector defaults
+to **Theme** (Normal when the selected theme specifies none); a per-widget explicit selection wins. Material
+surface treatment also applies to eligible framed Visualizer cards, using their authored Fill as tint; frameless
+modes retain their own presentation. The shared card surface shader supplies **one concentric legibility panel
+per card** and a contrast floor rather than per-text-run plates. Textless child surfaces may omit that panel.
+The baseline border is still a separately drawn flat Qt Quick border: material-aware borders are *proposed*,
+not implemented (`Current_Plan.md` §1A). Current Widget Opacity Adjust applies to material fills/tints, not
+borders, text, shadows or whole-widget fade. Materials never borrow Settings' native HWND/AccentPolicy path.
+The full shader, backdrop and lifecycle authority is `Docs/Architecture/Card_Surface_Materials.md`; do not
+restate its implementation matrix here.
 
 ### Settings collapsible-bucket contract
 

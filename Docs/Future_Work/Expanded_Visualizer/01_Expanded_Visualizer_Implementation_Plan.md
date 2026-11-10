@@ -5,16 +5,22 @@ tracked; this file is the one source of truth). Reviewed 7 Nov against `a295697c
 [Architecture Checklist](../../Reference/Architecture_Checklist.md); §0 below holds the phase ladder, gates, owners,  
 dormancy, lifecycle, 2D/3D consistency, budgets and risks the review added. Sections A-J are the original plan,  
 corrected where the review found drift.  
-**Status:** FUTURE, NOT ADMITTED. This is a detailed implementation plan, not a patch, an approved runtime contract change, a build instruction, or authority to bypass `Current_Plan.md`.  
-**Entry gate:** Begin **only when Waveform Ribbon is physically accepted and its live checklist closed**, and only after  
-the prerequisite phase P-A (§0.1) has landed. The existing ordered `Current_Plan.md` retains authority until the operator explicitly admits this feature and adjusts the plan. Do not erase or silently reorder the later 3D work.  
+**Status (10 Nov): PARTIALLY IMPLEMENTED / STILL UNDER PHYSICAL ACCEPTANCE.** The original future-entry
+gate below was superseded when the operator admitted Expanded Visualizer work. The canonical live authority
+is `Current_Plan.md` §1 step 3 and §1A, not historical unchecked implementation boxes in this detailed plan.
+M1/M2, the overlay and Fullscreen Edit functionality, and the M4 covered-display admission implementation
+have landed; M2b's full width-ratio DSP transaction, M4 GPU-load measurements, M5 lifecycle evidence and M6
+4K acceptance are not thereby completed. The original milestones remain as design/evidence checklists.
+Do not restart earlier implementation phases or claim that an untested later gate passed.
+**Original entry-gate rationale (5–7 Nov, historical):** Waveform physical acceptance and P-A host
+extraction preceded admission. Later 3D work still follows the active `Current_Plan.md` order.  
 **Supported visualizers (operator, 7 Nov):** every mode except Voxel Sphere (`sphere`) and Extruded Spectrum
 (`extruded_spectrum`): Extruded Bubble (the first, the gate mode), Spectrum, Oscilloscope, Spline Curve (`devcurve`),
 Bubble, Neon Lake (`shockwave_grid`) and Waveform Ribbon, each by one descriptor flag. Waveform Ribbon is already over
 budget under game load at the card (41-44 fps); its full-display figures are recorded at M6 against §0.7 (its
 live-tick cut is in flight on another branch); the flag carries no perf gate.  
 **Products:** existing Standard SRPSS and existing Media Center (MC) sharing the current Quick scene. No additional screensaver window, no product fork.  
-**Companion:** `02_ShittyMusicPlayer_Implementation_Plan.md` begins after this plan's acceptance and reuses its proven presentation **semantics**, not the screensaver's physical window manager.
+**Companion:** `Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md` begins after this plan's acceptance and reuses its proven presentation **semantics**, not the screensaver's physical window manager.
 
 ## 0. Phase ladder, prerequisites, owners and budgets (7 Nov review)
 

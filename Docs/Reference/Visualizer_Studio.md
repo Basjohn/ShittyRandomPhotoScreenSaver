@@ -463,6 +463,18 @@ control.
   the existing clear failure/read-only message; no alternate save root is used. If the preset file was saved
   before the live camera transaction fails, the error and log state that partial result explicitly and retain
   the Studio draft.
+- **Live fullscreen entry (operator-accepted 10 Nov).** The Visualizer's Studio `S` glyph hands
+  its current mode/preset and *transient evaluated camera pose/FOV* through the ordinary runtime teardown →
+  Settings → Studio launch, never directly through the live display. Selecting a mode ID in Settings is
+  insufficient when its lazy controls have not been constructed: the central Studio open path selects/builds
+  that mode body before the Settings-backed store is created (the Neon Lake
+  `_shockwave_grid_lazy_values` Save Camera failure). The Studio starts at the supplied preview pose without
+  writing a curated preset; **Save Camera** explicitly persists the evaluated pose through the mode's existing
+  Settings/preset authority. Studio's QQuickWindow uses the GUI process's QtGui application icon, with bundled
+  ICO fallback, without imposing QtWidgets imports on the worker. Mode-appropriate navigation uses the
+  shared framed/orbit camera policy; held-key rates stop on window/preset retirement. The accepted live
+  Fullscreen Edit artwork sizing/alignment/fade contract remains with the Expanded Visualizer/overlay owners,
+  not a second Studio layout system.
 - **Live camera round-trip.** Framed Camera Position, like turn and tilt, is a live presentation value.
   Ordinary preset resolution, opening Settings and runtime reconstruction preserve its last saved value.
   Explicit curated-preset selection initializes Camera Position from that preset; its optional starting-view

@@ -173,21 +173,23 @@ after the operator's yes on a question card; agents never run load (invisible ch
      **Windows defaults to the engine worker.** Explicit `--viz-in-process` / `--viz-engine-worker` choose the path;
      automatic fallbacks warn/error with their reason, while capacity violations remain terminal. Linux stays in
      process for this slice. Default-merge and H1/H2 evidence live in the audit's resolution section.
-     **Order** (each step: failing-first test, its negative control, record in the audit doc's resolution section):
-     1. M4: gates with non-default presets and settings; a gate 2 (no visual change) record.
-     2. H3 (operator, 8 Nov: there is no Linux machine to prove it on; assume it works with basic support): make the
-        worker the default on Linux too (flip `visualizer_engine_worker_platform_default`
-        to every platform and update `Linux_Plan.md` Phase 4 and the platform tests). No Linux proving step.
-     3. M5 and L2-L5, plus the inherited POSIX transfer-lifetime finding below.
-     4. P3's four decisions (listed last below) before P3's first slice.
+     **Remaining sequence (10 Nov source reconciliation; focused proof for each):**
+     1. M4 non-default *production-owner parity* and gate-2 rendered no-visual-change record (dynamic
+        capacity/high-water/non-default packet tests are already implemented; don't reopen them).
+     2. M5, L2–L5 and the accepted-but-unread POSIX Connection lifetime repair, which must own a
+        bounded descriptor retirement before Linux worker default can depend on that transport.
+     3. H3 Linux worker-default source flip and focused tests; the operator waived **physical** Linux
+        validation, not source correctness. Do not claim Pulse/forkserver runtime was tested.
+     4. P3's four reader/lifecycle/geometry/FP64 decisions and first native rendering substrate.
      M1/M2/L1/H1/H2 evidence lives in the audit's resolution section. A first-configure timeout disables the worker
      for the run; later owners do not repeat the six-second cold wait. Capacity, logging and detached STOP reports
      retain their focused proof; ordered controls refuse rather than evict and serialize before admission.
      Load reveal-latency sizing remains an operator gate.
-     - [ ] H3: the worker path has never run on Linux (forkserver on 3.14, POSIX wake path, Pulse capture). Operator,
-       8 Nov: it cannot be proven (no Linux machine); assume basic support and make the worker the Linux default too
-        (step 2).
-     - [ ] M4: every gate used default presets; gate 2 (no visual change) has no record.
+     - [ ] H3: worker path has no native Linux runtime evidence (forkserver, POSIX wake, Pulse capture).
+       After the source POSIX-lifetime repair, flip Linux default and update `Linux_Plan.md`; the operator's
+       hardware waiver does not turn untested runtime behaviour into a green gate.
+     - [~] M4: schema-maximum/non-default packet capacity and high-water tests already landed;
+       non-default worker/in-process **rendered** parity and the gate-2 no-visual-change record remain open.
      - [ ] M5: the in-process mode-cycling memory growth (gate 4 side finding) still hits the fallback and the Studios.
      - [ ] L2: gate 3's "GIL share" fields are wall time, not GIL hold; "revisions waiting 0/0" is zero by
        construction on the worker path; the worker's audio feed differs from a real device.
@@ -205,7 +207,10 @@ after the operator's yes on a question card; agents never run load (invisible ch
        single consumer and a non-consuming head read for the Python owner; EB geometry once per revision, not per
        frame; EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check scans
        a fixed module list and cannot see it).
-   - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
+   - P3: one C++/QRhi native core for all custom drawing. Substrate, Spectrum parity, shared fullscreen
+     transition passes, Waveform/Extruded Bubble, specialised transitions, the remaining Visualizers and
+     image/background/Scene3D ports follow one staged ownership plan; switch the whole window to Vulkan
+     only when raw-GL nodes have retired. Retain OpenGL through that same QRhi core.
    - P4: mixed-resolution soft layers in the core.
 
    Triggers 2 (render-thread starvation) and nearly 1 (EB at display size over 8 ms) are met. Expanded Visualizer
@@ -217,10 +222,11 @@ after the operator's yes on a question card; agents never run load (invisible ch
    (`Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`, gated behind `--smp` until its
    Gate M9; its §0A holds the prerequisite phases and §13-16 the operator's audio, Settings-tab, icon/artwork and
    rearrangement targets; §16A holds the operator's fullscreen arrangement: a tiling tree with choose, swap, resize
-   and split/remove, no dead sections, SMP fullscreen remembered, Settings → Layout pills Widgets and SMP). No
-   Vulkan backend now: the eventual backend is a native render core on Qt Quick's Vulkan
-   RHI, started only when a recorded trigger fires (full-display 4K GPU budget, render-thread GIL starvation, a
-   needed capability, a platform blocker). Port-readiness rules bind all new GPU code from now.
+   and split/remove, no dead sections, SMP fullscreen remembered, Settings → Layout pills Widgets and SMP). The
+   production Vulkan backend is not yet enabled: P2 is the Windows-default supervised Python worker;
+   P3 is the planned C++/QRhi native renderer and Vulkan-default migration (with OpenGL fallback),
+   informed by measured cost and the operator's explicit modernization goal. Port-readiness rules
+   bind all new GPU code from now.
 10. **§6 Shared 3D architecture** and **§7 Visualizer modes** (Reactive Liquid / Melt Pool → Concrete Rain → Usu
    Moonscape, lab-first per §7.0) resume after Expanded Visualizer acceptance and its full-display measurements, under
    the port-readiness rules; if a trigger fires first, the native Vulkan core precedes them.
@@ -241,27 +247,19 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
 - [ ] **1.1 Awaiting Logs:** no direct mode-switch cause in the supplied archive. On recurrence, correlate the
   reported time, prior/result mode, selected preset and runtime generation with the existing mode-transition owner
   and frame trace; distinguish explicit selection, enabled-mode normalization and Settings restoration first.
-- [~] **1.2-1.3 Awaiting Validation:** check Studio Save/Save Camera in a frozen build (writable and read-only
-  ProgramData paths), and a moved camera after Settings/fullscreen return. Save Camera captures the actual evaluated
-  pose without unrelated draft artwork; ordinary hydration preserves live XYZ. Focused file-integrity and real
-  Settings round-trip tests are green. Evidence: `logs/evidence_chest/logsf158e7bdd4.zip`; durable save contract:
-  `Docs/Reference/Visualizer_Studio.md`.
-  Installed ACL inspection found shipped preset files read-only to ordinary users despite parent-folder Write.
-  Verify the next Standard/MC installer grants Modify only on the shared preset data tree, then Save over an
-  installed preset and Save As as an ordinary user. No build/installed ACL mutation was performed by this task.
-  **9 Nov live S-launch follow-up:** the deferred Settings target restored the mode ID without constructing its lazy
-  Settings body, so Save Camera failed on `_shockwave_grid_lazy_values`. The shared Studio entry now selects/constructs
-  that body before store creation; an end-to-end non-rendering Qt regression covers Neon Lake and the camera save.
-  Physical Standard/MC confirmation is still pending; see
-  `Docs/Audits/Studio_Camera_And_Fullscreen_Overlay_Self_Audit_2026-11-09.md`.
-- [~] **1.4-1.5 Awaiting Validation:** check Fullscreen Mode's Media Bar/Floating Glyphs styles, long metadata
-  fitting, multiline Edit boxes and optional album. Both styles use the same admitted Media actions; every metadata
-  row uses Media's shared fitting primitive. Focused Settings, input, text-layout and Edit gates are green.
-  **9 Nov fullscreen follow-up:** parent artwork-axis resizing is in place, but left/right mirroring originally read
-  the configured corner rather than the block's actual screen position. Presentation mirroring now follows the
-  block's displayed midpoint, with authored child offsets and persisted corner untouched. Fullscreen Edit now holds
-  already-displayed artwork instead of restarting the track-swap fade; hidden overlays still reveal for editing.
-  Added real Quick tests for crossing the midpoint and for edit-entry opacity; awaiting Windows execution.
+- [~] **1.2-1.3 Frozen-install validation only:** after the operator accepted the Studio S launch,
+  live-camera handoff and Save Camera repair on 10 Nov, the remaining test is on freshly installed
+  Standard/MC builds as an ordinary Windows user. Confirm the installer grants Modify on the shared
+  ProgramData Visualizer preset tree **and its existing files**, then Save/Save Camera over a shipped
+  preset, Save As and reopen. Source-level file/Qt checks do not establish installed ACLs.
+  Durable behavior: `Docs/Reference/Visualizer_Studio.md`; original evidence:
+  `Docs/Audits/Studio_Camera_And_Fullscreen_Overlay_Self_Audit_2026-11-09.md` and
+  `Docs/Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md`.
+- [~] **1.4-1.5 Remaining fullscreen visual acceptance:** operator-check Media Bar/Floating
+  Glyphs styles, long metadata fitting, multiline Edit boxes and optional album, including Save/Cancel.
+  The parent artwork-border resize, dynamic inward left/right layout and unchanged-artwork edit fade are
+  accepted (10 Nov) and live in the fullscreen presentation contract, not reopened here. Existing
+  Settings/input/text-layout/Edit checks are green; actual Windows full-layout acceptance is still owed.
 - [~] **1.6 Awaiting Validation:** Achievement Pulse counted disabled provider fields as painted capsule rows;
   replaying the saved payload on Edit entry then changed the canvas. The enabled-row regression is green.
   Check child placement after Settings/fullscreen return with `--geo`; other families' extent floors are static.
@@ -279,6 +277,32 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
   switching/snap/resize and the remaining unsampled control/delegate inks. Small isolated GPU checks show an active
   increase (largest raw whole-frame rise about 0.020 ms for Glass), not performance neutrality or load acceptance.
   Native rounded corners remain open at 1.9; do not equate material transmission with a clipping fix.
+- [ ] **1.7b Material-aware widget border (near-term, independent material slice; 10 Nov):** extend
+  the existing shared card `MaterialSurface` shader's rounded SDF to shade the **border ring** using the same
+  display-local blurred backdrop already sampled by the fill; never create a second capture/blur, extra
+  material pass, timer or per-frame Python owner. A material-enabled card inherits its surface material for
+  the border **by default**. In `Widgets → General → Style Overrides`, add **Border Material:** Inherit Surface
+  (default) / Flat / Acrylic / Glass / Frosted / Mica / Smoked (explicit overrides), plus **Border Opacity Adjust** (-1..+1, persisted neutral 0),
+  following the existing `core/settings/surface_opacity.py` adjustment semantics and save/flush path. Zero is
+  exactly the authored material/theme baseline, not an always-on override; nonzero adjusts border density
+  independently of `Widget Opacity Adjust` and the existing family border-opacity controls. Retain the
+  authored theme border colour/contrast as the ring's tint/edge authority and border width/radius as its
+  geometric authority. On Normal or Flat, retain today's Rectangle border **pixel-identically**; on active
+  material, remove overdraw by that Rectangle only for the ring. Explicitly selecting a different
+  border material still samples the same shared backdrop and draws through the same card shader
+  (ring-local parameters only; no independent material item). Must remain clear against the fill,
+  including on Glass and bright wallpapers; validate stroke AA, translucent corners, 100/150/200% DPR,
+  normal/material switching, card opacity/theme inheritance, Style Overrides reset, and one focused GPU
+  before/after on busy cards. Include the existing framed Visualizer card if its surface is active, using
+  its own border authority; material children/Context Menu do not inherit this automatically where their
+  independent stroke semantics differ. Preserve older themes and settings via neutral defaults.
+  The shader currently still has `plateInset = borderWidth + 2.5/3 px`, creating the contrasting
+  interior rim the operator asked to eliminate; coordinate this same-pass geometry cleanup with the new
+  border-ring treatment. Extend the existing material face to the inside of the real border, without
+  changing content padding or inventing a separate plate system.
+  Regenerate the bundled `.qsb` from the shader source using the existing Qt toolchain; don't ship
+  uncompiled GLSL changes or assume every QRhi backend accepts an untested shader variant.
+  Contract: `Docs/Architecture/Card_Surface_Materials.md` §3.2.1.
 - [~] **1.8 Awaiting Validation:** operator-check Gmail and Reddit/Reddit2 column gestures: top grips reorder;
   solid-span endpoints change start/width and truncation. Retained-QML proof covers transformed opposite-edge
   stability, all-row updates, collision policy, Save/Cancel, Undo, slots and fresh-profile hydration.
