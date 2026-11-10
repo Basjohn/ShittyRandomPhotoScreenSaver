@@ -219,3 +219,129 @@ def test_linux_smoke_failure_includes_child_diagnostics(tmp_path: Path, capsys) 
     assert "Main log missing" in output
     assert "screensaver_qml.log" in output
     assert "crash details" in output
+
+
+def test_smoke_does_not_enable_release_logging() -> None:
+    """Release profiles remain logging-off; smoke observes actual Xvfb pixels."""
+    import inspect
+    from tools import linux_smoke_dist
+
+    main_source = inspect.getsource(linux_smoke_dist.main)
+    assert "logging.cfg" not in main_source
+    assert "_has_rendered_scene" in main_source
+    assert "_xvfb_gl46_available" in main_source
+    assert "Quick startup display ready" not in main_source
+
+
+def test_smoke_scene_evidence_rejects_blank_and_nearly_flat_frames(tmp_path: Path) -> None:
+    from PIL import Image, ImageDraw
+    from tools import linux_smoke_dist
+
+    blank = tmp_path / "blank.png"
+    black = tmp_path / "black.png"
+    flat = tmp_path / "flat.png"
+    scene = tmp_path / "scene.png"
+    Image.new("RGB", (480, 270), "black").save(blank)
+    Image.new("RGB", (480, 270), "black").save(black)
+    Image.new("RGB", (480, 270), (36, 36, 36)).save(flat)
+    picture = Image.new("RGB", (480, 270), "black")
+    draw = ImageDraw.Draw(picture)
+    for x in range(0, 480, 20):
+        draw.rectangle((x, 0, x + 9, 269), fill=(x % 190 + 50, 110, 220))
+    picture.save(scene)
+    assert not linux_smoke_dist._has_rendered_scene(blank, black)[0]
+    assert not linux_smoke_dist._has_rendered_scene(blank, flat)[0]
+    assert linux_smoke_dist._has_rendered_scene(blank, scene)[0]
+
+
+def test_smoke_gl_capability_probes_isolated_display(monkeypatch) -> None:
+    from tools import linux_smoke_dist
+
+    args = []
+    def run(command, **kwargs):
+        assert command == ["glxinfo", "-B"]
+        assert kwargs["env"] == {"DISPLAY": ":95"}
+        args.append(command)
+        return SimpleNamespace(returncode=0, stdout=b"OpenGL core profile version string: 4.6 (Core Profile) Mesa")
+
+    monkeypatch.setattr(linux_smoke_dist.subprocess, "run", run)
+    assert linux_smoke_dist._xvfb_gl46_available({"DISPLAY": ":95"})[0]
+    assert args
+
+@pytest.mark.parametrize("binary", ["srpss", "srpss-mc"])
+def test_linux_smoke_uses_pixels_not_frozen_logs(monkeypatch, tmp_path: Path, binary: str) -> None:
+    """End-to-end harness contract with tiny subprocess/Xvfb stand-ins for both products."""
+    from PIL import Image, ImageDraw
+    from tools import linux_smoke_dist as smoke
+
+    product_name = f"SRPSS-5.1.3-linux{'-mc' if binary == 'srpss-mc' else ''}-x86_64"
+    product = tmp_path / product_name
+    product.mkdir()
+    (product / binary).write_bytes(b"frozen product stand-in")
+    (product / "install.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    out = tmp_path / "evidence"
+    out.mkdir()
+    processes = []
+    profiles = []
+    screenshots = []
+
+    class FakeProcess:
+        def __init__(self, argv, **kwargs):
+            self.argv = argv
+            self.returncode = None
+            processes.append(self)
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 0
+            return 0
+
+        def terminate(self):
+            self.returncode = 0
+
+        def kill(self):
+            self.returncode = -9
+
+    def install_or_probe(argv, **kwargs):
+        assert argv[0] == str(product / "install.sh")
+        home = Path(kwargs["env"]["HOME"])
+        installed = home / ".local" / "opt" / binary / binary
+        installed.parent.mkdir(parents=True, exist_ok=True)
+        installed.write_bytes(b"installed binary")
+        data = tmp_path / "work" / "profile" / "data" / "SRPSS"
+        for name in ("themes", "presets/visualizer_modes", "sounds"):
+            (data / name).mkdir(parents=True, exist_ok=True)
+        return SimpleNamespace(returncode=0)
+
+    def screenshot(display, target):
+        screenshots.append(target)
+        picture = Image.new("RGB", (320, 180), "black")
+        if len(screenshots) > 1:
+            draw = ImageDraw.Draw(picture)
+            for x in range(0, 320, 16):
+                draw.rectangle((x, 0, x + 8, 179), fill=(x % 170 + 50, 110, 220))
+        picture.save(target)
+
+    monkeypatch.setattr(smoke.lh, "require_linux", lambda: None)
+    monkeypatch.setattr(smoke.lh, "child_env", lambda *args: {"DISPLAY": ":95"})
+    monkeypatch.setattr(smoke.lh, "start_xvfb", lambda *args: SimpleNamespace(terminate=lambda: None))
+    monkeypatch.setattr(smoke.lh, "copy_repo_images", lambda path: None)
+    monkeypatch.setattr(smoke.lh, "seed_profile", lambda *args, **kwargs: profiles.append(kwargs["application"]))
+    monkeypatch.setattr(smoke.lh, "grab_screen", screenshot)
+    monkeypatch.setattr(smoke.subprocess, "run", install_or_probe)
+    monkeypatch.setattr(smoke.subprocess, "Popen", FakeProcess)
+    monkeypatch.setattr(smoke, "_xvfb_gl46_available", lambda env: (True, "OpenGL Core 4.6"))
+    monkeypatch.setattr(smoke, "SHOT_SECONDS", (0, 0))
+    monkeypatch.setattr(smoke.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(smoke.evidence_media, "redirect_output", lambda *args: out)
+    monkeypatch.setattr(smoke.artifact_paths, "evidence_dir", lambda *args: out)
+    monkeypatch.setattr(smoke.artifact_paths, "run_label", lambda *args: "test")
+
+    assert smoke.main([str(product)]) == 0
+    assert profiles == ["Screensaver_MC" if binary == "srpss-mc" else "Screensaver"]
+    assert len(screenshots) >= 2
+    assert any("/s" in proc.argv for proc in processes)
+    assert any("/c" in proc.argv for proc in processes)
+    assert not list(tmp_path.rglob("*.logging.cfg"))

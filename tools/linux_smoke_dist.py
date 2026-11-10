@@ -1,22 +1,21 @@
-"""Smoke-test a built Linux product folder: install it, then run the saver and Settings headless.
+"""Smoke-test an installed frozen Linux screensaver or MC build without enabling release logging.
 
-Linux only. Used by ``.github/workflows/linux-build.yml`` and after local builds::
+Runs the actual installed binary on isolated Xvfb, verifies that Mesa exposes the
+required GL 4.6 Core context, and proves that a materially detailed scene appears
+in the framebuffer. The executable must exit cleanly via --exit-after, while /c
+must remain open. Qt/QML and child output are printed when a test fails.
 
-    python tools/linux_smoke_dist.py release/linux/SRPSS-<version>-linux-x86_64
-
-Everything happens under a temporary HOME: the product's own ``install.sh`` deploys
-the binary and the curated presets/themes/sounds (exercising the installer), then the
-*installed* ``srpss`` runs ``/s`` on Xvfb with real repository artwork and must exit 0
-after reaching a ready display with a validated OpenGL 4.6 context and no ERROR/CRITICAL
-log entries; ``/c`` must stay up until terminated. Environment notes: ``tools/linux_headless.py``.
+No logging configuration is written beside the frozen executable. Production
+logging remains disabled, as authored.
 """
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+from PIL import Image, ImageChops, ImageStat
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -24,8 +23,49 @@ import linux_headless as lh  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools import artifact_paths, evidence_media  # noqa: E402
 
-READY = "Quick startup display ready"
-GL_OK = "[QUICK_GL] validated"
+# Dedicated Xvfb with one virtual display. Enough time for first-use Qt/QML
+# initialization, without relying on the production logger's startup messages.
+SHOT_SECONDS = (6, 11, 16)
+
+
+def _has_rendered_scene(blank: Path, shot: Path) -> tuple[bool, str]:
+    """Reject black/flat frames and small incidental X11 cursor/OSD changes.
+
+    The fixture seeds actual, detailed artwork. Its rendered screen should
+    differ substantially from a blank Xvfb framebuffer and exhibit detail.
+    Normalize resolution so the thresholds are independent of runner DPI.
+    """
+    with Image.open(blank) as before, Image.open(shot) as after:
+        size = (192, 108)
+        background = before.convert("RGB").resize(size, Image.Resampling.BILINEAR)
+        rendered = after.convert("RGB").resize(size, Image.Resampling.BILINEAR)
+    difference = ImageChops.difference(background, rendered).convert("L")
+    changed = sum(difference.histogram()[16:]) / (size[0] * size[1])
+    detail = ImageStat.Stat(rendered.convert("L")).stddev[0]
+    return (changed >= 0.05 and detail >= 10.0,
+            f"changed={changed:.1%} detail_stddev={detail:.1f}")
+
+
+def _xvfb_gl46_available(env: dict[str, str]) -> tuple[bool, str]:
+    """Check the test X server's GL capability, not production log messages.
+
+    This probes the same isolated DISPLAY/Mesa environment as the frozen app;
+    visible pixels from the app are checked separately. A glxinfo capability
+    probe alone does not claim the app initialized the correct GL context.
+    """
+    import re
+
+    try:
+        probe = subprocess.run(["glxinfo", "-B"], env=env,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               timeout=15, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"glxinfo unavailable: {exc}"
+    output = probe.stdout.decode(errors="replace")
+    match = re.search(r"OpenGL core profile version string:\s*(\d+)\.(\d+)", output)
+    version = tuple(map(int, match.groups())) if match else None
+    return (probe.returncode == 0 and version is not None and version >= (4, 6),
+            f"glxinfo exit={probe.returncode}, core={version}; {output[-800:]}")
 
 
 def _fail(message: str, log: Path | None = None, *, stdout: bytes = b"") -> int:
@@ -75,42 +115,77 @@ def main(argv: list[str]) -> int:
         if not required.exists():
             return _fail(f"install.sh did not produce {required}")
 
-    # Frozen release builds log nothing by default; the product's own sidecar switch enables it.
-    (installed.parent / "srpss.logging.cfg").write_text("1", encoding="utf-8")
-
     xvfb = lh.start_xvfb(display)
+    child = None
+    log = logs / "screensaver.log"  # Optional. Do not enable frozen logging.
+    frozen_output = out / "frozen_stdout.txt"
     try:
         lh.copy_repo_images(work / "images")
         lh.seed_profile(env, work / "images", 4, application=app_profile)
+        gl_ok, gl_fact = _xvfb_gl46_available(env)
+        if not gl_ok:
+            return _fail(f"Xvfb lacks required GL 4.6 Core support: {gl_fact}", log)
 
-        run = subprocess.run([str(installed), "/s", "--exit-after", "20", lh.log_dir_arg(logs)], env=env,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
-        log = logs / "screensaver.log"
-        text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
-        if run.returncode != 0:
-            return _fail(f"/s exited {run.returncode}", log, stdout=run.stdout)
-        for marker in (READY, GL_OK):
-            if marker not in text:
-                return _fail(f"/s log lacks {marker!r}", log, stdout=run.stdout)
-        if binary == "srpss-mc" and "entrypoint=main_mc" not in text:
-            return _fail("MC product did not start through main_mc", log, stdout=run.stdout)
-        errors = [line for line in text.splitlines() if re.search(r"\b(ERROR|CRITICAL)\b", line)]
-        if errors:
-            return _fail("ERROR/CRITICAL in /s log:\n" + "\n".join(errors[:20]), log, stdout=run.stdout)
+        # Xvfb is a dedicated, otherwise empty display. Capture it before
+        # starting the frozen application, so a drawn scene is unmistakable.
+        blank = work / "blank_xvfb.png"
+        lh.grab_screen(display, blank)
+        shots = out / "shots"
+        shots.mkdir(exist_ok=True)
+        diagnostics = []
+        rendered_scene = False
+        with frozen_output.open("wb") as stdout_file:
+            child = subprocess.Popen(
+                [str(installed), "/s", "--exit-after", "20", lh.log_dir_arg(logs)],
+                env=env, stdout=stdout_file, stderr=subprocess.STDOUT,
+            )
+            started = time.monotonic()
+            for second in SHOT_SECONDS:
+                time.sleep(max(0.0, started + second - time.monotonic()))
+                if child.poll() is not None:
+                    diagnostics.append(f"process exited before {second}s screenshot")
+                    break
+                shot = shots / f"scene_{second:02d}s.png"
+                lh.grab_screen(display, shot)
+                visible, result = _has_rendered_scene(blank, shot)
+                diagnostics.append(f"{second}s: {result}")
+                rendered_scene |= visible
+            try:
+                exit_code = child.wait(timeout=50)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+                return _fail("/s failed to honour --exit-after", log,
+                             stdout=frozen_output.read_bytes())
+        stdout = frozen_output.read_bytes()
+        if exit_code != 0:
+            return _fail(f"/s exited {exit_code}; " + "; ".join(diagnostics), log, stdout=stdout)
+        if not rendered_scene:
+            return _fail("/s never produced a detailed Xvfb framebuffer; " + "; ".join(diagnostics),
+                         log, stdout=stdout)
+        print(f"[SMOKE] /s rendered: {'; '.join(diagnostics)}; Xvfb GL: {gl_fact.splitlines()[0]}")
 
-        settings = subprocess.Popen([str(installed), "/c", lh.log_dir_arg(logs)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        time.sleep(12)
-        alive = settings.poll() is None
-        settings.terminate()
+        settings = subprocess.Popen([str(installed), "/c", lh.log_dir_arg(logs)],
+                                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         try:
-            settings.wait(15)
-        except subprocess.TimeoutExpired:
-            settings.kill()
+            time.sleep(12)
+            alive = settings.poll() is None
+        finally:
+            if settings.poll() is None:
+                settings.terminate()
+            try:
+                settings.wait(15)
+            except subprocess.TimeoutExpired:
+                settings.kill()
+                settings.wait()
         if not alive:
             return _fail(f"/c exited early with {settings.returncode}", log)
     finally:
+        if child is not None and child.poll() is None:
+            child.kill()
+            child.wait()
         xvfb.terminate()
-    print(f"[SMOKE] OK: installed product ran /s and /c (work dir {work})")
+    print(f"[SMOKE] OK: installed {binary} rendered /s and opened /c without frozen logging")
     return 0
 
 
