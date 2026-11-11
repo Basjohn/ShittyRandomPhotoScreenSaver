@@ -79,12 +79,18 @@ Rectangle {
     // Card and section borders: one painted path (StudioFrame) or one Quick ring, never QSS-like segments.
     readonly property real cardBorder: 1.5
     readonly property bool maximized: studio.windowMaximized === true
+    // Full-window fills keep their corners inside the rounded window border (ui/settings_window_edge.py: the
+    // border's path is inset 0.5 with radius 6.5, so a radius-7 corner lies under its 4 px stroke), leaving the
+    // corners outside the border see-through. Maximised, the window is a plain rectangle.
+    readonly property real windowFillRadius: maximized ? 0 : 7
 
     color: "transparent"
     // The window surface: the theme's own window role (translucent under Glass/Acrylic); Normal keeps the
     // opaque lit gradient.
     Rectangle {
+        objectName: "studioWindowSurface"
         anchors.fill: parent
+        radius: shell.windowFillRadius
         color: shell.cWindow
         gradient: shell.translucent ? null : windowGradient
         Gradient {
@@ -2285,6 +2291,8 @@ Rectangle {
         id: titleBar
         objectName: "studioTitleBar"
         width: parent.width; height: 40
+        topLeftRadius: shell.windowFillRadius
+        topRightRadius: shell.windowFillRadius
         color: shell.cTitlebar
         MouseArea {
             anchors.fill: parent
@@ -3908,15 +3916,15 @@ Rectangle {
         }
     }
 
-    // The forged rounded window edge, painted by Settings' own painter over everything (its corner caps make the
-    // rectangular window read as rounded), then the resize edges a frameless window needs.
+    // The rounded window edge, painted by Settings' own painter over everything: the rounded border is the
+    // silhouette and the corners outside it stay see-through (the window's full-window fills are rounded to
+    // shell.windowFillRadius beneath it), then the resize edges a frameless window needs.
     StudioWindowEdge {
         objectName: "studioWindowEdge"
         anchors.fill: parent
         z: 1000
         maximized: shell.maximized
         outerBorder: shell.tc("outerBorder", shell.cOutline)
-        forgedEdge: shell.tc("forgedEdge", shell.cHeader)
     }
     Repeater {
         // Every side and corner: the Qt edges it resizes (through the system) and its cursor.

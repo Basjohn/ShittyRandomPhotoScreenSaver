@@ -42,7 +42,7 @@ def test_painted_silhouette_follows_the_forged_edge_owner_geometry():
     from tools.settings_native_corners import painted_silhouette
     from ui.settings_window_edge import forged_edge_geometry
 
-    assert forged_edge_geometry(1.5) == (0.5, 6.5, 4.0, 6.0)          # the product defaults, unchanged
+    assert forged_edge_geometry(1.5) == (0.5, 6.5, 4.0)               # the product defaults, unchanged
     today = painted_silhouette(1.5)
     assert today["centre_px"] == pytest.approx(10.5) and today["outer_radius_px"] == pytest.approx(12.75)
     assert today["edge_leg_px"] < today["nominal_edge_leg_px"]
@@ -67,7 +67,7 @@ def test_silhouette_escape_counts_only_changed_pixels_beyond_the_painted_edge():
     delta[pad+6, pad+6] = 90                      # inside the silhouette: not escape
     result = analyze_silhouette(delta, image, width, height, pad, silhouette, (40, 40, 40, 255))
     top_left = result["top_left"]
-    assert top_left["escape_pixels_changed_gt3"] == 1 and top_left["escape_forged_colour_pixels"] == 1
+    assert top_left["escape_pixels_changed_gt3"] == 1 and top_left["escape_painted_colour_pixels"] == 1
     assert top_left["escape_positions"] == [[0, 0]] and top_left["escape_maximum_delta"] == 90
     assert all(result[c]["escape_pixels_changed_gt3"] == 0 for c in ("top_right", "bottom_left", "bottom_right"))
 

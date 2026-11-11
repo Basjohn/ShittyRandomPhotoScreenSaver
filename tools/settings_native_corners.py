@@ -14,13 +14,11 @@ instead of raising our window over the operator's work.
 
 Measurement-only parameters (never product settings, never environment variables):
 
-* ``--extra-border-device-px`` (one or more widths, DEVICE pixels): the forged-edge owner
-  (``ui.settings_window_edge.paint_forged_window_edge``) widens its border and backing by that many device pixels;
+* ``--extra-border-device-px`` (one or more widths, DEVICE pixels): the edge owner
+  (``ui.settings_window_edge.paint_forged_window_edge``) widens its border by that many device pixels;
   every width is captured from the same shown window. ``--border-growth centre|outward``.
 * ``--region-before-accent``: a native rounded region (``CreateRoundRectRgn``, nominal radius) is set on the measured
   HWND immediately BEFORE its AccentPolicy call, so Accent is enabled on an already-regioned window.
-* ``--cap-alpha 0``: the forged camouflage (caps and backing) is painted fully transparent: what does the material
-  show in a cleared corner pixel?
 * ``--qt-scale-factor``: Qt rasterises at ``screen DPR x factor`` (Qt's own high-DPI scale) to emulate another DPR on
   the real monitor; the painted corner pixels are Qt's at that DPR, while DWM (shadow, blur kernel) stays at the
   monitor's real DPI. Reported as emulated, never as a measured monitor.
@@ -185,12 +183,12 @@ def analyze_pixels(delta, width, height, pad, radius):
 
 
 def painted_silhouette(dpr, extra_border_device_px=0.0, border_growth="centre"):
-    """The forged border stroke's outer edge in device px: its corner circle (centre offset from the HWND corner,
+    """The border stroke's outer edge in device px: its corner circle (centre offset from the HWND corner,
     radius) and the 'edge leg' (how far from the corner the silhouette leaves the window edge; the nominal arc's leg
     is its radius, a square corner's is 0)."""
     from ui.settings_window_edge import SETTINGS_OUTER_CORNER_RADIUS, forged_edge_geometry
 
-    inset, radius, border_width, _backing = forged_edge_geometry(dpr, extra_border_device_px, border_growth)
+    inset, radius, border_width = forged_edge_geometry(dpr, extra_border_device_px, border_growth)
     centre = (inset + radius) * dpr
     outer = (radius + border_width * 0.5) * dpr
     leg = centre - math.sqrt(outer*outer - centre*centre) if outer > centre else centre
@@ -200,9 +198,9 @@ def painted_silhouette(dpr, extra_border_device_px=0.0, border_growth="centre"):
             "border_width_logical": border_width, "border_width_device": border_width * dpr}
 
 
-def analyze_silhouette(delta, image, width, height, pad, silhouette, forged_rgb=None):
+def analyze_silhouette(delta, image, width, height, pad, silhouette, painted_rgb=None):
     """Corner pixels outside the PAINTED silhouette (the border's outer edge) that differ from the desktop: the
-    visible escape. Each is classed as forged camouflage colour (within 24 levels of ``forged_rgb``) or other
+    visible escape. Each is classed as a painted colour (within 24 levels of ``painted_rgb``) or other
     (material, antialiasing). Also lists every changed pixel outside the nominal arc, as corner-local (x, y)."""
     import numpy as np
 
@@ -220,13 +218,13 @@ def analyze_silhouette(delta, image, width, height, pad, silhouette, forged_rgb=
         changed = measured > CHANGED
         escape = changed & beyond
         forged = np.zeros_like(escape)
-        if forged_rgb is not None:
-            forged = (np.abs(colours[corner] - np.asarray(forged_rgb[:3], dtype=np.int16)).max(2) <= 24) & escape
+        if painted_rgb is not None:
+            forged = (np.abs(colours[corner] - np.asarray(painted_rgb[:3], dtype=np.int16)).max(2) <= 24) & escape
         corners[corner] = {
             "silhouette_pixels": int(beyond.sum()),
             "escape_pixels_changed_gt3": int(escape.sum()),
             "escape_maximum_delta": int(measured[beyond].max(initial=0)),
-            "escape_forged_colour_pixels": int(forged.sum()),
+            "escape_painted_colour_pixels": int(forged.sum()),
             "escape_positions": [[int(x), int(y)] for y, x in zip(*np.nonzero(escape))],
             "nominal_outside_changed_positions": [[int(x), int(y)] for y, x in zip(*np.nonzero(changed & nominal_outside))],
         }
@@ -361,7 +359,7 @@ class _NoSettingsPresence:
 def capture(label, material, dark_theme=None, light_theme=None, text_evidence=False, page="sources",
             single_theme=None, dark_background=None, light_background=None, background_pole="both",
             window="settings", extra_border_device_px=(0.0,), border_growth="centre", region_before_accent=False,
-            cap_alpha=None, qt_scale_factor=None, studio_mode="waveform_ribbon", retry_wait_s=20.0):
+            qt_scale_factor=None, studio_mode="waveform_ribbon", retry_wait_s=20.0):
     if sys.platform != "win32":
         raise RuntimeError("this gate requires a native Windows interactive desktop")
     if window not in ("settings", "studio"):
@@ -427,7 +425,7 @@ def capture(label, material, dark_theme=None, light_theme=None, text_evidence=Fa
                                  "emulated DPR on the real monitor; DWM shadow/blur stay at the monitor's DPI"}
                                 if qt_scale_factor else None),
               "parameters": {"extra_border_device_px": list(widths), "border_growth": border_growth,
-                             "region_before_accent": bool(region_before_accent), "cap_alpha": cap_alpha,
+                             "region_before_accent": bool(region_before_accent),
                              "studio_mode": studio_mode if window == "studio" else None},
               "placement_logical": list(placement), "cursor_logical": [cursor.x(), cursor.y()],
               "window_captures": 0, "background_captures": 0,
@@ -458,11 +456,7 @@ def capture(label, material, dark_theme=None, light_theme=None, text_evidence=Fa
         return ok
 
     def measured_edge(painter, outer_rect, dpr, **kwargs):
-        forged = QColor(kwargs["forged_edge"])
-        edge_state["forged"] = list(forged.getRgb())
-        if cap_alpha is not None:
-            forged.setAlpha(int(cap_alpha))
-            kwargs["forged_edge"] = forged
+        edge_state["forged"] = list(QColor(kwargs["outer_border"]).getRgb())
         kwargs.setdefault("extra_border_device_px", edge_state["extra"])
         kwargs.setdefault("border_growth", border_growth)
         return original_edge(painter, outer_rect, dpr, **kwargs)
@@ -710,7 +704,7 @@ def capture(label, material, dark_theme=None, light_theme=None, text_evidence=Fa
                             "theme_sha256": hashlib.sha256(theme_path.read_bytes()).hexdigest(),
                             "capture_rect": capture_rect, "dpr": dpr, "radius_physical_px": radius,
                             "native_backdrop_mode": backdrop_mode, "background": background_info,
-                            "forged_edge_rgba": forged_rgba, "painted_silhouette": silhouette,
+                            "outer_border_rgba": forged_rgba, "painted_silhouette": silhouette,
                             "occluded_after_capture": late, "background_occluded_at_reference": late_background,
                             "accent_policy_calls": accent_calls,
                             **analyze_pixels(delta, width, height, pad, radius)}
@@ -801,11 +795,10 @@ if __name__ == "__main__":
     parser.add_argument("--background-pole", choices=("both", "dark", "light"), default="both")
     parser.add_argument("--page", choices=("sources", "themes", "accessibility"), default="sources")
     parser.add_argument("--extra-border-device-px", type=float, nargs="+", default=[0.0],
-                        help="Extra forged-border width(s) in DEVICE px, each captured from the same shown window")
+                        help="Extra border width(s) in DEVICE px, each captured from the same shown window")
     parser.add_argument("--border-growth", choices=("centre", "outward"), default="centre")
     parser.add_argument("--region-before-accent", action="store_true",
                         help="Experiment: native rounded region set immediately before the AccentPolicy call")
-    parser.add_argument("--cap-alpha", type=int, choices=(0,), help="Experiment: transparent forged camouflage")
     parser.add_argument("--qt-scale-factor", type=float, help="Emulate DPR = monitor DPR x factor (Qt rasterisation)")
     parser.add_argument("--studio-mode", default="waveform_ribbon")
     args = parser.parse_args()
@@ -814,5 +807,5 @@ if __name__ == "__main__":
             dark_background=args.dark_background, light_background=args.light_background,
             background_pole=args.background_pole, window=args.window,
             extra_border_device_px=args.extra_border_device_px, border_growth=args.border_growth,
-            region_before_accent=args.region_before_accent, cap_alpha=args.cap_alpha,
+            region_before_accent=args.region_before_accent,
             qt_scale_factor=args.qt_scale_factor, studio_mode=args.studio_mode)

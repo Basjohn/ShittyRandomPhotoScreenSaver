@@ -153,6 +153,66 @@ def test_the_studio_window_is_frameless_with_the_settings_title_bar_and_edge(stu
         window_surface.host.release_engine()
 
 
+def _studio_corner_alphas(surface, dpr):
+    """Alpha of every device pixel wholly outside the window border's outer arc, and of the stroke's middle round
+    each corner arc, from the shell rendered off-screen over nothing (a transparent clear)."""
+    import math
+    from ui.settings_window_edge import forged_edge_geometry
+    surface.pump(3)
+    image = surface.grab()
+    h, w = image.shape[:2]
+    inset, radius, width = forged_edge_geometry(dpr)
+    centre, outer, middle = (inset + radius) * dpr, (radius + width / 2) * dpr, radius * dpr
+    outside, ring = [], []
+    for sx, sy, ox, oy in ((1, 1, 0, 0), (-1, 1, w - 1, 0), (1, -1, 0, h - 1), (-1, -1, w - 1, h - 1)):
+        for y in range(math.ceil(centre)):
+            for x in range(math.ceil(centre)):
+                if math.hypot(x + 0.5 - centre, y + 0.5 - centre) > outer + 0.75:
+                    outside.append(int(image[oy + sy * y, ox + sx * x, 3]))
+        for step in range(31):
+            angle = math.radians(180 + step * 3)
+            x, y = int(centre + middle * math.cos(angle)), int(centre + middle * math.sin(angle))
+            ring.append(int(image[oy + sy * y, ox + sx * x, 3]))
+    return outside, ring
+
+
+@pytest.mark.parametrize("dpr", [1.5, 2.0])
+def test_the_window_corners_outside_the_rounded_border_are_see_through(qt_app, dpr):
+    """The Studio's full-window fills (window surface, title bar) are rounded inside the shared rounded border, so
+    nothing the shell paints reaches the corner outside it (a Quick item cannot clear what is beneath it). At 100%
+    no pixel lies wholly outside the border's arc (tests/test_window_edge_see_through_corners.py covers 100%)."""
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    from ui.settings_window_edge import CORNER_OUTSIDE_ALPHA
+    from ui.studio.controller import StudioController
+    from ui.studio.registry import create_adapter
+    from ui.studio.surface import OffscreenStudioSurface
+    from ui.studio.theme import studio_theme
+    disable_per_call_gl_error_checking()
+    theme = _theme_with_mode("acrylic")
+    adapter = create_adapter("waveform_ribbon")
+    adapter.recorded_clips = lambda: ()
+    surfaces = []
+
+    def factory(controller):
+        surfaces.append(OffscreenStudioSurface(controller, size=(1280, 760), dpr=dpr, present_on_show=False,
+                                               transparent=True))
+        return surfaces[0]
+    controller = StudioController(adapter, _Store("waveform_ribbon"), _Presence(), factory,
+                                  theme_provider=lambda: studio_theme(theme))
+    assert controller.open()
+    try:
+        outside, ring = _studio_corner_alphas(surfaces[0], dpr)
+        assert len(outside) >= 4 and max(outside) <= CORNER_OUTSIDE_ALPHA, outside
+        assert min(ring) == 255, ring                        # the border ring is whole round every corner
+        # Negative control: a square full-window fill reaches the corner again.
+        (window_surface,) = _named(surfaces[0].host.root, "studioWindowSurface")
+        window_surface.setProperty("radius", 0)
+        outside, _ring = _studio_corner_alphas(surfaces[0], dpr)
+        assert max(outside) > 8
+    finally:
+        controller.close()
+
+
 # ----------------------------------------------------------------- material follows the theme
 def _theme_with_mode(mode):
     """The first shipped Settings theme on ``mode`` (themes are authored content: picked by property, never name)."""
