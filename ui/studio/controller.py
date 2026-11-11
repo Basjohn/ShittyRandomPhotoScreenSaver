@@ -561,9 +561,12 @@ class StudioBridge(QObject):
         except (KeyError, IndexError, TypeError, ValueError):
             return False, None
 
-    def _stored_keys(self, prop: StudioProperty) -> frozenset[str]:
-        """The settings keys ``prop``'s shown value follows (a SHAPE row follows its lanes and layout too)."""
-        return self.shapes.keys(prop.id) if prop.id in self.shapes else frozenset((prop.path[0],))
+    def _follows(self, prop: StudioProperty, keys: frozenset[str]) -> bool:
+        """Whether ``prop``'s shown value follows one of the settings ``keys`` (a SHAPE row follows its lanes, its
+        layout switch and what its preview reads, besides its own nodes)."""
+        if prop.id in self.shapes:
+            return not keys.isdisjoint(self.shapes.keys(prop.id))
+        return prop.path[0] in keys
 
     def _rebuild_values(self) -> None:
         values = self._c.evaluation_values()
@@ -593,7 +596,7 @@ class StudioBridge(QObject):
         out: dict[str, Any] = {}
         only = set()
         for prop in self._schema.properties:
-            if not keys & self._stored_keys(prop):
+            if not self._follows(prop, keys):
                 continue
             only.add(prop.id)
             held, shown = self._shown(prop, values)
@@ -669,20 +672,20 @@ class StudioBridge(QObject):
             (property_id, endpoint), (kind, payload) = next(iter(self._pending.items()))
             del self._pending[(property_id, endpoint)]
             self.previews_applied += 1
-            if kind == "value":
+            if kind == "shape":
+                self._guard(lambda: self.shapes.drag(*payload))
+            elif kind == "value":
                 self._guard(lambda: self._apply_value(property_id, endpoint, payload))
             elif kind == "colour":
                 self._guard(lambda: self._apply_colour(property_id, payload))
-            elif kind == "shape":
-                self._guard(lambda: self.shapes.drag(*payload))
             else:
                 self._guard(lambda: self._apply_gradient(property_id, payload))
 
     def drop_pending_previews(self) -> None:
         self._pending.clear()
-        self.shapes.gesture = None          # whatever dropped the previews also ends or cancels the session gesture
         if self.brush is not None:
             self.brush.cancel()
+        self.shapes.gesture = None          # whatever dropped the previews also ends or cancels the session gesture
 
     # --------------------------------------------------------- the shape instrument (shared instrument)
     # An exact entry or a keyboard step can carry its element past a neighbour: (property id, part, new index).

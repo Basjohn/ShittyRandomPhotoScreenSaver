@@ -772,7 +772,8 @@ Rectangle {
     // interpolation and the mode's own preview of what the shape does. This component maps it to pixels, hit-tests
     // the pointer and hands gestures over: drag a node, click empty space to add one, right-click (or Delete) to
     // remove one; drag a lane's tag along the axis and its marker up and down. A held pointer is applied once per
-    // frame and committed once on release.
+    // frame and committed once on release. Keys (the well focused): Ctrl+Left / Right walk the elements, the
+    // arrows step the selected one (Shift: ten steps), Delete removes a node, Esc drops a drag, then the selection.
     component ShapeRow: Column {
         id: shp
         objectName: "shapeRow"
@@ -967,8 +968,8 @@ Rectangle {
                                     onClicked: if (!parent.current) studio.commitValue(shp.view.layoutSwitch, 0, index === 1)
                                     C.ToolTip.visible: containsMouse
                                     C.ToolTip.text: index === 1
-                                        ? "The nodes describe one half, from the centre to the edge; the other half mirrors it."
-                                        : "The nodes describe the whole picture, from left to right."
+                                        ? "The nodes describe one half, centre to edge.\nThe other half mirrors it."
+                                        : "The nodes describe the whole picture,\nfrom left to right."
                                     C.ToolTip.delay: 600 }
                         Keys.onSpacePressed: if (!current) studio.commitValue(shp.view.layoutSwitch, 0, index === 1)
                         FocusRing { visible: parent.activeFocus }
@@ -1279,6 +1280,7 @@ Rectangle {
                 }
                 Rectangle {                 // a removed node fades out where it was
                     id: vanished
+                    objectName: "shapeVanished"
                     width: 14; height: 14; radius: 7
                     color: "transparent"; border.width: 2; border.color: shell.cWellTrace1
                     opacity: 0
@@ -1419,7 +1421,21 @@ Rectangle {
                     else if (shp.selPart !== "") { shp.select("", -1); event.accepted = true }
                     return
                 }
-                if (shp.selPart === "" || shp.dragPart !== "") return
+                if (shp.dragPart !== "") return
+                var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right
+                // Ctrl+Left / Right (or the first arrow with nothing selected) walks the elements: nodes, then lanes.
+                if (arrow && ((event.modifiers & Qt.ControlModifier) || shp.selPart === "")) {
+                    var total = shp.nodes.length + shp.lanes.length
+                    if (total === 0) return
+                    var at = shp.selPart === "node" ? shp.selIndex
+                             : (shp.selPart === "lane" ? shp.nodes.length + shp.selIndex
+                                                        : (event.key === Qt.Key_Right ? -1 : total))
+                    at = (at + (event.key === Qt.Key_Right ? 1 : -1) + total) % total
+                    if (at < shp.nodes.length) shp.select("node", at); else shp.select("lane", at - shp.nodes.length)
+                    event.accepted = true
+                    return
+                }
+                if (shp.selPart === "") return
                 var step = (event.modifiers & Qt.ShiftModifier) ? 10 : 1
                 var along = shp.mirrored ? -step : step          // right on screen is toward the centre when mirrored
                 if (event.key === Qt.Key_Left) studio.shapeStep(shp.row.id, shp.selPart, shp.selIndex, -along, 0)
@@ -1443,6 +1459,21 @@ Rectangle {
             clip: true
             Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
             readonly property bool editing: shp.selPart !== ""
+            // Where the panel is too short for the strip, it scrolls with the strip as it opens (and back within its
+            // content as it closes), so the selected element's fields are never left under the panel's edge.
+            onHeightChanged: {
+                var scroll = shp.parent
+                while (scroll && scroll.objectName !== "inspectorScroll") scroll = scroll.parent
+                if (!scroll) return
+                var flick = scroll.contentItem
+                if (editing) {
+                    var bottom = strip.mapToItem(flick.contentItem, 0, strip.height).y + 4
+                    if (bottom - flick.height > flick.contentY) flick.contentY = bottom - flick.height
+                } else {
+                    var limit = Math.max(0, flick.contentHeight - flick.height)
+                    if (flick.contentY > limit) flick.contentY = limit
+                }
+            }
             readonly property bool node: shp.stripPart === "node"
             readonly property var element: node ? (shp.stripIndex < shp.nodes.length ? shp.nodes[shp.stripIndex] : [0, 0])
                                                 : (shp.stripIndex < shp.lanes.length

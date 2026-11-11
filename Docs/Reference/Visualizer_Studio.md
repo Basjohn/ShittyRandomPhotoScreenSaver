@@ -379,7 +379,8 @@ when both toolbar groups cannot fit side by side.
     position (axis position and value, 0..1) and the controller applies it at the next frame start through the same
     queue as every drag (`_queue_preview`, kind `shape`); `shapeRelease` applies the last one and commits once (one
     save, one undo entry); `shapeCancel` restores. Exact entry and keyboard steps commit per step. Nothing is
-    written to settings, presets or files while the pointer is held.
+    written to settings, presets or files, logged or re-analysed while the pointer is held. The canvas sets
+    `preventStealing` (it sits in a scrolling panel: a drag holds until release, see "Drags are batched").
   - *Look.* On the instrument well with the well inks (`wellTrace1` the curve and nodes, `wellTrace3` the lanes,
     `wellDim` the grid), so it follows every Studio theme; hover, held and selected states ease over 120 ms; a
     node that is added or removed fades in or out where it is, a layout change fades the canvas through, the strip
@@ -449,7 +450,7 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
 `.artifacts/evidence/studio/followups/20261107_followups/drag_profile/`.
 
 A drag holds until release. Drag instruments that sit in a scrolling panel set `preventStealing: true`: the value
-slider, the colour picker's field and hue bar, gradient nodes, the shape instrument's canvas, and the response curve in the scrolling dock (it
+slider, the colour picker's field and hue bar, gradient nodes, and the response curve in the scrolling dock (it
 scrolls sideways when narrow and down when short, its vertical bar in the dock's right margin beside the fields; at
 the default window on a 1440p / 150% screen its Range row was otherwise cut off). Without it, a vertical wobble past the drag threshold handed the press to the panel's scroll view, and the
 slider let go mid-drag (operator, 6 Nov: "sliders snap out of being dragged in mid motion"; it reproduced on every

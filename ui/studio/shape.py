@@ -21,7 +21,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from ui.studio.schema import SHAPE, ShapeLayout, ShapeSpec, StudioProperty, StudioSchema
+from ui.studio.schema import ShapeLayout, ShapeSpec, StudioProperty, StudioSchema
 from ui.studio.session import StudioEditSession, read_path
 
 NODE, LANE, STRENGTH, ADD = "node", "lane", "strength", "add"
@@ -292,10 +292,5 @@ class StudioShapes:
         return instrument.lane_index(session.values, label)
 
 
-def is_row(prop: StudioProperty) -> bool:
-    """A SHAPE property drawn as an instrument (a carried one only holds a value the instrument edits)."""
-    return prop.instrument == SHAPE and not prop.instrument_only
-
-
 __all__ = ["ADD", "CURVE_SAMPLES", "LANE", "NODE", "STEP", "STRENGTH", "ShapeGesture", "ShapeInstrument",
-           "StudioShapes", "is_row"]
+           "StudioShapes"]

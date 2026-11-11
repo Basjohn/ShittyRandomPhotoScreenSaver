@@ -232,9 +232,8 @@ def shape_properties(keys: ShapeKeys, add: Callable[..., None], workspace: str, 
     add(keys.mirrored, (keys.mirrored,), "Mirrored Layout", workspace, group, SWITCH, instrument_only=True,
         tooltip="On: the shape is mirrored around the centre (centre <-> edge). Off: a left-to-right profile.")
     add(keys.nodes, (keys.nodes,), label, workspace, group, SHAPE, priority=200,
-        tooltip="The authored silhouette across the bars and the frequency lanes that drive it. Drag a node to "
-                f"reshape it, click empty space to add one ({low} to {high} nodes), right-click a node to remove "
-                "it. Drag a lane's tag to move it and its marker to set how strongly it drives its bars.")
+        tooltip=f"The authored silhouette across the bars ({low} to {high} nodes) and the frequency lanes that "
+                "drive it.")
     layouts = {}
     for mirrored in (False, True):
         name = "Mirrored" if mirrored else "Linear"

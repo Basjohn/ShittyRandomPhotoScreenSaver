@@ -647,6 +647,43 @@ def test_the_pointer_drags_adds_and_removes_nodes_on_the_real_canvas(studio, mod
     assert len(_nodes(controller, prop_id)) == low and store.commits == commits
 
 
+def test_nothing_pops_a_layout_change_fades_through_and_nodes_fade_in_and_out(studio):
+    """Fade, never vanish: on the frame after a layout change the canvas is not yet showing the new layout at full
+    strength; a node added by the button eases in and a removed one leaves a fading mark where it was."""
+    from tools.studio_shape_capture import _named, settle
+    mode, prop_id = next((m, p) for m, p in INSTRUMENTS if create_adapter(m).schema().shape(p).layout_switch)
+    controller, surface, _store = studio(mode)
+    bridge = controller.bridge
+    row, _well = _row(surface, controller, prop_id)
+    settle(surface, 0.4)
+    assert row.property("contentOpacity") == 1.0
+    mirrored = bool(row.property("mirrored"))
+    assert bridge.values[prop_id]["mirrored"] is mirrored
+    bridge.commitValue(bridge.values[prop_id]["layoutSwitch"], 0, not mirrored)
+    surface.pump()
+    assert bool(row.property("mirrored")) is mirrored or row.property("contentOpacity") < 1.0   # not popped in
+    settle(surface, 0.6)
+    assert bool(row.property("mirrored")) is (not mirrored) and row.property("contentOpacity") == 1.0
+    # A node removed by the mode's action: a mark fades out where it was; added again: its handle eases in.
+    spec = _spec(controller, prop_id)
+    _thin(controller, prop_id, spec.node_limits[1] - 1)
+    settle(surface, 0.5)
+    ghost = _named(row, "shapeVanished")[0]
+    assert ghost.opacity() == 0.0
+    count = len(_named(row, "shapeNode"))
+    bridge.runAction(f"{spec.remove}0")
+    surface.pump()
+    assert len(_named(row, "shapeNode")) == count - 1 and ghost.opacity() > 0.0
+    settle(surface, 0.5)
+    assert ghost.opacity() == 0.0
+    bridge.runAction(spec.add)
+    surface.pump()
+    handles = _named(row, "shapeNode")
+    assert len(handles) == count and min(item.opacity() for item in handles) < 1.0
+    settle(surface, 0.5)
+    assert all(item.opacity() == 1.0 for item in _named(row, "shapeNode"))
+
+
 def test_the_canvas_is_painted_and_follows_the_studio_theme_tokens(studio):
     """The well shows the curve and its preview in the Studio theme's well inks, and repaints in a changed theme
     (a canvas that kept its own colours, or whose paint failed, would not show the new ink). Before the theme
@@ -676,3 +713,261 @@ def test_the_canvas_is_painted_and_follows_the_studio_theme_tokens(studio):
     controller.bridge.set_theme({**tokens, "wellTrace1": marker})
     surface.pump(3)
     assert inked(region(), marker) > 60                             # the curve and the node rims took the new ink
+
+
+def test_the_keyboard_walks_steps_and_removes_the_selected_element(studio):
+    """Real key events on the focused canvas: Ctrl+Right walks the elements (nodes, then lanes), an arrow steps the
+    selected one as one committed edit, Delete removes a node, Esc drops the selection. Without a selection an Up
+    arrow changes nothing (negative control)."""
+    from PySide6.QtCore import QCoreApplication, QEvent, Qt
+    from PySide6.QtGui import QKeyEvent
+    from tools.studio_shape_capture import settle
+    from ui.studio.shape import STEP
+    mode, prop_id = INSTRUMENTS[0]
+    controller, surface, store = studio(mode)
+    low, high = _spec(controller, prop_id).node_limits
+    _thin(controller, prop_id, max(low + 1, min(high, 3)))
+    commits = store.commits
+    row, well = _row(surface, controller, prop_id)
+    well.forceActiveFocus()
+
+    def key(code, modifiers=Qt.KeyboardModifier.NoModifier):
+        for kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+            QCoreApplication.sendEvent(surface.window, QKeyEvent(kind, code, modifiers))
+        settle(surface, 0.03)
+
+    nodes = _nodes(controller, prop_id)
+    key(Qt.Key.Key_Up)
+    assert row.property("selPart") == "" and _nodes(controller, prop_id) == nodes and store.commits == commits
+    key(Qt.Key.Key_Right, Qt.KeyboardModifier.ControlModifier)
+    assert (row.property("selPart"), row.property("selIndex")) == ("node", 0)
+    for _ in range(len(nodes)):
+        key(Qt.Key.Key_Right, Qt.KeyboardModifier.ControlModifier)
+    assert (row.property("selPart"), row.property("selIndex")) == ("lane", 0)       # past the last node: the lanes
+    key(Qt.Key.Key_Left, Qt.KeyboardModifier.ControlModifier)
+    assert (row.property("selPart"), row.property("selIndex")) == ("node", len(nodes) - 1)
+    last = nodes[-1]
+    down = last[1] > 0.5
+    key(Qt.Key.Key_Down if down else Qt.Key.Key_Up)
+    assert _nodes(controller, prop_id)[-1] == [last[0], pytest.approx(last[1] + (-STEP if down else STEP))]
+    assert store.commits == commits + 1
+    key(Qt.Key.Key_Delete)
+    assert len(_nodes(controller, prop_id)) == len(nodes) - 1 and store.commits == commits + 2
+    assert row.property("selPart") == ""
+    key(Qt.Key.Key_Right, Qt.KeyboardModifier.ControlModifier)
+    assert row.property("selPart") == "node"
+    key(Qt.Key.Key_Escape)
+    assert row.property("selPart") == "" and controller.state == "presented"        # Esc took the selection only
+
+
+# ------------------------------------------------------------- no I/O while a shape drag moves (plan 1B.3's rule)
+_MANAGER_WRITES = ("set", "set_many", "set_section", "set_widgets_map", "save", "flush", "remove",
+                   "replace_visualizer_runtime_preset_state")
+
+
+class _Writes:
+    """Counts every write-shaped call while armed: Settings mutations, the tab's save, files opened for writing or
+    replaced, INFO+ log lines and engine analyses started (the counters of ``tests/test_studio_drag_io_churn.py``,
+    which drives every other drag instrument the same way)."""
+
+    def __init__(self, monkeypatch, manager, tab, jobs) -> None:
+        import builtins
+        import io
+        import logging
+        import os
+        self.manager, self.jobs, self.armed, self.counts = manager, jobs, False, {}
+        for name in _MANAGER_WRITES:
+            if hasattr(manager, name):
+                monkeypatch.setattr(manager, name, self._wrap(f"settings.{name}", getattr(manager, name)))
+        monkeypatch.setattr(tab, "_save_settings_now", self._wrap("tab.save", tab._save_settings_now))
+        opener = builtins.open
+
+        def counting_open(file, mode="r", *args, **kwargs):
+            if any(flag in str(mode) for flag in "wax+"):
+                self._note(f"file.write: {os.path.basename(str(file))}")
+            return opener(file, mode, *args, **kwargs)
+        monkeypatch.setattr(builtins, "open", counting_open)
+        monkeypatch.setattr(io, "open", counting_open)
+        monkeypatch.setattr(os, "replace", self._wrap("file.replace", os.replace))
+        counter = self
+
+        class _Logs(logging.Handler):
+            def emit(self, record):
+                if record.levelno >= logging.INFO:
+                    counter._note(f"log.{record.name}")
+        self._handler, self._root = _Logs(level=logging.DEBUG), logging.getLogger()
+        self._level = self._root.level
+        self._root.addHandler(self._handler)
+        self._root.setLevel(logging.DEBUG)
+
+    def close(self) -> None:
+        self._root.removeHandler(self._handler)
+        self._root.setLevel(self._level)
+
+    def _note(self, name) -> None:
+        if self.armed:
+            self.counts[name] = self.counts.get(name, 0) + 1
+
+    def _wrap(self, name, original):
+        def wrapper(*args, **kwargs):
+            self._note(name)
+            return original(*args, **kwargs)
+        return wrapper
+
+    def measure(self, action) -> dict:
+        revision, jobs = self.manager.persistence_snapshot()["state_revision"], len(self.jobs)
+        self.counts, self.armed = {}, True
+        try:
+            action()
+        finally:
+            self.armed = False
+        counts = dict(self.counts)
+        if self.manager.persistence_snapshot()["state_revision"] != revision:
+            counts["settings.revision"] = 1
+        if len(self.jobs) != jobs:
+            counts["engine.analysis"] = len(self.jobs) - jobs
+        return counts
+
+
+@pytest.fixture
+def settings_studio(qt_app, tmp_path, monkeypatch):
+    """The mode's Studio opened from its real Settings body (a never-shown ``VisualizersTab`` over a real
+    ``SettingsManager`` on a temporary profile, on Custom so a commit saves), with the write counters."""
+    from PySide6.QtWidgets import QDialog, QVBoxLayout
+    from core.settings.settings_manager import SettingsManager
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+    from core.settings.visualizer_presets import get_custom_preset_index
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    from ui.studio.controller import StudioController
+    from ui.studio.settings_link import open_mode_studio
+    from ui.studio.surface import OffscreenStudioSurface
+    from ui.tabs.visualizers_tab import VisualizersTab
+    disable_per_call_gl_error_checking()
+    manager = SettingsManager(organization="SRPSSFocusedTests", application="StudioShapeInstrument",
+                              storage_base_dir=tmp_path / "profile")
+    made = []
+
+    def build(mode):
+        manager.set("widgets", {"spotify_visualizer": {
+            "enabled": True, "visualizers_enabled": True, "mode": mode,
+            "mode_activation": build_visualizer_mode_activation([mode]),
+            f"preset_{mode}": get_custom_preset_index(mode)}})
+        dialog = QDialog()                                     # never shown
+        QVBoxLayout(dialog).addWidget(tab := VisualizersTab(manager))
+        tab._select_mode_page(mode)
+        jobs: list = []
+        adapter = create_adapter(mode)
+        adapter.recorded_clips = lambda: ()
+        adapter.create_renderer = _QuietRenderer
+        real_evaluator = adapter.create_evaluator
+
+        class _Counted:
+            def __call__(self, *args):
+                jobs.append(args)                              # each start is one engine re-analysis
+                return self
+
+            def cancel(self):
+                pass
+
+        def evaluator():
+            made_evaluator = real_evaluator()
+            made_evaluator._loader = _Counted()
+            return made_evaluator
+        adapter.create_evaluator = evaluator
+        surfaces = []
+
+        def factory(controller):
+            surfaces.append(OffscreenStudioSurface(controller, size=(1280, 760), present_on_show=False))
+            return surfaces[-1]
+        controller = open_mode_studio(tab, mode, adapter=adapter, surface_factory=factory)
+        surfaces[0].pump(3)
+        assert controller.state == "presented"
+        counter = _Writes(monkeypatch, manager, tab, jobs)
+        made.append((dialog, controller, counter))
+        return controller, surfaces[0], counter
+    yield build
+    for dialog, controller, counter in made:
+        counter.close()
+        if StudioController.active() is controller:
+            controller.close()
+        dialog.deleteLater()
+    qt_app.processEvents()
+    assert manager.flush(timeout=5.)
+
+
+def _shape_drags(controller, prop_id):
+    """(name, part, index, moves) for one drag of each kind the instrument has: a node, a lane's tag, a lane's
+    strength marker and a press on empty space (when the curve has room). Each move is one pointer position."""
+    nodes, notches = _nodes(controller, prop_id), _notches(controller, prop_id)
+    strengths, spec = _strengths(controller, prop_id), _spec(controller, prop_id)
+    node = nodes[-1]
+    rise = -0.05 if node[1] > 0.5 else 0.05
+    plans = [("node", "node", len(nodes) - 1, [(node[0], node[1] + rise * k) for k in (1, 2, 3, 4)])]
+    lane = len(notches) - 1
+    room = notches[lane][0] - notches[lane - 1][0]
+    plans.append(("lane", "lane", lane, [(notches[lane][0] - room * 0.1 * k, 0.0) for k in (1, 2, 3, 4)]))
+    strength = strengths[notches[lane][1]]
+    step = -0.05 if strength > 0.5 else 0.05
+    plans.append(("strength", "strength", lane, [(0.0, strength + step * k) for k in (1, 2, 3, 4)]))
+    if len(nodes) < spec.node_limits[1]:
+        plans.append(("add", "add", -1, [(0.5 + 0.01 * k, 0.5) for k in (1, 2, 3, 4)]))
+    return plans
+
+
+def _per_move(counts: dict, moves: int) -> dict:
+    """What a drag's moves did that they may not: any write, store change or analysis, and log lines that keep pace
+    with the moves (an event-edge line, such as an earlier change's replay landing, is not per move)."""
+    logs = sum(n for name, n in counts.items() if name.startswith("log."))
+    churn = {name: n for name, n in counts.items() if not name.startswith("log.")}
+    if logs >= moves:
+        churn.update({name: n for name, n in counts.items() if name.startswith("log.")})
+    return churn
+
+
+@pytest.mark.parametrize("mode,prop_id", INSTRUMENTS)
+def test_a_shape_drag_writes_nothing_while_it_moves_and_saves_once_on_release(settings_studio, mode, prop_id):
+    """Through Settings' own owners: while the pointer is held nothing reaches the settings store, the tab's save, a
+    file, the log or the engine's analysis; the release is one session commit and one tab save."""
+    controller, surface, counter = settings_studio(mode)
+    bridge, session = controller.bridge, controller.session
+    _thin(controller, prop_id, _spec(controller, prop_id).node_limits[1] - 1)       # room for the add gesture
+    surface.pump(3)
+    counter.manager.flush(timeout=5.)
+    churn, faults = {}, {}
+    for name, part, index, moves in _shape_drags(controller, prop_id):
+        commits = session.commit_count
+
+        def during():
+            bridge.shapePress(prop_id, part, index)
+            for x, y in moves:
+                bridge.shapeDrag(prop_id, x, y)
+                surface.pump()
+        moving = _per_move(counter.measure(during), len(moves))
+        assert session.gesture_active and session.commit_count == commits, name
+        released = counter.measure(lambda: (bridge.shapeRelease(), surface.pump(3), counter.manager.flush(timeout=5.)))
+        if moving:
+            churn[name] = moving
+        if not (session.commit_count == commits + 1 and released.get("tab.save", 0) == 1
+                and released.get("settings.revision")):
+            faults[name] = (session.commit_count - commits, released)
+        bridge.undo()
+        surface.pump(2)
+        counter.manager.flush(timeout=5.)
+    assert churn == {}, f"{mode} {prop_id}: writes while dragging: {churn}"
+    assert faults == {}, f"{mode} {prop_id}: release did not save exactly once: {faults}"
+
+
+def test_a_commit_per_move_is_seen_by_the_counters_negative_control(settings_studio):
+    """The shape of a churning instrument: each move commits (here the exact entry, which commits per call)."""
+    mode, prop_id = INSTRUMENTS[0]
+    controller, surface, counter = settings_studio(mode)
+    bridge = controller.bridge
+    height = _nodes(controller, prop_id)[0][1]
+    step = -0.05 if height > 0.5 else 0.05
+
+    def during():
+        for k in (1, 2, 3, 4):
+            bridge.shapeCommitText(prop_id, "node", 0, 1, f"{height + step * k:.3f}")
+            surface.pump()
+    moving = _per_move(counter.measure(during), 4)
+    assert moving.get("tab.save", 0) == 4 and moving.get("settings.revision")

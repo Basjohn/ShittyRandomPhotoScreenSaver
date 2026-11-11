@@ -202,10 +202,8 @@ def _shaper_properties(add: Callable[..., None], workspace: str, group: str) -> 
     one stored record), shown with React to Music (Settings showed the shaper only then)."""
     add(SHAPER, (SHAPER, "nodes"), "Reaction Shaper", workspace, group, SHAPE_INSTRUMENT, priority=200,
         when=REACTION_ON,
-        tooltip="How strongly each height of the land deforms (shoreline to summit) and which part of the spectrum "
-                f"moves it. Drag a node to reshape the curve, click empty space to add one ({SHAPER_NODES[0]} to "
-                f"{SHAPER_NODES[1]} nodes), right-click a node to remove it. Drag a lane's tag to move where it "
-                "takes over and its marker to set its strength.")
+        tooltip=f"How strongly each height of the land deforms, shoreline to summit ({SHAPER_NODES[0]} to "
+                f"{SHAPER_NODES[1]} nodes), and which part of the spectrum moves it.")
     # The first boundary is pinned at the shoreline by the canonical shaper rule; the others move.
     layout = ShapeLayout((SHAPER, "notches"), (SHAPER, "lanes"), low="Shoreline", high="Summit",
                          previous=SHAPER_PREVIOUS, next=SHAPER_NEXT)
