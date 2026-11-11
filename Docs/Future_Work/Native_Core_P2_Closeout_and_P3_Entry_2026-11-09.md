@@ -30,40 +30,53 @@ Evidence already in design/audit: 160 replayable (recording,mode) pairs, 291,024
 
 ## 2. Ordered remaining P2 work: fix debt before making native consumers
 
-**11 Nov status (source and focused tests landed on the native-core branch; the boxes below stay open until the lead's
-audit accepts them).** P2-C1's rendered parity and gate-2 record, P2-C2's memory reading, P2-C3's L2-L5 and P2-C4's
-POSIX transfer lifetime each have their record, tests, negative controls and what remains unverified in
-`Native_Core_P2_Phase_Boundary_Audit.md`, "11 Nov". Two defects were found and fixed on the way: R-184 (the worker
-path kept drawing the outgoing frame after a profile-changing fade-out; found by the first rendered comparison) and
-R-185 (a worker being torn down still read as running, so one worker death turned the worker off for the run). Still
-open from this section after that work: P2-C1's load admission check; P2-C2's lease/hold exactly-once sweep and the
-Studio/fallback memory readings; P2-C3's last bullet (a target that never reveals, the framed-view control, Random
-Group Drift); H3 itself. No load, device, frozen or Linux run was made.
+**11 Nov status (audited and merged to main with `1af42104`).** P2-C1's rendered parity and gate-2 record, P2-C2's
+memory reading, P2-C3's L2-L5 and P2-C4's POSIX transfer lifetime each have their record, tests, negative controls and
+what remains unverified in `Native_Core_P2_Phase_Boundary_Audit.md`, "11 Nov". Two defects were found and fixed on the
+way: R-184 (the worker path kept drawing the outgoing frame after a profile-changing fade-out; found by the first
+rendered comparison) and R-185 (a worker being torn down still read as running, so one worker death turned the worker
+off for the run). Still open from this section after that work: P2-C1's failed high-water admission and load check;
+P2-C2's lease/hold exactly-once sweep and the Studio/fallback memory readings; P2-C3's last bullet (a target that never
+reveals, the framed-view control, Random Group Drift); H3 itself (in flight). No load, device, frozen or Linux run was
+made.
 
 ### P2-C1. M4, actual non-default identity and rendered parity
 
-- [ ] Extend the **real production owner worker-versus-in-process** gates to at least independently altered Settings/presets in Spectrum, Waveform Ribbon, Extruded Bubble and each remaining supported mode, including switch/reconfigure, park/resume and the same live PCM. Retain existing schema-max capacity tests; do not rewrite them as if missing.
-- [ ] Record packet identity (logical frames), rendered pixels/clip/BTF (gate 2) and generation/remap identity separately. A compressed-recording test must not stand in for real rendered pixels. Include negative controls that genuinely fail with one mode/Settings drift.
+- Landed (`af133dee`, `791b17ab`): the real production owner is gated worker-versus-in-process, independently altered
+  Settings in every mode with switch/reconfigure, park/resume and the same recorded PCM
+  (`tools/visualizer_replay/owner_render_parity.py`, `tests/test_visualizer_owner_render_parity.py`). The schema-max
+  capacity tests are retained.
+- Landed (`af133dee`, `9a4007de`): packet identity, rendered pixels (single-sampled, exact) and generation/remap identity
+  are recorded separately, with negative controls that fail on a drift; gate 2 has its record. BTF checks were not rerun
+  there.
 - [ ] Verify failed high-water admission preserves last good frame without silently changing the worker path. Run load only after operator approval per `Current_Plan.md`.
 
 ### P2-C2. M5, memory and lifecycle
 
-- [ ] Reproduce the *remaining in-process mode-cycle* memory slope through the fallback and through Studio, isolating it from the fixed worker codec cycles (R-179), Settings retired-generation cycles (R-175) and the separate native Settings/Studio residual. Record RSS/private/USS, native allocations, GL and handles under a stable comparison; repair at lifetime owner, not via periodic trimming or disabled checks.
+- Landed (`dd49377a`): the in-process mode-cycle reading shows a first-lap high-water in the rendering process on both
+  paths with no lap-to-lap trend; the instrument now judges each mode from its second visit
+  (`tools/live_check_resources.py`, `tests/test_live_check_resources.py`).
+- [ ] Measure the Studios' in-process cycle and the post-failure fallback separately (RSS/private/USS, native allocations, GL and handles under a stable comparison); repair at lifetime owner, not via periodic trimming or disabled checks.
 - [ ] Verify leases and holds release exactly once across Settings, mode switches, worker death, failed reload and a Visualizer-off run. Keep the bound of one worker/mapping and zero worker cost while disabled.
 
 ### P2-C3. L2-L5, observability, liveness and truthful results
 
-- [ ] **L2** Rename/derive the 'GIL share' statistic so it reports what is *actually measured* (main frame occupancy/wall time), and use a real direct profiler for any new true GIL-hold claim. Pair equivalent PCM/audio contents. State GPU-clock/load conditions for FPS/age conclusions. Do not leave worker 'revisions waiting 0/0' masquerading as a throughput comparison.
-- [ ] **L3** Attribute the `--usage` ~13 ms extra per 15 s sample to the additional worker; reduce the topology/sample hitch at the existing sampler, without adding per-frame sampling or changing cadence.
-- [ ] **L4** Measure the Python wake-listener cost; make blocked *tick* progress detectable even if the process still responds to heartbeat. Audit Qt-bearing presentation inputs against the worker's pure/QtCore-only boundary; never silently discard an input.
-- [ ] **L5** Correct historical claims made before R-179/frozen check 2. Status must identify which exact product frozen-run gate still awaits operator validation.
+- Landed (`091b9eea`): **L2** the live check names what it measures (`tick_wall_share`, `main_wall_share`, `main_cpu_share`), marks the worker's 'revisions waiting' row as vacuous and names how the audio was delivered (`tools/visualizer_live_check.py`).
+- Landed (`2fbf83e3`): **L3** the `--usage` extra cost was the GIL-held working-set walk; the sampler reads USS through `core/performance/windows_working_set.py` with the GIL released (`tests/test_usage_sampler.py`).
+  - [ ] L3 remainder: `collect_ms` with the displays on and under load, in an operator-approved session.
+- Landed (`8117d0e6`): **L4** the wake-listener cost is measured, a blocked cadence thread fails its session closed at the worker's heartbeat, and a Qt-typed presentation input goes plain or is refused loudly (`tests/test_visualizer_engine_worker_cadence_liveness.py`, `tests/test_visualizer_owner_engine_worker_inputs.py`).
+  - [ ] L4 residual: the blocked thread itself stays in the worker until it returns.
+- Landed (`9a4007de`): **L5** the design doc's gate 4 worker row, writer slot choice, gate 2 record and gate 3 field names are corrected, `tests/test_visualizer_engine_import_weight.py` is in `Docs/TestSuite.md`, and the frozen wording names what still awaits the operator (the next product frozen build's ordinary acceptance).
 - [ ] Bound a target that never reveals and the failed reload/reconstruction loop without endless repeated attempts. Independent framed-view negative control and Random Group Drift semantics remain explicit targeted follow-ups, not silently closed.
 
 ### P2-C4. POSIX accepted-transfer lifetime before Linux worker default
 
-- [ ] Design bounded ownership for an **accepted `multiprocessing.Connection` never deserialized because its POSIX child dies**. The stdlib `resource_sharer` may retain a sender `os.dup` descriptor. Serialization before admission widens, but does not duplicate, this already-existing window.
-- [ ] Avoid popping **accepted** private cache entries, a global service shutdown, a blocking GUI/IO handshake or an unfenced late close. Prefer supported lifecycle ownership with clear maximum time/descriptor budget and race-safe cancellation or a different transport that requires no sharer; prove child-death-before-decode, blocked/late service requests, normal delivery, failed enqueue and repeated generation recovery.
-- [ ] Keep Windows' child-owned `DuplicateHandle` path unchanged and independently regression-protected. If CPython 3.14 internal reduction adapters remain, pin and fail clearly on unsupported versions and keep version-upgrade tests. A POSIX bug is not a reason to change the already tested Windows transport.
+- Landed (`8c7ffa09`): no ordered control creates a resource-sharer registration any more; a sharer-backed `Connection`
+  or socket is refused before registration, and the POSIX wake pipe crosses as a name the session opens itself
+  (`core/visualizer_engine/wake_channel.py`, `tests/test_visualizer_wake_channel.py`,
+  `tests/test_visualizer_ordered_control_delivery.py`). A worker that dies before decoding leaves nothing to cancel.
+  The CPython 3.14 private-cache rollback adapter is removed; Windows' child-owned `DuplicateHandle` path is unchanged
+  and keeps its tests. Linux runtime remains unverified (no FIFO, forkserver or Linux worker has run).
 - [ ] **H3 Linux default after source-level POSIX closeout:** flip only the canonical `visualizer_engine_worker_platform_default` owner, its platform tests and `Linux_Plan.md` Phase 4. Maintain explicit in-process override and reasoned fallback. The operator's 8 Nov waiver means no fabricated Linux runtime acceptance; label forkserver, shared-memory tracker, wake pipe, Pulse/parec capture and real-device tests **unverified**, and retain a follow-up validation gate when a Linux machine is available.
 
 **Priority:** P2-C1, P2-C2/C3, P2-C4 and Linux H3; then P3's four decisions and core. Independent P3 design can be drafted during C2/C3, but native reader publication/teardown must not ship against an unresolved mapping lifetime.
