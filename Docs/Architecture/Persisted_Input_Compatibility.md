@@ -224,7 +224,7 @@ without the safe path below.
   *Blocked:* reading the factors in QML again (a second artwork size carrier), or renaming the persisted key.
 
 - **Visualizer preset references** (`core/settings/visualizer_preset_indices.py`, `preset_references` beside
-  the `preset_<mode>` indices; plan 1C.1, 12 Nov 2026; R-189). A stored preset is the slot index plus the preset's
+  the `preset_<mode>` indices; plan 1C.1, 12 Nov 2026; R-190). A stored preset is the slot index plus the preset's
   identity (its authored name without the slot number), a signature of the catalogue it was chosen from and the
   slot it was written with. While the catalogue is unchanged, or when a writer chose another slot since (the
   stored index differs from the reference's slot: a selection made against the catalogue the process holds), the

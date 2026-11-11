@@ -1,4 +1,4 @@
-"""A mode's preset files that cannot be read for a moment never fail the catalogue (1C.1, R-189).
+"""A mode's preset files that cannot be read for a moment never fail the catalogue (1C.1, R-190).
 
 The operator's first open of Spectrum after an install failed with Spectrum's presets "not existing" and the
 second open worked. The catalogue was built once, when ``core.settings.visualizer_presets`` was first imported:

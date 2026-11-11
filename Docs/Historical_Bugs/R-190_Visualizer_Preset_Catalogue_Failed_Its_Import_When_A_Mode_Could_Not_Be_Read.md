@@ -1,4 +1,4 @@
-# R-189 | The Visualizer preset catalogue failed its import when a mode's files could not be read for a moment, and stored presets were bare slot indices
+# R-190 | The Visualizer preset catalogue failed its import when a mode's files could not be read for a moment, and stored presets were bare slot indices
 
 **Status:** fixed 12 Nov 2026 (plan 1C.1). Two faults, both silent until the curated Spectrum presets were replaced
 on 11 Nov.

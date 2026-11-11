@@ -1,4 +1,4 @@
-"""A stored preset reference that the catalogue no longer resolves falls back at the owner (1C.1, R-189).
+"""A stored preset reference that the catalogue no longer resolves falls back at the owner (1C.1, R-190).
 
 Contract (``Docs/Architecture/Persisted_Input_Compatibility.md``, "Visualizer preset references"): the stored
 reference is the slot index plus the preset's identity (its authored name without the slot number) and a signature
