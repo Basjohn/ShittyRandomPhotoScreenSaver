@@ -361,42 +361,38 @@ through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 - [ ] Side defect: `tests/test_qtquick_media_presentation.py:429` pins a default colour
   (`app_volume_fill_color`) and fails when run after the Visualizer test files in one process (passes alone).
 
-### 1B.8 Light themes are practically opaque in the saver (M1 in flight, Opus High; cause found in research)
+### 1B.8 Light themes are practically opaque in the saver (M1 merged 4674e801; M2 in flight, Opus High)
 
 **Material track (operator, 11 Nov: proper transparency on light themes, no inset while keeping the material on
-all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint:**
+all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint.** Contract:
+`Docs/Architecture/Card_Surface_Materials.md` ("M1 dark-ink rule"); evidence
+`.artifacts/evidence/materials/20261111_m1/` (open `OPEN_FIRST_overview_main.png`).
 
-- [ ] M1. Light-theme transparency: boxes a to i below (dark themes pixel-identical at this step).
+M1 landed: dark ink's panel is bounded at the card's Settings-variant shell density (`SurfaceContrast.panelCeiling`,
+shader uniform `panelCeiling`), faint runs correct their own ink (`legibleInk`), and a run faded by item opacity
+takes a text-local plate. Wallpaper swing inside light cards went from 0.0 to 0.08-0.25; dark themes identical.
+
 - [ ] M2. No inset on any theme: the `plateInset` rim box of 1.7b (section 1A): the material face reaches the
   inside of the real border, dark and light, content padding unchanged; before/after renders of every material
   on one dark and one light theme, and text still passes on the composed pixels with M1's ink rule.
+- [ ] M2. The ink plate behind faded runs (the pill behind "PLAYING" on Polished Chrome, Mica) re-checked at 1x
+  and 3x on the three light themes once the inset is gone; softened or tightened if it reads as a sticker.
+- [ ] M2. Dark-identity comparison that separates "inset gone" from any other change on dark themes.
 - [ ] M3. Widget border material: the remaining boxes of 1.7b (ring shading from the same backdrop, Border
   Material and Border Opacity Adjust in Style Overrides, Normal/Flat pixel-identical).
 - [ ] M4. Window border material: 1B.9's box (the Settings/Studio border ring takes the same rule).
 - [ ] Each step: `.qsb` regenerated, the SURFACE block kept identical across its three shader files, one focused
   GPU before/after, lead pixel review on the operator's two wallpapers.
-
-Cause (arithmetic, not yet pixels): `SurfaceContrast.js` cannot reach its 4.8:1 target for dark ink at 55% alpha
-even on white, so it saturates and `surface_material.frag` fills the card interior white. The Settings variant
-corrects the ink and keeps the surface at its calibrated density (about .63-.72).
-
-- [ ] a. Before set: off-screen card renders of Platinum Workstation, Polished Chrome, Pearl Blush and two good
-  dark themes over one dark and one bright PERSONALSET wallpaper (`tools/surface_material_capture.py`), with
-  the surviving wallpaper swing inside the card measured per theme.
-- [ ] b. Bounded surface for dark ink: the panel moves toward the anchor only as far as the theme's
-  Settings-variant shell density; the solver's unreachable case resolves to "bounded surface + corrected ink",
-  never limit 1.0.
-- [ ] c. Correct the ink, not the panel: darken semantic ink toward its theme anchor where it misses the ratio
-  (the 1.7a runtime ink correction); judge faint ink at its real alpha, not a fixed 55%.
-- [ ] d. Text-local plate (`TextLegibilityPlate` / `text_legibility.frag`) only where a run still fails over a
-  busy backdrop; never a whole-card lift.
-- [ ] e. Dark themes pixel-identical before and after.
-- [ ] f. The SURFACE block identical across `surface_material.frag`, `text_legibility.frag`,
-  `text_legibility.vert` (`tests/test_surface_materials.py`); `.qsb` files regenerated with the Qt toolchain.
-- [ ] g. One focused GPU before/after on a busy card; no extra pass, capture or per-frame Python.
-- [ ] h. After set + lead pixel review, light beside dark; `tools/theme_legibility.py` rerun on the composed
-  surfaces.
-- [ ] i. Docs: `Docs/Architecture/Card_Surface_Materials.md`; closes 1.7a's density question (update it there).
+- [ ] Known dark-theme shortfalls measured in M1, written into `Card_Surface_Materials.md` with their numbers
+  (Default Dark on the bright wallpaper 3.9-4.3; Midnight Cobalt accent 3.42), and whether M2 moves them.
+- [ ] Card shell bound (about 0.73-0.76) against the real Settings window (0.63-0.72): recorded in
+  `Card_Surface_Materials.md` with the reason cards do not read the linked Settings theme at runtime (lead, 11
+  Nov: a card must not depend on Settings window state).
+- [ ] Linked button red test (1B.11's side defect) fixed as its own commit before M2: a state ink may flip
+  polarity in `ui/settings_surface_composition.py` `_correct_ink` when neither more alpha nor its own pole can
+  reach the ratio; ordinary semantic inks keep their polarity; stills before and after; R-NNN entry if it was a
+  silent long-lived red.
+- [ ] Feature requests from the agent recorded here as their own boxes when admitted.
 
 ### 1B.9 Settings and Studio window corners bleed (see-through corners merged a89ce123; continues 1.9)
 
@@ -514,6 +510,17 @@ closed and always tears down. Queued for the next free Opus High slot.
   notification. In-process path too. Skips cleanly with a stated reason where the machine has no second endpoint.
 - [ ] First reveal, worker against in process, without load on D1: the time from activation to the first drawn
   frame for each mode on both paths.
+
+### 1B.15 Housekeeping the lead decided (11 Nov; engineering choices, not operator decisions)
+
+- [ ] Preset rollback recovery copies: `core/visualizer_preset_tree.py` writes the before-images of a failed
+  preset-replacement rollback to `tempfile.mkdtemp(prefix='srpss_preset_recovery_')` (`%TEMP%`, which Windows
+  Storage Sense may empty). Move them under the data root beside the preset tree (one owner for the path, the
+  folder named in the error as now, the newest few kept and older ones pruned on the next successful replace);
+  the test keeps redirecting to `tmp_path`.
+- [ ] Extruded Bubble evidence root: move `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
+  referenced by `Investigation.md`) to `.artifacts/evidence/visualizers/extruded_bubble/20261020/` and repoint the
+  references; nothing deleted.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
@@ -685,13 +692,6 @@ Watchlist entry (operator, 11 Nov).
   expanded?
 - **Decision, overlays on pause:** a pause does nothing to them (by the spec, not built): Now Playing is event-only
   and has already faded after its window; with Always Show it stays up by definition. Add a fade-out on pause?
-- **Decision, preset rollback recovery copies:** `core/visualizer_preset_tree.py` writes the before-images of a
-  failed preset-replacement rollback to `tempfile.mkdtemp(prefix='srpss_preset_recovery_')` (`%TEMP%`, which Windows
-  Storage Sense may empty and nothing removes) and names the folder in the error. Move it beside the preset tree or
-  the data root? Unchanged until the operator says (the test redirects it to `tmp_path`).
-- **Decision, Extruded Bubble evidence root:** move `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored
-  media, referenced by `Investigation.md`; outside the 7 Nov migration mapping) into the layout
-  (`visualizers/extruded_bubble/...`)?
 - **Decision, Audio Analysis group in the Spline Curve and Oscilloscope Studios (section 9):** keep it or hide it?
   Every offered control moves the frame (Spline Curve's; Oscilloscope's Flare and Drive, and Tone for Bar Count, Block
   Size and Input Gain), though the Oscilloscope's trace itself is the raw capture.
