@@ -99,7 +99,7 @@ def test_build_foundry_discovers_inno_7_and_keeps_6_compatibility() -> None:
         r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
     ):
         assert token in source
-    assert 'os.environ.get("SRPSS_ISCC_PATH")' in source
+    assert "SRPSS_ISCC_PATH" not in source              # the --iscc argument is the only override
     assert 'shutil.which("ISCC.exe") or shutil.which("ISCC")' in source
     assert "Supported Inno Setup console compiler (ISCC.exe, 6.7.2+) was not found" in source
     assert '"--version"' in source

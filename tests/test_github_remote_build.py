@@ -814,7 +814,7 @@ def test_gh_calls_run_inside_the_cancellable_process_owner():
 
 def test_the_headless_run_drives_the_tabs_own_pipeline(monkeypatch):
     commit = remote.PushedCommit("main", "c" * 40, "x", "c" * 40)
-    monkeypatch.setattr(build_runner, "run_preflight", lambda mode: build_runner.PreflightResult(
+    monkeypatch.setattr(build_runner, "run_preflight", lambda mode, **_kw: build_runner.PreflightResult(
         remote_commit=commit, notes=[f"GitHub builds {commit.describe()}"]))
     monkeypatch.setattr(build_runner, "helper_build_status", lambda *_a, **_k: SimpleNamespace(
         needs_rebuild=True, reason="stale", fingerprint="f"))

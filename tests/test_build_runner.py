@@ -310,7 +310,7 @@ def test_preflight_passes_a_complete_release_tree(
         encoding="utf-8",
     )
     monkeypatch.setattr(build_runner, "_find_pwsh", lambda: Path("pwsh.exe"))
-    monkeypatch.setattr(build_runner, "_find_iscc", lambda: Path("ISCC.exe"))
+    monkeypatch.setattr(build_runner, "_find_iscc", lambda _override=None: Path("ISCC.exe"))
     monkeypatch.setattr(build_runner, "_query_iscc_version", lambda _path: (7, 1, 0))
     # This test pins job/asset preflight against a synthetic tree. The defaults
     # authority audit is a separate cross-cutting concern (it inspects the real
@@ -338,10 +338,16 @@ def test_inno_discovery_prefers_7_then_6_and_falls_back_to_path(monkeypatch, tmp
     seven.write_bytes(b"fixture")
     six.write_bytes(b"fixture")
 
-    monkeypatch.delenv("SRPSS_ISCC_PATH", raising=False)
     monkeypatch.setattr(build_runner, "ISCC_CANDIDATES", (seven, six))
     monkeypatch.setattr(build_runner.shutil, "which", lambda _name: None)
     assert build_runner._find_iscc() == seven
+    # The --iscc argument is the one override: it wins when it names an ISCC.exe, and nothing else overrides.
+    custom = tmp_path / "Elsewhere" / "ISCC.exe"
+    custom.parent.mkdir()
+    custom.write_bytes(b"fixture")
+    assert build_runner._find_iscc(custom) == custom
+    assert build_runner._find_iscc(tmp_path / "missing" / "ISCC.exe") == seven
+    assert build_runner.parse_args(["--iscc", str(custom)]).iscc == custom
 
     seven.unlink()
     assert build_runner._find_iscc() == six
@@ -364,7 +370,7 @@ def test_inno_version_parser_accepts_6_7_2_and_7_series():
 
 def test_preflight_blocks_unverifiable_or_old_inno(monkeypatch, tmp_path):
     monkeypatch.setattr(build_runner, "_find_pwsh", lambda: Path("pwsh.exe"))
-    monkeypatch.setattr(build_runner, "_find_iscc", lambda: Path("ISCC.exe"))
+    monkeypatch.setattr(build_runner, "_find_iscc", lambda _override=None: Path("ISCC.exe"))
     monkeypatch.setattr(build_runner, "audit_defaults_authority", lambda _root: [])
     monkeypatch.setattr(build_runner, "audit_qml_source_contract", lambda _root: [])
 

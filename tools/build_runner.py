@@ -1019,9 +1019,10 @@ def _owner_gh_runner(process_owner: BuildProcessOwner):
     return run
 
 
-def _find_iscc() -> Path | None:
-    override = os.environ.get("SRPSS_ISCC_PATH")
-    if override:
+def _find_iscc(override: Path | None = None) -> Path | None:
+    """Inno Setup's console compiler: ``override`` (the ``--iscc`` argument, the only override) when it names an
+    existing ISCC.exe, else the Inno Setup 7 then 6 install folders, else PATH."""
+    if override is not None:
         candidate = Path(override)
         if candidate.is_file() and candidate.name.lower() == "iscc.exe":
             return candidate
@@ -1071,8 +1072,8 @@ def _find_pwsh() -> Path | None:
     return Path(resolved) if resolved else None
 
 
-def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResult:
-    iscc = _find_iscc()
+def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT, *, iscc_override: Path | None = None) -> PreflightResult:
+    iscc = _find_iscc(iscc_override)
     result = PreflightResult(
         pwsh=_find_pwsh(),
         iscc=iscc,
@@ -1903,8 +1904,10 @@ class JobWidgets:
 class BuildRunnerApp:
     AUTO_CLOSE_MS = 3000
 
-    def __init__(self, root: tk.Tk, *, initial_mode: ModeName | None = None) -> None:
+    def __init__(self, root: tk.Tk, *, initial_mode: ModeName | None = None,
+                 iscc_override: Path | None = None) -> None:
         self._root = root
+        self._iscc_override = iscc_override
         self._events: queue.Queue[tuple] = queue.Queue()
         self._running = False
         self._process_owner: BuildProcessOwner | None = None
@@ -2739,7 +2742,7 @@ class BuildRunnerApp:
         )
 
     def _preflight_worker(self, mode: ModeName) -> None:
-        result = run_preflight(mode)
+        result = run_preflight(mode, iscc_override=self._iscc_override)
         self._events.put(("preflight", mode, result))
 
     def _set_all(self, value: bool) -> None:
@@ -3191,9 +3194,9 @@ class BuildRunnerApp:
                 )
 
 
-def smoke_payload(mode: ModeName) -> dict:
+def smoke_payload(mode: ModeName, *, iscc_override: Path | None = None) -> dict:
     status = helper_build_status(mode)
-    preflight = run_preflight(mode)
+    preflight = run_preflight(mode, iscc_override=iscc_override)
     jobs = jobs_for_mode(mode)
     return {
         "success": not any(
@@ -3224,7 +3227,8 @@ def smoke_payload(mode: ModeName) -> dict:
     }
 
 
-def run_headless(selected_keys: Sequence[str] | None = None, *, out: Callable[[str], None] = print) -> int:
+def run_headless(selected_keys: Sequence[str] | None = None, *, out: Callable[[str], None] = print,
+                 iscc_override: Path | None = None) -> int:
     """GitHub Remote without the window: the tab's own pre-flight and pipeline, its events printed.
 
     ``selected_keys`` None selects what the tab pre-selects (both GitHub builds, the Reddit Helper when stale).
@@ -3233,7 +3237,7 @@ def run_headless(selected_keys: Sequence[str] | None = None, *, out: Callable[[s
     mode: ModeName = "github"
     jobs = jobs_for_mode(mode)
     names = {job.key: job.name for job in jobs}
-    preflight = run_preflight(mode)
+    preflight = run_preflight(mode, iscc_override=iscc_override)
     for line in (*preflight.notes, *(f"ERROR: {e}" for e in preflight.errors),
                  *(f"warning: {w}" for w in preflight.warnings)):
         out(f"[FOUNDRY] {line}")
@@ -3311,6 +3315,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         metavar="JOB",
         help="with --run: job keys (standard media_center reddit_helper standard_installer media_center_installer)",
     )
+    parser.add_argument(
+        "--iscc",
+        type=Path,
+        metavar="PATH",
+        help="Inno Setup's ISCC.exe, when it is not in the Inno Setup 7/6 install folders or on PATH",
+    )
     return parser.parse_args(argv)
 
 
@@ -3319,14 +3329,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     persisted = load_preferences()
     mode = normalize_mode(args.mode or persisted.mode)
     if args.smoke_test:
-        payload = smoke_payload(mode)
+        payload = smoke_payload(mode, iscc_override=args.iscc)
         print(json.dumps(payload, indent=2))
         return 0 if payload["success"] else 1
     if args.run:
         if args.mode != "github":
             print("--run is for --mode github; local builds run from the Build Foundry window")
             return 2
-        return run_headless(args.select)
+        return run_headless(args.select, iscc_override=args.iscc)
 
     if sys.platform != "win32":
         print("Warning: the SRPSS Build Foundry is intended for Windows")
@@ -3345,7 +3355,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         pass
     if os.environ.get("SRPSS_BUILD_RUNNER_DEBUG"):
         print(f"Build Foundry DPI mode: {dpi_mode}")
-    BuildRunnerApp(root, initial_mode=mode)
+    BuildRunnerApp(root, initial_mode=mode, iscc_override=args.iscc)
     root.mainloop()
     return 0
 
