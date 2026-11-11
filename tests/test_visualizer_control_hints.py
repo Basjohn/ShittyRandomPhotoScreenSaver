@@ -256,7 +256,9 @@ def _manager_method(name):
     ("bubble",False,False), (None,False,False), ("extruded_bubble",True,False),
 ])
 def test_new_display_bind_seeds_hint_capability_with_existing_owner(mode, retired, expected):
+    from tests._display_manager_doubles import visualizer_owner_double
     from tests.test_neon_settings_lifecycle_and_editor import FakeUnit
+    from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
     unit = FakeUnit()
     projected = {}
     unit.runtime.input_controller.set_framed_flight_enabled = lambda value: None
@@ -268,8 +270,9 @@ def test_new_display_bind_seeds_hint_capability_with_existing_owner(mode, retire
         _quick_view_orbit_admitted = _manager_method("_quick_view_orbit_admitted")
         _configure_quick_visualizer_input_admission = _manager_method("_configure_quick_visualizer_input_admission")
         def __init__(self):
-            self._quick_visualizer_owner = None if mode is None else SimpleNamespace(
-                is_retired=retired, controller=SimpleNamespace(mode_id=mode))
+            self._quick_visualizer_owner = None if mode is None else visualizer_owner_double(
+                VisualizerRuntimeController(runtime_generation=0, initial_mode=mode, engine_factory=lambda _n: None),
+                retired=retired)
             self._quick_readiness_by_screen = {}
             self._quick_custom_layout_owner = SimpleNamespace(undo_last_change=lambda: None)
         def __getattr__(self, name):

@@ -41,7 +41,10 @@ class FakeUnit:
     def __init__(self):
         self.screen_index = 3
         self.is_retired = False
-        self.runtime = SimpleNamespace()
+        from tests._display_manager_doubles import input_controller_double, scene_controller_double
+        # The real controllers' setters (no-ops), so a setter DisplayManager starts calling never breaks this unit.
+        self.runtime = SimpleNamespace(scene_controller=scene_controller_double(),
+                                       input_controller=input_controller_double())
         runtime = self.runtime
         tree = ast.parse((ROOT / 'engine/display_manager.py').read_text(encoding='utf-8'))
         cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'DisplayManager')
@@ -63,10 +66,6 @@ class FakeUnit:
                     obj = SimpleNamespace()
                     setattr(runtime, owner.attr, obj)
                 setattr(obj, signal.attr, FakeSignal())
-        runtime.input_controller = SimpleNamespace(
-            set_view_orbit_enabled=lambda _admitted: None,
-            set_scene_transform_enabled=lambda _admitted, **_kwargs: None,
-        )
         runtime.scene_readiness = 'ready'
 
     def reanchor_for_current_bounds(self):

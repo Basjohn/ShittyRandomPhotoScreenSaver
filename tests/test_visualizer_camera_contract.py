@@ -66,16 +66,9 @@ def test_framed_cameras_stay_the_framed_standard():
 @pytest.fixture
 def manager(qt_app, tmp_path):
     from core.settings import SettingsManager
-    from engine.display_manager import DisplayManager
+    from tests._display_manager_doubles import bare_display_manager, visualizer_owner_double
     settings = SettingsManager(application=f"CameraContract_{uuid.uuid4().hex}", storage_base_dir=tmp_path)
-    manager = DisplayManager.__new__(DisplayManager)
-    manager.settings_manager = settings
-    manager.displays = []
-    manager._quick_visualizer_owner = None
-    manager._quick_view_orbit_pending = None
-    manager._quick_view_pose_owner = None
-    manager._quick_scene_view_gesture = None
-    manager._widgets_config_snapshot = {}
+    manager = bare_display_manager(settings_manager=settings, _widgets_config_snapshot={})
     manager._refresh_quick_visualizer_edit_content_envelope = lambda *a: None
     manager._refresh_all_quick_context_menus = lambda: None
     manager._quick_view_orbit_admitted = lambda: True
@@ -89,7 +82,7 @@ def manager(qt_app, tmp_path):
         controller = VisualizerRuntimeController(runtime_generation=0, initial_mode=mode_id,
                                                  engine_factory=lambda _n: None)
         install_default_presentation_state(controller.presentation_state)
-        manager._quick_visualizer_owner = SimpleNamespace(is_retired=False, controller=controller)
+        manager._quick_visualizer_owner = visualizer_owner_double(controller)
         return controller
     manager.own = own
     return manager
