@@ -996,8 +996,7 @@ Evidence `.artifacts/evidence/lifecycle/slow_startup/20261106_slow_startup/`; th
 - [ ] Side defect: a prefetch batch asked for before the optional image_prefetch child is ready fails as "not
   running" (a logged `[PREFETCH]` error); that batch is not retried.
 
-**Spline Curve (`devcurve`) "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then
-operator eyes)**
+**Spline Curve (`devcurve`) "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review)**
 
 Contract: guide section 13D -> DevCurve. Evidence and before/after WebPs (loud end and a quiet passage, P1/P6):
 `.artifacts/evidence/visualizers/devcurve/reactivity/20261105_reactivity/` (`PROGRESS.md`).
@@ -1058,7 +1057,7 @@ Active density/composition work and native evidence: section 1A, items 1.7/1.9. 
   contrast alone does not account for the shadow's effect.
 
 **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent); second pass
-done, awaiting operator eyes**
+done, awaiting the lead's review**
 
 The mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`. Preset 9 (Deep Red Ocean) only;
 Presets 1-8 stay pixel-identical. Shared controls, each dormant at 0: Ember Grain, Ember Band (Water), Lit Glass
@@ -1352,50 +1351,53 @@ No adaptive memory (the Adaptive Response toggle is retired), Kick Accent bounde
 ships 0), the floor lift bounded by the card's top edge. Lessons of the rejected v4:
 `Docs/Guides/Visualizer_Reactivity_Authoring.md`; measurements: Migration Plan section 8.
 
-- [~] Operator sign-off on the trade-offs against main, or ask for the tag's exact Preset 4 dynamics:
-  - [~] Preset 4 visible amplitude p10/p50/p90 -4/+4/+5% and 3 s contrast +4.5% against the tag (inside the +-10%
-    gate).
-  - [~] Preset 7 roll 1.12x; P7 saturation higher on two songs (10.2% / 6.8% against 3.4%).
-  - [~] Kick peaks 1.6-6.4% under main in 6 of 16 song-time bins (worst P7 0-15 s) and 6-11% over it in sustained
-    loud bins.
-  - [~] Quieter-after-loud kicks 8-27% under main by design (a quieter passage is no longer re-normalised up).
-  - [~] Top-row spark density up to about 2x main.
-- [~] Operator's eye on the music-vs-response findings (chain7, every preset and Reaction Mode; 7 Nov):
-  - [~] Group Wave registers single kicks least: P7 as authored born rise .03-.06 per kick, P7 forced to Travelling
-    Pulse .16-.30, and 46% of P7's kicks raise its born swell by under 1% of its range (Travelling Pulse 25%).
-  - [~] Whole Swell plateaus in flat loud songs (P6 song 2 saturated 20%, ws_P1 15%): the music's RMS is flat there and
-    beats ripple the plateau, so it reads as sustained, not pinned.
-  - [~] Song 1's sparse intro (big isolated kicks in the PCM) barely moves any preset while the carry-over from song 0
-    decays (re-scale gap .37-.50 on most presets).
-- [~] **Floor first (7 Nov, operator: "rather it goes a bit higher when it has to than clips"; supersedes top edge
+Trade-offs against main, for the operator's sign-off or a request for the tag's exact Preset 4 dynamics (the decision
+is in section 2; the lead accepted them on 6 Nov):
+
+- Preset 4 visible amplitude p10/p50/p90 -4/+4/+5% and 3 s contrast +4.5% against the tag (inside the +-10% gate).
+- Preset 7 roll 1.12x; P7 saturation higher on two songs (10.2% / 6.8% against 3.4%).
+- Kick peaks 1.6-6.4% under main in 6 of 16 song-time bins (worst P7 0-15 s) and 6-11% over it in sustained loud
+  bins.
+- Quieter-after-loud kicks 8-27% under main by design (a quieter passage is no longer re-normalised up).
+- Top-row spark density up to about 2x main.
+- **Floor first (7 Nov, operator: "rather it goes a bit higher when it has to than clips"; supersedes top edge
   first): Preset 4 change for sign-off.** `TROUGH_LIFT_MAX` 1.5 -> 3, `TOP_GIVE_BACK` 1.5; Floor Give (P2) and Static
   Height keep 1.5. Preset 4's lift p50/p90 .75/1.48 -> 1.01/2.19 at 1282x1005 (the ribbon rides ~.7 world units higher
   at p90, at most 1.5 higher, in loud passages) and no longer dips into the floor (7.8% -> .1%).
+
+- [ ] Lead review on the music-vs-response traces (`waveform_music_response.py`; chain7, every preset and Reaction
+  Mode; 7 Nov):
+  - [ ] Group Wave registers single kicks least: P7 as authored born rise .03-.06 per kick, P7 forced to Travelling
+    Pulse .16-.30, and 46% of P7's kicks raise its born swell by under 1% of its range (Travelling Pulse 25%).
+  - [ ] Whole Swell plateaus in flat loud songs (P6 song 2 saturated 20%, ws_P1 15%): the music's RMS is flat there and
+    beats ripple the plateau, so it reads as sustained, not pinned.
+  - [ ] Song 1's sparse intro (big isolated kicks in the PCM) barely moves any preset while the carry-over from song 0
+    decays (re-scale gap .37-.50 on most presets).
 - [ ] At the 640x560 card: P4 Anything's crest-clipped share is 6.2% against main's .4% (crests graze the top edge)
   and P4 Rag Doll 2.1% (.4%); crests above the top on .2-1.1% of ticks (main 0-.1%).
 - [ ] P5 and P6 do not fit a 640x560 card with any setting (floor 32-43% and crests above the top 16-36% of ticks;
   rendered crest clipping 14-47% against main's 2-16%): authoring, their bodies are taller than that card.
 
-**Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov; awaiting operator
-eyes)**
+**Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov; awaiting the lead's
+review)**
 
 Complaints: no decay/breathing in soft passages, sustained passages with changes read almost flat, a swell to full
 power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song 70-130 s).
 Evidence `reactivity_preset7/20261107_reactivity_preset7/`. The pulse-visibility WIP was dropped with its branch
 (11 Nov): the operator accepted the pulse as is.
 
-- [~] Operator review of Preset 7 (bodies are smaller in loud passages now that the uniform inflation is gone:
-  sustained-loud visible amplitude 6.4 -> 5.4).
-- [~] Whole Swell (Preset 6) sits at its soft bound in all music by design (one global level; de-saturating it barely
-  changed the visible body, so it was left).
+- [ ] Lead review on a rendered showcase WebP and the music-response trace of Preset 7 (bodies are smaller in loud
+  passages now that the uniform inflation is gone: sustained-loud visible amplitude 6.4 -> 5.4).
+- [ ] Lead review on rendered Whole Swell (Preset 6) strips: it sits at its soft bound in all music by design (one
+  global level; de-saturating it barely changed the visible body, so it was left).
 
-**Breathing + anchored history ends (merged; awaiting operator ears/eyes)**
+**Breathing + anchored history ends (merged; awaiting the lead's review)**
 
 Evidence `.artifacts/evidence/visualizers/waveform_ribbon/breathing/20261105_breathing/`.
 
-- [~] Soft passages let go between swells (0.7 in every preset but 4) and a quieter passage after a loud one stays
-  quieter.
-- [~] The tail no longer staggers at side angles.
+- [ ] Invisible run on recorded music and lead review of the animated WebP: soft passages let go between swells (0.7
+  in every preset but 4) and a quieter passage after a loud one stays quieter.
+- [ ] Lead review on a rendered side-angle WebP: the tail no longer staggers at side angles.
 
 **Four-ribbon maximum and Preset 3 (Awaiting Validation)**
 
@@ -1403,23 +1405,24 @@ The candidate admits FOUR cards across authoring/runtime/clearance/accent/range 
 active identities and old three-card state's values and count. The explicit operator maximum overrides the first
 board's decorative count label; use four for Preset 3's paired target.
 
-- [~] Validate Preset 3 against `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`:
-  - [~] Teal/orange contrast.
-  - [~] Readable lattice/twist/strands/particles.
-  - [~] Continuous wet textured floor.
-  - [~] The large quiet-to-peak geometric change shown.
+- [ ] Lead review on mock | ours sheets (full resolution plus crops): validate Preset 3 against
+  `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`:
+  - [ ] Teal/orange contrast.
+  - [ ] Readable lattice/twist/strands/particles.
+  - [ ] Continuous wet textured floor.
+  - [ ] The large quiet-to-peak geometric change shown.
 - [ ] Native low/high/recorded captures must reach that range without pinning or swapping scene/camera identity.
 - [ ] The recorded draft still needs visual correction: white/rope-like overlaps, repeated continuation, weak/dark
   atmosphere and a poor floor/contact strip remain rejected.
 - [ ] Do not equate source tests, particle/root counts or larger amplitude with reference fidelity.
 
-**Reaction: travelling energy pulse + four Reaction Modes (5 Nov; awaiting operator eyes/ears)**
+**Reaction: travelling energy pulse + four Reaction Modes (5 Nov; awaiting the lead's review)**
 
 Design: Migration Plan "Current reaction model"; decision record in the audit doc, decisions 7+; evidence
 `.artifacts/evidence/visualizers/waveform_ribbon/studio_20261105/modes/`.
 
-- [~] Travelling Pulse (default), Frozen Past, Whole Swell and Group Wave read right on recorded music (flow-rule and
-  twitch tests exist for every mode).
+- [ ] Lead review on rendered strips and music-response traces: Travelling Pulse (default), Frozen Past, Whole Swell
+  and Group Wave read right on recorded music (flow-rule and twitch tests exist for every mode).
 - [ ] Group Wave still reads close to Travelling Pulse on rendered strips (it keeps the summed travelling field; its
   sets need their own pass), and its Pulse Width is not yet the band core the other two modes use (operator: "a
   relatively small horizontal width and the full vertical width").
@@ -1428,41 +1431,44 @@ Design: Migration Plan "Current reaction model"; decision record in the audit do
 
 **Particles (5 Nov candidate)**
 
-- [~] Operator eyes: crest-weighted, distributed births in each ribbon's colour, visible >=1 px cores with soft halos,
-  gentle fade; swells gather particles (Pulse Particles).
+- [ ] Lead review on rendered crops and a WebP: crest-weighted, distributed births in each ribbon's colour, visible
+  >=1 px cores with soft halos, gentle fade; swells gather particles (Pulse Particles).
 - [ ] Open: still sparser than the high-react reference (admission-limited).
 
 **Strands: rare, 3-5 seconds TOTAL life**
 
 The latest operator correction supersedes the proposed 30-second fade.
 
-- [~] Preserve the approved non-flickering look and make appearances much rarer.
-- [~] Use most of a configurable 3-5 second lifetime for a gentle tip-first fade.
-- [~] Reactivation restores them smoothly, with glow and movement/growth (retain the approximate 20% repeat extension),
-  without abrupt respawn or pulse reset.
+- [ ] Lead review on a rendered strand WebP: preserve the approved non-flickering look and make appearances much
+  rarer.
+- [ ] Same review: use most of a configurable 3-5 second lifetime for a gentle tip-first fade.
+- [ ] Same review: reactivation restores them smoothly, with glow and movement/growth (retain the approximate 20%
+  repeat extension), without abrupt respawn or pulse reset.
 - [ ] Prove quiet/peak lifetime handles, tip/root fade ordering, slow decay, partial-fade reactivation and
   direct/reflected appearance.
 - [ ] Retain birth look during travel; finite history eviction must not cut off a visible unfinished fade.
 
-**Colour, floor and mist (5 Nov candidates; awaiting operator eyes)**
+**Colour, floor and mist (5 Nov candidates; awaiting the lead's review)**
 
 Evidence `studio_20261105/floor4/`; measurements in Migration Plan section 8.
 
-- [~] Lattice sheets (V3).
-- [~] Wet concrete with stable soft coloured reflection mass (no horizon line, no flicker-prone streaks; operator
-  prefers smeared colour to streaks).
-- [~] One bounded night medium with a slight local ribbon tint (strong Local Light can no longer wash the frame).
+- [ ] Lead review on rendered sheets: lattice sheets (V3).
+- [ ] Lead review on rendered strips: wet concrete with stable soft coloured reflection mass (no horizon line, no
+  flicker-prone streaks; operator prefers smeared colour to streaks).
+- [ ] Lead review on rendered sheets: one bounded night medium with a slight local ribbon tint (strong Local Light
+  can no longer wash the frame).
 - [ ] Wide sheets (P2) still graze the floor on ~60% of ticks: optional Floor Give (below) lets the wet floor dent
   under them instead.
 
 **Fixed response, break-proof Breathing, Kick Accent (operator, 6 Nov: "when it went suddenly quiet everything become
-more reactive ... Adaptive is a very problematic approach"; "many sustained kicks ignored"; awaiting operator eyes)**
+more reactive ... Adaptive is a very problematic approach"; "many sustained kicks ignored"; awaiting the lead's review)**
 
 Geometry drives are a fixed function of the real-music scale (the Adaptive Response toggle is retired). Preset 4
 differs from the tag only through it, Kick Accent and the floor lift: compare against the tag with Kick Accent 0.
 Range audit: `.artifacts/evidence/visualizers/waveform_ribbon/reactivity_preset7/20261107_reactivity_preset7/rangeaudit_*.txt`.
 
-- [~] Operator eyes on the fixed response, Breathing and Kick Accent.
+- [ ] Invisible run on recorded music and lead review of the music-response traces: the fixed response, Breathing
+  and Kick Accent.
 - [ ] Rotation's drive is never above .36 on any recording (its Peak handle is never reached).
 - [ ] Light/Colour/Sparkle/Highlights, Width and Lift never reach .8 on three or four of five songs: those
   calibrations (not the response gain) are the remaining Range losses.
@@ -1472,39 +1478,39 @@ Range audit: `.artifacts/evidence/visualizers/waveform_ribbon/reactivity_preset7
 - [ ] Soft passages swing less in absolute terms (3 s contrast .21 vs the adaptive gain's .30) and loud ones .11 vs
   .16.
 
-**Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests"; awaiting operator eyes)**
+**Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests"; awaiting the lead's review)**
 
 Opt-in Floor slider (default 0 = the rigid floor, pixel-identical); P2 authored 1.0. Perspective only. Evidence
 `.artifacts/evidence/visualizers/waveform_ribbon/floor_deform/20261107_floor_deform/`; design in the Migration Plan's
 Floor bucket.
 
-- [~] Where a lower edge comes down onto the floor the wet floor yields in a soft dent, so troughs stay round and dip
-  in instead of flattening: in the visible frame P2 reaches the floor only in the ragdoll loud end (about 49.5-52 s);
-  P3 never does, so it is unchanged there.
+- [ ] Lead review on rendered stills and a WebP: where a lower edge comes down onto the floor the wet floor yields in
+  a soft dent, so troughs stay round and dip in instead of flattening: in the visible frame P2 reaches the floor
+  only in the ragdoll loud end (about 49.5-52 s); P3 never does, so it is unchanged there.
 
 **Pulse Rim (operator, 5 Nov: "where the pulse is that section of the ribbon's rim can be even brighter with
-falloff"; awaiting operator eyes)**
+falloff"; awaiting the lead's review)**
 
 Reaction-bucket slider (0 = today's rims, pixel-identical). Evidence
 `.artifacts/evidence/visualizers/waveform_ribbon/pulse_rim/20261107_pulse_rim/`; design in the Migration Plan's
 Reaction bucket.
 
-- [~] The rims (line and rim glow) brighten on the pulse with the field's own smooth falloff, in every Reaction Mode
-  and both Travel Directions.
+- [ ] Lead review on rendered strips: the rims (line and rim glow) brighten on the pulse with the field's own smooth
+  falloff, in every Reaction Mode and both Travel Directions.
 
-**Swells reach the Preset camera already faded (Presets 1-3; awaiting operator eyes)**
+**Swells reach the Preset camera already faded (Presets 1-3; awaiting the lead's review)**
 
 Swells now born just beyond the camera's visible span and ageing only once seen; Preset 4 and Presets 5-7 byte-
 identical. Evidence `reactivity_preset7/20261107_reactivity_preset7/` (`visibility_tag_vs_final.txt`,
 `kicks4_table.txt`, `sheets/*_p1..3_*`).
 
-- [~] Operator eyes on Presets 1-3: edge swells arrive in view at strength.
+- [ ] Lead review on the rendered sheets of Presets 1-3: edge swells arrive in view at strength.
 - [ ] Open: on Presets 1/3 the rim's swell-to-elsewhere contrast (1.11/1.17) is still below Preset 4's (1.27).
 - [ ] Open: the no-twitch probe's .02/.01 bounds only held because its swells never reached the cloth (in-view
   .028/.012).
 
 **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need";
-awaiting operator eyes)**
+awaiting the lead's review)**
 
 Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image: history enters at the left;
 pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour grade stays put). Leads the
@@ -1512,8 +1518,10 @@ Studio's Composition / Flow group. Evidence
 `.artifacts/evidence/visualizers/waveform_ribbon/travel_direction/20261107_travel_direction/`; design in the Migration
 Plan's Flow bucket.
 
-- [~] A live change fades out, swaps while hidden and fades back (0.6 s each way).
-- [~] Left To Right mirrors history, pulses, held swells, Tilt Shift, sparks, strands and floor give.
+- [ ] Lead review on a rendered WebP of a live change: it fades out, swaps while hidden and fades back (0.6 s each
+  way).
+- [ ] Lead review on rendered strips: Left To Right mirrors history, pulses, held swells, Tilt Shift, sparks,
+  strands and floor give.
 
 **Dense highlights, moving colour and rim glow**
 
@@ -1558,9 +1566,9 @@ geometry and persistence tests alone cannot establish feel or beauty across movi
 
 **Floor coverage, collision, reflection and viewport changes**
 
-- [~] Awaiting native visual validation: the floor now intersects the same physical camera's pixel rays with the
-  infinite world plane, covering foreground/far ground while actor clipping remains unchanged. Finish the unified
-  atmosphere before visual judgment.
+- [ ] Lead review on rendered frames (D1 run, 1B.14 harness, for native pixels): the floor now intersects the same
+  physical camera's pixel rays with the infinite world plane, covering foreground/far ground while actor clipping
+  remains unchanged. Finish the unified atmosphere before visual judgment.
 - [ ] After the strand slice, draw ground all the way through the foreground and beyond the waveform into heavy dark
   mist that GENTLY thickens until no horizon line is visible. A strip of reflections over black is rejected.
 - [ ] Keep actors and physical floor contact correct, with smooth waveform collision rather than clipping.
@@ -1577,7 +1585,7 @@ geometry and persistence tests alone cannot establish feel or beauty across movi
 
 Replacement medium in place (old banks/fringe/floor haze removed); P3 density 0.06-0.09, P1/P2 0.055-0.075.
 
-- [~] Operator eyes on the darker bounded haze with capped local tint.
+- [ ] Lead review on rendered sheets: the darker bounded haze with capped local tint.
 - [ ] Open: the retained moving-body wake needs measurement.
 - [ ] Open: the loaded fog cost gate (P2/game60 render median was over budget) needs measurement.
 
@@ -1620,18 +1628,19 @@ The reaction is the travelling energy pulse with selectable modes (the C elastic
 sway/torsion); A's accumulated twist and the reactive axial roll stay, with musical vertical response applied after
 the roll (roll-invariant).
 
-- [~] Preserve constant history flow, no time-varying axial scaling, smooth curves, particles/free strands and fog
-  clearance by the actual body.
+- [ ] Lead review on rendered strips and a WebP: preserve constant history flow, no time-varying axial scaling,
+  smooth curves, particles/free strands and fog clearance by the actual body.
 
 **Full controls/editors, four-ribbon capacity and three presets: finish admission**
 
 Candidate Preset 1/2 with the selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom
 and Edit/Arrange feature set exist.
 
-- [~] Expose bend/torsion/stretch/twist/rotation and accent ranges, source/curve visual tuning, ribbon/gradient
-  editors, and floor reflectivity/tint/brightness.
-- [~] Every reactive range needs actual quiet/peak consumer proof for both handles.
-- [~] Retain mutable authored presets and prove Save/Cancel/Restore and runtime source reachability.
+- [ ] Lead review of rendered Studio frames: expose bend/torsion/stretch/twist/rotation and accent ranges,
+  source/curve visual tuning, ribbon/gradient editors, and floor reflectivity/tint/brightness.
+- [ ] Every reactive range needs actual quiet/peak consumer proof for both handles (the range audit, lead-run).
+- [ ] Retain mutable authored presets and prove Save/Cancel/Restore and runtime source reachability (focused tests
+  on the real SettingsDialog).
 
 **Framing, timing and acceptance**
 
@@ -1640,7 +1649,8 @@ and Edit/Arrange feature set exist.
   audit range headroom.
 - [ ] Close shared lifecycle/cost/dormancy gates and run `tools/visualizer_live_check.py --mode waveform_ribbon --load
   game60` before WR-09 acceptance.
-- [~] Operator visual/native judgement remains explicit where automation cannot close it.
+- [ ] Lead visual/native judgement at WR-09 acceptance: rendered showcase WebPs and a D1 run (1B.14 harness); what
+  neither can close, and has no simple test, becomes a Watchlist entry, never an open phase (operator, 11 Nov).
 - [ ] The new unified atmosphere supersedes all old fog layers. Floor-column polish is secondary to continuous ground
   and response.
 
