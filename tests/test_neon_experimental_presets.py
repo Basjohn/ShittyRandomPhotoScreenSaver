@@ -44,7 +44,13 @@ def test_each_current_neon_art_file_has_owned_schema_roundtrip_and_independent_v
         assert all(applied[key]==live[key] for key in view)
         activation=resolve_visualizer_activation_payload(live)
         assert activation.preset_index==index and activation.mode==mode
-        assert normalize_visualizer_mode_payload(mode,activation.resolved_config)==normalized
+        # The framed camera position belongs to the live view like the pose: hydration of a config that carries the
+        # live view keeps it (apply_preset_to_config); only an explicit selection seeds the preset's.
+        from core.settings.framed_camera import spec_for_mode
+        position=spec_for_mode(mode).key('camera_position')
+        resolved=normalize_visualizer_mode_payload(mode,activation.resolved_config)
+        assert resolved[position]==live[position]
+        assert {k:v for k,v in resolved.items() if k!=position}=={k:v for k,v in normalized.items() if k!=position}
 
 
 @pytest.mark.parametrize(('schema','selected','custom'),[(11,1,True),(11,0,False),(10,1,True),(10,2,True),(10,3,True),(12,1,False)])

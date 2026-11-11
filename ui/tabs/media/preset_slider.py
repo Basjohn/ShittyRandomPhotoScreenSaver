@@ -44,6 +44,7 @@ from core.settings.visualizer_presets import (
     get_next_visualizer_preset_ordinal,
     get_visualizer_presets_dir,
     reload_presets,
+    reload_presets_if_changed,
 )
 from ui.styled_popup import StyledPopup
 
@@ -111,6 +112,8 @@ class VisualizerPresetSlider(QWidget):
         self._mode = mode
         self._advanced_container: Optional[QWidget] = None
         self._technical_container: Optional[QWidget] = None
+        # The page opens on the presets that are on disk now, not the catalogue this process loaded (1C.1).
+        reload_presets_if_changed(mode)
         self._preset_names = get_preset_names(mode)
         self._preset_count = get_preset_count(mode)
         self._custom_index = get_custom_preset_index(mode)

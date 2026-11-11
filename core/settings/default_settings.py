@@ -1540,6 +1540,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'preset_extruded_bubble': 0,
                                     'preset_extruded_spectrum': 0,
                                     'preset_oscilloscope': 0,
+                                    'preset_references': {},
                                     'preset_shockwave_grid': 0,
                                     'preset_spectrum': 0,
                                     'preset_sphere': 0,

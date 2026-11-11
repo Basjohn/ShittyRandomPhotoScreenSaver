@@ -557,11 +557,6 @@ class VisualizerRenderItem(QQuickItem):
                         self._diag_bubble_geometry_burst_remaining -= 1
             self._diag_last_render_playing = playing
 
-        logical_size = (
-            (0.0, 0.0)
-            if presentation is None
-            else (presentation.outer_rect[2], presentation.outer_rect[3])
-        )
         screen_index = int(getattr(self._bound_window, "screen_index", -1))
         if snapshot is not None and self._frame_trace is not None:
             self._frame_trace.record(
@@ -579,8 +574,7 @@ class VisualizerRenderItem(QQuickItem):
         node.synchronize(
             identity=identity,
             snapshot=snapshot,
-            logical_size=logical_size,
-            device_pixel_ratio=(1.0 if presentation is None else presentation.dpr),
+            presentation=presentation,
             clear_snapshot=clear_snapshot or drop_retained,
             screen_index=screen_index,
         )

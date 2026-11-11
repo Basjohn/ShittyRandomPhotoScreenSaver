@@ -846,6 +846,14 @@ class SettingsManager(QObject):
                         if k not in section_dict:
                             section_dict[k] = v
                             changed = True
+                    if section_name == 'spotify_visualizer':
+                        # A stored preset reference the catalogue no longer resolves (removed, renamed or
+                        # renumbered presets) falls back at the owner and is repaired here, once (1C.1).
+                        from core.settings.visualizer_preset_indices import repair_preset_references
+                        repaired = repair_preset_references(section_dict)
+                        if repaired != section_dict:
+                            section_dict = repaired
+                            changed = True
                     widgets[section_name] = section_dict
                 else:
                     # Entire section missing or invalid – adopt defaults.
