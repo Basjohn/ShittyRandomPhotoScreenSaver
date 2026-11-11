@@ -188,9 +188,6 @@ Attribution merged 11 Nov (382ae139; baseline `tools/baselines/overhead/2026-11-
 phase-boundary audit and `Docs/Reference/Benchmarks.md`; evidence `.artifacts/evidence/native_core/20261111_attribution/`).
 What it left open:
 
-- [ ] Extruded Bubble still runs 4 imports inside per-frame functions (about 2.3 us each through PySide's import
-  hook; older than the 7 Nov baseline): move them to module level, then sweep the other modes' and transitions'
-  per-frame paths for the same pattern; proof by the overhead baseline's call counts.
 - [ ] Neon Lake's driver memory at its first draw (`private_other`, about +280 MB committed, mostly not
   resident) is not attributed: read GPU allocations around the first draw before P3 sizes anything for it.
 - [ ] Neon Lake against the new baseline: GL calls 354 -> 361 and relative GPU time 1.14 -> 1.44 ms since the land
@@ -493,8 +490,6 @@ curtain) stands beside the survivors; the two below do not yet.
   fixed, lead review before the operator sees them.
 - [ ] Extruded Bubble: one arctic-themed preset, light and depth, not a glossy object (Opus Medium, low
   priority, lead pixel review).
-- [ ] `tools/visualizer_preset_author.py` refuses the shape keys (`spectrum_lane_strengths_linear has no Settings
-  control`): admit them through the spec's own admission and the Studio shape rules, as the agent's script did.
 - [ ] Side defect: Bar Count is admitted to 96 by the spec but `spectrum.py` clamps to 64 (`_MAX_BARS`, lines 28,
   102, 199): a higher count would draw only the first 64 bars. One owner for the maximum; render one frame at 96.
 - [ ] Side defect: the segment border ring is lopsided (`spectrum.frag:914`: `<=` on one side, `>=` on the
@@ -504,12 +499,6 @@ curtain) stands beside the survivors; the two below do not yet.
   bars, wherever the Bass lane sits (`bar_computation.py:422-432`). It should follow the Bass lane's position.
 - [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
   rounded tops.
-- [ ] Side defect: `tools/release_media.py:69` binds `load_scenes(paths=USU_SCENES)` at definition, so
-  `test_release_media.py::test_source_change_during_capture_discards_media` ignores its monkeypatch in a
-  worktree without the `assets/usu/scenes` originals; resolve the default at call time.
-- [ ] Side defect: seven `test_release_media.py` tests fail with `missing authored preset path: spectrum:1` when
-  run in one process after the preset and Studio preset tests (order pollution; the file passes alone and on
-  main after the merge): find the test that leaves the preset tree redirected and make it restore.
 - [ ] Neon Lake: three unique presets (using the shape instrument, far-land brush and the new land reactivity).
 - [ ] Every preset authored through the Studio's Save To path, complete for every control (completeness guard).
 - [ ] One showcase WebP per preset (`release_media.py`), reviewed by the lead before the operator sees them.
@@ -586,14 +575,11 @@ closed and always tears down. Queued for the next free Opus High slot.
 
 ### 1B.15 Housekeeping the lead decided (11 Nov; engineering choices, not operator decisions)
 
-- [ ] Preset rollback recovery copies: `core/visualizer_preset_tree.py` writes the before-images of a failed
-  preset-replacement rollback to `tempfile.mkdtemp(prefix='srpss_preset_recovery_')` (`%TEMP%`, which Windows
-  Storage Sense may empty). Move them under the data root beside the preset tree (one owner for the path, the
-  folder named in the error as now, the newest few kept and older ones pruned on the next successful replace);
-  the test keeps redirecting to `tmp_path`.
-- [ ] Extruded Bubble evidence root: move `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
-  referenced by `Investigation.md`) to `.artifacts/evidence/visualizers/extruded_bubble/20261020/` and repoint the
-  references; nothing deleted.
+- [ ] Extruded Bubble evidence of 20 Oct: the references now point to
+  `.artifacts/evidence/visualizers/extruded_bubble/20261020/` (`RELOCATED` in `tools/artifact_migration.py`),
+  but neither that folder nor the old `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` exists on disk any
+  more: the media `Investigation.md` cites is gone. Say so in `Investigation.md` (one line under its evidence
+  list) so nobody hunts for it; the 22 and 23 Oct folders are still referenced and still ignored by git.
 
 ## 1C. Operator's diagnostic run (11 Nov, evening; ahead of everything in 1B that is not already in flight)
 
@@ -759,9 +745,6 @@ significant work". Opus and Sonnet agents resume as the lead sees fit.
 - [ ] Material M2b (commit a8761c8c on `worktree-agent-a93bb05376d4941fc`, never reported): a fresh Opus High
   agent merged that branch (old agents cannot be resumed across sessions), takes 1C.5 first, then audits and
   reports M2b against 1B.8's boxes, then stops; M3 after the lead's review.
-- [ ] Small boxes batch 3 (`worktree-agent-a6ba0b17824677702`: three commits done, the preset author tool half
-  done as WIP 860ee38b): a fresh Opus Medium agent merged that branch, finishes the tool, does 1B.15's two
-  boxes, then 1C.9.
 - [ ] Small boxes batch 4 (`worktree-agent-a4e50f79894c549ec`; WIP edf2100a: six sibling test files moved onto
   the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
   a Medium slot is free after 1C.1 and 1C.4.
@@ -884,35 +867,43 @@ last because it touches the water's edge)**
   one session; lead pixel review. If the analytic edge cannot be made to look right, stop and report with the
   renders rather than shipping rocks without a shoreline.
 
-### 1C.9 Sources: RSS Pools shows which pools are active and valid (operator, 11 Nov; small, Opus Medium)
+### 1C.9 Sources: RSS Pools shows which pools are active and valid (rows merged 11 Nov; restyle owed, Opus Medium)
 
-Operator: "RSS Pools in Sources should list which pools are active and valid, right now it looks empty when
-filled with only Just Make It Work pools only saying the number and nothing else. I would suggest listing them in
-Custom Pools as JMIT POOL -> NAME and a right aligned semantic check mark for valid ones, X for failing ones."
-Today `ui/tabs/sources_tab.py` (about line 700) sets one label, "Pools: N enabled", with the names only in its
-tooltip; pool data is `sources/rss/pools.py` (`WALLPAPER_POOLS`, `read_pool_selection`).
+Merged: each active Just Make It Work pool is a row `JMIT POOL -> <Pool Name>` in the Sources list beside the custom
+feeds, with a right-aligned mark (check, X, hollow circle for untried) read from the health the sources already
+store (`sources/rss/source_health.py`, `core.feeds.cache.peek_feed_health`: no network, no timer); pool rows are
+not removable there; an empty state; tests on the real `SettingsDialog` (`tests/test_sources_online_rows_real_
+dialog.py`). Operator on the stills, 11 Nov: "Those stills are a bad font and not semantically styled by theme."
+The lead had passed them; the rows are painted by a private delegate (`ui/tabs/online_source_rows.py`) with a
+synthesised italic and a plain list box, instead of following a list the theme already styles.
 
-- [ ] Inventory first: how the Custom Pools list is built and what a row is; where a pool's or feed's health is
-  known today (last fetch result, the pool index, `Docs/Reference/Feeds.md` and
-  `Docs/Reference/Wallpaper_Pool_Selection.md`); whether "valid" can be read from stored state without a fetch.
-- [ ] Each active Just Make It Work pool is a row in the Custom Pools list, labelled `JMIT POOL -> <Pool Name>`
-  (Title Case for the name; the prefix as the operator wrote it), visually distinct from the user's own custom
-  feeds and not editable or removable there (they are managed by the pool chooser; the row's tooltip says so).
-- [ ] A right-aligned status mark per row, for JMIT pools and custom feeds alike: a check mark in the theme's
-  semantic success colour when the pool's last result is valid, an X in the semantic failure colour when it is
-  failing, and a neutral mark when it has not been tried yet; the tooltip states why (last success time, or the
-  failure reason). Marks are painted glyphs in theme tokens, not coloured text characters, and readable on
-  light and dark themes.
-- [ ] Validity comes from stored state the sources already keep; opening Settings triggers no network request
-  and no new timer or polling; the marks refresh when the sources' own state changes (an existing signal or the
-  tab's existing refresh edge).
-- [ ] The summary label stays, reworded only if needed so it never reads as empty ("Pools: off" only when none).
-- [ ] An empty state: with no pools and no custom feeds the list says so in one line.
-- [ ] Tests on the real `SettingsDialog` (never a stub host): rows exist for the active pools derived from
-  `WALLPAPER_POOLS` and the selection (no pool names or wording pinned), the mark follows a stubbed stored
-  state for valid, failing and untried, no network is touched (transport and DNS stubbed), and a negative control.
-- [ ] Evidence: off-screen stills of the Sources tab on one dark and one light theme with a mix of valid,
-  failing and untried rows; lead pixel review; `Docs/Reference/Feeds.md` updated.
+- [ ] Inventory first: which Settings lists are themed today and by what (`ui/tabs/shared_styles.py`,
+  `ui/settings_theme_qss.py`, `ui/theme_typography.py`, `ui/theme_semantics.py`; the Themes tab's theme list and
+  its filter popup; the Folders list in this same tab): the font family, size, weight and letter spacing their
+  rows use, and the semantic tokens for row text, secondary text, hover, selection, the list's surface and border.
+- [ ] Check the capture before judging the font: the off-screen stills must load the product's bundled fonts
+  (`ui/font_registration.py`); if the stills' face differs from the product's, fix the capture, then look again.
+- [ ] Rows take the theme's list typography from the one typography owner: no font set by hand in the delegate,
+  no synthesised italic or bold anywhere (a face the family does not ship is never faked).
+- [ ] A pool row is told apart semantically, not by slant: "JMIT POOL" as a short ALL CAPS tag in the theme's
+  tag or accent treatment (the pattern short tags already use in Settings), the operator's arrow drawn as the
+  theme's arrow glyph, then the pool name in the row's normal text (Title Case as the catalogue has it).
+- [ ] Custom-feed rows use the same row typography; a long URL elides in the middle and never runs under the mark.
+- [ ] The list's surface, border, radius, row height, padding, hover and selection come from the shared list
+  style every themed list uses (one owner; if none exists as a reusable piece, make the Themes list's style the
+  shared one and move both onto it), on dark, light and material themes.
+- [ ] The marks keep their semantic colours (`popup.icon.success`, `popup.icon.error`, tertiary for untried),
+  sized to the row's cap height, with the stroke weight of the theme's other painted glyphs.
+- [ ] The heading above the list says what it lists (it reads "Custom Feeds" while pools are listed too).
+- [ ] Side defect seen in the light still: a native dotted size grip shows at the Settings window's bottom-right
+  corner; it should be the themed resize affordance or none (1B.9's corner work).
+- [ ] Side defect: `ui/studio/extruded_spectrum_adapter.py:90` cites `spec_mode_builder._apply_availability`,
+  which does not exist, and line 94 imports the private `_resolve` from `ui/tabs/media/spec_mode_builder.py`:
+  give the helper a public name in its owner and fix the docstring.
+- [ ] Evidence: the Sources list beside the Themes list (the reference), same theme, same scale, on Default
+  Dark, Pearl Blush and one Glass theme, full tab and 2x crops of three rows; the lead compares them side by
+  side before the operator sees them (mock-parity standard: every row element against its reference).
+- [ ] The marks seen with real stored health once (a D1 or frozen run of 1B.14 after a real fetch), lead review.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
