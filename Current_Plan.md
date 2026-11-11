@@ -234,222 +234,267 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 ## 1B. Operator defects and requests (11 Nov; run first, in this order)
 
-Order: the two Edit/exit defects that block ordinary use, then the Studio work (churn rule first, so new controls
-are born under it), then the fullscreen overlay contract, then window material and corners, then presets last
-(they need the finished Studio controls). Each fix reproduces its failure first; visual items are judged on
-rendered pixels by the lead. Roster (operator, 11 Nov): one Fable High (complex/architectural/visual), one Opus 5.5
-High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/research only); the lead audits all.
+Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its
+`[~]` validation steps and open side defects. Order: the Edit/exit defects, the Studio work, the fullscreen
+overlay contract, window material and corners, presets last. Every fix reproduces its failure first; the lead
+judges visual items on rendered pixels and audits each branch against the pre-fix code before merging.
 
-- [~] **1B.1 Awaiting Validation (merged 11 Nov, 46129166): Edit edits the display it was entered on.** With the
-  Visualizer expanded on one display, Edit from that display is Fullscreen Edit; Edit from another display is the
-  ordinary Edit of every other display while the view stays expanded and running (contract: plan 01 M3c "Edit
-  beside the view", `Spec.md`). Lead audit: the 13 new two-display tests fail on the pre-fix code; 1019 focused
-  tests pass on the merge. Operator check on two physical monitors: enter Edit from each display by menu and
-  double-right, Save and Cancel on each, and the expanded view still animating while the other display edits.
-  Side defects found there (all fail the same on the pre-fix code):
-  - [ ] `tests/test_visualizer_expansion_fullscreen_edit.py`: 4 reds on main
-    (`test_parent_axes_resize_the_artwork_border_not_the_metadata_text_box` and
-    `test_entering_fullscreen_edit_does_not_refade_already_visible_now_playing_content`: a Qt item already
-    deleted; `test_now_playings_parts_move_and_size_inside_the_block_through_the_child_editor[False/True]`: the
-    title child moves 3 or 15 px against 34). Resolve under 1B.7, which owns that contract.
-  - [ ] `tests/test_qtquick_custom_layout_owner.py` then `tests/test_qtquick_context_menu.py` in one process fails
-    the menu tests (`menuVisible` False); likely the 700 ms right-click suppression armed by an earlier test's
-    Save/Cancel leaking across tests.
-  - [ ] Unreproduced edge: in an ordinary global Edit, closing the Visualizer and then switching mode makes
-    `activate_edit_visualizer_profile` return False (`rendering/quick/custom_layout_owner.py`, the
-    `visible is None` branch), which looks like a forced runtime reload. Reproduce or rule out.
-- [ ] **1B.12 Two fullscreen glyphs, one per display (operator, 11 Nov; "partial extra refinement", for the
-  Expanded Visualizer now and SMP later).** Beside the existing fullscreen glyph (diagonal arrow up-right) add a
-  second one, a diagonal arrow up-left. With more than one display active both show: up-left expands onto
-  Display 0, up-right onto Display 1 (from whichever display the card is on, through the existing transfer +
-  expand transaction, never a second path). V keeps expanding on the display the Visualizer is currently on.
-  With one display the single existing glyph stays as today (operator, 11 Nov: "Keep it"). The
-  target is a display, not "the Visualizer's display", so SMP can later hold one display fullscreen while the
-  Visualizer holds the other. Displays beyond the first two are reached with V. Glyph drawn in the existing
-  glyph row's style (painted, no seams), Title Case tooltips, fades in and out with the display count.
-- [~] **1B.2 Awaiting Validation (merged 11 Nov, 0f8f4836; R-183): the cursor keeps its changed shape after exit
-  until a click.** Cause as far as it is proven on what Windows displays: Qt hands a window's cursor to Windows only
-  while Qt believes the pointer is over that window, and Windows never re-queries a still pointer when the window
-  under it hides or its process ends; every earlier "arrow" was only the Qt property. Fix: the retire owner
-  (`QuickDisplayWindow._relinquish_pointer`) gives Windows the arrow itself, once, while the HWND exists
-  (`show_native_arrow_for_retiring_window`, `rendering/quick/pointer_capture.py`). **Not accepted:** the
-  small-window native harness reproduced the stuck shape only with Qt's pointer tracking cleared artificially;
-  which real event clears it in the operator's exits is not proven (likely exits where the saver is not the
-  foreground window when it hides: a link click, a second display). Operator: run
-  `.venv\Scripts\python.exe tools\cursor_exit_observer.py --label <name>`, start the saver, exit by each path
-  (key, click, mouse move, link click, Settings, MC), keep the mouse still two seconds each time; each exit
-  prints `cursor after exit: <name>, changed to arrow after <ms>` or `only after click`, logged under
-  `.artifacts/evidence/input/cursor_exit/`. If any path still says "only after click", that log names the path
-  to fix next. Opt-in native harness: `tools/cursor_exit_native_harness.py`.
-  - [ ] Side defect: in the saver, when a hovered QML item is destroyed or left, the window can keep the hand
-    or arrow instead of the Halo until the Halo next re-applies it.
-  - [ ] Side defect: `tests/test_artifact_paths_contract.py` also fails on literal `evidence_chest` paths in
-    `tools/godzip_foundry.py` (2579, 2632, 3386) and `tools/godzip_logzip_retention.py` (22, 38), PNG writes
-    outside `tools/evidence_media.py` in `tools/settings_native_corners.py`, `srpss_border_core.py` and
-    `srpss_border_studio.py`, and a `delete=False` temp file at `tools/visualizer_capture_core.py:215` (same
-    class as the "Tool-output contract reds" item in section 3; fix together).
-- [ ] **1B.3 side defects (the churn audit itself landed 11 Nov, f5693c6d: no Studio drag writes while it moves;
-  `tests/test_studio_drag_io_churn.py` holds every registered adapter to it; camera navigation now rebuilds the
-  inspector once per frame, 1-4 ms a move before).** Found by that audit, not fixed there:
-  - [ ] Sphere Studio: View Turn / View Tilt do not stick. A drag of `sphere_turn` commits and saves once, then
-    reads back 0.0 and the slider snaps back (the keys are excluded from the preset save by
-    `get_visualizer_view_pose_keys`, and Sphere has no framed-camera aim hold).
-  - [ ] Waveform Studio: Camera Position Y snaps back. `waveform_ribbon_camera_position[1]` dragged to its maximum
-    commits once and the save returns 0.0 (the slider's range or the eye limit is wrong).
-- [ ] **1B.4 Shape control for the music-visual shape (Spectrum and Neon Lake): design regression.** Both Studios
-  turned the shape editing control into sliders. Recover the original shape control from git before the Studios
-  existed, and build one thematic, Studio-matching, visually pleasing shape instrument on the Studio's shared
-  instrument layer (theme tokens, drag batching, undo, one commit on release, unchanged serialized keys).
-  - [ ] Spectrum uses it.
-  - [ ] Neon Lake uses it (the same instrument if its quality holds for both).
-- [ ] **1B.5 Neon Lake: all visible land is brush-editable.** The Studio brush stops at limits narrower than the
-  land the scene shows. The paintable domain is the visible terrain; move the bound to the terrain's own extent
-  owner (no second limit table), with a pick test at the visible edges through the production camera.
-  Reproduced 11 Nov (`tests/test_neon_lake_brush_reach.py`, strict xfail on "every visible land point is
-  paintable"): there is no limit narrower than the authored grid; the refused land is the generated landscape
-  drawn past the grid (`scene_surface`, `rendering/gl_programs/neon_terrain_surface.py`), about 26% of the land
-  on screen for Preset 3 at the default view and 13-20% for Presets 1-2 dollied back; `pick_terrain`
-  (`ui/studio/shockwave_grid_adapter.py`) refuses it because no authored cell exists there. Lead's decision: a
-  stroke past the grid grows the authored grid through the existing extend owner
-  (`rendering/gl_programs/neon_terrain_extent.py`, cap 257), and growth is invisible: new cells take the generated
-  landscape's own heights and the far-land curvature keeps its authored origin, so the horizon, detail and glow
-  do not shift when the grid grows; existing cells stay exactly as stored; the stroke re-maps its coordinates
-  across a mid-stroke growth; one undoable step per stroke including the growth. Runs with 1B.6 (same terrain
-  owners).
-- [ ] **1B.6 Neon Lake: land reactivity pass for smooth deformation.** No tearing or jagged edges at any
-  reactivity (continuous normals and silhouette under the production mesh density). Optional, default off and
-  preset-authored: growth of spires, mounds and land that is not visible at low reactivity, and indents of land
-  that is. Fixed scales (no learned levels), everything ramps and fades, continuous-play evidence on recorded
-  music, no second simulation owner.
-- [ ] **1B.7 Fullscreen Now Playing (media toast): one geometry contract with the Media widget.** Audit its
-  geometry contracts and Edit control against ordinary widget editing: reliable alignment, adjustment and detail
-  adjustment exactly as the Media widget has. Artwork, metadata and controls behave as the Media widget's do in
-  Edit, through the same child-editor contract rather than overlay exceptions. Add an optional seekbar (default
-  off) that inherits the Media widget seekbar's traits and style from one shared component. Retire each
-  exception the audit finds or record why it must stay.
-  Research (11 Nov): the child editor, descriptor type, child-geometry normaliser, transport bar and metadata fit
-  are already shared. Parallel or missing: the parent move / corner scale / per-axis resize / Restore Size are
-  reimplemented in `fullscreen_overlay_edit.py`; no role declares `alignment_flip` or `semantic_corner_anchor` (the
-  overlay mirrors by position, `ExpandedVisualizerOverlays.qml`); artwork size has two carriers and the parent
-  handles resize the artwork border, unlike Media; artwork border and shape come from the Visualizer card chrome;
-  only the other overlay is a snap peer; storage is `widgets.spotify_visualizer.fullscreen_overlays`, not
-  `widgets.custom_layout`; the seekbar is inline in `MediaPresentation.qml` (no component to reuse; its position
-  comes from GSMTC timeline events, no timer).
-  Decomposition (lead, 11 Nov; each slice its own reviewed checkpoint, in this order, the Media card
-  pixel-identical after every one):
-  - [ ] a. Extract the Media seekbar into one component with a look carrier (no behaviour change; before/after
-    Media card renders identical at 100/150%).
-  - [ ] b. Parent geometry through the shared owner: the overlay block's move, corner scale, per-axis resize and
-    Restore Size use the ordinary Edit handlers; delete the parallel code in `fullscreen_overlay_edit.py` with its
-    tests (no bridge kept for dead callers).
-  - [ ] c. Alignment as declared roles: `alignment_flip` / `semantic_corner_anchor` on the overlay's roles
-    replace the position-based mirroring, so alignment is chosen and stable, as on the Media card.
-  - [ ] d. Artwork: one size carrier; the parent handles act as Media's do; border and shape follow the Media
-    widget's artwork settings, not the Visualizer card chrome. Resolves the four reds listed at 1B.1.
-  - [ ] e. Snap and guides: display edges, centre lines and the other overlay through the ordinary guide owner.
-  - [ ] f. Storage: the persisted key stays (`widgets.spotify_visualizer.fullscreen_overlays` is never renamed);
-    its records take the ordinary child-geometry schema and normaliser. Any shape change gets its load bridge in
-    `Docs/Architecture/Persisted_Input_Compatibility.md`.
-  - [ ] g. The optional seekbar: a Fullscreen Mode option (default off), a child part in Fullscreen Edit like the
-    others, the same seek route and double-click ownership as the Media card, authored into the defaults.
-  Guardrails: no overlay-only geometry maths survives; no timer for position; nothing changes for a user who
-  never opens Fullscreen Edit (stored overlays load to the same pixels: render before/after from a saved profile).
-- [ ] **1B.8 Light themes are practically opaque in the application.** Dark themes transmit correctly; light
-  themes (Platinum Workstation, Polished Chrome, Plum for example) render nearly opaque in the saver even though
-  their Settings GUI variant shows the material correctly. Find where the runtime path diverges from the Settings
-  variant (the light-surface legibility guard of 1.7a is the first suspect), and make the application match it
-  while keeping text legible on composed pixels. Prove on off-screen wallpaper renders, light beside dark.
-  Research (11 Nov, estimates from the solver's arithmetic, not captured pixels): the cause is the saver's
-  legibility panel, not the themes. `SurfaceContrast.js` assumes faint ink at 55% alpha; black at that alpha
-  reaches only 4.76:1 on white against a 4.8 target, so for every dark-ink theme the solver saturates at white
-  (linear guard limit 1.0, anchor above 1) and `surface_material.frag` mixes the whole panel interior to white.
-  Dark themes get reachable limits and keep following the wallpaper. The Settings variant corrects the ink and
-  leaves the surface at its calibrated density (about .63-.72). The operator's third example is Pearl Blush
-  (11 Nov; Plum Jade is a dark theme): prove on Platinum Workstation, Polished Chrome and Pearl Blush.
-  Design (lead, 11 Nov): do what the Settings variant does, in the same order.
-  - [ ] a. Evidence first: off-screen card renders of the three light themes and two good dark themes over one
-    dark and one bright PERSONALSET wallpaper (`tools/surface_material_capture.py`), with the wallpaper swing
-    that survives inside the card measured per theme. This is the before set and the acceptance oracle.
-  - [ ] b. The surface keeps its calibrated density for dark ink: the panel may move toward the anchor only as
-    far as the theme's own Settings-variant shell density, never to a saturated white. The solver's unreachable
-    case (target above what the ink can reach on white) must resolve to "bounded surface + corrected ink", not
-    to limit 1.0.
-  - [ ] c. Correct the ink, not the panel: where dark ink over the bounded surface misses the ratio, darken the
-    semantic ink toward its theme anchor (the 1.7a runtime ink correction), and judge faint ink at its real
-    alpha rather than the fixed 55% assumption.
-  - [ ] d. Only where a text run still fails over a busy backdrop, a text-local legibility plate (the existing
-    `TextLegibilityPlate` / `text_legibility.frag`), never a whole-card lift.
-  Guardrails: dark themes render pixel-identical before and after (their limits were already reachable); the
-  SURFACE block stays identical across `surface_material.frag`, `text_legibility.frag` and
-  `text_legibility.vert` (`tests/test_surface_materials.py`); regenerate the `.qsb` files with the Qt toolchain;
-  no extra pass, capture or per-frame Python; one focused GPU before/after on a busy card. Coordinate with 1.7b
-  (same shader): land 1B.8 first, then the border ring.
-- [ ] **1B.9 Settings and Studio window corners still bleed/escape.** Continues 1.9 with the operator's
-  allowance: the border may grow by at most 2 px if that covers the escape. Measure with
-  `tools/settings_native_corners.py` (four cases, 150% DPI) at +1 and +2 px, report to the operator whether
-  thicker borders solve it, and implement the smallest width that does; if neither does, say so with the pixels.
-  The window border should also take a material like the planned widget border (1.7b): one border-material
-  treatment, not a second system.
-  Research (11 Nov; geometry from a pixel-centre model, to be confirmed by the tool): both windows are rectangular
-  layered HWNDs with Accent blur over the whole rectangle; `paint_forged_window_edge` (shared by Settings and the
-  Studio) forges the rounded look (radius 6.5, 4 px border, logical px). A +2 px border shrinks the leftover wedge
-  from about 5 px to about 1 at 150% (0 at 100%, 3 of 8 at 200%) by squaring the corner, and does not remove it.
-  Never tried: DWM corner preference on a non-layered window, a region applied before Accent, a composition-host
-  clip. The tool shows a real native window; there is no Studio equivalent yet.
-  Order of experiments (lead, 11 Nov; each one reversible, measured with the four-case gate at 100/150/200%
-  before the next; a small native window is unavoidable here, so keep it Settings-sized and brief, never
-  fullscreen):
-  - [ ] a. Give the tool a Studio case (same forged edge) and a border-width argument, then measure +1 and +2 px
-    as the operator asked. Report the leftover pixels per scale with crops; adopt a width only if it removes the
-    escape rather than squaring the corner.
-  - [ ] b. Clip the material itself, cheapest first: a region applied before the Accent call; then the Windows 11
-    DWM corner preference on a non-layered variant of the window (check what it costs: shadow ownership,
-    translucency, the layered-window repaint path of §9's freeze fix); then a composition-host clip.
-  - [ ] c. Whichever clips: redo input, resize, snap/maximise, DPI change, activation and Studio-over-Settings
-    modality on the real `SettingsDialog` and Studio window before it ships.
-  - [ ] d. Window border material: after the corner is honest, the forged border ring takes the border-material
-    treatment of 1.7b (one shared rule for cards and windows), inside the +2 px budget.
-- [ ] **1B.13 Hold right-click to pan the live Visualizer, as in the Studios (operator, 11 Nov; large QoL, but the
-  context menu's reliability and speed rank above it).** Design (lead): the platform's own convention, menu on
-  button-up, scoped to the one place a drag can mean something else.
-  - Over a pan-capable Visualizer card only (the same admission as the held-left plain orbit: not in Edit, not
-    exiting, no menu open, mode has `scene_transform_settings`), a right press opens nothing and arms a pending
-    pan at the press point, mirroring the plain orbit's pending -> capture states in `rendering/quick/window.py`.
-  - Pointer travel past the system drag distance while held turns it into the pan (existing press-scoped pan
-    baseline `_quick_scene_view_gesture` and the one pointer-capture owner); the menu never opens for that press,
-    and `context_menu_active` never becomes true. Release ends the pan through the live view-pose owner's
-    existing save rule (no new persistence rule).
-  - Release without that travel opens the retained context menu at the release point through the same
-    `context_menu_requested` route as today.
-  - Everywhere else (any other widget, the wallpaper, Edit, Alt-right, a mode that cannot pan) the menu opens on
-    press exactly as today: that path is not touched, so its reliability cannot regress.
-  - No timer or hold delay anywhere (a hold-time rule would add latency and a timer); no menu flash and dismiss.
-  - Guardrails and regression bar: the existing context-menu, R39 hover-handoff, double-right Edit shortcut and
-    single-menu-per-display tests pass unchanged; new tests for click (menu opens once, on release), drag (pan,
-    no menu), press on the card and release off it, a second right press while the menu is open, double-right
-    over the card, focus loss / mode switch / exit / display loss mid-pan (capture released, pose not corrupted),
-    the expanded card (the whole display is the card), and Media Center mode. Measure press-to-menu-visible on
-    the untouched path before and after (must be equal) and release-to-menu-visible on the card. The pan cursor
-    goes through the cursor owner 1B.2 fixes: build after 1B.2 merges (same file).
-- [ ] **1B.11 Theme filter in the Linked row (operator request, 11 Nov; independent of the items above, runs when
-  a slot is free).** Both theme pages (Settings Themes, Widget Themes) get a type-in filter in the space beside
-  the Linked / Independent button (`ui/tabs/themes_tab.py`, `ui/widgets/theme_list.py`). Typing narrows the list
-  to themes whose name or scheme matches: "Blue" finds every theme with Blue in its name or whose own colours are
-  blue; "Dark", "Light" and the material names ("Glass", "Frosted", ...) filter by kind; several words narrow
-  together. Autocomplete offers the kinds, the colour families and theme names. Kinds and colour families are
-  derived from each theme's own data (ink/surface luminance, material, the hue of its accent and surface) by one
-  pure function both catalogs share, so imported and user themes are covered with no hand-kept tag table. An
-  empty filter shows everything; favourites, linking and the active theme's selection behave as today (the
-  active theme is never deselected by filtering); the filter text is view state, not a saved setting. Styled
-  from the theme's own input role, Title Case, one-sentence tooltip. Test on the real SettingsDialog (built
-  tabs), with the filter derived from catalog data, never pinned theme names.
-- [ ] **1B.10 Presets (only after 1B.3-1B.6 land; one Fable 5.2 Medium agent, admitted above the roster cap for
-  this task only).** Supersedes the lead's Spectrum presets 2-15 of 7 Nov (§3).
-  - [ ] Spectrum: replace presets 2 and up with the best and most novel looks the mode can make.
-  - [ ] Extruded Bubble: one arctic-themed preset.
-  - [ ] Neon Lake: three unique presets.
-  Every preset reads as unique and visually impressive on rendered showcase WebP. The agent may ask the lead for
-  a feature or architecture it needs for a better look, as long as it is not wasteful.
+### 1B.1 Edit edits the display it was entered on (merged 46129166; contract: plan 01 M3c "Edit beside the view")
+
+- [~] Operator, two physical monitors, Visualizer expanded on one:
+  - [~] Edit from the other display (context menu, then double-right): its widgets edit, the expanded view keeps
+    animating, no Edit chrome on the expanded display.
+  - [~] Edit from the expanded display: Fullscreen Edit of the overlays only.
+  - [~] Save and Cancel from each; a collapse press while Edit is open beside the view waits for Save/Cancel.
+- [ ] Side defect: `tests/test_qtquick_custom_layout_owner.py` then `tests/test_qtquick_context_menu.py` in one
+  process fails the menu tests (`menuVisible` False); suspect the 700 ms right-click suppression armed by an
+  earlier test's Save/Cancel leaking across tests. Reset it per test at its owner.
+- [ ] Side defect (unreproduced): in an ordinary global Edit, closing the Visualizer and then switching mode makes
+  `activate_edit_visualizer_profile` return False (`rendering/quick/custom_layout_owner.py`, the `visible is None`
+  branch), which looks like a forced runtime reload. Reproduce in a test or rule out.
+
+### 1B.2 Cursor keeps its changed shape after exit until a click (merged 0f8f4836; R-183; NOT accepted)
+
+The retire owner now gives Windows the arrow natively. The native harness reproduced the stuck shape only with
+Qt's pointer tracking cleared artificially, so the operator's real exit path is unproven.
+
+- [~] Operator: run `.venv\Scripts\python.exe tools\cursor_exit_observer.py --label <name>`, start the saver, and
+  keep the mouse still two seconds after each exit:
+  - [~] key exit
+  - [~] click exit
+  - [~] mouse-move exit
+  - [~] link click (browser opens)
+  - [~] Settings opened from the saver
+  - [~] Media Center mode exit
+  - [~] exit with the pointer on the second display
+- [ ] Read the observer log (`.artifacts/evidence/input/cursor_exit/`): any path printing `only after click`
+  names the event that clears Qt's pointer tracking; reproduce that path in `tools/cursor_exit_native_harness.py`
+  and fix it at the retire owner.
+- [ ] Update R-183 with the operator's result (accepted, or the failing path and its fix).
+- [ ] Side defect: when a hovered QML item is destroyed or left, the saver window can keep the hand or arrow
+  instead of the Halo until the Halo next re-applies it.
+- [ ] Side defect: `tests/test_artifact_paths_contract.py` fails on literal `evidence_chest` paths
+  (`tools/godzip_foundry.py` 2579, 2632, 3386; `tools/godzip_logzip_retention.py` 22, 38), PNG writes outside
+  `tools/evidence_media.py` (`tools/settings_native_corners.py`, `srpss_border_core.py`, `srpss_border_studio.py`)
+  and a `delete=False` temp file (`tools/visualizer_capture_core.py:215`). Fix with section 3's "Tool-output
+  contract reds".
+
+### 1B.3 Studio slider save churn (audit landed f5693c6d: no drag writes while it moves)
+
+- [ ] Sphere Studio: View Turn / View Tilt snap back to 0 after a drag (in flight, Opus Medium; fix committed
+  on its branch d542d355, unaudited).
+- [ ] Waveform Studio: Camera Position Y dragged to its maximum saves 0.0; fix the range or the eye limit at
+  the canonical spec (in flight, same agent).
+- [ ] One registry-wide test: every framed mode's camera position/target row has the range its spec admits.
+- [ ] Lead audit: both regressions fail on the pre-fix code; merge; re-run `tests/test_studio_drag_io_churn.py`
+  for the touched modes.
+
+### 1B.4 Shape instrument for Spectrum and Neon Lake (design regression: sliders replaced the shape control)
+
+In flight, Fable High (branch `worktree-agent-a9762f84867d7deda`; first commits 3695f429, 3aeae75e, unaudited).
+
+- [ ] One reusable Studio shape instrument (schema kind + QML component), not a per-mode widget: drag nodes,
+  click to add, right-click to remove within the node limits, drag lane boundaries, lane strengths in place,
+  mirrored half with a ghost, the curve drawn by the production interpolation.
+- [ ] Spectrum uses it; the slider rows it replaces are removed.
+- [ ] Neon Lake uses it for the Frequency Response shape.
+- [ ] Neon Lake uses it for the terrain shaper (or the report says why not).
+- [ ] Extruded Spectrum uses it (same family helper).
+- [ ] One commit per drag, Studio undo/redo, stored keys and values unchanged (no migration).
+- [ ] No write per move: `tests/test_studio_drag_io_churn.py` passes with the instrument registered.
+- [ ] Lead pixel review of the off-screen renders: Spectrum and Neon Lake Studios, one dark and one light Studio
+  theme, 100% and 150%, 2x crops, a mid-drag state. Reject anything that reads as a debug widget; no seams.
+- [ ] Lead audit (behavioural tests fail on pre-change code), merge, focused Studio tests on the merge.
+- [~] Operator look at the instrument in both Studios.
+
+### 1B.5 Neon Lake: all visible land is brush-editable (reproduced; fix decided, operator agreed 11 Nov)
+
+Cause: land past the authored grid is generated landscape with no stored cells, so `pick_terrain` refuses it
+(26% of on-screen land on Preset 3; 13-20% on Presets 1-2 dollied back). Queued for Fable High after 1B.4.
+
+- [ ] A stroke past the grid grows the authored grid through the existing extend owner
+  (`rendering/gl_programs/neon_terrain_extent.py`, cap 257).
+- [ ] Growth is invisible: new cells take the generated landscape's own heights (`scene_surface`), and the
+  far-land curvature keeps its authored origin, so horizon, detail and glow do not shift. Prove with a
+  before/after render of an un-painted growth (pixel-equal within MSAA jitter).
+- [ ] Existing cells stay exactly as stored: every shipped preset's terrain loads byte-identical.
+- [ ] The stroke re-maps its coordinates across a mid-stroke growth; one undoable step per stroke including
+  the growth.
+- [ ] At the 257 cap the brush shows a clear refused state (cursor + one-line notice), never a silent no-op.
+- [ ] `tests/test_neon_lake_brush_reach.py`: the strict xfail "every visible land point is paintable" becomes a
+  pass and the xfail marker is removed.
+- [ ] Texture/mesh cost of the largest grown grid measured against today's (control-relative GPU).
+- [ ] Docs: `Docs/Reference/Neon_Lake_Basin.md`, `Docs/Reference/Visualizer_Studio.md` (brush).
+- [~] Operator: paint far land in the Studio.
+
+### 1B.6 Neon Lake: land reactivity pass for smooth deformation (queued for Fable High with 1B.5)
+
+- [ ] Reproduce the tearing/jagged edges first: stills and one animated WebP at high reactivity on recorded
+  music, with the mesh density and the reaction path that produce them named.
+- [ ] Smooth deformation at every reactivity: continuous normals and silhouette at the production mesh density
+  (no cracks between cells, no stair-stepped ridges, no shading pops).
+- [ ] Optional growth (default off, a preset-authored control): spires, mounds and land that is not visible at
+  low reactivity rise with the music.
+- [ ] Optional indents (default off, a preset-authored control): land that is visible sinks with the music.
+- [ ] Fixed scales only (no learned levels, no `musical_weight` gate); everything ramps and fades in and out.
+- [ ] One simulation owner: the existing terrain reaction path, no second population, no renderer-side sim.
+- [ ] Each new control: canonical spec entry, Studio row, authored into every Neon Lake preset (repair fill +
+  completeness guard), Settings/Studio parity test.
+- [ ] Continuous-play evidence over whole songs (`neon_lake_music_response.py`): mid-song kicks still read.
+- [ ] Per-frame cost before/after on the logical tick and the render (`tools/overhead_baseline.py`).
+- [ ] Lead pixel review on showcase WebP; then merge.
+- [~] Operator look.
+
+### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (not started)
+
+Already shared: child editor, descriptor type, child-geometry normaliser, transport bar, metadata fit. Each slice
+is its own reviewed checkpoint, in this order; the Media card stays pixel-identical after every one.
+
+- [ ] a. Extract the Media seekbar from `MediaPresentation.qml` into one component with a look carrier (no
+  behaviour change; before/after Media card renders identical at 100% and 150%).
+- [ ] b. Parent geometry through the shared owner: the overlay block's move, corner scale, per-axis resize and
+  Restore Size use the ordinary Edit handlers; delete the parallel code in `fullscreen_overlay_edit.py` and its
+  tests.
+- [ ] c. Alignment as declared roles: `alignment_flip` / `semantic_corner_anchor` on the overlay's roles replace
+  the position-based mirroring in `ExpandedVisualizerOverlays.qml`.
+- [ ] d. Artwork: one size carrier; the parent handles act as Media's do; border and shape follow the Media
+  widget's artwork settings, not the Visualizer card chrome.
+- [ ] d1. The four reds in `tests/test_visualizer_expansion_fullscreen_edit.py` are green or rewritten to the
+  new contract (`test_parent_axes_resize_the_artwork_border_not_the_metadata_text_box`,
+  `test_entering_fullscreen_edit_does_not_refade_already_visible_now_playing_content`,
+  `test_now_playings_parts_move_and_size_inside_the_block_through_the_child_editor[False/True]`).
+- [ ] e. Snap and guides: display edges, centre lines and the other overlay through the ordinary guide owner.
+- [ ] f. Storage: the key `widgets.spotify_visualizer.fullscreen_overlays` stays; its records take the ordinary
+  child-geometry schema and normaliser; any shape change gets its load bridge in
+  `Docs/Architecture/Persisted_Input_Compatibility.md`.
+- [ ] g. Optional seekbar (default off): Fullscreen Mode option, a child part in Fullscreen Edit, the Media
+  card's seek route and double-click ownership, authored into the defaults; no timer for position.
+- [ ] h. A saved profile's overlays render to the same pixels before and after (a user who never opens
+  Fullscreen Edit sees no change).
+- [ ] i. No overlay-only geometry maths left: grep-level audit listed in the report.
+- [~] Operator: Fullscreen Edit of Now Playing beside the Media widget's Edit; the seekbar.
+
+### 1B.8 Light themes are practically opaque in the saver (not started; cause found in research)
+
+Cause (arithmetic, not yet pixels): `SurfaceContrast.js` cannot reach its 4.8:1 target for dark ink at 55% alpha
+even on white, so it saturates and `surface_material.frag` fills the card interior white. The Settings variant
+corrects the ink and keeps the surface at its calibrated density (about .63-.72).
+
+- [ ] a. Before set: off-screen card renders of Platinum Workstation, Polished Chrome, Pearl Blush and two good
+  dark themes over one dark and one bright PERSONALSET wallpaper (`tools/surface_material_capture.py`), with
+  the surviving wallpaper swing inside the card measured per theme.
+- [ ] b. Bounded surface for dark ink: the panel moves toward the anchor only as far as the theme's
+  Settings-variant shell density; the solver's unreachable case resolves to "bounded surface + corrected ink",
+  never limit 1.0.
+- [ ] c. Correct the ink, not the panel: darken semantic ink toward its theme anchor where it misses the ratio
+  (the 1.7a runtime ink correction); judge faint ink at its real alpha, not a fixed 55%.
+- [ ] d. Text-local plate (`TextLegibilityPlate` / `text_legibility.frag`) only where a run still fails over a
+  busy backdrop; never a whole-card lift.
+- [ ] e. Dark themes pixel-identical before and after.
+- [ ] f. The SURFACE block identical across `surface_material.frag`, `text_legibility.frag`,
+  `text_legibility.vert` (`tests/test_surface_materials.py`); `.qsb` files regenerated with the Qt toolchain.
+- [ ] g. One focused GPU before/after on a busy card; no extra pass, capture or per-frame Python.
+- [ ] h. After set + lead pixel review, light beside dark; `tools/theme_legibility.py` rerun on the composed
+  surfaces.
+- [ ] i. Docs: `Docs/Architecture/Card_Surface_Materials.md`; closes 1.7a's density question (update it there).
+- [~] Operator look on the three light themes.
+
+### 1B.9 Settings and Studio window corners bleed (not started; continues 1.9 with the +2 px allowance)
+
+Both windows are rectangular layered HWNDs with Accent blur over the whole rectangle; `paint_forged_window_edge`
+forges the rounded look (radius 6.5, 4 px border). Model estimate: +2 px leaves about 1 px at 150% and 3 of 8 at
+200% by squaring the corner. A small native window is unavoidable here: Settings-sized, brief, never fullscreen.
+
+- [ ] a. `tools/settings_native_corners.py` gains a Studio case and a border-width argument.
+- [ ] b. Measure today, +1 px and +2 px at 100/150/200%, four theme/background cases each; crops kept.
+- [ ] c. Tell the operator plainly whether thicker borders solve it; adopt a width only if it removes the
+  escape rather than squaring the corner.
+- [ ] d. If not: a region applied before the Accent call.
+- [ ] e. If not: the Windows 11 DWM corner preference on a non-layered variant (cost check: shadow ownership,
+  translucency, the layered-window repaint path of §9's freeze fix).
+- [ ] f. If not: a composition-host clip.
+- [ ] g. Whichever clips: input, resize, snap/maximise, DPI change, activation and Studio-over-Settings
+  modality proven on the real `SettingsDialog` and Studio window.
+- [ ] h. Window border material: the forged border ring takes 1.7b's border-material treatment (one rule for
+  cards and windows), inside the +2 px budget.
+- [ ] i. Docs: `Docs/Architecture/Settings_Theme_Architecture.md`; close or rewrite 1.9.
+- [~] Operator look at Settings and Studio corners on both wallpapers.
+
+### 1B.10 Presets (only after 1B.3-1B.6 land; one Fable 5.2 Medium agent above the roster cap, this task only)
+
+Supersedes the lead's Spectrum presets 2-15 of 7 Nov (section 3). Every preset must read as unique and visually
+impressive; the agent may ask the lead for a feature or architecture a better look needs, if it is not wasteful.
+
+- [ ] Gate: 1B.3 side defects, 1B.4, 1B.5 and 1B.6 merged.
+- [ ] Spectrum: presets 2 and up replaced with the best and most novel looks the mode can make (ghosts soft and
+  blurred like Preset 1's; no seam where a transparent-border bar meets its ghost).
+- [ ] Extruded Bubble: one arctic-themed preset.
+- [ ] Neon Lake: three unique presets (using the shape instrument, far-land brush and the new land reactivity).
+- [ ] Every preset authored through the Studio's Save To path, complete for every control (completeness guard).
+- [ ] One showcase WebP per preset (`release_media.py`), reviewed by the lead before the operator sees them.
+- [ ] Feature requests from the agent recorded here as their own boxes when admitted.
+- [~] Operator look.
+
+### 1B.11 Theme filter in the Linked row (operator request; not started; independent, next free Opus slot)
+
+- [ ] One pure function both theme catalogs share derives each theme's kinds from its own data: Dark/Light
+  (ink and surface luminance), material, colour families (hue of accent and surface). No hand-kept tag table.
+- [ ] A type-in filter beside the Linked / Independent button on the Settings Themes page.
+- [ ] The same on the Widget Themes page (`ui/tabs/themes_tab.py`, `ui/widgets/theme_list.py`).
+- [ ] Matching: name substring or kind/colour ("Blue" finds Blue-named and blue-coloured themes); several words
+  narrow together; empty shows everything.
+- [ ] Autocomplete offers kinds, colour families and theme names.
+- [ ] The active theme is never deselected by filtering; favourites and linking behave as today.
+- [ ] Filter text is view state, not a saved setting.
+- [ ] Styled from the theme's input role, Title Case, one-sentence tooltip; checked in a dark and a light theme.
+- [ ] Tests on the real `SettingsDialog` (built tabs), derived from catalog data, never pinned theme names.
+- [~] Operator look.
+
+### 1B.12 Two fullscreen glyphs, one per display (operator; in flight, Opus High)
+
+For the Expanded Visualizer now and SMP later: the target is a display, not "the Visualizer's display".
+
+- [ ] A second glyph (diagonal arrow up-left) beside the existing up-right one, painted in the glyph row's
+  style (no seams, strokes >= 1.5 px), Title Case tooltips.
+- [ ] More than one display: both show; up-left expands onto Display 0, up-right onto Display 1, from whichever
+  display the card is on, through the existing transfer + expand transaction (no second path).
+- [ ] One display: the single existing glyph exactly as today (operator: "Keep it").
+- [ ] V still expands on the display the Visualizer is on; displays beyond the first two are reached with V.
+- [ ] While expanded: the expanded display's glyph collapses; the other moves the expanded view there; the
+  Edit holds of 1B.1 still refuse a transfer.
+- [ ] The glyphs fade in and out when the display count changes.
+- [ ] The owner request is "expand on display N" (the shape SMP will reuse).
+- [ ] Off-screen PNG evidence at 100% and 150% with 2x crops (one display, two displays, expanded); lead pixel
+  review.
+- [ ] Lead audit, merge; plan 01 updated.
+- [~] Operator look on two monitors.
+
+### 1B.13 Hold right-click to pan the live Visualizer (operator; queued behind 1B.12, same agent)
+
+The context menu's reliability and speed rank above this feature. Design: menu on button-up, only over a
+pan-capable Visualizer card; everywhere else the menu opens on press exactly as today, untouched.
+
+- [ ] Baseline first: press-to-menu-visible timing on the untouched path recorded.
+- [ ] Over a pan-capable card (not in Edit, not exiting, no menu open, mode has `scene_transform_settings`) a
+  right press opens nothing and arms a pending pan.
+- [ ] Travel past the system drag distance while held becomes the pan (the existing pan baseline
+  `_quick_scene_view_gesture` and the one pointer-capture owner); no menu for that press;
+  `context_menu_active` never true.
+- [ ] Release ends the pan through the live view-pose owner's existing save rule (no new persistence rule).
+- [ ] Release without that travel opens the retained menu at the release point through
+  `context_menu_requested`.
+- [ ] Pan feel (direction, scale per pixel, limits) matches the Studios (`ui/studio/viewport.py`).
+- [ ] No timer or hold delay; no menu flash-and-dismiss.
+- [ ] The pan cursor goes through the cursor owner and ends on R-183's retire path.
+- [ ] Existing context-menu, R39 hover-handoff, double-right Edit and single-menu-per-display tests pass
+  unchanged.
+- [ ] New tests: click (menu once, on release); drag (pan, no menu); press on the card, release off it; second
+  right press with the menu open; double-right over the card; focus loss, mode switch, exit and display loss
+  mid-pan; the expanded card; Media Center mode.
+- [ ] After: press-to-menu-visible on the untouched path equal to the baseline; release-to-menu-visible on the
+  card reported.
+- [ ] Docs: `Spec.md` / `Docs/Contracts.md` input routing.
+- [~] Operator feel check.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
