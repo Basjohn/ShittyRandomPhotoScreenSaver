@@ -144,16 +144,13 @@ P3 ports.
 
 **P2 remaining checks outside the ordered audit repairs:**
 
-- [~] Awaiting Validation, frozen: next requested build: QtCore-only engine workers, expected image-worker Qt
-  dependencies, flat worker memory, unchanged icons and one Settings round trip. First Neon Lake activation: logged
-  cold link with live progress or cache hit, never an activation-failure reload; second run: cache hit.
-- [~] Awaiting Validation, audio devices (design 5.3): default switch, pinned player, USB/Bluetooth or sole output
-  unplug, silent/remote playback and another player masking the old endpoint; include in-process control and time
-  capture reopen against cadence. No device/load run without the operator.
-- [~] Awaiting Validation, M2 latency: size first reveal against in process in a separately approved load session.
-  The cold configure bound remains six seconds; later owners skip it after a deadline miss this run.
-- [ ] After device checks, decide whether the in-process owner should use the existing worker delivery watch to
-  recover stale loopback streams; it currently waits for a later playback/activation edge.
+- [ ] Frozen check, the lead's at the next GitHub Remote build (`tools/github_remote_build.py`): from the built
+  artifact, the engine worker's import closure is QtCore only and the image worker's Qt dependencies are the
+  expected ones (the same oracle as `tests/test_visualizer_engine_import_weight.py`, run against the frozen
+  manifest), icons unchanged. What needs the frozen product running (flat worker memory over one Settings round
+  trip; the first Neon Lake activation logging a cold link or a cache hit) is 1B.14's frozen run.
+- The real-endpoint capture test and the no-load first-reveal comparison are 1B.14's; only latency under load
+  is a Watchlist entry. None of them holds P2 open.
 - [ ] Make the framed-view negative control independent of presentation timing
   (`test_visualizer_owner_engine_worker.py::test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`).
 - [ ] Decide bounded reconstruction for a target that never reveals, including stopping a failed owner's runtime on
@@ -196,9 +193,9 @@ design and closeout docs.
    default` returns the worker on every platform; `--viz-in-process` still chooses in process; a worker that
    cannot start or configure falls back in process with a logged reason). Nothing of it has run on Linux
    (`Linux_Plan.md` Phase 4 says exactly what is unverified):
-   - [~] First Linux run, whenever a Linux machine exists: the named wake pipe (FIFO), the worker's spawn under
-     forkserver, the shared mapping's tracker, Pulse capture in the worker, the listener thread ending when the
-     worker's writer closes, and a broken worker showing up as a logged in-process fallback.
+   Linux is best effort (operator, 11 Nov): no Linux environment exists, so the flip stands on code quality and
+   the tests that run on Windows, and H3 is closed. What a first Linux run would show is the Watchlist entry
+   "Linux engine worker".
    - [ ] `Docs/Guardrails/Linux_Compatibility.md` section 7 forbids a Linux-branch test in a shared file; the
      platform-injected `[False]` case in `tests/test_platform_selection.py` is the only negative control that
      runs on Windows: record it there as the admitted exception or move it.
@@ -269,54 +266,30 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 `[~]` validation steps and open side defects. Order: the Edit/exit defects, the Studio work, the fullscreen
 overlay contract, window material and corners, presets last. Every fix reproduces its failure first; the lead
 judges visual items on rendered pixels and audits each branch against the pre-fix code before merging.
+**Nothing in this section waits on the operator** (operator, 11 Nov: checks are the lead's work; a remaining
+question without a simple test is a Watchlist item, never an open phase). What needs the real product on real
+hardware is proven by the lead's harnesses in 1B.14, and behaviour that changed is listed once in section 2
+("Changed on 11 Nov").
 
 ### 1B.1 Edit edits the display it was entered on (merged 46129166; contract: plan 01 M3c "Edit beside the view")
 
-- [~] Operator, two physical monitors, Visualizer expanded on one:
-  - [~] Edit from the other display (context menu, then double-right): its widgets edit, the expanded view keeps
-    animating, no Edit chrome on the expanded display.
-  - [~] Edit from the expanded display: Fullscreen Edit of the overlays only.
-  - [~] Save and Cancel from each; a collapse press while Edit is open beside the view waits for Save/Cancel.
 - [ ] Side defect (unreproduced): in an ordinary global Edit, closing the Visualizer and then switching mode makes
   `activate_edit_visualizer_profile` return False (`rendering/quick/custom_layout_owner.py`, the `visible is None`
   branch), which looks like a forced runtime reload. Reproduce in a test or rule out.
 
-### 1B.2 Cursor keeps its changed shape after exit until a click (merged 0f8f4836; R-183; NOT accepted)
+### 1B.2 Cursor keeps its changed shape after exit until a click (merged 0f8f4836; R-183; proof owed in 1B.14)
 
 The retire owner now gives Windows the arrow natively. The native harness reproduced the stuck shape only with
 Qt's pointer tracking cleared artificially, so the operator's real exit path is unproven.
 
-- [~] Operator: run `.venv\Scripts\python.exe tools\cursor_exit_observer.py --label <name>`, start the saver, and
-  keep the mouse still two seconds after each exit:
-  - [~] key exit
-  - [~] click exit
-  - [~] mouse-move exit
-  - [~] link click (browser opens)
-  - [~] Settings opened from the saver
-  - [~] Media Center mode exit
-  - [~] exit with the pointer on the second display
-- [ ] Read the observer log (`.artifacts/evidence/input/cursor_exit/`): any path printing `only after click`
-  names the event that clears Qt's pointer tracking; reproduce that path in `tools/cursor_exit_native_harness.py`
-  and fix it at the retire owner.
-- [ ] Update R-183 with the operator's result (accepted, or the failing path and its fix).
 - [ ] Side defect: when a hovered QML item is destroyed or left, the saver window can keep the hand or arrow
   instead of the Halo until the Halo next re-applies it.
-
-### 1B.3 Studio slider save churn (audit and its camera side defects landed; contract: Visualizer_Studio.md)
-
-- [~] Operator: Sphere Studio, drag View Turn / View Tilt (holds for the session), Save Camera, reopen.
-- [~] Operator: Waveform Studio has Camera X and Z only (its grounded orbit fixes the eye height, so Camera Y
-  never did anything); say if a real eye-height control is wanted.
-- [~] Operator: Extruded Bubble Studio Camera X/Y/Z now span -2..2 (the eye's whole admitted box), was -1..1.
 
 ### 1B.4 Shape instrument for Spectrum and Neon Lake (merged; contract: Visualizer_Studio.md)
 
 One instrument in Spectrum, Extruded Spectrum, Neon Lake's Frequency Response and its Reaction Shaper; the old
 shape widget is retired; shape drags are in the churn guard; Studio tooltips wrap inside the window.
 
-- [~] Operator look at the instrument in the Spectrum and Neon Lake Studios: drag feel, cursor shapes and
-  tooltips on a real window; over a material theme on the real desktop; a strength diamond under a curve node
-  (a press just below the diamond's centre takes the diamond).
 - [ ] `fft_to_bars` gained two helper calls per tick (`shape_bar_profile`, `lane_sample_positions`); re-record
   the Spectrum overhead baseline so the +2 calls are attributed (with section 1 item 8b's attribution box).
 - [ ] Admitted later if wanted (operator's call): a pop-out larger canvas; Spline Curve's layer nodes and Voxel
@@ -335,9 +308,6 @@ one commit and one undo per stroke; a refused state at the 257 cap). Contract: `
 - [ ] Brush Radius is now a share of the basin (stable across growth): rescale its default and range so the
   default footprint on each shipped preset is about what it was (0.57x on Presets 1 and 2 today).
 - [ ] Off-screen PNG of the refused state at the cap (struck-through footprint and notice).
-- [~] Operator: paint far land in the Studio; paint past the old edge and undo; reach the cap.
-- [~] Operator: paint past the authored origin renders as far land (no shoreline line or wet fringe, detail
-  fading with distance); say if far paint should be able to make shore.
 
 ### 1B.6 Neon Lake: smooth land reaction, Growth and Indents (merged 33912e5ae; refinement round in flight)
 
@@ -358,9 +328,6 @@ change: the tears are gone and the reaction is a little weaker on banks and very
 - [ ] Growth Density (site cell size) and a Growth region bias (far land only / by elevation through the shaper):
   canonical spec entries with Studio rows, authored neutral into every preset, dormant when neutral.
 - [ ] Lead pixel review of the refinement round; merge; then tell the preset agent Neon Lake is ready.
-- [~] Operator decision: spire glow on hits; islands rising from the lake (needs the water-boundary contract
-  decision). Not admitted; the agent writes up what each needs.
-- [~] Operator look: the smooth reaction on the three existing presets under music; Growth and Indents.
 
 ### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (merged 189fbd36c; plan 01 M3c)
 
@@ -369,19 +336,6 @@ Now Playing and the toast are edited by ordinary Edit's handlers; the Media seek
 off). What stays overlay-specific, with its reason, is listed in plan 01. Old profiles' artwork factors load
 through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 
-- [~] Operator: Fullscreen Edit of Now Playing beside the Media widget's Edit: move, corner, side handles,
-  Restore Size, the child lock and each part.
-- [~] Operator: the seek bar on Now Playing against a real player (look, fill, seeking, a double-click on it
-  never changing the Visualizer's mode).
-- [~] Operator: three behaviours changed to the Media widget's rule; say if any should go back. (1) Now Playing's
-  side handles reflow the text box; they used to resize the artwork border (accepted 10 Nov). (2) The block no
-  longer flips by which side of the screen it is on (accepted 10 Nov as the inward left/right layout): its
-  orientation follows its anchor corner, chosen by the title's flip glyph or by ending a move in a corner.
-  (3) A corner drag grows about the top centre and Restore Size keeps the top left.
-- [~] Operator: Now Playing's artwork border now takes the Media widget's artwork colour, stroke and Rounded
-  Artwork option, not the Visualizer card's border (supersedes the 8 Nov "themed border").
-- [~] Operator: in ordinary Edit on thin Media rows the flip glyph sits just right of the move grip (it used to
-  cover the grip); a move that ends in a corner pin is now one undo step (Media's header too).
 - [ ] The safe-area edge guides are no longer drawn in Fullscreen Edit (as in ordinary Edit); confirm that is
   wanted or restore them through the ordinary guide owner.
 - [ ] Evidence gap: no side-by-side render of the Media widget's own Edit beside Fullscreen Edit (it needs an
@@ -428,7 +382,6 @@ corrects the ink and keeps the surface at its calibrated density (about .63-.72)
 - [ ] h. After set + lead pixel review, light beside dark; `tools/theme_legibility.py` rerun on the composed
   surfaces.
 - [ ] i. Docs: `Docs/Architecture/Card_Surface_Materials.md`; closes 1.7a's density question (update it there).
-- [~] Operator look on the three light themes.
 
 ### 1B.9 Settings and Studio window corners bleed (see-through corners merged a89ce123; continues 1.9)
 
@@ -438,11 +391,6 @@ inner line are gone. Thicker borders (they square the corner) and a pre-Accent r
 measurements and rules: `Docs/Architecture/Settings_Theme_Architecture.md`. Residue no layered window can remove:
 a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels, was 72-251).
 
-- [~] Operator look at Settings corners on both wallpapers, a dark and a light theme; say if the inner
-  near-white line on light themes is missed (it was backing showing through, not a themed highlight).
-- [~] Operator look at the Studio's corners on a real screen (proven off-screen only).
-- [~] Operator: drag and resize Settings from each corner (the alpha-1 corner pixels keeping input is reasoned,
-  not exercised on a real window).
 - [ ] Studio resize areas have no test for their geometry; add one beside `tests/test_studio_chrome.py`.
 - [ ] Close or rewrite 1.9 (section 1A) to point here.
 - [ ] Side defect: the Studio window shows only blur (no title bar or content) in native captures by
@@ -473,20 +421,14 @@ after each mode for the lead's pixel review.
 - [ ] Every preset authored through the Studio's Save To path, complete for every control (completeness guard).
 - [ ] One showcase WebP per preset (`release_media.py`), reviewed by the lead before the operator sees them.
 - [ ] Feature requests from the agent recorded here as their own boxes when admitted.
-- [~] Operator look.
 
 ### 1B.11 Theme filter in the Linked row (merged d401b3c2; contract: Settings_Theme_Architecture.md "Theme filter")
 
-- [~] Operator look on a real display: the filter on both theme pages, the autocomplete popup's placement, and
-  whether the colour families feel right ("Blue" lists 20 of 100 Settings themes; a theme named for a colour its
-  accent is not, such as Cobalt Peach, is found by name words only).
 - [ ] The theme list's and the popup's scrollbars render as the native black/white bar in off-screen captures;
   confirm on a real display and theme them through `shared_styles` if they are native there too.
 - [ ] Side defect (red on main): `tests/test_surface_opacity_adjust.py::test_real_link_button_uses_state_ink_for_
   checked_text_and_lock_icon_offscreen` fails (worst contrast 1.58 against 4.5): the Linked button's checked
   text/lock ink. Fix with 1B.8's ink correction or at the link button's style owner.
-- [~] Operator look: the Weather location autocomplete now uses the themed popup, and the Weather and Widgets
-  status notes take the theme's success and warning roles.
 
 ### 1B.12 Fullscreen glyphs relative to the Visualizer's display (merged 9bb4e806c; contract: plan 01 M3c)
 
@@ -496,13 +438,6 @@ overlap horizontally, so a vertical stack offers no side arrows); only applicabl
 current display's glyph is a Down arrow and the diagonals move the view. The owner request stays "expand on
 display N" (`expand_on_display`, the shape SMP will reuse).
 
-- [~] Operator, two or more monitors: the arrows offered from each display match the physical arrangement
-  (including mixed DPI); each press; the move while expanded (collapse, move, expand) between displays of
-  different size or DPI and its fades; V unchanged.
-- [~] Operator decision: a single display now shows the Up arrow (it showed up-right); one line in
-  `VisualizerPresentation.qml` (`expandHereArrowDegrees`) switches it back.
-- [~] Operator decision: the glyph tooltips are ALL CAPS and relative ("FULL DISPLAY ON THE DISPLAY TO THE
-  LEFT"), matching the rest of the glyph row; Title Case is a one-line change.
 - [ ] Two left/right rules: Edit's display-hop arrows (`QuickCustomLayoutOwner._adjacent_binding_for_identity`,
   `rendering/quick/custom_layout_owner.py`) compare centre x and offer a hop between two vertically stacked
   displays of different widths, where the glyphs offer none. Move Edit's hop onto `core.display_neighbours`.
@@ -520,13 +455,45 @@ Over a pan-capable card a right press arms a pending pan; travel past the drag d
 press); a still release opens the menu at the release point; every other right press opens on press as before.
 Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us after (run-to-run noise 300-426).
 
-- [~] Operator feel check on the real display: pan direction and scale against the Studios; a quick right
-  click on the card still opens the menu; double-right still enters Edit.
-- [~] Operator: all three pans (Alt+right, held-right, the Studios) now share one rule, the Studio's
-  (`view_orbit.scene_pan_delta`). A right drag moves the scene against the pointer, a down drag moves it with the
-  pointer: say if that mix should be made one-way (a one-line change in that function).
 - [ ] Native pointer capture on a real foreground window is unproven (tests use a stand-in capture): add the
   pan to the opt-in native harness pattern of R-183 or verify with the operator's check above.
+
+### 1B.14 Lead verification harnesses (operator, 11 Nov: "why can you not make tests that exercise these?")
+
+The lead's lapse: these were filed as operator checks. They are testable: a frozen build through GitHub, the
+real product run on Display 1 (the second monitor) for diagnostics, and real audio endpoints. Lead-run only
+(agents build the harnesses and prove them hidden; the lead runs the visible part). Display 0 is never taken;
+each visible run is short, bounded, fails closed and always tears down. Queued for the next free Opus High slot.
+
+- [ ] D1 run harness: start the real saver from source on Display 1 only, with diagnostic flags and recorded
+  music, for a bounded time; drive it by messages posted to the saver's own windows (never global input);
+  collect its logs, frame trace and grabbed frames; a watchdog ends it. A tool under `tools/`, opt-in, zero
+  product cost.
+- [ ] Cursor after exit (R-183) on D1 with `tools/cursor_exit_observer.py`: key, click, mouse-move, link click
+  (browser launch stubbed), Settings and Media Center exits, the pointer placed over the saver on D1 for the
+  run and put back after; a verdict per path. Then R-183 is accepted, or the failing path is fixed at the
+  retire owner and re-run.
+- [ ] Held-right pan on D1: real pointer capture on a foreground window (press, drag, release; a click still
+  opens the menu on release; focus loss mid-pan releases the capture).
+- [ ] Expanded Visualizer on D1: expand, collapse, the fullscreen arrows offered for the real arrangement, the
+  move toward D1 from a hidden D0-side owner where that can be driven without showing anything on D0; frames
+  grabbed and reviewed by the lead. What truly needs both displays visible is listed in the report, not assumed.
+- [ ] Now Playing on D1: Fullscreen Edit handles and the seek bar against a real player session (fill follows
+  the timeline, a seek lands).
+- [ ] Settings and Studio windows on D1: corner drag and resize from each corner by messages (the alpha-1 corner
+  pixels keep input); the Studio's corners captured natively; the theme list and autocomplete scrollbars
+  captured (theme them through `shared_styles` if they are native bars there).
+- [ ] Frozen build: `tools/github_remote_build.py` on the pushed commit (the lead's standing permission); from
+  the artifact, the engine worker's import closure and the image worker's Qt dependencies; then the frozen
+  product run on D1 with diagnostic flags: worker memory flat across a Settings round trip, the first Neon Lake
+  activation logging a cold link or a cache hit and never an activation-failure reload, the second run a cache hit.
+- [ ] Real audio endpoints: a test that opens real WASAPI loopback in the engine worker and drives the product's
+  own device-change path with real endpoint ids: with two or more active render endpoints, a default-device
+  change to the other endpoint (the notification delivered with its real id; no system setting changed) and
+  capture resuming on it; with one, invalidate-and-reopen on the same endpoint; endpoint removal by its
+  notification. In-process path too. Skips cleanly with a stated reason where the machine has no second endpoint.
+- [ ] First reveal, worker against in process, without load on D1: the time from activation to the first drawn
+  frame for each mode on both paths.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
@@ -717,6 +684,27 @@ answers.
   pages; Open Studio in the preset row and the Save To flow; the seamless clip loops; the chrome; the drag feel; the
   terrain brush.
 - **§5 Frozen release gate:** operator-run builds and installer checks.
+
+- **Changed on 11 Nov (no action needed; say only if one should go back):**
+  - Now Playing follows the Media widget's Edit rules: its side handles reflow the text box (they resized the
+    artwork border, accepted 10 Nov); the block's orientation follows its anchor corner, set by the title's flip
+    glyph or by ending a move in a corner (it flipped by screen side, accepted 10 Nov); a corner drag grows about
+    the top centre and Restore Size keeps the top left; its artwork border takes the Media widget's artwork
+    colour, stroke and Rounded Artwork option; the safe-area edge guides are not drawn.
+  - Fullscreen glyphs: a single display shows the Up arrow (it showed up-right); tooltips are relative and
+    ALL CAPS like the rest of the glyph row.
+  - All three pans (Alt+right, held-right, the Studios) share the Studio's rule: a right drag moves the scene
+    against the pointer, a down drag moves it with the pointer.
+  - Studios: Waveform has Camera X and Z only (its camera fixes the eye height, so Camera Y never did anything);
+    Extruded Bubble's Camera X/Y/Z span -2..2 (was -1..1); Sphere's View Turn / Tilt hold for the session and
+    save through Save Camera.
+  - Settings and Studio windows end at their rounded border: the near-white inner line on light themes is gone
+    (it was backing showing through).
+  - Neon Lake under music: the land no longer tears; the reaction is a little weaker on banks and very low
+    land; paint past the old grid edge renders as far land (no shoreline line or wet fringe).
+  - Brush Radius in the Neon Lake Studio is a share of the basin (its default is being rescaled).
+- **Decisions the lead will put to the operator when their write-ups exist:** Neon Lake spire glow on hits;
+  islands rising from the lake (needs the water-boundary contract decision).
 
 ## 3. Lead and agents: active, paused and queued work
 
@@ -1107,6 +1095,17 @@ reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
 Live checklist: every box is an observation or a fix owed on evidence; delete an item when its evidence closes it.
+
+**Engine worker and platform (reopen only on evidence; no simple test exists)**
+
+- [ ] First-reveal latency under load: if the Visualizer's first appearance is noticeably later on the worker
+  than it was in process, size it in a load session (the no-load comparison is 1B.14's).
+- [ ] A hot-plugged audio device: nothing in use is hot-plugged until SMP/Library exists; the real-endpoint
+  reopen test of 1B.14 covers the capture path. Revisit with SMP.
+- [ ] Linux engine worker (best effort, never run): the named wake pipe (FIFO), the worker's spawn under
+  forkserver, the shared mapping's tracker, Pulse capture in the worker, the listener thread ending when the
+  worker's writer closes, and a broken worker showing as a logged in-process fallback. `--viz-in-process` is
+  the escape if a Linux user reports the Visualizer missing.
 
 **Neon Lake (`shockwave_grid`) camera step on real music (found 6 Nov, pass 7, pre-existing at 0776da08)**
 
@@ -1918,8 +1917,5 @@ No memory updates without an explicit request.
 ADDITION & SIDE QUEST BOX
 Never Remove This Box. Restore It If Removed. Only Remove Contents As you place them in the active plan as real live checklist targets.
 ####################
-
-
-
 
 ###################
