@@ -138,6 +138,9 @@ class CustomLayoutSessionItem:
     # instead of letterboxing. ``None`` means the canonical config-derived size.
     content_extent_axes: frozenset[str] = frozenset()
     content_extent_minimum_size: ViewportExtent | None = None
+    # A family-declared outer floor (logical px) that replaces the ordinary widget floor for every gesture on this
+    # item (the full-display overlays' frames may be a single line of text). ``None``: the ordinary floor.
+    layout_minimum_size: ViewportExtent | None = None
     baseline_content_extent: ViewportExtent | None = None
     current_content_extent: ViewportExtent | None = None
     # Descriptor-admitted major visual children may carry authored-relative
@@ -237,6 +240,7 @@ class CustomLayoutSessionItem:
         self.content_extent_minimum_size = normalize_viewport_extent(
             self.content_extent_minimum_size
         )
+        self.layout_minimum_size = normalize_viewport_extent(self.layout_minimum_size)
         self.baseline_content_extent = normalize_viewport_extent(
             self.baseline_content_extent
         )

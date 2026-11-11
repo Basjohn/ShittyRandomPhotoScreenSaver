@@ -320,15 +320,14 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
         assert {k: v for k, v in draft_value[overlay].items() if k not in keys} == {
             k: v for k, v in seeded[overlay].items() if k not in keys}
         # The side handles really set every extent the script touched (each axis on its own; the Volume OSD has none
-        # and this display has no OSD).
-        if overlay == "preset":
+        # and this display has no OSD). Both overlays' parent axes are the ordinary content box (plan 1B.7b, as the
+        # Media card's): the text box reflows; Now Playing's artwork size is its artwork child's alone.
+        if overlay in ("preset", "now_playing"):
             assert all(draft_value[overlay][key] != seeded[overlay][key]
                        for key in ("text_width", "text_height"))
-        elif overlay == "now_playing":
-            assert all(draft_value[overlay][key] != seeded[overlay][key]
-                       for key in ("artwork_width", "artwork_height"))
-            assert (draft_value[overlay]["text_width"], draft_value[overlay]["text_height"]) == (
-                seeded[overlay]["text_width"], seeded[overlay]["text_height"])
+        if overlay == "now_playing":
+            assert all(draft_value[overlay][key] == seeded[overlay][key]
+                       for key in ("artwork_scale", "artwork_width", "artwork_height"))
     # Now Playing's parts moved and sized through the child editor are records of its child_geometry.
     assert set(draft_value["now_playing"]["child_geometry"]) == {"title", "artwork", "artist"}
     assert edit.owner.fullscreen_draft_pending and edit.flips == [True]
@@ -352,6 +351,56 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
     assert display.scene._visualizer_overlay_config == draft_config
     assert edit.drawn() == draft_frames
     assert edit.reloads == []
+
+
+@pytest.mark.qt
+def test_the_overlay_blocks_parent_gestures_are_the_ordinary_edit_handlers(display, tmp_path):
+    """Plan 1B.7b: the block's corner, side handle and Restore Size are ordinary Edit's (the owner's handlers, bounded
+    by the safe area), so they behave as the Media card's do: a corner grows the frame about its top centre, a side
+    handle reflows the content box (its text box; the artwork keeps its size, which is its child's alone), Restore
+    Size returns the canonical size and keeps the frame's top left. No parallel solver remains on the overlay editor."""
+    from core.settings.fullscreen_overlays import canonical_fullscreen_overlays
+    from rendering.quick.fullscreen_overlay_edit import FullscreenOverlayEdit
+
+    for name in ("resolve_move", "begin_resize", "update_resize", "resize_wheel", "restore_size"):
+        assert not hasattr(FullscreenOverlayEdit, name), name
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"offset_x": 0.1, "offset_y": -0.1})
+    _draw(display, media=_Media(), config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    item = edit.item("now_playing")
+
+    before = QRect(item.current_global_rect)
+    edit.corner("now_playing", "bottom_right", 60, 40)
+    _run(display, 60)
+    grown = QRect(item.current_global_rect)
+    draft = edit.owner._fullscreen.draft_value()["now_playing"]
+    assert grown.width() > before.width() and grown.height() > before.height()
+    assert abs(grown.y() - before.y()) <= 1
+    assert abs((grown.x() + grown.width() / 2) - (before.x() + before.width() / 2)) <= 1
+    assert draft["scale"] == pytest.approx(item.resize_scale) and draft["scale"] > seeded["now_playing"]["scale"]
+    assert edit.drawn()["now_playing"] == grown.getRect()
+
+    edit.side("now_playing", "right", 120)
+    _run(display, 60)
+    draft = edit.owner._fullscreen.draft_value()["now_playing"]
+    assert item.current_content_extent is not None
+    assert draft["text_width"] != seeded["now_playing"]["text_width"]
+    assert draft["text_height"] == seeded["now_playing"]["text_height"]            # the untouched axis
+    assert all(draft[key] == seeded["now_playing"][key] for key in ("artwork_scale", "artwork_width",
+                                                                     "artwork_height"))
+
+    top_left = QRect(item.current_global_rect).topLeft()
+    assert edit.model.restoreSize(edit.row("now_playing"))
+    _run(display, 60)
+    draft = edit.owner._fullscreen.draft_value()["now_playing"]
+    canonical = canonical_fullscreen_overlays()["now_playing"]
+    assert all(draft[key] == canonical[key] for key in ("scale", "text_width", "text_height"))
+    assert (item.current_global_rect.topLeft() - top_left).manhattanLength() <= 2
+    assert edit.owner.cancel()
 
 
 # ------------------------------------------------------------------------------ the ordinary layout is untouched
@@ -1179,10 +1228,12 @@ def test_the_volume_osd_is_moved_and_sized_in_fullscreen_edit_and_keeps_its_ordi
         _run(display, 60)
         assert edit.item("volume_osd").current_global_rect == before
         edit.drag("volume_osd", -260, -300)
-        edit.corner("volume_osd", "bottom_right", 80, 30)       # grows; the opposite corner stays
+        # Grows as every widget's corner does (ordinary Edit's uniform scale, plan 1B.7b): about its top centre.
+        edit.corner("volume_osd", "bottom_right", 80, 30)
         _run(display, 60)
         grown = QRect(edit.item("volume_osd").current_global_rect)
-        assert grown.width() > moved.width() and abs(grown.x() - moved.x()) <= 1 and abs(grown.y() - moved.y()) <= 1
+        assert grown.width() > moved.width() and abs(grown.y() - moved.y()) <= 1
+        assert abs((grown.x() + grown.width() / 2) - (moved.x() + moved.width() / 2)) <= 1
         drawn = _osd_rect(osd)
         draft = edit.owner._fullscreen.draft_value()["volume_osd"]
         assert draft["offset_x"] != 0.0 and draft["offset_y"] != 0.0 and draft["scale"] > 1.0
@@ -1601,16 +1652,6 @@ def test_the_same_offset_reflows_to_the_same_relative_place_on_another_display()
     assert offset == (0.25, 0.25)
     placed = (28.0 + offset[0] * large[0], 28.0 + offset[1] * large[1])
     assert offsets_for_position(placed, (28.0, 28.0), large) == offset
-
-
-def test_a_corner_drag_scales_by_the_dragged_corners_distance_from_the_fixed_one():
-    from rendering.quick.fullscreen_overlay_edit import corner_drag_scale
-
-    origin = QRect(0, 0, 300, 400)
-    assert corner_drag_scale(origin, 1.0, "bottom_right", 0, 0) == pytest.approx(1.0)
-    assert corner_drag_scale(origin, 1.0, "bottom_right", 300, 400) == pytest.approx(2.0)
-    assert corner_drag_scale(origin, 1.0, "top_left", -300, -400) == pytest.approx(2.0)
-    assert corner_drag_scale(origin, 2.0, "top_right", -150, 200) == pytest.approx(1.0)
 
 
 def test_the_draft_value_carries_exactly_the_placement_members():

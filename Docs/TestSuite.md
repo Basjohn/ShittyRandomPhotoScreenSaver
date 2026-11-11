@@ -1000,6 +1000,12 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   the view stays expanded without Edit chrome (red on the pre-fix entry); no expansion binds both displays from
   either; Save/Cancel on each; an unsaved Fullscreen draft against a request from the other display and the reverse;
   a shared widget's X keeps the expanded display's copy; the view's holds under the Edit beside it.
+- Plan 1B.7b (the overlays' parent geometry through ordinary Edit's handlers):
+  `tests/test_visualizer_expansion_fullscreen_edit.py::test_the_overlay_blocks_parent_gestures_are_the_ordinary_edit_handlers`
+  — no parallel solver on the overlay editor; Now Playing's corner grows about its top centre (red on the former
+  opposite-corner solver), its side handle reflows the text box and leaves the artwork factors (red on the former
+  artwork-border rule), Restore Size returns the canonical size and keeps the top left; the frame is what is drawn.
+  The parity map and the Volume OSD's corner now expect the ordinary rules.
 - `tests/test_visualizer_expansion_fullscreen_edit.py` — Expanded Visualizer Fullscreen Edit (plan 01 M3c) on the
   hidden production scene with the real Edit owner, model and gestures: the parity map (one gesture script, moves,
   wheel, corners, side handles and a two-axis diagonal included, through a draft; Cancel restores exactly, Save

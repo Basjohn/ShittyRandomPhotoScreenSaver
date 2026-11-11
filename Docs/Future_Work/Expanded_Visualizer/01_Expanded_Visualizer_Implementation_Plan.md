@@ -852,8 +852,17 @@ can most geometry normally."
   drawn. Moves snap with the ordinary rule (`resolve_snap_local_rect_for_edit`) inside the safe area (its edges, so
   its corners, and its centre) and to the other overlay (edges, centre, the 30 px gutter); every guide is drawn on
   the Edit layer (the guide underlay lies under the expanded card). Stored offsets are the ones the overlay really
-  took (clamps included). Corner drags scale by the dragged corner's distance from the opposite one and keep that
-  corner; the wheel (5 % per notch) and Restore Size (the canonical scale) keep the frame's top centre.
+  took (clamps included). **Superseded by plan 1B.7b (11 Nov, Media parity):** the parent gestures (move, corner
+  drag, wheel, side and diagonal handles, Restore Size) are the `QuickCustomLayoutOwner`'s ordinary handlers on these
+  items, bounded by and snapped within the safe area (the owner's `_edit_frame`; the overlay editor's `edit_frame`)
+  with the other items as peers (a peer enclosing the frame, the expanded card's item, offers no line). They change
+  only the session's generic state (frame, `resize_scale`, content box); `FullscreenOverlayEdit.project` turns it
+  into the placement members (scale = `resize_scale`; a changed content-box axis = that axis's text-box extent; the
+  offset that draws the frame where the handler put it, keeping the edges it kept). So a corner drag grows the frame
+  about its top centre and Restore Size keeps its top left, as on every widget; the overlay's own corner solver,
+  edge solver, wheel and Restore Size were deleted. Each item declares `layout_minimum_size` (1 x 1 px: a frame may
+  be one line of text), Restore Size's `authored_size_payload` (the canonical size members) and its scale as
+  `baseline_resize_scale`.
 - *Artwork (decided; superseded 8 Nov by "Now Playing's parts" below: the artwork is the block's child and has no
   Edit item of its own; `artwork_scale` / `artwork_width` / `artwork_height` still draw as stored and Restore Size
   returns them to canonical).* Now Playing's artwork has its own size factor, `now_playing.artwork_scale` (canonical default,
@@ -867,7 +876,9 @@ can most geometry normally."
   by the safe area) and resize-edge snap (`resolve_resize_edge_snap`: the safe area's centre, the other overlay's
   edges and centre), changes one member and keeps the other exactly (ordinary `content_extent_resize_payload`):
   `text_width` / `text_height` for the toast and the Now Playing text block, `artwork_width` / `artwork_height` for
-  the artwork, all new members of the one value (canonical default = today's look: text `0` = natural, artwork `1`
+  the artwork (plan 1B.7b: Now Playing's parent axes are the ordinary content box again, its text box, as Media's
+  card reflows its content; the 8 Nov "parent axes resize the artwork border" rule is retired and the artwork's size
+  is its child's alone), all new members of the one value (canonical default = today's look: text `0` = natural, artwork `1`
   = square; a value stored before them reads them so, no bridge). Mirrored semantics: the text box is ordinary
   Edit's content box (Media's card elides in a set width and reflows into a set height): a set width elides, a set
   height adds lines (the toast's name and Now Playing's title wrap, then elide; the toast's name is centred in its

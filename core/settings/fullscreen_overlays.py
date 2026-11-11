@@ -13,13 +13,12 @@ overlay's size; zero offset and unit scale are the defaults). Now Playing's artw
 edits exactly these placement values: the offsets, the scales and the single-axis extents below. The corner is Settings'
 (the anchor); changing it rebases the offset (:func:`rebase_offset_for_corner`).
 
-Single-axis sizing (Fullscreen Edit's side handles): the Preset toast parent edits ``text_width`` /
-``text_height`` in ems of its font size. Now Playing's **parent handles resize the artwork border** through
-``artwork_width`` / ``artwork_height``, independent factors of the default square art size (``1`` = square).
-The existing ``text_width`` / ``text_height`` members on Now Playing remain readable for previously authored
-values and for the text box itself; they are not rewritten by parent size handles. Metadata remains a naturally
-grouped stack and reflows only when its available width/height requires it. Individual artwork, metadata and
-control child geometry remains separately editable. No resize changes a curated Visualizer preset.
+Single-axis sizing (Fullscreen Edit's side handles, ordinary Edit's content box; plan 1B.7b): each overlay's parent
+edits its text box, ``text_width`` / ``text_height`` in ems of its font size (``0`` = natural), as the Media card's
+content extent reflows its content. Now Playing's ``artwork_scale`` / ``artwork_width`` / ``artwork_height`` still draw
+as stored (Restore Size returns them to canonical) but no handle writes them: the artwork's size is its child's.
+Individual artwork, metadata and control child geometry remains separately editable. No resize changes a curated
+Visualizer preset.
 
 Now Playing's parts (Fullscreen Edit's child editing, operator 8 Nov: "I should be able to move every element around in
 that block and change it"): ``now_playing.child_geometry`` is ordinary Edit's CUSTOM ``child_geometry`` carrier for the
@@ -64,8 +63,7 @@ OFFSET_MIN, OFFSET_MAX = -1.0, 1.0
 SCALE_MIN, SCALE_MAX = 0.5, 3.0
 #: The size factors (each clamped to SCALE_MIN..SCALE_MAX): the uniform scales and the artwork's width/height factors.
 SCALE_KEYS = ("scale", "artwork_scale", "artwork_width", "artwork_height")
-#: Legacy text extents in ems (0 = natural). Preset toast's parent edits them; Now Playing parent edits
-#: artwork_width/artwork_height instead, retaining these stored fields for existing authoring.
+#: Text-box extents in ems (0 = natural): each overlay's parent side handles edit them (ordinary Edit's content box).
 TEXT_EXTENT_KEYS = ("text_width", "text_height")
 TEXT_EXTENT_MAX = 60.0
 #: Now Playing's per-part geometry member (ordinary Edit's CUSTOM ``child_geometry`` carrier).
