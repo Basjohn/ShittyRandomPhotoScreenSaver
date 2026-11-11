@@ -29,6 +29,15 @@ relinquishes the pointer synchronously (window mouse grab off, which also drops 
 press `SetCapture` from an exit click; arrow cursor) and, until the HWND is gone, consumes pointer
 motion and reverts any non-arrow `CursorChange`, so retained hover cannot re-install a link's
 pointing hand that would outlive the saver on screen (`tests/test_qtquick_exit_pointer_release.py`).
+A Qt cursor is only a property until Qt hands it to Windows, which it does only while its own
+window-under-mouse is that window; Windows never re-queries a still pointer after the window hides
+or the process ends. So, on Windows, the same `_relinquish_pointer` also gives Windows itself the
+arrow once, on the GUI thread, while the HWND exists
+(`pointer_capture.show_native_arrow_for_retiring_window`: one `SetCursor(IDC_ARROW)`, skipped while
+the pointer is over another live window of this thread; inert off Windows). That is the only native
+cursor call in the product; it is not a counter, timer or poll. Cursor fixes are proven on what
+Windows displays (`tools/cursor_exit_native_harness.py`, `tools/cursor_exit_observer.py`), never on
+`QWindow.cursor()` alone (R-183, `tests/test_qtquick_exit_native_arrow.py`).
 
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
 Ordinary-widget glyph capabilities are resolved by the scene factory and supplied as immutable presentation

@@ -1,4 +1,5 @@
-"""Short-lived native mouse capture/confinement for the existing orbit gesture."""
+"""Native pointer facts of a Quick display window: the orbit gesture's short-lived capture/confinement, and the
+one native arrow a retiring window gives Windows (``show_native_arrow_for_retiring_window``)."""
 from __future__ import annotations
 
 import ctypes
@@ -144,6 +145,64 @@ class QtOrbitCapture:
         if self.grabbed:
             self.window.setMouseGrabEnabled(False)
             self.grabbed = False
+
+
+_IDC_ARROW = 32512
+_GA_ROOT = 2
+_RETIRE_API = None
+
+
+def _retire_api():
+    global _RETIRE_API
+    if _RETIRE_API is None:
+        user32 = ctypes.WinDLL('user32', use_last_error=True)
+        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        for name, args, result in (
+            ('GetCursorPos', [ctypes.POINTER(wintypes.POINT)], wintypes.BOOL),
+            ('WindowFromPoint', [wintypes.POINT], wintypes.HWND),
+            ('GetAncestor', [wintypes.HWND, wintypes.UINT], wintypes.HWND),
+            ('GetWindowThreadProcessId', [wintypes.HWND, ctypes.c_void_p], wintypes.DWORD),
+            ('LoadCursorW', [wintypes.HINSTANCE, ctypes.c_void_p], wintypes.HANDLE),
+            ('SetCursor', [wintypes.HANDLE], wintypes.HANDLE),
+        ):
+            function = getattr(user32, name)
+            function.argtypes, function.restype = args, result
+        kernel32.GetCurrentThreadId.argtypes, kernel32.GetCurrentThreadId.restype = [], wintypes.DWORD
+        _RETIRE_API = (user32, kernel32)
+    return _RETIRE_API
+
+
+def show_native_arrow_for_retiring_window(hwnd: int) -> bool:
+    """Make Windows itself display the arrow for a retiring display window (Windows only; R-183).
+
+    ``QWindow.setCursor`` reaches Windows only when Qt's own window-under-mouse is that window
+    (qwindowswindow.cpp ``applyNewCursor``); otherwise Qt stores the shape and applies it at the next
+    ``WM_SETCURSOR``. A retiring window gets no next ``WM_SETCURSOR``: Windows does not re-query a still
+    pointer when the windows under it hide, close or their process ends, so the last shape this GUI thread
+    gave Windows (a link's pointing hand, the Halo, the blank cursor) stays on screen until the next mouse
+    input. This one ``SetCursor(IDC_ARROW)`` on the GUI thread, while the window still exists, is that missing
+    native instruction. It is shown only while this thread owns the cursor (the pointer is over its windows,
+    or a shape it set is still frozen on screen); otherwise Windows ignores it. It is skipped while the pointer
+    is over ANOTHER window of this GUI thread, which owns its own cursor.
+
+    Returns True when the arrow was set. Off Windows nothing is needed (the window system resets the
+    pointer when a surface unmaps) and the caller does not call it.
+    """
+    if not hwnd:
+        return False
+    user32, kernel32 = _retire_api()
+    point = wintypes.POINT()
+    if not user32.GetCursorPos(ctypes.byref(point)):
+        return False
+    under = user32.WindowFromPoint(point)
+    root = int((user32.GetAncestor(under, _GA_ROOT) if under else None) or under or 0)
+    if root and root != int(hwnd) and user32.GetWindowThreadProcessId(root, None) == kernel32.GetCurrentThreadId():
+        return False
+    arrow = user32.LoadCursorW(None, ctypes.c_void_p(_IDC_ARROW))
+    if not arrow:
+        return False
+    user32.SetCursor(arrow)
+    return True
 
 
 _QT_ORBIT_ANNOUNCED = False
