@@ -167,3 +167,40 @@ Every finding was re-read against the source; none was refuted. Changes of weigh
   Settings declaration point, which the SMP plan's `--smp` gate and SMP-only build need.
 - **Not added:** nothing nasty surfaced. No finding breaks today's product or corrupts data; the Tier 1 items are the
   real cost of the application-wide work, and they are bounded.
+
+## Landed slice notes (moved from `Current_Plan.md`, 11 Nov 2026)
+
+Facts of the 7-8 Nov landings that no contract doc carried; the contracts themselves stay where the sections above
+point.
+
+- **AC-02:** an oversized authored Visualizer (no Media card, as large as the display) reported an off-display origin
+  (the saver projected its origin and stacking obstacle at the 30 px margin while the presentation drew it clamped at
+  0); the shared placement now clamps, as Arrange always did (drawn pixels unchanged). The owner and its click
+  admissions no longer hold `DisplayManager` strongly: the layout-profile resolver, transition-failure callback and
+  the double/middle-click and wheel admissions reach it through the binding's weak services and ignore a late click
+  once it is gone. 324 Arrange cases are byte-identical. Expanded Visualizer M1's takeover events cannot be fenced by
+  the engine generation (`BeatEngine._commit_activation_generation` advances generation and activation together on
+  every preset and mode activation), so the coordinator uses its own owner-admission serial.
+- **AC-04, AC-05, AC-06:** the active mode draws first and a failed release is recorded once and retried at the next
+  boundary (AC-04); one beat-engine authority, 94 replays byte-identical (AC-05); the Studio's clip caches are bounded
+  and the clip parse runs off the GUI thread (AC-06). Reset Camera: in-card controls own their double-click, so it
+  never cycles the mode.
+- **AC-07, AC-10:** two no-edit saves drop from 38 publications to 2; the mode-transition deadline joins the
+  single-shot registry.
+- **AC-08:** one GL state-query helper on every per-frame fence, in the same order; on the node path Python calls fall
+  1609 -> 1216 and render-thread CPU 0.68 -> 0.51 ms; clip smoke and the render-node pixel tests pass, protected
+  lineage untouched.
+- **AC-11:** Sphere and Extruded Spectrum reset to their preset home through the in-card glyph and the R key; home and
+  orbit renders are byte-identical before and after (single-sample). Operator (7 Nov): Extruded Spectrum does not
+  coast; a released drag stops dead (inertia stays off). The one-pixel `test_waveform_floor_give.py` flake was MSAA
+  rasterisation noise, so the test renders single-sample.
+- **AC-12:** the authored clock is monotonic (`core/authored_clock.py`), every visualizer-path `time.time()`
+  converted; 88/88 replays across all nine modes are byte-identical to main; no external wall-clock timestamp reaches
+  the clock path.
+- **AC-13 slice:** only the terminal owner's shutdown cancels every single-shot; a helper cancels only its own work.
+  The s_hotkey exit hang was the display-window guard's `pytest.skip` escaping production's show-failure path and
+  abandoning a running logical runtime; the guard now raises an ordinary error that production retires after, and the
+  file exits in 9 s instead of 900.
+- **Lifecycle backstop and Settings round-trip harness:** terminal retirement runs once even after a bare `exit(1)`;
+  `tools/visualizer_live_check.py --settings-roundtrip AT,...` drives the real Settings path invisibly and fails the
+  run on a barrier timeout, a reveal without a re-freeze or an early exit.

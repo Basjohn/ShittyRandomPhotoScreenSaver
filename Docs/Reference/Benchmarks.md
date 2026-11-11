@@ -150,3 +150,32 @@ transition and what it created or kept.
 - CPU timings are hints (see above); a rise in `py_calls` or `gl_calls` is the evidence.
 - The control is Crossfade: a change to Crossfade itself shifts every relative figure together;
   that shows as every row moving the same way.
+
+## Recorded sessions (moved from `Current_Plan.md`, 11 Nov 2026)
+
+**7 Nov quiet-machine session** (stopped early by the lead; receipts under
+`.artifacts/evidence/performance/quiet_session/20261107_quiet_session/<task>/receipts.md`). Owed re-runs are on the
+plan (§3, "Lead, the quiet machine").
+
+- **Overhead baseline** (`tools/baselines/overhead/2026-11-07_4bb2b775.json`). Against 123e1209 every Visualizer
+  gains +46 Python calls a frame, arriving exactly at efea1304 (AC-08's `rendering/quick/gl_query.py`): not a
+  regression (Spectrum 757 -> 803, Extruded Spectrum 1179 -> 1225; AC-12 adds none; each wrapper call replaces a
+  PyOpenGL checked getter, about 2.7 us against about 13 us a query; control-relative render CPU fell: Spectrum
+  2.04 -> 1.26 cf, Extruded Spectrum 3.29 -> 2.12 cf). GL calls and control-relative CPU are flat. Burn's +14 Python
+  calls a frame (AC-20's per-frame spec lookup) were fixed in 0b3048b6 (407 again).
+- **M0 Extruded Bubble baseline** (`2_m0_eb_baseline/`): four views (canonical, wide, tall, display) x idle/game60 on
+  one monitor, plus canonical and display on two monitors. Only the display-sized view moves: under game60 its render
+  mode is 8.2 ms against 4.4 at the card (over the 8 ms budget of the Expanded Visualizer plan §0.7) and fps 64
+  against 73. Tick (5.1 ms game60, 2.7 idle) and GIL do not depend on size.
+- **Waveform tick cut under game60** (`3_waveform_tick_cut/`, one clean round): main against `946e14b3^` tick -5 to
+  -10 %, fps +6-12 % on P1/P4/P7. Indicative only (confounded by the other 193 commits). Waveform stays far over
+  budget under game60 (GIL > 0.7, render 16-21 ms).
+- **Waveform follow-ups merged the same day:** the music-vs-response check found no mid-song kick muted (Group Wave
+  shows single kicks least; Whole Swell plateaus on flat loud songs, which reads as sustained). Floor first: the lift
+  limit went from 1.5 to 3 and the top takes back at most 1.5; floor contact at 1282x1005 fell from 7-49% to 0-2.2%
+  with no crest above the top. Evidence:
+  `.artifacts/evidence/visualizers/waveform_ribbon/followups/20261107_followups/`.
+- **GC freeze steady check** (`4_gc_freeze_steady/`): Bubble P1, 600 s game60 clean: no steady gen1/gen2, heap 180,685
+  objects frozen at reveal and 87 left.
+- **Card materials** (`5_card_materials/`, one Glass/Normal pair): Glass costs about +16 % of a core on the render
+  thread (53.7 against 37.5), publish->swap +3 ms, hitches 2.46 against 2.05 a minute, at the same late %.
