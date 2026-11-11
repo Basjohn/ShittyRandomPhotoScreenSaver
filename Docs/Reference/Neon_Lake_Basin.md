@@ -272,7 +272,26 @@ kept or computed. A frame nothing drives tells the shader the reaction is off.
 Cost (RTX 4090, 1300x750, PairedBench medians, separate sessions, GPU 31-37% busy): with React to Music on, GPU
 0.93 -> 0.98 ms (Preset 1), 0.86 -> 0.97 (Preset 2), 1.80 -> 1.96 (Preset 3), about the same driven; Growth spires
 driven 1.09 ms, Growth + Indents 1.21 ms. CPU thread unchanged (2.3 ms), Python calls per frame 5781 -> 5315 (the
-tables are packed once per bake), GL calls 359 -> 361 (two uniforms). Contracts:
+tables are packed once per bake), GL calls 359 -> 361 (two uniforms).
+
+**Measured again in one session (2026-11-12 refinement;** the old renderer, program and reaction GLSL loaded beside
+the current ones under alias names, each drawn by its own host, cases alternated in one PairedBench; RTX 4090,
+1300x750, GPU 37-50% busy with other work, 2775 MHz; evidence `20261112_refine/gpu_ab_*.json`): against 6aaeda50
+(1B.5 done, before the smooth reaction), React to Music off 1.73 -> 1.77 ms (Preset 3), 0.89 -> 0.88 (Preset 1);
+on with the preview's drives 1.79 -> 1.95 (+9%), 0.87 -> 0.98 (+12%); driven 1.76 -> 1.91, 0.87-0.91 -> 0.99-1.06;
+Growth + Indents driven 2.08 (Preset 3) and 1.24-1.30 (Preset 1) against the old driven land. Against main
+(0cce76a48, this round's start) every case is within 0-2% (the new Indents law and the Growth Region branch).
+Against c64ed434 (before 1B.5) React to Music off already costs about 10% more (0.80 -> 0.89, 1.60 -> 1.78; that
+session's "before" cases were noisy, 31-40%): the origin overlay's branches in the height function, paid whether or
+not the grid ever grew. Logical tick (`ShockwaveGridFrameRuntime`, heavy1 recorded, 5454 ticks, median of nine
+alternated rounds, wall time): wave ring only 9.5 us, lane drives 34.7 us (34.9 after 1B.6), Growth + Indents alone
+24.1 us, lanes + Growth + Indents 38.9 us. Per frame (`tools/overhead_baseline.py`, default settings): Python calls
+5339 -> 5145 with the camera floor resolved on its edges, GL calls 363 (361 + `uGrowthPlace` in two programs).
+Continuous play across three recorded songs back to back (`neon_lake_music_response --continuous`, evidence
+`20261112_refine/continuous_play/`): every song's kicks still lift Growth and Indents mid-song (median rise over the
+0.2 s after a wave's birth 3-20%, 30-92 kicks per third); against each song played fresh the drives differ only in
+the first seconds after a boundary (the passage follower and the lanes' 4 s level are warm instead of cold), by
+under 0.02 after 10 s and 0.0006 after that. Contracts:
 `tests/test_neon_terrain_smooth.py` (GPU, with a control that takes the cross-fade away),
 `tests/test_neon_terrain_forms.py`, `tests/test_neon_terrain_reaction.py`.
 
