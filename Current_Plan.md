@@ -770,8 +770,7 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
     The Bar Fill ghost must read like Preset 1's: soft, blurred, translucent (no crisp stripes or stars inside it),
     fading sooner, with no ~1 px dark seam where a transparent-border bar meets its ghost (merged as 092304dc;
     evidence `20261108_ghost_seam`). The same bar binds the replacement presets under 1B.10.
-- [~] **Waveform agent (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch
-  `worktree-agent-af0eb2492e1e318d7`), operator decisions from the 7 Nov follow-ups** (evidence:
+- [~] **Waveform Ribbon, operator decisions from the 7 Nov follow-ups** (evidence:
   `.artifacts/evidence/visualizers/waveform_ribbon/followups/20261107_followups/`; raw captures not kept):
   - [~] Preset 4 rides about .7 higher at p90 and stops dipping into the floor: sign off.
   - [~] On a small 640x560 card, P5 and P6 cannot fit either way: crests now graze the top on 14-47% of frames,
@@ -1345,8 +1344,8 @@ eyes)**
 
 Complaints: no decay/breathing in soft passages, sustained passages with changes read almost flat, a swell to full
 power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song 70-130 s).
-Evidence `reactivity_preset7/20261107_reactivity_preset7/`. The pulse-visibility WIP (branch
-`worktree-agent-a470c20ffe5fe8b02`) stays parked: the operator accepted the pulse as is.
+Evidence `reactivity_preset7/20261107_reactivity_preset7/`. The pulse-visibility WIP was dropped with its branch
+(12 Nov): the operator accepted the pulse as is.
 
 - [~] Operator review of Preset 7 (bodies are smaller in loud passages now that the uniform inflation is gone:
   sustained-loud visible amplitude 6.4 -> 5.4).
