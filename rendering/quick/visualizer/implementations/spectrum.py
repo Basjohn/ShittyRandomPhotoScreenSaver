@@ -26,6 +26,9 @@ from rendering.gl_programs.spectrum_options import SPECTRUM_FLAG_PATTERNS, SPECT
 
 
 _MAX_BARS = 64
+# The space between bars in px at scale 1: the long-standing fixed value, and the most Bar Gap admits.
+DEFAULT_BAR_GAP = 2.0
+MAX_BAR_GAP = 4.0
 
 
 def resolve_spectrum_decor_uniforms(
@@ -134,7 +137,10 @@ def compute_quick_spectrum_layout(
     viewport_extent: Sequence[object],
     visual_scale: float,
     bar_count: int,
+    bar_gap: float = DEFAULT_BAR_GAP,
 ) -> QuickSpectrumLayout:
+    """``bar_gap``: the authored space between bars (``spectrum_bar_gap``, px at scale 1, 0 to ``MAX_BAR_GAP``);
+    the bars always fill the same span, so a narrower gap widens them and 0 joins them into one field."""
     if len(local_content_rect) != 4 or len(viewport_extent) != 2:
         raise ValueError("Spectrum layout geometry is incomplete")
     content_x, content_y, content_width, content_height = (
@@ -151,7 +157,7 @@ def compute_quick_spectrum_layout(
     margin = 8.0 * scale
     left_inset = 1.0 * scale
     right_inset = 3.0 * scale
-    gap = 2.0 * scale
+    gap = max(0.0, min(MAX_BAR_GAP, float(bar_gap))) * scale
     bar_region_width = (
         content_width - (2.0 * margin) - left_inset - right_inset
     )
@@ -226,6 +232,7 @@ class QuickSpectrumRenderer:
             viewport_extent=presentation.logical_viewport_extent,
             visual_scale=presentation.uniform_visual_scale,
             bar_count=count,
+            bar_gap=logical.common.style.get("bar_gap", DEFAULT_BAR_GAP),
         )
         if not self._program:
             self._initialize()

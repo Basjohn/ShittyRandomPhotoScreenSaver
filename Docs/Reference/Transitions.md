@@ -698,6 +698,30 @@ Each foundation slice adds what it learned here.
 - Uniform tables uploaded every frame: pack them once per bake (ctypes array keyed by the baked tuple's identity);
   a 160-float tuple through PyOpenGL twice a frame cost about 340 Python calls.
 
+**Heightfield land, second pass (Neon Lake refinement, 2026-11-12)**
+- A dip must be sized by an absolute term, not only a share of what stands there: a share of low land (dunes a tenth
+  of the height scale) sinks a few hundredths and reads as nothing. Bound it under the room above a floor with
+  `room * tanh(law / room)`, and let the form's own profile scale the result (`most * tanh(k * press)`). Saturating
+  the press against the room instead flattens low land's bowls into shelves with sharp rims: prove smoothness by
+  where the curvature sits (max over mean of the second difference across the bowl: 10-13 for the shelf, under 2
+  for the profile-scaled law), not by a step bound, which both pass.
+- Forms that only lower the land need no wide clearance round the eye (the camera floor never needs them); give
+  way only over a short reach, or every default view's near ground stays untouched.
+- Refine a mesh under the tiles that changed, not under one bounding box of them: two far corners refined everything
+  between (5.49 ms against 2.29 ms with tiles). Steps along an axis that depend only on the column (or row) keep
+  split and unsplit neighbours nesting, so the crack-free rule still holds per edge.
+- No CPU-side cache of large static geometry once it is on the GPU: an lru_cache of float tuples keyed by an
+  edit's bounds kept 22-30 MB per entry after upload, after the mode left and after the host released. Build per
+  change into a compact array, upload float32 bytes, keep the handle only.
+- Per-frame CPU work that depends only on settings (the camera floor's cell reads) is resolved on the edge where
+  its inputs change, keyed by the record's identity and the values, and reused at rest (194 Python calls a frame).
+- Before/after in one session for a renderer: load the old renderer, program and GLSL modules from git under alias
+  names (rewriting their imports) beside the current ones, each drawn by its own render host through the host's
+  renderer factory, and alternate the cases in one PairedBench. Call counts of the aliased modules are not counted
+  by the cost probe; compare GPU only.
+- Continuous play across songs: chain the recordings into one clip (shifted timestamps, capture serials continued)
+  and replay once; a fresh activation per song hides what a follower carries over the boundary.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:

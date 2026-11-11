@@ -66,10 +66,14 @@ def transition_size(aspect: float = 16 / 9) -> tuple[int, int]:
     return TRANSITION_WIDTH, round(TRANSITION_WIDTH / aspect / 2) * 2
 
 
-def load_scenes(paths=USU_SCENES) -> tuple:
-    """The four scenes, read once. Missing originals fail loudly: never a substitute."""
+def load_scenes(paths=None) -> tuple:
+    """The four scenes, read once. Missing originals fail loudly: never a substitute.
+
+    ``paths`` defaults to ``USU_SCENES`` read at call time, so the module attribute stays the one owner."""
     from PIL import Image
 
+    if paths is None:
+        paths = USU_SCENES
     missing = [str(path) for path in paths if not Path(path).is_file()]
     if missing:
         raise FileNotFoundError(f"operator Usu scene originals are missing (never substituted): {missing}")

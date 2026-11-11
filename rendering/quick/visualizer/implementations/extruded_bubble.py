@@ -52,7 +52,8 @@ from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAINS_PER
 from widgets.spotify_visualizer.extruded_bubble_drift_log import STEP_FLOATS, STEP_INDEX
 from .extruded_bubble_drift_solver import PROGRAMS as _DRIFT_PROGRAMS, DriftSolver
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
-from widgets.spotify_visualizer.extruded_bubble_geometry import WORLD_CENTER, WORLD_HALF, WORLD_UNIT, stream_basis
+from widgets.spotify_visualizer.extruded_bubble_geometry import (
+    WORLD_CENTER, WORLD_HALF, WORLD_UNIT, scene_source_face_weights, stream_basis)
 from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame
 
 from ..implementation_values import parameter
@@ -513,7 +514,6 @@ class QuickExtrudedBubbleRenderer:
         stream = _floats(state.stream)
         across, depth_axis = stream_basis(stream)
         scene_emission = 1 if parameter(parameters, "extruded_bubble_emission_geometry") == "SCENE" else 0
-        from widgets.spotify_visualizer.extruded_bubble_geometry import scene_source_face_weights
         scene_faces = _floats(scene_source_face_weights(stream_path[:3], stream))
         self._uniforms.set(programs["beads"], {
             "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF,

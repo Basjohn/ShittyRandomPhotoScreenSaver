@@ -175,12 +175,20 @@ Rules:
 - Curated ghosts (operator, 8 Nov 2026, twice: caps alone "only draw the line, not the ghost effect"; then flat
   ghosts under caps had "a solid top edge line" and "no blend"). Every curated preset ghosts the way Preset 1 does:
   a trail continuing the bar's own colours, fading out, with no cap line. Preset 1 does it with Rainbow Ghost over
-  its rainbow borders; of the presets authored on 12 Nov 2026 (1B.10), Quicksilver uses Rainbow Ghost, Dot Matrix
-  its teal Bar Colour, Afterglow a Custom coral with a Ghost Gradient, and the rest Bar Fill. Peak Caps are off on
-  every curated preset. Opacities sit near Preset 1's (about 0.6). This supersedes both the 7 Nov caps-only
-  rule and the first 8 Nov flat light colours. Authoring notes from that round: a rounded bar (Border Radius above
-  about 2) wants a Bar Fill ghost (the others float above it as a lens); a Bar Fill ghost of a dark or grey fill
-  reads as soot; a pattern narrower than the bar pitch turns into bricks against the 2 px bar gaps.
+  its rainbow borders; of the 1B.10 presets (11 Nov 2026), Dot Matrix uses its teal Bar Colour, Voltage a Custom
+  magenta with a Ghost Gradient, and the rest Bar Fill. Peak Caps are off on every curated preset. Opacities sit
+  near Preset 1's (about 0.6). This supersedes both the 7 Nov caps-only rule and the first 8 Nov flat light colours.
+  Authoring notes from 1B.10: the operator rejected fat bars, glossy "object" surfaces (chrome, capsules, ice rods),
+  a grid on blocks, dark fills under a coloured veil and ghosts that sit on the bar as a second block; the kept
+  looks are fine, luminous bars with a clean vertical gradient. A rounded bar (Border Radius above about 2) wants
+  a Bar Fill ghost (the others float above it as a lens); a Bar Fill ghost of a dark, grey or near-white fill
+  reads as soot; a pattern narrower than the bar pitch turns into bricks against the bar gaps; a Custom or Bar
+  Colour ghost is as wide as the whole bar, so over a bar with a transparent border it is wider than the lit fill.
+- **Bar Gap** (`spectrum_bar_gap`, 0 to 4 px at scale 1, default 2: the former fixed gap; Render bucket). The bars
+  always fill the same span, so a narrower gap widens them. It is presentation-owned and travels in the frame's
+  common style beside Border Radius to `compute_quick_spectrum_layout` (`tests/test_spectrum_bar_gap.py`). At 0
+  the bars touch, but a bar's 1 px border zone is still drawn in the border colour (transparent at Border Opacity
+  0), so a gradient fill does not yet join into one unbroken field.
 - Toggling fades (`SpectrumDecorFade`, `FADE_SECONDS`): one envelope per option on the presentation owner, advanced
   only on the capture timestamp (no timer, thread or second clock); a pattern switched to another dips through zero.
   A fresh owner starts settled, so exact Studio replays and new activations show the settings directly.

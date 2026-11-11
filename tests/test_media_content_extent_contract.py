@@ -237,7 +237,10 @@ def test_media_artwork_rail_does_not_depend_on_positioner_polish_or_expand_a_loc
     # The shared card boundary clips unconditionally; Media does not install
     # a competing content-extent-dependent clipping policy around its Column.
     assert 'clip: mediaRoot.mediaModel.contentExtentActive' not in qml
-    assert "clip: true" in qml.split("id: appVolumeSlider", 1)[1].split("id: appVolumeTrack", 1)[0]
+    # The volume lane's paint boundary is the accessory layer (grown by the track shadow's
+    # reach); the slider itself does not clip again (Current_Plan 1C.5).
+    slider = qml.split("id: appVolumeSlider", 1)[1].split("id: appVolumeTrack", 1)[0]
+    assert "clip: false" in slider and "anchors.margins: mediaRoot.accessoryPaintOutset" in slider
     assert "childPaintContainmentActive" not in qml
     overlay = _text("rendering/quick/qml/OverlayWidget.qml")
     card = _text("rendering/quick/qml/OverlayCard.qml")

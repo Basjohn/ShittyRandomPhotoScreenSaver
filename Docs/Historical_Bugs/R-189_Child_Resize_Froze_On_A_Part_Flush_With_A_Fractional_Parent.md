@@ -1,4 +1,4 @@
-# R-187 | A child part flush with the edge of a parent at a fractional place could not be resized (the gesture froze at its start)
+# R-189 | A child part flush with the edge of a parent at a fractional place could not be resized (the gesture froze at its start)
 
 **Status:** fixed 12 Nov 2026 (plan 1C.3, found while restoring Now Playing's artwork rule). `rendering/quick/qml/
 CustomLayoutOverlay.qml` `containChildResize` allows half a pixel (0.51 px) instead of 0.0001 px when it asks whether a

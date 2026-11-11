@@ -3,10 +3,11 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 from dataclasses import replace
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import numpy as np
 from PIL import Image
 from OpenGL import GL as gl
+from PySide6.QtGui import QOpenGLContext
 from rendering.quick import gl_query
 from core.ribbon_packet import KNOT_ROWS
 from core.ribbon_continuation import continuation_bounds, frustum_axial_span
@@ -167,7 +168,6 @@ class WaveformScene:
 
 
     def _check_context(self, *, admit=False):
-        from PySide6.QtGui import QOpenGLContext
         current = QOpenGLContext.currentContext()
         if current is None:
             raise RuntimeError('Waveform scene requires its owning current GL context')
@@ -328,7 +328,6 @@ class WaveformScene:
 
     def _fog_bound(self, volume):
         """The volume bound for its passes, or a no-op scope with the analytic-mist uniforms."""
-        from contextlib import nullcontext
         return volume.bound(**OWNED) if volume is not None else nullcontext(dict(FOG_OFF))
 
 

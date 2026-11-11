@@ -1483,6 +1483,34 @@ def _build_theme_filter_input_style() -> str:
 THEME_FILTER_INPUT_STYLE = _build_theme_filter_input_style()
 
 
+# Row height of a Settings content list: the Themes rows' palette square (24) and its margins fit it.
+SETTINGS_LIST_ROW_HEIGHT = 32
+
+
+def _build_settings_list_style() -> str:
+    """The one list style of Settings' content lists (the Themes catalogues, Sources' Folders and online rows).
+
+    Typography and row geometry live here; the surface, text, hover and selection colours, padding and radius are
+    the root ``QListWidget`` rule (``ui/settings_theme.py``) and the frame is painted seam-free by
+    ``OutlinedListWidget``. Delegates draw with the font this style gives the list and never set one themselves.
+    """
+    return (
+        "QListWidget {"
+        " font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        " font-size: 12pt;"
+        "}"
+        f"QListWidget::item {{ min-height: {SETTINGS_LIST_ROW_HEIGHT}px; }}"
+    )
+
+
+SETTINGS_LIST_STYLE = _build_settings_list_style()
+
+
+def apply_settings_list_style(list_widget: QWidget) -> None:
+    """Give one Settings content list the shared list style, kept live across theme changes."""
+    bind_shared_styles(list_widget, "SETTINGS_LIST_STYLE", base_style="")
+
+
 def _build_text_secondary_color_style() -> str:
     return f"color: {_theme_qss_color('text.secondary')};"
 
@@ -1747,6 +1775,7 @@ _THEME_STYLE_BUILDERS = {
     "MODE_TOGGLE_BUTTON_STYLE": _build_mode_toggle_button_style,
     "THEME_LINK_BUTTON_STYLE": _build_theme_link_button_style,
     "THEME_FILTER_INPUT_STYLE": _build_theme_filter_input_style,
+    "SETTINGS_LIST_STYLE": _build_settings_list_style,
     "TEXT_SECONDARY_COLOR_STYLE": _build_text_secondary_color_style,
     "STATUS_SUCCESS_LABEL_STYLE": _build_status_success_label_style,
     "STATUS_WARNING_LABEL_STYLE": _build_status_warning_label_style,

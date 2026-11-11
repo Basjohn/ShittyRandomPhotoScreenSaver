@@ -122,21 +122,75 @@ def test_rollback_never_clobbers_newer_edit_and_retains_before_images(tmp_path, 
     before = valuable.read_bytes()
     valuable.write_bytes(b'older target bytes')
     original = tree.atomic_write_bytes
-    recovery = tmp_path / 'recovery'
-    monkeypatch.setattr(tree.tempfile, 'mkdtemp', lambda **_: (recovery.mkdir(), str(recovery))[1])
+    recovery_root = tmp_path / 'recovery'
+    monkeypatch.setattr(tree, 'get_preset_recovery_dir', lambda: recovery_root)
     def fail_after_newer_edit(path, data):
         if path == target / 'spectrum/preset_2_second.json':
             valuable.write_bytes(b'newer independent edit')
             raise OSError('injected failure')
         original(path, data)
     monkeypatch.setattr(tree, 'atomic_write_bytes', fail_after_newer_edit)
-    with pytest.raises(RuntimeError, match='before-images at'):
+    with pytest.raises(RuntimeError, match='before-images at') as raised:
         tree.replace_curated_visualizer_preset_tree(source, target)
     assert valuable.read_bytes() == b'newer independent edit'
+    (recovery,) = recovery_root.iterdir()
+    assert str(recovery) in str(raised.value)
     records = json.loads((recovery / 'recovery.json').read_text())
     record = next(r for r in records if r['path'] == str(valuable.absolute()))
     assert (recovery / record['before']).read_bytes() == b'older target bytes'
     assert preset(source).read_bytes() == before
+
+
+def test_recovery_folders_live_under_the_data_root_owner():
+    from core.settings.storage_paths import resolve_app_data_dir
+    assert tree.get_preset_recovery_dir().parent == resolve_app_data_dir()
+
+
+def _recovery_folders(root, count):
+    """``count`` recovery folders, oldest first, as a failed rollback names them, plus one folder not ours."""
+    folders = []
+    for index in range(count):
+        folder = root / f'{tree._RECOVERY_PREFIX}2026010{index}_000000_000000'
+        folder.mkdir(parents=True)
+        (folder / 'recovery.json').write_text('[]')
+        folders.append(folder)
+    (root / 'operator_notes').mkdir()
+    return folders
+
+
+def test_a_successful_replace_keeps_only_the_newest_recovery_folders(tmp_path, monkeypatch):
+    recovery_root = tmp_path / 'recovery'
+    monkeypatch.setattr(tree, 'get_preset_recovery_dir', lambda: recovery_root)
+    folders = _recovery_folders(recovery_root, tree.RECOVERY_KEEP + 2)
+    source, target = tmp_path / 'incoming', tmp_path / 'active'
+    preset(source)
+    tree.replace_curated_visualizer_preset_tree(source, target)
+    assert sorted(p for p in recovery_root.iterdir() if p.name.startswith(tree._RECOVERY_PREFIX)) \
+        == folders[-tree.RECOVERY_KEEP:]
+    assert (recovery_root / 'operator_notes').is_dir()
+
+
+def test_a_failed_replace_and_the_startup_bootstrap_prune_nothing(tmp_path, monkeypatch):
+    recovery_root = tmp_path / 'recovery'
+    monkeypatch.setattr(tree, 'get_preset_recovery_dir', lambda: recovery_root)
+    _recovery_folders(recovery_root, tree.RECOVERY_KEEP + 2)
+    before = sorted(recovery_root.iterdir())
+    source, target = tmp_path / 'incoming', tmp_path / 'active'
+    preset(source); preset(source, 'preset_2_second.json', slot=1)
+    original = tree.atomic_write_bytes
+    calls = 0
+    def fail_second(path, data):
+        nonlocal calls
+        calls += 1
+        if calls == 2: raise OSError('injected second promotion')
+        original(path, data)
+    monkeypatch.setattr(tree, 'atomic_write_bytes', fail_second)
+    with pytest.raises(OSError, match='second promotion'):
+        tree.replace_curated_visualizer_preset_tree(source, target)
+    assert sorted(recovery_root.iterdir()) == before
+    monkeypatch.setattr(tree, 'atomic_write_bytes', original)
+    tree.replace_curated_visualizer_preset_tree(source, tmp_path / 'bootstrap', prune_recovery=False)
+    assert sorted(recovery_root.iterdir()) == before
 
 
 def test_source_and_target_may_not_overlap(tmp_path):

@@ -9,12 +9,13 @@ from widgets.spotify_visualizer.presentation_geometry import framed_aperture_sca
 
 import ctypes
 import math
+import zlib
 from contextlib import contextmanager
 from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices
 from rendering.gl_programs.neon_lake_basin_mesh import (
-    BASIN_MESH_FINE_ROWS, BASIN_MESH_SUBDIVISION, NO_EXTENT, basin_mesh_vertices, basin_mesh_points,
+    BASIN_MESH_FINE_ROWS, BASIN_MESH_SUBDIVISION, NO_EXTENT, basin_mesh_vertices, basin_mesh_points, upload_bytes,
 )
 from rendering.gl_programs.neon_starscape import starscape_beat_cells
 from rendering.quick import gl_query
@@ -24,8 +25,10 @@ from rendering.gl_programs.neon_lake_basin_program import (
     basin_pixel_scale, basin_view,
 )
 from rendering.gl_programs.neon_celestial import basin_body_position, celestial_placement
-from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES
-from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
+from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES, growth_cell_scale
+from rendering.gl_programs.neon_lake_basin_options import (
+    BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES,
+)
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE,
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, SHOCKWAVE_HALF_WIDTH,
@@ -45,7 +48,7 @@ from .spectrum import prepare_spectrum_shader_levels
 _EVENT_BINDING, _HEIGHT_UNIT, _OVERLAY_UNIT = 3, 4, 5
 _VIEW_UNIFORMS = ("uMatrix", "uField", "uEye", "uRight", "uUp", "uBack", "uTan")
 _REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactionMaximum", "uReactionLanes",
-                      "uReactionBias", "uReactionForms", "uReactionDrives")
+                      "uReactionBias", "uReactionForms", "uReactionDrives", "uGrowthPlace")
 _CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
                      "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uStarGlowColor",
                      "uCloudColor","uHorizonColor","uClouds","uCloudDrift","uNebula","uNebulaTurn","uNebulaColorA","uNebulaColorB")
@@ -110,9 +113,10 @@ class QuickShockwaveGridRenderer:
         if cells != self._mesh_cells:
             if self._mesh_cells is not None:
                 self._resources.drop_mesh(_mesh_key(self._mesh_cells))
+            # Built for this upload alone (float32 bytes): the uploaded mesh is the only copy kept.
             self._mesh_data = self._resources.mesh(
-                _mesh_key(cells), basin_mesh_vertices(*cells[:2], BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS,
-                                                      cells[2]), (2,))
+                _mesh_key(cells), upload_bytes(basin_mesh_vertices(*cells[:2], BASIN_MESH_SUBDIVISION,
+                                                                   BASIN_MESH_FINE_ROWS, cells[2])), (2,))
             self._mesh_cells = cells
         return self._mesh_data
 
@@ -120,7 +124,7 @@ class QuickShockwaveGridRenderer:
         cells = (tuple(cells), self._lattice_extent)        # the marks stay on the origin's lattice
         if cells != self._points_cells:
             self._drop_points()
-            self._points_data=self._resources.mesh(_point_key(cells),basin_mesh_points(*cells),(2,))
+            self._points_data=self._resources.mesh(_point_key(cells),upload_bytes(basin_mesh_points(*cells)),(2,))
             self._points_cells=cells
         return self._points_data
 
@@ -136,12 +140,13 @@ class QuickShockwaveGridRenderer:
                                                      self._overlay))
 
     def _adopt_terrain(self, terrain) -> None:
-        """The authored origin's reach past the basin (the mark lattice), the bounds of what the brush has painted
-        past it (the triangles' fine region; None while nothing is), the basin-to-grid transform and the origin's
-        rect in grid uv."""
+        """The authored origin's reach past the basin (the mark lattice), the tiles the brush has painted past it
+        (the triangles' fine region; None while nothing is), the basin-to-grid transform and the origin's rect in
+        grid uv."""
         self._lattice_extent = tuple(float(v) for v in terrain.get("extent", NO_EXTENT))
         painted = terrain.get("painted")
-        self._lattice_reach = None if painted is None else tuple(float(v) for v in painted)
+        self._lattice_reach = (None if not painted
+                               else tuple(tuple(float(v) for v in tile) for tile in painted))
         self._terrain_grid = tuple(float(v) for v in terrain.get("grid", (0.0, 0.0, 1.0)))
         self._terrain_origin = tuple(float(v) for v in terrain.get("origin_rect", (0.0, 0.0, 1.0, 1.0)))
 
@@ -264,6 +269,11 @@ class QuickShockwaveGridRenderer:
                        float(parameter(parameters, "shockwave_grid_terrain_growth_shape")),
                        reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_indents")), 0.0)
         gl.glUniform2f(uniforms["uReactionDrives"], *mode_state.terrain_forms)
+        # Growth Density as the site cell's scale (1 at the usual) and Growth Region (0 everywhere: no weighting).
+        gl.glUniform2f(uniforms["uGrowthPlace"],
+                       growth_cell_scale(parameter(parameters, "shockwave_grid_terrain_growth_density")),
+                       float(BASIN_GROWTH_REGIONS.get(str(parameter(parameters, "shockwave_grid_terrain_growth_region")),
+                                                      0)))
 
     @staticmethod
     def _bind_celestial(uniforms,parameters,half_width,animation_time,view):
@@ -593,7 +603,9 @@ class QuickShockwaveGridRenderer:
 
 def _mesh_key(lattice) -> str:
     (columns, rows), extent, reach = lattice
-    grown = "" if reach is None else f" painted {','.join(f'{v:.4f}' for v in reach)}"
+    # Painted tiles (up to 256 of them): named by their count and a digest of their exact bounds.
+    grown = ("" if reach is None else
+             f" painted {len(reach)} tiles {zlib.crc32(repr(reach).encode('ascii')):08x}")
     return f"basin {columns}x{rows} reach {','.join(f'{v:.4f}' for v in extent)}{grown}"
 
 

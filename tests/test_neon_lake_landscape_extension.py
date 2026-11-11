@@ -37,8 +37,30 @@ def test_points_are_all_and_only_the_shared_triangle_lattice_vertices():
     assert len(tri) == len(xs) * len(ys)
     assert len(triangles) == (len(xs) - 1) * (len(ys) - 1) * 12
     assert len(vertices) == len(xs) * len(ys) * 2
-    assert basin_mesh_vertices(cells) is triangles  # no per-frame regeneration
-    assert basin_mesh_points(cells) is vertices
+    # Built per call (the renderer uploads once per lattice and keeps only the GPU mesh): the same every time.
+    assert basin_mesh_vertices(cells) == triangles and basin_mesh_points(cells) == vertices
+
+
+def test_the_mesh_owner_keeps_no_copy_and_the_renderer_none_after_upload():
+    """The triangles were an eight-entry cache of Python float tuples keyed by the painted reach (22-30 MB each,
+    kept after upload and after the mode left). Now nothing caches them: two painted reaches leave no vertex copy in
+    the owner, and the renderer holds only the uploaded mesh's handle and count."""
+    from rendering.gl_programs import neon_lake_basin_mesh as mesh
+    assert not hasattr(mesh.basin_mesh_vertices, "cache_info") and not hasattr(mesh.basin_mesh_points, "cache_info")
+    import sys
+    cells, extent = (24, 16), (0.375, 0.375, 0.75, 0.0)
+    for reach in (((-1.4, -0.9, -1.1, -0.6),), ((1.6, 0.6, 1.9, 0.9),)):
+        built = mesh.basin_mesh_vertices(cells, extent, 2, (-0.8, 0.0), reach)
+        assert sys.getrefcount(built) <= 2                 # this name (and the call's argument): nobody else holds it
+        assert built is not mesh.basin_mesh_vertices(cells, extent, 2, (-0.8, 0.0), reach)
+        assert len(mesh.upload_bytes(built)) == 4 * len(built)    # float32, what the GPU takes
+    # The renderer's own state: (vao, count) handles, never the vertex data.
+    from rendering.quick.visualizer.implementations.shockwave_grid import QuickShockwaveGridRenderer
+    renderer = QuickShockwaveGridRenderer()
+    assert renderer._mesh_data is None and renderer._points_data is None
+    import inspect
+    source = inspect.getsource(QuickShockwaveGridRenderer._mesh) + inspect.getsource(QuickShockwaveGridRenderer._points)
+    assert "upload_bytes(" in source and "self._resources.mesh(" in source
 
 
 def test_extension_progressively_reduces_density_without_a_seam_jump():

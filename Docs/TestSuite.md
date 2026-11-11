@@ -1040,7 +1040,7 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   `metadata` part, its handle inside the block and safe area and clear of the artwork at each corner, every line moves
   and scales with it, the Seek Bar follows its width and place; red before the group);
   `test_the_same_gestures_through_the_edit_layer_and_the_owners_own_seams_store_the_same_record` (parity);
-  `test_a_part_flush_with_the_blocks_edge_still_resizes_by_its_strip` (R-187, the shared child editor's containment
+  `test_a_part_flush_with_the_blocks_edge_still_resizes_by_its_strip` (R-189, the shared child editor's containment
   slack; red on the pre-fix QML); `test_media_content_extent_contract.py` pins that Media draws the one rule; the
   text-group load bridge in
   `test_visualizer_expansion_overlay_settings.py::test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_group`

@@ -74,6 +74,8 @@ Item {
         textFormat: Text.PlainText
         opacity: refreshStateGlyph.presentationOpacity
             * (1.0 - refreshStateGlyph.transitionProgress)
+        // The crossfade is transient: the ink is solved at the resting opacity (ShadowedText).
+        inkOpacity: refreshStateGlyph.presentationOpacity
         color: refreshStateGlyph.hovered && refreshStateGlyph.canActivate
             ? "white" : refreshStateGlyph.glyphColor
         font.family: refreshStateGlyph.fontFamily
@@ -94,6 +96,7 @@ Item {
         textFormat: Text.PlainText
         opacity: refreshStateGlyph.presentationOpacity
             * refreshStateGlyph.transitionProgress
+        inkOpacity: refreshStateGlyph.presentationOpacity
         color: refreshStateGlyph.hovered && refreshStateGlyph.canActivate
             ? "white" : refreshStateGlyph.glyphColor
         font.family: refreshStateGlyph.fontFamily

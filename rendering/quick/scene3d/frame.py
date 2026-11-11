@@ -7,6 +7,8 @@ and a unit ``quad_vao``; the shared helpers take any frame with those fields.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
+from types import SimpleNamespace
 from typing import Protocol
 
 # QMatrix4x4 stores binary32 coefficients. Bound their rounding relative to the
@@ -58,8 +60,6 @@ def orient_visualizer_scene_frame(frame):
     quarters = frame.content_rotation_quarters
     if not quarters or frame.scene_output_rotation:
         return frame
-    from dataclasses import replace
-
     width, height = frame.logical_size
     matrix = frame.matrix_values
     # New logical item coordinates -> the unchanged physical item (clockwise in Qt's top-down coordinates).
@@ -87,8 +87,6 @@ def scene_output_frame(frame):
     quarters = getattr(frame, "scene_output_rotation", 0)
     if not quarters:
         return frame
-    from types import SimpleNamespace
-
     return SimpleNamespace(viewport=frame.scene_output_viewport, logical_size=frame.logical_size,
                            matrix_values=_clip_turn(frame.matrix_values, 4 - quarters), quad_vao=frame.quad_vao,
                            scene_output_rotation=quarters, scene_output_viewport=frame.scene_output_viewport)
@@ -155,8 +153,6 @@ def _item_pixel_rect(matrix, logical_size, viewport) -> tuple[int, int, int, int
 
 
 def _extended_item_frame(frame: SceneFrame, left: float, top: float, right: float, bottom: float):
-    from types import SimpleNamespace
-
     m = list(frame.matrix_values)
     for row in range(4):
         m[12 + row] -= left * m[row] + top * m[4 + row]

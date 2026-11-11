@@ -40,7 +40,7 @@ from urllib.parse import urlparse
 from core.constants import MIN_WALLPAPER_HEIGHT, MIN_WALLPAPER_WIDTH
 from core.feeds.cache import FeedCacheStore
 from core.feeds.models import FeedDocument, FeedImageCandidate, FeedItem, FeedSourceSpec
-from core.feeds.normalization import endpoint_fingerprint, redacted_url_for_log
+from core.feeds.normalization import redacted_url_for_log
 from core.feeds.transport import normalize_feed_address
 from core.logging.logger import get_logger
 from sources.base_provider import ImageMetadata
@@ -57,6 +57,7 @@ from sources.rss.constants import (
     TARGET_TOTAL_IMAGES,
 )
 from sources.rss.image_fetch import fills_displays, image_size_of_file
+from sources.rss.source_health import custom_feed_source_id, feed_store_dir, pool_source_id, source_cache_key
 from sources.rss.pools import PoolEndpoint, WallpaperPoolRotation, WallpaperPoolSelection, get_wallpaper_pool, examine_pool_response, MAX_DOCUMENTS_PER_PASS, MAX_STARTUP_DOCUMENTS, STARTUP_ACQUISITION_SECONDS
 
 logger = get_logger(__name__)
@@ -486,14 +487,15 @@ class RSSCoordinator:
             from sources.rss.json_listing import json_image_listing
 
             if self._feed_store is None:
-                self._feed_store = FeedCacheStore(self._cache.state_dir / "feeds")
-            fingerprint = endpoint_fingerprint(feed_url)
-            source_id = "wallpaper:pool:" + pool_endpoint.source_id if pool_endpoint is not None else "wallpaper:endpoint:" + fingerprint
+                self._feed_store = FeedCacheStore(feed_store_dir(self._cache.cache_dir))
+            # One naming owner (``source_health``): Settings reads these records' health by the same ids.
+            source_id = (pool_source_id(pool_endpoint.source_id) if pool_endpoint is not None
+                         else custom_feed_source_id(feed_url))
             provider = get_wallpaper_pool(pool_endpoint.pool_id).provider if pool_endpoint is not None else None
             timeout = float(self._timeout)
             source = FeedSource(
                 FeedSourceSpec(source_id, feed_url,
-                               source_id.replace(":", "_"), max_items=FEED_MAX_ITEMS,
+                               source_cache_key(source_id), max_items=FEED_MAX_ITEMS,
                                allow_endpoint_migration=pool_endpoint is not None),
                 transport_factory=lambda: FeedHttpTransport(
                     connect_timeout=min(timeout, LISTING_SOCKET_TIMEOUT_SECONDS),

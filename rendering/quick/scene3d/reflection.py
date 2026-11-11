@@ -15,6 +15,7 @@ import ctypes
 import weakref
 
 from OpenGL import GL as gl
+from PySide6.QtGui import QOpenGLContext
 
 from rendering.quick import gl_query
 
@@ -42,7 +43,6 @@ class PlanarReflection:
         return self._size
 
     def _check_context(self, *, admit: bool = False) -> None:
-        from PySide6.QtGui import QOpenGLContext
         current = QOpenGLContext.currentContext()
         if current is None:
             raise RuntimeError(f"{self.label}: reflection GL work needs its owning current context")

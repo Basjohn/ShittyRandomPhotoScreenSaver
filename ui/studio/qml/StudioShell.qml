@@ -3320,7 +3320,9 @@ Rectangle {
                                 }
                                 Repeater {
                                     model: [
-                                        { name: "radius", label: "Radius", from: 0.03, to: 0.35,
+                                        { name: "radius", label: "Radius",
+                                          from: (studio.brushState.radius_range || [0.0, 1.0])[0],
+                                          to: (studio.brushState.radius_range || [0.0, 1.0])[1],
                                           tip: "The brush size on the ground, as a share of the basin's width (the same wherever you paint)." },
                                         { name: "strength", label: "Strength", from: 0.01, to: 1.0,
                                           tip: "How much a stroke changes the land per brush-width it travels. Low values build up gently; Flatten snaps to its height only at 100%." },

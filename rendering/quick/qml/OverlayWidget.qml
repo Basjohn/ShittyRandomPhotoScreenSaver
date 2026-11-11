@@ -78,6 +78,11 @@ Item {
     property real accessoryExtent: 0.0
     property string accessorySide: "right"
     property alias accessoryContent: accessoryLayer.data
+    // How far the accessory's own paint (its control's drop shadow) reaches past the lane. The
+    // lane's paint boundary takes it in, so that shadow fades out instead of ending at the lane
+    // edge (Current_Plan.md 1C.5); the family keeps its controls themselves inside the lane, and
+    // the lane's geometry (accessoryExtent) is unchanged. 0 for every family without one.
+    property real accessoryPaintOutset: 0.0
 
     // Content-driven outer geometry (H option A): each family binds its stable
     // *preferred* content size here from its intrinsic QML content (text implicit
@@ -407,12 +412,17 @@ Item {
         Item {
             id: accessoryLayer
             objectName: "overlayAccessoryLayer"
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: Math.max(0.0, overlayWidget.accessoryExtent)
-            x: overlayWidget.accessoryOnLeft ? 0.0 : parent.width - width
+            // The lane, grown on every side by the accessory's paint outset (its control's
+            // shadow); the family places its content back on the lane with that margin.
+            readonly property real laneWidth: Math.max(0.0, overlayWidget.accessoryExtent)
+            readonly property real paintOutset: Math.max(0.0, overlayWidget.accessoryPaintOutset)
+            y: -paintOutset
+            height: parent.height + 2.0 * paintOutset
+            width: laneWidth + 2.0 * paintOutset
+            x: (overlayWidget.accessoryOnLeft ? 0.0 : parent.width - laneWidth) - paintOutset
             // External volume owns this independent lane. Its paint never
-            // escapes that lane, even outside Edit or in authored mode.
+            // escapes that lane (and its shadow's reach), even outside Edit or
+            // in authored mode.
             clip: true
             z: 2
         }

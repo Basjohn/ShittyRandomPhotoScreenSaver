@@ -14,6 +14,8 @@ import math
 from dataclasses import dataclass
 from functools import lru_cache
 
+from core.settings import framed_camera as fc
+from core.settings.neon_lake_camera import SPEC, floor_reaction, terrain_floor
 from core.constants.neon_lake_world import (
     CONTINUATION_DESCENT, DISTANT_CURVATURE, DISTANT_FLAT, FAR_HILLS, FAR_PLANE, WATER_PEAK,
 )
@@ -76,29 +78,35 @@ class BasinView:
 def orbit_view(turn: float, tilt: float, field=(0.0, 0.0, 1800.0, 1000.0), *, scale: float = 1.0,
                pan=(0.0, 0.0), fov: float = 30.0, position=(0.0, 0.0, 0.0)) -> BasinView:
     """A view from settings-unit pose values with no terrain floor (tools and contracts)."""
-    from core.settings import framed_camera as fc
-    from core.settings.neon_lake_camera import SPEC
     axes = fc.camera_axes(SPEC, turn, tilt)
     eye, _offset = fc.resolve_camera_position(SPEC, turn, tilt, scale, pan[0], pan[1], fov, position, axes=axes)
     tan = fc.viewport_tangents(fov, field[2] / field[3], 1., SPEC.fov_range)
     return BasinView(eye, axes[:3], axes[3:6], axes[6:9], tan, tuple(field))
 
 
+# The newest eye and what it was resolved from (the terrain record by identity, the pose and floor inputs by value).
+# The camera floor reads the terrain's cells round the eye; its inputs change only with the terrain, the brush, the
+# Terrain Reaction amounts and the camera, so a frame at rest reuses the eye instead of evaluating the floor again.
+_EYE_MEMO: list = [None, None, None]
+
+
 def basin_view(parameters, field, *, aperture_scale: float = 1.) -> BasinView:
     """Shared physical eye over the fixed terrain; only the observed aperture can resize."""
-    from core.settings import framed_camera as fc
-    from core.settings.neon_lake_camera import SPEC, floor_reaction, terrain_floor
-
     def get(name):
         return parameters["shockwave_grid_" + name]
     aspect = field[2] / field[3]
     turn, tilt, fov = float(get("turn")), float(get("tilt")), float(get("camera_fov"))
     axes = fc.camera_axes(SPEC, turn, tilt)
-    eye, _offset = fc.resolve_camera_position(
-        SPEC, turn, tilt, float(get("scene_scale")), float(get("scene_pan_x")), float(get("scene_pan_y")), fov,
-        get("camera_position"), None,
-        terrain_floor(get("terrain"), float(get("terrain_height")), SHOCKWAVE_HALF_WIDTH,
-                      floor_reaction(parameters)), axes=axes)
+    terrain, height, reaction = get("terrain"), float(get("terrain_height")), floor_reaction(parameters)
+    pose = (turn, tilt, float(get("scene_scale")), float(get("scene_pan_x")), float(get("scene_pan_y")), fov,
+            tuple(float(v) for v in get("camera_position")), height, reaction)
+    if _EYE_MEMO[0] is terrain and _EYE_MEMO[1] == pose:
+        eye = _EYE_MEMO[2]
+    else:
+        eye, _offset = fc.resolve_camera_position(
+            SPEC, *pose[:6], get("camera_position"), None,
+            terrain_floor(terrain, height, SHOCKWAVE_HALF_WIDTH, reaction), axes=axes)
+        _EYE_MEMO[:] = [terrain, pose, eye]
     tan = fc.viewport_tangents(fov, aspect, aperture_scale, SPEC.fov_range)
     return BasinView(eye, axes[:3], axes[3:6], axes[6:9], tan, tuple(field))
 
@@ -374,12 +382,22 @@ float basinLandHeight(vec2 uv,float base,float curved) {
         // Zero at the water and easing in up the bank over the smooth land's own rise: on the cells' height alone
         // it came in within a quarter of a cell, and a strong reshaping stood as a wall along the shore.
         float land=smoothstep(0.0,0.08,base)*smoothstep(BASIN_SHORE_HEIGHT,0.10,curved)*basinDetailFade(uv);
-        // Its patterns and Growth lift (or lower) the land; Indents press it toward its floor share.
-        float room=(1.0-REACTION_FLOOR)*height;
-        float change=uLand.x*(basinReaction(uv,curved,p,land)+land*basinGrowth(p))-room*land*basinIndent(p);
+        // Its patterns and Growth lift (or lower) the land.
+        float authored=height;
+        float room=(1.0-REACTION_FLOOR)*authored;
+        float growth=basinGrowth(p);
+        // Growth Region: far land only (past the authored terrain's edge) or by elevation through the shaper's
+        // curve. Everywhere (0) weighs nothing, so the usual Growth is untouched.
+        if (growth>0.0 && uGrowthPlace.y>0.5)
+            growth*=uGrowthPlace.y<1.5 ? smoothstep(GROWTH_FAR_LAND.x,GROWTH_FAR_LAND.y,basinOutside(uv))
+                                       : reactionBiasAt(curved);
+        float change=uLand.x*(basinReaction(uv,curved,p,land)+land*growth);
         // Downward, the change eases onto the floor share instead of stopping at it: a hard stop creased the
         // land along the line where it was reached.
         height+=change<0.0 ? -room*tanh(-change/max(room,1e-6)) : change;
+        // Indents carve bowls into what stands there, onto their own lower floor.
+        float press=land*basinIndent(p);
+        if (press>0.0) height-=basinIndentDepth(press,height,authored,uLand.x);
     }
     // A shallow convex distant world produces a real terrain/sky tangency,
     // rather than an exposed remote mesh edge or an infinitely flat plane.

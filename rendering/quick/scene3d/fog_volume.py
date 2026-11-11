@@ -18,6 +18,7 @@ import weakref
 
 import numpy as np
 from OpenGL import GL as gl
+from PySide6.QtGui import QOpenGLContext
 
 from rendering.gl_programs.fog_volume import (FOG_COMPOSITE_FRAGMENT, FOG_FULLSCREEN_VERTEX, FOG_INTEGRATE_COMPUTE,
                                               fog_detail_noise, fog_march_source)
@@ -79,7 +80,6 @@ class FogVolume:
         return dict(self._uniforms)
 
     def _check_context(self, *, admit: bool = False) -> None:
-        from PySide6.QtGui import QOpenGLContext
         current = QOpenGLContext.currentContext()
         if current is None:
             raise RuntimeError(f"{self.label}: fog volume GL work needs its owning current context")
@@ -241,7 +241,6 @@ class FogMarch:
         return self._colour
 
     def _check_context(self) -> None:
-        from PySide6.QtGui import QOpenGLContext
         current = QOpenGLContext.currentContext()
         if current is None:
             raise RuntimeError(f"{self.label}: fog march GL work needs its owning current context")

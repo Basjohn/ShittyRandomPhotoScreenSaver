@@ -1,8 +1,8 @@
 {
-  "description": "Dusk: indigo bars, and above each a coral veil that hangs for a moment and sinks.",
+  "description": "A dense dome of light: violet at the horizon, burning through magenta and pink to a peach crown.",
   "mode": "spectrum",
-  "name": "Preset 9 (Afterglow)",
-  "preset_index": 8,
+  "name": "Preset 6 (Dusk)",
+  "preset_index": 5,
   "visualizer_preset_override": true,
   "visualizer_preset_mode": "spectrum",
   "snapshot": {
@@ -10,23 +10,27 @@
       "spotify_visualizer": {
         "spectrum_visual_smoothing_enabled": true,
         "spectrum_visual_smoothing": 0.7,
-        "spectrum_mirrored": false,
+        "spectrum_mirrored": true,
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.62
+            1.0
           ],
           [
-            0.3,
-            0.78
+            0.45,
+            0.9
           ],
           [
-            0.65,
-            0.68
+            0.75,
+            0.66
+          ],
+          [
+            0.92,
+            0.4
           ],
           [
             1.0,
-            0.78
+            0.14
           ]
         ],
         "spectrum_notch_positions_mirrored": [
@@ -95,34 +99,35 @@
         "spectrum_rainbow_fill": false,
         "spectrum_rainbow_border": false,
         "spectrum_border_radius": 0.0,
+        "spectrum_bar_gap": 0.0,
         "spectrum_wave_amplitude": 0.15,
         "spectrum_profile_floor": 0.2,
-        "spectrum_drop_speed": 0.72,
+        "spectrum_drop_speed": 0.8,
         "spectrum_ghosting_enabled": true,
         "spectrum_rainbow_ghost": false,
         "spectrum_ghost_alpha": 0.6,
-        "spectrum_ghost_decay": 0.15,
-        "spectrum_ghost_color_source": "Custom",
+        "spectrum_ghost_decay": 0.18,
+        "spectrum_ghost_color_source": "Bar Fill",
         "spectrum_ghost_color": [
           255,
-          110,
-          90,
+          255,
+          255,
           255
         ],
-        "spectrum_ghost_gradient": true,
+        "spectrum_ghost_gradient": false,
         "spectrum_ghost_tip_color": [
           255,
-          90,
-          170,
+          255,
+          255,
           255
         ],
         "spectrum_gloss": 0.0,
         "spectrum_fill_gradient": true,
         "spectrum_fill_tip_color": [
-          120,
-          80,
-          235,
-          235
+          255,
+          214,
+          170,
+          255
         ],
         "spectrum_peak_caps": false,
         "spectrum_peak_cap_color": [
@@ -142,7 +147,7 @@
         ],
         "spectrum_pattern_scale": 1.0,
         "spectrum_pattern_strength": 0.6,
-        "spectrum_bar_count": 41,
+        "spectrum_bar_count": 64,
         "spectrum_audio_block_size": 128,
         "spectrum_adaptive_sensitivity": false,
         "spectrum_sensitivity": 1.15,
@@ -156,10 +161,10 @@
         "spectrum_manual_floor": 0.42,
         "spectrum_lane_transient_mix": 0.94,
         "spectrum_bar_fill_color": [
-          24,
-          18,
-          96,
-          200
+          120,
+          30,
+          255,
+          255
         ],
         "spectrum_bar_border_color": [
           255,

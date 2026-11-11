@@ -42,6 +42,11 @@ _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 _STATE_VERSION = 1
 
 
+def pool_state_dir(cache_dir: Path) -> Path:
+    """The pool's state directory (the index, and the wallpaper sources' feed records under ``feeds/``)."""
+    return Path(cache_dir) / "state"
+
+
 def url_key(url: str) -> str:
     """The stable file stem / memory key for an image URL."""
     return hashlib.md5(str(url).encode("utf-8", errors="replace")).hexdigest()
@@ -74,7 +79,7 @@ class RSSCache:
             from core.settings.storage_paths import get_rss_cache_dir
             self.cache_dir = get_rss_cache_dir()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.state_dir = self.cache_dir / "state"
+        self.state_dir = pool_state_dir(self.cache_dir)
         self.max_cache_size = max_cache_size_mb * 1024 * 1024
         self._entries: List[PoolEntry] = []
         self._index: Dict[str, dict] = {}

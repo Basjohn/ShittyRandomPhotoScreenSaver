@@ -21,6 +21,8 @@ _ORDER_ROLE = FAVOURITE_ROLE + 1
 FILTER_TERMS_ROLE = _ORDER_ROLE + 1
 FAVOURITES_KEY = "ui.theme_favourites"
 EMPTY_FILTER_TEXT = "No Themes Match the Filter"
+# Stroke width of the glyphs painted in Settings content lists (this star, Sources' status marks).
+LIST_GLYPH_STROKE = 1.25
 
 
 def dominant_theme_colours(theme) -> tuple[tuple[int, int, int], ...]:
@@ -122,7 +124,7 @@ class _ThemeRowDelegate(QStyledItemDelegate):
             painter.fillRect(cell, QColor(*rgb))
         painter.restore()
         accent = QColor(*theme.color("control.list.selected_accent").as_tuple())
-        painter.setPen(QPen(accent, 1.25))
+        painter.setPen(QPen(accent, LIST_GLYPH_STROKE))
         painter.setBrush(accent if index.data(FAVOURITE_ROLE) else Qt.BrushStyle.NoBrush)
         painter.translate(QRectF(star).center())
         painter.drawPath(self._star_path)

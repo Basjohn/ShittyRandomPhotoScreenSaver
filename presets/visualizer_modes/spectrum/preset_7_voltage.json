@@ -1,7 +1,7 @@
 {
-  "description": "White light split: every bar its own hue, saturated at the base and bleaching toward white at the top.",
+  "description": "Thin cyan filaments with white tips, a tall spire at the centre, each leaving a magenta trail.",
   "mode": "spectrum",
-  "name": "Preset 7 (Prism)",
+  "name": "Preset 7 (Voltage)",
   "preset_index": 6,
   "visualizer_preset_override": true,
   "visualizer_preset_mode": "spectrum",
@@ -14,19 +14,19 @@
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.6
-          ],
-          [
-            0.35,
             1.0
           ],
           [
-            0.7,
-            0.7
+            0.18,
+            0.72
+          ],
+          [
+            0.5,
+            0.6
           ],
           [
             1.0,
-            0.36
+            0.44
           ]
         ],
         "spectrum_notch_positions_mirrored": [
@@ -91,37 +91,38 @@
         ],
         "spectrum_glow_intensity": 0.3,
         "spectrum_render_mode": "bars",
-        "spectrum_unique_colors": true,
-        "spectrum_rainbow_fill": true,
+        "spectrum_unique_colors": false,
+        "spectrum_rainbow_fill": false,
         "spectrum_rainbow_border": false,
-        "spectrum_border_radius": 3.0,
+        "spectrum_border_radius": 0.0,
+        "spectrum_bar_gap": 4.0,
         "spectrum_wave_amplitude": 0.15,
         "spectrum_profile_floor": 0.2,
-        "spectrum_drop_speed": 0.72,
+        "spectrum_drop_speed": 1.6,
         "spectrum_ghosting_enabled": true,
         "spectrum_rainbow_ghost": false,
         "spectrum_ghost_alpha": 0.6,
         "spectrum_ghost_decay": 0.18,
-        "spectrum_ghost_color_source": "Bar Fill",
+        "spectrum_ghost_color_source": "Custom",
         "spectrum_ghost_color": [
           255,
-          255,
-          255,
+          40,
+          200,
           255
         ],
-        "spectrum_ghost_gradient": false,
+        "spectrum_ghost_gradient": true,
         "spectrum_ghost_tip_color": [
-          255,
-          255,
+          130,
+          60,
           255,
           255
         ],
-        "spectrum_gloss": 0.35,
+        "spectrum_gloss": 0.0,
         "spectrum_fill_gradient": true,
         "spectrum_fill_tip_color": [
+          235,
           255,
-          232,
-          232,
+          255,
           255
         ],
         "spectrum_peak_caps": false,
@@ -142,7 +143,7 @@
         ],
         "spectrum_pattern_scale": 1.0,
         "spectrum_pattern_strength": 0.6,
-        "spectrum_bar_count": 49,
+        "spectrum_bar_count": 44,
         "spectrum_audio_block_size": 128,
         "spectrum_adaptive_sensitivity": false,
         "spectrum_sensitivity": 1.15,
@@ -156,20 +157,20 @@
         "spectrum_manual_floor": 0.42,
         "spectrum_lane_transient_mix": 0.94,
         "spectrum_bar_fill_color": [
+          0,
+          200,
           255,
-          50,
-          50,
           255
         ],
         "spectrum_bar_border_color": [
-          255,
-          255,
+          0,
+          200,
           255,
           255
         ],
-        "spectrum_bar_border_opacity": 0.0,
-        "spectrum_rainbow_enabled": true,
-        "spectrum_rainbow_speed": 0.25,
+        "spectrum_bar_border_opacity": 1.0,
+        "spectrum_rainbow_enabled": false,
+        "spectrum_rainbow_speed": 0.6,
         "mode": "spectrum"
       }
     }

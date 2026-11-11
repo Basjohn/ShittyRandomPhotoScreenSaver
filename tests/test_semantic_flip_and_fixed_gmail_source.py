@@ -229,7 +229,10 @@ def test_media_flip_drag_detachment_keeps_stable_slot_and_authoritative_offset()
     artwork = media.split('id: artworkFrame', 1)[1].split('id: progressBand', 1)[0]
     assert 'readonly property real authoredSeekX:' in artwork
     assert 'progressTrack.x' not in artwork and 'progressTrack.width' not in artwork
-    assert 'clip: true' in media
+    # Media's external volume is paint-bounded unconditionally by its accessory lane (since 1C.5 the
+    # lane's own boundary, grown by the track shadow's reach; the slider no longer clips again).
+    assert 'accessoryContent:' in media
+    assert 'clip: true' in source('OverlayWidget.qml').split('id: accessoryLayer', 1)[1]
     assert 'clip: mediaRoot.mediaModel.contentExtentActive' not in media
 
 

@@ -20,3 +20,50 @@ the environment and the rules that never change between tasks. The lead owns thi
 - Today is 11 Nov 2026. Delete your scratch files before you finish; keep only deliberate evidence.
 - Side defects you meet are never ignored: fix them if small and in your files, otherwise report them with path, line and the command that reproduces them.
 - Report: for each box of your plan item, "done" with the commit and the evidence path, or "not done" and why; then what you did not verify; then side defects. Be plain; the lead checks the report against the boxes and the diff, and renders are reviewed pixel by pixel.
+
+## Commands and tool calls that fail, and what to do instead (measured on 12 Nov 2026: 19 of 1,466 calls)
+
+A failing test is information and is fine. A command or tool call that could not have worked is waste. The ones
+agents actually made:
+
+- **Searching from Bash.** `git grep` with options after the pattern, `git grep` over `tests/*.py` (the shell
+  expands the glob into an argument list too long), `grep` with a mistyped option. Search file contents with the
+  Grep tool and find files with the Glob tool, always; never `grep`, `git grep`, `find` or `ls` of a guessed path.
+- **Guessed paths.** A document, folder or installed-program path that was assumed to exist. Check with Glob
+  first; a path quoted in a brief or a plan item may be stale, so confirm it before you build on it.
+- **A tool's options guessed.** Before the first run of any script under `tools/`, run it once with `--help` and
+  use the options it prints.
+- **A probe that exits non-zero to say what it found.** Your own probe scripts print their findings and exit 0;
+  a non-zero exit means the probe itself broke.
+- **An Edit that does not match.** Make `old_string` unique by including a neighbouring line; if the file was
+  changed by a script or a merge since you read it, read that region again before editing.
+- **`python -c`, command chains, pipes, `cd`.** Refused by the worktree isolation, every time. Write a script.
+
+## Progress journal (so that an interrupted agent's work can be taken over)
+
+You can be stopped at any moment by a usage limit, with no warning, and an agent of an earlier session cannot
+be resumed. Keep a journal at `.artifacts/handover/JOURNAL.md` in your worktree (ignored by git; the lead's
+`tools/agent_handover.py` reads it). It is short, plain, newest state first, and always true:
+
+- At the start: your plan item, and the boxes in the order you will take them.
+- After every box: "done", its commit hash, the evidence path, anything the next person must know.
+- Before every long command or render: what is running and what you will do with its result.
+- Decisions you took and why; approaches you tried and dropped, so nobody repeats them.
+- What is uncommitted right now and whether it is safe to commit as it stands.
+
+Commit after every box, not at the end. A commit is the only state that is certain to survive you. Update the
+journal before the commit, not after.
+
+If you are a successor: merge the earlier agent's branch, read its journal and its last commits, check that
+what it marked done really is (run its tests), then start your own journal by copying what is still true.
+
+## Evidence: small, named, and removed once approved
+
+- In your report, list evidence in two groups: **keep** (the few files the plan or a document cites: the
+  open-first sheets, the tables, one showcase per effect) and **the rest**.
+- Before you report, delete raw frames, intermediate renders and anything that only you needed in order to make
+  the sheets. Stills stay PNG; a sequence that stands for motion is one animated WebP, never a folder of frames.
+- When the lead tells you a step is approved, the lead copies the keep group into the main checkout. If you
+  continue after that, delete that step's evidence from your worktree except what your next step needs as a
+  baseline, and say in your journal what you kept and why. When your work is merged the worktree is removed
+  with everything left in it.

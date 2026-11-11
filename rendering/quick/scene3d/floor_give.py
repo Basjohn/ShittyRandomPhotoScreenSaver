@@ -1,5 +1,6 @@
 """The yielding floor's fixed-world field, reduced once per frame on GPU without readback or camera inputs."""
 from OpenGL import GL as gl
+from PySide6.QtGui import QOpenGLContext
 from rendering.quick import gl_query
 from rendering.quick.scene3d.compute import bound_image,dispatch
 from rendering.quick.scene3d.resources import MeshResources,warm_programs
@@ -33,7 +34,6 @@ class FloorGiveField:
     def has_resources(self):return bool(self.texture or self._sections or self.resources.has_resources)
 
     def _check(self):
-        from PySide6.QtGui import QOpenGLContext
         current=QOpenGLContext.currentContext()
         if current is None:raise RuntimeError('Floor give field requires its current GL context')
         if self._context is None:self._context=current

@@ -119,19 +119,33 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 - [ ] The AC-13 remainder (`Docs/Reference/Architecture_Checklist.md`).
 - [ ] AC-14, AC-15 and AC-16 (same checklist).
 
-### Item 7. One measurement session of at most 10 minutes under game60, only after the operator's yes
+### Item 7. Load session of 11 Nov (run; 7.9 minutes under game60, four runs, no reruns)
 
-Approved by the operator on 11 Nov ("The machine will not get quieter"). The lead runs it at the first gap in
-which no agent is running tests (a measured run beside agents' GL tests is void by its own conditions), with a
-fixed run list, no reruns, the conditions recorded. Baselines and evidence paths: section 3, "Lead, the quiet
-machine".
+Run by the lead on 11 Nov evening with no agent running (before the start: CPU about 12 %, GPU 4 %; during: other
+processes 73-78 % CPU, GPU 61-66 %, clock 2760 MHz in every run). Invisible saver, recorded music
+(`anything_mixed2`). Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/live_check/20261111_load_r1_*`,
+`..._r2_*`, `.artifacts/evidence/visualizers/spectrum/live_check/20261111_load_r3_*`, `..._r4_*`; receipts
+`.artifacts/evidence/performance/load_session/20261111_load_session/driver_receipts.json`; figures in
+`Docs/Reference/Benchmarks.md` ("Load session, 11 Nov").
 
-- [ ] First reveal on the engine worker against in process under load (closes the Watchlist's latency entry).
-- [ ] A second clean Waveform tick-cut round.
-- [ ] A clean Waveform P4 GC run, and the long run with Settings round trips.
-- [ ] A Settings round-trip run.
-- [ ] The alternated Glass/Normal card-materials pair.
-- [ ] The two-monitor canonical game60 outlier (48.6 fps, never repeated).
+Results: Waveform Preset 4 on the engine worker 59.4 fps, render 10.4 / 12.7 ms (median / p90), 1.4 % late, 3.3
+hitches a minute; in process 40.6 fps, 14.0 / 17.4 ms, 37.7 % late, 7.2 hitches a minute. First two seconds
+after startup: worker 86 frames, 3.5 % late; in process 69 frames, 75 % late (the worker reveals sooner and
+cleaner under load, which closes the Watchlist's latency question). One Settings round trip on the worker: 7.8 s
+in all (stop 0.46 s), both barriers complete, thawed and re-frozen, no failure, private memory 1271 to 1171 MB.
+Card materials, alternated second pair (Normal then Glass, Spectrum Preset 1, transition-heavy): 89.5 against
+89.6 fps, 0.2 % late and 0.73 hitches a minute in both, publish to swap 10.8 against 11.6 ms, saver tree 106.1
+against 105.7 % of a core: no measurable cost for Glass (the first pair's +16 % of a core was not repeated).
+
+- [ ] Waveform Preset 4 is still over the 8 ms render budget under game60 on the worker (10.4 ms median,
+  `reflection` 1.7 and `ribbons` 1.9 ms the largest stages): a P3 input (item 8b), not a P2 fault.
+- [ ] Side defect, `tools/visualizer_live_check.py`: on the worker run with a Settings round trip the age chain's
+  medians are nonsense (`publish_to_swap_ms` and `consumed_age_at_sync_ms` medians about -48,500 ms, p90 sane):
+  records from before and after the round trip (a new worker generation, a different clock origin) are mixed.
+  Report ages per generation, or only for the steady window before the first round trip as the help text says.
+- [ ] Not run inside the ten minutes: a second Waveform tick-cut A/B against the pre-cut tree (superseded for
+  the default path, since the tick no longer runs on main's interpreter); the 600 s GC run with a frame trace;
+  the two-monitor canonical outlier (48.6 fps, never repeated). The last two are Watchlist entries now.
 
 ### Item 8. §8 Accepted-mode follow-ups
 
@@ -174,9 +188,6 @@ Attribution merged 11 Nov (382ae139; baseline `tools/baselines/overhead/2026-11-
 phase-boundary audit and `Docs/Reference/Benchmarks.md`; evidence `.artifacts/evidence/native_core/20261111_attribution/`).
 What it left open:
 
-- [ ] Extruded Bubble still runs 4 imports inside per-frame functions (about 2.3 us each through PySide's import
-  hook; older than the 7 Nov baseline): move them to module level, then sweep the other modes' and transitions'
-  per-frame paths for the same pattern; proof by the overhead baseline's call counts.
 - [ ] Neon Lake's driver memory at its first draw (`private_other`, about +280 MB committed, mostly not
   resident) is not attributed: read GPU allocations around the first draw before P3 sizes anything for it.
 - [ ] Neon Lake against the new baseline: GL calls 354 -> 361 and relative GPU time 1.14 -> 1.44 ms since the land
@@ -215,36 +226,37 @@ What it left open:
    - [ ] D3: EB geometry once per revision, not per frame. The worker's +34 MB at the first Waveform Ribbon is
      not geometry: 32 MB is the buffer numpy's OpenBLAS reserves on the first matrix-matrix product in a process
      (committed, not resident, never freed), so D3 sizes nothing against it.
-   - [ ] D4: EB's fp64 drift solver on Vulkan, at equal quality (operator, 11 Nov: Vulkan is the front, strong,
-     stable face of the product, never the fallback; OpenGL is the fallback). Direction to prove, not yet decided:
-     (a) keep 64-bit floats where the device has them: `shaderFloat64` is a queryable Vulkan device feature
-     through the native handles a C++ core holds (QRhi's own API has no query, which is why the Python path could
-     not ask); (b) for devices and backends without it, the same solver in double-single arithmetic (two 32-bit
-     floats per value, error-free sums and products) or a camera-relative reformulation that keeps the error
-     below the fp64 oracle's visible threshold, judged against the fp64 result on recorded drift; (c) or the
-     drift integrated in the worker in float64 and sent once per revision, if D3's geometry rule makes that
-     natural. Pick by measured error and cost; the shader-readiness check must discover compute sources instead
-     of a fixed module list.
-     Inventory (Sonnet, 11 Nov): `D:\Temp\Scratch\SRPSS\research\20261111\eb_fp64_drift_inventory.md`. Facts
-     the decision starts from: the doubles live only inside two compute programs (`CHAIN_COMPUTE`,
-     `CLOUD_COMPUTE`: step log, chain geometry, per-chain shift and phase; add, multiply, divide, `floor`, `mod`
-     only); every output the draw shaders read is already fp32; only chains carry exact fp64 state across frames
-     (the cloud's phase, span and seed are float32); the recorded reason is that a float32 span/carry moved a
-     chain's knot step one tick early against the CPU, plus 2 pi reduction of ever-growing phase; a complete
-     float64 CPU oracle exists (`MaterialDriftReference`, tests only, 1e-4, at most about 4 s of simulated time).
-   - [ ] D4 input: nothing detects fp64 today (OpenGL 4.6 Core implies it; a failed context raises "no renderer
-     fallback"); the native core needs an explicit capability read and a stated behaviour without it.
-   - [ ] D4 input: both drift shaders are on the `LEGACY_GL_ONLY` list because they fail `qsb` on loose uniforms,
-     so "qsb compiles fp64 SPIR-V" (phase-boundary audit) is not shown for them: restructure the uniforms into a
-     block and compile them, or correct the audit's claim.
-   - [ ] D4 input: the oracle comparison runs 150 to 240 ticks; extend it to a long horizon (hours of simulated
-     time, the saver's real session length) before any 32-bit formulation is judged, and state the visible
-     threshold of drift error.
-   - [ ] D4 input: option (c) would send about 3.99 MB per revision at full population (240 chains x 128 knots,
-     2500 snow, 216000 specks, 16 B each); measure the worker's CPU cost for it.
-   - [ ] The solver docstring says the CPU reference keeps positions in fp32; it keeps float64 and narrows only
-     when packing. Correct the docstring; the phase-boundary audit cites the doubles at `SOLVER:39-92`, they run
-     to line 210.
+   - **D4 decided in design (lead, 11 Nov; `Docs/Future_Work/Native_Core_P3_Decisions.md`):** no `double` in any
+     shader on any backend, so no device feature is needed and no device is second class (operator: Vulkan is
+     the front, strong, stable face; OpenGL is the fallback). The doubles serve three things only, and each gets
+     its precision where it is free or rebuilt exactly: (1) the per-chain knot decision (`floor`) is made in the
+     engine worker in float64, by the reference's own arithmetic, and published per step as an integer `moved`
+     and a float32 `shift` (at most 240 chains); (2) the three growing phase arguments are reduced mod 2 pi in
+     the worker and published as three float32 angles per step; (3) the per-mote quotient `travel * carry / span`
+     is rebuilt on the GPU from pairs of floats (the worker precomputes `carry / span` per mote as a high and a
+     low float32 in the mote record's two unused floats, and splits `travel` per step; the shader uses an
+     `fma` two-product marked `precise`), about 48 significant bits against the 24 the float32 result can hold.
+     It can be built now in the existing OpenGL renderer, behind the existing reference tests, before any C++.
+   - [ ] D4.1 A NumPy float32 model of the pair arithmetic in the shader's exact operation order (`math.fma`)
+     against `MaterialDriftReference`, on runs starting at one hour's and eight hours' `travel` and `phase`: no
+     GPU, a test file; this proves the formulation before any shader changes.
+   - [ ] D4.2 The worker's drift log publishes the chain decision stream and the three reduced angles; mote
+     geometry carries `carry / span` as a float pair; the step record carries `travel` as a pair; codec and slot
+     sizing follow (`core/visualizer_engine/frame_capacity.py`); in process and worker paths both.
+   - [ ] D4.3 Both compute programs rewritten without `double`; chain `moved` equals the reference's as integers
+     on every tick of a long recorded drive (not a tolerance); displacement, shift, phase offset and progress
+     within the existing 1e-4 at the long horizons; today's `double` shader run on the same horizons beside it.
+   - [ ] D4.4 The largest displacement difference in pixels at 4K for the nearest bead the camera admits, stated.
+   - [ ] D4.5 Both programs pass `qsb` (loose uniforms into a block) and leave `LEGACY_GL_ONLY`; the
+     shader-readiness check discovers compute sources instead of a fixed module list; the phase-boundary audit's
+     "qsb compiles fp64 SPIR-V" claim and its `SOLVER:39-92` citation corrected; the solver docstring corrected
+     (the reference keeps float64 positions and narrows only when packing).
+   - [ ] D4.6 Cost: GPU time per dispatch at Preset 1 and at 216,000 specks against today's, alternated in one
+     session; the worker's tick cost for the decisions; a frame with no new step still dispatches nothing.
+   - [ ] D4.7 A warm-up self-check of the two-product on a known pair (on the edge, never per frame): a compiler
+     that ignores `precise` is logged and reported, never silent drift.
+   - [ ] D4.8 What the user sees when the drift program fails to compile on a device is traced and stated
+     (today: a `RuntimeError` with no fallback), and the long-horizon test stays in the suite.
    - [ ] Transport rule for the substrate: nothing through the resource sharer; a name on POSIX, an exact-process
      handle on Windows.
 
@@ -255,8 +267,9 @@ What it left open:
 native core for all custom drawing, rolled out in this order; each stage retires its raw-Python GL renderer only
 after parity, never leaving a second permanent renderer:
 
-- [ ] P3.0 The four decisions above (D1-D4) and the transport rule written as contracts, seen by the lead and the
-  operator, before any C++.
+- [ ] P3.0 The four decisions above (D1-D4) and the transport rule written as contracts in
+  `Docs/Future_Work/Native_Core_P3_Decisions.md`, seen by the lead and the operator, before any C++ (D4 is
+  written; D1, D2, D3 and the transport rule are owed).
 - [ ] P3.1 Native QRhi substrate: exact Qt/PySide6 ABI, the frozen MSVC DLL guard, resource ownership, the native
   packet reader with its quiescence barrier and drop edge, capture/clip parity. `native/spike_p1` stays evidence,
   never a shipped renderer.
@@ -330,39 +343,46 @@ shape widget is retired; shape drags are in the churn guard; Studio tooltips wra
 - [ ] Admitted later if wanted (operator's call): a pop-out larger canvas; Spline Curve's layer nodes and Voxel
   Sphere's zone boundaries on the same instrument; Shift axis lock, snapping, double-click reset.
 
-### 1B.5 Neon Lake: all visible land is brush-editable (merged 33912e5ae; refinement round in flight, Opus High)
+### 1B.5 Neon Lake: all visible land is brush-editable (merged 33912e5ae; refinement round merged 11 Nov)
 
 A stroke past the grid grows the authored grid under it invisibly (grown cells are an overlay on the generated
 landscape; an authored origin keeps horizon, detail and glow; shipped presets' terrain loads byte-identical;
-one commit and one undo per stroke; a refused state at the 257 cap). Contract: `Docs/Reference/Neon_Lake_Basin.md`.
+one commit and one undo per stroke; a refused state at the 257 cap). The mesh refines under painted 16-cell tiles
+(two far corners 5.49 to 2.29 ms; an unpainted grid unchanged); Brush Radius is a share of the basin (default
+0.16, range 0.03 to 0.6, read from the brush owner); no mesh cache (the GPU mesh is the only copy). Contract:
+`Docs/Reference/Neon_Lake_Basin.md`; evidence `.artifacts/evidence/visualizers/shockwave_grid/20261111_refine/`.
 
-- [ ] Painted growth cost: the mesh refines under one bounding box of painted cells (two far corners refine
-  everything between; a fully painted 257 grid costs 5.65 ms against 1.95 ms at 65). Refine in tiles holding
-  painted cells only, crack-free; report one corner, two corners and the whole grid; distance-based density if
-  it holds without aliasing the smallest brush.
-- [ ] Brush Radius is now a share of the basin (stable across growth): rescale its default and range so the
-  default footprint on each shipped preset is about what it was (0.57x on Presets 1 and 2 today).
-- [ ] Off-screen PNG of the refused state at the cap (struck-through footprint and notice).
+- [ ] Dormancy fault from 1B.5: with React To Music off and a grid that never grew, the frame costs about 10 %
+  more GPU than before 1B.5 (c64ed434), from terrain-overlay branches that run whether or not the grid grew
+  (one noisy session, 31-40 % noise): re-measure alternated on a quiet machine, then make an ungrown grid skip
+  the overlay path entirely (identical pixels, the pre-1B.5 cost).
+- [ ] Five of the seven GL calls added per frame since the 7 Nov baseline (354 to 361; two are 1B.6's uniforms)
+  are not attributed: find them in 1B.5's path and remove the ones an ungrown grid does not need.
+- [ ] Distance-based mesh density was not built (the mesh does not know the eye, and a camera-dependent mesh
+  would rebuild and pop): no render shows whether the smallest brush aliases on far land seen up close; render
+  it once, and only then decide whether anything is owed.
 
-### 1B.6 Neon Lake: smooth land reaction, Growth and Indents (merged 33912e5ae; refinement round in flight)
+### 1B.6 Neon Lake: smooth land reaction, Growth and Indents (merged 33912e5ae; refinement round merged 11 Nov)
 
-The reaction reshapes the land smoothly (lanes cross-fade along the height, cubic tables and elevation, an eased
-floor, a shore fade); Growth (mounds to spires by Growth Shape) and Indents are optional, default off, authored
-neutral into the three presets; drives are memoryless on the fixed scale. Under music the existing presets do
-change: the tears are gone and the reaction is a little weaker on banks and very low land.
+The reaction reshapes the land smoothly; Growth (mounds to spires by Growth Shape, with Growth Density and Growth
+Region: Everywhere / Far Land / By Elevation) and Indents (a point may sink 0.65 of its authored height plus 0.40
+of Terrain Height, never below 8 % of its height, the water's edge fixed) are optional, default off, authored
+neutral into the three presets. Measured: tick 38.9 us with lanes, Growth and Indents (34.7 before); GPU with
+the reaction on +8 to +14 % against before 1B.6, Growth and Indents on top; mid-song kicks lift the drives in
+continuous play (median 3-20 %). The lead decides when the reactivity is good enough (operator, 11 Nov).
 
-- [ ] Indents are barely visible at full drive on Preset 1: a depth law that clearly sinks visible land on all
-  three presets' default views, smooth, never below the water-boundary contract; staged-drive sheet and a WebP.
-- [ ] `tools/overhead_baseline.py` for Neon Lake against the stored baseline, with system usage.
-- [ ] Logical-tick cost of the lane, Growth and Indents drives, before and after.
-- [ ] GPU before/after alternated in one session, control-relative, including React To Music off (the +5-12%
-  reaction cost so far comes from separate sessions).
-- [ ] Continuous play across two songs back to back on the music-response trace: mid-song kicks read, no state
-  across the song boundary.
-- [ ] Off-screen PNG of the Neon Lake Studio's Reaction workspace with the Growth, Growth Shape and Indents rows.
-- [ ] Growth Density (site cell size) and a Growth region bias (far land only / by elevation through the shaper):
-  canonical spec entries with Studio rows, authored neutral into every preset, dormant when neutral.
-- [ ] Lead pixel review of the refinement round; merge; then tell the preset agent Neon Lake is ready.
+- [ ] Lead's reactivity verdict: watch `indents_p1_heavy1.webp` and one driven showcase per preset with Growth
+  and Indents on, beside the music envelope (`tools/visualizer_replay/neon_lake_music_response.py --continuous`);
+  write the verdict here (good enough, or the one thing that is still weak) before any further reaction work.
+- [ ] Side defect: a paused Studio preview shows no terrain reaction at all (`advance_terrain_reaction` with
+  `playing=False` zeroes the energies), so every paused still or capture at a fixture time hides Growth, Indents
+  and the lanes. A paused seek should show the reaction the fixture has at that time (evaluate the drives for
+  the seek time; nothing per frame at rest).
+- [ ] Side defect: `tools/visualizer_replay/waveform_music_response.py:63` silently skips recordings without PCM
+  (heavy1, quiet_intro*, balanced*) and the report drops those songs without saying so: name them in the report.
+- [ ] Side defect: the cost probe does not count GL or Python calls inside modules loaded under alias names, so
+  one-session comparisons against an old renderer have meaningless call counts: count by module object.
+- [ ] Neon Lake presets (1B.10) may start: the land work they need is merged.
 
 ### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (merged 189fbd36c; plan 01 M3c)
 
@@ -377,7 +397,7 @@ through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
   off-screen harness that drives ordinary Edit on a Media card); build it beside
   `tools/expanded_visualizer_evidence.py`.
 
-### 1B.8 Light themes are practically opaque in the saver (M1 4674e801, M2 63e22431 merged; M2b in flight)
+### 1B.8 Light themes are practically opaque in the saver (M1, M2 and M2b merged; M3 waits behind the native core)
 
 **Material track (operator, 11 Nov: proper transparency on light themes, no inset while keeping the material on
 all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint.** Contract:
@@ -393,21 +413,32 @@ the whole face up to the real border on every theme and material (no inset panel
 inner hairline is gone, the ink plate fades over 5 px, legibility tables unchanged, no GPU rise. The Linked
 button's state ink may cross polarity (R-186; stills `.artifacts/evidence/settings/linked_button/`).
 
-- [ ] M2b. One ink rule on every theme (lead, 11 Nov: a uniform contract, not a light-theme exception): a text
-  run that misses its ratio on a dark theme corrects its own ink as light themes do (authored ink where it
-  reads, else more alpha, else toward white keeping hue); the dark panel gets no denser; runs that pass stay
-  byte-identical. Measured before: Default Dark on the bright wallpaper has 8-10 small runs at 3.89-4.27;
-  `widget.accent` fails 4.5:1 over the white pole on 46 of 98 material themes, all dark (Midnight Cobalt 3.42,
-  worst Royal Orchard 1.44).
-- [ ] M2b. Text runs only; graphic uses of the accent (bars, dividers, fills, icons) listed where they fall
-  under 3:1, not recoloured.
-- [ ] M2b. Themes whose corrected accent collapses toward `card.text` named with 3x crops before the operator
-  sees them; the table of every changed theme (before/after ratio and colour) goes to section 2's "Changed".
-- [ ] M2b. `tools/theme_legibility.py` over all 98 material themes, both wallpapers: zero small runs below
-  4.5:1, or the exact remainder and why.
-- [ ] M2b. Offscreen checks M2 left out: 150% and 200% device pixel ratio (one light, one dark theme), the
-  Visualizer card and the Context Menu on a light theme.
-- [ ] Mid-transition frames and a real display for M1/M2: a D1 run (1B.14 harness), lead review.
+M2b landed 12 Nov (evidence `.artifacts/evidence/materials/20261111_m2b/`): a text run that misses its ratio
+on a dark theme corrects its own ink; card roles under 4.5:1 on the materials went from 46 themes to 0, small
+runs from 3-10 a frame to 0, light themes and Normal unchanged, no shader change. Two faults found in audit
+and fixed (the solver added the Glass sheen after the legibility limit; a hidden crossfade copy held a plate).
+58 dark themes change; the table is `changed_table.md` in the evidence folder.
+
+- [ ] Ink is judged against the card panel even where a run sits on another fill: Midnight Cobalt's System Stats
+  labels change (#668cff to #7e9eff, 4.95 to 8.17) though they read on their metric panel. Pass the underlying
+  fill into the ink solve (the legibility plate already has `underlayColor`), so a run that reads where it sits
+  is not touched.
+- [ ] 27 groups of runs that already read at 4.5:1 gain a few percent of alpha because the solver aims for 4.8
+  (its headroom): decide whether a run at or above 4.5 is left exactly as authored (the lead's rule was
+  byte-identical for passing runs) and make the solver do that.
+- [ ] Accents whose corrected text ink collapses toward the card text: Royal Orchard most (#3e4f2c to #97a08d,
+  48 % of its colour kept) and Smoke Quartz; Slate Lavender, Tungsten Blues, Lantern Grove and Riviera Dusk keep
+  61-70 % (`accent_collapse_candidates_3x.png`). A theme-authoring matter: these six accents are too dark for a
+  dark card; note it for the theme files, no solver change.
+- [ ] The accent as a graphic (bars, dividers, icons; not recoloured) is under 3:1 on eight dark themes: Royal
+  Orchard 1.44, Tungsten Blues 2.27, Lantern Grove 2.32, Slate Lavender 2.35, Smoke Quartz 2.59, Riviera Dusk
+  2.67, Forest Rose 2.89, Nordic Signal 2.89. The same theme-authoring note.
+- [ ] The Context Menu does not go through the ink rule: its submenu arrows are 1.7-3.6:1 on Polished Chrome and
+  Pearl Blush (2.3-3.0 on Normal too; older than M2b). Give the arrow the label's ink.
+- [ ] Side defect: `tests/test_live_normalization_role_lifetime_contract.py::test_card_and_accessory_
+  normalization_changes_cannot_rebuild_role_lists` fails for Reddit (5 against an expected 2), unrelated to the
+  material work; reproduce with that file alone.
+- [ ] Mid-transition frames and a real display for M1, M2 and M2b: a D1 run (1B.14 harness), lead review.
 - [ ] M3. Widget border material: the remaining boxes of 1.7b (ring shading from the same backdrop, Border
   Material and Border Opacity Adjust in Style Overrides, Normal/Flat pixel-identical).
 - [ ] M3. With the inner hairline gone, the border stays clearly distinct from the face on the three light
@@ -452,14 +483,26 @@ Operator, 11 Nov: presets 5 (Tube Lights), 6 (Quicksilver), 8 (Blueprint), 9 (Af
 ghastly ugly"; 2 Aurora, 3 Lanterns, 4 Dot Matrix and 7 Prism stand. Lead's reading: wide glossy, chrome, capsule,
 grid-on-block and dark-fill looks fail; fine luminous gradients pass. Fewer good presets beat a full slot count.
 
-- [ ] Spectrum round 2 (in flight): the five rejected presets replaced by new ideas, not re-skins; slots
-  contiguous; the whole set judged together on the peak and quiet sheets; lead pixel review before the operator
-  sees them.
-- [ ] Bar gap control (0 to about 4 px), admitted: one canonical spec entry, authored into every Spectrum preset at
-  2 px by the repair fill, shown through the spec in Settings and the Studio, a structural test, the Visualizer
-  Reference updated. Built in round 2 only if a new look needs it; otherwise it stays this open box.
-- [ ] `tools/visualizer_preset_author.py` refuses the shape keys (`spectrum_lane_strengths_linear has no Settings
-  control`): admit them through the spec's own admission and the Studio shape rules, as the agent's script did.
+Spectrum round 2 merged 11 Nov as it stood when the agent was interrupted (0cf6f5c6; operator: "still better
+than what we have now"; evidence `.artifacts/evidence/visualizers/spectrum/presets/20261111_round2/`): eight
+presets (1 Organs, 2 Aurora, 3 Lanterns, 4 Dot Matrix, 5 Prism, 6 Dusk, 7 Voltage, 8 Mood Ring) and the Bar Gap
+control (0 to 4 px, default 2, `tests/test_spectrum_bar_gap.py`). Lead's pixel review: Dusk (pink to violet
+curtain) stands beside the survivors; the two below do not yet.
+
+- [ ] Flaw, Preset 7 Voltage (Opus Medium, when nothing more significant waits): one flat cyan with a violet
+  ghost; no gradient, no bright tip, no structure, so it reads as a default bar chart. Give it light: a core
+  or tip that goes white-hot with level, or segment it as a thin LED ladder; keep the cyan and violet idea.
+- [ ] Flaw, Preset 8 Mood Ring: flat yellow blocks at the peak and flat orange at rest on wide bars; the colour
+  change with level is the idea but each state is a plain fill. Thinner bars and a vertical gradient through
+  the level colours, so the change is visible inside one frame; or drop the preset if it cannot stand beside 2
+  to 6.
+- [ ] Round 2 was never reported: check the Bar Gap control end to end (Settings and Studio rows through the
+  spec, every Spectrum preset authored at its value, the Visualizer Reference) and the whole-song reactivity
+  table for presets 6 to 8 (`response.json` in the evidence folder).
+- [ ] Showcase WebPs exist for 6 to 8 only as the interrupted agent's drafts; re-render after the two flaws are
+  fixed, lead review before the operator sees them.
+- [ ] Extruded Bubble: one arctic-themed preset, light and depth, not a glossy object (Opus Medium, low
+  priority, lead pixel review).
 - [ ] Side defect: Bar Count is admitted to 96 by the spec but `spectrum.py` clamps to 64 (`_MAX_BARS`, lines 28,
   102, 199): a higher count would draw only the first 64 bars. One owner for the maximum; render one frame at 96.
 - [ ] Side defect: the segment border ring is lopsided (`spectrum.frag:914`: `<=` on one side, `>=` on the
@@ -469,13 +512,6 @@ grid-on-block and dark-fill looks fail; fine luminous gradients pass. Fewer good
   bars, wherever the Bass lane sits (`bar_computation.py:422-432`). It should follow the Bass lane's position.
 - [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
   rounded tops.
-- [ ] Side defect: `tools/release_media.py:69` binds `load_scenes(paths=USU_SCENES)` at definition, so
-  `test_release_media.py::test_source_change_during_capture_discards_media` ignores its monkeypatch in a
-  worktree without the `assets/usu/scenes` originals; resolve the default at call time.
-- [ ] Side defect: seven `test_release_media.py` tests fail with `missing authored preset path: spectrum:1` when
-  run in one process after the preset and Studio preset tests (order pollution; the file passes alone and on
-  main after the merge): find the test that leaves the preset tree redirected and make it restore.
-- [ ] Extruded Bubble: one arctic-themed preset.
 - [ ] Neon Lake: three unique presets (using the shape instrument, far-land brush and the new land reactivity).
 - [ ] Every preset authored through the Studio's Save To path, complete for every control (completeness guard).
 - [ ] One showcase WebP per preset (`release_media.py`), reviewed by the lead before the operator sees them.
@@ -552,14 +588,11 @@ closed and always tears down. Queued for the next free Opus High slot.
 
 ### 1B.15 Housekeeping the lead decided (11 Nov; engineering choices, not operator decisions)
 
-- [ ] Preset rollback recovery copies: `core/visualizer_preset_tree.py` writes the before-images of a failed
-  preset-replacement rollback to `tempfile.mkdtemp(prefix='srpss_preset_recovery_')` (`%TEMP%`, which Windows
-  Storage Sense may empty). Move them under the data root beside the preset tree (one owner for the path, the
-  folder named in the error as now, the newest few kept and older ones pruned on the next successful replace);
-  the test keeps redirecting to `tmp_path`.
-- [ ] Extruded Bubble evidence root: move `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
-  referenced by `Investigation.md`) to `.artifacts/evidence/visualizers/extruded_bubble/20261020/` and repoint the
-  references; nothing deleted.
+- [ ] Extruded Bubble evidence of 20 Oct: the references now point to
+  `.artifacts/evidence/visualizers/extruded_bubble/20261020/` (`RELOCATED` in `tools/artifact_migration.py`),
+  but neither that folder nor the old `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` exists on disk any
+  more: the media `Investigation.md` cites is gone. Say so in `Investigation.md` (one line under its evidence
+  list) so nobody hunts for it; the 22 and 23 Oct folders are still referenced and still ignored by git.
 
 ## 1C. Operator's diagnostic run (11 Nov, evening; ahead of everything in 1B that is not already in flight)
 
@@ -664,19 +697,53 @@ The mode id is `devcurve`. The operator's crop shows a magenta band crossing the
 - [ ] Before/after 4x crops of the left and bottom border for `devcurve`; lead pixel review.
 - [ ] R-NNN entry (a contract every mode relied on was not enforced).
 
-### 1C.5 Volume child control: its drop shadow is cut off sharply (owner: the material agent, before M2b's review)
+Lead's audit note, 12 Nov: the agent's first fix (0e01e147, R-187: the clip was built from the retained
+snapshot's record, so content could cross the rounded corners between a geometry change and the next coherent
+publication) is right in itself but is a transient, and steady frames were reported clean; the operator described
+a standing condition and their crop shows lines inside the border band along the left edge. Not closed until:
 
-Operator's crop: the Media widget's volume bar (a child material surface) has its drop shadow ending in a hard
-edge instead of fading. First suspect: M2 (63e22431), which changed `ChildMaterialSurface.qml` and the child
-branch of the surface shader; the shadow's extent or the child item's clip may no longer include the blur.
+- [ ] Steady frames proved under the operator's own setup: theme `Amethyst Night [Single] [Glass]` (translucent
+  border), `card_border_width_px` 5, CUSTOM layout with slots, Spline Curve's own white bar border on, a 3840 x
+  2160 display at 150 %, ordinary and display-wide card; pixels counted in the border band (between the card's
+  outer edge and the drawn border's inner edge) and outside the card, before and after the fix.
+- [ ] If the band shows content: the wrong geometry named (clip inset against the configured border width, DPR
+  rounding, a translucent border over an outer-path clip, the CUSTOM record, a generous scissor) and fixed at
+  the shared owner; why Spline Curve shows it and the others do not, with one other mode beside it.
+- [ ] The clip contract test's steady check runs with a non-default border width, a Glass border and the CUSTOM
+  route, over every mode, counting the border band.
+- [ ] Operator, 12 Nov, on their crop: "I see 1px or so escaping there ... It's the white lines." The target is
+  Spline Curve's own white bar-border lines reaching about one pixel past the content's bound in steady frames:
+  measured with fills transparent and only the bar border on, all four sides, at 100 %, 125 % and 150 %; the
+  one-pixel disagreement named (border rounding against the clip's inner edge, the clip's soft edge, the line's
+  width or fringe, a scissor wider than the stencil) and fixed at the shared bound; a full-brightness line along
+  each edge added to the clip contract test.
+- [ ] Not reproduced off-screen (12 Nov): with a 5 px half-transparent border in Amethyst Night's colours,
+  Glass, fills transparent and only the white lines drawn, at 100, 125 and 150 %, card origins shifted by
+  fractions of a pixel, ordinary and display-wide: zero pixels in the border band or outside the card; the
+  outermost white pixel sits 0 to 1 device pixel inside the inner edge (evidence in the agent's branch,
+  `visualizers/devcurve/20261112_white_lines/`). What was not covered: the real window on the 150 % display
+  with its overscan, the operator's own card positions and slots, pixel shift, the engine-worker path, the
+  operator's own Spline Curve preset. So it is the lead's on Display 1: the harness of 1B.14 is being built
+  (Opus Medium) with this as its first recipe.
+- [ ] Side defect, red on main: `test_3d_curated_preset_ownership[shockwave_grid-1]`, `[shockwave_grid-2]` and
+  `test_neon_experimental_presets::test_each_current_neon_art_file_has_owned_schema_roundtrip_and_independent_
+  view` fail on camera position values since the operator's preset edit (bc74cefe) or the Neon Lake merge: the
+  tests pin authored values; make them derive from the canonical source (with the 1C.1 agent).
+- [ ] Side defect: importing `core.settings.normalization` before anything else raises a circular `ImportError`.
 
-- [ ] Root cause: off-screen 4x crops of the volume bar, the transport bar and the mute button on Glass and on
-  Normal, at main before M1 (533dc7f1), after M1 (4674e801) and after M2 (63e22431); name the commit and the line.
-- [ ] Fix at the owner of the child's shadow (its extent or the clip of its parent), not by removing the shadow;
-  every child control with a shadow is checked, on dark and light themes, both wallpapers.
-- [ ] A structural guard so a child surface's shadow cannot be clipped again: the shadow's painted extent lies
-  inside its item's unclipped bounds (derived from the shadow parameters, no pixel values pinned).
-- [ ] Before/after crops in the M2b evidence folder; lead pixel review.
+### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
+
+Cause: two clips (`overlayAccessoryLayer` in `OverlayWidget.qml`, `mediaAppVolumeSlider` in `MediaPresentation.qml`,
+both from b5bb788e) cut the track's shadow at the edge of the volume's own strip; at the default layout it fits by
+0.3 px, and once Edit widens, heightens or moves the track it is cut square. M1 and M2 were not the cause. The
+strip's clip now grows by the shadow's reach; guard `test_media_child_shadows_are_never_clipped_by_their_lane_or_
+card`. Evidence `.artifacts/evidence/materials/20261111_m2b/before_after_*_4x.png` (the "before" matches the
+operator's crop).
+
+- [ ] The agent could not reproduce the cut at the operator's stored Media layout (no volume edits in their
+  settings): a D1 run with a copy of the operator's profile (1B.14), a 4x crop of the volume bar, lead review.
+- [ ] A volume track heightened past about 1.2x (the descriptor allows 2.5x) is taller than its strip and is cut
+  square itself: clamp the descriptor to what the strip can hold, or let the strip grow, at the owner.
 
 ### 1C.6 SMP full-player mock restored (operator, 11 Nov; `references/` is ignored by git)
 
@@ -694,8 +761,26 @@ plan 02's "Proposal basis" and `Index.md` point to it.
   8.3 (the Visualizer / Lyrics / Artist Collage pane with glyph parity), 3 and 5.1 (the favourites and library
   filters as one filter owner), 5.2 (the track menu; Track Information alignment swap), 4 (existing sliders and
   seek bar, the alignment rule). Each change cites its requirement number; nothing is promoted into this plan.
+Operator's clarification, 11 Nov evening, written into document 04 sections 7 to 9 and plan 02 (8.2, 13, 16):
+three builds from profiles (the screensaver and MC builds carry full SMP beside the compositor; only the SMP
+profile build has none); Small mode is the Media widget on the live desktop (snapping, outer geometry always
+adjustable, children behind the lock glyph); its Up arrow enters Full mode (the mock), which defaults to full
+screen and resizes like a normal window with its sections scaling; SMP Edit rearranges sections (swap, X/Y/XY,
+move to an edge) and must not break the existing Edit modes; long term an equalizer, upmix and downmix, ReplayGain,
+device select, crossfade and a well indexed growable library; Arrange gets an SMP section (the main one on SMP
+builds); on the screensaver and MC builds Small and Full mode stay inside the compositor (Full mode as a
+display-wide presentation, as the fullscreen Visualizer is), and only the SMP build uses desktop windows. SMP
+stays behind the native core, the open defects and the fullscreen Visualizer. The route the lead chose: SMP Edit is its own owner over a section tree, built from
+the existing Edit modes' parts, one edit session per surface, written once against a small host interface with
+two hosts, a compositor display and a desktop window (document 04 section 8).
+
+- [ ] Rules that keep SMP's doors open, to check at every audit until SMP starts (document 04 section 8, last
+  list): the Media widget, Now Playing and the seek bar stay host-agnostic; the Visualizer stays one owner that can
+  be retargeted between hosts and rendered at any aspect, strips included; Edit's handles, guides and snapping
+  stay reusable components; the native core renders into whatever surface its host gives it.
 - [ ] The operator's answers to the mock document's section 6 (what "CS" is; whether Lyrics and Artist Collage
-  are in the first full-player milestone; proposal A7) are recorded there when given. Nothing waits on them.
+  are in the first full-player milestone; whether the wider dock model is wanted) are recorded there when given.
+  Nothing waits on them.
 
 ### 1C.7 Handover state after the usage limit (11 Nov evening) and the roster change
 
@@ -704,27 +789,11 @@ dropped from the group and the cap. Its Spectrum work merges as it stands ("stil
 now"); flaws the lead sees are noted in 1B.10 for an Opus Medium agent "at a point where we do not have more
 significant work". Opus and Sonnet agents resume as the lead sees fit.
 
-- [ ] Neon Lake refinement round (`worktree-agent-a849151c5ede86920`, complete, nine commits): lead pixel review
-  of `indents_staged_drives_sheet.png`, the Growth Density/Region sheet and the two Studio sheets; focused tests
-  on the merge; merge; then 1B.5/1B.6 boxes updated, its three side defects recorded (paused Studio preview
-  shows no reaction; the trace drops clips without PCM silently; the cost probe misses aliased modules), and
-  its two operator write-ups (spire glow on hits, islands) moved to section 2.
-- [ ] Spectrum presets round 2 (`worktree-agent-a6bf350be60bea91b`, interrupted; WIP commits e3249136 and
-  70bd1bc2: Bar Gap control, the five rejected presets removed, Prism to slot 5, Dusk / Voltage / Mood Ring
-  added, the last two mid-tuning): completeness and preset tests on the merge, the lead renders the contact
-  sheets and notes flaws in 1B.10, merge. The removed slots feed 1C.1's guard.
-- [ ] Material M2b (`worktree-agent-a93bb05376d4941fc`, commit a8761c8c, interrupted before its report): the
-  agent resumes (Opus), takes 1C.5 first, then reports M2b against 1B.8's boxes, then M3.
-- [ ] Small boxes batch 3 (`worktree-agent-a6ba0b17824677702`; three commits done: per-frame imports, the
-  release-media default, the preset-registry fixture; WIP 860ee38b: the preset author tool's shape keys, half
-  done; not started: rollback recovery copies, the Extruded Bubble evidence root): the agent resumes.
 - [ ] Small boxes batch 4 (`worktree-agent-a4e50f79894c549ec`; WIP edf2100a: six sibling test files moved onto
   the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
   a Medium slot is free after 1C.1 and 1C.4.
-- [ ] Load session: run 11 Nov evening at the gap (no agent running; CPU about 12 %, GPU 4 % before the
-  start); results and what the ten minutes did not cover go to item 7 and the Watchlist.
 
-### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; when a relevant agent is free)
+### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; step b of round 3, 1C.10)
 
 Operator: "an option or slider for neon lake to allow the WATER edge/face lines to be completely hidden ... this
 shouldn't be very difficult". Mode id `shockwave_grid`. Today the water draws ripple/face lines (`Water Colour`,
@@ -752,35 +821,110 @@ enough (operator, same message: it "has improved quite a bit already"); see 1B.6
   WebP at 0 on the preset where it looks best; `Docs/Reference/Neon_Lake_Basin.md` and the Visualizer Reference
   updated.
 
-### 1C.9 Sources: RSS Pools shows which pools are active and valid (operator, 11 Nov; small, Opus Medium)
+### 1C.10 Neon Lake round 3 (operator, 11 Nov evening; one Opus High agent when a slot is free, in this order)
 
-Operator: "RSS Pools in Sources should list which pools are active and valid, right now it looks empty when
-filled with only Just Make It Work pools only saying the number and nothing else. I would suggest listing them in
-Custom Pools as JMIT POOL -> NAME and a right aligned semantic check mark for valid ones, X for failing ones."
-Today `ui/tabs/sources_tab.py` (about line 700) sets one label, "Pools: N enabled", with the names only in its
-tooltip; pool data is `sources/rss/pools.py` (`WALLPAPER_POOLS`, `read_pool_selection`).
+One agent, one mode (`shockwave_grid`), four features and two repairs, each its own reviewed checkpoint. Every
+new control is a canonical spec entry in `core/settings/visualizer_mode_settings.py`, off or neutral by default,
+authored neutral into every Neon Lake preset by the repair fill, shown in Settings and the Studio through the
+spec, identical pixels and zero cost when off (a skipped branch, not a multiply by zero), Settings/Studio and
+engine-worker parity rerun, `Docs/Reference/Neon_Lake_Basin.md` and the Visualizer Reference updated. Everything
+ramps and fades; nothing pins at its ceiling on loud music and nothing mutes mid-song kicks in continuous play
+(judge on whole songs with `tools/visualizer_replay/neon_lake_music_response.py --continuous`).
 
-- [ ] Inventory first: how the Custom Pools list is built and what a row is; where a pool's or feed's health is
-  known today (last fetch result, the pool index, `Docs/Reference/Feeds.md` and
-  `Docs/Reference/Wallpaper_Pool_Selection.md`); whether "valid" can be read from stored state without a fetch.
-- [ ] Each active Just Make It Work pool is a row in the Custom Pools list, labelled `JMIT POOL -> <Pool Name>`
-  (Title Case for the name; the prefix as the operator wrote it), visually distinct from the user's own custom
-  feeds and not editable or removable there (they are managed by the pool chooser; the row's tooltip says so).
-- [ ] A right-aligned status mark per row, for JMIT pools and custom feeds alike: a check mark in the theme's
-  semantic success colour when the pool's last result is valid, an X in the semantic failure colour when it is
-  failing, and a neutral mark when it has not been tried yet; the tooltip states why (last success time, or the
-  failure reason). Marks are painted glyphs in theme tokens, not coloured text characters, and readable on
-  light and dark themes.
-- [ ] Validity comes from stored state the sources already keep; opening Settings triggers no network request
-  and no new timer or polling; the marks refresh when the sources' own state changes (an existing signal or the
-  tab's existing refresh edge).
-- [ ] The summary label stays, reworded only if needed so it never reads as empty ("Pools: off" only when none).
-- [ ] An empty state: with no pools and no custom feeds the list says so in one line.
-- [ ] Tests on the real `SettingsDialog` (never a stub host): rows exist for the active pools derived from
-  `WALLPAPER_POOLS` and the selection (no pool names or wording pinned), the mark follows a stubbed stored
-  state for valid, failing and untried, no network is touched (transport and DNS stubbed), and a negative control.
-- [ ] Evidence: off-screen stills of the Sources tab on one dark and one light theme with a mix of valid,
-  failing and untried rows; lead pixel review; `Docs/Reference/Feeds.md` updated.
+**a. Repairs first (they change what the rest is measured against)**
+
+- [ ] 1B.5's dormancy fault: an ungrown grid with React To Music off pays for the terrain-overlay path; skip it
+  (identical pixels, the pre-1B.5 cost), re-measured alternated in one session; the five unattributed GL calls.
+- [ ] 1B.6's paused Studio preview: a paused seek shows the reaction the fixture has at that time.
+
+**b. Water lines can be hidden: plan 1C.8, as written there.**
+
+**c. Spire glow on hits (operator: "spires should glow an editible colour on hits. Completely optional in the
+Studio. If you want a test colour just pick one of the dominant colours.")**
+
+- [ ] The hit part of the Growth drive exposed on its own (today it is mixed into the drive): a frame-field
+  value and one uniform, memoryless on the fixed scale like the other drives; nothing per frame when off.
+- [ ] Growth's share of a vertex's height passed to the fragment shader; emission added into the bloom target
+  in proportion to that share and the hit value, so only what grew glows, tallest most; mounds glow less than
+  spires by the same rule (Growth Shape decides), no separate switch.
+- [ ] Two spec controls in the Studio's Reaction workspace beside Growth: "Spire Glow" (amount, 0 = off and
+  identical to today) and "Spire Glow Colour" (an editable colour). No test colour is shipped in presets: the
+  presets are authored at 0; for evidence use each preset's dominant accent (Preset 1 its magenta ridge colour,
+  Preset 3 its gold).
+- [ ] The glow rises with the hit and decays over a few hundred milliseconds (a ramp, never a flash that
+  strobes); on sustained loud passages it settles below its ceiling so the next hit still reads.
+- [ ] Evidence: a staged sheet (hit value 0, 0.5, 1 on Presets 1 and 3), one driven WebP on `heavy1`, the
+  music-response trace with the glow term beside the song's envelope; lead pixel review.
+
+**d. Vertex trace (operator: "would a vertex trace reaction also be viable? When on and a colour is chosen
+vertexes react to music by changing colour to the chosen colour and you could select 'Random', 'Left to Right',
+'Back To Front', 'Front To Back' and 'Center Out' as their starting points. Their speed and colour deepness
+effected by intensity, making sure not to pin.")** Viable and cheap: the land's vertex points are already drawn
+by a vertex shader that knows each point's position, and the mode already carries a small ring of travelling
+wave fronts from the tick to the shader.
+
+- [ ] Design note first (half a page in `Neon_Lake_Basin.md`, seen by the lead before code): each vertex gets an
+  order key in 0..1 from its position by the chosen start: Left To Right (basin x), Back To Front and Front To
+  Back (depth from the saved camera's forward axis, so it reads the same from the default view), Center Out
+  (distance from the lake's centre), Random (a stable hash of the cell, so it never shimmers frame to frame). A
+  trace is a front that travels along the key; a vertex's colour moves toward the chosen colour as the front
+  passes and relaxes back behind it over a set tail length.
+- [ ] Fronts are launched by the music in the tick (a hit above the passage's own level launches one), kept in
+  a small fixed ring (as the wave ring is), advanced on the logical tick, sent as one uniform array; the vertex
+  shader does a few operations per vertex per live front and nothing when the ring is empty.
+- [ ] Intensity drives two things, both through soft knees so neither pins: the front's speed (faster on
+  louder passages, bounded so a front is always seen to travel) and the colour's depth (how far a vertex moves
+  toward the chosen colour; never fully replacing the land's own colour unless the control asks for it).
+- [ ] Spec controls in the Reaction workspace: "Vertex Trace" (amount, 0 = off), "Trace Colour" (editable),
+  "Trace Start" (Random, Left To Right, Back To Front, Front To Back, Center Out; Title Case as written here),
+  "Trace Length" (the tail). Whether land vertices only or the water's vertices too: the agent renders both
+  and the lead picks.
+- [ ] It composes with Growth, Indents and Spire Glow without double-brightening (the trace recolours the
+  vertex; glow adds emission; together they stay under the bloom ceiling on `heavy1`).
+- [ ] Evidence: one WebP per Trace Start on Preset 1 with a test colour from its dominant accents, the
+  music-response trace showing launches against the song, a continuous-play run over three songs (launch
+  counts per third, no starvation after loud passages), cost per frame against the overhead baseline; lead
+  pixel review.
+
+**e. Islands (operator: "land can grow out of water but only in exceptional music circumstances"; optional,
+last because it touches the water's edge)**
+
+- [ ] The standing rule changes for this one feature only, and the docs say so: the authored shoreline never
+  moves; islands are extra land that may rise inside the lake while the feature is on.
+- [ ] "Exceptional" defined on the music's own scale and proved on whole songs: an island rises only when the
+  passage level has stayed in the top few percent of the session's own recent loudness for some seconds *and*
+  a strong hit lands; a cooldown follows; a quiet or even song raises none. Calibrate by presence on the
+  recorded songs (0 on `quiet_intro` until its loud end; 1 to 3 across `heavy1`), never by absolute levels.
+- [ ] A few fixed island sites per preset (seeded from the terrain record, in open water away from the shore and
+  the celestial reflection path), each a smooth mound; an island rises over seconds and sinks over seconds
+  (fade, never vanish), and never breaches the camera floor's clearance.
+- [ ] The island gets a real water's edge without recomputing the precomputed bank distance: its shoreline
+  distance is analytic (distance to the island's current waterline circle), and the shore glow, wet fringe,
+  wave taper and reflections read the smaller of the bank distance and the island distance. With no island up
+  the term is skipped and the frame is identical to today.
+- [ ] The camera floor's ripple allowance and the water reaction account for an island that is up; Growth,
+  Indents, Spire Glow and Vertex Trace treat island land as land.
+- [ ] One spec control, "Islands" (off by default), with at most one more for how rare; in the Studio the
+  Peak fixture can force one for authoring.
+- [ ] Evidence: rise and sink WebP on Presets 1 and 3 with 4x crops of the island's waterline (glow and fringe
+  wrap it, no hard ring), the whole-song launch table, GPU cost with an island up and with none, alternated in
+  one session; lead pixel review. If the analytic edge cannot be made to look right, stop and report with the
+  renders rather than shipping rocks without a shoreline.
+
+### 1C.9 Sources: RSS Pools shows which pools are active and valid (rows and restyle merged 12 Nov)
+
+Active Just Make It Work pools are rows in the Sources list (the heading reads "Pools and Custom Feeds"), told
+apart by an accent "JMIT POOL" tag and an arrow glyph, with a right-aligned validity mark read from stored health;
+no network, no timer. One shared list style (`shared_styles.SETTINGS_LIST_STYLE`, Jost 12 pt, 32 px rows) now
+serves the Themes lists, the Folders list and this one; the delegate sets no font. Evidence
+`.artifacts/evidence/settings/rss_pools/20261111_restyle/` (Sources above Themes at 2x on three themes).
+
+- [ ] The marks seen with real stored health once (a D1 or frozen run of 1B.14 after a real fetch), lead review.
+- [ ] Not rendered: a Mica theme; the onboarding lists keep their own style (decide whether they join the shared
+  one when onboarding is next touched).
+- [ ] List scrollbars draw as unthemed black native bars in off-screen renders (the Themes list too; older than
+  this change): the same box as 1B.11's, checked on a real display in the D1 run and themed through
+  `shared_styles` if they are native there.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
@@ -984,8 +1128,11 @@ Watchlist entry (operator, 11 Nov).
     opposite pole so it reads on its pill (2.48, 3.79, 2.86 to about 5.1); the other 197 state inks are
     unchanged.
   - Spectrum presets 2 to 15 of 7 Nov are replaced (1B.10); the five you rejected are being redone.
-- **Decisions the lead will put to the operator when their write-ups exist:** Neon Lake spire glow on hits;
-  islands rising from the lake (needs the water-boundary contract decision).
+  - Dark themes on material cards (12 Nov): text that was under 4.5:1 is now lighter (58 themes; on Royal
+    Orchard and Smoke Quartz the accent-coloured text ends up close to the plain text colour). Bars, dividers
+    and icons in the accent colour are unchanged.
+  - Settings lists (12 Nov): the Themes, Folders and online lists share one style (12 pt, 32 px rows); the
+    Sources list's heading reads "Pools and Custom Feeds"; the window's resize grip is three solid lines.
 
 ## 3. Lead and agents: active, paused and queued work
 
@@ -998,7 +1145,24 @@ Nov evening: the lead is the only Fable "until I say otherwise"; the preset agen
 the cap): the native-core sequence (section 1 item 8b), the material track (1B.8) and what is left of the presets
 (1B.10, Opus Medium, when nothing more significant is waiting; the lead judges their pixels) run in these slots.
 The plan holds every task in detail before dispatch: a brief is its plan item, and a report is checked against
-the item's boxes (operator, 11 Nov evening). Agents run
+the item's boxes (operator, 11 Nov evening).
+
+**Closing before opening (operator, 12 Nov: "we seem to already struggle with agents not completing before the
+5hr limit ... We do need to focus on closing tasks with real successes ... and thus opening work chances"; and
+on the native core having no agent: "it is disappointing"; no further agents are added).** Rules:
+- A dispatch is one plan item, or one step of a large one, sized to finish, prove and report well inside the
+  limit; it commits at every step so a cut-off loses nothing, and it stops at its review point.
+- A slot does not take new work while its last report is unreviewed or unmerged: the lead audits and merges
+  first, deletes the landed boxes, then opens the next item.
+- Opus High slot A (material: 1C.5, the M2b report): when that is reviewed and merged the slot goes to the
+  native core, not to M3: first D4 (item 8b, D4.1 to D4.8, buildable now in the OpenGL renderer), then D1, D2,
+  D3 and the transport rule as contracts. M3 and M4 (border materials) follow when a High slot is free again.
+- Opus High slot B (Now Playing 1C.3, then the retarget 1C.2) stays on the fullscreen Visualizer until both
+  are merged; then Neon Lake round 3 (1C.10) or M3, whichever the lead finds more valuable then.
+- Opus Medium slots: 1C.4 and 1C.1 (Spline Curve, the preset error), the pool rows restyle (1C.9); then the
+  parked batch 4 (test doubles), the two preset flaws and 1C.8 (water lines) as bounded items.
+
+Agents run
 only the tests related to what they changed, never `--isolated`, never take over a display (off-screen renders
 and captures), and record side defects here instead of ignoring them. Wait for agent reports without status
 polling. An interrupted agent's uncommitted work is preserved as a "WIP (handover)" commit on its branch and the
@@ -1131,9 +1295,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   - [ ] GC freeze steady check (`4_gc_freeze_steady/`): a clean Waveform P4 run (the run was tainted: no steady gen2,
     3 gen1 of 9-11 ms) and the long run with Settings round trips. Bubble P1, 600 s game60 was clean: no steady
     gen1/gen2, heap 180,685 frozen at reveal and 87 left.
-  - [ ] Card materials (`5_card_materials/`): the alternated second Glass/Normal pair. First pair: Glass costs about
-    +16 % of a core on the render thread (53.7 against 37.5), publish->swap +3 ms, hitches 2.46 against 2.05 a
-    minute, at the same late %.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 
@@ -1351,8 +1512,6 @@ Live checklist: every box is an observation or a fix owed on evidence; delete an
 
 **Engine worker and platform (reopen only on evidence; no simple test exists)**
 
-- [ ] First-reveal latency under load: if the Visualizer's first appearance is noticeably later on the worker
-  than it was in process, size it in a load session (the no-load comparison is 1B.14's).
 - [ ] A hot-plugged audio device: nothing in use is hot-plugged until SMP/Library exists; the real-endpoint
   reopen test of 1B.14 covers the capture path. Revisit with SMP.
 - [ ] Linux engine worker (best effort, never run): the named wake pipe (FIFO), the worker's spawn under
@@ -1490,11 +1649,13 @@ there). Evidence `.artifacts/evidence/display/display_power/20261105_display_pow
   in Task Manager while dark, whether wake input reaches the saver, and the first seconds after wake (a stale frame,
   a jump or a hitch). Run with `--frame-trace --usage`; when something shows, read that trace and reopen here.
 
-**Card materials under load**
 
-- [ ] A transition-heavy material/Normal pair needs the separately approved measurement session (load is the
-  operator's to approve; small off-screen GPU timings do not replace it). When a session is approved, the lead runs
-  it with item 7's card-materials pair.
+**Load runs the 11 Nov session did not cover (reopen only on evidence)**
+
+- [ ] The 600 s Waveform Preset 4 and Bubble GC runs with `--frame-trace` (gen1/gen2 pauses per hour) and a long
+  run with several Settings round trips: one 85 s run with one round trip was clean (re-frozen, no barrier
+  timeout); nothing has shown a steady collection since the GC freeze merged.
+- [ ] The two-monitor canonical game60 outlier (48.6 fps once, 7 Nov, never repeated).
 
 **Installed builds as an ordinary Windows user (no such account or fresh install exists to test on; moved from 1.2-1.3)**
 

@@ -134,7 +134,7 @@ R37 source candidate details and acceptance implications:
 
 **Tree examined:** `da25970a16d11b0bf07098883cff1eea36e6beb8`, initially clean. No production code, presets,
 Settings, accepted 2D Bubble or lifecycle policy changed. No agents delegated. Evidence is retained locally at
-`Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/forensics/`; these ignored artifacts are not bundled into source control. Reproduction tooling
+`.artifacts/evidence/visualizers/extruded_bubble/20261020/forensics/`; these ignored artifacts are not bundled into source control. Reproduction tooling
 is in `tools/visualizer_replay/{extruded_bubble_forensics,bubble_reference_capture,extruded_bubble_log_inventory}.py`.
 Current work and acceptance remain in `Current_Plan.md` §4B. This report supersedes the earlier *unknown first
 response-loss stage* for the measured offline cases only; it does not erase the operator's failed live retests.
@@ -348,7 +348,7 @@ not be mistaken for matching the newly expanded size range.
 
 ### 7.2 Evidence and measured limits
 
-Local evidence is under `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/` (ignored media/custody; retained on this workstation):
+Local evidence is under `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/` (ignored media/custody; retained on this workstation):
 
 - `minimum_p1`: opening 12 s of real `anything_mixed2`, 1,091 logical inputs, 360 native 1672×941 frames at
   30 fps, same-frame zero-swell controls, silent GIF/MP4, contact sheet, per-ID custody and source hashes.
@@ -432,7 +432,7 @@ At driver 0 P1 uploads 0.018 rather than 0.6; at driver 1 it still reaches its a
 0.003–0.2. This is a deliberate resting-activity contract, not a changed preset or additional audio floor.
 Continuous simulation followers preserve release/phase; disabled rays remain off.
 
-Evidence: `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/rays_fixed_p1`, `rays_fixed_p7`, `rays_fixed_p7_1440`, plus the real opening
+Evidence: `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/rays_fixed_p1`, `rays_fixed_p7`, `rays_fixed_p7_1440`, plus the real opening
 12-second `light_passage_p1` native sequence. Fixed-state central RGB mean at softness 0 now spans
 **93.36–114.66** for P1, compared with **111.50–116.63** before. At softness 1 P1 spans **95.27–161.16**.
 P7's scene is intentionally dominated by other light/particulate, so its central-region average remains a weak
@@ -547,7 +547,7 @@ One operator-requested Sol 6.1 Medium agent performed the read-only source audit
 falsifier; the primary inspected its source, images and metadata. The still cannot establish the original
 offending shell's cluster membership, but the renderer discrepancy is independently reproduced.
 
-`Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/distortion_audit/` compares unmodified production ordinary/cluster shaders with
+`.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/distortion_audit/` compares unmodified production ordinary/cluster shaders with
 `uDiag=5` at a fixed camera. A radius-0.6 sphere at depth 6 is compared at center and (-4,-2.4,-6). A coincident
 radius-1e-6 second member admits the cluster path without changing the SDF silhouette. Direct RGBA32F OIT
 readback isolates coverage from lighting/refraction/post effects. All four native RTX 4090 draws return GL error 0.
@@ -617,7 +617,7 @@ This is a consumer correction, not an independent musical particle-birth model. 
 and density/lifetime appearance remain distinct open measurements.
 
 Actual `anything_mixed2.jsonl` native captures use unmodified preset activation:
-`Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/emission_final_p1` contains 16 paired frames over the opening 4 s at 1672×941;
+`.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/emission_final_p1` contains 16 paired frames over the opening 4 s at 1672×941;
 `emission_final_p7_1440` contains 12 paired frames over 3 s at 2560×1440. Each retains source hashes, clip/settings
 receipts, stable-ID custody and actual same-frame zero-swell controls. The primary inspected both contact
 sheets: onset opens the shell/particulate field, but P7's competing fine bright detail and limited depth hierarchy
@@ -737,13 +737,13 @@ checked the boundary and the final speck change; no additional agents were used.
 
 Final-source native artifacts (ignored local evidence, with source/clip/settings receipts):
 
-- `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/world_final_p7`: 15 frozen real-recorded-snapshot views at 1672×941,
+- `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/world_final_p7`: 15 frozen real-recorded-snapshot views at 1672×941,
   unmodified P7, 54 global bubble identities; ordinary yaw-view frustum candidates range 4–22.
-- `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/world_final_p1_1440`: 15 equivalent views at 2560×1440, unmodified P1,
+- `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/world_final_p1_1440`: 15 equivalent views at 2560×1440, unmodified P1,
   56 global identities; ordinary yaw-view candidates range 2–9. Both include twelve yaw angles, two tilt views
   and a zoom/pan view. No simulation advance occurs between views. Candidate counts are conservative ordinary
   frustum estimates, not segmented pixels or procedural/union counts. The primary inspected both contact sheets.
-- `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/world_final_operator_ranges`: 10 paired frames at 2560×1440 from
+- `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/world_final_operator_ranges`: 10 paired frames at 2560×1440 from
   `anything_mixed2`, 227 selected logical inputs over approximately 1.5–4 s. P7 is activated with selected retained
   controls in memory: Large [0,4], Small [20,50], Particles [.85,1], Bead Chains [2,4], Ray Softness .81. This is
   not an exact live-operator configuration reproduction. All logical records, including retirement, stay within
@@ -866,7 +866,7 @@ visible size. 2D eligibility there is only one large/three small IDs versus five
 identity meets the 80% rule across 8–12 s. This is insufficient coverage for a blanket cross-song or full-population
 claim. Current EB first-window eligibility is three large/seventeen small; the comparator has three/fourteen.
 
-Evidence under `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/recovery/`:
+Evidence under `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/`:
 
 - `matched_phrase_before` owns the pre-change paired distributions. `matched_body_final` owns the current
   paired twelve-second result and actual two-seam input custody. `matched_body_soft` and `matched_body_ragdoll`
@@ -985,7 +985,7 @@ loss of rejected uncommitted implementations. Both new native cases also retain 
 producer files, verified against their capture receipts before archival; that is a source-custody improvement,
 not a regenerated or silently relabelled capture.
 
-Evidence in `Evidence/2026-10-20/recovery/`:
+Evidence in `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/`:
 
 - `passage_roles_final`: identical recorded inputs over 12 s; **zero actual body-tuple mismatches**. Median per-ID
   4–8 s large extrema are **.349–2.774×**, small **.294–2.277×**. First-window large extrema remain

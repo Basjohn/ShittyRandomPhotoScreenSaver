@@ -36,16 +36,17 @@ Item {
         ? surfaceMaterialLoader.item.panelLimits : Qt.vector4d(0, 1, 1, 1)
     readonly property real surfaceMaterialCeiling: surfaceMaterialLoader.item
         ? surfaceMaterialLoader.item.panelCeiling : 1.0
-    // A text run's ink on this card (ShadowedText): null (the authored colour stands) unless
-    // the material is active with dark ink, where the panel is bounded and the run's own ink
-    // is corrected against the composed panel over black and white backdrops:
+    // A text run's ink on this card (ShadowedText): null (the authored colour stands, byte for
+    // byte) when the material is inactive or the run already reads; otherwise the run's own
+    // ink corrected against the composed panel over black and white backdrops, on every theme:
     // [r, g, b, a, reachable] (SurfaceContrast.legibleInk). Style edges only.
     function surfaceInkSolution(color, opacity, small) {
         var surface = surfaceMaterialLoader.item
-        if (!card.surfaceMaterialActive || !surface || surface.panelLimits.y > 0.5
-                || surface.glassLegibility.w <= 1.0)
+        if (!card.surfaceMaterialActive || !surface || surface.glassLegibility.w <= 1.0)
             return null
-        return surface.legibleInk(color, opacity, small)
+        var ink = surface.legibleInk(color, opacity, small)
+        return ink[4] && ink[0] === color.r && ink[1] === color.g && ink[2] === color.b
+            && ink[3] === color.a ? null : ink
     }
     // Card CONTENT paints only within the card at every point in its lifecycle.
     // Background, border and the external shadow remain separate/unclipped.
