@@ -59,6 +59,9 @@ ShaderEffect {
                                                                       tintColor, contrastLimits, opacityAdjust)
     readonly property var inkPoles: SurfaceContrast.inkPoles(resolvedParameters, tintColor, contrastLimits,
                                                             panelCeiling, opacityAdjust)
+    function legibleInk(color, opacity, small) {
+        return SurfaceContrast.legibleInk(color, opacity, inkPoles, small)
+    }
 
     // Shader inputs (names match surface_material.frag's uniform block).
     readonly property var source: backdrop

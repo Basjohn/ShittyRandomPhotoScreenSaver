@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Effects
-import "SurfaceContrast.js" as SurfaceContrast
 
 // Presentation-only card shell: background, border, corner radius, padding and
 // a signed-offset-safe rectangular drop shadow. This is a shared E3 primitive:
@@ -46,7 +45,7 @@ Item {
         if (!card.surfaceMaterialActive || !surface || surface.panelLimits.y > 0.5
                 || surface.glassLegibility.w <= 1.0)
             return null
-        return SurfaceContrast.legibleInk(color, opacity, surface.inkPoles, small)
+        return surface.legibleInk(color, opacity, small)
     }
     // Card CONTENT paints only within the card at every point in its lifecycle.
     // Background, border and the external shadow remain separate/unclipped.
