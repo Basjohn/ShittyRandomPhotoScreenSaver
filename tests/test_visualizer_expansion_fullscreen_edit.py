@@ -1522,6 +1522,31 @@ def test_now_playings_parts_move_and_size_inside_the_block_through_the_child_edi
 
 
 @pytest.mark.qt
+def test_a_part_flush_with_the_blocks_edge_still_resizes_by_its_strip(display, tmp_path):
+    """Shared child editor (plan 1C.3 side defect): the Edit frame is the parent's rectangle rounded to whole pixels,
+    so a part flush with the edge of a parent at a fractional place (Now Playing's artwork is as tall as its block)
+    reads up to half a pixel outside it; the containment check took that for an existing protrusion and froze the
+    resize at its start. With real pointer events, the artwork's side strip now shrinks it."""
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"offset_x": 0.0731, "offset_y": -0.2917})
+    _draw(display, media=_Media(title="A Track Title", artist="An Artist"), config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    block = _rect(_slot(display, "expandedOverlayNowPlaying"), _root(display))
+    art = _rect(_root(display).findChild(QQuickItem, "expandedOverlayArtwork"), _root(display))
+    assert abs(art.height() - block.height()) < 0.01 and block.y() != round(block.y())     # flush, fractional place
+    _open_children_by_pointer(display, edit)
+    strip = edit.layer_item(f"customLayoutChildResizeEdge-{BLOCK}-artwork-right")
+    before = _np_parts(display)["artwork"]
+    assert _real_drag(display, _scene_point(strip), -20, 0) == f"customLayoutChildResizeEdge-{BLOCK}-artwork-right"
+    after = _np_parts(display)["artwork"]
+    assert abs(after.width() - (before.width() - 20)) <= 3 and after.height() == before.height()
+    edit.owner.cancel()
+
+
+@pytest.mark.qt
 def test_the_block_offers_no_child_editing_to_the_preset_toast_and_the_parts_follow_the_blocks_scale(
         display, tmp_path):
     """The toast has no parts (no child lock). A part's edit alone makes the draft pending (Settings is held, Save or
