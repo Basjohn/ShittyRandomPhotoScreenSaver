@@ -419,6 +419,58 @@ Rectangle {
         }
     }
 
+    // The Studio's one tooltip form. Every `C.ToolTip.*` in this shell shows Qt's single shared tooltip, so styling
+    // that instance once gives every row, button and handle the same tip: theme surface, outline and text; wrapped
+    // to at most `tipMaxWidth` (never wider than the window less the popup's margins, which keep it inside). The
+    // instance belongs to the QML engine, which outlives one Studio, so each shell restyles it with its own theme.
+    readonly property real tipMaxWidth: Math.max(160, Math.min(420, width - 2 * 12))
+    Component {
+        id: studioTipBackground
+        Rectangle {
+            objectName: "studioTipBackground"
+            radius: 5
+            color: Qt.rgba(shell.cRaised.r, shell.cRaised.g, shell.cRaised.b, 1)   // opaque over any material
+            border.width: 1
+            border.color: shell.cOutline
+        }
+    }
+    Component {
+        id: studioTipText
+        Text {
+            objectName: "studioTipText"
+            property var popup: null
+            text: popup ? popup.text : ""
+            wrapMode: Text.Wrap
+            color: shell.cText
+            font.pixelSize: shell.fontBase - 1
+            lineHeight: 1.1
+        }
+    }
+    function styleSharedToolTip() {
+        var tip = C.ToolTip.toolTip
+        if (!tip)
+            return
+        tip.objectName = "studioToolTip"
+        tip.margins = 12
+        tip.padding = 8
+        var oldBackground = tip.background, oldContent = tip.contentItem
+        // Created under the shell (an item, so Qt does not warn), then unparented: a control adopts only a piece
+        // with no parent, and an adopted-elsewhere text would draw at the shell's corner instead of in the tip.
+        var background = studioTipBackground.createObject(shell)
+        var content = studioTipText.createObject(shell, { popup: tip })
+        background.parent = null
+        content.parent = null
+        tip.background = background
+        tip.contentItem = content
+        // Only a previous Studio's created pieces are ours to free (the style's own are declared, not created).
+        if (oldBackground && oldBackground.objectName === "studioTipBackground") oldBackground.destroy()
+        if (oldContent && oldContent.objectName === "studioTipText") oldContent.destroy()
+        tip.implicitWidth = Qt.binding(function() {
+            return Math.min(shell.tipMaxWidth, tip.implicitContentWidth + tip.leftPadding + tip.rightPadding)
+        })
+    }
+    Component.onCompleted: styleSharedToolTip()
+
     // One line that never overflows: elided to its width, the full text on hover when it is cut.
     component HintText: Text {
         id: hint

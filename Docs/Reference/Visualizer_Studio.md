@@ -96,6 +96,11 @@ reuses Settings' owners rather than restating them:
   (the scene's pixels are unchanged) while every slot corner lies inside the frame's rounded outline; the frame's
   border is drawn over the scene (`viewportFrameBorder`), covering the slot's square corners. The render node, its
   scissor and the saver's clip path are untouched.
+- **Tooltips.** Every `C.ToolTip` in the shell is Qt's one shared tooltip, styled once per Studio
+  (`styleSharedToolTip`): the theme's raised surface made opaque, its outline and text, wrapped to at most
+  `tipMaxWidth` (420 px, never wider than the window less the popup's 12 px margins, which keep it inside). The
+  instance belongs to the QML engine and outlives a Studio, so each shell restyles it with its own theme. No per-row
+  tooltip styling (`tests/test_studio_tooltip.py`).
 | `ui/studio/<mode>_adapter.py`, `<mode>_recorded_inputs.py` | One adapter per registered mode plus its recorded-clip extractor. |
 
 ## 3. Adapter contract
