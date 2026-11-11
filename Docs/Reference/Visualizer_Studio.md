@@ -360,7 +360,13 @@ when both toolbar groups cannot fit side by side.
   save exactly. Save Camera explicitly captures every supported axis; the gesture and Keep View policies below still
   govern navigation that has not been explicitly saved.
   `saved_with_camera_policy` keys persist only when the store's camera policy allows; `saved_on_keep` keys persist on
-  Keep View; anything else is preview only.
+  Keep View; anything else is preview only. One rule for every mode's live view pose (the descriptor's
+  `view_orbit_settings`, turn and tilt): its rows are view-pose rows and the mode navigates it (framed modes through
+  `framed.camera_navigation`, free-orbit modes, Sphere and Extruded Spectrum, through `framed.orbit_navigation`).
+  Without the preset row's camera choice (Sphere and Extruded Spectrum have none) the dragged view holds for the
+  session and Save Camera keeps it. Until 11 Nov Sphere's View Turn / Tilt were plain committed rows: the canonical
+  save, which leaves view keys to the camera owner, read the old view back and the slider snapped back
+  (`tests/test_studio_view_pose_sliders.py`).
 - **Previews.** `preset_preview` (starting-point tiles) and `card_preview` (rendered cards at the Quiet or Peak
   endpoint) render once per commit while visible, never per frame.
 - **Handles.** `scene_handles(...)` projects direct-manipulation handles through the mode's real camera (or item

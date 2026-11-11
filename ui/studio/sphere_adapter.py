@@ -139,6 +139,8 @@ def build_schema() -> StudioSchema:
     placed: dict[str, list[str]] = {w[0]: [] for w in _WORKSPACES}
     customs = _custom_controls(spec)
     tracer_on = ((PREFIX + "light_tracer_enabled", (True,)),)
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    view_keys = frozenset(get_visualizer_mode_descriptor(MODE).view_orbit_settings)
 
     def place(workspace, group):
         if group not in placed[workspace]:
@@ -148,7 +150,7 @@ def build_schema() -> StudioSchema:
         bucket = control.bucket or customs.get(control.key, "")
         if bucket:
             workspace, group = _BUCKET_WORKSPACE.get(bucket, "look"), titles.get(bucket, bucket)
-        elif control.key in (PREFIX + "turn", PREFIX + "tilt"):
+        elif control.key in view_keys:
             workspace, group = "motion", VIEW_GROUP           # the saved view the live orbit writes
         else:
             continue
@@ -156,11 +158,17 @@ def build_schema() -> StudioSchema:
         label = _label(control.label) or _label(getattr(control, "text", "")) or control.key
         if control.key == PREFIX + "finish":
             label = "Finish Preset"
-        elif control.key in (PREFIX + "turn", PREFIX + "tilt"):
+        elif control.key in view_keys:
             label = "View " + control.key[len(PREFIX):].title()
         when = control_condition(control) or (tracer_on if control.key == PREFIX + "tracer_color" else ())
         common = dict(workspace=workspace, group=group, tooltip=getattr(control, "tooltip", ""), when=when,
                       priority=_PRIORITY.get(control.key, 100), icon=_ROW_ICONS.get(control.key[len(PREFIX):], ""))
+        if control.key in view_keys:
+            # The live view pose, as in every Studio: a preview view, saved only through the store's camera policy
+            # (Save Camera). A plain committed row was read back by the canonical save, which leaves view keys to
+            # the camera owner, and snapped back.
+            common.update(view_pose=True, tooltip="Preview view. Drag the viewport to orbit. The live orbit is a "
+                                                  "view, not artwork: Save Camera keeps it.")
         if isinstance(control, Slider):
             extra = max(0, int(round(math.log10(control.display_multiplier)))) if control.display_multiplier > 1 else 0
             decimals = 0 if control.integer else max(control.decimals + extra, 2 if control.percent else 0)
@@ -558,7 +566,11 @@ class SphereStudioAdapter(StudioModeAdapter):
         self._schema: StudioSchema | None = None
 
     def capabilities(self) -> StudioCapabilities:
-        return StudioCapabilities(viewport=True, camera=False, handles=False, objects=False)
+        # The live orbit (turn / tilt) is navigable like every mode's view pose; Sphere has no lens, dolly or pan.
+        return StudioCapabilities(viewport=True, camera=True, handles=False, objects=False)
+
+    def navigation(self):
+        return framed.orbit_navigation(MODE)
 
     def schema(self) -> StudioSchema:
         if self._schema is None:
