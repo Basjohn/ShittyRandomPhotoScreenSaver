@@ -328,6 +328,25 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   only the other overlay is a snap peer; storage is `widgets.spotify_visualizer.fullscreen_overlays`, not
   `widgets.custom_layout`; the seekbar is inline in `MediaPresentation.qml` (no component to reuse; its position
   comes from GSMTC timeline events, no timer).
+  Decomposition (lead, 11 Nov; each slice its own reviewed checkpoint, in this order, the Media card
+  pixel-identical after every one):
+  - [ ] a. Extract the Media seekbar into one component with a look carrier (no behaviour change; before/after
+    Media card renders identical at 100/150%).
+  - [ ] b. Parent geometry through the shared owner: the overlay block's move, corner scale, per-axis resize and
+    Restore Size use the ordinary Edit handlers; delete the parallel code in `fullscreen_overlay_edit.py` with its
+    tests (no bridge kept for dead callers).
+  - [ ] c. Alignment as declared roles: `alignment_flip` / `semantic_corner_anchor` on the overlay's roles
+    replace the position-based mirroring, so alignment is chosen and stable, as on the Media card.
+  - [ ] d. Artwork: one size carrier; the parent handles act as Media's do; border and shape follow the Media
+    widget's artwork settings, not the Visualizer card chrome. Resolves the four reds listed at 1B.1.
+  - [ ] e. Snap and guides: display edges, centre lines and the other overlay through the ordinary guide owner.
+  - [ ] f. Storage: the persisted key stays (`widgets.spotify_visualizer.fullscreen_overlays` is never renamed);
+    its records take the ordinary child-geometry schema and normaliser. Any shape change gets its load bridge in
+    `Docs/Architecture/Persisted_Input_Compatibility.md`.
+  - [ ] g. The optional seekbar: a Fullscreen Mode option (default off), a child part in Fullscreen Edit like the
+    others, the same seek route and double-click ownership as the Media card, authored into the defaults.
+  Guardrails: no overlay-only geometry maths survives; no timer for position; nothing changes for a user who
+  never opens Fullscreen Edit (stored overlays load to the same pixels: render before/after from a saved profile).
 - [ ] **1B.8 Light themes are practically opaque in the application.** Dark themes transmit correctly; light
   themes (Platinum Workstation, Polished Chrome, Plum for example) render nearly opaque in the saver even though
   their Settings GUI variant shows the material correctly. Find where the runtime path diverges from the Settings
@@ -352,6 +371,28 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   from about 5 px to about 1 at 150% (0 at 100%, 3 of 8 at 200%) by squaring the corner, and does not remove it.
   Never tried: DWM corner preference on a non-layered window, a region applied before Accent, a composition-host
   clip. The tool shows a real native window; there is no Studio equivalent yet.
+- [ ] **1B.13 Hold right-click to pan the live Visualizer, as in the Studios (operator, 11 Nov; large QoL, but the
+  context menu's reliability and speed rank above it).** Design (lead): the platform's own convention, menu on
+  button-up, scoped to the one place a drag can mean something else.
+  - Over a pan-capable Visualizer card only (the same admission as the held-left plain orbit: not in Edit, not
+    exiting, no menu open, mode has `scene_transform_settings`), a right press opens nothing and arms a pending
+    pan at the press point, mirroring the plain orbit's pending -> capture states in `rendering/quick/window.py`.
+  - Pointer travel past the system drag distance while held turns it into the pan (existing press-scoped pan
+    baseline `_quick_scene_view_gesture` and the one pointer-capture owner); the menu never opens for that press,
+    and `context_menu_active` never becomes true. Release ends the pan through the live view-pose owner's
+    existing save rule (no new persistence rule).
+  - Release without that travel opens the retained context menu at the release point through the same
+    `context_menu_requested` route as today.
+  - Everywhere else (any other widget, the wallpaper, Edit, Alt-right, a mode that cannot pan) the menu opens on
+    press exactly as today: that path is not touched, so its reliability cannot regress.
+  - No timer or hold delay anywhere (a hold-time rule would add latency and a timer); no menu flash and dismiss.
+  - Guardrails and regression bar: the existing context-menu, R39 hover-handoff, double-right Edit shortcut and
+    single-menu-per-display tests pass unchanged; new tests for click (menu opens once, on release), drag (pan,
+    no menu), press on the card and release off it, a second right press while the menu is open, double-right
+    over the card, focus loss / mode switch / exit / display loss mid-pan (capture released, pose not corrupted),
+    the expanded card (the whole display is the card), and Media Center mode. Measure press-to-menu-visible on
+    the untouched path before and after (must be equal) and release-to-menu-visible on the card. The pan cursor
+    goes through the cursor owner 1B.2 fixes: build after 1B.2 merges (same file).
 - [ ] **1B.11 Theme filter in the Linked row (operator request, 11 Nov; independent of the items above, runs when
   a slot is free).** Both theme pages (Settings Themes, Widget Themes) get a type-in filter in the space beside
   the Linked / Independent button (`ui/tabs/themes_tab.py`, `ui/widgets/theme_list.py`). Typing narrows the list
