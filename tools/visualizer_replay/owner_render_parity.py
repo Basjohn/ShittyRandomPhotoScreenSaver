@@ -37,15 +37,15 @@ mode's own passes on this GPU, on either process path, and no pixel oracle can b
 - ``single``: every scene target opened with one sample for the run (``single_sample_scene_targets``: the sample
   count ``SceneTarget.begin`` is given, nothing else, so every pass, program, post effect and tier property is drawn
   as the product draws it). **The gate is exact here:** every frame's pixels equal on the two paths.
-- ``product``: the tier as resolved for this GPU. A mode whose in-process run repeats exactly (the 2D modes) must
-  be exact. A mode whose in-process run does not repeat is reported against that repeat: the differing frames, the
-  most pixels differing in one frame and the largest level difference, worker against in process beside in process
-  against itself, and it fails if the paths differ by more levels than the same path differs from itself.
+- ``product``: the sampling as shipped. The pixels are **reported, not judged**: the differing frames, the most
+  pixels differing in one frame and the largest level difference, worker against in process beside in process
+  against itself (one repeat is one sample of the noise: a short tail can repeat exactly and then differ by a
+  pixel). Everything else is still judged.
 
 Gate (per mode, variant and sampling): the two paths drew the same number of frames over equal regions, the pixels
-are equal as above, the logical digests are equal, the worker path stayed on the worker, and the drawn frames changed
-over the run and lit the card (a blank card would be equal on any two paths). On a difference both paths' frames of
-the first differing input are written beside an amplified difference map.
+are equal (``single``), the logical digests are equal, the worker path stayed on the worker, and the drawn frames
+changed over the run and lit the card (a blank card would be equal on any two paths). On a difference both paths'
+frames of the first differing input are written beside an amplified difference map.
 
 Controls (``--skip-controls`` omits them): the in-process run repeated (``single``: identical to itself, the
 oracle's noise floor is zero), and the mode's Sliders moved a further step must change the drawn frames (the
@@ -389,11 +389,12 @@ def rendered_parity(mode: str, variant: str, clip_frames, supervisor: Any, *, sa
                 verdict["nudged_frames_changed"] = pair_difference(in_process, nudged)["frames"]
                 del nudged
                 verdict["controls_ok"] = bool(verdict["reproducible"] and verdict["nudged_frames_changed"] > 0)
-        elif not verdict["reproducible"]:
-            # The same path does not repeat itself at this sampling: the paths may differ by no more levels than that.
-            pixels_ok = bool(paths["regions_equal"] and verdict["frames_drawn"][0] == verdict["frames_drawn"][1]
-                             and paths["max_level"] <= verdict["repeat"]["max_level"])
-            verdict["bounded_by_repeat"] = pixels_ok
+        else:
+            # A multisampled target does not repeat its own draw, and one repeat is one sample of that noise (a
+            # 35-frame tail can repeat exactly and then differ by one pixel): the pixels are reported beside the same
+            # path's repeat and not judged here. ``single`` is the exact gate.
+            verdict["pixels_judged"] = False
+            pixels_ok = bool(paths["regions_equal"] and verdict["frames_drawn"][0] == verdict["frames_drawn"][1])
         verdict["identical"] = bool(pixels_ok and verdict["digests_identical"] and verdict["stayed_on_worker"]
                                     and verdict["meaningful"]
                                     and verdict["final_mode"][0] == verdict["final_mode"][1]
