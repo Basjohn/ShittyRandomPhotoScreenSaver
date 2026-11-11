@@ -183,8 +183,6 @@ What it left open:
   work (33912e5a); the refinement round reports which change accounts for it (1B.6).
 - [ ] Waveform Ribbon hard-codes 4 samples (`rendering/quick/scene3d/waveform.py:378`); route it through the
   scene's sampling owner.
-- [ ] `tools/artifact_paths.py` sends a worktree's evidence to the main checkout's `.artifacts`; give it the
-  running checkout's root so worktree agents need no redirect.
 - [ ] Multisampled scene targets are not reproducible draw to draw on this GPU (the parity gate judges
   single-sampled targets and reports product sampling beside the path's own repeat); attributed only as far as
   "the mode's own passes".
@@ -208,11 +206,6 @@ What it left open:
    Linux is best effort (operator, 11 Nov): no Linux environment exists, so the flip stands on code quality and
    the tests that run on Windows, and H3 is closed. What a first Linux run would show is the Watchlist entry
    "Linux engine worker".
-   - [ ] `Docs/Guardrails/Linux_Compatibility.md` section 7 forbids a Linux-branch test in a shared file; the
-     platform-injected `[False]` case in `tests/test_platform_selection.py` is the only negative control that
-     runs on Windows: record it there as the admitted exception or move it.
-   - [ ] The `[PLATFORM]` branch of `_note_in_process_path` (`quick_display_visualizer_owner.py`) can no longer
-     fire; keep it only if a platform may be taken off the worker again, otherwise delete it with its test.
 4. P3's four decisions and first native rendering substrate (order: D1/D2 with the drop edge, then D4, then D3;
    the substrate is built against the single-sample parity gate, `tools/visualizer_replay/owner_render_parity.py`):
    - [ ] D1: the native reader vs the GUI thread closing the mapping mid-copy; liveness is per stream, not per
@@ -383,10 +376,6 @@ through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 - [ ] Evidence gap: no side-by-side render of the Media widget's own Edit beside Fullscreen Edit (it needs an
   off-screen harness that drives ordinary Edit on a Media card); build it beside
   `tools/expanded_visualizer_evidence.py`.
-- [ ] A raw old profile file on disk with the retired artwork factors is covered only by the normaliser test
-  (the round-trip test writes through the settings manager, which normalises on write): add a fixture file.
-- [ ] Side defect: `tests/test_qtquick_media_presentation.py:429` pins a default colour
-  (`app_volume_fill_color`) and fails when run after the Visualizer test files in one process (passes alone).
 
 ### 1B.8 Light themes are practically opaque in the saver (M1 merged 4674e801; M2 in flight, Opus High)
 
@@ -429,7 +418,6 @@ inner line are gone. Thicker borders (they square the corner) and a pre-Accent r
 measurements and rules: `Docs/Architecture/Settings_Theme_Architecture.md`. Residue no layered window can remove:
 a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels, was 72-251).
 
-- [ ] Studio resize areas have no test for their geometry; add one beside `tests/test_studio_chrome.py`.
 - [ ] Close or rewrite 1.9 (section 1A) to point here.
 - [ ] Side defect: the Studio window shows only blur (no title bar or content) in native captures by
   `tools/settings_native_corners.py --window studio`; find whether it is the capture setup or the Studio.
@@ -502,16 +490,10 @@ overlap horizontally, so a vertical stack offers no side arrows); only applicabl
 current display's glyph is a Down arrow and the diagonals move the view. The owner request stays "expand on
 display N" (`expand_on_display`, the shape SMP will reuse).
 
-- [ ] Two left/right rules: Edit's display-hop arrows (`QuickCustomLayoutOwner._adjacent_binding_for_identity`,
-  `rendering/quick/custom_layout_owner.py`) compare centre x and offer a hop between two vertically stacked
-  displays of different widths, where the glyphs offer none. Move Edit's hop onto `core.display_neighbours`.
 - [ ] A display arrangement changing while the saver runs is covered only by re-admission in tests; check it on
   the topology-replacement path.
 - [ ] The Reset Camera glyph (a font character) shows coloured edge fringes in off-screen crops; confirm on a
   real display and paint it as a path like the arrows if it does there too.
-- [ ] Record the QML trap where QML authors will see it (there is no QML authoring guide; add a short section to
-  `Docs/Guardrails/Presentation_Change_Preflight.md`): a property named `left` on a `Text` (colliding with
-  Item's built-in `left`) hangs the hidden-scene load silently instead of raising.
 
 ### 1B.13 Hold right-click to pan the live Visualizer (merged 21da6fbc; contract: Spec.md / Contracts.md input)
 
@@ -702,13 +684,14 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 - [ ] Keep it a separate reversible fix.
 - [ ] Repeat the four-case corner/border/shadow gate before claiming improvement.
 
-### Side defect: Build Runner's environment variables
+### Side defect: nine reds from stale owner stubs (found 11 Nov; repair in flight, Opus Medium)
 
-- [ ] `tools/build_runner.py:3346` still reads `SRPSS_BUILD_RUNNER_DEBUG` (the Inno override is now `--iscc PATH`);
-  replace it with a CLI argument.
-- [ ] Two reds in `tests/test_github_remote_build.py`: `test_the_github_tab_offers_the_remote_products_and_local_
-  steps` (an extra `linux_mc` job) and `test_the_linux_dispatch_sends_inputs_only_for_a_pinned_commit`
-  (`scripts/linux/build_from_windows.ps1` no longer matches); not checked against the base commit.
+- [ ] `test_visualizer_camera_contract.py` (2), `test_visualizer_control_hints.py` (5),
+  `test_visualizer_custom_route_contract.py` (1) and `test_visualizer_custom_geometry_profiles.py` (1) fail when
+  their files run alone: hand-built stubs lack `owner.is_started` and `set_visualizer_studio_rotate_glyphs`
+  (`engine/display_manager.py:1026-1027`, from dfceed38), and a `DisplayManager` without `displays` reaches
+  `_expand_glyph_neighbours` (`:3559`, from 32279216). Stubs brought up to the real owner's surface through one
+  shared double; a product fix only if `displays` can really be absent; sibling stubs swept.
 
 ### Awaiting Validation after the focused proofs
 
