@@ -1,8 +1,10 @@
 """Lazy event-spark draw over the shared particle pass and immutable logical birth records."""
 from __future__ import annotations
+from types import SimpleNamespace
 import weakref
 import numpy as np
 from OpenGL import GL as gl
+from PySide6.QtGui import QOpenGLContext
 from core.ribbon_bursts import CAPACITY, STRIDE
 from rendering.gl_programs.ribbon_bursts import VERTEX, FRAGMENT
 from rendering.gl_programs.mist import FOG_OFF
@@ -23,7 +25,6 @@ class RibbonBurstRenderer:
     def has_resources(self):return self.resources.has_resources or (self.stream is not None and self.stream.has_resources)
 
     def _context(self, *, admit=False):
-        from PySide6.QtGui import QOpenGLContext
         current=QOpenGLContext.currentContext()
         if current is None:raise RuntimeError('Ribbon event sparks require their current GL context')
         if self._context_ref is None and admit:self._context_ref=weakref.ref(current)
@@ -67,7 +68,6 @@ class RibbonBurstRenderer:
             elif key=='uGradeStops':gl.glUniform4fv(u[key],len(value)//4,np.asarray(value,np.float32))
             else:gl.glUniform4f(u[key],*value)
         vao,_=self.resources.mesh('quad',(0.,0.,1.,0.,0.,1.,1.,1.),(2,))
-        from types import SimpleNamespace
         stream=self._stream();stream.warm()
         with stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,payload,restore=restore):
             draw_particles(SimpleNamespace(quad_vao=vao),CAPACITY)

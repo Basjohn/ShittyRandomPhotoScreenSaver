@@ -14,6 +14,8 @@ import math
 from dataclasses import dataclass
 from functools import lru_cache
 
+from core.settings import framed_camera as fc
+from core.settings.neon_lake_camera import SPEC, floor_reaction, terrain_floor
 from core.constants.neon_lake_world import (
     CONTINUATION_DESCENT, DISTANT_CURVATURE, DISTANT_FLAT, FAR_HILLS, FAR_PLANE, WATER_PEAK,
 )
@@ -76,8 +78,6 @@ class BasinView:
 def orbit_view(turn: float, tilt: float, field=(0.0, 0.0, 1800.0, 1000.0), *, scale: float = 1.0,
                pan=(0.0, 0.0), fov: float = 30.0, position=(0.0, 0.0, 0.0)) -> BasinView:
     """A view from settings-unit pose values with no terrain floor (tools and contracts)."""
-    from core.settings import framed_camera as fc
-    from core.settings.neon_lake_camera import SPEC
     axes = fc.camera_axes(SPEC, turn, tilt)
     eye, _offset = fc.resolve_camera_position(SPEC, turn, tilt, scale, pan[0], pan[1], fov, position, axes=axes)
     tan = fc.viewport_tangents(fov, field[2] / field[3], 1., SPEC.fov_range)
@@ -92,9 +92,6 @@ _EYE_MEMO: list = [None, None, None]
 
 def basin_view(parameters, field, *, aperture_scale: float = 1.) -> BasinView:
     """Shared physical eye over the fixed terrain; only the observed aperture can resize."""
-    from core.settings import framed_camera as fc
-    from core.settings.neon_lake_camera import SPEC, floor_reaction, terrain_floor
-
     def get(name):
         return parameters["shockwave_grid_" + name]
     aspect = field[2] / field[3]

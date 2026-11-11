@@ -25,6 +25,7 @@ from widgets.spotify_visualizer.render_state import (
     VisualizerRenderSnapshot,
 )
 from widgets.spotify_visualizer.shaders import load_fragment_shader
+from widgets.spotify_visualizer.bubble_ambient_geometry import ambient_sprite_scale
 
 from rendering.quick import gl_query
 from ..implementation_values import parameter, rgba, safe_hue
@@ -260,10 +261,10 @@ class QuickBubbleRenderer:
         # No texture, framebuffer or extra GL calls on the opt-out path.
         ambient_texture = ambient_light = 0
         if payload.ambient_points:
-            from .bubble_ambient_gl import QuickBubbleAmbientPoints
             if self._ambient_renderer is None:
+                # Loaded on this edge only: the opt-out path never imports the ambient GL module.
+                from .bubble_ambient_gl import QuickBubbleAmbientPoints
                 self._ambient_renderer = QuickBubbleAmbientPoints()
-            from widgets.spotify_visualizer.bubble_ambient_geometry import ambient_sprite_scale
             ambient_texture, ambient_light = self._ambient_renderer.render_texture(
                 layout.content_rect, presentation.dpr, payload.ambient_points,
                 sprite_scale=ambient_sprite_scale(layout.effect_scale),

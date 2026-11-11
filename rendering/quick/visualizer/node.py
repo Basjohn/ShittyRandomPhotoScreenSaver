@@ -69,7 +69,7 @@ class VisualizerRenderNode(QSGRenderNode):
         self._identity: VisualizerRenderIdentity | None = None
         self._snapshot: VisualizerRenderSnapshot | None = None
         # The record the scene draws the card from at this sync (the item's own). The clip is built from it, never
-        # from the retained snapshot's record, which can be older and larger (R-187).
+        # from the retained snapshot's record, which can be older and larger (R-188).
         self._presentation: ResolvedVisualizerPresentation | None = None
         self._logical_size = (0.0, 0.0)
         self._clip_host = VisualizerClipHost()

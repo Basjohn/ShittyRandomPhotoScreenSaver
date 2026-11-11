@@ -29,7 +29,7 @@ glass, depth, musical response or parity with these targets.
 
 ## Slim GODZIP resource boundary (current handoff)
 
-Normal GODZIPs intentionally exclude root `assets/`, root `references/`, `ui/assets/` and operator themes; this EB reference also omits bulky local `Lab/2026-10-18/` and `Evidence/2026-10-20/` payloads, some original mock image bytes, and the separate workstation 11.6 GB evidence archive. The paths below describe the **full local repository/reference collection**, not files guaranteed to exist in the slim archive. Do not treat an absent Lab/Evidence file as permission to delete its requirement, reconstruct a screenshot or fetch an unrelated checkout. Current source, text Investigation/Target and the live `Current_Plan.md` are sufficient for code/docs handoffs; request a specifically needed image or recording only for a visual acceptance gate. EB Lab remains deliberately out of the archive.
+Normal GODZIPs intentionally exclude root `assets/`, root `references/`, `ui/assets/` and operator themes; this EB reference also omits bulky local `Lab/2026-10-18/` and `.artifacts/evidence/visualizers/extruded_bubble/20261020/` payloads, some original mock image bytes, and the separate workstation 11.6 GB evidence archive. The paths below describe the **full local repository/reference collection**, not files guaranteed to exist in the slim archive. Do not treat an absent Lab/Evidence file as permission to delete its requirement, reconstruct a screenshot or fetch an unrelated checkout. Current source, text Investigation/Target and the live `Current_Plan.md` are sufficient for code/docs handoffs; request a specifically needed image or recording only for a visual acceptance gate. EB Lab remains deliberately out of the archive.
 
 ## Start here
 
@@ -41,12 +41,13 @@ Normal GODZIPs intentionally exclude root `assets/`, root `references/`, `ui/ass
 | Durable visual/behavior contract and earlier findings | [Target.md](Target.md) | Required appearance, ownership and preserved design provenance |
 | Investigation, attempts, measurements and evidence limits | [Investigation.md](Investigation.md) | Full failure ledger; §§15–18 cover physical world, rejected response, clarification and passage-role candidate |
 | Astra High visual audit | [Visual_Audit_2026-10-20.md](Visual_Audit_2026-10-20.md) | Concrete material/defocus leads and native falsifiers |
-| Original forensic captures | `Evidence/2026-10-20/forensics/` (local historical evidence; omitted here) | 1,029 files moved from the former logs directory |
-| Recovery captures and paired response custody | `Evidence/2026-10-20/recovery/` (local historical evidence; omitted here) | 8,009 files moved from the former logs directory |
+| Original forensic captures | `.artifacts/evidence/visualizers/extruded_bubble/20261020/forensics/` (local historical evidence; omitted here) | 1,029 files moved from the former logs directory |
+| Recovery captures and paired response custody | `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/` (local historical evidence; omitted here) | 8,009 files moved from the former logs directory |
 | Asset provenance and move verification | [asset_manifest.json](asset_manifest.json) | Original paths, sizes, SHA-256 for all target/lab files and attachment deduplication |
 
-The target/lab images, recipes, manifest and documents are versioned. The 11.6 GB native evidence archive stays
-local and ignored, **inside this folder**. Capture receipts preserve the paths and producer hashes from their
+The target/lab images, recipes, manifest and documents are versioned. The 11.6 GB native evidence archive of
+20 October stays local and ignored in the evidence layout, `.artifacts/evidence/visualizers/extruded_bubble/20261020/`
+(formerly `Evidence/2026-10-20/` inside this folder; mapping in `tools/artifact_migration.py` `RELOCATED`). Capture receipts preserve the paths and producer hashes from their
 original runs; those historical receipt strings were not rewritten. The original recorded sound inputs stay
 with the recorder at `logs/visualizer_recordings`, not in a competing audio library.
 
@@ -103,17 +104,17 @@ Archived recipe payloads may be absent from slim handoffs and are not required b
 
 ## Historical recovery evidence (20 October; not current acceptance)
 
-- Historical passage-role candidate: `Evidence/2026-10-20/recovery/passage_roles_native_p1/contact.png`,
-  `Evidence/2026-10-20/recovery/passage_roles_native_p7_1440/contact.png`,
-  `Evidence/2026-10-20/recovery/passage_roles_final/summary.json`.
+- Historical passage-role candidate: `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/passage_roles_native_p1/contact.png`,
+  `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/passage_roles_native_p7_1440/contact.png`,
+  `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/passage_roles_final/summary.json`.
   That checkpoint was unaccepted; it does not supersede the accepted baseline at the top of this document.
-- Rejected P1 at that checkpoint: `Evidence/2026-10-20/recovery/clean_body_native_p1/contact.png`,
-  `Evidence/2026-10-20/recovery/clean_body_native_p1/frame_0060.png`,
-  `Evidence/2026-10-20/recovery/clean_body_native_p1/motion.gif`.
-- Rejected P7 at that checkpoint: `Evidence/2026-10-20/recovery/clean_body_native_p7_1440/contact.png`,
-  `Evidence/2026-10-20/recovery/clean_body_native_p7_1440/frame_0090.png`.
-- Same-sound accepted 2D reference: `Evidence/2026-10-20/recovery/clean_body_2d_reference/contact.png`.
-- Paired source custody: `Evidence/2026-10-20/recovery/matched_body_final/summary.json`.
+- Rejected P1 at that checkpoint: `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/clean_body_native_p1/contact.png`,
+  `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/clean_body_native_p1/frame_0060.png`,
+  `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/clean_body_native_p1/motion.gif`.
+- Rejected P7 at that checkpoint: `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/clean_body_native_p7_1440/contact.png`,
+  `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/clean_body_native_p7_1440/frame_0090.png`.
+- Same-sound accepted 2D reference: `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/clean_body_2d_reference/contact.png`.
+- Paired source custody: `.artifacts/evidence/visualizers/extruded_bubble/20261020/recovery/matched_body_final/summary.json`.
   Windowed logical ratios do not establish listening, display timing or visual acceptance.
 
 The annotated targets are direct acceptance references:

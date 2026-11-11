@@ -4,8 +4,9 @@
         --index 5 --title "Abyss" --description "..."
 
 ``--values`` is a JSON object of scenes, each a mapping of the mode's Settings values (keys with or without the
-``<mode>_`` prefix). Every value must come back unchanged from its Settings control's ``admit`` (so the Settings UI can
-reach it: no hidden keys, nothing out of range); the view pose keys (turn, tilt, scale, pan) become the preset's
+``<mode>_`` prefix). Every value must come back unchanged from its Settings control's ``admit``, or for a record key
+(a shape, the layers...) from the spec's own record admission (``ModeSettings.admit_custom``), so the Settings UI can
+reach it: no hidden keys, nothing out of range; the view pose keys (turn, tilt, scale, pan) become the preset's
 ``starting_view``, as Save Preset As stores it with **Include current camera view when saving**. The rest start from
 the canonical defaults, pass the same normalisers the Settings save uses, and are written to
 ``presets/visualizer_modes/<mode>/preset_<index>_<slug>.json``. The written preset is then read back through
@@ -29,18 +30,23 @@ from core.settings.visualizer_settings_snapshot import RETIRED_AUTHORED_TECH_SUF
 
 def _admitted(mode: str, values: dict) -> dict:
     from core.settings.defaults import get_default_settings
-    from core.settings.visualizer_mode_settings import spec_control
+    from core.settings.visualizer_mode_settings import require_mode_settings, spec_control
 
     defaults = get_default_settings()["widgets"]["spotify_visualizer"]
+    spec = require_mode_settings(mode)
     admitted = {}
     for key, value in values.items():
         key = key if key.startswith(f"{mode}_") else f"{mode}_{key}"
         control = spec_control(key)
-        if control is None:
+        if control is not None:
+            back = control.admit(value, defaults[key])
+        elif spec.custom_row(key) is not None:
+            # A record key (a shape, the layers...): the spec's own admission, as the Settings body admits it.
+            back = spec.admit_custom(key, value, defaults[key])
+        else:
             raise ValueError(f"{key} has no Settings control")
-        back = control.admit(value, defaults[key])
         if json.loads(json.dumps(back)) != json.loads(json.dumps(value)):
-            raise ValueError(f"{key}: the Settings control admits {value!r} as {back!r}")
+            raise ValueError(f"{key}: the spec admits {value!r} as {back!r}")
         admitted[key] = back
     return admitted
 

@@ -9,6 +9,7 @@ default) flames licking up from the burning edge and glowing ember veins crawlin
 from __future__ import annotations
 
 import logging
+import time as _time
 from typing import Any, Dict, Tuple
 
 from rendering.gl_programs.base_program import BaseGLProgram
@@ -432,8 +433,6 @@ void main() {
     ) -> None:
         if gl is None:
             return
-
-        import time as _time
 
         vp_w, vp_h = viewport
         progress = max(0.0, min(1.0, float(getattr(state, "progress", 0.0))))

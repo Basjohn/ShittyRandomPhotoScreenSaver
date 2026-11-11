@@ -48,6 +48,7 @@ matters while its toggle is on hides with it.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 import math
 from functools import cached_property
@@ -646,6 +647,21 @@ class ModeSettings:
             if control.key == key:
                 return control
         raise KeyError(f"{self.mode_id} declares no control {key!r}")
+
+    def custom_row(self, key: str) -> Custom | None:
+        """The Custom row whose record owns ``key`` (a shape, the layers, the terrain...); None when no row owns it."""
+        return next((entry for entry in self.entries if isinstance(entry, Custom) and key in entry.keys), None)
+
+    def admit_custom(self, key: str, value: object, default: object) -> object:
+        """One key of a Custom row's record as the model admits it: the row's ``admit`` when it declares one, else
+        the stored record passes through (a copy). The one admission for record keys; KeyError when no row owns it."""
+        row = self.custom_row(key)
+        if row is None:
+            raise KeyError(f"{self.mode_id} declares no record key {key!r}")
+        if not row.admit:
+            return deepcopy(value)
+        module, _, name = row.admit.partition(":")
+        return getattr(import_module(module), name)(key, value, default)
 
     def keys(self) -> tuple[str, ...]:
         return tuple(control.key for control in self.controls)

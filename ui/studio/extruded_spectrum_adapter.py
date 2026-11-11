@@ -87,12 +87,13 @@ def _family_keys(family: str) -> dict[str, str]:
 
 
 def control_available(control) -> bool:
-    """Settings' own availability rule (``spec_mode_builder._apply_availability``): a control whose capability flag
-    is off is disabled there (not editable), so the Studio does not offer it either."""
+    """The spec's availability rule (a control's ``availability`` flag, ``core/settings/visualizer_mode_settings.py``,
+    resolved by ``spec_mode_builder.resolve_spec_reference``): a control whose capability flag is off is not
+    editable, so the Studio does not offer it."""
     if not getattr(control, "availability", ()):
         return True
-    from ui.tabs.media.spec_mode_builder import _resolve
-    return bool(_resolve(control.availability[0]))
+    from ui.tabs.media.spec_mode_builder import resolve_spec_reference
+    return bool(resolve_spec_reference(control.availability[0]))
 
 
 @cache

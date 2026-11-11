@@ -16,12 +16,14 @@
     {
       "former_path": "logs/eb_forensics_20261020",
       "path": "Evidence/2026-10-20/forensics",
+      "relocated_to": ".artifacts/evidence/visualizers/extruded_bubble/20261020/forensics",
       "files": 1029,
       "bytes": 1926263674
     },
     {
       "former_path": "logs/eb_reactivity_20261020",
       "path": "Evidence/2026-10-20/recovery",
+      "relocated_to": ".artifacts/evidence/visualizers/extruded_bubble/20261020/recovery",
       "files": 8009,
       "bytes": 9668942512
     },

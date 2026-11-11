@@ -99,13 +99,16 @@ def test_guided_toggle_changes_pool_admission_without_replacing_custom_feeds(qt_
 
 def test_settings_pool_only_configuration_enables_ratio_and_readiness(qt_app, settings):
     from ui.tabs.sources_tab import SourcesTab
+    from ui.tabs.online_source_rows import FEED, KEY_ROLE, POOL, rows_of_kind
     from core.sources.readiness import has_image_sources
     settings.set("sources.folders", ["X:/wallpapers"])
     write_pool_selection(settings, WallpaperPoolSelection(True, ("nasa.space",), "latest"))
     tab = SourcesTab(settings)
     try:
         assert tab.ratio_slider.isEnabled()
-        assert tab.rss_list.count() == 0
+        # No custom feed rows; the active pool is listed as its own (pool) row since 1C.9.
+        assert rows_of_kind(tab.rss_list, FEED) == []
+        assert [item.data(KEY_ROLE) for item in rows_of_kind(tab.rss_list, POOL)] == ["nasa.space"]
         assert has_image_sources(settings)
         assert "Pools:" in tab.pool_status_label.text()
     finally:

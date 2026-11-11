@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import math
 import re
+import struct
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -1051,8 +1052,6 @@ def _std140_type(glsl_type: str) -> tuple[str, int, int, int]:
 
 
 def _pack_std140_value(glsl_type: str, value) -> bytes:
-    import struct
-
     element, count, _alignment, stride = _std140_type(glsl_type)
     fmt = "<" + _STD140[element][2]
     if "[" not in glsl_type:
@@ -1096,8 +1095,6 @@ class Scene3DBlockLayout:
         return f"layout(std140) uniform {self.name} {{\n{members}}};\n"
 
     def pack(self, values) -> bytes:
-        import struct
-
         data = bytearray(self.size)
         for (field, glsl_type), offset in zip(self.fields, self.offsets):
             value = values[field]
@@ -1113,8 +1110,6 @@ class Scene3DBlockLayout:
 
     def pack_fields(self, values) -> tuple[tuple[int, bytes], ...]:
         """Pack selected named members at their std140 offsets."""
-        import struct
-
         members = {field: (glsl_type, offset) for (field, glsl_type), offset in zip(self.fields, self.offsets)}
         packed = []
         for field, value in values.items():
@@ -1176,8 +1171,6 @@ class Scene3DStorageLayout:
                 f"    {self.record} {self.array}[];\n}};\n")
 
     def pack(self, records) -> bytes:
-        import struct
-
         data = bytearray(self.stride * len(records))
         for index, values in enumerate(records):
             base = index * self.stride

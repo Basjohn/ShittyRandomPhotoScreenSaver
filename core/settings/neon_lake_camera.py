@@ -89,13 +89,14 @@ def terrain_floor(terrain: Mapping, terrain_height: float, half_width: float = N
 
     ``reaction`` is the music's largest lift in lane units (strength x (peaks + pulses + swell)).
     """
-    from rendering.gl_programs.heightfield import heightfield_grid_transform, heightfield_origin_rect
     size, heights = _heights(terrain)
     # The render record carries its precomputed transform; a settings record derives it from its basin.
     if "grid" in terrain:
         grid_left, grid_front, grid_scale = tuple(terrain["grid"])
         origin = tuple(terrain.get("origin_rect", (0.0, 0.0, 1.0, 1.0)))
     else:
+        # Only a settings record reaches here (the render record carries its transform): no per-frame import.
+        from rendering.gl_programs.heightfield import heightfield_grid_transform, heightfield_origin_rect
         grid_left, grid_front, grid_scale = heightfield_grid_transform(terrain)
         origin = heightfield_origin_rect(terrain)
     grown = origin != (0.0, 0.0, 1.0, 1.0)

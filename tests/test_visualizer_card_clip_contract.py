@@ -1,4 +1,4 @@
-"""No Visualizer pixel lands outside the card's inner edge, for every registered mode (1C.4, R-187).
+"""No Visualizer pixel lands outside the card's inner edge, for every registered mode (1C.4, R-188).
 
 The production ``DisplayScene.qml`` and scene controller draw the card through a hidden ``QQuickRenderControl`` host
 (``tools/expanded_visualizer_evidence.HiddenDisplayHost``; no window is ever shown). Each mode replays a shipped
@@ -17,7 +17,7 @@ Checks, on the card as drawn now (the item's own record):
 * ``collapsed``: the ordinary card taken back from the display-wide one before a coherent snapshot exists (the
   retained snapshot's record is display-wide).
 
-Each runs with Normal and with Glass card material. Before R-187 the node built its stencil clip from the retained
+Each runs with Normal and with Glass card material. Before R-188 the node built its stencil clip from the retained
 snapshot's record, so ``shrunk`` and ``collapsed`` let Spline Curve's fill and lines cross the card's rounded corners.
 """
 from __future__ import annotations

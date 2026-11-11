@@ -1,4 +1,4 @@
-# R-187 | The Visualizer's card clip followed the retained snapshot's record, not the card being drawn, so a mode could paint past the card's rounded corners
+# R-188 | The Visualizer's card clip followed the retained snapshot's record, not the card being drawn, so a mode could paint past the card's rounded corners
 
 **Status:** fixed 11 Nov 2026 (plan 1C.4). `rendering/quick/visualizer/node.py` builds the stencil clip from the record
 the scene draws the card from at this sync (the retained `VisualizerRenderItem`'s own, handed to

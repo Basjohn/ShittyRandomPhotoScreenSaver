@@ -543,28 +543,21 @@ class CornerSizeGrip(QSizeGrip):
         # Slightly larger footprint so the diagonal cut reads clearly.
         self.setFixedSize(24, 24)
 
+    # Stroke of the grip's diagonals: the width of the theme's other painted glyphs.
+    STROKE = 1.25
+
     def paintEvent(self, event) -> None:  # type: ignore[override]
+        # Three solid, antialiased diagonals in the theme's size-grip role (a dotted, aliased
+        # pen read as Windows' native grip, 1C.9).
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        color = _theme_qcolor("chrome.size_grip")
-        pen = QPen(color)
-        pen.setWidth(2)
-        pen.setStyle(Qt.PenStyle.DotLine)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(_theme_qcolor("chrome.size_grip"), self.STROKE)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
-
-        w = self.width()
-        h = self.height()
-
-        # Three short diagonal strokes that read as a "cut" into the
-        # corner rather than a tiny triangle of pixels.
-        margin = 3
-        for offset in (0, 5, 10):
-            x1 = w - margin - offset
-            y1 = h - margin
-            x2 = w - margin
-            y2 = h - margin - offset
-            if x1 >= 0 and y2 >= 0:
-                painter.drawLine(x1, y1, x2, y2)
+        corner = QPointF(self.width() - 4.0, self.height() - 4.0)
+        for length in (4.0, 8.5, 13.0):
+            painter.drawLine(QPointF(corner.x() - length, corner.y()), QPointF(corner.x(), corner.y() - length))
+        painter.end()
 
 
 class SettingsDialog(QDialog):

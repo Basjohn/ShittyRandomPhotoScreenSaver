@@ -146,5 +146,43 @@ def test_faint_dark_ink_is_corrected_not_the_panel(solver, opacity) -> None:
 
 def test_an_opacity_faded_run_that_black_cannot_rescue_asks_for_a_plate(solver) -> None:
     poles = [[0.55, 0.55, 0.55], [0.95, 0.95, 0.95]]
-    ink = solver(f"legibleInk({_colour(DARK_INK)}, 0.4, {poles}, true)")
+    ink = solver(f"legibleInk({_colour(DARK_INK)}, 0.4, {poles}, true, false)")
     assert ink[4] is False and ink[:4] == [0, 0, 0, 1]
+
+
+@pytest.mark.parametrize("material", ("glass", "frosted"))
+def test_light_ink_white_pole_is_bounded_as_the_shader_bounds_it(solver, material) -> None:
+    # In the shader the face sheen is added before the legibility layer, whose guard holds a
+    # light-ink panel at its limit over a bright wallpaper; only the grain, added after, lifts it
+    # further. The white pole must claim no brighter panel than that, or a run that reads is
+    # corrected anyway (M2b audit: Default Dark's muted text on Glass, 5.05:1, was recoloured).
+    faint = LIGHT_INK[:3] + (0.55,)
+    ratio = solver(f"requiredReferenceContrast({_colour(LIGHT_INK)}, {_colour(faint)})")
+    limits = solver(f"limits({_colour(LIGHT_INK)}, {ratio})")
+    poles = solver(f"inkPoles({_params(material)}, {_colour(DARK_TINT)}, {limits}, 1.0, 0)")
+    grain = 0.5 * PARAMS[material][1][1]
+    assert PARAMS[material][2][0] > 0.0                                  # the material has a sheen
+    assert _luminance([c - grain for c in poles[1]]) <= limits[2] + 1e-4
+    assert _luminance(poles[1]) > _luminance(poles[0])
+
+
+@pytest.mark.parametrize("small", (True, False))
+def test_light_ink_on_a_dark_panel_is_corrected_toward_white_and_a_reading_ink_is_kept(solver, small) -> None:
+    # The same rule on every theme: a dark (light-ink) card's run that misses its ratio
+    # lightens toward white keeping its hue; the panel itself is not touched.
+    faint = LIGHT_INK[:3] + (0.55,)
+    ratio = solver(f"requiredReferenceContrast({_colour(LIGHT_INK)}, {_colour(faint)})")
+    limits = solver(f"limits({_colour(LIGHT_INK)}, {ratio})")
+    params, tint = _params("glass"), _colour(DARK_TINT)
+    poles = solver(f"inkPoles({params}, {tint}, {limits}, 1.0, 0)")
+    bar = 4.8 if small else 3.2
+    kept = solver(f"legibleInk({_colour(LIGHT_INK)}, 1.0, {poles}, {str(small).lower()}, true)")
+    assert kept[:4] == pytest.approx([c / 255 for c in LIGHT_INK[:3]] + [1.0]) and kept[4] is True
+    accent = (120, 40, 150, 1.0)                                    # a dark purple accent as text
+    ink = solver(f"legibleInk({_colour(accent)}, 1.0, {poles}, {str(small).lower()}, true)")
+    assert ink[4] is True and ink[3] == 1.0
+    assert all(c >= a / 255 - 1e-9 for c, a in zip(ink[:3], accent[:3]))       # lighter, never darker
+    # Hue kept: a mix toward white keeps the channels' order and their ratios to the remainder.
+    assert ink[2] > ink[0] > ink[1]
+    for pole in poles:
+        assert _contrast(ink[:3], pole) >= bar - 1e-3

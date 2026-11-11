@@ -73,6 +73,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | wallpaper cache, speculative source batches and image-worker ownership | `Docs/Contracts.md` → Wallpaper image cache and prefetch |
 | Just Make It Work pool selection, provider admission and legacy feed migration | `Docs/Reference/Wallpaper_Pool_Selection.md`; `sources/rss/pools.py` |
+| Sources' pool/feed rows and their stored validity marks | `Docs/Reference/Feeds.md` § Wallpaper feeds; `sources/rss/source_health.py`; `ui/tabs/online_source_rows.py` |
 | Visualizer preset directory authority, repair/import/export and explicit replacement | `Docs/Reference/Visualizer_Preset_Repair.md`; `core/visualizer_preset_tree.py` |
 | accepted Standard/MC Ban Image and matching-run frozen-build evidence | `Docs/Guides/Python314_Cutover.md` |
 | persisted Ban Image identity, zero-ban cost and explicit Clear | `Spec.md` → Persistent Ban Image admission; `Docs/Contracts.md` → Actions / images |
@@ -81,6 +82,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | operator-only build execution / canonical Python 3.14 workers | `Current_Plan.md` §5; `Docs/Guides/Python314_Cutover.md` |
 | immutable Qt resources, editable assets and automatic regeneration | `Spec.md` → Settings themes / native backdrop; `Docs/Guides/10_WIDGET_GUIDELINES.md` → asset ownership |
 | rules every dispatched agent follows (worktree environment, tests, forbidden actions, report shape) | `Docs/Guardrails/Agent_Worktree_Rules.md` |
+| native core P3 decisions before any C++ (D4: the Extruded Bubble drift solver without 64-bit shader floats, for Vulkan as the primary backend) | `Docs/Future_Work/Native_Core_P3_Decisions.md` |
 | presentation/cadence renderer preflight | `Docs/Guardrails/Presentation_Change_Preflight.md` |
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Fullscreen controls, metadata fitting and overlay editing | `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` §G; `core/settings/fullscreen_overlays.py` |

@@ -55,15 +55,19 @@ Item {
     }
     readonly property Item surfaceCard: _findSurfaceCard(shadowedText.parent)
     readonly property bool onSurfaceMaterial: surfaceCard !== null && surfaceCard.surfaceMaterialActive
-    // On a material card with dark ink (light themes) the panel is bounded rather than
-    // whitened, and the run's own ink is corrected at its real alpha (the card's
-    // surfaceInkSolution); otherwise exactly the authored colour. A run whose own opacity
-    // keeps even black from reading over the bounded panel takes a text-local plate.
+    // On a material card (every theme, 1B.8 M2b) a run that misses its ratio has its own ink
+    // corrected at its real alpha (the card's surfaceInkSolution); a run that reads keeps
+    // exactly the authored colour, as on Normal. A run whose own opacity keeps even the ink's
+    // pole from reading takes a text-local plate.
+    // The opacity the ink is solved at: the run's steady opacity. A run that crossfades its own
+    // opacity (RefreshStateGlyph's twins) passes its resting value, so a fade neither re-solves
+    // the ink every frame nor loads and drops a plate part-way through.
+    property real inkOpacity: opacity
     readonly property real _pixelSize: effectiveFont.pixelSize > 0 ? effectiveFont.pixelSize
         : effectiveFont.pointSize * 96.0 / 72.0
     readonly property var _inkSolution: onSurfaceMaterial
         && typeof surfaceCard.surfaceInkSolution === "function"
-        ? surfaceCard.surfaceInkSolution(shadowedText.color, shadowedText.opacity, _pixelSize < 18.0) : null
+        ? surfaceCard.surfaceInkSolution(shadowedText.color, shadowedText.inkOpacity, _pixelSize < 18.0) : null
     readonly property color inkColor: _inkSolution === null ? shadowedText.color
         : Qt.rgba(_inkSolution[0], _inkSolution[1], _inkSolution[2], _inkSolution[3])
     readonly property bool inkNeedsPlate: _inkSolution !== null && !_inkSolution[4]
@@ -126,9 +130,10 @@ Item {
     }
 
     // Text-local plate (Card_Surface_Materials.md 3.3), only for a run whose ink correction
-    // cannot reach the floor (inkNeedsPlate: dark ink faded by its own opacity on a bounded
-    // light panel). It hugs the painted text and draws only where the surface under it
-    // misses the floor; never on Normal, light ink or a run that reads.
+    // cannot reach the floor (inkNeedsPlate: a run faded by its own opacity so far that even
+    // its ink's pole cannot read). It hugs the painted text and draws only where the surface
+    // under it misses the floor; never on Normal, on a run that reads, or on a run at opacity 0
+    // (nothing to read: a crossfade's resting twin).
     Loader {
         id: inkPlate
         objectName: "shadowedTextInkPlate"
@@ -138,7 +143,8 @@ Item {
         readonly property real pad: 2.0 + soft
         readonly property real paintedWidth: Math.min(mainText.contentWidth,
             shadowedText.width > 0 ? shadowedText.width : mainText.contentWidth)
-        active: shadowedText.inkNeedsPlate && shadowedText.visible && paintedWidth > 0
+        active: shadowedText.inkNeedsPlate && shadowedText.visible && shadowedText.inkOpacity > 0.0
+            && paintedWidth > 0
         visible: active
         x: (shadowedText.horizontalAlignment === Text.AlignRight ? shadowedText.width - paintedWidth
             : shadowedText.horizontalAlignment === Text.AlignHCenter ? (shadowedText.width - paintedWidth) / 2.0
@@ -155,11 +161,11 @@ Item {
                 return Qt.point(origin.x + inkPlate.x, origin.y + inkPlate.y)
             }
             runColor: Qt.rgba(shadowedText.inkColor.r, shadowedText.inkColor.g, shadowedText.inkColor.b,
-                              shadowedText.inkColor.a * shadowedText.opacity)
+                              shadowedText.inkColor.a * shadowedText.inkOpacity)
             runPixelSize: shadowedText._pixelSize
             radiusOverride: inkPlate.height / 2.0
             edgeSoftness: inkPlate.soft
-            ownOpacity: shadowedText.opacity
+            ownOpacity: shadowedText.inkOpacity
         }
     }
 

@@ -361,6 +361,43 @@ def test_card_panel_holds_faint_small_runs_at_4_5(material_scene, tmp_path, fami
     assert all(p5 >= 4.5 for _text, _alpha, p5 in rows), rows
 
 
+def test_a_run_at_opacity_zero_loads_no_ink_plate_and_a_crossfade_keeps_one_ink(material_scene, tmp_path) -> None:
+    """1B.8 M2b audit: the ink rule runs on every theme, so a refresh glyph's resting crossfade twin
+    (own opacity 0) must not hold a text-local plate, and the twins solve their ink at the glyph's
+    resting opacity, not at the crossfade's (no per-frame re-solve, no plate loaded mid-fade)."""
+    from tools import onboarding_preview_foundry as foundry
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+    from tools.surface_material_capture import settle_animations
+
+    scene = material_scene
+    scene.set_wallpaper(_busy(900, 520))
+    art = foundry._gradient_art(tmp_path / "art.png", (240, 240), ("#27336e", "#e7678a"), 1)
+    presentation = foundry._preview_gmail(scene.scene, art)
+    item = presentation.item
+    presentation.set_geometry(OverlayWidgetGeometry(60.0, 60.0, item.width(), item.height()))
+    scene.presentations = [presentation]
+    settle_animations(scene, 1.4)
+    scene.set_material("glass")
+    scene.render(3)
+    runs, pending = [], [item]
+    while pending:
+        node = pending.pop()
+        pending.extend(node.childItems())
+        if node.property("inkNeedsPlate") is not None:
+            runs.append(node)
+    assert runs, "the fixture has shadowed runs"
+    resting = [run for run in runs if run.opacity() == 0.0 and run.isVisible()]
+    assert resting, "the refresh glyph keeps a resting crossfade twin"
+    for run in runs:
+        plate = _find(run, "shadowedTextInkPlate")
+        if run.opacity() == 0.0:
+            assert plate is None or not plate.property("active"), run.property("text")
+    glyphs = [run for run in runs if run.property("text") in ("↻", "◌")]
+    assert len(glyphs) >= 2
+    assert len({run.property("inkColor").name() for run in glyphs}) == 1
+    assert all(run.property("inkOpacity") > 0.0 for run in glyphs)
+
+
 def test_achievement_capsules_never_run_into_the_artwork_or_metric(material_scene, tmp_path) -> None:
     from tools import card_surface_capture as capture
 
