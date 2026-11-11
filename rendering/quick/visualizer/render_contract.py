@@ -8,6 +8,7 @@ from typing import Protocol
 
 from core.performance.frame_trace import FrameTraceEvent, FrameTraceSink
 from widgets.spotify_visualizer import mode_capabilities
+from widgets.spotify_visualizer.presentation_orientation import logical_rect_from_physical_rect
 from widgets.spotify_visualizer.render_state import VisualizerRenderSnapshot
 
 
@@ -164,10 +165,6 @@ class QuickVisualizerRenderFrame:
         )
         if self.content_rotation_quarters == 0:
             return physical_rect
-        from widgets.spotify_visualizer.presentation_orientation import (
-            logical_rect_from_physical_rect,
-        )
-
         return logical_rect_from_physical_rect(
             physical_rect,
             physical_size=self.logical_size,
