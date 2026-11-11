@@ -439,6 +439,15 @@ def _turn_for_mode(mode_id: str, key: str, value: float) -> float:
     return _wrap(value) if get_visualizer_mode_descriptor(mode_id).view_orbit_turn_wraps else _clamped(key, value)
 
 
+def scene_pan_delta(dx: float, dy: float, width: float, height: float) -> tuple[float, float]:
+    """The one pan convention (operator, 11 Nov 2026: the Studio's): the pan change for a pointer offset of
+    ``(dx, dy)`` px over a ``width`` x ``height`` frame. Dragging right lowers pan X; dragging down raises pan Y.
+
+    Every pan gesture calls this: the Studio viewport (``StudioController.pan_by``), the live card's held-right pan
+    and its Alt+right drag (``engine/display_manager.py``). Bounds stay with each caller's canonical clamp."""
+    return -float(dx) / max(1.0, float(width)), float(dy) / max(1.0, float(height))
+
+
 def bounded_scene_pan(envelope: tuple[float, ...], scale: float, pan_x: float, pan_y: float) -> tuple[float, float]:
     """A framed scene's pan kept inside its declared envelope at this zoom.
 

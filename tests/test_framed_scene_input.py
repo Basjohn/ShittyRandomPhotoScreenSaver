@@ -18,7 +18,7 @@ from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from tests.test_qtquick_custom_layout_owner import _configure_visualizer, _LiveCommitEngine
 from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
-from widgets.spotify_visualizer.view_orbit import view_pose_values
+from widgets.spotify_visualizer.view_orbit import scene_pan_delta, view_pose_values
 
 MODE = 'shockwave_grid'
 ALT = Qt.KeyboardModifier.AltModifier
@@ -150,14 +150,17 @@ def test_native_pan_zoom_and_orbit_never_change_card_layout(card, editing):
     mouse(card, QEvent.Type.MouseButtonPress, p, Qt.MouseButton.RightButton)
     mouse(card, QEvent.Type.MouseMove, p + delta, Qt.MouseButton.RightButton)
     interior_w, interior_h = presentation.content_rect[2:]
-    assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(before['shockwave_grid_scene_pan_x'] + delta.x() / interior_w)
-    assert pose(card)['shockwave_grid_scene_pan_y'] == pytest.approx(before['shockwave_grid_scene_pan_y'] + delta.y() / interior_h)
+    # Alt+right follows the one pan rule (the Studio's, scene_pan_delta) over the card's interior.
+    dx, dy = scene_pan_delta(delta.x(), delta.y(), interior_w, interior_h)
+    assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(before['shockwave_grid_scene_pan_x'] + dx)
+    assert pose(card)['shockwave_grid_scene_pan_y'] == pytest.approx(before['shockwave_grid_scene_pan_y'] + dy)
     assert card.writes == []
     wheel(card, p + delta)
     assert pose(card)['shockwave_grid_scene_scale'] > before['shockwave_grid_scene_scale']
     # Pan continues from its press, unaffected by internal zoom.
     mouse(card, QEvent.Type.MouseMove, p + delta + QPointF(10., 5.), Qt.MouseButton.RightButton)
-    assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(before['shockwave_grid_scene_pan_x'] + 56. / interior_w)
+    assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(
+        before['shockwave_grid_scene_pan_x'] + scene_pan_delta(56., 28., interior_w, interior_h)[0])
     mouse(card, QEvent.Type.MouseButtonRelease, p + delta, Qt.MouseButton.RightButton)
     assert card.writes == []  # wheel still owns the same gesture until Alt release
     release_alt(card)
@@ -194,7 +197,8 @@ def test_native_pan_zoom_and_orbit_never_change_card_layout(card, editing):
     mouse(card, QEvent.Type.MouseButtonPress, p, Qt.MouseButton.RightButton)
     mouse(card, QEvent.Type.MouseMove, p + QPointF(5., 0.), Qt.MouseButton.RightButton)
     mouse(card, QEvent.Type.MouseButtonRelease, p, Qt.MouseButton.RightButton)
-    assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(live['shockwave_grid_scene_pan_x'] + 5. / interior_w)
+    assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(
+        live['shockwave_grid_scene_pan_x'] + scene_pan_delta(5., 0., interior_w, interior_h)[0])
     assert len(card.writes) == 2
     # Alt-left retains orbit, and its settlement keeps all transform keys.
     pan_scale = {key: value for key, value in pose(card).items() if 'scene_' in key}
@@ -204,6 +208,55 @@ def test_native_pan_zoom_and_orbit_never_change_card_layout(card, editing):
     assert {key: pose(card)[key] for key in pan_scale} == pan_scale
     assert card.scene.visualizer_item.presentation == presentation
     assert len(card.writes) == 3
+
+
+def _studio_pan_change(dx, dy, width, height):
+    """The Studio viewport's own pan (``StudioController.pan_by``) on a stand-in navigation: the change it asks for."""
+    from ui.studio.controller import StudioController
+    nudged = {}
+    stand_in = SimpleNamespace(navigation=lambda: SimpleNamespace(pan_x='x', pan_y='y'),
+                               _nudge=lambda axis, delta: nudged.__setitem__(axis, delta))
+    StudioController.pan_by(stand_in, dx, dy, width, height)
+    return nudged['x'], nudged['y']
+
+
+def _live_pan_changes(card, offset):
+    """The pan change one pointer offset makes through Alt+right and through held-right on the live card."""
+    keys = ('shockwave_grid_scene_pan_x', 'shockwave_grid_scene_pan_y')
+    p = point(card)
+    start = pose(card)
+    mouse(card, QEvent.Type.MouseButtonPress, p, Qt.MouseButton.RightButton)
+    mouse(card, QEvent.Type.MouseMove, p + QPointF(offset), Qt.MouseButton.RightButton)
+    alt = tuple(pose(card)[key] - start[key] for key in keys)
+    mouse(card, QEvent.Type.MouseButtonRelease, p + QPointF(offset), Qt.MouseButton.RightButton)
+    release_alt(card)
+    start = pose(card)
+    card.manager._start_quick_scene_pan()
+    card.manager._pan_quick_visualizer_scene(offset)
+    held = tuple(pose(card)[key] - start[key] for key in keys)
+    card.manager._finish_quick_visualizer_gesture()
+    return alt, held
+
+
+def test_alt_right_held_right_and_the_studio_pan_the_same_way(card, monkeypatch):
+    """Operator, 11 Nov 2026: one pan direction, the Studio's. Alt+right once moved the scene the other way."""
+    import widgets.spotify_visualizer.view_orbit as view_orbit
+    width, height = card.scene.visualizer_item.presentation.content_rect[2:]
+    offset = QPoint(12, 6)
+    expected = scene_pan_delta(offset.x(), offset.y(), width, height)
+    alt, held = _live_pan_changes(card, offset)
+    studio = _studio_pan_change(offset.x(), offset.y(), width, height)
+    for change in (alt, held, studio):
+        assert change == pytest.approx(expected)
+    # Negative control: the retired Alt+right rule (pan X follows the drag) is a different, detectable pan.
+    retired = (offset.x() / width, offset.y() / height)
+    assert retired != pytest.approx(expected)
+    # One owner: a changed rule reaches all three gestures.
+    monkeypatch.setattr(view_orbit, 'scene_pan_delta', lambda dx, dy, w, h: (dx / (2. * w), -dy / (2. * h)))
+    changed = view_orbit.scene_pan_delta(offset.x(), offset.y(), width, height)
+    alt, held = _live_pan_changes(card, offset)
+    for change in (alt, held, _studio_pan_change(offset.x(), offset.y(), width, height)):
+        assert change == pytest.approx(changed)
 
 
 def test_hit_test_and_closed_input_reject_scene_changes(card):
@@ -326,7 +379,7 @@ def test_internal_transform_uses_spec_limits_without_changing_frame(card):
     mouse(card, QEvent.Type.MouseButtonRelease, p, Qt.MouseButton.RightButton)
     scale=pose(card)['shockwave_grid_scene_scale']
     # The far drag saturates at the mode's declared envelope (and the pan setting range).
-    expected = _envelope_limit(scale, 1e9, -1e9)
+    expected = _envelope_limit(scale, *scene_pan_delta(1e9, -1e9, 1., 1.))
     assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(expected[0])
     assert pose(card)['shockwave_grid_scene_pan_y'] == pytest.approx(expected[1])
     wheel(card, p, 12000)

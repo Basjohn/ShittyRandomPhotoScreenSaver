@@ -1439,20 +1439,7 @@ class DisplayManager(QObject):
     def _move_quick_visualizer(self, offset: QPoint, cursor: QPoint) -> None:
         context = self._quick_scene_view_context()
         if context is not None:
-            owner, descriptor, presentation = context
-            if not self._quick_scene_view_gesture_current(owner, descriptor):
-                return
-            if presentation is None:
-                return
-            width, height = presentation.content_rect[2:]
-            if width <= 0 or height <= 0:
-                return
-            sample = self._quick_scene_view_gesture
-            _scale, pan_x, pan_y = descriptor.scene_transform_settings
-            self._publish_quick_scene_view(owner, descriptor, {
-                pan_x: sample[3] + float(offset.x()) / float(width),
-                pan_y: sample[4] + float(offset.y()) / float(height),
-            })
+            self._pan_quick_scene_from_press(context, offset)   # Alt+right: the same pan rule as held-right
             return
         if getattr(self, '_quick_scene_view_gesture', None) is not None:
             return  # a mode replacement cannot turn an old pan into outer movement
@@ -1468,15 +1455,16 @@ class DisplayManager(QObject):
             self._capture_quick_scene_view_gesture(owner, descriptor)
 
     def _pan_quick_visualizer_scene(self, offset: QPoint) -> None:
-        """Held-right pan: the pointer's global offset since the press, in the Studios' own feel (plan 1B.13).
-
-        The Studio viewport pans by ``pan_x -= dx / width``, ``pan_y += dy / height`` of its preview frame
-        (``ui/studio/controller.py`` ``pan_by``); the live card uses its content rect, and both are bounded by the
-        canonical spec (``transform_visualizer_scene`` clamps). A mode switch or replaced owner since the press
-        pans nothing."""
+        """Held-right pan: the pointer's global offset since the press, in the Studios' own feel (plan 1B.13)."""
         context = self._quick_scene_view_context()
-        if context is None:
-            return
+        if context is not None:
+            self._pan_quick_scene_from_press(context, offset)
+
+    def _pan_quick_scene_from_press(self, context, offset: QPoint) -> None:
+        """Held-right and Alt+right pan: the press baseline plus ``scene_pan_delta`` (the Studio's rule, one owner:
+        ``widgets/spotify_visualizer/view_orbit.py``) over the live card's content rect, bounded by the canonical
+        spec (``transform_visualizer_scene`` clamps). A mode switch or replaced owner since the press pans nothing."""
+        from widgets.spotify_visualizer.view_orbit import scene_pan_delta
         owner, descriptor, presentation = context
         if not self._quick_scene_view_gesture_current(owner, descriptor) or presentation is None:
             return
@@ -1485,10 +1473,8 @@ class DisplayManager(QObject):
             return
         sample = self._quick_scene_view_gesture
         _scale, pan_x, pan_y = descriptor.scene_transform_settings
-        self._publish_quick_scene_view(owner, descriptor, {
-            pan_x: sample[3] - float(offset.x()) / float(width),
-            pan_y: sample[4] + float(offset.y()) / float(height),
-        })
+        delta_x, delta_y = scene_pan_delta(offset.x(), offset.y(), width, height)
+        self._publish_quick_scene_view(owner, descriptor, {pan_x: sample[3] + delta_x, pan_y: sample[4] + delta_y})
 
     def _scale_quick_visualizer(self, angle_delta_y: int) -> None:
         context = self._quick_scene_view_context()

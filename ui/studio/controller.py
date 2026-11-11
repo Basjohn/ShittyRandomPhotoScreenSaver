@@ -2447,11 +2447,13 @@ class StudioController(QObject):
         self._nudge(nav.orbit_v, float(dy) * span_v / 600.0)
 
     def pan_by(self, dx: float, dy: float, width: float, height: float) -> None:
+        from widgets.spotify_visualizer.view_orbit import scene_pan_delta
         nav = self.navigation()
         if nav is None:
             return
-        self._nudge(nav.pan_x, -float(dx) / max(1.0, float(width)))
-        self._nudge(nav.pan_y, float(dy) / max(1.0, float(height)))
+        delta_x, delta_y = scene_pan_delta(dx, dy, width, height)
+        self._nudge(nav.pan_x, delta_x)
+        self._nudge(nav.pan_y, delta_y)
 
     def zoom_by(self, steps: float, *, dolly: bool = False) -> None:
         """Wheel: ``steps`` > 0 zooms in. Multiplicative, bounded by the mode's camera range."""
