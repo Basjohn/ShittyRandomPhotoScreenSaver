@@ -470,16 +470,32 @@ impressive; the agent may ask the lead for a feature or architecture a better lo
   popup (unthemed); give it the theme filter's popup.
 - [ ] Side defect: `ui/tabs/widgets_tab_weather.py:157` hard-codes `#4CAF50` instead of a theme role.
 
-### 1B.12 Two fullscreen glyphs, one per display (merged 21da6fbc; contract: plan 01 M3c)
+### 1B.12 Fullscreen glyphs per display (first form merged 21da6fbc; operator's relative form below is open)
 
-Up-left expands on Display 1 of Settings' numbering (the first display), up-right on the second; one display
-keeps the single glyph; the request is "expand on display N" (`expand_on_display`), the shape SMP will reuse.
-The expanded-to-expanded move between displays (plan 01's unbuilt M5 step) was built here as its transfer.
+Merged form: up-left expands on the first display, up-right on the second (absolute), through the owner request
+"expand on display N" (`expand_on_display`, the shape SMP will reuse) and the expanded-to-expanded move.
 
-- [~] Operator, two monitors: both glyphs from each display; the move while expanded (collapse, move, expand);
+**Operator, 12 Nov: relative to the Visualizer's display, for consistency with 3+ monitors.** Queued for a fresh
+Opus High after 1B.7 merges (same QML and coordinator files).
+
+- [ ] Up arrow (same size and styling as the others): fullscreen on the display the Visualizer is on.
+- [ ] Diagonal up-left arrow: fullscreen on the display to the left of the Visualizer's display; diagonal
+  up-right arrow: fullscreen on the display to the right. Left and right come from the displays' physical
+  arrangement (the nearest display whose geometry lies on that side), never from the display index.
+- [ ] Only the applicable arrows show, so no space is wasted: no display on a side, no arrow for it; one
+  display shows the Up arrow alone (lead's reading: the single glyph becomes the Up arrow; confirm).
+- [ ] While expanded: the current display's glyph is the collapse (the Up arrow's mirror, a Down arrow); the
+  diagonals move the expanded view to the left or right neighbour; the 1B.1 Edit holds still refuse a move.
+- [ ] The request stays "expand on display N" at the owner: the relative choice is resolved to a display at the
+  press, in one place.
+- [ ] Glyphs appear and disappear with a fade when the arrangement changes; the row never jumps.
+- [ ] Tests: one, two and three displays (left only, right only, both), a vertical arrangement (no side
+  neighbours), expanded on the middle display; arrangement derived from geometry in the test, never pinned.
+- [ ] Off-screen PNG evidence at 100% and 150% with 2x crops for each case; lead pixel review; plan 01 updated.
+- [~] Operator, two monitors: the arrows from each display; the move while expanded (collapse, move, expand);
   a move between displays of different size or DPI and its fades; V unchanged.
-- [~] Operator decision: the two glyphs' tooltips are ALL CAPS ("FULL DISPLAY ON DISPLAY 1") to match the rest
-  of the glyph row; Title Case is a one-line change.
+- [~] Operator decision: the glyph tooltips are ALL CAPS to match the rest of the glyph row; Title Case is a
+  one-line change.
 - [ ] Record in the QML guide: a QML property named `left` on a `Text` (colliding with Item's built-in `left`)
   hangs the hidden-scene load silently instead of raising.
 
