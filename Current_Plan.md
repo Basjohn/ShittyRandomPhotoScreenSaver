@@ -251,9 +251,6 @@ judges visual items on rendered pixels and audits each branch against the pre-fi
     animating, no Edit chrome on the expanded display.
   - [~] Edit from the expanded display: Fullscreen Edit of the overlays only.
   - [~] Save and Cancel from each; a collapse press while Edit is open beside the view waits for Save/Cancel.
-- [ ] Side defect: `tests/test_qtquick_custom_layout_owner.py` then `tests/test_qtquick_context_menu.py` in one
-  process fails the menu tests (`menuVisible` False); suspect the 700 ms right-click suppression armed by an
-  earlier test's Save/Cancel leaking across tests. Reset it per test at its owner.
 - [ ] Side defect (unreproduced): in an ordinary global Edit, closing the Visualizer and then switching mode makes
   `activate_edit_visualizer_profile` return False (`rendering/quick/custom_layout_owner.py`, the `visible is None`
   branch), which looks like a forced runtime reload. Reproduce in a test or rule out.
@@ -278,79 +275,67 @@ Qt's pointer tracking cleared artificially, so the operator's real exit path is 
 - [ ] Update R-183 with the operator's result (accepted, or the failing path and its fix).
 - [ ] Side defect: when a hovered QML item is destroyed or left, the saver window can keep the hand or arrow
   instead of the Halo until the Halo next re-applies it.
-- [ ] Side defect: `tests/test_artifact_paths_contract.py` fails on literal `evidence_chest` paths
-  (`tools/godzip_foundry.py` 2579, 2632, 3386; `tools/godzip_logzip_retention.py` 22, 38), PNG writes outside
-  `tools/evidence_media.py` (`tools/settings_native_corners.py`, `srpss_border_core.py`, `srpss_border_studio.py`)
-  and a `delete=False` temp file (`tools/visualizer_capture_core.py:215`). Fix with section 3's "Tool-output
-  contract reds".
 
-### 1B.3 Studio slider save churn (audit and its two camera side defects landed; contract: Visualizer_Studio.md)
+### 1B.3 Studio slider save churn (audit and its camera side defects landed; contract: Visualizer_Studio.md)
 
-- [ ] The Studio's orbit notice says the orbit "saves only with the preset's camera checkbox"; Sphere and
-  Extruded Spectrum have no checkbox and save through Save Camera. Make the notice follow the mode's policy.
 - [~] Operator: Sphere Studio, drag View Turn / View Tilt (holds for the session), Save Camera, reopen.
 - [~] Operator: Waveform Studio has Camera X and Z only (its grounded orbit fixes the eye height, so Camera Y
   never did anything); say if a real eye-height control is wanted.
 - [~] Operator: Extruded Bubble Studio Camera X/Y/Z now span -2..2 (the eye's whole admitted box), was -1..1.
 
-### 1B.4 Shape instrument for Spectrum and Neon Lake (design regression: sliders replaced the shape control)
+### 1B.4 Shape instrument for Spectrum and Neon Lake (merged; contract: Visualizer_Studio.md)
 
-Built and merged (one instrument in Spectrum, Extruded Spectrum, Neon Lake's Frequency Response and its Reaction
-Shaper; contract: `Docs/Reference/Visualizer_Studio.md`; capture tool `tools/studio_shape_capture.py`). The lead
-passed its off-screen pixels (dark and light themes).
+One instrument in Spectrum, Extruded Spectrum, Neon Lake's Frequency Response and its Reaction Shaper; the old
+shape widget is retired; shape drags are in the churn guard; Studio tooltips wrap inside the window.
 
 - [~] Operator look at the instrument in the Spectrum and Neon Lake Studios: drag feel, cursor shapes and
-  tooltips on a real window; over a material theme on the real desktop.
-- [ ] `tests/test_studio_drag_io_churn.py`: its drag plans skip the SHAPE instrument; fold the shape drags in so
-  the one churn guard covers it (today only `tests/test_studio_shape_instrument.py` proves no write per move).
-- [ ] Side defect: long row tooltips do not wrap and run off the window (`RowLabel` in
-  `ui/studio/qml/StudioShell.qml`).
-- [ ] Side defect: a lane-strength diamond exactly under a curve node cannot be grabbed (reachable only through
-  its tag, the field or keys); give the nearer-to-pointer element the press or offset the hit areas.
-- [ ] `ui/tabs/media/spectrum_shape_editor.py` now only owns the node-limit constants and is a test subject:
-  move the constants to the shape rule owner and retire the widget with its tests.
+  tooltips on a real window; over a material theme on the real desktop; a strength diamond under a curve node
+  (a press just below the diamond's centre takes the diamond).
 - [ ] `fft_to_bars` gained two helper calls per tick (`shape_bar_profile`, `lane_sample_positions`); re-record
-  the Spectrum overhead baseline so the +2 calls are attributed, not read as drift.
+  the Spectrum overhead baseline so the +2 calls are attributed (with section 1 item 8b's attribution box).
 - [ ] Admitted later if wanted (operator's call): a pop-out larger canvas; Spline Curve's layer nodes and Voxel
   Sphere's zone boundaries on the same instrument; Shift axis lock, snapping, double-click reset.
 
-### 1B.5 Neon Lake: all visible land is brush-editable (in flight, Fable High; fix decided, operator agreed)
+### 1B.5 Neon Lake: all visible land is brush-editable (merged 33912e5ae; refinement round in flight, Fable High)
 
-Cause: land past the authored grid is generated landscape with no stored cells, so `pick_terrain` refuses it
-(26% of on-screen land on Preset 3; 13-20% on Presets 1-2 dollied back). Queued for Fable High after 1B.4.
+A stroke past the grid grows the authored grid under it invisibly (grown cells are an overlay on the generated
+landscape; an authored origin keeps horizon, detail and glow; shipped presets' terrain loads byte-identical;
+one commit and one undo per stroke; a refused state at the 257 cap). Contract: `Docs/Reference/Neon_Lake_Basin.md`.
 
-- [ ] A stroke past the grid grows the authored grid through the existing extend owner
-  (`rendering/gl_programs/neon_terrain_extent.py`, cap 257).
-- [ ] Growth is invisible: new cells take the generated landscape's own heights (`scene_surface`), and the
-  far-land curvature keeps its authored origin, so horizon, detail and glow do not shift. Prove with a
-  before/after render of an un-painted growth (pixel-equal within MSAA jitter).
-- [ ] Existing cells stay exactly as stored: every shipped preset's terrain loads byte-identical.
-- [ ] The stroke re-maps its coordinates across a mid-stroke growth; one undoable step per stroke including
-  the growth.
-- [ ] At the 257 cap the brush shows a clear refused state (cursor + one-line notice), never a silent no-op.
-- [ ] `tests/test_neon_lake_brush_reach.py`: the strict xfail "every visible land point is paintable" becomes a
-  pass and the xfail marker is removed.
-- [ ] Texture/mesh cost of the largest grown grid measured against today's (control-relative GPU).
-- [ ] Docs: `Docs/Reference/Neon_Lake_Basin.md`, `Docs/Reference/Visualizer_Studio.md` (brush).
-- [~] Operator: paint far land in the Studio.
+- [ ] Focused tests green on the merge (running), then push.
+- [ ] Painted growth cost: the mesh refines under one bounding box of painted cells (two far corners refine
+  everything between; a fully painted 257 grid costs 5.65 ms against 1.95 ms at 65). Refine in tiles holding
+  painted cells only, crack-free; report one corner, two corners and the whole grid; distance-based density if
+  it holds without aliasing the smallest brush.
+- [ ] Brush Radius is now a share of the basin (stable across growth): rescale its default and range so the
+  default footprint on each shipped preset is about what it was (0.57x on Presets 1 and 2 today).
+- [ ] Off-screen PNG of the refused state at the cap (struck-through footprint and notice).
+- [~] Operator: paint far land in the Studio; paint past the old edge and undo; reach the cap.
+- [~] Operator: paint past the authored origin renders as far land (no shoreline line or wet fringe, detail
+  fading with distance); say if far paint should be able to make shore.
 
-### 1B.6 Neon Lake: land reactivity pass for smooth deformation (in flight after 1B.5, same agent)
+### 1B.6 Neon Lake: smooth land reaction, Growth and Indents (merged 33912e5ae; refinement round in flight)
 
-- [ ] Reproduce the tearing/jagged edges first: stills and one animated WebP at high reactivity on recorded
-  music, with the mesh density and the reaction path that produce them named.
-- [ ] Smooth deformation at every reactivity: continuous normals and silhouette at the production mesh density
-  (no cracks between cells, no stair-stepped ridges, no shading pops).
-- [ ] Optional growth (default off, a preset-authored control): spires, mounds and land that is not visible at
-  low reactivity rise with the music.
-- [ ] Optional indents (default off, a preset-authored control): land that is visible sinks with the music.
-- [ ] Fixed scales only (no learned levels, no `musical_weight` gate); everything ramps and fades in and out.
-- [ ] One simulation owner: the existing terrain reaction path, no second population, no renderer-side sim.
-- [ ] Each new control: canonical spec entry, Studio row, authored into every Neon Lake preset (repair fill +
-  completeness guard), Settings/Studio parity test.
-- [ ] Continuous-play evidence over whole songs (`neon_lake_music_response.py`): mid-song kicks still read.
-- [ ] Per-frame cost before/after on the logical tick and the render (`tools/overhead_baseline.py`).
-- [ ] Lead pixel review on showcase WebP; then merge.
-- [~] Operator look.
+The reaction reshapes the land smoothly (lanes cross-fade along the height, cubic tables and elevation, an eased
+floor, a shore fade); Growth (mounds to spires by Growth Shape) and Indents are optional, default off, authored
+neutral into the three presets; drives are memoryless on the fixed scale. Under music the existing presets do
+change: the tears are gone and the reaction is a little weaker on banks and very low land.
+
+- [ ] Indents are barely visible at full drive on Preset 1: a depth law that clearly sinks visible land on all
+  three presets' default views, smooth, never below the water-boundary contract; staged-drive sheet and a WebP.
+- [ ] `tools/overhead_baseline.py` for Neon Lake against the stored baseline, with system usage.
+- [ ] Logical-tick cost of the lane, Growth and Indents drives, before and after.
+- [ ] GPU before/after alternated in one session, control-relative, including React To Music off (the +5-12%
+  reaction cost so far comes from separate sessions).
+- [ ] Continuous play across two songs back to back on the music-response trace: mid-song kicks read, no state
+  across the song boundary.
+- [ ] Off-screen PNG of the Neon Lake Studio's Reaction workspace with the Growth, Growth Shape and Indents rows.
+- [ ] Growth Density (site cell size) and a Growth region bias (far land only / by elevation through the shaper):
+  canonical spec entries with Studio rows, authored neutral into every preset, dormant when neutral.
+- [ ] Lead pixel review of the refinement round; merge; then tell the preset agent Neon Lake is ready.
+- [~] Operator decision: spire glow on hits; islands rising from the lake (needs the water-boundary contract
+  decision). Not admitted; the agent writes up what each needs.
+- [~] Operator look: the smooth reaction on the three existing presets under music; Growth and Indents.
 
 ### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (merged 189fbd36c; plan 01 M3c)
 
@@ -381,9 +366,6 @@ through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
   (the round-trip test writes through the settings manager, which normalises on write): add a fixture file.
 - [ ] Side defect: `tests/test_qtquick_media_presentation.py:429` pins a default colour
   (`app_volume_fill_color`) and fails when run after the Visualizer test files in one process (passes alone).
-- [ ] Side defect (order leak, fix on the side-defect branch): `tests/test_visualizer_held_right_pan.py` fails
-  11 of 14 when run after `tests/test_qtquick_custom_layout_owner.py` in one process (passes alone); confirm
-  the pointer-guard reset fixes it once that branch merges.
 
 ### 1B.8 Light themes are practically opaque in the saver (not started; cause found in research)
 
@@ -452,12 +434,13 @@ a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels
 - [ ] Window border material: the border ring takes 1.7b's border-material treatment (one rule for cards and
   windows), inside the +2 px budget (unused: the border stays 4 px).
 
-### 1B.10 Presets (only after 1B.3-1B.6 land; one Fable 5.2 Medium agent above the roster cap, this task only)
+### 1B.10 Presets (in flight: one Fable 5.2 Medium agent above the roster cap, this task only)
 
 Supersedes the lead's Spectrum presets 2-15 of 7 Nov (section 3). Every preset must read as unique and visually
 impressive; the agent may ask the lead for a feature or architecture a better look needs, if it is not wasteful.
+Order: Spectrum, then Extruded Bubble, then Neon Lake once 1B.6's refinement round has merged; the agent reports
+after each mode for the lead's pixel review.
 
-- [ ] Gate: 1B.3 side defects, 1B.4, 1B.5 and 1B.6 merged.
 - [ ] Spectrum: presets 2 and up replaced with the best and most novel looks the mode can make (ghosts soft and
   blurred like Preset 1's; no seam where a transparent-border bar meets its ghost).
 - [ ] Extruded Bubble: one arctic-themed preset.
@@ -477,9 +460,8 @@ impressive; the agent may ask the lead for a feature or architecture a better lo
 - [ ] Side defect (red on main): `tests/test_surface_opacity_adjust.py::test_real_link_button_uses_state_ink_for_
   checked_text_and_lock_icon_offscreen` fails (worst contrast 1.58 against 4.5): the Linked button's checked
   text/lock ink. Fix with 1B.8's ink correction or at the link button's style owner.
-- [ ] Side defect: the Weather location autocomplete (`ui/widgets/geocode_completer.py:52-69`) uses Qt's default
-  popup (unthemed); give it the theme filter's popup.
-- [ ] Side defect: `ui/tabs/widgets_tab_weather.py:157` hard-codes `#4CAF50` instead of a theme role.
+- [~] Operator look: the Weather location autocomplete now uses the themed popup, and the Weather and Widgets
+  status notes take the theme's success and warning roles.
 
 ### 1B.12 Fullscreen glyphs per display (first form merged 21da6fbc; operator's relative form below is open)
 
@@ -518,9 +500,9 @@ Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us afte
 
 - [~] Operator feel check on the real display: pan direction and scale against the Studios; a quick right
   click on the card still opens the menu; double-right still enters Edit.
-- [ ] One pan direction, the Studio's (operator, 11 Nov): Alt+right drag follows the Studio's rule on both axes
-  through one shared pan-delta function with held-right (today Alt+right increases pan X when dragged right,
-  `engine/display_manager.py` `_move_quick_visualizer`); in flight with the side-defect batch.
+- [~] Operator: all three pans (Alt+right, held-right, the Studios) now share one rule, the Studio's
+  (`view_orbit.scene_pan_delta`). A right drag moves the scene against the pointer, a down drag moves it with the
+  pointer: say if that mix should be made one-way (a one-line change in that function).
 - [ ] Native pointer capture on a real foreground window is unproven (tests use a stand-in capture): add the
   pan to the opt-in native harness pattern of R-183 or verify with the operator's check above.
 
@@ -657,10 +639,15 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 - [ ] Keep it a separate reversible fix.
 - [ ] Repeat the four-case corner/border/shadow gate before claiming improvement.
 
-### Side defect: Build Runner's Inno discovery
+### Side defect: Build Runner's environment variables
 
-- [ ] Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1023`) and a test requires
-  it. Replace that tool override with explicit CLI/sidecar admission when opening its owner.
+- [ ] `tools/build_runner.py:3346` still reads `SRPSS_BUILD_RUNNER_DEBUG` (the Inno override is now `--iscc PATH`);
+  replace it with a CLI argument.
+- [ ] Two reds in `tests/test_github_remote_build.py`: `test_the_github_tab_offers_the_remote_products_and_local_
+  steps` (an extra `linux_mc` job) and `test_the_linux_dispatch_sends_inputs_only_for_a_pinned_commit`
+  (`scripts/linux/build_from_windows.ps1` no longer matches); not checked against the base commit.
+- [ ] `tests/test_visualizer_owner_engine_worker.py::test_the_park_clears_the_reader_after_the_park_reply_never_
+  before` is flaky (about 1 run in 6, before and after the native-core merge); with the native-core agent.
 
 ### Awaiting Validation after the focused proofs
 
