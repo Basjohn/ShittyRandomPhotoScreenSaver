@@ -174,10 +174,10 @@ def build_schema() -> StudioSchema:
                     tooltip=tooltip, object_scope=scope, targets=(scope,), priority=index,
                     when=common["when"]))
         elif isinstance(control, SceneCameraPosition):
-            for index, axis in enumerate(_AXES):
+            for index, low, high in framed.camera_position_axes(MODE):
                 props.append(StudioProperty(id=f"{control.key}.{index}", path=(control.key, index),
-                                            label=f"Camera {axis}", instrument=SCALAR, minimum=-1.0, maximum=1.0,
-                                            decimals=3, **{**common, "tooltip": tooltip or
+                                            label=f"Camera {_AXES[index]}", instrument=SCALAR, minimum=low,
+                                            maximum=high, decimals=3, **{**common, "tooltip": tooltip or
                                                            "Normalized camera offset; admitted by the framed camera."}))
         elif isinstance(control, Triangle):
             for index, corner in enumerate(control.corners):

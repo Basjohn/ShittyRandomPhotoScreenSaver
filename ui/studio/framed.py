@@ -66,6 +66,23 @@ def live_card_framings(card, card_style=None) -> tuple[StudioFraming, ...]:
                           "A 21:9 card containing everything the live card shows.", style))
 
 
+def camera_position_axes(mode_id: str) -> tuple[tuple[int, float, float], ...]:
+    """Camera Position's editable axes ``(index, low, high)`` from the mode's framed camera spec (the one owner of
+    where the eye may go). Each axis spans the admitted eye box in offset units (``2 * eye_half / offset_scale``
+    either way: from any orbit pose the eye may reach the whole box; the box and floor bound the eye itself). An
+    axis the spec fixes is not offered: a grounded orbit keeps its authored eye height, so its height offset always
+    resolves to 0 (Waveform's Studio offered it, and every drag snapped back)."""
+    from core.settings.framed_camera import spec_for_mode
+    spec = spec_for_mode(mode_id)
+    axes = []
+    for index, (half, scale) in enumerate(zip(spec.eye_half, spec.offset_scale)):
+        if index == 1 and spec.grounded_orbit is not None:
+            continue
+        reach = 2.0 * float(half) / float(scale)
+        axes.append((index, -reach, reach))
+    return tuple(axes)
+
+
 def camera_navigation(mode_id: str, prefix: str) -> StudioNavigation:
     """Orbit = turn/tilt; wheel = the lens field of view (a saved Camera setting); Shift+wheel = the framed
     camera's dolly (scene_scale); pan = scene pan. Bounds are the registry's. Orbit is saved only with the
@@ -179,5 +196,6 @@ class ContractModeRenderer(QuickModeRenderer):
         return bool(step(self._frame(card, frame))) if callable(step) else True
 
 
-__all__ = ["ContractModeRenderer", "QuickModeRenderer", "camera_navigation", "card_framings", "orbit_navigation",
+__all__ = ["ContractModeRenderer", "QuickModeRenderer", "camera_navigation", "camera_position_axes", "card_framings",
+           "orbit_navigation",
            "presentation"]

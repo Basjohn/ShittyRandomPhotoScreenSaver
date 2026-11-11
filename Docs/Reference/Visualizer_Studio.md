@@ -497,7 +497,11 @@ control.
   Explicit curated-preset selection initializes Camera Position from that preset; its optional starting-view
   record initializes the remaining live pose. Free-orbit modes use that same metadata with their own two-key
   orbit schema; modes without a camera reject it. Neither navigation nor an ordinary Settings save edits a
-  curated preset file.
+  curated preset file. Its Studio rows are `framed.camera_position_axes(mode)`, derived from the mode's
+  `FramedCameraSpec`: each axis spans the eye box in offset units (`2 * eye_half / offset_scale` either way), and an
+  axis the spec fixes is not offered (a grounded orbit keeps its authored eye height: Waveform has no Camera Y; until
+  11 Nov it offered one at a hard-coded -1..1 whose every drag saved and read back 0.0;
+  `tests/test_studio_camera_position_rows.py`).
 - **Preset menu.** The header's preset picker offers Settings' own preset-row actions: Move To Custom (on a curated
   preset), Save Preset As… (on Custom, Settings' own file dialog) and, for authoring the curated presets themselves,
   **Save To <Preset>**. This replaced Settings' Edit Preset (the preset file opened in the OS editor), deleted on

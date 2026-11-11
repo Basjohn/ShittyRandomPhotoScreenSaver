@@ -120,7 +120,9 @@ def test_every_spec_control_keeps_its_instrument_range_choices_and_condition(mod
         if not props or isinstance(control, VisualEditor):
             continue                                   # coverage above; visual editors' leaves below
         if isinstance(control, SceneCameraPosition):
-            assert sorted(p.path[1] for p in props) == [0, 1, 2], control.key
+            # The axes the mode's framed camera lets the eye move along (a grounded orbit keeps its height).
+            from ui.studio.framed import camera_position_axes
+            assert sorted(p.path[1] for p in props) == [i for i, _lo, _hi in camera_position_axes(mode)], control.key
             continue
         whole = [p for p in props if len(p.path) == 1]
         if isinstance(control, (Slider, Range, Toggle, Choice)):

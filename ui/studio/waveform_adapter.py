@@ -23,7 +23,7 @@ from ui.studio.registry import studio_title
 from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, RenderCard, StudioCapabilities, StudioFixture, StudioModeAdapter,
 )
-from ui.studio import clip_loop
+from ui.studio import clip_loop, framed
 from ui.studio.exact_replay import ExactReplay
 from ui.studio.schema import (
     CHOICE, COLOUR, COUNT, GRADIENT, QUIET_PEAK, SCALAR, SWITCH, CardSpec, LifecycleSpec, SceneObject,
@@ -232,12 +232,13 @@ def build_schema() -> StudioSchema:
                                         if notes else (), **common))
         elif isinstance(control, Colour):
             props.append(StudioProperty(instrument=COLOUR, **common))
-    # Camera position: three normalized offsets of the shared framed-camera owner.
+    # Camera position: the normalized offsets the shared framed camera lets the eye move along (its grounded orbit
+    # keeps the eye's height, so there is no Camera Y).
     position = spec.control(PREFIX + "camera_position")
-    for index, axis in enumerate(("X", "Y", "Z")):
+    for index, low, high in framed.camera_position_axes(MODE):
         props.append(StudioProperty(id=f"{position.key}.{index}", path=(position.key, index),
-                                    label=f"Camera {axis}", workspace="world", group="Camera", instrument=SCALAR,
-                                    minimum=-1.0, maximum=1.0, decimals=3,
+                                    label=f"Camera {'XYZ'[index]}", workspace="world", group="Camera",
+                                    instrument=SCALAR, minimum=low, maximum=high, decimals=3,
                                     tooltip="Normalized camera offset; admitted by the shared framed camera."))
     # Live view pose (not body controls): previewed while navigating; turn/tilt are saved only when the
     # preset's camera checkbox includes the view, zoom/pan stay preview views.
