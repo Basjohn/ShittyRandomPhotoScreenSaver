@@ -264,8 +264,14 @@ widgets.music_workspace:
 The first *functional* milestone should produce a useful offline library and saved-playlist organiser **before** adding a durable playback backend. It may expose 'Play' disabled with an honest tooltip until later milestone. Do not build placeholder play buttons pretending playback exists.
 
 **Library pane:** folder picker; incremental scan progress/status/cancel; live list of indexed tracks (track, title, artist, album, duration, optional genre), filter/search/sort, explicit refresh/rescan, track properties, safe missing/unknown file treatment. Do not require audio output to browse files. Search/selection must be keyboard accessible; large collections use bounded pagination/virtualization rather than thousands of simultaneous Quick delegates.
+The search and filter entry points of this pane follow the full-player mock: a search glyph that opens a library
+filter drop-down and a favourites heart that applies the favourites filter, both owned by one filter owner (§5.1; mock
+R7, R8). The first milestone needs only the plain search; the glyph pair is the long-range shape.
 
 **Playlist pane:** list of named playlists; create/rename/delete with confirmation; select list, order items by drag/move/keyboard, add/remove selected tracks, reorder persistently, explicit save, distinguish frozen playlist vs dynamic query. A separate *current queue* tab/view can be introduced **inside the playlists pane** when playback arrives; this is not a third separately placed widget unless operator later authorizes it. Support an empty playlist gracefully.
+In the full-player mock the right column's "Playing Tracks" is this same Playlist pane shown as a compact
+presentation (artwork, title, artist, duration and a menu per row, the playing row highlighted); it is one widget
+entry with the pane, not a second widget (§4.1; mock R10).
 
 **Interaction between panes:** selecting Library tracks and 'Add to playlist' should update Playlist pane through shared immutable library/playlist revision (not direct QML-to-QML references). Independent layout roots but one query/service owner. Deleting a playlist never deletes tracks. Duplicate named playlists require a clear policy. Missing-file entries remain visible/repairable rather than silently disappearing and reindexing the playlist order.
 
@@ -295,6 +301,14 @@ Define small interfaces first (illustrative, not new business superclasses): `Pl
 - [ ] Presentation adapters subscribe to latest revision; stale track/artwork/seek commands rejected by generation or item identity. The library/playlists UI may disappear/reappear without restarting audio or resending a duplicate command.
 - [ ] Queue order is independent from library sort/filter and playlist order. A playback queue can be made from a playlist snapshot, then independently re-ordered without silently rewriting the saved playlist. Repeat one/all, shuffle with stable history, previous, seek and end-of-queue have exact tests.
 - [ ] Manual user command and Windows media-key ingress share one command queue; command completion/error is observed, not assumed on worker submission. Replaying a click should not double-advance a track.
+- [ ] **Playing Tracks is the Playlist widget, compact (full-player mock R10):** the queue view of the Playlist pane
+  (§3.2) has a compact presentation for the full-player window's right column. It is the same widget and the same
+  model as the pane, one widget entry; it never becomes a third top-level identity or a separate queue implementation.
+- [ ] **Transport bar uses what exists (full-player mock R12 to R14):** the volume control is one of our existing
+  sliders and the seek bar is the existing `MediaSeekBar.qml` (already one shared component), matched for length to
+  the bar; no second slider or seek implementation is written for the player. Every control in the bar, both sliders
+  included, sits on one horizontal alignment; correct alignment is a core requirement of the bar, checked by a
+  geometry assertion in the native Quick test, not by eye.
 
 ### 4.2 Source and Media provider arbitration
 
@@ -315,6 +329,18 @@ Current `core/media/provider_registry.py` encodes explicit external Windows GSMT
 - [ ] Explicit DB constraint (foreign keys + unique track/group; trigger or transaction-level enforced maximum with multi-writer tests). Concurrent MC/SMP attempts to add fourth membership cannot slip through.
 - [ ] Browse **All / Artists / Genres / Favorites / Groups**, with dense list and cached artwork grid; selection and keyboard navigation stable across category switches. Display group mosaics, accurate counts, search, sorting and drill-down. No synchronous high-resolution art decode in GUI delegates.
 - [ ] Build 'Play group', 'Queue group', and 'Save as playlist' as explicit snapshot/queue operations. A group's playlist export must not silently sever future dynamic membership semantics; label snapshot vs dynamic clearly.
+- [ ] **One filter owner, two entry glyphs (full-player mock R7, R8):** the favourites filter above and the library
+  filter drop-down are one filter owner over the same list. The favourites heart is the same control as the search
+  glyph but applies the favourites filter; the search glyph opens the library filter drop-down. A filter stays
+  applied until the user unselects it, and the glyph glows slightly while a filter is active. Neither glyph owns a
+  second filtered copy of the list.
+- [ ] **Audiobooks as a Library special group (full-player mock R2, long-term goal):** the full-player navigation
+  shows AUDIOBOOKS where the concept image showed Podcasts, so §8.2's removal of Podcasts navigation stands and this
+  replaces it. Audiobooks are a special group in the Library, not a separate product area: the user can add and
+  remove audiobook items, save bookmarks at track points, and use chapter support and the like. Bookmarks and
+  chapters are Library data under §3.3 persistence (database rows keyed by canonical track ID, never tags or
+  `settings_v2.json`) and are bound by the same explicit-write and no-silent-tag-write rules as groups. This does not
+  admit podcasts (§1, §12).
 
 ### 5.2 Artwork and metadata
 
@@ -325,6 +351,15 @@ Current `core/media/provider_registry.py` encodes explicit external Windows GSMT
 - [ ] Portable personal groups are DB-first. Optional explicit export/import via safe namespaced custom format tags/sidecar where supported; never reinterpret standard `GENRE`/`COMMENT`/`GROUPING` by default, and never rewrite thousands of files upon group rename. A comments fallback requires deliberate warning/choice.
 - [ ] Optional duplicate discovery distinguishes identical bytes, probable recording matches/different encodes and similar names; background hashes/fingerprints bounded, no automatic delete, never conflate live/remaster versions. User can retain, ignore or explicitly remove after confirmation.
 - [ ] Optional local embedded unsynchronised lyrics and `.lrc` sidecars can be added after core library acceptance. Online lyrics require legal/provider validation, and remain non-blocking. **No podcasts.**
+- [ ] **Library track menu (full-player mock R9):** a row's three-dot menu is the library track menu: Properties,
+  Metadata Edit, Quick Tagging, Delete and Add To Group. Each entry is a front for the explicit transactions already
+  described here and in §5.1 (tag writes as user transactions with backup, delete only after confirmation and
+  path revalidation, group membership under the three-membership limit); the menu adds no new write path. Quick
+  Tagging is a short tagging flow over the same metadata transaction, not a second tag writer.
+- [ ] **Track Information alignment is swappable (full-player mock R11):** the Track Information panel (large
+  artwork, title, artist, album and the format line) can swap its alignment, header included, in the way Now Playing
+  does (side flip with one text group, Current_Plan 1C.3); artwork comes from the §15 resolver and the format line
+  from the technical properties read above.
 
 ### 5.3 Storage safety and partial failure
 
@@ -348,6 +383,10 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
 ### 7.1 UI modes and glyph semantics
 
 - [ ] Mini/ordinary Media card gains **↗** diagonal-outward glyph. Expanded media view replaces it with **↙** inward-collapse glyph. Draw vectors in the existing semantic style, not Unicode glyphs with inconsistent baselines; separate hitbox, hover fade, tooltip and keyboard accessibility. Visualizer's future desktop **Pop Out** is **square + diagonal arrow** and represents a *different* action/window boundary.
+- [ ] **Swapping arrow in the SMP title bar (full-player mock R1):** the full-player window's title bar carries the
+  same swapping-arrow family: a down-left diagonal arrow that enters the Mini / Normal Media presentation (the compact
+  player of §8.2), the reverse of the expand arrows. It is drawn in the same vector glyph family as the Visualizer
+  card's fullscreen arrows and this section's glyphs (Current_Plan 1B.12, plan 01 M3c), not a separate icon set.
 - [ ] A screen-wide adaptive Media experience uses existing Media track/artwork/transport/seek/volume/state truth, including correct source attribution. It **reflows** artwork, title, controls, playback details and optional canonical visualizer area instead of naïvely scaling the entire 420-ish mini card. Keep theme palette and round-trip to exact saved mini geometry.
 - [ ] If Visualizers is not enabled, expanded Media still works as a media interface. If it is enabled, optional existing visualizer presentation may occupy a defined area, but it is still the **one** visualizer owner/render pipeline, not an independently running second visualizer. No product requirement to force Visualizers capability ON.
 - [ ] Media and EB takeover on one display are mutually exclusive **presentation states**. Use one authoritative display takeover policy, not two flags that can both control background/widget admission; switching expansion types is an ordered exit/enter transaction with predictable persistence and safe restoration.
@@ -383,9 +422,28 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
 - [ ] All pane arrangements are bounded and DPI-aware; restore by semantic slots and normalized geometric intent rather than only last pixel rectangle. Handle 125/150/200% DPR, maximized/compact modes, missing monitor and small window; clip safely instead of placing a child offscreen.
 - [ ] **Compact player** is a normal desktop window using the existing Media widget semantic model/style; **Full desktop** is Library/Playlist/Visualizer composition; **Immersive** uses the admitted expanded visualizer/media concepts within SMP's own host. Compact↔full↔immersive must not reset audio, queue, SMTC or visualizer logical clock.
 - [ ] Theme and preset controls reuse canonical sources, and Settings is reorganized by the later presentation descriptor without hiding important visualizer detail. No second renderer or separate mode preset implementation.
+- [ ] **SMP Edit mode (full-player mock R3, long-range; sits beside the splitter and docking bullet above and does not
+  replace it):** the mock's grid glyph in the navigation row enters SMP Edit mode, in which every element except the
+  title bar is movable, sizeable and swappable when the space calculations can handle it. The mock asks for this to
+  run through the existing Edit owner and its handlers, not a second layout system (§16 holds the layout model). The
+  bullet above says the desktop user does not use the global SRPSS CUSTOM Edit; the two statements are reconciled
+  when the operator admits the SMP host, and neither is changed here.
+- [ ] **Left pane edges (full-player mock R4):** the left pane's edges are adjustable in X, Y and XY (a corner moves
+  both), within the per-content minimums of §16A.
+- [ ] **Backgrounds and colours (full-player mock R15, R16):** every pane and bar background inherits the surface
+  material and the theme colours (the widget material system, `Docs/Architecture/Card_Surface_Materials.md`), and
+  every colour is a semantic theme colour. The mock's Miami Afterdark navy and pink is one example under one theme,
+  not a palette to hard-code; the restrained charcoal and slate in the visual-reference bullet above is likewise only
+  the concept image's example.
 
 ### 8.3 Visualizer Pop Out: SMP-only product feature
 
+- [ ] **The left pane shows Visualizer, Lyrics or Artist Collage (full-player mock R5, R6, long-range):** the left
+  pane of the full player presents one of the three. As Visualizer it is the real Visualizer card with its real glyph
+  row (glyph parity, including the Pop Out glyph below), not a second renderer; Lyrics and Artist Collage are further
+  presentations of the same pane. Lyrics stay bound by §5.2's local-first, later-milestone rule, and whether Lyrics and
+  Artist Collage belong to the first full-player milestone is an open operator question
+  (`04_Full_Player_Mock_2026-11-11.md` section 6).
 - [ ] The glyph is a **square outline containing outward diagonal arrow** (not the ↗ Expand glyph), with tooltip `POP OUT VISUALIZER`. It moves the *one* visualizer into a separate **always-on-top** desktop window. MC does not need it for product acceptance; a focused MC test shell is allowed only if it proves a difficult window-transfer contract and is not shipped as a new feature.
 - [ ] Exactly one live logical controller/DSP source and one currently active GL visualizer renderer. Desktop dock and popout are **mutually exclusive rendering hosts**. Rehosting between separate `QQuickWindow` GL contexts can require releasing/recreating *context-local GPU resources*; don't assume reparenting a QSGRenderNode or QQuickItem across contexts is free/safe. Fence old root destruction, then construct/attach destination with current immutable presentation/source state. No double active renderer interval.
 - [ ] Preserve selected mode, preset, camera semantic view, wallpaper/scene environment policy where applicable, activation epoch/source freshness and authored state; renderer-only context objects may rebuild without restarting playback or analysis.
@@ -654,6 +712,12 @@ every widget anywhere on any display with saved slots. SMP gets both, with one l
   popped out always-on-top; panels remember a per-layout size and a per-monitor position; a layout can hide the
   transport and run from media keys; a layout switch never resets audio, queue, SMTC or the visualizer clock
   (§8.2); Edit-style keyboard nudging for floating panels; theme-aware chrome on every panel.
+- [ ] **SMP Edit mode and the mock (full-player mock R3, R4, R11):** the full-player mock wants every element except
+  the title bar to be movable, sizeable and swappable when space allows, through the existing Edit owner and its
+  handlers, with the left pane's edges adjustable in X, Y and XY and Track Information's alignment swappable. §16A
+  below already offers choose, swap, resize and split or remove over a tiling tree; whether the mock's freedom is that
+  vocabulary reached through the existing Edit owner or something wider is for the operator. The lead's proposals for
+  the mock are in `04_Full_Player_Mock_2026-11-11.md` section 4 and are not part of this plan until accepted.
 - [ ] **One model, not two:** pane identities, visibility and rects are the same canonical values whether MC's
   CUSTOM or the SMP host edits them (profile-scoped geometry, shared identities); the dock model is a different
   editor over the same per-pane intent, not a second persistence authority.
