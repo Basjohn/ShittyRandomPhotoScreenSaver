@@ -80,6 +80,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Build Runner cancellation and supported products | `Spec.md` → Build control and products |
 | operator-only build execution / canonical Python 3.14 workers | `Current_Plan.md` §5; `Docs/Guides/Python314_Cutover.md` |
 | immutable Qt resources, editable assets and automatic regeneration | `Spec.md` → Settings themes / native backdrop; `Docs/Guides/10_WIDGET_GUIDELINES.md` → asset ownership |
+| rules every dispatched agent follows (worktree environment, tests, forbidden actions, report shape) | `Docs/Guardrails/Agent_Worktree_Rules.md` |
 | presentation/cadence renderer preflight | `Docs/Guardrails/Presentation_Change_Preflight.md` |
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Fullscreen controls, metadata fitting and overlay editing | `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` §G; `core/settings/fullscreen_overlays.py` |
