@@ -263,6 +263,97 @@ def test_target_death_between_duplication_and_enqueue_refusal_needs_no_pid_looku
         receiver.close()
 
 
+def _heavy_unread_worker(channel, ready, release):
+    ballast = bytearray(96 * 1024 * 1024)                   # a longer teardown, as a real worker's
+    for index in range(0, len(ballast), 4096):
+        ballast[index] = 1
+    ready.set()
+    release.wait(30)
+
+
+@pytest.mark.skipif(__import__('sys').platform != 'win32', reason='the Windows process-handle teardown window')
+@pytest.mark.parametrize('pre_fix', (False, True))
+def test_a_worker_being_torn_down_is_not_running_and_a_send_to_it_never_raises(monkeypatch, pre_fix):
+    # R-185: a killed worker's process handle is signalled only when its teardown has finished (5 to 24 ms measured),
+    # but its handle table goes first: the session's wake pipe ends (the owner starts recovering) while ``is_alive()``
+    # still says True. The replacement's configure was then sent "to a running worker", and the wake handle's
+    # duplication into the dying process raised access denied out of ``send_message``: a second failure, the engine
+    # worker off for the run. The exit status is set when termination begins, so the supervisor reads it: the role
+    # is not running (the link starts a fresh worker), a send returns None, nothing is duplicated or leaked.
+    # Negative control (``is_alive()`` alone, as before): still "running" right after the kill.
+    import _winapi
+
+    from core.process import supervisor as supervisor_module
+
+    if pre_fix:
+        monkeypatch.setattr(supervisor_module, 'process_has_exited', lambda process: not process.is_alive())
+    context = multiprocessing.get_context('spawn')
+    channel = context.Queue(maxsize=4)
+    ready, release = context.Event(), context.Event()
+    child = context.Process(target=_heavy_unread_worker, args=(channel, ready, release))
+    receiver, sender = context.Pipe(duplex=False)
+    child.start()
+    supervisor = _supervisor(channel, child)
+    try:
+        assert ready.wait(30)
+        assert supervisor.is_running(WorkerType.VISUALIZER)
+        before = _windows_handles()
+        _winapi.TerminateProcess(child.sentinel, 1)
+        running = supervisor.is_running(WorkerType.VISUALIZER)       # at once: teardown has only begun
+        assert running is pre_fix, running
+        if pre_fix:
+            return
+        assert child.is_alive() or child.exitcode is not None        # either way the role reads as gone
+        for _ in range(200):                                         # all through the teardown and after it
+            assert supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE,
+                                           {'wake': sender}) is None
+        child.join(5)
+        assert not child.is_alive() and not supervisor.is_running(WorkerType.VISUALIZER)
+        assert _windows_handles() == before
+        sender.send_bytes(b'original still owned')
+        assert receiver.recv_bytes() == b'original still owned'
+    finally:
+        if child.is_alive():
+            child.terminate()
+            child.join(5)
+        _close(supervisor)
+        child.close()
+        sender.close()
+        receiver.close()
+
+
+@pytest.mark.skipif(__import__('sys').platform != 'win32', reason='the Windows process-handle teardown window')
+def test_a_send_whose_target_dies_during_the_handle_transfer_is_not_running_not_an_error(monkeypatch):
+    # The target exits between the supervisor's check and the wake handle's duplication into it: the send answers
+    # None (the worker is not running), never an exception. An OSError from a live target still propagates.
+    from core.process import control_messages
+    from core.process import supervisor as supervisor_module
+
+    exited: list = []
+
+    class _Refused:
+        def __init__(self, _message, _process):
+            raise PermissionError(5, 'Access is denied')
+
+    monkeypatch.setattr(control_messages, 'EncodedControl', _Refused)
+    monkeypatch.setattr(supervisor_module, 'process_has_exited', lambda _process: bool(exited))
+    channel = queue.Queue()
+    supervisor = _supervisor(channel)
+    try:
+        with pytest.raises(PermissionError):
+            supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {})
+
+        def exits_after_the_check(_process, _calls=[]):
+            _calls.append(True)
+            return len(_calls) > 1                           # alive at the check, gone at the transfer
+
+        monkeypatch.setattr(supervisor_module, 'process_has_exited', exits_after_the_check)
+        assert supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {}) is None
+        assert channel.empty()
+    finally:
+        _close(supervisor)
+
+
 @pytest.mark.parametrize('refusal', ('serialize', 'enqueue'))
 def test_never_submitted_sharer_registration_is_locally_reclaimed(refusal):
     """Exercise the stdlib registration path on Windows sockets and POSIX FDs."""
