@@ -878,6 +878,19 @@ can most geometry normally."
   - Storage (1B.7d): `now_playing.artwork_scale` / `artwork_width` / `artwork_height` are retired; a stored value
     with them loads through the one normaliser's bridge into the `artwork` record
     (`Docs/Architecture/Persisted_Input_Compatibility.md`).
+- *What stays overlay-specific (plan 1B.7i audit, grep of `fullscreen_overlay_edit.py`, the owner's
+  `_fullscreen` branches and the overlays' QML).* No parallel gesture solver remains (no corner, edge, wheel, Restore
+  Size, artwork-factor or position-mirroring maths). Kept, each for its reason: (1) the storage adapter
+  (`FullscreenOverlayEdit._apply_edit` / `_place`, `offsets_for_position`, `extent_value`, `_extents_for`,
+  `_drawn_extents`, `_kept_edge`): the overlays' value is resolution-independent (offsets in fractions of the safe
+  area from a corner anchor, extents in ems) and separate from CUSTOM by design, so ordinary geometry is translated
+  into it, with what-is-drawn readback; (2) `edit_frame` (the safe area as the items' edit frame, a declared seam of
+  the owner's `_edit_frame`); (3) the owner's `_fullscreen` branches that are not geometry: the draft's pending state,
+  no close (no enabled state), the Save target (the one overlays value), no Reset to authored, the card item's Rotate
+  Widget Content; (4) `ExpandedOverlaySlot.qml`'s placement (corner anchor, stacking, the card's control reserves)
+  and the QML's `containX`/`containY`: a part's record is in ems while the block's size follows its text, so a stored
+  record can exceed the block and is drawn at its edge (8 Nov decision; the child editor contains live gestures as on
+  every widget).
 - *Saved profiles (plan 1B.7h, geometry and storage).* Three profile fixtures (the canonical value with Settings
   options only, right corners, a pre-1B.7 Fullscreen Edit profile with offsets, scale, extents and child records)
   rendered off-screen at 100 % and 150 % with main (06cf12d7) and with 1B.7: every overlay and part rectangle is
