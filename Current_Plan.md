@@ -604,7 +604,7 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 
 ### Side defect: Build Runner's Inno discovery
 
-- [ ] Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1012`) and a test requires
+- [ ] Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1023`) and a test requires
   it. Replace that tool override with explicit CLI/sidecar admission when opening its owner.
 
 ### Awaiting Validation after the focused proofs
