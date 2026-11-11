@@ -188,7 +188,7 @@ design and closeout docs.
 - [~] Operator: a mode switch on the engine worker no longer leaves a faint ghost of the outgoing mode after its
   fade-out (R-184: Sphere, Extruded Spectrum, Waveform Ribbon switches).
 
-3. H3 Linux worker-default source flip and focused tests (the operator waived **physical** Linux validation, not
+3. H3 Linux worker-default source flip and focused tests, in flight, Opus Medium (the operator waived **physical** Linux validation, not
    source correctness; do not claim Pulse/forkserver runtime was tested):
    - [ ] Flip `visualizer_engine_worker_platform_default` for Linux; update the platform tests.
    - [ ] Gate tools and tests that send a raw `Pipe` sender through a real supervisor switch to
@@ -208,13 +208,32 @@ design and closeout docs.
    - [ ] Transport rule for the substrate: nothing through the resource sharer; a name on POSIX, an exact-process
      handle on Windows.
 
-**P3 and P4:**
+**P3 and P4 (nothing built yet; decomposition and decision inputs:
+`Docs/Future_Work/Native_Core_P2_Closeout_and_P3_Entry_2026-11-09.md` section 3; backend decision:
+`Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`; SMP seam:
+`Docs/Future_Work/ShittyMusicPlayer/03_PCM_Source_and_Native_Core_Seams_2026-11-09.md`).** P3 is one C++/QRhi
+native core for all custom drawing, rolled out in this order; each stage retires its raw-Python GL renderer only
+after parity, never leaving a second permanent renderer:
 
-- [ ] P3: one C++/QRhi native core for all custom drawing, one staged ownership plan: substrate, Spectrum parity,
-  shared fullscreen transition passes, Waveform/Extruded Bubble, specialised transitions, the remaining
-  Visualizers and image/background/Scene3D ports. Switch the whole window to Vulkan only when raw-GL nodes have
-  retired; retain OpenGL through that same QRhi core.
-- [ ] P4: mixed-resolution soft layers in the core.
+- [ ] P3.0 The four decisions above (D1-D4) and the transport rule written as contracts, seen by the lead and the
+  operator, before any C++.
+- [ ] P3.1 Native QRhi substrate: exact Qt/PySide6 ABI, the frozen MSVC DLL guard, resource ownership, the native
+  packet reader with its quiescence barrier and drop edge, capture/clip parity. `native/spike_p1` stays evidence,
+  never a shipped renderer.
+- [ ] P3.2 Spectrum first: pixel parity against the single-sample gate
+  (`tools/visualizer_replay/owner_render_parity.py`), frame trace and CPU/GIL measurements, inside the same
+  scene (no second compositor).
+- [ ] P3.3 Transitions' shared fullscreen pass, then the specialised ones (Crumble, Particle, 3D Block Spins),
+  keeping timing, image ownership, covered-display admission, protected clipping, shader identity and GPU
+  resource accounting.
+- [ ] P3.4 Waveform Ribbon, Extruded Bubble, the remaining Visualizers, the image presenter/background and the
+  Scene3D nodes.
+- [ ] P3.5 Switch the whole Qt Quick window's backend once every raw-GL dependency has retired: Vulkan as the
+  default, OpenGL through the same core as the selectable fallback (D3D where supported); never a Python OpenGL
+  node inside a Vulkan window.
+- [ ] P4 Mixed-resolution soft layers in the same core; thin emissive lines, dots, rims, particles and UI stay
+  full resolution; no per-mode extra renderer or backend.
+- [ ] Expanded Visualizer M6 (4K acceptance) waits for P2's operator gates and the first P3 ports (plan 01).
 
 ### Item 9. SMP & Full Display
 
@@ -365,7 +384,7 @@ through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 - [ ] Side defect: `tests/test_qtquick_media_presentation.py:429` pins a default colour
   (`app_volume_fill_color`) and fails when run after the Visualizer test files in one process (passes alone).
 
-### 1B.8 Light themes are practically opaque in the saver (not started; cause found in research)
+### 1B.8 Light themes are practically opaque in the saver (M1 in flight, Opus High; cause found in research)
 
 **Material track (operator, 11 Nov: proper transparency on light themes, no inset while keeping the material on
 all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint:**
@@ -461,34 +480,31 @@ after each mode for the lead's pixel review.
 - [~] Operator look: the Weather location autocomplete now uses the themed popup, and the Weather and Widgets
   status notes take the theme's success and warning roles.
 
-### 1B.12 Fullscreen glyphs per display (first form merged 21da6fbc; operator's relative form below is open)
+### 1B.12 Fullscreen glyphs relative to the Visualizer's display (merged 9bb4e806c; contract: plan 01 M3c)
 
-Merged form: up-left expands on the first display, up-right on the second (absolute), through the owner request
-"expand on display N" (`expand_on_display`, the shape SMP will reuse) and the expanded-to-expanded move.
+Up arrow: full display on the Visualizer's own display; diagonal up-left / up-right: on the display to its left or
+right by physical arrangement (`core/display_neighbours.py`: a display counts as beside only if it does not
+overlap horizontally, so a vertical stack offers no side arrows); only applicable arrows show; while expanded the
+current display's glyph is a Down arrow and the diagonals move the view. The owner request stays "expand on
+display N" (`expand_on_display`, the shape SMP will reuse).
 
-**Operator, 12 Nov: relative to the Visualizer's display, for consistency with 3+ monitors.** Queued for a fresh
-Opus High after 1B.7 merges (same QML and coordinator files).
-
-- [ ] Up arrow (same size and styling as the others): fullscreen on the display the Visualizer is on.
-- [ ] Diagonal up-left arrow: fullscreen on the display to the left of the Visualizer's display; diagonal
-  up-right arrow: fullscreen on the display to the right. Left and right come from the displays' physical
-  arrangement (the nearest display whose geometry lies on that side), never from the display index.
-- [ ] Only the applicable arrows show, so no space is wasted: no display on a side, no arrow for it; one
-  display shows the Up arrow alone (lead's reading: the single glyph becomes the Up arrow; confirm).
-- [ ] While expanded: the current display's glyph is the collapse (the Up arrow's mirror, a Down arrow); the
-  diagonals move the expanded view to the left or right neighbour; the 1B.1 Edit holds still refuse a move.
-- [ ] The request stays "expand on display N" at the owner: the relative choice is resolved to a display at the
-  press, in one place.
-- [ ] Glyphs appear and disappear with a fade when the arrangement changes; the row never jumps.
-- [ ] Tests: one, two and three displays (left only, right only, both), a vertical arrangement (no side
-  neighbours), expanded on the middle display; arrangement derived from geometry in the test, never pinned.
-- [ ] Off-screen PNG evidence at 100% and 150% with 2x crops for each case; lead pixel review; plan 01 updated.
-- [~] Operator, two monitors: the arrows from each display; the move while expanded (collapse, move, expand);
-  a move between displays of different size or DPI and its fades; V unchanged.
-- [~] Operator decision: the glyph tooltips are ALL CAPS to match the rest of the glyph row; Title Case is a
-  one-line change.
-- [ ] Record in the QML guide: a QML property named `left` on a `Text` (colliding with Item's built-in `left`)
-  hangs the hidden-scene load silently instead of raising.
+- [~] Operator, two or more monitors: the arrows offered from each display match the physical arrangement
+  (including mixed DPI); each press; the move while expanded (collapse, move, expand) between displays of
+  different size or DPI and its fades; V unchanged.
+- [~] Operator decision: a single display now shows the Up arrow (it showed up-right); one line in
+  `VisualizerPresentation.qml` (`expandHereArrowDegrees`) switches it back.
+- [~] Operator decision: the glyph tooltips are ALL CAPS and relative ("FULL DISPLAY ON THE DISPLAY TO THE
+  LEFT"), matching the rest of the glyph row; Title Case is a one-line change.
+- [ ] Two left/right rules: Edit's display-hop arrows (`QuickCustomLayoutOwner._adjacent_binding_for_identity`,
+  `rendering/quick/custom_layout_owner.py`) compare centre x and offer a hop between two vertically stacked
+  displays of different widths, where the glyphs offer none. Move Edit's hop onto `core.display_neighbours`.
+- [ ] A display arrangement changing while the saver runs is covered only by re-admission in tests; check it on
+  the topology-replacement path.
+- [ ] The Reset Camera glyph (a font character) shows coloured edge fringes in off-screen crops; confirm on a
+  real display and paint it as a path like the arrows if it does there too.
+- [ ] Record the QML trap where QML authors will see it (there is no QML authoring guide; add a short section to
+  `Docs/Guardrails/Presentation_Change_Preflight.md`): a property named `left` on a `Text` (colliding with
+  Item's built-in `left`) hangs the hidden-scene load silently instead of raising.
 
 ### 1B.13 Hold right-click to pan the live Visualizer (merged 21da6fbc; contract: Spec.md / Contracts.md input)
 
