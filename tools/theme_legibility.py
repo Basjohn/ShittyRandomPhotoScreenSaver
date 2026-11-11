@@ -22,7 +22,7 @@ Bars: 4.5:1 for small text, 3:1 for large text (WCAG AA). Disabled roles are exe
 The contrast function is the canonical ``ui.theme_semantics.contrast_ratio``.
 
 Usage:
-  python tools/theme_legibility.py [--themes NAME ...] [--light] [--json OUT]
+  python tools/theme_legibility.py [--themes NAME ...] [--light] [--card-materials] [--json OUT]
 """
 from __future__ import annotations
 

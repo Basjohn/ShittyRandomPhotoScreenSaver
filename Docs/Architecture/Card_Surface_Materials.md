@@ -125,7 +125,7 @@ On the card side, `OverlayCard` gains one inactive `Loader` (the only Normal-pat
 card, no scene-graph node); it loads `MaterialSurface` only when the card's material is not Normal and a source is
 bound. While loaded, the card's `Rectangle` keeps its border and drops its fill (the material paints the fill).
 
-### 3.3 Legibility
+### 3.2.1 Material border ring (proposed; Current_Plan.md 1B.8 M3 / 1.7b)
 
 **Proposed, not landed:** The current ordinary card still paints a plain
 `Rectangle` border over the existing single-pass material fill. `Current_Plan.md` §1A proposes deriving a
@@ -179,12 +179,54 @@ block):
   then a separate linear-light contrast guard applies the minimum further correction required by its steady ink.
   `SurfaceContrast.js` derives that guard at ink/style edges, with 4.5:1 small-text acceptance checked in rendered pixels.
   The backdrop is heavily blurred, so correction stays smooth; dark-text light themes lift toward white rather than
-  darkening beneath their own text. Tint, haze, luminosity and smoke density are calibrated independently of textless
-  children: Glass/Frosted volume keeps its accepted recipe, Acrylic/Mica/Smoked volume removes 20% density.
+  darkening beneath their own text, but only as far as the bounded surface below. Tint, haze, luminosity and smoke
+  density are calibrated independently of textless children: Glass/Frosted volume keeps its accepted recipe,
+  Acrylic/Mica/Smoked volume removes 20% density.
+
+**Dark ink: bounded surface and corrected ink (12 Nov 2026, `Current_Plan.md` 1B.8 M1; supersedes the white panel
+of light themes and closes 1.7a's density question).** Operator: light themes were "practically opaque even when
+their settings gui variant shows the material correctly". Cause: the solver asked the panel to carry faint ink (the
+card text at 55 % unless a family passes its own) at 4.8:1, which dark ink cannot reach on any surface (black at 55 %
+reaches 4.76:1 on white), so the limit saturated at 1.0 and every light card's interior was the same white over any
+wallpaper (surviving wallpaper swing 0). The rule now, light ink (dark themes) unchanged:
+
+- *The panel answers for the full-strength ink.* When the faint ink cannot read on white, `requiredReferenceContrast`
+  solves for the reference ink (`card.text`) at full alpha instead: a reachable linear limit (about 0.25), never 1.0.
+- *Bounded surface.* `SurfaceContrast.panelCeiling` caps the panel's lift toward its anchor (the `panelCeiling`
+  uniform; the shader's one change is `c = min(c, mix(unplated, 1, panelCeiling * plate))` for dark ink in the shared
+  SURFACE block) so that the card's total density (material terms x panel) equals the theme's Settings-variant shell
+  density: the card's authored surface alpha under the Settings calibration of its material
+  (`settings_surface_density`, `SETTINGS_DENSITY_BASELINE` in `core/settings/surface_opacity.py`, mirrored in the JS
+  and kept equal by `tests/test_surface_contrast_solver.py`), then Widget Opacity Adjust. The saver never loads the
+  Settings theme catalogue, so a mirror's own authored alpha stands in for its Settings shell (the same projection
+  the material already uses). The ceiling is never below what the reference ink needs over a black wallpaper, so
+  legibility stays the final floor at every Opacity Adjust.
+- *Corrected ink, not panel.* Each `ShadowedText` run on a dark-ink material card asks its card
+  (`OverlayCard.surfaceInkSolution`) for its ink, judged at its real alpha (colour alpha x the run's opacity) over the
+  composed panel on a black and a white wallpaper (`MaterialSurface.inkPoles`, the shader's terms evaluated once at
+  style edges; every wallpaper lies between the two). The Settings `_correct_ink` order: kept when it reads (4.8:1
+  small, 3.2:1 large), else its alpha rises, else it darkens toward black keeping its hue.
+- *Text-local plate, only where ink cannot.* A run faded by its own item opacity (Media's PLAYING at 62 %) can stay
+  short even as black; only then its `ShadowedText` loads one `TextLegibilityPlate` hugging the painted text (a pill),
+  which lifts only where the surface under it misses the floor (`ownOpacity` keeps the run's fade off the plate).
+  No whole-card lift, no plate on any run that reads, none on Normal or light ink.
+
+Evidence (`.artifacts/evidence/materials/20261112_m1/`, PERSONALSET `Usu_Underwater_Lab_1440p.png` dark and
+`uwyTD.jpg` bright; Weather, Media, Reddit, System Stats, Clock and Gmail, Feed, Friend Pulse, System Stats): the
+surviving wallpaper swing inside the card (mean luminance change across the two wallpapers over the wallpaper's own)
+went from 0 to 0.12-0.25 on the main cards (Frosted/Mica 0.22-0.25, Acrylic 0.13-0.16, Glass 0.14, Smoked 0.12) and
+0.04-0.11 on the list cards, whose tiles keep their own fills; dark themes keep 0.08-0.13. Small runs below 4.5:1 on
+the three light themes went from 1-9 per frame to 0 on every material and both wallpapers; dark-theme frames match
+the earlier code within renderer jitter (at most 2 levels on about 1,000-1,500 pixels per frame, the same count and
+size as two runs of identical code). `tools/theme_legibility.py --card-materials` evaluates the production solver on
+each mirror's material: every light theme's card roles hold 4.5:1 (4.78 or better) over black and white wallpapers
+with corrected ink. Steady GPU over Normal, five cards on the bright wallpaper, Polished Chrome
+(`tools/surface_material_capture.py` cost method, control-relative): +0.016-0.028 ms after (two runs) against
++0.046-0.072 ms before; the guard's pow path now runs only where the surface is under the reachable limit.
 
 Nothing else darkens the card itself: no `LegibilityRow` sits on a card (Media, Reddit, Gmail, Feed list lines,
 Weather, the Abandonment and Achievement shelves lost theirs), and `ShadowedText` loads no plate of its own (the
-`surfacePlateEnabled` opt-out is gone with it). A `LegibilityRow` remains only where text sits on a control's own
+`surfacePlateEnabled` opt-out is gone with it) except the dark-ink plate above, for a run its ink cannot rescue. A `LegibilityRow` remains only where text sits on a control's own
 further fill (Feed grid tiles, Friend Pulse rows and tiles, Games You Follow story tiles, System Stats metric panels,
 Achievement capsules): it passes that fill as `underlayColor` (the floor is measured against what the text sits on),
 sits 2 px inside that panel's border and takes the panel's radius minus that inset (never under 2 px), so it follows
