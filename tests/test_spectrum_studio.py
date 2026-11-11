@@ -167,14 +167,16 @@ def _vector_elements() -> set[tuple]:
     return out
 
 
-def _uncovered(properties) -> set:
+def _uncovered(properties, shapes=None) -> set:
     """Registry keys (every spec control, every Custom row's keys, every technical control, the mode's shared bar
-    and rainbow families) with no Studio property, plus vector elements no property edits."""
-    paths = {tuple(p.path) for p in properties}
+    and rainbow families) with no Studio property, plus vector elements nothing edits (neither a property nor the
+    shape instrument: ``shapes`` are the schema's ``ShapeSpec``s)."""
+    from tests.test_studio_shape_instrument import shape_uncovered
+    shapes = build_schema().shapes if shapes is None else shapes
     roots = {p.path[0] for p in properties}
     custom_keys = {key for e in spec().entries if isinstance(e, Custom) for key in e.keys}
     keys = {c.key for c in spec().body_controls} | custom_keys | technical_keys() | family_keys()
-    return (keys - roots) | {element for element in _vector_elements() if element not in paths}
+    return (keys - roots) | shape_uncovered(properties, shapes, _vector_elements())
 
 
 def test_every_spectrum_and_rainbow_ghost_control_is_editable_in_the_studio():
@@ -187,9 +189,11 @@ def test_coverage_check_detects_a_missing_control_negative_control():
     for dropped in (PREFIX + "rainbow_ghost", PREFIX + "render_mode", SHAPE_NODES, PREFIX + "visual_smoothing",
                     PREFIX + "bar_border_opacity", PREFIX + "rainbow_speed", PREFIX + "sensitivity"):
         assert dropped in _uncovered([p for p in properties if p.path[0] != dropped]), dropped
+    # Without the shape instrument nothing edits a node, a lane's position or its strength (their properties
+    # alone only carry the values).
     lanes = LANES[False]
     label = next(iter(require_canonical_default("widgets.spotify_visualizer")[lanes]))
-    assert (lanes, label) in _uncovered([p for p in properties if tuple(p.path) != (lanes, label)])
+    assert {(lanes, label), (SHAPE_NODES, 0, 1), (NOTCHES[True], 0, 0)} <= _uncovered(properties, shapes=())
 
 
 def test_instruments_bounds_choices_and_conditions_come_from_the_registry():
@@ -573,8 +577,9 @@ def test_edits_save_through_spectrums_settings_owners_and_every_exit_restores_se
     bridge = controller.bridge
     session = controller.session
     stored = lambda: settings_manager.get("widgets")["spotify_visualizer"]      # noqa: E731
-    # Spec controls (a Choice, Rainbow Ghost, a slider), the Custom rows (smoothing, shape node, boundary, lane), the
-    # shared families (fill alpha, border opacity, rainbow) and a technical value, each through Settings' save.
+    # Spec controls (a Choice, Rainbow Ghost, a slider), the Custom rows (smoothing; the shape instrument's node,
+    # lane position and lane strength), the shared families (fill alpha, border opacity, rainbow) and a technical
+    # value, each through Settings' save.
     render = session.values[PREFIX + "render_mode"]
     other = next(v for v in build_schema().find(PREFIX + "render_mode").choice_values if v != render)
     label = build_schema().find(PREFIX + "render_mode").choices[
@@ -589,15 +594,15 @@ def test_edits_save_through_spectrums_settings_owners_and_every_exit_restores_se
     bridge.commitValue(PREFIX + "visual_smoothing", 0, 0.73)
     assert stored()[PREFIX + "visual_smoothing"] == pytest.approx(0.73)
     height = session.values[SHAPE_NODES][0][1]
-    bridge.commitValue(f"{SHAPE_NODES}.0.1", 0, round(1.0 - height, 3))
+    bridge.shapeCommitText(SHAPE_NODES, "node", 0, 1, f"{round(1.0 - height, 3)}")
     assert stored()[SHAPE_NODES][0][1] == pytest.approx(round(1.0 - height, 3))
     mirrored = bool(session.values[PREFIX + "mirrored"])
     notches, lanes = NOTCHES[mirrored], LANES[mirrored]
     low, high = session.values[notches][0][0], session.values[notches][1][0]
-    bridge.commitValue(f"{notches}.0", 0, round((low + high) / 2, 3))
+    bridge.shapeCommitText(SHAPE_NODES, "lane", 0, 0, f"{round((low + high) / 2, 3)}")
     assert stored()[notches][0][0] == pytest.approx(round((low + high) / 2, 3))
-    lane = next(iter(session.values[lanes]))
-    bridge.commitValue(f"{lanes}.{lane}", 0, 0.25)
+    lane = session.values[notches][1][1]
+    bridge.shapeCommitText(SHAPE_NODES, "lane", 1, 1, "0.25")
     assert stored()[lanes][lane] == pytest.approx(0.25)
     bridge.commitValue(PREFIX + "bar_fill_color.3", 0, 120)
     assert stored()[PREFIX + "bar_fill_color"][3] == 120
@@ -644,17 +649,24 @@ def test_restore_check_detects_a_concealed_settings_negative_control(qt_app, dia
     assert _settings_restored(controller, dialog)
 
 
-def test_absent_shape_node_slots_are_not_shown(qt_app, dialog_tab, no_gl_checks):
-    from ui.tabs.media.spectrum_shape_editor import _MAX_NODES
+def test_the_shape_is_one_instrument_row_and_no_slider_rows(qt_app, dialog_tab, no_gl_checks):
+    """The shape group shows the shape instrument (the stored nodes and the current layout's lanes on its canvas);
+    the layout switch, the lane positions and the lane strengths are values it edits, never rows of their own."""
     from ui.studio.settings_link import open_mode_studio
     _dialog, tab = dialog_tab()
     surfaces = []
     controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces))
     surfaces[0].pump(2)
-    count = len(controller.session.values[SHAPE_NODES])
-    hidden = controller.bridge.conditionHidden
-    assert all(not hidden.get(f"{SHAPE_NODES}.{i}.1") for i in range(count))
-    assert all(hidden.get(f"{SHAPE_NODES}.{i}.1") for i in range(count, _MAX_NODES))
+    bridge, session = controller.bridge, controller.session
+    bridge.setWorkspace("shape")
+    rows = {r["id"]: r for g in bridge.inspector for r in g["rows"]}
+    assert rows[SHAPE_NODES]["instrument"] == "shape"
+    carried = {PREFIX + "mirrored", *NOTCHES.values(), *LANES.values()}
+    assert not any(row.split(".")[0] in carried or row.startswith(SHAPE_NODES + ".") for row in rows)
+    view = bridge.values[SHAPE_NODES]
+    mirrored = bool(session.values[PREFIX + "mirrored"])
+    assert view["nodes"] == session.values[SHAPE_NODES] and view["mirrored"] is mirrored
+    assert [lane["label"] for lane in view["lanes"]] == [label for _x, label in session.values[NOTCHES[mirrored]]]
     controller.close()
 
 
@@ -850,7 +862,7 @@ def test_a_failed_reanalysis_shows_a_notice_keeps_the_preview_and_retry_lands(qt
     bridge = controller.bridge
     adapter.loader.fail = True
     nodes = controller.session.values[SHAPE_NODES]
-    bridge.commitValue(f"{SHAPE_NODES}.0.1", 0, 0.0 if nodes[0][1] > 0.5 else 1.0)    # engine-owned: re-analyse
+    bridge.shapeCommitText(SHAPE_NODES, "node", 0, 1, "0.0" if nodes[0][1] > 0.5 else "1.0")   # engine-owned: re-analyse
     assert _pump_until(surface, lambda: bridge.messageAction == "Retry")
     assert "worker exited" in bridge.message
     from PySide6.QtCore import QObject
@@ -881,7 +893,7 @@ def test_a_failure_without_the_evaluator_report_stays_silent_negative_control(qt
     adapter.loader.fail = True
     nodes = controller.session.values[SHAPE_NODES]
     bridge = controller.bridge
-    bridge.commitValue(f"{SHAPE_NODES}.0.1", 0, 0.0 if nodes[0][1] > 0.5 else 1.0)
+    bridge.shapeCommitText(SHAPE_NODES, "node", 0, 1, "0.0" if nodes[0][1] > 0.5 else "1.0")
     surface.pump(10)
     assert controller.evaluator.errors and bridge.messageAction == ""
     controller.close()

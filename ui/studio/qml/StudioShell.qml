@@ -734,6 +734,810 @@ Rectangle {
         }
     }
 
+    // Exact entry for an instrument that commits its own way (the shape instrument's selected element).
+    component ExactField: Rectangle {
+        id: ef
+        property string display: ""
+        property string name: "Exact value"
+        property bool editable: true
+        signal edited(string text)
+        implicitWidth: 54
+        implicitHeight: 22
+        radius: 4
+        color: shell.cInput
+        opacity: editable ? 1.0 : 0.45
+        border.width: 1
+        border.color: efInput.activeFocus ? shell.cAccent : shell.cOutlineSoft
+        TextInput {
+            id: efInput
+            anchors.fill: parent
+            anchors.margins: 4
+            horizontalAlignment: TextInput.AlignRight
+            verticalAlignment: TextInput.AlignVCenter
+            color: shell.cText
+            font.pixelSize: shell.fontBase - 2
+            selectByMouse: true
+            readOnly: !ef.editable
+            activeFocusOnTab: ef.editable
+            text: ef.display
+            Accessible.name: ef.name
+            onEditingFinished: if (text !== ef.display) ef.edited(text)
+            Keys.onEscapePressed: { text = ef.display; focus = false }
+        }
+        Binding { target: efInput; property: "text"; value: ef.display; when: !efInput.activeFocus }
+    }
+
+    // The shared shape instrument (ui/studio/shape.py): a node curve and its frequency lanes on one canvas.
+    // Everything drawn comes from the bridge: the stored nodes and lanes, the curve sampled by the production
+    // interpolation and the mode's own preview of what the shape does. This component maps it to pixels, hit-tests
+    // the pointer and hands gestures over: drag a node, click empty space to add one, right-click (or Delete) to
+    // remove one; drag a lane's tag along the axis and its marker up and down. A held pointer is applied once per
+    // frame and committed once on release. Keys (the well focused): Ctrl+Left / Right walk the elements, the
+    // arrows step the selected one (Shift: ten steps), Delete removes a node, Esc drops a drag, then the selection.
+    component ShapeRow: Column {
+        id: shp
+        objectName: "shapeRow"
+        property var row
+        readonly property var view: studio.values[row.id] || ({})
+        // What is drawn: the view, except across a layout change, which fades through instead of popping.
+        property var shown: ({})
+        readonly property var nodes: shown.nodes || []
+        readonly property var lanes: shown.lanes || []
+        readonly property bool mirrored: shown.mirrored === true
+        property real contentOpacity: 1
+        property string selPart: ""            // "node" | "lane": the element the strip under the canvas edits
+        property int selIndex: -1
+        property string hoverPart: ""          // "node" | "lane" | "strength" | "add"
+        property int hoverIndex: -1
+        property real hoverX: 0
+        property real hoverY: 0
+        property string dragPart: ""           // the part the pointer holds
+        property var lastNodes: []
+        property string stripPart: "node"      // the strip's last element (kept while the strip fades out)
+        property int stripIndex: 0
+        property string chipText: ""
+        property real chipX: 0
+        property real chipY: 0
+        property bool chipOn: false
+        signal nodeAppeared(int index)
+        signal nodeVanished(real x, real y)
+        spacing: 4
+        // What the pointer would do where it is, said in the header while it hovers (kept while it fades out).
+        readonly property string hint: {
+            if (dragPart !== "") return ""
+            if (hoverPart === "add") return shown.canAdd === true ? "Click To Add A Node" : ""
+            if (hoverPart === "node") return shown.canRemove === true ? "Drag To Move  ·  Right-Click To Remove" : "Drag To Move"
+            if (hoverPart === "strength") return "Drag To Set Its Strength"
+            if (hoverPart === "lane")
+                return hoverIndex < lanes.length && lanes[hoverIndex].pinned === true ? "This Lane Stays Here"
+                                                                                       : "Drag To Move The Lane"
+            return ""
+        }
+        property string lastHint: ""
+        onHintChanged: if (hint !== "") lastHint = hint
+
+        // Geometry inside the well (logical pixels): the plot and, under its baseline, the lane tags. The curve's
+        // height and a lane's strength share the plot's one 0..1 axis: a bar is the one times the other.
+        readonly property real plotL: 34
+        readonly property real plotR: Math.max(plotL + 40, width - 16)
+        readonly property real plotW: plotR - plotL
+        readonly property real plotT: 14
+        readonly property real plotH: 108
+        readonly property real plotB: plotT + plotH
+        readonly property real tagT: plotB + 8
+        readonly property real tagH: 18
+        readonly property real midX: plotL + plotW / 2
+        function clamp01(v) { return Math.max(0, Math.min(1, v)) }
+        // side 0: the whole axis, left to right. Side -1: the editable (left) half of a mirrored layout, the centre
+        // at its right; side 1: its mirror image.
+        function sideX(nx, side) { return side === 0 ? plotL + nx * plotW : midX + side * nx * plotW / 2 }
+        function px(nx) { return sideX(nx, mirrored ? -1 : 0) }
+        function py(v) { return plotT + (1 - v) * plotH }
+        function nxAt(x) { return clamp01(mirrored ? (midX - x) / (plotW / 2) : (x - plotL) / plotW) }
+        function nyAt(y) { return clamp01(1 - (y - plotT) / plotH) }
+
+        FontMetrics { id: tagFont; font.pixelSize: shell.fontBase - 2 }
+        function tagWidth(i) { return i < lanes.length ? Math.ceil(tagFont.advanceWidth(lanes[i].label)) + 18 : 0 }
+        // Each lane tag's left edge: centred under its lane, pushed apart where lanes sit close, kept inside.
+        readonly property var tagX: {
+            var order = [], out = [], i, k, w
+            for (i = 0; i < lanes.length; ++i) { order.push(i); out.push(0) }
+            order.sort(function(a, b) { return px(lanes[a].x) - px(lanes[b].x) })
+            var gap = 4, low = 4, high = width - 4, edge = low - gap
+            for (i = 0; i < order.length; ++i) {
+                k = order[i]; w = tagWidth(k)
+                out[k] = Math.max(edge + gap, Math.min(high - w, px(lanes[k].x) - w / 2))
+                edge = out[k] + w
+            }
+            edge = high + gap
+            for (i = order.length - 1; i >= 0; --i) {
+                k = order[i]; w = tagWidth(k)
+                out[k] = Math.min(out[k], edge - gap - w)
+                edge = out[k]
+            }
+            return out
+        }
+
+        function select(part, index) {
+            selPart = part; selIndex = index
+            if (part !== "") { stripPart = part; stripIndex = index }
+        }
+        function removeNode(index) {
+            if (shown.canRemove !== true || (shown.removeAction || "") === "") return
+            select("", -1)
+            studio.runAction(shown.removeAction + index)
+        }
+        function swapLane(index, step) {
+            var action = step < 0 ? shown.previousAction : shown.nextAction
+            if ((action || "") === "" || index + step < 0 || index + step >= lanes.length) return
+            studio.runAction(action + index)
+            select("lane", index + step)
+        }
+        // The value chip beside the hovered or held element; it keeps its last text and place while it fades out.
+        function updateChip() {
+            var part = dragPart !== "" ? (dragPart === "add" ? "node" : dragPart) : hoverPart
+            var index = dragPart !== "" ? selIndex : hoverIndex
+            if (part === "node" && index >= 0 && index < nodes.length) {
+                chipText = shell.fmt(nodes[index][0], 3, "") + "   " + shell.fmt(nodes[index][1], 3, "")
+                chipX = px(nodes[index][0]); chipY = py(nodes[index][1]); chipOn = true
+            } else if (part === "strength" && index >= 0 && index < lanes.length) {
+                chipText = lanes[index].label + "  " + Math.round(lanes[index].strength * 100) + "%"
+                chipX = px(lanes[index].x); chipY = py(lanes[index].strength); chipOn = true
+            } else if (part === "lane" && dragPart === "lane" && index >= 0 && index < lanes.length) {
+                chipText = lanes[index].label + "  " + shell.fmt(lanes[index].x, 3, "")
+                chipX = px(lanes[index].x); chipY = plotB + 2; chipOn = true
+            } else chipOn = false
+        }
+        // Show the bridge's view. A node that came or went fades in or out where it is (the other handles are
+        // alike, so they simply take their places).
+        function adopt() {
+            var was = lastNodes, now = view.nodes || [], i
+            if (was.length > 0 && now.length === was.length + 1) {
+                for (i = 0; i < was.length; ++i) if (now[i][0] !== was[i][0] || now[i][1] !== was[i][1]) break
+                shown = view
+                nodeAppeared(i)
+            } else if (now.length > 0 && now.length === was.length - 1) {
+                for (i = 0; i < now.length; ++i) if (now[i][0] !== was[i][0] || now[i][1] !== was[i][1]) break
+                var gx = px(was[i][0]), gy = py(was[i][1])
+                shown = view
+                nodeVanished(gx, gy)
+            } else shown = view
+            lastNodes = now
+            var active = view.active
+            if (active !== undefined && dragPart !== "" && active.index >= 0)
+                select(active.part === "lane" || active.part === "strength" ? "lane" : "node", active.index)
+            if ((selPart === "node" && selIndex >= nodes.length) || (selPart === "lane" && selIndex >= lanes.length))
+                select("", -1)
+            updateChip()
+        }
+        onViewChanged: {
+            if (shown.nodes !== undefined && view.nodes !== undefined && (view.mirrored === true) !== mirrored) {
+                if (!layoutFade.running) layoutFade.restart()
+            } else if (!layoutFade.running) adopt()
+        }
+        onHoverPartChanged: updateChip()
+        onHoverIndexChanged: updateChip()
+        onDragPartChanged: updateChip()
+        Component.onCompleted: { shown = view; lastNodes = view.nodes || [] }
+        SequentialAnimation {
+            id: layoutFade
+            NumberAnimation { target: shp; property: "contentOpacity"; to: 0; duration: 110; easing.type: Easing.OutQuad }
+            ScriptAction { script: { shp.select("", -1); shp.lastNodes = shp.view.nodes || []; shp.shown = shp.view
+                                     shp.updateChip() } }
+            NumberAnimation { target: shp; property: "contentOpacity"; to: 1; duration: 170; easing.type: Easing.OutQuad }
+        }
+        Connections {
+            target: studio
+            function onShapeSelected(id, part, index) {
+                if (id === shp.row.id && part === shp.selPart) shp.select(part, index)
+            }
+        }
+
+        Item {                              // the label, the layout, the axis, the node count and Add Node
+            id: shapeHeader
+            width: shp.width; height: 24
+            readonly property var layouts: shp.view.layouts || []
+            readonly property bool switchable: layouts.length === 2 && (shp.view.layoutSwitch || "") !== ""
+            RowLabel { id: shapeLabel; text: row.label; icon: row.icon || ""; tip: row.tooltip; propId: row.id
+                       height: parent.height; width: Math.min(implicitWidth + 4, parent.width * 0.3) }
+            Row {                           // the layout: which half of the picture the nodes describe
+                id: layoutPair
+                objectName: "shapeLayout"
+                visible: shapeHeader.switchable
+                x: shapeLabel.width + 10; anchors.verticalCenter: parent.verticalCenter
+                spacing: 0
+                Repeater {
+                    model: shapeHeader.switchable ? shapeHeader.layouts : []
+                    delegate: Rectangle {
+                        readonly property bool current: (shp.view.mirrored === true) === (index === 1)
+                        objectName: "shapeLayoutChoice"
+                        width: layoutName.implicitWidth + 18; height: 22
+                        radius: 4
+                        color: current ? shell.cAccentSoft : (layoutMouse.containsMouse ? shell.cRaised : "transparent")
+                        border.width: 1
+                        border.color: current ? shell.cAccent : shell.cOutlineSoft
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.name: modelData + " Layout"
+                        Accessible.checked: current
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Text { id: layoutName; anchors.centerIn: parent; text: modelData; color: shell.cText
+                               font.pixelSize: shell.fontBase - 2; font.bold: parent.current }
+                        MouseArea { id: layoutMouse; anchors.fill: parent; hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: if (!parent.current) studio.commitValue(shp.view.layoutSwitch, 0, index === 1)
+                                    C.ToolTip.visible: containsMouse
+                                    C.ToolTip.text: index === 1
+                                        ? "The nodes describe one half, centre to edge.\nThe other half mirrors it."
+                                        : "The nodes describe the whole picture,\nfrom left to right."
+                                    C.ToolTip.delay: 600 }
+                        Keys.onSpacePressed: if (!current) studio.commitValue(shp.view.layoutSwitch, 0, index === 1)
+                        FocusRing { visible: parent.activeFocus }
+                    }
+                }
+            }
+            Row {
+                id: shapeTools
+                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+                Text {
+                    objectName: "shapeStatus"
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: shp.dragPart !== "" && row.releaseOnly === true ? "Updates On Release"
+                          : shp.nodes.length + " / " + (shp.shown.maxNodes || 0) + " Nodes"
+                    color: shell.cDim; font.pixelSize: shell.fontBase - 2
+                }
+                StudioButton {
+                    objectName: "shapeAddNode"
+                    icon: "plus"; iconSize: 14; width: 26; height: 22
+                    enabledState: shp.shown.canAdd === true && (shp.shown.addAction || "") !== ""
+                    tip: "Add Node\nAdds a node in the widest gap, on the current curve."
+                    onClicked: studio.runAction(shp.shown.addAction)
+                }
+            }
+            Item {                          // the axis as the canvas reads from left to right, or what the pointer would do
+                id: shapeCaption
+                x: (layoutPair.visible ? layoutPair.x + layoutPair.width : shapeLabel.width) + 12
+                width: Math.max(0, shapeTools.x - x - 10); height: parent.height
+                Text {
+                    objectName: "shapeAxis"
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: implicitWidth <= parent.width && opacity > 0
+                    opacity: shp.hint === "" || shapeHint.implicitWidth > parent.width ? shp.contentOpacity : 0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    text: shp.mirrored ? (shp.shown.high || "") + "  ←  " + (shp.shown.low || "") + "  →  " + (shp.shown.high || "")
+                                       : (shp.shown.low || "") + "  →  " + (shp.shown.high || "")
+                    color: shell.cDim; font.pixelSize: shell.fontBase - 3
+                }
+                Text {
+                    id: shapeHint
+                    objectName: "shapeHint"
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: implicitWidth <= parent.width && opacity > 0
+                    opacity: shp.hint !== "" ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    text: shp.lastHint
+                    color: shell.cText; font.pixelSize: shell.fontBase - 3
+                }
+            }
+        }
+
+        Rectangle {
+            id: well
+            objectName: "shapeWell"
+            width: shp.width; height: shp.tagT + shp.tagH + 7
+            radius: 6
+            color: shell.cWell
+            // Keyboard focus shows on the well's own border (a ring outside it would be cut by the scrolling panel).
+            border.width: shell.cardBorder; border.color: well.activeFocus ? shell.cFocus : shell.cOutlineSoft
+            Behavior on border.color { ColorAnimation { duration: 120 } }
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Graphic
+            Accessible.name: row.label
+
+            Item {
+                id: shapeContent
+                anchors.fill: parent
+                opacity: shp.contentOpacity
+
+                Canvas {
+                    id: plotCanvas
+                    objectName: "shapeCanvas"
+                    anchors.fill: parent
+                    onPaint: {
+                        var ctx = getContext("2d"); ctx.reset()
+                        var v = shp.shown
+                        if (!v.nodes || !v.curve) return
+                        var L = shp.plotL, W = shp.plotW, T = shp.plotT, H = shp.plotH, B = shp.plotB, mid = shp.midX
+                        var dim = shell.cWellDim, curveInk = shell.cWellTrace1, laneInk = shell.cWellTrace3
+                        function ink(c, a) {
+                            return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + ","
+                                   + Math.round(c.b * 255) + "," + a + ")"
+                        }
+                        function line(x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke() }
+                        var sides = v.mirrored ? [-1, 1] : [0]
+                        var profile = v.laneProfile || [], lanes = v.lanes || [], bars = v.bars || [], curve = v.curve
+                        var i, s, side, xa, xb
+                        ctx.lineJoin = "round"; ctx.lineCap = "round"
+
+                        // The plot's ground, tinted by the lane strength above it.
+                        for (s = 0; s < sides.length && profile.length > 1; ++s) {
+                            side = sides[s]
+                            if (v.laneMode === "bands") {
+                                for (i = 0; i + 1 < profile.length; i += 2) {
+                                    xa = shp.sideX(profile[i][0], side); xb = shp.sideX(profile[i + 1][0], side)
+                                    ctx.fillStyle = ink(laneInk, 0.015 + 0.1 * profile[i][1])
+                                    ctx.fillRect(Math.min(xa, xb), T, Math.abs(xb - xa), H)
+                                }
+                            } else {
+                                xa = shp.sideX(0, side); xb = shp.sideX(1, side)
+                                var tint = ctx.createLinearGradient(xa, 0, xb, 0)
+                                for (i = 0; i < profile.length; ++i)
+                                    tint.addColorStop(shp.clamp01(profile[i][0]), ink(laneInk, 0.015 + 0.1 * profile[i][1]))
+                                ctx.fillStyle = tint
+                                ctx.fillRect(Math.min(xa, xb), T, Math.abs(xb - xa), H)
+                            }
+                        }
+
+                        // Grid: quarters of the value and the baseline.
+                        ctx.lineWidth = 1
+                        var marks = [1, 0.75, 0.5, 0.25]
+                        for (i = 0; i < marks.length; ++i) {
+                            ctx.strokeStyle = ink(dim, marks[i] === 0.5 ? 0.22 : 0.11)
+                            line(L, Math.round(shp.py(marks[i])) + 0.5, L + W, Math.round(shp.py(marks[i])) + 0.5)
+                        }
+                        ctx.strokeStyle = ink(dim, 0.5)
+                        line(L, Math.round(B) + 0.5, L + W, Math.round(B) + 0.5)
+
+                        // What the shape does: per bar, the silhouette (faint) and that height at its lane's strength.
+                        var count = bars.length
+                        if (count > 1) {
+                            var pitch = W / (count - 1)
+                            if (pitch >= 3) {
+                                var bw = Math.max(1.5, Math.min(9, pitch * 0.62))
+                                for (i = 0; i < count; ++i) {
+                                    var bx = Math.round((L + i * pitch - bw / 2) * 2) / 2
+                                    ctx.fillStyle = ink(curveInk, 0.12)
+                                    ctx.fillRect(bx, B - bars[i][0] * H, bw, bars[i][0] * H)
+                                    ctx.fillStyle = ink(curveInk, 0.3)
+                                    ctx.fillRect(bx, B - bars[i][1] * H, bw, bars[i][1] * H)
+                                }
+                            } else {
+                                for (s = 0; s < 2; ++s) {
+                                    ctx.beginPath(); ctx.moveTo(L, B)
+                                    for (i = 0; i < count; ++i) ctx.lineTo(L + i * pitch, B - bars[i][s] * H)
+                                    ctx.lineTo(L + W, B); ctx.closePath()
+                                    ctx.fillStyle = ink(curveInk, s === 0 ? 0.12 : 0.28); ctx.fill()
+                                }
+                            }
+                        }
+
+                        // The lanes: each one's stem up to its strength, and the strength along the axis between them.
+                        for (s = 0; s < sides.length; ++s) {
+                            side = sides[s]
+                            ctx.setLineDash([2, 3]); ctx.lineWidth = 1; ctx.strokeStyle = ink(laneInk, 0.55)
+                            for (i = 0; i < lanes.length; ++i) {
+                                xa = Math.round(shp.sideX(lanes[i].x, side)) + 0.5
+                                line(xa, B, xa, shp.py(lanes[i].strength))
+                            }
+                            ctx.setLineDash([])
+                            if (profile.length > 1) {
+                                ctx.beginPath()
+                                for (i = 0; i < profile.length; ++i) {
+                                    xa = shp.sideX(profile[i][0], side)
+                                    if (i === 0) ctx.moveTo(xa, shp.py(profile[i][1])); else ctx.lineTo(xa, shp.py(profile[i][1]))
+                                }
+                                ctx.lineWidth = 1.5; ctx.strokeStyle = ink(laneInk, 0.85); ctx.stroke()
+                            }
+                        }
+
+                        // The mirror image stands back behind a veil of the well; the centre line divides the halves.
+                        if (v.mirrored) {
+                            ctx.fillStyle = ink(shell.cWell, 0.52)
+                            ctx.fillRect(mid, T - 9, L + W - mid + 12, H + 10)
+                            ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = ink(dim, 0.55)
+                            line(mid, T - 7, mid, B)
+                            ctx.setLineDash([5, 5]); ctx.strokeStyle = ink(curveInk, 0.6)
+                            ctx.beginPath()
+                            for (i = 0; i < curve.length; ++i) {
+                                xa = shp.sideX(i / (curve.length - 1), 1)
+                                if (i === 0) ctx.moveTo(xa, shp.py(curve[i])); else ctx.lineTo(xa, shp.py(curve[i]))
+                            }
+                            ctx.stroke()
+                            ctx.setLineDash([])
+                        }
+
+                        // The curve, exactly as the production interpolation samples it.
+                        side = v.mirrored ? -1 : 0
+                        ctx.beginPath()
+                        for (i = 0; i < curve.length; ++i) {
+                            xa = shp.sideX(i / (curve.length - 1), side)
+                            if (i === 0) ctx.moveTo(xa, shp.py(curve[i])); else ctx.lineTo(xa, shp.py(curve[i]))
+                        }
+                        ctx.lineWidth = 6; ctx.strokeStyle = ink(curveInk, 0.2); ctx.stroke()
+                        ctx.lineWidth = 2; ctx.strokeStyle = ink(curveInk, 1); ctx.stroke()
+
+                        // Each tag's lead to its lane.
+                        ctx.lineWidth = 1; ctx.strokeStyle = ink(laneInk, 0.55)
+                        for (i = 0; i < lanes.length; ++i)
+                            line(shp.px(lanes[i].x), B + 1.5, shp.tagX[i] + shp.tagWidth(i) / 2, shp.tagT - 0.5)
+                    }
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
+                    Component.onCompleted: requestPaint()
+                    Connections {
+                        target: shp
+                        function onShownChanged() { plotCanvas.requestPaint() }
+                        function onTagXChanged() { plotCanvas.requestPaint() }
+                    }
+                    Connections { target: studio; function onThemeChanged() { plotCanvas.requestPaint() } }
+                }
+
+                Repeater {                  // the value axis
+                    model: [[1, "1.0"], [0.5, "0.5"], [0, "0"]]
+                    delegate: Text {
+                        x: 0; width: shp.plotL - 9; horizontalAlignment: Text.AlignRight
+                        y: shp.py(modelData[0]) - height / 2
+                        text: modelData[1]; color: shell.cWellDim; font.pixelSize: shell.fontBase - 4
+                    }
+                }
+
+                Repeater {                  // the lanes: strength marker in the plot, tag under the baseline
+                    model: shp.lanes.length
+                    delegate: Item {
+                        id: laneItem
+                        readonly property var lane: index < shp.lanes.length ? shp.lanes[index]
+                                                    : ({"label": "", "x": 0, "strength": 0, "pinned": false})
+                        readonly property real cx: shp.px(lane.x)
+                        readonly property real cy: shp.py(lane.strength)
+                        readonly property bool selected: shp.selPart === "lane" && shp.selIndex === index
+                        readonly property bool capHeld: selected && shp.dragPart === "strength"
+                        readonly property bool tagHeld: selected && shp.dragPart === "lane"
+                        readonly property bool capLit: capHeld || (shp.dragPart === "" && shp.hoverPart === "strength"
+                                                                   && shp.hoverIndex === index)
+                        readonly property bool tagLit: tagHeld || (shp.dragPart === "" && shp.hoverPart === "lane"
+                                                                   && shp.hoverIndex === index && lane.pinned !== true)
+                        Rectangle {
+                            x: laneItem.cx - 12; y: laneItem.cy - 12; width: 24; height: 24; radius: 12
+                            color: shell.withAlpha(shell.cWellTrace3, 0.24)
+                            opacity: laneItem.capLit ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                        }
+                        Rectangle {           // a diamond: lanes; curve nodes are discs
+                            objectName: "shapeLaneMarker"
+                            x: laneItem.cx - 5; y: laneItem.cy - 5; width: 10; height: 10; radius: 2
+                            rotation: 45
+                            color: laneItem.capHeld || laneItem.selected ? shell.cWellTrace3 : shell.opaque(shell.cWell)
+                            border.width: 2
+                            border.color: laneItem.selected ? shell.cWellText : shell.cWellTrace3
+                            scale: laneItem.capLit ? 1.25 : 1
+                            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+                        }
+                        Rectangle {
+                            objectName: "shapeLaneTag"
+                            x: index < shp.tagX.length ? shp.tagX[index] : 0
+                            y: shp.tagT; width: shp.tagWidth(index); height: shp.tagH; radius: 9
+                            color: laneItem.selected ? shell.cAccentSoft
+                                   : (laneItem.tagLit ? Qt.lighter(shell.cRaised, 1.3) : shell.cRaised)
+                            border.width: laneItem.selected ? 1.5 : 1
+                            border.color: laneItem.selected ? shell.cAccent
+                                          : (laneItem.tagLit ? shell.cOutline : shell.cOutlineSoft)
+                            opacity: laneItem.lane.pinned === true && !laneItem.selected ? 0.72 : 1
+                            Text { anchors.centerIn: parent; text: laneItem.lane.label; color: shell.cText
+                                   font.pixelSize: shell.fontBase - 2 }
+                            // Tags make room for the one being dragged; any other change places them at once.
+                            Behavior on x { enabled: shp.dragPart === "lane" && !laneItem.tagHeld
+                                            NumberAnimation { duration: 110; easing.type: Easing.OutQuad } }
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+                        }
+                    }
+                }
+
+                Repeater {                  // the curve's nodes
+                    model: shp.nodes.length
+                    delegate: Item {
+                        id: nodeItem
+                        objectName: "shapeNode"
+                        readonly property var node: index < shp.nodes.length ? shp.nodes[index] : [0, 0]
+                        readonly property bool selected: shp.selPart === "node" && shp.selIndex === index
+                        readonly property bool held: selected && (shp.dragPart === "node" || shp.dragPart === "add")
+                        readonly property bool lit: held || (shp.dragPart === "" && shp.hoverPart === "node"
+                                                             && shp.hoverIndex === index)
+                        x: shp.px(node[0]); y: shp.py(node[1])
+                        Rectangle {
+                            anchors.centerIn: parent; width: 30; height: 30; radius: 15
+                            color: shell.withAlpha(shell.cWellTrace1, 0.22)
+                            opacity: nodeItem.lit ? 1 : (nodeItem.selected ? 0.6 : 0)
+                            scale: nodeItem.held ? 1.15 : 1
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                        }
+                        Item {
+                            id: nodeBody
+                            anchors.centerIn: parent
+                            Rectangle {
+                                anchors.centerIn: parent; width: 14; height: 14; radius: 7
+                                color: nodeItem.selected ? shell.cWellTrace1 : shell.opaque(shell.cWell)
+                                border.width: 2
+                                border.color: nodeItem.selected ? shell.cWellText : shell.cWellTrace1
+                                scale: nodeItem.held ? 1.25 : (nodeItem.lit ? 1.12 : 1)
+                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Behavior on border.color { ColorAnimation { duration: 120 } }
+                            }
+                        }
+                        ParallelAnimation {
+                            id: appear
+                            NumberAnimation { target: nodeItem; property: "opacity"; from: 0; to: 1; duration: 160 }
+                            NumberAnimation { target: nodeBody; property: "scale"; from: 0.4; to: 1; duration: 200
+                                              easing.type: Easing.OutBack }
+                        }
+                        Connections { target: shp; function onNodeAppeared(i) { if (i === index) appear.restart() } }
+                    }
+                }
+                Rectangle {                 // a removed node fades out where it was
+                    id: vanished
+                    objectName: "shapeVanished"
+                    width: 14; height: 14; radius: 7
+                    color: "transparent"; border.width: 2; border.color: shell.cWellTrace1
+                    opacity: 0
+                    ParallelAnimation {
+                        id: vanish
+                        NumberAnimation { target: vanished; property: "opacity"; from: 0.9; to: 0; duration: 220 }
+                        NumberAnimation { target: vanished; property: "scale"; from: 1; to: 1.9; duration: 220
+                                          easing.type: Easing.OutQuad }
+                    }
+                    Connections { target: shp
+                                  function onNodeVanished(x, y) { vanished.x = x - 7; vanished.y = y - 7; vanish.restart() } }
+                }
+                Item {                      // where a click would add a node
+                    x: shp.hoverX; y: shp.hoverY
+                    opacity: shp.hoverPart === "add" && shp.dragPart === "" && shp.shown.canAdd === true ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    Rectangle { anchors.centerIn: parent; width: 16; height: 16; radius: 8; color: "transparent"
+                                border.width: 1.5; border.color: shell.withAlpha(shell.cWellTrace1, 0.75) }
+                    StudioIcon { anchors.centerIn: parent; name: "plus"; width: 9; height: 9; stroke: 2.4
+                                 color: shell.cWellTrace1 }
+                }
+                Rectangle {                 // the value of the hovered or held element
+                    id: chip
+                    objectName: "shapeChip"
+                    width: chipLabel.implicitWidth + 14; height: 19; radius: 4
+                    x: Math.max(3, Math.min(well.width - width - 3, shp.chipX - width / 2))
+                    y: shp.chipY - height - 13 < 2 ? shp.chipY + 15 : shp.chipY - height - 13
+                    color: shell.opaque(shell.cRaised); border.width: 1; border.color: shell.cOutlineSoft
+                    opacity: shp.chipOn ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    Text { id: chipLabel; anchors.centerIn: parent; text: shp.chipText; color: shell.cText
+                           font.pixelSize: shell.fontBase - 3 }
+                }
+            }
+
+            MouseArea {
+                id: shapeArea
+                objectName: "shapeArea"
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                // The panel scrolls: a drag holds until release (see ValueSlider).
+                preventStealing: true
+                property real grabX: 0
+                property real grabY: 0
+                property real pressX: 0
+                property real pressY: 0
+                property bool moved: false
+                cursorShape: {
+                    if (shp.dragPart === "node" || shp.dragPart === "add") return Qt.ClosedHandCursor
+                    if (shp.dragPart === "lane") return Qt.SizeHorCursor
+                    if (shp.dragPart === "strength") return Qt.SizeVerCursor
+                    if (shp.hoverPart === "node") return Qt.OpenHandCursor
+                    if (shp.hoverPart === "strength") return Qt.SizeVerCursor
+                    if (shp.hoverPart === "lane")
+                        return shp.hoverIndex < shp.lanes.length && shp.lanes[shp.hoverIndex].pinned === true
+                               ? Qt.ArrowCursor : Qt.SizeHorCursor
+                    return shp.hoverPart === "add" && shp.shown.canAdd === true ? Qt.CrossCursor : Qt.ArrowCursor
+                }
+                function hit(mx, my) {
+                    var best = -1, reach = 13 * 13, i, dx, dy, d
+                    for (i = 0; i < shp.nodes.length; ++i) {
+                        dx = mx - shp.px(shp.nodes[i][0]); dy = my - shp.py(shp.nodes[i][1]); d = dx * dx + dy * dy
+                        if (d <= reach) { reach = d; best = i }
+                    }
+                    if (best >= 0) return {"part": "node", "index": best}
+                    reach = 11 * 11
+                    for (i = 0; i < shp.lanes.length; ++i) {
+                        dx = mx - shp.px(shp.lanes[i].x); dy = my - shp.py(shp.lanes[i].strength); d = dx * dx + dy * dy
+                        if (d <= reach) { reach = d; best = i }
+                    }
+                    if (best >= 0) return {"part": "strength", "index": best}
+                    if (my >= shp.tagT - 2 && my <= shp.tagT + shp.tagH + 2)
+                        for (i = 0; i < shp.lanes.length; ++i)
+                            if (mx >= shp.tagX[i] && mx <= shp.tagX[i] + shp.tagWidth(i))
+                                return {"part": "lane", "index": i}
+                    var right = shp.mirrored ? shp.midX : shp.plotR
+                    if (mx >= shp.plotL - 5 && mx <= right + 5 && my >= shp.plotT - 5 && my <= shp.plotB + 3)
+                        return {"part": "add", "index": -1}
+                    return {"part": "", "index": -1}
+                }
+                function hover(mx, my) {
+                    var at = hit(mx, my)
+                    if (at.part === "add") { shp.hoverX = Math.max(shp.plotL, Math.min(shp.mirrored ? shp.midX : shp.plotR, mx))
+                                             shp.hoverY = Math.max(shp.plotT, Math.min(shp.plotB, my)) }
+                    shp.hoverPart = at.part; shp.hoverIndex = at.index
+                }
+                function hand(mx, my) {
+                    if (shp.dragPart === "strength") studio.shapeDrag(shp.row.id, 0, shp.nyAt(my - grabY))
+                    else if (shp.dragPart === "lane") studio.shapeDrag(shp.row.id, shp.nxAt(mx - grabX), 0)
+                    else studio.shapeDrag(shp.row.id, shp.nxAt(mx - grabX), shp.nyAt(my - grabY))
+                }
+                onPressed: function(mouse) {
+                    well.forceActiveFocus()
+                    var at = hit(mouse.x, mouse.y)
+                    if (mouse.button === Qt.RightButton) {
+                        if (at.part === "node") shp.removeNode(at.index)
+                        return
+                    }
+                    if (at.part === "" || (at.part === "add" && shp.shown.canAdd !== true)) { shp.select("", -1); return }
+                    pressX = mouse.x; pressY = mouse.y; grabX = 0; grabY = 0; moved = false
+                    if (at.part === "node") {
+                        grabX = mouse.x - shp.px(shp.nodes[at.index][0]); grabY = mouse.y - shp.py(shp.nodes[at.index][1])
+                        shp.select("node", at.index)
+                    } else if (at.part === "lane") {
+                        shp.select("lane", at.index)
+                        if (shp.lanes[at.index].pinned === true) return
+                        grabX = mouse.x - shp.px(shp.lanes[at.index].x)
+                    } else if (at.part === "strength") {
+                        grabY = mouse.y - shp.py(shp.lanes[at.index].strength)
+                        shp.select("lane", at.index)
+                    } else shp.select("", -1)
+                    shp.dragPart = at.part
+                    studio.shapePress(shp.row.id, at.part, at.index)
+                    // A new node goes to the pointer at once; a held node, marker or tag moves once it is dragged.
+                    if (at.part === "add") { moved = true; hand(mouse.x, mouse.y) }
+                }
+                onPositionChanged: function(mouse) {
+                    if (shp.dragPart === "") { hover(mouse.x, mouse.y); return }
+                    if (!moved && Math.abs(mouse.x - pressX) < 3 && Math.abs(mouse.y - pressY) < 3) return
+                    moved = true
+                    hand(mouse.x, mouse.y)
+                }
+                onReleased: function(mouse) {
+                    if (shp.dragPart === "") return
+                    shp.dragPart = ""
+                    studio.shapeRelease()
+                    hover(mouse.x, mouse.y)
+                }
+                onCanceled: if (shp.dragPart !== "") { shp.dragPart = ""; studio.shapeCancel() }
+                onExited: if (shp.dragPart === "") { shp.hoverPart = ""; shp.hoverIndex = -1 }
+            }
+
+            Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_Escape) {
+                    if (shp.dragPart !== "") { shp.dragPart = ""; studio.shapeCancel(); event.accepted = true }
+                    else if (shp.selPart !== "") { shp.select("", -1); event.accepted = true }
+                    return
+                }
+                if (shp.dragPart !== "") return
+                var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right
+                // Ctrl+Left / Right (or the first arrow with nothing selected) walks the elements: nodes, then lanes.
+                if (arrow && ((event.modifiers & Qt.ControlModifier) || shp.selPart === "")) {
+                    var total = shp.nodes.length + shp.lanes.length
+                    if (total === 0) return
+                    var at = shp.selPart === "node" ? shp.selIndex
+                             : (shp.selPart === "lane" ? shp.nodes.length + shp.selIndex
+                                                        : (event.key === Qt.Key_Right ? -1 : total))
+                    at = (at + (event.key === Qt.Key_Right ? 1 : -1) + total) % total
+                    if (at < shp.nodes.length) shp.select("node", at); else shp.select("lane", at - shp.nodes.length)
+                    event.accepted = true
+                    return
+                }
+                if (shp.selPart === "") return
+                var step = (event.modifiers & Qt.ShiftModifier) ? 10 : 1
+                var along = shp.mirrored ? -step : step          // right on screen is toward the centre when mirrored
+                if (event.key === Qt.Key_Left) studio.shapeStep(shp.row.id, shp.selPart, shp.selIndex, -along, 0)
+                else if (event.key === Qt.Key_Right) studio.shapeStep(shp.row.id, shp.selPart, shp.selIndex, along, 0)
+                else if (event.key === Qt.Key_Up) studio.shapeStep(shp.row.id, shp.selPart, shp.selIndex, 0, step)
+                else if (event.key === Qt.Key_Down) studio.shapeStep(shp.row.id, shp.selPart, shp.selIndex, 0, -step)
+                else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && shp.selPart === "node")
+                    shp.removeNode(shp.selIndex)
+                else return
+                event.accepted = true
+            }
+        }
+
+        // Under the canvas, while an element is selected: its exact values and its structural edits.
+        Item {
+            id: strip
+            objectName: "shapeStrip"
+            width: shp.width
+            height: editing ? Math.max(24, stripFlow.implicitHeight) : 0
+            visible: height > 0.5
+            clip: true
+            Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
+            readonly property bool editing: shp.selPart !== ""
+            // Where the panel is too short for the strip, it scrolls with the strip as it opens (and back within its
+            // content as it closes), so the selected element's fields are never left under the panel's edge.
+            onHeightChanged: {
+                var scroll = shp.parent
+                while (scroll && scroll.objectName !== "inspectorScroll") scroll = scroll.parent
+                if (!scroll) return
+                var flick = scroll.contentItem
+                if (editing) {
+                    var bottom = strip.mapToItem(flick.contentItem, 0, strip.height).y + 4
+                    if (bottom - flick.height > flick.contentY) flick.contentY = bottom - flick.height
+                } else {
+                    var limit = Math.max(0, flick.contentHeight - flick.height)
+                    if (flick.contentY > limit) flick.contentY = limit
+                }
+            }
+            readonly property bool node: shp.stripPart === "node"
+            readonly property var element: node ? (shp.stripIndex < shp.nodes.length ? shp.nodes[shp.stripIndex] : [0, 0])
+                                                : (shp.stripIndex < shp.lanes.length
+                                                   ? [shp.lanes[shp.stripIndex].x, shp.lanes[shp.stripIndex].strength] : [0, 0])
+            readonly property bool pinned: !node && shp.stripIndex < shp.lanes.length
+                                           && shp.lanes[shp.stripIndex].pinned === true
+            Flow {
+                id: stripFlow
+                width: parent.width
+                spacing: 6
+                opacity: strip.editing ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 140 } }
+                Text {
+                    height: 22; verticalAlignment: Text.AlignVCenter
+                    width: Math.min(implicitWidth, 110); elide: Text.ElideRight
+                    text: strip.node ? "Node " + (shp.stripIndex + 1)
+                                     : (shp.stripIndex < shp.lanes.length ? shp.lanes[shp.stripIndex].label : "") + " Lane"
+                    color: shell.cText; font.pixelSize: shell.fontBase - 1; font.bold: true
+                }
+                Text { height: 22; verticalAlignment: Text.AlignVCenter; text: "Position"; color: shell.cDim
+                       font.pixelSize: shell.fontBase - 2; leftPadding: 4 }
+                ExactField {
+                    objectName: "shapePosition"
+                    name: "Position"; editable: !strip.pinned
+                    display: shell.fmt(strip.element[0], 3, "")
+                    onEdited: function(text) { studio.shapeCommitText(shp.row.id, shp.stripPart, shp.stripIndex, 0, text) }
+                }
+                Text { height: 22; verticalAlignment: Text.AlignVCenter; color: shell.cDim
+                       text: strip.node ? (shp.shown.valueLabel || "Value") : "Strength"
+                       font.pixelSize: shell.fontBase - 2; leftPadding: 4 }
+                ExactField {
+                    objectName: "shapeValue"
+                    name: strip.node ? (shp.shown.valueLabel || "Value") : "Strength"
+                    display: shell.fmt(strip.element[1], 3, "")
+                    onEdited: function(text) { studio.shapeCommitText(shp.row.id, shp.stripPart, shp.stripIndex, 1, text) }
+                }
+                StudioButton {
+                    objectName: "shapeRemoveNode"
+                    visible: strip.node
+                    icon: "minus"; iconSize: 14; width: 26; height: 22
+                    enabledState: shp.shown.canRemove === true
+                    tip: "Remove Node\nAlso right-click the node, or press Delete."
+                    onClicked: shp.removeNode(shp.stripIndex)
+                }
+                StudioButton {
+                    objectName: "shapeLanePrevious"
+                    visible: !strip.node
+                    icon: "chevron-left"; iconSize: 14; width: 26; height: 22
+                    enabledState: shp.stripIndex > 0 && (shp.shown.previousAction || "") !== ""
+                    tip: "Swap With Previous Lane\nThe two lanes exchange places; their positions stay."
+                    onClicked: shp.swapLane(shp.stripIndex, -1)
+                }
+                StudioButton {
+                    objectName: "shapeLaneNext"
+                    visible: !strip.node
+                    icon: "chevron-right"; iconSize: 14; width: 26; height: 22
+                    enabledState: shp.stripIndex < shp.lanes.length - 1 && (shp.shown.nextAction || "") !== ""
+                    tip: "Swap With Next Lane\nThe two lanes exchange places; their positions stay."
+                    onClicked: shp.swapLane(shp.stripIndex, 1)
+                }
+            }
+        }
+    }
+
     // Reversible starting points for a group (e.g. materials): one tile = one undoable edit.
     component PresetTiles: Flow {
         id: tiles
@@ -1243,6 +2047,7 @@ Rectangle {
                         case "count": return countDelegate
                         case "colour": return colourDelegate
                         case "gradient": return gradientDelegate
+                        case "shape": return shapeDelegate
                         default: return scalarDelegate
                         }
                     }
@@ -3155,4 +3960,5 @@ Rectangle {
     Component { id: countDelegate; CountRow { width: parent ? parent.width : 0; row: rowData } }
     Component { id: colourDelegate; ColourRow { width: parent ? parent.width : 0; row: rowData } }
     Component { id: gradientDelegate; GradientRow { width: parent ? parent.width : 0; row: rowData } }
+    Component { id: shapeDelegate; ShapeRow { width: parent ? parent.width : 0; row: rowData } }
 }

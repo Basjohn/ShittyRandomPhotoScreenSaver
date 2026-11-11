@@ -42,8 +42,10 @@ from ui.studio.adapter import StudioCapabilities, StudioFixture, StudioModeAdapt
 from ui.studio.engine_answers import EngineAnswerEvaluator
 from ui.studio.shockwave_grid_recorded_inputs import NEON_LAKE
 from ui.studio.schema import (
-    CHOICE, COLOUR, SCALAR, SWITCH, StudioAction, StudioProperty, StudioSchema, Workspace, WorkspaceColumn,
+    CHOICE, COLOUR, SCALAR, SHAPE_BANDS, SWITCH, ShapeLayout, ShapeSpec, StudioAction, StudioProperty,
+    StudioSchema, Workspace, WorkspaceColumn,
 )
+from ui.studio.schema import SHAPE as SHAPE_INSTRUMENT       # ``SHAPE`` here names the Frequency Response keys
 from ui.studio.spectrum_shape import ShapeKeys
 from ui.studio.technical import TECHNICAL_GROUP, admit_technical, technical_properties
 
@@ -94,7 +96,7 @@ _SMOOTHING = (
     ("solid_bar_hysteresis_enabled", "Stabilize Levels", SWITCH,
      "Use the shared bar evaluator's hysteresis to suppress tiny level fluctuations."),
 )
-# The terrain shaper's structural edits (the shared shape editor's rules along the land's height).
+# The terrain shaper's structural edits (the shared shape instrument's rules along the land's height).
 SHAPER_ADD = "terrain_shaper.add_node"
 SHAPER_REMOVE = "terrain_shaper.remove_node."           # + node index
 SHAPER_PREVIOUS = "terrain_shaper.lane_previous."       # + boundary index
@@ -129,11 +131,17 @@ def engine_key(values: Mapping[str, Any]) -> str:
 
 
 # ------------------------------------------------------------------------------- terrain shaper
+@cache
+def _shaper_default() -> dict:
+    """The canonical shaper record (read only: a drag admits and previews against it every frame)."""
+    return canonical(SHAPER)
+
+
 def admit_shaper(candidate: Any, previous: Any) -> dict:
     """Settings' shaper rules (``normalize_terrain_shaper``) with the shape editor's moves: a moved node or boundary
     stops at its neighbours, the lanes and their set never change, two to five nodes."""
     from rendering.gl_programs.neon_terrain_reaction import normalize_terrain_shaper
-    default = canonical(SHAPER)
+    default = _shaper_default()
     old = normalize_terrain_shaper(previous, default)
     if not isinstance(candidate, Mapping):
         return old
@@ -175,33 +183,33 @@ def _shaper_edit(action_id: str, shaper: Mapping) -> tuple[str, dict] | None:
     return None
 
 
-def _shaper_properties(add: Callable[..., None], workspace: str, group: str) -> None:
-    """The shaper's rows: every node slot (both axes), the movable lane boundaries and the five lane strengths, shown
-    with React to Music (Settings shows the shaper only then)."""
-    from rendering.gl_programs.neon_terrain_reaction import REACTION_LANES
-    for index in range(SHAPER_NODES[1]):
-        for axis, word in ((0, "Height"), (1, "Amount")):
-            remove = (StudioAction(f"{SHAPER_REMOVE}{index}", f"Remove Node {index + 1}", "minus",
-                                   "Remove this node (the shaper keeps at least two)."),) if axis == 0 else ()
-            add(f"{SHAPER}.nodes.{index}.{axis}", (SHAPER, "nodes", index, axis),
-                f"Shaper Node {index + 1} {word}", workspace, group, SCALAR, minimum=0.0, maximum=1.0, decimals=3,
-                priority=200 + 2 * index + axis, actions=remove, when=REACTION_ON,
-                tooltip="A node of the reaction curve along the land's height (shoreline 0 to summit 1), then how "
-                        "strongly that elevation deforms. A node stops at its neighbours.")
+def shaper_profile(values: Mapping[str, Any]) -> dict:
+    """What the shaper does along the land's height, for the instrument's preview: per elevation sample of the
+    baked tables the height shader reads (``bake_terrain_shaper``), the curve and the curve at its lane's strength;
+    and each lane's strength over the span it owns (from its boundary up to the next one, as the bake assigns it)."""
+    from rendering.gl_programs.neon_terrain_reaction import bake_terrain_shaper
+    shaper = admit_shaper(values.get(SHAPER), values.get(SHAPER))
+    baked = bake_terrain_shaper(shaper)
+    notches, lanes = shaper["notches"], []
+    for index, (position, label) in enumerate(notches):
+        top = notches[index + 1][0] if index + 1 < len(notches) else 1.0
+        lanes += [[position, shaper["lanes"][label]], [top, shaper["lanes"][label]]]
+    return {"bars": [[bias, weight] for bias, weight in zip(baked["bias"], baked["weight"])], "lanes": lanes}
+
+
+def _shaper_properties(add: Callable[..., None], workspace: str, group: str) -> ShapeSpec:
+    """The shaper as ONE shape instrument (its nodes, the lane boundaries and the five lane strengths, all in the
+    one stored record), shown with React to Music (Settings showed the shaper only then)."""
+    add(SHAPER, (SHAPER, "nodes"), "Reaction Shaper", workspace, group, SHAPE_INSTRUMENT, priority=200,
+        when=REACTION_ON,
+        tooltip=f"How strongly each height of the land deforms, shoreline to summit ({SHAPER_NODES[0]} to "
+                f"{SHAPER_NODES[1]} nodes), and which part of the spectrum moves it.")
     # The first boundary is pinned at the shoreline by the canonical shaper rule; the others move.
-    for index in range(1, len(REACTION_LANES)):
-        swaps = (StudioAction(f"{SHAPER_PREVIOUS}{index}", "Swap With Previous Lane", "chevron-left",
-                              "Exchange this lane with the one below it (the boundaries stay)."),
-                 StudioAction(f"{SHAPER_NEXT}{index}", "Swap With Next Lane", "chevron-right",
-                              "Exchange this lane with the one above it (the boundaries stay)."))
-        add(f"{SHAPER}.notches.{index}", (SHAPER, "notches", index, 0), f"Reaction Boundary {index + 1}", workspace,
-            group, SCALAR, minimum=0.0, maximum=1.0, decimals=3, priority=300 + index, actions=swaps,
-            when=REACTION_ON, tooltip="The height where this frequency lane takes over. A boundary stops at its "
-                                      "neighbours.")
-    for index, lane in enumerate(REACTION_LANES):
-        add(f"{SHAPER}.lanes.{lane}", (SHAPER, "lanes", lane), f"{lane} Lane Strength", workspace, group, SCALAR,
-            minimum=0.0, maximum=1.0, decimals=2, priority=320 + index, when=REACTION_ON,
-            tooltip="How strongly this part of the spectrum moves the heights it owns.")
+    layout = ShapeLayout((SHAPER, "notches"), (SHAPER, "lanes"), low="Shoreline", high="Summit",
+                         previous=SHAPER_PREVIOUS, next=SHAPER_NEXT)
+    return ShapeSpec(SHAPER, (layout,), node_limits=SHAPER_NODES, lane_mode=SHAPE_BANDS, pinned_lanes=1,
+                     value_label="Amount", node_noun="Reaction Node", lane_noun="Reaction Lane", add=SHAPER_ADD,
+                     remove=SHAPER_REMOVE, profile=shaper_profile)
 
 
 # ------------------------------------------------------------------------------------ terrain
@@ -238,13 +246,6 @@ def structure_edit(action_id: str, values: Mapping[str, Any]):
         edit = _terrain_edit(action_id, values[TERRAIN])
         return None if edit is None else (edit[0], {(TERRAIN,): edit[1]})
     return spectrum_shape.structure_edit(SHAPE, action_id, values)
-
-
-def row_label(prop: StudioProperty, values: Mapping[str, Any]) -> str:
-    """Boundary rows are titled by the lane they currently bound (lanes can be swapped)."""
-    if prop.path[0] == SHAPER and prop.path[1] == "notches":
-        return f"{values[SHAPER]['notches'][prop.path[2]][1]} Boundary"
-    return spectrum_shape.row_label(SHAPE, prop, values)
 
 
 def camera_position_bounds() -> tuple[tuple[float, float], ...]:
@@ -332,9 +333,9 @@ def build_schema() -> StudioSchema:
 
     # Terrain Reaction's shaper (Custom).
     reaction = titles[customs["terrain_shaper"].bucket]
-    _shaper_properties(add, _BUCKET_WORKSPACE[customs["terrain_shaper"].bucket], reaction)
+    shaper_spec = _shaper_properties(add, _BUCKET_WORKSPACE[customs["terrain_shaper"].bucket], reaction)
 
-    # Frequency Response (Custom): the smoothing rows and Spectrum's shape editor.
+    # Frequency Response (Custom): the smoothing rows and the Spectrum family's shape instrument.
     response = titles[customs["shape"].bucket]
     response_workspace = _BUCKET_WORKSPACE[customs["shape"].bucket]
     smoothing = customs["smoothing"]
@@ -345,7 +346,8 @@ def build_schema() -> StudioSchema:
         extra = (dict(minimum=0.0, maximum=1.0, decimals=2, when=((PREFIX + "visual_smoothing_enabled", (True,)),))
                  if instrument == SCALAR else {})
         add(key, (key,), label, response_workspace, response, instrument, tooltip=tooltip, **extra)
-    spectrum_shape.shape_properties(SHAPE, add, response_workspace, response)
+    response_spec = spectrum_shape.shape_properties(SHAPE, add, response_workspace, response,
+                                                    label="Response Shape")
 
     technical = technical_properties(MODE, workspace=response_workspace)
     props.extend(prop for prop, _defn in technical.values())
@@ -403,12 +405,8 @@ def build_schema() -> StudioSchema:
                         group_traces=((titles["waves"], ("Waves",)), (reaction, ("Land", "Level")),
                                       (response, ("Level", "Peak"))),
                         group_icons=tuple(group_icons.items()), object_noun="Layer",
-                        group_actions=((terrain_group, terrain_actions),
-                                       (reaction, (StudioAction(SHAPER_ADD, "Add Node", "plus",
-                                                                "Add a reaction node in the curve's widest gap "
-                                                                f"(at most {SHAPER_NODES[1]})."),)),
-                                       (response, (spectrum_shape.add_node_action(),))),
-                        row_label=row_label)
+                        group_actions=((terrain_group, terrain_actions),),
+                        shapes=(shaper_spec, response_spec))
 
 
 # ------------------------------------------------------------------------------- terrain brush
@@ -614,5 +612,5 @@ __all__ = [
     "NEON_LAKE", "NeonLakeStudioAdapter", "NeonLakeStudioEvaluator", "SHAPE", "SHAPER", "TERRAIN", "admit_shaper",
     "admit_terrain", "brush_target", "build_schema", "camera_position_bounds", "pick_terrain", "terrain_footprint",
     "terrain_view", "engine_key", "engine_values", "owned_keys",
-    "row_label", "structure_edit",
+    "shaper_profile", "structure_edit",
 ]

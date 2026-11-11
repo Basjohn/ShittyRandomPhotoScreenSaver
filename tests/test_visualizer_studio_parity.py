@@ -697,6 +697,24 @@ def test_studio_edits_of_every_custom_row_save_and_reload_through_settings(studi
         after = read_path(session.values, prop.path)
         if after != before:
             wanted[key] = (prop.path, after)
+    # A Custom row edited on the shape instrument (its curve nodes and its lanes): one node and one lane strength,
+    # through the instrument's exact entry.
+    for shape in session.schema.shapes:
+        prop = session.schema.find(shape.property)
+        if prop.path[0] not in customs or hidden.get(prop.id):
+            continue
+        node = (*prop.path, 0, 1)
+        height = read_path(session.values, node)
+        bridge.shapeCommitText(prop.id, "node", 0, 1, "0.25" if height > 0.5 else "0.75")
+        assert read_path(session.values, node) != height, prop.id
+        wanted[f"{prop.id} node"] = (node, read_path(session.values, node))
+        layout = bridge.shapes.instrument(prop.id).layout(session.values)
+        notches = read_path(session.values, layout.notches)
+        lane = (*layout.lanes, notches[-1][1])
+        strength = read_path(session.values, lane)
+        bridge.shapeCommitText(prop.id, "lane", len(notches) - 1, 1, "0.25" if strength > 0.5 else "0.75")
+        assert read_path(session.values, lane) != strength, prop.id
+        wanted[f"{prop.id} lane"] = (lane, read_path(session.values, lane))
     assert wanted, f"{mode}: no Custom row was edited"
     controller.close()
     reloaded = studio_on.make_tab(mode)

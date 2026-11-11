@@ -102,6 +102,34 @@ def _build_lane_energy_profile(
     ).astype("float32", copy=False)
 
 
+def shape_bar_profile(np, shape_nodes, bands: int, mirrored: bool, profile_floor: float):
+    """The authored silhouette as one height per bar (the shape nodes sampled across the bars, never below the
+    profile floor). The Studio's shape instrument draws its preview with this same function."""
+    # The pure curve helper, never the Settings widget module (it loads QtWidgets into the engine worker).
+    from utils.curve_nodes import interpolate_nodes, interpolate_nodes_mirrored
+    if mirrored:
+        profile_list = interpolate_nodes_mirrored(shape_nodes, bands)
+    else:
+        profile_list = interpolate_nodes(shape_nodes, bands)
+    profile_shape = np.array(profile_list, dtype="float32")
+    return np.maximum(profile_shape, profile_floor)
+
+
+def lane_sample_positions(np, bands: int, mirrored: bool):
+    """Where each bar sits on the lane axis: its distance from the centre (mirrored: 0 centre .. 1 edge) or its
+    place from left to right."""
+    if mirrored:
+        center_pos = (float(bands) - 1.0) * 0.5
+        max_dist = max(center_pos, 1.0)
+        return np.abs(np.arange(bands, dtype="float32") - center_pos) / max_dist
+    return np.linspace(0.0, 1.0, bands, dtype="float32")
+
+
+def lane_strength_profile(np, sample_positions, notches, strengths: Mapping[str, float]):
+    """The authored lane strength at each sample position: the lane routing with every band at unit energy."""
+    return _build_lane_energy_profile(np, sample_positions, notches, strengths, 1.0, 1.0, 1.0)
+
+
 def get_zero_bars(worker: "SpotifyVisualizerAudioWorker") -> List[float]:
     """Return cached zero bars list to avoid per-call allocation."""
     if worker._zero_bars is None or len(worker._zero_bars) != worker._bar_count:
@@ -330,15 +358,7 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             raise RuntimeError("Spectrum shape nodes are unresolved")
 
         # Build per-bar profile from user-drawn shape nodes
-        # The pure curve helper, never the Settings widget module (it loads QtWidgets into the engine worker).
-        from utils.curve_nodes import interpolate_nodes, interpolate_nodes_mirrored
-        if mirrored:
-            profile_list = interpolate_nodes_mirrored(shape_nodes, bands)
-        else:
-            profile_list = interpolate_nodes(shape_nodes, bands)
-
-        profile_shape = np.array(profile_list, dtype="float32")
-        profile_shape = np.maximum(profile_shape, shape_cfg.profile_floor)
+        profile_shape = shape_bar_profile(np, shape_nodes, bands, mirrored, shape_cfg.profile_floor)
 
         # ── Lane-aware audio routing ─────────────────────────────────
         # Interpolate authored lane strengths across the current notch family.
@@ -349,14 +369,8 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         if not isinstance(active_notches, list) or len(active_notches) < 2:
             raise RuntimeError("Spectrum notch configuration is unresolved")
 
-        if mirrored:
-            center_pos = (float(bands) - 1.0) * 0.5
-            max_dist = max(center_pos, 1.0)
-            sample_positions = np.abs(np.arange(bands, dtype="float32") - center_pos) / max_dist
-            lane_strengths = shape_cfg.lane_strengths_mirrored
-        else:
-            sample_positions = np.linspace(0.0, 1.0, bands, dtype="float32")
-            lane_strengths = shape_cfg.lane_strengths_linear
+        sample_positions = lane_sample_positions(np, bands, mirrored)
+        lane_strengths = shape_cfg.lane_strengths_mirrored if mirrored else shape_cfg.lane_strengths_linear
 
         per_bar_energy = _build_lane_energy_profile(
             np,
