@@ -1081,65 +1081,115 @@ reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake (`shockwave_grid`) camera step on real music (found 6 Nov, pass 7, pre-existing at 0776da08):** Preset 1 on
-  1985_loud1 between 42.054 s and 42.075 s the whole land shifts ~8 px down in one frame and stays (mean step 8.5/255
-  against ~1.3; replay parameters and presentation identical across the two frames, Terrain Reaction bands smooth).
-  Find the owner (camera floor / reaction normalisation) with `tools/neon_lake_capture.py --clip ... --start 41.9
+Live checklist: every box is an observation or a fix owed on evidence; delete an item when its evidence closes it.
+
+**Neon Lake (`shockwave_grid`) camera step on real music (found 6 Nov, pass 7, pre-existing at 0776da08)**
+
+Preset 1 on 1985_loud1 between 42.054 s and 42.075 s: the whole land shifts ~8 px down in one frame and stays (mean
+step 8.5/255 against ~1.3; replay parameters and presentation identical across the two frames, Terrain Reaction
+bands smooth).
+
+- [ ] Find the owner (camera floor / reaction normalisation) with `tools/neon_lake_capture.py --clip ... --start 41.9
   --duration 0.3 --fps 90 --all-frames`.
 
-- [ ] **Neon render tests load-sensitive under parallel runs (5-6 Nov):** `test_neon_lake_renderer.py` (once, pass-5
-  merge gate) and `test_neon_scene_materials.py` (once, pass-5 branch) failed under parallel load and passed alone; the
-  re-run overwrote each log, so the failing test is unknown (most likely a QSG clip probe timing out). The isolated
-  runner now keeps the parallel-run failure as `logs/pytest_isolated/<file>.under_load.log`; next time, read it and
-  fix the probe's timeout or synchronisation rather than rerunning.
-- [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
-  again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
-  Give and mist) and on ~0.7% of pixels in Neon Lake. Not renderer state: packet, uniforms, every vertex position,
-  fields, fog volumes, reflection and all four depth samples are bit-identical, single-sample renders are exact
-  (`test_floor_give_repeat_renders_are_renderer_deterministic`), and no barrier/finish/stream pinning changes it; the
-  multisampled colour itself flips up to 3/255 per sample. Per-sample Waveform floor shading removes it there but costs
-  +1.2 ms (give off) / +2.0 ms (give on) at 1080p, so it was not taken. Tests compare such renders with
-  `tests/_msaa_render_noise.py`. Reopen if a driver update or another GPU shows it gone or larger.
+**Neon render tests load-sensitive under parallel runs (5-6 Nov)**
 
-- [ ] **Display Settings capacity (physical hotplug):** on a real monitor disconnect/return or explicit reauthoring,
-  Settings' current-screen rows and selections/bindings stay coherent (focused checks pass; hidden form evidence
+`test_neon_lake_renderer.py` (once, pass-5 merge gate) and `test_neon_scene_materials.py` (once, pass-5 branch) failed
+under parallel load and passed alone; the re-run overwrote each log, so the failing test is unknown (most likely a QSG
+clip probe timing out).
+
+- [ ] Next time it fails, read `logs/pytest_isolated/<file>.under_load.log` (the isolated runner now keeps the
+  parallel-run failure) and fix the probe's timeout or synchronisation rather than rerunning.
+
+**4x MSAA repeat-render noise (driver, 5 Nov)**
+
+Mechanism and the shared comparison helper `tests/_msaa_render_noise.py`: `Docs/TestSuite.md` ("4x MSAA repeat-render
+noise").
+
+- [ ] Reopen if a driver update or another GPU shows the noise gone or larger.
+
+**Display Settings capacity (physical hotplug)**
+
+- [ ] On a real monitor disconnect/return or explicit reauthoring, Settings' current-screen rows and
+  selections/bindings stay coherent (focused checks pass; hidden form evidence
   `tmp/pytest_ux30_display/test_display_ui_rows_follow_to0/six_display_rows.png`).
-- [ ] **R38 hover display-transfer glyphs (physical topology):** watch glyph hit/tooltip/fade and transfer on
-  unequal-DPI screens and monitor unplug/return (equal-DPR pair passes; `tmp/ux30_actual_displays/receipt.json`).
-- [~] **Steam Games You Follow images:** many update entries lack images. Audit URLs, redirects/statuses, cache keys,
-  game IDs, fallbacks, dedupe and selection order (including artwork fetched but rejected downstream); prefer
-  image-bearing updates without suppressing legitimate no-image entries; instrument attrition, compare natively with
-  Feeds. A generic game cover existing is not proof an image is missing.
-- [ ] **Steam artwork 404** for asset hash `9b4a68b51c5f` (23 Oct MC run, `logs/run_matrix/2026-10-23_idle_hint_shaft/`)
-  and earlier `4b349d51e996` / `3f5b734df3c5`: stale metadata vs genuinely missing CDN asset, before changing lookup.
-- [ ] **Monitor power/wake:** display off, > 30 s off, rapid off/on, reordered return, both selected displays absent:
-  widgets keep physical assignments and CUSTOM geometry. On recurrence record timestamps, remaining screen, flavour,
-  Interaction Mode and wake/exit input (history: R-79).
-- [ ] **Refresh contention:** correlate FEEDS/Gmail/Reddit queue/claim/publish/retire with transition delays in a natural
-  dual-display trace (fairness, no post-transition stampede, retained last-good content).
-- [ ] **15 s usage-sample hitch (unexplained, not reproduced):** 31 Oct 19:28-19:33 MC run, a 95-121 ms freeze of the
-  GUI, render and logical threads at every `--usage` sample (20 in 5 min, `gui_stall_stacks.log` and frame trace
-  agree). Each sample took ~95 ms because the sampled tree held 7 processes / 233 threads (normal 3 / ~55, ~16-24 ms);
-  the four extra descendants used the GPU (counters 17 → 70), existed from the first sample and are unidentified.
-  The next MC run (19:47) and an invisible live check on current code were normal. On recurrence the sampler now
-  logs `[USAGE] topology added ... name= parent= threads=` for every process entering the tree: identify them, then
-  decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
-  Seen again 8 Nov with a normal tree (P2 gate 3's game60 pair, design doc step 6 "Gate 3 record"): every sample in both
-  runs stalled the render thread 71-106 ms in the scene render (13 of the worker path's 23 hitches, 14 of in process's
-  39); `collect_ms` ~13 ms per process walked at 87% system CPU (58 ms for 4-5 processes with the engine worker, 46 ms
-  for 3-4 in process; 23 ms for 4 on an idle machine). Main-side on both paths; the engine worker adds one process to
-  the walk.
-- [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
-- [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
-- [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
-  `C:\ProgramData\SRPSS\logs\scr_helper.log`. Inspect the helper/log-path authority before relying on that
-  diagnostic route; do not hide it behind a silent local fallback. Separate from Waveform rendering.
-- [ ] **Frozen release gate (operator scheduled):** Standard/Diagnostic from one compile, MC and Reddit Helper installed
-  startup/exit, Settings/widgets/cache/audio and installer behaviour.
-  Check installer logs and obsolete-file removal in both curated theme/preset trees. Both sources declare whole-tree
+
+**R38 hover display-transfer glyphs (physical topology)**
+
+- [ ] Watch glyph hit/tooltip/fade and transfer on unequal-DPI screens and monitor unplug/return (equal-DPR pair
+  passes; `tmp/ux30_actual_displays/receipt.json`).
+
+**Steam Games You Follow images**
+
+Many update entries lack images. A generic game cover existing is not proof an image is missing.
+
+- [~] Audit URLs, redirects/statuses, cache keys, game IDs, fallbacks, dedupe and selection order (including artwork
+  fetched but rejected downstream).
+- [~] Prefer image-bearing updates without suppressing legitimate no-image entries.
+- [~] Instrument attrition and compare natively with Feeds.
+
+**Steam artwork 404**
+
+- [ ] Asset hash `9b4a68b51c5f` (23 Oct MC run, `logs/run_matrix/2026-10-23_idle_hint_shaft/`) and earlier
+  `4b349d51e996` / `3f5b734df3c5`: decide stale metadata vs genuinely missing CDN asset before changing lookup.
+
+**Monitor power/wake**
+
+- [ ] Exercise: display off, > 30 s off, rapid off/on, reordered return, both selected displays absent; widgets keep
+  physical assignments and CUSTOM geometry.
+- [ ] On recurrence record timestamps, remaining screen, flavour, Interaction Mode and wake/exit input (history:
+  R-79).
+
+**Refresh contention**
+
+- [ ] Correlate FEEDS/Gmail/Reddit queue/claim/publish/retire with transition delays in a natural dual-display trace
+  (fairness, no post-transition stampede, retained last-good content).
+
+**15 s usage-sample hitch (unexplained, not reproduced)**
+
+31 Oct 19:28-19:33 MC run: a 95-121 ms freeze of the GUI, render and logical threads at every `--usage` sample (20 in
+5 min, `gui_stall_stacks.log` and frame trace agree). Each sample took ~95 ms because the sampled tree held 7
+processes / 233 threads (normal 3 / ~55, ~16-24 ms); the four extra descendants used the GPU (counters 17 -> 70),
+existed from the first sample and are unidentified. The next MC run (19:47) and an invisible live check on current
+code were normal. Not the Extruded Bubble chain fix (no processes, tick unchanged).
+
+- [ ] On recurrence read the sampler's `[USAGE] topology added ... name= parent= threads=` lines (one per process
+  entering the tree), identify the extra processes, then decide whether the sampler must exclude/outsource them.
+- [ ] Seen again 8 Nov with a normal tree (P2 gate 3's game60 pair, design doc step 6 "Gate 3 record"): every sample
+  in both runs stalled the render thread 71-106 ms in the scene render (13 of the worker path's 23 hitches, 14 of in
+  process's 39); `collect_ms` ~13 ms per process walked at 87% system CPU (58 ms for 4-5 processes with the engine
+  worker, 46 ms for 3-4 in process; 23 ms for 4 on an idle machine). Main-side on both paths; the engine worker adds
+  one process to the walk.
+
+**Cross-display Media shortcuts**
+
+- [ ] Delivered once on the other display, when exercised.
+
+**Music recorder**
+
+- [ ] 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
+
+**Helper breadcrumb diagnostics unavailable**
+
+Current native MC evidence logs no access to `C:\ProgramData\SRPSS\logs\scr_helper.log`. Separate from Waveform
+rendering.
+
+- [ ] Inspect the helper/log-path authority before relying on that diagnostic route; do not hide it behind a silent
+  local fallback.
+
+**Frozen release gate (operator scheduled)**
+
+- [ ] Standard/Diagnostic from one compile.
+- [ ] MC and Reddit Helper installed startup/exit.
+- [ ] Settings/widgets/cache/audio and installer behaviour.
+- [ ] Installer logs and obsolete-file removal in both curated theme/preset trees. Both sources declare whole-tree
   replacement; verify Diagnostic now reads that installed theme tree too.
-- [ ] **Conditional evidence only:** original Bubble tiny-radius judder (R-105) and dual-display reboot recovery
-  (R-134–R-145) need new reproductions. The 90 Hz versus 60 Hz investigation stays off limits.
+
+**Conditional evidence only**
+
+- [ ] Original Bubble tiny-radius judder (R-105) needs a new reproduction.
+- [ ] Dual-display reboot recovery (R-134–R-145) needs a new reproduction.
+- [ ] The 90 Hz versus 60 Hz investigation stays off limits.
 
 ## 6. Shared 3D architecture (one step, before the next mode; after Expanded Visualizer, under port-readiness rules)
 
