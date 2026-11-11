@@ -116,6 +116,39 @@ def test_duplicate_state_recomputes_so_final_survivor_x_is_ordinary_off():
     assert second.current_enabled is False
 
 
+def test_a_copy_held_outside_the_session_keeps_the_session_copy_a_duplicate():
+    """Plan 1B.1: the expanded display's copy (outside an Edit beside it) still counts, so the X removes only the
+    session copy, never the widget."""
+    session = CustomLayoutSession()
+    copy = _item(CustomLayoutKey("clock", "display:a", "digital"), QRect(40, 50, 320, 140))
+    session.add_item(copy)
+    session.refresh_duplicate_state()
+    assert copy.is_duplicate is False
+    session.hold_copies({copy.model_identity: 1})
+    session.refresh_duplicate_state()
+    assert copy.is_duplicate is True
+    copy.apply_remove_action()
+    assert copy.removed is True and copy.current_enabled is True
+
+
+def test_has_changes_reports_every_value_cancel_would_restore():
+    session = CustomLayoutSession()
+    item = _item(CustomLayoutKey("weather", "display:a"), QRect(60, 80, 420, 220))
+    session.add_item(item)
+    assert not session.has_changes()
+    for change in (
+        lambda: item.set_geometry(QRect(90, 80, 420, 220)),
+        lambda: setattr(item, "current_enabled", False),
+        lambda: setattr(item, "removed", True),
+        lambda: item.set_current_display("display:b", monitor_route="2"),
+        lambda: setattr(item, "current_size_payload", {"font_size": 99}),
+    ):
+        change()
+        assert session.has_changes()
+        session.restore_baseline()
+        assert not session.has_changes()
+
+
 def test_cancel_restores_geometry_payload_display_enabled_and_removed_working_state():
     session = CustomLayoutSession()
     key = CustomLayoutKey("weather", "display:a")

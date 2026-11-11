@@ -40,7 +40,7 @@ def test_studio_click_routes_to_lifecycle_target_with_live_mode_without_entering
     signals = SignalCollector()
     manager = SimpleNamespace(_retired=False, displays=[unit], _quick_visualizer_unit=unit,
                               _quick_visualizer_owner=owner, settings_target_requested=signals,
-                              _start_quick_custom_layout_session=lambda: (_ for _ in ()).throw(
+                              _start_quick_custom_layout_session=lambda _entry: (_ for _ in ()).throw(
                                   AssertionError("Studio click must not enter CUSTOM")))
     assert DisplayManager._route_hover_edit_glyph(manager, unit, "studio", "spotify_visualizer")
     assert len(signals.values) == 1
@@ -98,7 +98,7 @@ def test_fullscreen_rotate_uses_existing_edit_card_and_model(monkeypatch):
     manager = SimpleNamespace(_retired=False, displays=[unit], _quick_visualizer_unit=unit,
                               _quick_visualizer_owner=owner, _quick_custom_layout_owner=layout,
                               _expanded_display_coordinator=coordinator,
-                              _start_quick_custom_layout_session=lambda: actions.append("start") or True)
+                              _start_quick_custom_layout_session=lambda _entry: actions.append("start") or True)
     assert DisplayManager._route_hover_edit_glyph(manager, unit, "rotate", "spotify_visualizer")
     assert actions == ["start", 0]
     actions.clear()

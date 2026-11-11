@@ -7,7 +7,7 @@ objects, settings manager, or cadence.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any
 
@@ -215,8 +215,14 @@ def _write_item(
         if not isinstance(section, dict):
             section = {}; widgets[get_custom_persistence_position_settings_key_for_widget(item.model_identity)] = section
         section["position"] = "Custom"
-    if widget_writes_custom_monitor_key(item.model_identity):
-        route_key = get_custom_persistence_monitor_settings_key_for_widget(item.model_identity)
+    _write_monitor_route(widgets, item.model_identity, monitor_route, signature)
+
+
+def _write_monitor_route(widgets: dict[str, Any], widget_id: str, monitor_route: str, signature: str) -> None:
+    """The widget's monitor route (and the physical display a numbered route names), where it writes one."""
+
+    if widget_writes_custom_monitor_key(widget_id):
+        route_key = get_custom_persistence_monitor_settings_key_for_widget(widget_id)
         section = widgets.setdefault(route_key, {})
         if not isinstance(section, dict):
             section = {}; widgets[route_key] = section
@@ -242,12 +248,20 @@ def commit_custom_session(
     session: CustomLayoutSession,
     descriptors: Mapping[object, WidgetRuntimeDescriptor],
     displays: Mapping[str, object],
+    held: Mapping[str, Sequence[object]] | None = None,
 ) -> dict[str, Any]:
     """Commit a staged CUSTOM session into ``widgets`` and return that mapping.
 
     ``displays`` maps display identity to ``(signature aliases, QRect geometry,
     monitor route)``.  Runtime callers may pass their existing binding objects;
     that adapter exists only to keep this mutation boundary presentation-neutral.
+
+    ``held`` maps a widget id to the displays (same forms) holding a copy of it
+    outside this session (an Edit beside an expanded Visualizer, plan 1B.1).
+    Those copies are untouched, but they count as survivors exactly as their
+    session items would in a global Edit: the widget stays enabled, and when
+    the X left one held copy of a shared (``ALL``) widget its route narrows to
+    that copy's display.
     """
     sync_custom_layout_restore_routes(widgets)
     custom_map = load_custom_layout_map(widgets)
@@ -255,10 +269,11 @@ def commit_custom_session(
     for item in session.items():
         grouped.setdefault(item.model_identity, []).append(item)
     for widget_id, items in grouped.items():
+        held_displays = tuple((held or {}).get(widget_id, ()))
         section = widgets.setdefault(widget_id, {})
         if not isinstance(section, dict):
             section = {}; widgets[widget_id] = section
-        section["enabled"] = any(item.current_enabled and not item.removed for item in items)
+        section["enabled"] = bool(held_displays) or any(item.current_enabled and not item.removed for item in items)
         for removed in (item for item in items if item.removed):
             source = displays.get(removed.source_key.display_identity)
             if source is None:
@@ -269,15 +284,23 @@ def commit_custom_session(
         survivors = [item for item in items if not item.removed]
         # Mutually exclusive Visualizer layout profiles are not physical
         # duplicate widgets, even though every profile must be saved.
-        source_had_duplicates = sum(not item.profile_parked for item in items) > 1
+        source_had_duplicates = sum(not item.profile_parked for item in items) + len(held_displays) > 1
+        sole_survivor = len(survivors) + len(held_displays) == 1
         for item in survivors:
             display = displays[item.current_display_identity]
             _aliases, _geometry, route, _screen = _display_parts(display)
             monitor = item.current_monitor_route
-            if widget_id == "spotify_visualizer" or item.current_display_identity != item.source_key.display_identity or (source_had_duplicates and len(survivors) == 1 and _is_all(item.source_monitor_route)):
+            if widget_id == "spotify_visualizer" or item.current_display_identity != item.source_key.display_identity or (source_had_duplicates and sole_survivor and _is_all(item.source_monitor_route)):
                 monitor = route
             descriptor = descriptors[item.source_key]
             _write_item(widgets, custom_map, item, descriptor, monitor, display)
+        if (not survivors and sole_survivor and source_had_duplicates
+                and any(_is_all(item.source_monitor_route) for item in items)):
+            # The one surviving copy is held outside the session: its geometry is untouched; only the shared route
+            # narrows to its display, as a surviving session copy's would.
+            # (Its canonical signature, without migrating that display's saved buckets: nothing of it is written.)
+            aliases, _geometry, route, _screen = _display_parts(held_displays[0])
+            _write_monitor_route(widgets, widget_id, route, normalize_screen_signature(aliases[0]))
     write_custom_layout_map(widgets, custom_map)
     return widgets
 

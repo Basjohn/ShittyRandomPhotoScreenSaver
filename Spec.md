@@ -707,6 +707,14 @@ its initial session: disabling Follow Media or stacking changes authority withou
 A newly constructed uncommitted Visualizer in global CUSTOM uses Media's plain authored slot. Cancel restores
 authored packing only when no effective route remains `Custom`. This boundary is event-driven and owns no cadence.
 
+**Edit edits the display it was entered on** (operator, 11 Nov 2026). Every entry (context menu, double-right shortcut,
+hover glyph) names its display. With no Expanded Visualizer the one Edit session binds every display, from whichever
+display it was entered. With the Visualizer resting expanded on one display, Edit entered there is Fullscreen Edit (its
+overlays only); Edit entered on another display is the same ordinary Edit with the expanded display left out (no Edit
+chrome, nothing captured or transferred there), while the view stays expanded and running. There is still one session
+owner and one Save/Cancel/draft contract; menus offer Save/Cancel only on the displays the session edits. Details:
+`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` M3c "Edit beside the view".
+
 CUSTOM terminalization is one **shared all-display transaction**. Save/Cancel may not clear one display and then throw before
 the others are released. Every display cleanup is attempted, shared coordinator/session/binding ownership is retired in a
 `finally`-equivalent boundary, and repeated cleanup is safe. A Python retained-presentation wrapper must not outlive its C++

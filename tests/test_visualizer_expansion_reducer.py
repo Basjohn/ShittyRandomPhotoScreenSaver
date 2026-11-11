@@ -211,6 +211,42 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
      [*EXPAND_BY_USER, EditEntered(GEN), SettingsOpened(GEN), ready(requested=True, gen=2)],
      [*EXPANDED_TRACE, "applied expanded", "applied retiring Retire[settings]",
       "applied enter_pending BeginEnter[restore,still]"]),
+    # Edit beside the view (operator, 11 Nov; plan 1B.1): Edit edits the display it was entered on.
+    ("Edit entered on another display keeps the view expanded, with no collapse transaction and no write",
+     [*EXPAND_BY_USER, EditEntered(GEN, False)], [*EXPANDED_TRACE, "applied expanded"]),
+    ("an Edit beside the view: Save and Cancel leave it expanded and write nothing",
+     [*EXPAND_BY_USER, EditEntered(GEN, False), EditExited(GEN, saved=True), EditEntered(GEN, False),
+      EditExited(GEN, saved=False)],
+     [*EXPANDED_TRACE, "applied expanded", "applied expanded", "applied expanded", "applied expanded"]),
+    ("an Edit beside the view, then one on it: the second is Fullscreen Edit",
+     [*EXPAND_BY_USER, EditEntered(GEN, False), EditExited(GEN, saved=False), EditEntered(GEN, True)],
+     [*EXPANDED_TRACE, "applied expanded", "applied expanded", "applied expanded"]),
+    ("a collapse press under an Edit beside the view waits for its Save/Cancel; declined, nothing collapses",
+     [*EXPAND_BY_USER, EditEntered(GEN, False), glyph(2, False), EditResolutionDeclined(GEN),
+      EditExited(GEN, saved=True)],
+     [*EXPANDED_TRACE, "applied expanded", "applied expanded RequestEditResolution", "applied expanded",
+      "applied expanded"]),
+    ("a collapse press that waited for the Edit beside the view is the user's collapse after its Save",
+     [*EXPAND_BY_USER, EditEntered(GEN, False), glyph(2, False), EditExited(GEN, saved=True), exited],
+     [*EXPANDED_TRACE, "applied expanded", "applied expanded RequestEditResolution",
+      "applied exiting Persist[False],BeginExit[user]", "applied ordinary"]),
+    ("an incapable mode under an Edit beside the view is refused; a capable one stays expanded",
+     [*EXPAND_BY_USER, EditEntered(GEN, False), ModeRequested(GEN, 7, INCAPABLE, False),
+      ModeRequested(GEN, 8, "capable-2", True), activated("capable-2", True, act=2)],
+     [*EXPANDED_TRACE, "applied expanded", "rejected expanded RejectModeRequest",
+      "applied expanded Forward[capable-2,keep]", "applied expanded"]),
+    ("a transfer under an Edit beside the view is refused before any change",
+     [*EXPAND_BY_USER, EditEntered(GEN, False), TransferRequested(GEN, ACT, 5, B, True)],
+     [*EXPANDED_TRACE, "applied expanded", "rejected expanded RejectTransfer"]),
+    ("an incapable activation under an Edit beside the view collapses it; the Edit goes on as an ordinary one",
+     [*EXPAND_BY_USER, EditEntered(GEN, False), activated(INCAPABLE, False, act=2), exited,
+      EditExited(GEN, saved=False)],
+     [*EXPANDED_TRACE, "applied expanded", "applied exiting BeginExit[capability_lost]",
+      "applied dormant Persist[False]", "applied dormant"]),
+    ("Edit entered on another display while entering is an ordinary Edit (collapses at the commit edge)",
+     [ready(), glyph(1, True), prepared, EditEntered(GEN, False), committed],
+     ["applied ordinary", "applied enter_pending BeginEnter[user,anim]", "applied entering RunEnter",
+      "applied entering", "applied exiting Persist[True],BeginExit[edit]"]),
     ("an ordinary Edit begun while entering collapses; its Cancel restores expansion after the editor exits",
      [ready(), glyph(1, True), prepared, EditEntered(GEN), committed, exited, EditExited(GEN, saved=False),
       prepared, committed],
@@ -447,7 +483,8 @@ def _alphabet(s: tk.TakeoverState) -> list[tk.Event]:
         TransferRequested(g, act, 9, other, True), TransferRequested(g, act, 9, other, False),
         TransferCommitted(g, s.txn), TransferFailed(g, s.txn),
         DisplayLost(g, disp), DisplayLost(g, other),
-        EditEntered(g), EditExited(g, False), EditResolutionDeclined(g), SettingsOpened(g), Shutdown(g),
+        EditEntered(g), EditEntered(g, False), EditExited(g, False), EditResolutionDeclined(g), SettingsOpened(g),
+        Shutdown(g),
         OwnerRetired(g, "reload"), OwnerRetired(g - 1, "reload"),
     ]
 
@@ -528,8 +565,8 @@ def _check(s0: tk.TakeoverState, event: tk.Event, step: tk.Step) -> None:
         if isinstance(a, ForwardModeRequest) and a.keep_expanded:
             assert s0.phase is Phase.EXPANDED and s1.phase is Phase.EXPANDED, ctx
     if isinstance(event, ModeRequested) and not event.mode_capable and s0.phase is Phase.EXPANDED:
-        if s0.edit_fullscreen:
-            # Fullscreen Edit: refused until Save or Cancel; nothing changes.
+        if s0.edit_fullscreen or s0.edit_elsewhere:
+            # Fullscreen Edit, or an Edit beside the view: refused until Save or Cancel; nothing changes.
             assert step.outcome is Outcome.REJECTED and s1 == s0, ctx
         else:
             assert not [a for a in actions if isinstance(a, ForwardModeRequest)] and s1.phase is Phase.EXITING, ctx
@@ -538,13 +575,22 @@ def _check(s0: tk.TakeoverState, event: tk.Event, step: tk.Step) -> None:
     # collapse after the session's own Save/Cancel, or an incapable activation (which ends the session first).
     if s1.edit_fullscreen:
         assert s1.edit_active and s1.phase in (Phase.EXPANDED, Phase.RETIRING), ctx
+    # An Edit beside the view (plan 1B.1): the same, never together with Fullscreen Edit.
+    if s1.edit_elsewhere:
+        assert s1.edit_active and not s1.edit_fullscreen and s1.phase in (Phase.EXPANDED, Phase.RETIRING), ctx
     if isinstance(event, EditEntered) and s0.phase is Phase.EXPANDED and step.outcome is Outcome.APPLIED:
-        assert not actions and s1.phase is Phase.EXPANDED and s1.edit_fullscreen, ctx
-    if s0.edit_fullscreen and any(isinstance(a, BeginExit) for a in actions):
+        assert not actions and s1.phase is Phase.EXPANDED, ctx
+        assert s1.edit_fullscreen is event.on_view_display and s1.edit_elsewhere is (not event.on_view_display), ctx
+    if (s0.edit_fullscreen or s0.edit_elsewhere) and any(isinstance(a, BeginExit) for a in actions):
         assert isinstance(event, (EditExited, ModeActivated)), ctx
-        if isinstance(event, ModeActivated):
+        if isinstance(event, ModeActivated) and s0.edit_fullscreen:
             assert isinstance(actions[0], EndFullscreenEdit) and not s1.edit_active, ctx
-    if s0.edit_fullscreen and isinstance(event, TransferRequested) and step.outcome is not Outcome.STALE:
+        if isinstance(event, ModeActivated) and s0.edit_elsewhere:
+            # The Edit beside the view never held it: it goes on as an ordinary Edit, nothing ends it.
+            assert not any(isinstance(a, EndFullscreenEdit) for a in actions), ctx
+            assert s1.edit_active and not s1.edit_elsewhere, ctx
+    if (s0.edit_fullscreen or s0.edit_elsewhere) and isinstance(event, TransferRequested) \
+            and step.outcome is not Outcome.STALE:
         assert not [a for a in actions if isinstance(a, BeginTransfer)], ctx
     # A cycle never collapses an expanded view and never forwards an incapable mode from it.
     if isinstance(event, ModeCycleRequested) and s0.phase is Phase.EXPANDED and step.outcome is not Outcome.STALE:
@@ -568,6 +614,8 @@ _STARTS = {
     "edit": _run([ready(requested=True), EditEntered(GEN)])[0],
     "fullscreen-edit": _run([*EXPAND_BY_USER, EditEntered(GEN)])[0],
     "fullscreen-edit-collapse-held": _run([*EXPAND_BY_USER, EditEntered(GEN), glyph(2, False)])[0],
+    "edit-beside-view": _run([*EXPAND_BY_USER, EditEntered(GEN, False)])[0],
+    "edit-beside-view-collapse-held": _run([*EXPAND_BY_USER, EditEntered(GEN, False), glyph(2, False)])[0],
     "transfer": _run([*EXPAND_BY_USER, TransferRequested(GEN, ACT, 5, B, True)])[0],
     "held-mode": _run([*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False)])[0],
 }
@@ -667,6 +715,7 @@ _DISTURBANCES = {
     "collapse": GlyphPressed(GEN, ACT, A, 50, False),
     "expand": GlyphPressed(GEN, ACT, A, 50, True),
     "edit": EditEntered(GEN),
+    "edit-beside": EditEntered(GEN, False),
     "settings": SettingsOpened(GEN),
     "lost": DisplayLost(GEN, A),
     "other-lost": DisplayLost(GEN, B),

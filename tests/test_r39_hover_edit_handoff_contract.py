@@ -17,7 +17,7 @@ def test_hover_glyphs_require_existing_interaction_admission():
     assert 'not (state.interaction_mode_enabled or state.ctrl_held)' in glue
     assert 'not state.always_show_glyphs' in glue
     assert 'not (state.interaction_mode_enabled or state.ctrl_held)' in manager
-    assert 'self._start_quick_custom_layout_session()' in manager
+    assert 'self._start_quick_custom_layout_session(source)' in manager
     assert 'session.select_item(target)' in manager
     assert 'model.closeItem(row)' in manager
     assert 'model.restoreSize(row)' in manager

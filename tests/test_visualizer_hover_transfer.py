@@ -45,7 +45,7 @@ def _manager_for_click(*, options=(True, True), moved=True, existing_edit=False)
         "source": SimpleNamespace(identity="source", unit=source)}, visualizer_display_transfer_options=lambda _: options)
     manager = SimpleNamespace(_retired=False, displays=[source], _quick_visualizer_unit=source,
                               _quick_custom_layout_owner=owner,
-                              _start_quick_custom_layout_session=lambda: calls.append("start") or True,
+                              _start_quick_custom_layout_session=lambda _entry: calls.append("start") or True,
                               cancel_custom_layout_session=lambda: calls.append("cancel") or True)
     return manager, source, calls
 

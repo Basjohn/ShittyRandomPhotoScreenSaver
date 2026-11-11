@@ -965,6 +965,13 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   (Cancel writes nothing), writes only the edited key into a tmp copy of a real curated preset in the file's own
   shape (LF and CRLF), reloads presets, and a read-only file gives the message and writes nothing (negative
   control: writable prompts); opened on Custom it is not offered; the shared patcher touches nothing else.
+- `tests/test_visualizer_expansion_two_display_edit.py` — Edit edits the display it was entered on with an Expanded
+  Visualizer on another display (plan 1B.1): the display manager's real Edit entry, Save, Cancel, Settings and menu
+  routes, the real takeover coordinator and Edit owner, a real clock display beside the hidden production scene drawn
+  expanded. Entry from the other display (menu and shortcut, view on display 0 or 1) opens its ordinary Edit while
+  the view stays expanded without Edit chrome (red on the pre-fix entry); no expansion binds both displays from
+  either; Save/Cancel on each; an unsaved Fullscreen draft against a request from the other display and the reverse;
+  a shared widget's X keeps the expanded display's copy; the view's holds under the Edit beside it.
 - `tests/test_visualizer_expansion_fullscreen_edit.py` — Expanded Visualizer Fullscreen Edit (plan 01 M3c) on the
   hidden production scene with the real Edit owner, model and gestures: the parity map (one gesture script, moves,
   wheel, corners, side handles and a two-axis diagonal included, through a draft; Cancel restores exactly, Save
