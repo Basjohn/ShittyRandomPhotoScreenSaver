@@ -329,7 +329,12 @@ def test_the_park_clears_the_reader_after_the_park_reply_never_before(qt_app, pc
             with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
                 owner = rig.build()
             # No presentation while the reply is awaited (it would take the frame and hide what each variant left).
-            owner.controller.logical_mailbox.set_wake_callback(None)
+            # Removing the mailbox's callback is not enough: the wake listener may already have queued a GUI wake for
+            # an earlier frame, and that event, run by ``settle``, presented (took) the forced frame, so a negative
+            # control read nothing about 1 run in 6. Here that wake is always queued, and closing the owner's wake
+            # drops it with any later one.
+            owner._publication_wake.request()
+            owner._publication_wake.close()
             assert owner.set_display_power(False)
             rig.settle()                                 # the park's reply (an event: the owner never waits)
             unread[name] = owner.controller.logical_mailbox.peek()
