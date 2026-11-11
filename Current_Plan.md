@@ -287,7 +287,6 @@ Built and merged (one instrument in Spectrum, Extruded Spectrum, Neon Lake's Fre
 Shaper; contract: `Docs/Reference/Visualizer_Studio.md`; capture tool `tools/studio_shape_capture.py`). The lead
 passed its off-screen pixels (dark and light themes).
 
-- [ ] Focused tests green on the merge (running), then push.
 - [~] Operator look at the instrument in the Spectrum and Neon Lake Studios: drag feel, cursor shapes and
   tooltips on a real window; over a material theme on the real desktop.
 - [ ] `tests/test_studio_drag_io_churn.py`: its drag plans skip the SHAPE instrument; fold the shape drags in so
