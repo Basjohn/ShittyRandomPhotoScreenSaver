@@ -92,11 +92,14 @@ function materialTransmission(params, tint, adjustment) {
 }
 
 // The panel interior over a uniform grey backdrop: surfaceAt's colour terms (no rim), each at
-// its worst for the card's ink: for dark ink the grain at its darkest (the Glass sheen only
-// lightens, so it is left out); for light ink the grain and the face's sheen at their lightest.
+// its worst for the card's ink, in the shader's order: for dark ink the grain at its darkest
+// (the Glass sheen only lightens, so it is left out); for light ink the face's sheen at its
+// brightest before the legibility layer (whose guard then bounds it, as in the shader) and the
+// grain at its lightest after it.
 function _panelOver(grey, params, tint, panelLimits, ceiling, adjustment, applyPanel) {
     var t = [tint.r, tint.g, tint.b]
     var c = [grey, grey, grey]
+    var lightInk = panelLimits[1] > 0.5
     var pull = _term(params[1].x, adjustment)
     var shift = (_encodedLuma(t) - grey) * pull
     c = [c[0] + shift, c[1] + shift, c[2] + shift]
@@ -107,9 +110,12 @@ function _panelOver(grey, params, tint, panelLimits, ceiling, adjustment, applyP
     c = _mix(c, t, adjustedDensity(tintOpacity, adjustment))
     if (!applyPanel)
         return c
+    if (lightInk && params[2].x > 0) {
+        var sheen = params[2].x * 0.10
+        c = [c[0] + sheen, c[1] + sheen, c[2] + sheen]
+    }
     var unplated = c
     var anchor = panelLimits[0]
-    var lightInk = panelLimits[1] > 0.5
     var currentL = _encodedLuma(c)
     var dense = c
     if (lightInk && currentL > anchor && currentL > 0)
@@ -139,8 +145,7 @@ function _panelOver(grey, params, tint, panelLimits, ceiling, adjustment, applyP
         c = [Math.min(c[0], bound[0]), Math.min(c[1], bound[1]), Math.min(c[2], bound[2])]
         c = [c[0] - grain, c[1] - grain, c[2] - grain]
     } else {
-        var lift = grain + (params[2].x > 0 ? params[2].x * 0.10 : 0)
-        c = [c[0] + lift, c[1] + lift, c[2] + lift]
+        c = [c[0] + grain, c[1] + grain, c[2] + grain]
     }
     return [Math.max(0, Math.min(1, c[0])), Math.max(0, Math.min(1, c[1])), Math.max(0, Math.min(1, c[2]))]
 }

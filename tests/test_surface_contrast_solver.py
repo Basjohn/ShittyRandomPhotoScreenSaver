@@ -150,6 +150,22 @@ def test_an_opacity_faded_run_that_black_cannot_rescue_asks_for_a_plate(solver) 
     assert ink[4] is False and ink[:4] == [0, 0, 0, 1]
 
 
+@pytest.mark.parametrize("material", ("glass", "frosted"))
+def test_light_ink_white_pole_is_bounded_as_the_shader_bounds_it(solver, material) -> None:
+    # In the shader the face sheen is added before the legibility layer, whose guard holds a
+    # light-ink panel at its limit over a bright wallpaper; only the grain, added after, lifts it
+    # further. The white pole must claim no brighter panel than that, or a run that reads is
+    # corrected anyway (M2b audit: Default Dark's muted text on Glass, 5.05:1, was recoloured).
+    faint = LIGHT_INK[:3] + (0.55,)
+    ratio = solver(f"requiredReferenceContrast({_colour(LIGHT_INK)}, {_colour(faint)})")
+    limits = solver(f"limits({_colour(LIGHT_INK)}, {ratio})")
+    poles = solver(f"inkPoles({_params(material)}, {_colour(DARK_TINT)}, {limits}, 1.0, 0)")
+    grain = 0.5 * PARAMS[material][1][1]
+    assert PARAMS[material][2][0] > 0.0                                  # the material has a sheen
+    assert _luminance([c - grain for c in poles[1]]) <= limits[2] + 1e-4
+    assert _luminance(poles[1]) > _luminance(poles[0])
+
+
 @pytest.mark.parametrize("small", (True, False))
 def test_light_ink_on_a_dark_panel_is_corrected_toward_white_and_a_reading_ink_is_kept(solver, small) -> None:
     # The same rule on every theme: a dark (light-ink) card's run that misses its ratio
