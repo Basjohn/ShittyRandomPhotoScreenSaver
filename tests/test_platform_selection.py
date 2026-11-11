@@ -109,7 +109,7 @@ def test_settings_backdrop_is_native_dwm_without_an_underlay(monkeypatch, window
 @pytest.mark.parametrize("is_windows", (True, False))
 def test_the_visualizer_runs_on_the_engine_worker_by_default(monkeypatch, is_windows) -> None:
     # Native core P2: the engine worker is the default on every platform: Windows by the operator's decision of 8 Nov,
-    # Linux since the H3 source flip (12 Nov; before it the platform default followed IS_WINDOWS and the non-Windows
+    # Linux since the H3 source flip (11 Nov; before it the platform default followed IS_WINDOWS and the non-Windows
     # case here fails). --viz-in-process states the in-process control and wins over --viz-engine-worker. This is the
     # path SELECTION only: nothing of the worker path has run on Linux (Linux_Plan.md, Phase 4).
     from core.diagnostics import experiment_flags as ef

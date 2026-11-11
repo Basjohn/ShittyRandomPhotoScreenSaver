@@ -22,7 +22,7 @@ Item {
     property bool expandGlyphAvailable: false
     property bool expandedDisplay: false
     signal expandGlyphRequested(bool expand)
-    // Full display relative to the Visualizer's display (plan 1B.12, operator 12 Nov): the Up arrow is full display
+    // Full display relative to the Visualizer's display (plan 1B.12, operator 11 Nov): the Up arrow is full display
     // on this display (the Down arrow, its collapse, while expanded); the up-left and up-right arrows are full display
     // on the display to the left and to the right (while expanded they move the view there). The display manager
     // publishes whether a display lies on each side (from the displays' arrangement, never their index) and resolves

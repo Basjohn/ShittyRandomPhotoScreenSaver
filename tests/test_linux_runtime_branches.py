@@ -46,7 +46,7 @@ def test_linux_saver_opens_links_directly_and_never_touches_the_windows_helper(
 
 
 def test_linux_defaults_to_the_engine_worker_and_in_process_stays_a_choice(monkeypatch):
-    # Native core P2, H3 (12 Nov 2026): the engine worker is the default on Linux too (the operator's 8 Nov decision:
+    # Native core P2, H3 (11 Nov 2026): the engine worker is the default on Linux too (the operator's 8 Nov decision:
     # no Linux machine, no proving step). --viz-in-process chooses the in-process path and wins over
     # --viz-engine-worker. This asserts the SELECTION. Whether the worker path runs on Linux (the named wake pipe,
     # forkserver, the mapping's tracker, Pulse capture in the worker) is shown by the worker tests when this suite

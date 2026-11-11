@@ -16,7 +16,7 @@ cadence).
   ``WorkerType.VISUALIZER`` process (no fallback), and its frames equal the same owner's in process (stated), frame for
   frame through ``owner_worker_gate``'s identity script (play, a warm pause, a park, a mode switch); the worker side's
   capture is the shipped clip's PCM through the link's test control, never a device. The default is the worker on
-  every platform since the H3 source flip (12 Nov 2026), so this is not gated by platform any more: on Linux it is
+  every platform since the H3 source flip (11 Nov 2026), so this is not gated by platform any more: on Linux it is
   the first test to run the default path there, and no such run has been recorded (``Linux_Plan.md``, Phase 4).
 """
 import pytest

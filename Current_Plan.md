@@ -163,7 +163,7 @@ P3 ports.
 
 **Remaining sequence (one Opus slot, in this order; it reports at each numbered boundary for the lead's
 audit; focused proof for each).** Steps 1 and 2 of the 10 Nov sequence (M4 rendered parity, M5, L2-L5, the POSIX
-transfer lifetime) merged 12 Nov with R-184 and R-185; records: the phase-boundary audit's "11 Nov" section, the
+transfer lifetime) merged 11 Nov with R-184 and R-185; records: the phase-boundary audit's "11 Nov" section, the
 design and closeout docs.
 
 - [ ] Attribute the Python-call rises since the 7 Nov overhead baseline (`2026-11-07_4bb2b775.json`): +4 in 14
@@ -192,14 +192,18 @@ design and closeout docs.
 - [~] Operator: a mode switch on the engine worker no longer leaves a faint ghost of the outgoing mode after its
   fade-out (R-184: Sphere, Extruded Spectrum, Waveform Ribbon switches).
 
-3. H3 Linux worker-default source flip and focused tests, in flight, Opus Medium (the operator waived **physical** Linux validation, not
-   source correctness; do not claim Pulse/forkserver runtime was tested):
-   - [ ] Flip `visualizer_engine_worker_platform_default` for Linux; update the platform tests.
-   - [ ] Gate tools and tests that send a raw `Pipe` sender through a real supervisor switch to
-     `open_wake_channel` (they would be refused on Linux).
-   - [ ] `Linux_Plan.md`: at H3, "the POSIX wake pipe (a named pipe the session opens)"; state what is unverified
-     (no FIFO, forkserver, Pulse capture or Linux worker has run; on Linux the listener thread ends only when the
-     worker's writer closes; the in-process fallback on configure failure is the safety net).
+3. H3, the Linux worker default: the source flip merged 11 Nov (6c2039b3; `visualizer_engine_worker_platform_
+   default` returns the worker on every platform; `--viz-in-process` still chooses in process; a worker that
+   cannot start or configure falls back in process with a logged reason). Nothing of it has run on Linux
+   (`Linux_Plan.md` Phase 4 says exactly what is unverified):
+   - [~] First Linux run, whenever a Linux machine exists: the named wake pipe (FIFO), the worker's spawn under
+     forkserver, the shared mapping's tracker, Pulse capture in the worker, the listener thread ending when the
+     worker's writer closes, and a broken worker showing up as a logged in-process fallback.
+   - [ ] `Docs/Guardrails/Linux_Compatibility.md` section 7 forbids a Linux-branch test in a shared file; the
+     platform-injected `[False]` case in `tests/test_platform_selection.py` is the only negative control that
+     runs on Windows: record it there as the admitted exception or move it.
+   - [ ] The `[PLATFORM]` branch of `_note_in_process_path` (`quick_display_visualizer_owner.py`) can no longer
+     fire; keep it only if a platform may be taken off the worker again, otherwise delete it with its test.
 4. P3's four decisions and first native rendering substrate (order: D1/D2 with the drop edge, then D4, then D3;
    the substrate is built against the single-sample parity gate, `tools/visualizer_replay/owner_render_parity.py`):
    - [ ] D1: the native reader vs the GUI thread closing the mapping mid-copy; liveness is per stream, not per
@@ -664,8 +668,6 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 - [ ] Two reds in `tests/test_github_remote_build.py`: `test_the_github_tab_offers_the_remote_products_and_local_
   steps` (an extra `linux_mc` job) and `test_the_linux_dispatch_sends_inputs_only_for_a_pinned_commit`
   (`scripts/linux/build_from_windows.ps1` no longer matches); not checked against the base commit.
-- [ ] `tests/test_visualizer_owner_engine_worker.py::test_the_park_clears_the_reader_after_the_park_reply_never_
-  before` is flaky (about 1 run in 6, before and after the native-core merge); with the native-core agent.
 
 ### Awaiting Validation after the focused proofs
 
@@ -718,13 +720,13 @@ answers.
 
 ## 3. Lead and agents: active, paused and queued work
 
-**Agents (operator, 12 Nov; replaces the 11 Nov roster):** the lead (Fable) is orchestrator, auditor and final
+**Agents (operator, 11 Nov; replaces the 11 Nov roster):** the lead (Fable) is orchestrator, auditor and final
 reviewer; all agent results pass that review before acceptance, and the lead's audits (pixel review, regressions
 re-run against the pre-change code, tests on the merge) are what keep the hand-overs sound. The other slots are
 Opus 5.5: two Opus High (complex, architectural and visual work), two Opus Medium (simpler and brute-force
 work), and one Sonnet 5.5 Medium for documents and research when needed. No Fable agents: the native-core
 sequence (section 1 item 8b) and the material track (1B.8) run in these slots; presets (1B.10) alone go to one
-Fable Medium agent (operator, 12 Nov: Opus does not handle preset visuals well). Agents run
+Fable Medium agent (operator, 11 Nov: Opus does not handle preset visuals well). Agents run
 only the tests related to what they changed, never `--isolated`, never take over a display (off-screen renders
 and captures), and record side defects here instead of ignoring them. Wait for agent reports without status
 polling. An interrupted agent's uncommitted work is preserved as a "WIP (handover)" commit on its branch and the
@@ -1365,7 +1367,7 @@ eyes)**
 Complaints: no decay/breathing in soft passages, sustained passages with changes read almost flat, a swell to full
 power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song 70-130 s).
 Evidence `reactivity_preset7/20261107_reactivity_preset7/`. The pulse-visibility WIP was dropped with its branch
-(12 Nov): the operator accepted the pulse as is.
+(11 Nov): the operator accepted the pulse as is.
 
 - [~] Operator review of Preset 7 (bodies are smaller in loud passages now that the uniform inflation is gone:
   sustained-loud visible amplitude 6.4 -> 5.4).

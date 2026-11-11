@@ -1071,7 +1071,7 @@ can most geometry normally."
   (traces and the invariant walk with the new entry), `tests/test_custom_layout_session.py`,
   `tests/test_custom_layout_contract.py` (held copies against the global Edit's result). Owed: the operator's
   physical two-monitor check.
-- *Full-display glyphs relative to the Visualizer's display (operator, 12 Nov; plan 1B.12, decided; supersedes the
+- *Full-display glyphs relative to the Visualizer's display (operator, 11 Nov; plan 1B.12, decided; supersedes the
   absolute form of 11 Nov).* The first form offered up-left for "Display index 0" and up-right for index 1 from
   whichever display the card was on; it is gone (no by-index route remains). Now, for consistency with three or more
   monitors, the row's full-display glyphs are relative to the display the Visualizer is on:

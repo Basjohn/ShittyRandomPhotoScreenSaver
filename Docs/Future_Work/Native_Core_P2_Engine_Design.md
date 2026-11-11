@@ -1815,7 +1815,7 @@ are specified above.
         proving prerequisite; the later default change remains ordered in `Linux_Plan.md` Phase 4.
        Pinned: `tests/test_platform_selection.py` (Windows: the worker; the in-process token wins),
        `tests/test_linux_runtime_branches.py` (Linux: in process; `--viz-engine-worker` still chooses the worker).
-       *Superseded 12 Nov by H3 (the phase-boundary audit's order, the operator's 8 Nov waiver):*
+       *Superseded 11 Nov by H3 (the phase-boundary audit's order, the operator's 8 Nov waiver):*
        `visualizer_engine_worker_platform_default()` answers the worker on every platform (no longer `IS_WINDOWS`);
        `tests/test_platform_selection.py` pins it with the platform injected both ways and
        `tests/test_linux_runtime_branches.py` on Linux. The Linux worker path has never run (no FIFO wake pipe,

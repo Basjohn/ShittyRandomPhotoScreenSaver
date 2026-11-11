@@ -70,7 +70,7 @@ data locations, product builds (including from Windows) and the Linux test route
 ### Phase 4: Linux backends
 
 - [x] MPRIS media controller; parec monitor capture; pactl system/app volume.
-- [~] **Visualizer engine worker (native core P2) is the default on Linux too: source landed 12 Nov (H3), Linux
+- [~] **Visualizer engine worker (native core P2) is the default on Linux too: source landed 11 Nov (H3), Linux
   runtime UNVERIFIED.** Operator, 8 Nov: there is no Linux machine to prove it on, so assume it works with basic
   support; no Linux proving step. `visualizer_engine_worker_platform_default` now answers the worker on every
   platform; `--viz-in-process` chooses the in-process path. Order and context: `Current_Plan.md` §1, item 8b.

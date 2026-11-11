@@ -564,7 +564,7 @@ is replaced once and the run's recoveries are capped (`MAX_RECOVERIES_PER_RUN`),
 Every automatic fallback logs its reason at WARNING/ERROR. H1 capacity violations instead fail closed without a
 worker recovery or in-process retry. The worker is the default on every platform
 (`visualizer_engine_worker_platform_default`): measured and accepted on Windows; on Linux a source-level default
-since 12 Nov 2026 that has never run (no FIFO, forkserver spawn, Pulse capture in the worker or Linux worker;
+since 11 Nov 2026 that has never run (no FIFO, forkserver spawn, Pulse capture in the worker or Linux worker;
 `Linux_Plan.md`, Phase 4), where the in-process fallback above is the safety net. No document may state that the
 Linux worker path was tested until a Linux run is recorded there. The path is chosen once
 per owner construction by `core.diagnostics.experiment_flags.visualizer_engine_worker_admitted`: the platform default,

@@ -1206,7 +1206,7 @@ High-value permanent guards include:
   replay's frames (`owner_replay(..., bar_count=)`) for every mode; dropping the logical, engine or presentation kwargs
   from the configure fails it (frame-neutral steps, the activation record and a cold engine's fence, are the parity
   and binding tests'). The same replay at `32f28d4f^` gave identical digests for all nine modes. The default path
-  (no path stated, the admission cleared; not gated by platform since the H3 flip of 12 Nov, and never yet run on
+  (no path stated, the admission cleared; not gated by platform since the H3 flip of 11 Nov, and never yet run on
   Linux) builds the owner through the same binding on a real
   `WorkerType.VISUALIZER` process and, per mode, presents the same owner's in-process frames frame for frame through
   `owner_worker_gate`'s identity script, never falling back (the gate refuses a default that resolves in process). The

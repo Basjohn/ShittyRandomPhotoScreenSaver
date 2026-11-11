@@ -26,7 +26,7 @@ Admissions:
   its Visualizer on the engine worker (``WorkerType.VISUALIZER``: capture, DSP and the
   tick out of process; the owner sends control edges and presents the worker's frames)
   by DEFAULT on every platform (Windows by the operator's decision of 8 Nov, after gates 3
-  and 4; Linux since the H3 source flip of 12 Nov, where the path has never run: Linux_Plan.md)
+  and 4; Linux since the H3 source flip of 11 Nov, where the path has never run: Linux_Plan.md)
   (:func:`visualizer_engine_worker_platform_default`). In process stays the automatic
   fallback when the worker fails (``engine_worker_link``'s bounded recovery). Two
   diagnostic tokens choose the path for A/B runs, whatever the platform:
@@ -248,7 +248,7 @@ def visualizer_switch_telemetry_admitted() -> bool:
 def visualizer_engine_worker_platform_default() -> bool:
     """Whether the Visualizer runs on the engine worker when no path was chosen: on every platform the product
     supports. Windows is the measured, accepted platform (gates 2 to 4, the frozen checks). Linux has the same
-    default since the H3 source flip (12 Nov 2026, the operator's 8 Nov decision: no Linux machine, no proving step),
+    default since the H3 source flip (11 Nov 2026, the operator's 8 Nov decision: no Linux machine, no proving step),
     and **nothing of the worker path has ever run there**: the session's named wake pipe, the worker's spawn under
     forkserver, the shared mapping's tracker and Pulse capture in the worker are source-level only
     (``Linux_Plan.md``, Phase 4). A worker that cannot configure or start leaves the activation in process
