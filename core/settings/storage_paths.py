@@ -16,6 +16,7 @@ root here to the one shared ``SRPSS`` folder::
     │   ├── reddit/
     │   ├── rss/
     │   └── weather.json
+    ├── preset_recovery/        (before-images of a failed preset-replacement rollback)
     ├── state/
     │   └── feed_health.json
     └── steam/
@@ -175,6 +176,12 @@ def get_state_dir(profile: ProfileRef = None) -> Path:
 def get_feed_health_file(profile: ProfileRef = None) -> Path:
     """Return ``<app_data>/state/feed_health.json``."""
     return get_state_dir(profile) / "feed_health.json"
+
+
+def get_preset_recovery_dir(profile: ProfileRef = None) -> Path:
+    """Return ``<app_data>/preset_recovery/`` without touching disk: the before-images of a failed curated-preset
+    rollback (``core.visualizer_preset_tree``) live here, durable where ``%TEMP%`` may be emptied."""
+    return resolve_app_data_dir(profile) / "preset_recovery"
 
 
 def get_steam_dir(profile: ProfileRef = None) -> Path:

@@ -414,7 +414,8 @@ def _presets_root() -> Path:
     if not bundled_root.is_dir():
         raise FileNotFoundError(f"Packaged visualizer preset tree is missing: {bundled_root}")
     try:
-        replace_curated_visualizer_preset_tree(bundled_root, shared_root)
+        # A startup bootstrap: never prunes rollback recovery folders (only a later explicit replacement does).
+        replace_curated_visualizer_preset_tree(bundled_root, shared_root, prune_recovery=False)
     except Exception:
         logger.error("[VIS_PRESETS] Failed to bootstrap shared preset tree", exc_info=True)
         raise

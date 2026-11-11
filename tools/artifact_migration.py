@@ -74,6 +74,12 @@ LEGACY = {
     "frame_webps_20261107.md": ("architecture", "frame_webps", "conversion"),
 }
 CHEST = ("lifecycle", "log_archives", "evidence_chest")
+# Evidence roots outside the flat legacy folder, relocated into the layout by hand (old -> new, repo-relative). The
+# references were repointed in the same change; the files are moved by the lead, never by this tool.
+RELOCATED = {
+    # 11 Nov: Extruded Bubble's 20 October forensic and recovery captures (ignored media, ~11.6 GB).
+    "Docs/Reference/Extruded_Bubble/Evidence/2026-10-20": ".artifacts/evidence/visualizers/extruded_bubble/20261020",
+}
 # Folders a running session is still writing: never moved until released. (The 7 Nov measurement session ended.)
 HELD: set[str] = set()
 

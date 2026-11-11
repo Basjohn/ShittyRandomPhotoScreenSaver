@@ -155,13 +155,13 @@ def _resolved_url(value: object) -> str:
         return ""
 
 
-def _record(payload: Mapping[str, Any]) -> FeedCacheRecord:
+def _health(payload: Mapping[str, Any]) -> FeedHealth:
     if payload.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("unsupported feed cache schema")
     raw_health = payload.get("health")
     if not isinstance(raw_health, Mapping):
         raise ValueError("missing feed cache health")
-    health = FeedHealth(
+    return FeedHealth(
         last_checked_at=_optional_float(raw_health.get("last_checked_at")),
         last_success_at=_optional_float(raw_health.get("last_success_at")),
         consecutive_failures=int(raw_health.get("consecutive_failures", 0))
@@ -170,6 +170,28 @@ def _record(payload: Mapping[str, Any]) -> FeedCacheRecord:
         last_failure=_optional_str(raw_health.get("last_failure"), max_len=240),
         backoff_until=_optional_float(raw_health.get("backoff_until")),
     )
+
+
+def feed_cache_path(root: Path, cache_key: str) -> Path:
+    """The one spelling of a source's record file under a store root."""
+    return Path(root) / f"{safe_cache_fragment(cache_key)}.json"
+
+
+def peek_feed_health(root: Path, cache_key: str) -> FeedHealth | None:
+    """A source's stored health without side effects: no directory is created, a corrupt record is not
+    quarantined and the document is not parsed. None when nothing readable is stored (never fetched)."""
+    path = feed_cache_path(root, cache_key)
+    try:
+        if path.stat().st_size > MAX_CACHE_FILE_BYTES:
+            return None
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return _health(payload) if isinstance(payload, Mapping) else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _record(payload: Mapping[str, Any]) -> FeedCacheRecord:
+    health = _health(payload)
     raw_snapshot = payload.get("snapshot")
     snapshot = None
     if raw_snapshot is not None:
@@ -208,7 +230,7 @@ class FeedCacheStore:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, cache_key: str) -> Path:
-        return self.root / f"{safe_cache_fragment(cache_key)}.json"
+        return feed_cache_path(self.root, cache_key)
 
     def read(self, cache_key: str) -> FeedCacheRecord | None:
         path = self.path_for(cache_key)

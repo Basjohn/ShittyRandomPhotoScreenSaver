@@ -5,16 +5,53 @@ owns numbered preset targets; Custom and unnumbered operator files survive.
 """
 from __future__ import annotations
 
+from datetime import datetime
 import json
+import logging
 import re
-import tempfile
+import shutil
 from pathlib import Path
 from collections.abc import Mapping
 
+from core.settings.storage_paths import get_preset_recovery_dir
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
 from core.utils.atomic_files import atomic_write_bytes
 
+logger = logging.getLogger(__name__)
+
 _NUMBERED = re.compile(r'^preset[_-]*(\d+)(?:[_-].+)?\.json$', re.IGNORECASE)
+# A failed rollback's before-images go to one folder of this name under the data root's recovery directory; the
+# newest few are kept, older ones pruned after a later replacement succeeds (never on failure, never at startup).
+_RECOVERY_PREFIX = 'srpss_preset_recovery_'
+RECOVERY_KEEP = 3
+
+
+def _new_recovery_folder() -> Path:
+    """A fresh recovery folder whose name sorts by creation time."""
+    base = get_preset_recovery_dir()
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+    for attempt in range(100):
+        folder = base / (f'{_RECOVERY_PREFIX}{stamp}' + (f'_{attempt}' if attempt else ''))
+        try:
+            folder.mkdir(parents=True)
+            return folder
+        except FileExistsError:
+            continue
+    raise FileExistsError(f'No free recovery folder name under {base}')
+
+
+def prune_preset_recovery_folders(keep: int = RECOVERY_KEEP) -> None:
+    """Remove all but the newest ``keep`` recovery folders. Called only after a successful replacement; a failure to
+    prune is logged and never fails the replacement it follows."""
+    base = get_preset_recovery_dir()
+    if not base.is_dir():
+        return
+    folders = sorted(p for p in base.iterdir() if p.is_dir() and p.name.startswith(_RECOVERY_PREFIX))
+    for old in folders[:-keep] if keep > 0 else folders:
+        try:
+            shutil.rmtree(old)
+        except OSError:
+            logger.warning('[VIS_PRESETS] Could not prune preset recovery folder %s', old, exc_info=True)
 
 
 def is_managed_curated_preset_path(path: Path) -> bool:
@@ -78,11 +115,15 @@ def snapshot_curated_visualizer_preset_tree(root: Path) -> dict[str, bytes]:
     return files
 
 
-def apply_curated_preset_files(root: Path, files: Mapping[str, bytes], *, remove: set[str]) -> None:
+def apply_curated_preset_files(root: Path, files: Mapping[str, bytes], *, remove: set[str],
+                               prune_recovery: bool = True) -> None:
     """Atomically replace individual files; restore all before-images on failure.
 
     The caller has already snapshotted/validated the complete incoming source.
     Removals are restricted to numbered curated files, never arbitrary JSON.
+    A rollback that cannot restore every file leaves its before-images in a recovery folder under the data root
+    (named in the error); after a successful replacement only the newest ``RECOVERY_KEEP`` such folders are kept,
+    unless ``prune_recovery`` is False (the startup bootstrap of the shared tree).
     """
     root = Path(root)
     if not files:
@@ -132,7 +173,7 @@ def apply_curated_preset_files(root: Path, files: Mapping[str, bytes], *, remove
         if errors:
             recovery = None
             try:
-                recovery = Path(tempfile.mkdtemp(prefix='srpss_preset_recovery_'))
+                recovery = _new_recovery_folder()
                 records = []
                 for index, entry in enumerate(touched):
                     backup = f'{index}.before'
@@ -146,9 +187,12 @@ def apply_curated_preset_files(root: Path, files: Mapping[str, bytes], *, remove
             raise RuntimeError(f'Preset replacement rollback failed; before-images at {recovery}: '
                                + '; '.join(errors)) from failure
         raise
+    if prune_recovery:
+        prune_preset_recovery_folders()
 
 
-def replace_curated_visualizer_preset_tree(source_root: Path, target_root: Path) -> set[str]:
+def replace_curated_visualizer_preset_tree(source_root: Path, target_root: Path, *,
+                                           prune_recovery: bool = True) -> set[str]:
     """Explicitly replace numbered targets from a validated immutable snapshot."""
     source_root, target_root = Path(source_root), Path(target_root)
     source, target = source_root.resolve(), target_root.resolve()
@@ -159,7 +203,7 @@ def replace_curated_visualizer_preset_tree(source_root: Path, target_root: Path)
         return set(files)
     stale = {entry for entry in scan_curated_visualizer_preset_tree(target_root)
              if is_managed_curated_preset_path(Path(entry)) and entry not in files}
-    apply_curated_preset_files(target_root, files, remove=stale)
+    apply_curated_preset_files(target_root, files, remove=stale, prune_recovery=prune_recovery)
     return set(files)
 
 

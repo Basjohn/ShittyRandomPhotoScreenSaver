@@ -576,3 +576,31 @@ def test_the_near_field_reference_height_is_resolved_on_its_edges_never_per_fram
     assert aperture == framed_aperture_scale(wide.presentation)
     assert float(module.parameter(parameters, "extruded_bubble_camera_fov")) == 30.0
     assert renderer._optical_px == original(parameters, aperture, width, height)
+
+
+@pytest.mark.qt
+def test_a_frame_at_rest_never_enters_the_import_machinery(target):
+    """A function-level import costs a trip through PySide's import hook every time it runs (four on EB's frame path,
+    ~2.3 us each, 11 Nov): once the renderer is warm, a frame imports nothing."""
+    import builtins
+    import sys
+    from rendering.quick.visualizer.implementations import extruded_bubble as module
+
+    capture, host = target
+    host._implementations["extruded_bubble"] = module.QuickExtrudedBubbleRenderer()
+    snapshot = _snapshot()
+    capture.render(host, snapshot)                            # the first frame may bind lazily on its edges
+    imports = []
+    original = builtins.__import__
+
+    def counted(name, *args, **kwargs):
+        caller = sys._getframe(1).f_code
+        imports.append((name, caller.co_filename, caller.co_name))
+        return original(name, *args, **kwargs)
+    builtins.__import__ = counted
+    try:
+        for _ in range(3):
+            capture.render(host, snapshot)
+    finally:
+        builtins.__import__ = original
+    assert imports == []

@@ -48,6 +48,29 @@ def test_fixed_arrays_have_std140_stride_and_reject_incomplete_records():
         _ARRAYS.pack({**values, "weights": (1,)})
 
 
+def test_packing_a_frames_block_imports_nothing():
+    """Every Scene3D frame packs its blocks: a function-level ``import struct`` there cost each pack a trip through
+    PySide's import hook (Sphere -105 Python calls per frame, 11 Nov)."""
+    import builtins
+
+    values = {"weights": tuple(range(8)), "lanes": (1, 2, 3, 4), "centres": ((5, 6, 7), (8, 9, 10))}
+    mixed = {field: (tuple(range(16)) if glsl == "mat4" else tuple(range(int(glsl[-1]))) if glsl[-1].isdigit()
+                     else 1) for field, glsl in _MIXED.fields}
+    imports, original = [], builtins.__import__
+
+    def counted(name, *args, **kwargs):
+        imports.append(name)
+        return original(name, *args, **kwargs)
+    builtins.__import__ = counted
+    try:
+        _ARRAYS.pack(values)
+        _ARRAYS.pack_fields({"lanes": (1, 2, 3, 4)})
+        _MIXED.pack(mixed)
+    finally:
+        builtins.__import__ = original
+    assert imports == []
+
+
 @pytest.mark.qt
 def test_fixed_scalar_and_vector_arrays_reach_gpu_and_partial_updates_preserve_other_fields(context):
     fragment = "#version 460 core\nout vec4 FragColor;\n" + _ARRAYS.glsl() + """

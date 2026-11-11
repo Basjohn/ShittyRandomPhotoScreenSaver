@@ -194,7 +194,8 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     return knobs
 
 
-from core.constants.extruded_bubble_world import SPECKS_FULL
+from core.constants.extruded_bubble_world import SPECKS_FULL, WAKE_STRIDE, speck_density
+from core.settings.framed_camera import perspective_matrix, viewport_tangents
 
 
 def speck_amount(emission: float) -> tuple[float, float]:
@@ -206,7 +207,6 @@ def speck_amount(emission: float) -> tuple[float, float]:
     """
     # `emission` is already the smoothed value of the operator's Particles Range,
     # resolved exactly once by ExtrudedBubbleSimulation. Never apply that Range again.
-    from core.constants.extruded_bubble_world import speck_density
     return speck_density(emission), 2.4
 
 
@@ -241,7 +241,6 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
     view_to_world = camera_axes(turn, tilt)
     right, up, back = view_to_world[:3], view_to_world[3:6], view_to_world[6:9]
     world_to_view = (right[0], up[0], back[0], right[1], up[1], back[1], right[2], up[2], back[2])
-    from core.settings.framed_camera import viewport_tangents, perspective_matrix
     tan = viewport_tangents(fov_y_degrees, aspect, aperture_scale / max(float(scale), 1e-3))
     projection = perspective_matrix(tan, NEAR, FAR)
     return view_to_world, world_to_view, tan, projection
@@ -311,7 +310,6 @@ def wake_instances(records) -> np.ndarray:
 
     xyz, reacted radius, stable ID, retirement, opacity, nominal radius, trail lead and settle directions.
     """
-    from core.constants.extruded_bubble_world import WAKE_STRIDE
     if isinstance(records, bytes):            # the frame's float32 records: a view, no conversion
         return np.frombuffer(records, dtype=np.float32).reshape(-1, WAKE_STRIDE)
     return np.asarray(records, dtype=np.float32).reshape(-1, WAKE_STRIDE)

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPainter, QPen, QPalette
 from ui.widgets.continuous_border import OutlinedListWidget
 from ui.tabs import shared_styles
+from ui.tabs.online_source_rows import FEED, KEY_ROLE, KIND_ROLE, OnlineSourceRowDelegate, populate_online_source_rows
 from ui.tabs.shared_styles import (
     NoWheelSlider,
     add_aligned_row,
@@ -228,9 +229,10 @@ class SourcesTab(QWidget):
         )
         rss_layout.addWidget(self.custom_feeds_label)
 
-        # RSS list
+        # Online sources: active Just Make It Work pools, then custom feeds, each with its status mark.
         self.rss_list = OutlinedListWidget()
         self.rss_list.setMinimumHeight(150)
+        self.rss_list.setItemDelegate(OnlineSourceRowDelegate(self.rss_list))
         rss_layout.addWidget(self.rss_list)
 
         # RSS input
@@ -366,11 +368,8 @@ class SourcesTab(QWidget):
         for folder in folders:
             self.folder_list.addItem(display_folder_path(folder))
 
-        # Load RSS feeds using dot notation
+        # The online rows (pools and custom feeds) are rebuilt by _update_ratio_control_state below.
         rss_feeds = self._settings.get('sources.rss_feeds')
-        self.rss_list.clear()
-        for feed in rss_feeds:
-            self.rss_list.addItem(feed)
 
         # Load and display usage ratio
         local_ratio = self._settings.get('sources.local_ratio')
@@ -510,7 +509,6 @@ class SourcesTab(QWidget):
             rss_feeds.append(url)
             self._settings.set('sources.rss_feeds', rss_feeds)
             self._settings.save()
-            self.rss_list.addItem(url)
             self.rss_input.clear()
             self._update_ratio_control_state()
             self._emit_sources_changed()
@@ -519,17 +517,17 @@ class SourcesTab(QWidget):
             StyledPopup.show_info(self, "Duplicate", "This feed is already added.")
 
     def _remove_rss(self) -> None:
-        """Remove selected RSS feed source.
+        """Remove selected RSS feed source (a pool row is managed by Just Make It Work, never removed here).
 
         Robust against settings returning None, non-list types, or the
-        URL text being desynchronised from the persisted list.
+        URL text being desynchronised from the persisted list; the rows are
+        then rebuilt from what is stored.
         """
         current_item = self.rss_list.currentItem()
-        if not current_item:
+        if not current_item or current_item.data(KIND_ROLE) != FEED:
             return
 
-        url = current_item.text()
-        row = self.rss_list.currentRow()
+        url = current_item.data(KEY_ROLE)
 
         try:
             rss_feeds = self._settings.get('sources.rss_feeds')
@@ -543,22 +541,21 @@ class SourcesTab(QWidget):
         except Exception as e:
             logger.warning(f"Failed to update settings while removing RSS feed: {e}")
 
-        # Always remove from UI regardless of settings state
-        self.rss_list.takeItem(row)
         self._update_ratio_control_state()
         self._emit_sources_changed()
         logger.info(f"Removed RSS feed: {url}")
 
     def _remove_all_rss(self) -> None:
-        """Remove all RSS feed sources."""
-        if self.rss_list.count() == 0:
+        """Remove all custom RSS feed sources (Just Make It Work pools stay with the pool chooser)."""
+        count = len(self._settings.get('sources.rss_feeds') or ())
+        if count == 0:
             return
 
         # Confirm with user using styled popup
         confirmed = StyledPopup.question(
             self,
             "Remove All Feeds",
-            f"Remove all {self.rss_list.count()} wallpaper feeds?",
+            f"Remove all {count} wallpaper feeds?",
             yes_text="Yes",
             no_text="No",
             default_to_yes=False
@@ -567,7 +564,6 @@ class SourcesTab(QWidget):
         if confirmed:
             self._settings.set('sources.rss_feeds', [])
             self._settings.save()
-            self.rss_list.clear()
             self._update_ratio_control_state()
             self._emit_sources_changed()
             logger.info("Removed all RSS feeds")
@@ -700,9 +696,12 @@ class SourcesTab(QWidget):
         from sources.rss.pools import online_source_count, read_pool_selection, WALLPAPER_POOLS
         selection = read_pool_selection(self._settings)
         count = online_source_count(self._settings)
-        labels = [pool.label for pool in WALLPAPER_POOLS if pool.pool_id in selection.active_ids]
+        active = [pool for pool in WALLPAPER_POOLS if pool.pool_id in selection.active_ids]
+        labels = [pool.label for pool in active]
         self.pool_status_label.setText(f"Pools: {len(labels)} enabled" if labels else "Pools: off")
         self.pool_status_label.setToolTip("\n".join(labels) if labels else "Custom feeds below remain independent.")
+        # The tab's one refresh edge (load and every source change): rows and their stored status, no fetch.
+        populate_online_source_rows(self.rss_list, active, list(self._settings.get('sources.rss_feeds') or ()))
         has_folders = len(folders) > 0
         has_rss = count > 0
         both_available = has_folders and has_rss

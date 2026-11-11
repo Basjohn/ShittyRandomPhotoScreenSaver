@@ -14,7 +14,9 @@ contract. Wallpaper acquisition is separate from the FEEDS news-widget runtime i
   It uses shared circle-checkbox/combo/pill styles, provider-page selection counts and tooltips. Wallhaven uses a
   two-column list; Space & Daily and optional Image Boards keep their choices across navigation. The shared transparent
   scroll surface exposes the semantic popup background rather than an opaque native palette. Provider/ranking details
-  belong in tooltips, not an explanatory paragraph. Sources summarizes enabled counts with full names in its tooltip.
+  belong in tooltips, not an explanatory paragraph. Sources summarizes enabled counts with full names in its tooltip,
+  and lists each active pool as a `JMIT POOL -> <Pool Name>` row with its stored validity mark beside the custom
+  feeds (`Feeds.md` § Wallpaper feeds; `sources/rss/source_health.py`).
 - `sources/rss/coordinator.py` remains the wallpaper pass/acquisition owner. Existing startup IO and background
   cadence drive its pass lock, image-attempt budget, rejection memory, cache, cancellation and session rotation.
 - `core/feeds/source.py` / `transport.py` retain bounded HTTP/DNS/redirects, validators, last-good and persisted
@@ -157,6 +159,10 @@ manifest bounds, HTML/RSS/JSON-feed negatives at the actual FeedSource seam, sta
 pool-only ratio/readiness, circle/tooltip styling contracts and cross-page choice retention. Native top/provider/tooltip
 and Sources-page captures under `tmp/wallpaper_pool_native/{dark,light}` inspect Neon Mall Acrylic and Pearl Blush Glass
 in real Settings. Provider descriptions and the custom-feed format/size explanation stay in tooltips.
+`tests/test_sources_online_rows_real_dialog.py`: on the real SettingsDialog with DNS/sockets stubbed, one row per
+active pool and custom feed, the valid/failing/untried mark from stored health (painted in the theme roles), the
+multi-endpoint pool's latest record, Remove Selected sparing pool rows, the empty state, and the coordinator naming
+its records as Settings reads them.
 `tests/test_wallpaper_pool_startup.py`: one IO admission, failed-first/usable-later, real foreground submission seam,
 no-source failure, shutdown/queued callback rejection, finite document/deadline bounds and shared watchdog pause/rearm.
 `tests/test_wallpaper_pools_zero_display.py`: selected NONE and empty Qt inventory keep source/queue/cache/network

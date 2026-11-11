@@ -52,11 +52,19 @@ WALLPAPER_POOLS = (
     WallpaperPool("yandere.safe", "Anime Illustrations — Safe-rated", "yandere"),
 )
 _BY_ID = {pool.pool_id: pool for pool in WALLPAPER_POOLS}
+_NASA_FIXED_SUBJECTS = ("Galaxy", "Mars", "Sun")
 _SOLAR_BODIES = ("Mercury", "Venus", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Asteroid")
 
 
 def get_wallpaper_pool(pool_id: str) -> WallpaperPool:
     return _BY_ID[pool_id]
+
+
+def pool_endpoint_source_ids(pool_id: str) -> tuple[str, ...]:
+    """Every ``PoolEndpoint.source_id`` a pool's endpoints can carry: the pool id, or one per NASA subject."""
+    if _BY_ID[pool_id].provider != "nasa":
+        return (pool_id,)
+    return tuple(f"{pool_id}.{subject.casefold()}" for subject in (*_NASA_FIXED_SUBJECTS, *_SOLAR_BODIES))
 
 
 @dataclass(frozen=True)
@@ -153,7 +161,7 @@ def pool_endpoint(pool_id: str, order: str, *, turn: int = 0, seed: str = "") ->
         raise ValueError(f"Unsupported wallpaper pool provider: {pool.provider}")
     # One Space choice gets equal opportunities for the four named subjects;
     # Solar System rotates a single body, without fetching all bodies in a pass.
-    subject = ("Galaxy", "Mars", "Sun", _SOLAR_BODIES[(turn // 4) % len(_SOLAR_BODIES)])[turn % 4]
+    subject = (*_NASA_FIXED_SUBJECTS, _SOLAR_BODIES[(turn // 4) % len(_SOLAR_BODIES)])[turn % 4]
     params = {"title": subject, "center": "JPL", "media_type": "image", "year_start": "2018",
               "page_size": "24", "page": str(1 + (turn // 4 // 24) % MAX_LISTING_PAGES)}
     return PoolEndpoint(f"{pool_id}.{subject.casefold()}", "https://images-api.nasa.gov/search?" + urlencode(params), pool_id, turn // 4)

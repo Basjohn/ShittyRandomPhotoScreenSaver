@@ -90,11 +90,18 @@ def _slats_style(parameters: Mapping[str, object]) -> bool:
     return parameters.get("style", "flat") == "slats"
 
 
-def _slats_program():
-    """The 3D Slats shader module, loaded the first time the style is used (Flat never loads it)."""
-    from rendering.gl_programs import blinds_slats_program
+_SLATS_PROGRAM = None
 
-    return blinds_slats_program
+
+def _slats_program():
+    """The 3D Slats shader module, loaded the first time the style is used (Flat never loads it).
+
+    Bound once on that first use, so a running Slats frame never re-enters the import machinery."""
+    global _SLATS_PROGRAM
+    if _SLATS_PROGRAM is None:
+        from rendering.gl_programs import blinds_slats_program
+        _SLATS_PROGRAM = blinds_slats_program
+    return _SLATS_PROGRAM
 
 
 class QuickBlindsRenderer:
