@@ -1949,11 +1949,12 @@ def test_parent_artwork_axes_do_not_overwrite_authored_child_geometry(display, t
     ("bottom_right", -0.70),
     ("top_right", -0.70),
 ])
-def test_now_playings_alignment_is_declared_and_stable_across_the_display_midpoint(
+def test_now_playings_orientation_follows_the_side_of_the_display_it_lies_on(
         display, tmp_path, corner, offset, flipped):
-    """Plan 1B.7c (the Media card's alignment contract): the block's one orientation is its corner's side, flipped
-    only by the title's alignment record (its flip glyph); where the block lies never mirrors it (the former
-    position-based mirroring flipped it past the display midpoint)."""
+    """Plan 1C.3 (restores the 10 Nov behaviour 1B.7c had replaced with the corner's side): the block's orientation is
+    the side of the display its centre lies on (left half: artwork left, text left-aligned; right half: mirrored),
+    wherever its anchor corner is; the title's alignment record (its flip glyph) mirrors it on top. A block offset
+    across the midpoint from its corner takes the side it now lies on."""
     settings = _manager(tmp_path)
     children = {"title": {"alignment": "right"}} if flipped else {}
     config = _seed(settings, now_playing={"corner": corner, "offset_x": offset, "child_geometry": children,
@@ -1966,15 +1967,60 @@ def test_now_playings_alignment_is_declared_and_stable_across_the_display_midpoi
     art = _rect(root.findChild(QQuickItem, "expandedOverlayArtwork"), root)
     text = _rect(root.findChild(QQuickItem, "expandedOverlayNowPlayingText"), root)
     corner_right = corner.endswith("right")
-    expected_right = corner_right is not flipped
-    assert (slot.x() + slot.width() / 2.0 > WIDTH / 2.0) is not corner_right   # it lies across the midpoint
+    lies_right = slot.x() + slot.width() / 2.0 > WIDTH / 2.0
+    assert lies_right is not corner_right                                   # it lies across the midpoint
+    expected_right = lies_right is not flipped
     assert bool(slot.property("contentRightSide")) is expected_right
+    title = _rect(root.findChild(QQuickItem, "expandedOverlayTitle"), root)
     if expected_right:
         assert text.right() < art.left(), (art, text)
+        assert abs(title.right() - text.right()) <= 1.0                     # right-aligned against the artwork
     else:
         assert art.right() < text.left(), (art, text)
+        assert abs(title.left() - text.left()) <= 1.0
     assert abs(art.center().y() - text.center().y()) < 1.5
     assert _value(settings)["now_playing"]["corner"] == corner  # presentation never rewrites the anchor
+
+
+@pytest.mark.qt
+def test_moving_now_playing_to_the_other_side_in_fullscreen_edit_flips_it_and_top_or_bottom_does_not(
+        display, tmp_path):
+    """Plan 1C.3 (operator, 11 Nov: moving the block to the other sides "did not flip orientation/alignment at all"):
+    Fullscreen Edit's own drag across the display's midpoint mirrors the block as it crosses; moving it up or down
+    never does; Save keeps the corner and draws what the draft showed."""
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"always_show": True})
+    _draw(display, media=_Media(), config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    root = _root(display)
+
+    def side() -> tuple[bool, bool]:
+        _run(display, 60)
+        art = _rect(root.findChild(QQuickItem, "expandedOverlayArtwork"), root)
+        text = _rect(root.findChild(QQuickItem, "expandedOverlayNowPlayingText"), root)
+        right = bool(slot.property("contentRightSide"))
+        assert (text.right() < art.left()) is right and (art.right() < text.left()) is not right
+        return right, slot.x() + slot.width() / 2.0 > WIDTH / 2.0
+
+    assert side() == (False, False)                                         # bottom left: artwork left
+    edit.drag("now_playing", 0, -round(HEIGHT * 0.6), steps=8)               # up to the top: unchanged
+    assert side() == (False, False)
+    edit.drag("now_playing", round(WIDTH * 0.7), 0, steps=12)                # across to the right: mirrored
+    assert side() == (True, True)
+    edit.drag("now_playing", 0, round(HEIGHT * 0.5), steps=8)                # down again: unchanged
+    assert side() == (True, True)
+    frames = edit.frames()
+    assert edit.owner.save()
+    _run(display, 120)
+    saved = _value(settings)
+    assert saved["now_playing"]["corner"] == seeded["now_playing"]["corner"]
+    display.scene.set_visualizer_expanded_overlay_config(_projection(saved))
+    _run(display, 200)
+    assert bool(slot.property("contentRightSide")) is True and edit.drawn() == frames
 
 
 @pytest.mark.qt

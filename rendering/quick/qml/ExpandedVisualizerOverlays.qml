@@ -303,12 +303,18 @@ Item {
         naturalWidth: blockWidth
         naturalHeight: blockHeight
 
-        // Alignment as declared roles (plan 1B.7c, as the Media card's): the block has ONE orientation, chosen and
-        // stable. Its authored side is the anchor corner's (Settings' Corner: a right corner puts the artwork on the
-        // right and the text on its rails); the title's alignment record (its flip glyph in Fullscreen Edit, the
-        // ``alignment_flip`` role that, like Media's header, also carries ``semantic_corner_anchor``) flips it. The
-        // artist and album lines flip their own text alignment on top of it (Media's orientedChildAlignment). Where the
-        // block lies on the display never changes it.
+        // Orientation follows the side of the display the block lies on (accepted 10 Nov; restored by plan 1C.3 after
+        // 1B.7c had tied it to the anchor corner): on the left half the artwork is on the left and the text is
+        // left-aligned beside it; on the right half the block is mirrored. The block's centre decides (at the exact
+        // midpoint: the left), so a block moved across the midpoint flips. Top and bottom never change it: the text
+        // sits beside the artwork, centred on it, wherever the block is placed vertically. The block's width never
+        // depends on its side, so there is no placement/orientation loop. The title's alignment record (its flip glyph
+        // in Fullscreen Edit, the ``alignment_flip`` role that, like Media's header, also carries
+        // ``semantic_corner_anchor``) is the explicit override on top (it mirrors the block where it is); the artist and
+        // album lines flip their own text alignment on top of that (Media's orientedChildAlignment). The Media card's
+        // app-volume rail follows its side of the display the same way.
+        readonly property bool positionRight: !!stage && stage.width > 0.0 ? x + width * 0.5 > stage.width * 0.5
+                                                                         : rightSide
         function childAlignment(roleId) {
             const record = childGeometry[roleId]
             return record && record.alignment !== undefined ? String(record.alignment) : "left"
@@ -317,7 +323,7 @@ Item {
             const record = childGeometry[roleId]
             return record && record.anchor !== undefined && record.anchor !== null ? String(record.anchor) : ""
         }
-        readonly property bool contentRightSide: rightSide !== (childAlignment("title") === "right")
+        readonly property bool contentRightSide: positionRight !== (childAlignment("title") === "right")
         function textRight(roleId) {
             return roleId === "title" ? contentRightSide : (childAlignment(roleId) === "right") !== contentRightSide
         }
