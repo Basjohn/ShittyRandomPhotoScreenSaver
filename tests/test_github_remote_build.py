@@ -395,9 +395,13 @@ def test_a_branch_that_moved_since_pre_flight_is_never_built(tmp_path, monkeypat
 def test_the_github_tab_offers_the_remote_products_and_local_steps(tmp_path):
     github = {job.key: job for job in build_runner.jobs_for_mode("github", tmp_path)}
     venv = {job.key: job for job in build_runner.jobs_for_mode("venv", tmp_path)}
+    # The remote products and local steps, then the optional Linux jobs: the other tabs' own Linux job, and Linux
+    # Media Center, which only this tab offers (its own contract: tests/test_linux_mc_build_contract.py).
     assert list(github) == ["standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer",
-                            "linux"]
+                            "linux", "linux_mc"]
     assert github["linux"] == venv["linux"] and not github["linux"].default_selected     # the other tabs' own job
+    assert "linux_mc" not in venv and not github["linux_mc"].default_selected
+    assert github["linux_mc"].kind == github["linux"].kind and github["linux_mc"].script == github["linux"].script
     for key in ("standard", "media_center"):
         assert github[key].kind == "github" and github[key].script == tmp_path / remote.WORKFLOW_PATH
         assert github[key].artifacts == venv[key].artifacts and github[key].output_dir == venv[key].output_dir
@@ -744,16 +748,33 @@ def test_a_linux_job_stopped_before_it_followed_its_run_still_cancels_it(monkeyp
 def test_the_linux_dispatch_sends_inputs_only_for_a_pinned_commit():
     # Checkpoint audit 11, A11-L3: GitHub refuses a dispatch with inputs the ref's linux-build.yml does not declare
     # (HTTP 422), so only the Remote tab's -Commit dispatch sends commit/token (and finds its run by the token); the
-    # other tabs' dispatch sends none and finds its run by commit and start time, as before fa62ef14. Negative
-    # control (the fa62ef14 script): one dispatch form, always with the inputs.
+    # other tabs' dispatch sends none and finds its run by commit and start time, as before fa62ef14. Since the Linux
+    # MC builds (3aef59d1/f94120a6) the dispatch is one call whose argument list grows: the commit/token inputs only
+    # inside ``if ($Commit)``, the MC profile input only for the MC profile. Negative control (the fa62ef14 script):
+    # the inputs always sent.
     text = (ROOT / "scripts" / "linux" / "build_from_windows.ps1").read_text(encoding="utf-8")
     dispatch = text[text.index("if ($Mode -eq 'Dispatch') {"):text.index("$runEvent = 'workflow_dispatch'")]
-    pinned, separator, plain = dispatch.partition("} else {")
-    assert separator and "if ($Commit) {" in pinned
-    calls = re.findall(r"Invoke-Checked gh @\('workflow', 'run'[^)]*\)", dispatch)
-    assert len(calls) == 2
+
+    def block(source: str, opener: str) -> tuple[str, str]:
+        """The braced body that follows ``opener`` and the source with it removed."""
+        start = source.index(opener) + len(opener)
+        depth, index = 1, start
+        while depth:
+            depth += {"{": 1, "}": -1}.get(source[index], 0)
+            index += 1
+        return source[start:index - 1], source[:source.index(opener)] + source[index:]
+
+    pinned, rest = block(dispatch, "if ($Commit) {")
     assert "commit=$remoteSha" in pinned and "token=$token" in pinned and "$token = " in pinned
-    assert "'workflow', 'run', $Workflow, '--ref', $Branch)" in plain and "-f" not in plain and "$token" not in plain
+    # Outside the pinned branch no commit or token input is ever added; the base call carries no input at all.
+    assert "commit=" not in rest and "token=" not in rest
+    base = re.search(r"\$dispatchArgs = @\(([^)]*)\)", rest)
+    assert base and "'workflow', 'run', $Workflow, '--ref', $Branch" in base.group(1) and "-f" not in base.group(1)
+    profile_inputs = re.findall(r"if \(\$Profile -eq 'mc'\) \{ \$dispatchArgs \+= @\(([^)]*)\) \}", rest)
+    assert len(profile_inputs) == 1 and "profile=mc" in profile_inputs[0]
+    assert "-f" not in rest.replace(profile_inputs[0], "")
+    # One dispatch, of the built argument list.
+    assert re.findall(r"Invoke-Checked gh \S+", dispatch) == ["Invoke-Checked gh $dispatchArgs"]
     assert text.count("$token = 'srpss-") == 1
     lookup = text[text.index("for ($attempt"):text.index("if (-not $runId)")]
     by_token, separator, by_time = lookup.partition("} else {")
