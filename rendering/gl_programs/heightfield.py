@@ -53,7 +53,30 @@ def normalize_heightfield(value: object) -> dict:
     basin = heightfield_basin({"size": size, **({"basin": value["basin"]} if "basin" in value else {})})
     if basin != (0, 0, size - 1):
         record["basin"] = list(basin)
+    origin = heightfield_origin({"size": size, **({"origin": value["origin"]} if "origin" in value else {})})
+    if origin != (0, 0, size - 1):
+        if not (origin[0] <= basin[0] and origin[1] <= basin[1] and basin[0] + basin[2] <= origin[0] + origin[2]
+                and basin[1] + basin[2] <= origin[1] + origin[2]):
+            raise ValueError("heightfield origin must contain the basin")
+        record["origin"] = list(origin)
     return record
+
+
+def _square(data: Mapping, name: str) -> tuple[int, int, int]:
+    """A square of whole cells inside the grid (first column, first row, span); the whole grid when absent."""
+    size = int(data["size"])
+    raw = data.get(name)
+    if raw is None:
+        return 0, 0, size - 1
+    try:
+        x0, y0, cells = (int(v) for v in raw)
+        if any(float(v) != int(v) or isinstance(v, bool) for v in raw):
+            raise ValueError
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"heightfield {name} must be three whole numbers: column, row, cells") from exc
+    if cells < 1 or x0 < 0 or y0 < 0 or x0 + cells > size - 1 or y0 + cells > size - 1:
+        raise ValueError(f"heightfield {name} must lie inside the grid")
+    return x0, y0, cells
 
 
 def heightfield_basin(data: Mapping) -> tuple[int, int, int]:
@@ -62,19 +85,26 @@ def heightfield_basin(data: Mapping) -> tuple[int, int, int]:
     A grid extended toward the horizon keeps the basin's own cells exactly (no resampling); the default
     is the whole grid. ``x0 + cells`` and ``y0 + cells`` stay inside the grid.
     """
-    size = int(data["size"])
-    raw = data.get("basin")
-    if raw is None:
-        return 0, 0, size - 1
-    try:
-        x0, y0, cells = (int(v) for v in raw)
-        if any(float(v) != int(v) or isinstance(v, bool) for v in raw):
-            raise ValueError
-    except (TypeError, ValueError) as exc:
-        raise ValueError("heightfield basin must be three whole numbers: column, row, cells") from exc
-    if cells < 1 or x0 < 0 or y0 < 0 or x0 + cells > size - 1 or y0 + cells > size - 1:
-        raise ValueError("heightfield basin must lie inside the grid")
-    return x0, y0, cells
+    return _square(data, "basin")
+
+
+def heightfield_origin(data: Mapping) -> tuple[int, int, int]:
+    """The authored origin: the square of cells the scene's generated landscape starts from (first column, first
+    row, span in cells); the whole grid by default.
+
+    A grid the terrain brush grew past its edge keeps the square it had: the land beyond that square is still the
+    generated landscape (its heights, the distant curvature, the fade of detail and glow are all measured from the
+    origin's edge), now with stored cells over it that the brush can paint. Growing therefore changes nothing on
+    screen; only painting does.
+    """
+    return _square(data, "origin")
+
+
+def heightfield_origin_rect(data: Mapping) -> tuple[float, float, float, float]:
+    """The authored origin in grid uv: (left, front, right, back); (0, 0, 1, 1) for a grid that never grew."""
+    x0, y0, cells = heightfield_origin(data)
+    n1 = int(data["size"]) - 1
+    return x0 / n1, y0 / n1, (x0 + cells) / n1, (y0 + cells) / n1
 
 
 def heightfield_grid_transform(data: Mapping) -> tuple[float, float, float]:
@@ -88,6 +118,13 @@ def heightfield_extent(data: Mapping) -> tuple[float, float, float, float]:
     x0, y0, cells = heightfield_basin(data)
     span = (int(data["size"]) - 1) / cells
     return x0 / cells, span - 1.0 - x0 / cells, y0 / cells, span - 1.0 - y0 / cells
+
+
+def heightfield_origin_extent(data: Mapping) -> tuple[float, float, float, float]:
+    """How far the authored origin reaches past the basin on each side (left, right, front, back), in basin uv."""
+    x0, y0, cells = heightfield_basin(data)
+    ox, oy, span = heightfield_origin(data)
+    return ((x0 - ox) / cells, (ox + span - x0) / cells - 1.0, (y0 - oy) / cells, (oy + span - y0) / cells - 1.0)
 
 
 def sample_heightfield(data: Mapping, u: float, v: float) -> float:

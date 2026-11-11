@@ -108,15 +108,25 @@ def basin_view(parameters, field, *, aperture_scale: float = 1.) -> BasinView:
 # The authored grid may reach past the basin toward the horizon: grid uv = (basin uv + xy) * z.
 # Every distance and constant in these shaders is in basin uv; only heightfield reads convert.
 # A program that never sets the uniform sees the identity (an unextended grid).
+# The generated landscape (continuation, far hills, distant curvature, the fade of detail and glow) belongs to the
+# authored origin: the square the grid had before the terrain brush grew it (uTerrainOrigin, in grid uv; the whole
+# grid otherwise). Stored cells past the origin lie over that landscape, so growing the grid moves nothing.
 _GRID_GLSL = """
 uniform vec3 uTerrainGrid = vec3(0.0, 0.0, 1.0);
+uniform vec4 uTerrainOrigin = vec4(0.0, 0.0, 1.0, 1.0);
 vec2 basinGrid(vec2 uv) { return (uv + uTerrainGrid.xy) * uTerrainGrid.z; }
 #define SCENE_HEIGHTFIELD_GRID(uv) basinGrid(uv)
-// Distance outside the authored grid, in basin uv (0 on it).
+// Distance outside the authored origin, in basin uv (0 on it).
 float basinOutside(vec2 uv) {
+    vec2 grid = basinGrid(uv);
+    return length(grid - clamp(grid, uTerrainOrigin.xy, uTerrainOrigin.zw)) / uTerrainGrid.z;
+}
+// Distance past the stored grid, in basin uv (0 on it): the same as basinOutside until the brush grows the grid.
+float basinPastGrid(vec2 uv) {
     vec2 grid = basinGrid(uv);
     return length(grid - clamp(grid, vec2(0.0), vec2(1.0))) / uTerrainGrid.z;
 }
+bool basinGrown() { return uTerrainOrigin != vec4(0.0, 0.0, 1.0, 1.0); }
 """
 
 _PROJECTION = _GRID_GLSL + f"""
@@ -215,18 +225,46 @@ uniform int uDepthOnly; // shared surface depth prepass for celestial transmissi
 uniform float uPointPx;
 // The artist owns only 0..1. Continue that exact boundary into deterministic
 // land rather than indefinitely clamping a last row of hills (or water).
+// The origin's own cells, read as the grid's edge was before the grid grew past it: samples stop at the origin's
+// square. An ungrown grid takes the ordinary samplers (the origin is the texture).
+ivec4 basinOriginCells() { return ivec4(round(uTerrainOrigin*float(uTerrainSize-1))); }
+vec2 basinOriginTexel(vec2 grid) {
+    // Points on the origin's edge sit on a cell line: snap them, or one side's cells leak into the other's.
+    vec2 p=grid*float(uTerrainSize-1), whole=round(p);
+    return mix(p,whole,lessThan(abs(p-whole),vec2(1e-3)));
+}
+float basinOriginHeight(vec2 grid) {
+    if (!basinGrown()) return sceneHeightfield(uTerrain,uTerrainSize,grid);
+    ivec4 cells=basinOriginCells();
+    vec2 p=clamp(basinOriginTexel(grid),vec2(cells.xy),vec2(cells.zw));
+    ivec2 c0=min(ivec2(floor(p)),cells.zw), c1=min(c0+1,cells.zw);
+    vec2 f=p-vec2(c0);
+    return mix(mix(texelFetch(uTerrain,c0,0).r,texelFetch(uTerrain,ivec2(c1.x,c0.y),0).r,f.x),
+               mix(texelFetch(uTerrain,ivec2(c0.x,c1.y),0).r,texelFetch(uTerrain,c1,0).r,f.x),f.y);
+}
+float basinOriginCurve(vec2 grid) {
+    if (!basinGrown()) return sceneHeightfieldCurve(uTerrain,uTerrainSize,grid);
+    ivec4 cells=basinOriginCells();
+    vec2 p=clamp(basinOriginTexel(grid),vec2(cells.xy),vec2(cells.zw));
+    ivec2 cell=ivec2(floor(p));
+    vec4 wx=sceneHeightfieldWeights(p.x-float(cell.x)),wy=sceneHeightfieldWeights(p.y-float(cell.y));
+    float height=0.0;
+    for (int y=0;y<4;++y) for (int x=0;x<4;++x)
+        height+=wx[x]*wy[y]*texelFetch(uTerrain,clamp(cell+ivec2(x-1,y-1),cells.xy,cells.zw),0).r;
+    return height;
+}
 float basinContinuation(vec2 uv) {
     vec2 grid=basinGrid(uv);
-    vec2 edge=clamp(grid,vec2(0.0),vec2(1.0));
+    vec2 edge=clamp(grid,uTerrainOrigin.xy,uTerrainOrigin.zw);
     vec2 delta=grid-edge;
     float distance=length(delta)/uTerrainGrid.z;
-    float boundary=sceneHeightfield(uTerrain,uTerrainSize,edge);
+    float boundary=basinOriginHeight(edge);
     if (distance<1e-6) return boundary;
     // Water reaching the grid's edge keeps flowing outward to the horizon (a painted stream or coast),
     // never stopping at a wall of rolling land; dry edges roll away as before.
     if (sceneHeightfieldWater(boundary)) return 0.0;
-    vec2 inward=clamp(edge-sign(delta)/float(uTerrainSize-1),vec2(0.0),vec2(1.0));
-    float interior=sceneHeightfield(uTerrain,uTerrainSize,inward);
+    vec2 inward=clamp(edge-sign(delta)/float(uTerrainSize-1),uTerrainOrigin.xy,uTerrainOrigin.zw);
+    float interior=basinOriginHeight(inward);
     // Continue the local edge derivative only in a thin transition strip.
     // Retaining the last border height indefinitely made tall ridges look like
     // mountain-shaped extrusion running to the end of the world.
@@ -244,18 +282,42 @@ float basinContinuation(vec2 uv) {
     float rolling=max(0.025,mix(boundary+nearSlope,backgroundHeight,descent));
     return mix(rolling,basinFarHills(uv),smoothstep(1.1,2.2,distance));
 }
+// The generated landscape's smooth surface: the origin's cubic on it, its continuation past it.
+float basinGeneratedCurve(vec2 uv) {
+    vec2 edge=clamp(basinGrid(uv),uTerrainOrigin.xy,uTerrainOrigin.zw);
+    if (basinOutside(uv)<1e-6) return basinOriginCurve(edge);
+    float base=basinOriginHeight(edge);
+    if (sceneHeightfieldWater(base)) return 0.0;
+    // Exactly continuous with the cubic surface at the editor boundary.
+    float boundary=basinOriginCurve(edge);
+    float continued=max(0.0,boundary+basinContinuation(uv)-base);
+    return mix(continued,basinFarHills(uv),smoothstep(1.1,2.2,basinOutside(uv)));
+}
+// Where a grown grid ends, whatever the brush made of its edge eases back into the generated land over the
+// continuation's descent: nothing at all for an unpainted growth, never a wall at a painted one.
+float basinEdgeCarry(vec2 uv,out vec2 edge,out vec2 edgeUv) {
+    vec2 grid=basinGrid(uv);
+    edge=clamp(grid,vec2(0.0),vec2(1.0));
+    edgeUv=edge/uTerrainGrid.z-uTerrainGrid.xy;
+    return 1.0-smoothstep(CONTINUATION_DESCENT.x,CONTINUATION_DESCENT.y,length(grid-edge)/uTerrainGrid.z);
+}
 float basinBase(vec2 uv) {
-    return basinOutside(uv)<1e-6 ? sceneHeightfield(uTerrain,uTerrainSize,basinGrid(uv))
-                                 : basinContinuation(uv);
+    if (basinPastGrid(uv)<1e-6) return sceneHeightfield(uTerrain,uTerrainSize,basinGrid(uv));
+    float generated=basinContinuation(uv);
+    if (!basinGrown() || sceneHeightfieldWater(generated)) return generated;
+    vec2 edge,edgeUv;
+    float carry=basinEdgeCarry(uv,edge,edgeUv);
+    if (carry<=0.0) return generated;
+    return max(1e-6,generated+carry*(sceneHeightfield(uTerrain,uTerrainSize,edge)-basinContinuation(edgeUv)));
 }
 float basinCurve(vec2 uv) {
-    if (basinOutside(uv)<1e-6) return sceneHeightfieldCurve(uTerrain,uTerrainSize,basinGrid(uv));
-    vec2 edge=clamp(basinGrid(uv),vec2(0.0),vec2(1.0));
-    if (sceneHeightfieldWater(sceneHeightfield(uTerrain,uTerrainSize,edge))) return 0.0;
-    // Exactly continuous with the cubic surface at the editor boundary.
-    float boundary=sceneHeightfieldCurve(uTerrain,uTerrainSize,edge);
-    float continued=max(0.0,boundary+basinContinuation(uv)-sceneHeightfield(uTerrain,uTerrainSize,edge));
-    return mix(continued,basinFarHills(uv),smoothstep(1.1,2.2,basinOutside(uv)));
+    if (basinPastGrid(uv)<1e-6) return sceneHeightfieldCurve(uTerrain,uTerrainSize,basinGrid(uv));
+    float generated=basinGeneratedCurve(uv);
+    if (!basinGrown() || sceneHeightfieldWater(basinContinuation(uv))) return generated;
+    vec2 edge,edgeUv;
+    float carry=basinEdgeCarry(uv,edge,edgeUv);
+    if (carry<=0.0) return generated;
+    return max(0.0,generated+carry*(sceneHeightfieldCurve(uTerrain,uTerrainSize,edge)-basinGeneratedCurve(edgeUv)));
 }
 float basinDetailFade(vec2 uv) {
     // Detail and glow carry well out over the land toward the horizon before settling into its haze.
