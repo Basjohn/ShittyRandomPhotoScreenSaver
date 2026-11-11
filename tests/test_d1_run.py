@@ -1,0 +1,312 @@
+"""``tools/d1_run.py``: the lead's Display 1 run harness, proved without showing a window (1B.14).
+
+Argument handling, the refusals, the profile copy and its settings edits, the crop code on synthetic images, the
+teardown paths (a child that hangs, one that exits early, a guard violation) and the verdict. The real saver is never
+started here; the hidden end-to-end run is the agent's probe, the visible one the lead's.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import psutil
+import pytest
+
+from tools import artifact_paths
+from tools import d1_run
+
+D0 = d1_run.Display(0, "MSI", True, 0, 0, 1707, 960, 1.5)
+D1 = d1_run.Display(1, "LG TV", False, 2560, 0, 2560, 1440, 1.5)
+MONITORS = [d1_run.Monitor(0, 0, 2560, 1440, True, r"\\.\DISPLAY1"),
+            d1_run.Monitor(2560, 0, 6400, 2160, False, r"\\.\DISPLAY2")]
+
+
+# -- arguments --------------------------------------------------------------------------------------------------------
+
+def test_steps_parse_and_malformed_ones_are_usage_errors():
+    assert d1_run.parse_step("12:grab:Steady A") == d1_run.Step(12.0, "grab", "steady_a")
+    assert d1_run.parse_step("3.5:key:esc").arg == "esc"
+    assert d1_run.parse_step("4:click:@visualizerExpandGlyph").arg == "@visualizerExpandGlyph"
+    assert d1_run.parse_target("10, 20") == ("point", 10, 20)
+    for bad in ("12:grab", "x:grab:a", "0:grab:a", "-1:grab:a", "nan:grab:a", "5:jump:a", "5:key:NOPE",
+                "5:click:10", "5:click:@", "5:grab:..."):
+        with pytest.raises(Exception):
+            d1_run.parse_step(bad)
+
+
+def test_the_display_is_required_and_bounds_hold(capsys):
+    for argv in ([], ["--display", "-1"], ["--display", "1", "--seconds", "0"], ["--display", "1", "--seconds", "601"],
+                 ["--display", "1", "--viz-set", "devcurve_bar_count=8"], ["--display", "1", "--zoom", "0"],
+                 ["--display", "1", "--app-arg=--only-display=0"], ["--display", "1", "--diag", "fresh"],
+                 ["--display", "1", "--diag", "exit-after"]):
+        with pytest.raises(SystemExit):
+            d1_run.parse_args(argv)
+    assert d1_run.parse_args(["--list-displays"]).list_displays
+
+
+def test_the_runner_command_forwards_every_option(tmp_path):
+    argv =["--display", "1", "--seconds", "25", "--hidden", "--diag", "perf", "--app-arg=--viz-in-process",
+            "--step", "16:grab:b", "--step", "12:grab:a", "--crop", "left-mid", "--crop", "bottom-right",
+            "--setting", "widgets.global.card_border_width_px=5", "--item", "visualizerCardFrame", "--zoom", "3",
+            "--entry", "main"]
+    args = d1_run.parse_args(argv)
+    assert [step.text() for step in args.step] == ["12:grab:a", "16:grab:b"]            # sorted by time
+    assert args.diag == ["--perf", "--noupdates"]                 # no live network unless --updates
+    assert d1_run.parse_args(["--display", "1", "--updates"]).diag == []
+    with artifact_paths.use_root(tmp_path / ".artifacts"):
+        out = artifact_paths.scratch_root("d1_run") / "run" / "out"     # where the parent points the runner
+        command = d1_run.runner_command(args, out)
+        assert command[1].endswith("d1_run.py") and "--runner" in command
+        forwarded = d1_run.parse_args(command[2:])
+    assert forwarded.out == out.resolve() and forwarded.runner
+    for name in ("display", "seconds", "hidden", "diag", "app_arg", "step", "crop", "setting", "item", "zoom",
+                 "entry", "crop_size", "clip"):
+        assert getattr(forwarded, name) == getattr(args, name), name
+
+
+# -- refusals ---------------------------------------------------------------------------------------------------------
+
+def test_the_display_choice_refuses_one_display_a_missing_index_and_the_primary():
+    assert d1_run.check_display_choice([D0, D1], 1) is D1
+    for displays, index in (([D1], 1), ([D0, D1], 2), ([D0, D1], 0)):
+        with pytest.raises(d1_run.Refusal):
+            d1_run.check_display_choice(displays, index)
+    assert d1_run.check_display_choice([D0, D1], 0, allow_primary=True) is D0
+    with pytest.raises(d1_run.Refusal, match="only 1 display"):
+        d1_run.check_display_choice([D0], 0, allow_primary=True)
+
+
+def test_the_windows_monitor_must_match_exactly_one_and_not_the_primary():
+    assert d1_run.match_monitor(D1, MONITORS) is MONITORS[1]
+    with pytest.raises(d1_run.Refusal, match="matches 0"):
+        d1_run.match_monitor(D1, MONITORS[:1])
+    with pytest.raises(d1_run.Refusal, match="matches 2"):
+        d1_run.match_monitor(D1, [MONITORS[1], MONITORS[1]])
+    # Qt says not primary but Windows does: still refused.
+    swapped = [MONITORS[0], d1_run.Monitor(2560, 0, 6400, 2160, True, r"\\.\DISPLAY2")]
+    with pytest.raises(d1_run.Refusal, match="primary"):
+        d1_run.match_monitor(D1, swapped)
+
+
+def test_the_plan_refuses_late_steps_hidden_desktop_grabs_and_unknown_settings():
+    def plan(*argv):
+        d1_run.check_plan(d1_run.parse_args(["--display", "1", "--seconds", "20", *argv]))
+
+    plan("--step", "15:grab:a", "--crop", "left-mid", "--setting", "widgets.global.card_border_width_px=5")
+    for argv in (["--step", "18:grab:a"], ["--hidden", "--step", "5:screen:a"], ["--crop", "left-mid"],
+                 ["--setting", "widgets.global.no_such_key=1"],
+                 ["--mode", "devcurve", "--setting", "widgets.spotify_visualizer.devcurve_bar_border_opacity=1.0"]):
+        with pytest.raises(d1_run.Refusal):
+            plan(*argv)
+
+
+# -- the profile copy and its edits -----------------------------------------------------------------------------------
+
+def _fake_appdata(tmp_path) -> Path:
+    appdata = tmp_path / "appdata"
+    (appdata / "SRPSS").mkdir(parents=True)
+    (appdata / "SRPSS_MC").mkdir()
+    for folder in ("SRPSS", "SRPSS_MC"):
+        (appdata / folder / "settings_v2.json").write_text(json.dumps(
+            {"snapshot": {"widgets": {"spotify_visualizer": {"mode": "bubble", "preset_bubble": 0}}}}))
+    return appdata
+
+
+def test_settings_are_written_to_the_copy_through_the_settings_manager_and_read_back(tmp_path, qt_app):
+    from core.settings import SettingsManager
+
+    applied = d1_run.apply_settings([("widgets.global.card_border_width_px", 5),
+                                     ("widgets.spotify_visualizer.expanded_display_requested", True)],
+                                    application="Screensaver_MC", storage_base_dir=tmp_path / "copy")
+    assert applied["widgets.global.card_border_width_px"]["after"] == 5
+    assert Path(applied["_path"]) == (tmp_path / "copy" / "SRPSS_MC" / "settings_v2.json").resolve()
+    reopened = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path / "copy")
+    reopened.load()
+    assert reopened.get("widgets.global.card_border_width_px") == 5
+    assert reopened.get("widgets.spotify_visualizer.expanded_display_requested") is True
+    with pytest.raises(KeyError):
+        d1_run.apply_settings([("widgets.global.no_such_key", 1)], application="Screensaver_MC",
+                              storage_base_dir=tmp_path / "copy")
+
+
+def test_the_main_entry_edits_its_own_profile_and_the_source_is_never_touched(tmp_path):
+    from tools.visualizer_live_check import _prepare_profile
+
+    appdata = _fake_appdata(tmp_path)
+    before = {folder: (appdata / folder / "settings_v2.json").read_text() for folder in ("SRPSS", "SRPSS_MC")}
+    root = _prepare_profile(tmp_path / "run", "devcurve", 2, {}, appdata_root=appdata, settings_folder="SRPSS")
+    ordinary = json.loads((root / "SRPSS" / "settings_v2.json").read_text())["snapshot"]["widgets"]
+    assert ordinary["spotify_visualizer"]["mode"] == "devcurve"
+    assert ordinary["spotify_visualizer"]["preset_devcurve"] == 1
+    assert json.loads((root / "SRPSS_MC" / "settings_v2.json").read_text()) == json.loads(before["SRPSS_MC"])
+    plain = _prepare_profile(tmp_path / "run2", None, None, {}, appdata_root=appdata)
+    assert (plain / "SRPSS_MC" / "settings_v2.json").read_text() == before["SRPSS_MC"]
+    assert {folder: (appdata / folder / "settings_v2.json").read_text() for folder in before} == before
+
+
+# -- crops on synthetic images ----------------------------------------------------------------------------------------
+
+def test_named_points_and_crops_stay_on_the_rectangle_and_inside_the_image():
+    rect = (100.0, 50.0, 400.0, 200.0)
+    assert d1_run.anchor_point(rect, "left-mid") == (100.0, 150.0)
+    assert d1_run.anchor_point(rect, "bottom-mid") == (300.0, 250.0)
+    assert d1_run.anchor_point(rect, "bottom-left") == (100.0, 250.0)
+    assert d1_run.anchor_point(rect, "bottom-right") == (500.0, 250.0)
+    assert d1_run.anchor_point(rect, "top-right") == (500.0, 50.0)
+    assert d1_run.anchor_point(rect, "center") == (300.0, 150.0)
+    assert d1_run.crop_rect(rect, "left-mid", 32, (1000, 600)) == (84, 134, 32, 32)
+    assert d1_run.crop_rect((0.0, 0.0, 1000.0, 600.0), "bottom-right", 32, (1000, 600)) == (968, 568, 32, 32)
+    assert d1_run.crop_rect((0.0, 0.0, 1000.0, 600.0), "top-left", 32, (1000, 600)) == (0, 0, 32, 32)
+    with pytest.raises(ValueError):
+        d1_run.crop_rect(rect, "middle", 32, (1000, 600))
+
+
+def test_a_zoomed_crop_is_the_source_pixels_in_exact_blocks(qt_app):
+    from PySide6.QtGui import QColor, QImage
+
+    image = QImage(64, 48, QImage.Format.Format_ARGB32)
+    for y in range(48):
+        for x in range(64):
+            image.setPixelColor(x, y, QColor((x * 4) % 256, (y * 5) % 256, (x + y) % 256))
+    image.setDevicePixelRatio(1.5)                           # as grabWindow returns it: the crop must ignore it
+    rect = d1_run.crop_rect((10.0, 8.0, 40.0, 30.0), "bottom-left", 8, (64, 48))
+    zoomed = d1_run.zoom_crop(image, rect, 4)
+    assert (zoomed.width(), zoomed.height()) == (32, 32)
+    x0, y0 = rect[:2]
+    for zy in range(32):
+        for zx in range(32):
+            assert zoomed.pixelColor(zx, zy) == image.pixelColor(x0 + zx // 4, y0 + zy // 4), (zx, zy)
+
+
+# -- teardown ---------------------------------------------------------------------------------------------------------
+
+def _child(tmp_path, body: str) -> list[str]:
+    script = tmp_path / "child.py"
+    script.write_text(body, encoding="utf-8")
+    return [sys.executable, str(script)]
+
+
+def test_a_child_that_hangs_is_ended_by_the_watchdog_and_nothing_is_left(tmp_path):
+    command = _child(tmp_path, "import subprocess, sys, time\n"
+                               "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+                               "time.sleep(120)\n")
+    seen = {}
+
+    def guard(pids):
+        seen.setdefault("pids", set()).update(pids)
+        return []
+
+    outcome = d1_run.supervise(command, log_path=tmp_path / "runner.txt", deadline_s=3.0, guard=guard)
+    assert outcome["ended"] == "watchdog" and outcome["seconds"] < 30
+    assert not psutil.pid_exists(outcome["pid"]) or psutil.Process(outcome["pid"]).status() == psutil.STATUS_ZOMBIE
+    for pid in seen["pids"]:                                  # the grandchild went with the tree
+        assert not psutil.pid_exists(pid) or not psutil.Process(pid).is_running()
+
+
+def test_a_child_that_exits_early_is_a_failure_with_its_code(tmp_path):
+    outcome = d1_run.supervise(_child(tmp_path, "import sys\nprint('bye')\nsys.exit(3)\n"),
+                               log_path=tmp_path / "runner.txt", deadline_s=60.0)
+    assert outcome == {**outcome, "ended": "exited", "returncode": 3, "violation": None}
+    assert "bye" in (tmp_path / "runner.txt").read_text()
+    verdict = d1_run.analyse_run(tmp_path, outcome, [d1_run.Step(5.0, "grab", "a")])
+    assert any("exited with code 3" in failure for failure in verdict["failures"])
+    assert any("never revealed" in failure for failure in verdict["failures"])
+    assert any("never ran" in failure for failure in verdict["failures"])
+
+
+def test_a_guard_violation_kills_the_run(tmp_path):
+    outcome = d1_run.supervise(_child(tmp_path, "import time\ntime.sleep(120)\n"), log_path=tmp_path / "runner.txt",
+                               deadline_s=60.0, guard=lambda pids: ["hwnd 1 on monitor (0, 0, 2560, 1440)"])
+    assert outcome["ended"] == "guard" and outcome["violation"] and outcome["seconds"] < 30
+    verdict = d1_run.analyse_run(tmp_path, outcome, [])
+    assert any("left the chosen display" in failure for failure in verdict["failures"])
+
+
+# -- the verdict ------------------------------------------------------------------------------------------------------
+
+def _state(tmp_path, *, events=("initialized", "reveal", "armed", "exit_after_stop", "finish"), results=None):
+    steps = [d1_run.Step(5.0, "grab", "a")]
+    state = {"events": [{"event": name, "at": i} for i, name in enumerate(events)],
+             "results": results if results is not None else [{"index": 0, "step": "5:grab:a", "ok": True}],
+             "received": None}
+    (tmp_path / d1_run.STATE_NAME).write_text(json.dumps(state))
+    (tmp_path / "logs").mkdir(exist_ok=True)
+    (tmp_path / "logs" / "screensaver_frame_trace.bin").write_bytes(b"trace")
+    return steps
+
+
+def test_a_complete_run_passes_and_each_missing_piece_fails_it(tmp_path):
+    ok = {"ended": "exited", "returncode": 0, "violation": None}
+    steps = _state(tmp_path)
+    assert d1_run.analyse_run(tmp_path, ok, steps)["failures"] == []
+    _state(tmp_path, events=("initialized", "reveal", "armed", "finish"))
+    assert any("--exit-after" in f for f in d1_run.analyse_run(tmp_path, ok, steps)["failures"])
+    _state(tmp_path, results=[{"index": 0, "step": "5:grab:a", "ok": False, "error": "no item"}])
+    assert any("failed: no item" in f for f in d1_run.analyse_run(tmp_path, ok, steps)["failures"])
+    _state(tmp_path)
+    (tmp_path / "logs" / "native_faults.log").write_text("Windows fatal exception: access violation\n")
+    assert any("native fault" in f for f in d1_run.analyse_run(tmp_path, ok, steps)["failures"])
+    (tmp_path / "logs" / "native_faults.log").unlink()
+    (tmp_path / "logs" / "screensaver_frame_trace.bin").unlink()
+    assert any("frame trace" in f for f in d1_run.analyse_run(tmp_path, ok, steps)["failures"])
+    _state(tmp_path)
+    assert any("watchdog" in f for f in d1_run.analyse_run(tmp_path, {**ok, "ended": "watchdog"}, steps)["failures"])
+
+
+def test_posted_input_the_window_never_received_fails_a_visible_run_and_is_noted_in_a_hidden_one(tmp_path):
+    ok = {"ended": "exited", "returncode": 0, "violation": None}
+    _state(tmp_path, results=[{"index": 0, "step": "5:move:1,1", "ok": True}])
+    steps = [d1_run.Step(5.0, "move", "1,1")]
+    state = json.loads((tmp_path / d1_run.STATE_NAME).read_text())
+    state["received"] = {"mouse_move": 0, "key_press": 0}
+    (tmp_path / d1_run.STATE_NAME).write_text(json.dumps(state))
+    visible = d1_run.analyse_run(tmp_path, ok, steps)
+    hidden = d1_run.analyse_run(tmp_path, ok, steps, hidden=True)
+    assert any("no mouse event" in f for f in visible["failures"])
+    assert hidden["failures"] == [] and any("no mouse event" in n for n in hidden["notes"])
+    state["received"]["mouse_move"] = 2
+    (tmp_path / d1_run.STATE_NAME).write_text(json.dumps(state))
+    assert d1_run.analyse_run(tmp_path, ok, steps)["failures"] == []
+
+
+# -- the parent end to end, with the child and the displays faked ------------------------------------------------------
+
+def _main(monkeypatch, tmp_path, argv, *, displays=(D0, D1), outcome=None):
+    monkeypatch.setattr(d1_run, "enumerate_displays", lambda: list(displays))
+    monkeypatch.setattr(d1_run, "win32_monitors", lambda: list(MONITORS))
+    launched = []
+
+    def supervise(command, **kwargs):
+        launched.append((command, kwargs))
+        out = Path(command[command.index("--out") + 1])
+        launched.append(("profile_during_run", (out / "profile" / "SRPSS_MC" / "settings_v2.json").is_file()))
+        return outcome or {"ended": "exited", "returncode": 1, "violation": None, "pid": 0, "seconds": 0.1}
+
+    monkeypatch.setattr(d1_run, "supervise", supervise)
+    with artifact_paths.use_root(tmp_path / ".artifacts"):
+        out = artifact_paths.evidence_dir("display", "d1_run", "unit")
+        code = d1_run.main(["--display", "1", "--profile", str(_fake_appdata(tmp_path)), "--out", str(out), *argv])
+        from tools import evidence_media
+        evidence_media._PENDING.clear()          # the CLI's finish() is not part of main(); nothing is published here
+    return code, launched
+
+
+def test_a_refused_display_starts_nothing_and_leaves_nothing(monkeypatch, tmp_path):
+    code, launched = _main(monkeypatch, tmp_path, [], displays=(D1,))
+    assert code == 2 and launched == []
+    assert not (tmp_path / ".artifacts").exists()
+
+
+def test_a_failed_run_still_deletes_the_profile_copy_and_keeps_its_settings(monkeypatch, tmp_path):
+    code, launched = _main(monkeypatch, tmp_path, ["--mode", "devcurve", "--step", "5:grab:a"])
+    assert code == 3
+    command, kwargs = launched[0]
+    assert launched[1] == ("profile_during_run", True)
+    assert kwargs["deadline_s"] > 30 and kwargs["guard"] is not None
+    out = Path(command[command.index("--out") + 1])
+    assert not (out / "profile").exists(), "the profile copy outlived the run"
+    mc = json.loads((out / "run_settings_v2_mc.json").read_text())
+    assert mc["snapshot"]["widgets"]["spotify_visualizer"]["mode"] == "devcurve"
+    summary = json.loads((out / "summary.json").read_text())
+    assert summary["failures"] and json.loads((out / "plan.json").read_text())["display"]["index"] == 1

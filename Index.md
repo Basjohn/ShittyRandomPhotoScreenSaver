@@ -162,7 +162,8 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | GODZIP Foundry quick-launch Foundries / GUI tools | `Docs/Reference/Harness_Index.md` → GODZIP Foundry operator commands |
 | friendly 60-second music capture / full waveform replay | `tools/music_recorder.py`; `Docs/Reference/Harness_Index.md` |
 | benchmarks: cost baselines, the lifecycle contract, reading results, expected results | `Docs/Reference/Benchmarks.md` |
-| bounded self-terminating RUN / repeated startup-teardown acceptance | `Docs/Reference/Harness_Index.md` → Bounded self-terminating RUN sessions (`main_mc.py`, `tools/run_matrix.py`, `--exit-after`) |
+| bounded self-terminating RUN / repeated startup-teardown acceptance | `Docs/Reference/Harness_Index.md` → Bounded self-terminating RUN sessions (`main_mc.py`, `tools/run_matrix.py`, `--exit-after`, `--only-display`) |
+| the lead's bounded run on Display 1: frames, posted input, logs | `tools/d1_run.py`; `Docs/Reference/Harness_Index.md` → Display 1 run harness |
 | Steam source/auth/privacy contract | `Docs/Reference/Steam_Source_Contracts.md` |
 | Friend Pulse current contract | `Docs/Reference/Steam_Friend_Pulse.md` |
 | System Stats current contract | `Docs/Reference/System_Stats_Widget.md` |

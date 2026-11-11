@@ -900,7 +900,19 @@ class DisplayManager(QObject):
         self._schedule_monitor_reconcile("applicationStateChanged")
 
     def _get_allowed_screen_indices(self, screen_count: int) -> set[int]:
-        """Resolve physical saver selection before admitting any Quick resources."""
+        """Resolve physical saver selection before admitting any Quick resources.
+
+        ``--only-display <index>`` (RUN only, ``core.diagnostics.experiment_flags``) replaces the profile's selection
+        with that one screen for the run; an index no current screen has admits nothing (never another display).
+        """
+        from core.diagnostics.experiment_flags import only_display_index
+
+        forced = only_display_index()
+        if forced is not None:
+            allowed = {forced} if 0 <= forced < screen_count else set()
+            logger.info("[DISPLAY] --only-display %d allowed screen indices=%s (screens=%d)",
+                        forced, sorted(allowed), screen_count)
+            return allowed
         from core.settings.display_selection import resolve_monitor_numbers, enabled_monitor_numbers
         if self.settings_manager is None:
             numbers = enabled_monitor_numbers(require_canonical_default("display.show_on_monitors"), screen_count)
