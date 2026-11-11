@@ -26,8 +26,13 @@ GROWTH_HEIGHT = (0.30, 0.72)
 GROWTH_CELL = (1.05, 0.70)
 GROWTH_SHARPNESS = (1.0, 2.6)   # the site profile's power: a rounded dome to a slender peak
 INDENT_CELL = 0.85
-# Indents sink visible land toward its floor share: this much of the way at full drive in a dent's middle.
-INDENT_DEPTH = 1.0
+# Indents carve bowls into visible land. The depth law, at full drive in a bowl's middle: a share of the land's own
+# height there plus an absolute depth (a share of Terrain Height), eased onto a floor share of the authored height.
+# The share alone left low land (dunes a tenth of the height scale) with dips too shallow to see; the absolute term
+# is what carves them, and the floor is what keeps every bowl dry land above the water plane.
+INDENT_SHARE = 0.45
+INDENT_ABSOLUTE = 0.24
+INDENT_FLOOR = 0.10
 
 
 # Growth stands back from the eye: nothing within the first distance (world units, along the ground), whole by
@@ -154,7 +159,9 @@ const vec2 GROWTH_HEIGHT = vec2({GROWTH_HEIGHT[0]:.6f}, {GROWTH_HEIGHT[1]:.6f});
 const vec2 GROWTH_CELL = vec2({GROWTH_CELL[0]:.6f}, {GROWTH_CELL[1]:.6f});
 const vec2 GROWTH_SHARPNESS = vec2({GROWTH_SHARPNESS[0]:.6f}, {GROWTH_SHARPNESS[1]:.6f});
 const float INDENT_CELL = {INDENT_CELL:.6f};
-const float INDENT_DEPTH = {INDENT_DEPTH:.6f};
+const float INDENT_SHARE = {INDENT_SHARE:.6f};
+const float INDENT_ABSOLUTE = {INDENT_ABSOLUTE:.6f};
+const float INDENT_FLOOR = {INDENT_FLOOR:.6f};
 // The tables are read through the land's own cubic filter: a weight that changes along the slope does so with a
 // continuous slope and curvature, so the surface it scales keeps continuous normals.
 vec4 reactionFilter(float t) {{
@@ -191,20 +198,33 @@ float basinSites(vec2 p, float cell, float sharpness, float drive, uint seed) {{
     }}
     return total;
 }}
+// The music's landforms give way round the eye (0 beside it, 1 clear of it) instead of moving the camera floor.
+float reactionEyeClear(vec2 p) {{
+    return smoothstep({GROWTH_EYE_CLEAR[0]:.6f}, {GROWTH_EYE_CLEAR[1]:.6f}, length(p - uEye.xz));
+}}
 // Growth, in Terrain Height units: mounds to spires by its shape.
 float basinGrowth(vec2 p) {{
     if (uReactionForms.x <= 0.0) return 0.0;
     float shape = uReactionForms.y;
-    float clear = smoothstep({GROWTH_EYE_CLEAR[0]:.6f}, {GROWTH_EYE_CLEAR[1]:.6f}, length(p - uEye.xz));
+    float clear = reactionEyeClear(p);
     if (clear <= 0.0) return 0.0;
     return clear * uReactionForms.x * mix(GROWTH_HEIGHT.x, GROWTH_HEIGHT.y, shape)
            * basinSites(p, mix(GROWTH_CELL.x, GROWTH_CELL.y, shape), mix(GROWTH_SHARPNESS.x, GROWTH_SHARPNESS.y, shape),
                         uReactionDrives.x, 11u);
 }}
-// Indents: how far toward its floor share the land is pressed in, 0..1.
+// Indents: how hard the land is pressed in here, 0 (not at all) .. 1 (a bowl's middle at full drive).
 float basinIndent(vec2 p) {{
     if (uReactionForms.z <= 0.0) return 0.0;
-    return min(1.0, uReactionForms.z * INDENT_DEPTH * basinSites(p, INDENT_CELL, 1.0, uReactionDrives.y, 29u));
+    float clear = reactionEyeClear(p);
+    if (clear <= 0.0) return 0.0;
+    return clear * min(1.0, uReactionForms.z * basinSites(p, INDENT_CELL, 1.0, uReactionDrives.y, 29u));
+}}
+// How far that press sinks land standing at ``height`` whose authored height is ``authored`` (both world units;
+// ``scale`` is Terrain Height): a share of the authored height plus an absolute depth, eased onto the floor share
+// so a bowl in low land flattens toward the water plane without ever reaching it.
+float basinIndentDepth(float press, float height, float authored, float scale) {{
+    float space = max(height - INDENT_FLOOR * authored, 1e-6);
+    return space * tanh(press * (INDENT_SHARE * authored + INDENT_ABSOLUTE * scale) / space);
 }}
 // Each lane reshapes with its own pattern: low lanes heave broad ground up and down, high lanes
 // lift finer crests. Signed patterns raise some places and lower others, so the land changes shape.
