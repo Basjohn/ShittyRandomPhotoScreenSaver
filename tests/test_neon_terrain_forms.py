@@ -7,6 +7,7 @@ the track, no presence ratio (``musical_weight``) gates them, everything ramps, 
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -121,18 +122,20 @@ def test_the_same_music_draws_the_same_landforms_wherever_in_a_song_it_falls():
         song = _Song()
         for seconds, intensity, loudness in prelude:
             song.play(seconds, intensity, kicks=[0.5 * k for k in range(int(seconds * 2))], loudness=loudness)
-        song.play(8.0, 0.85)                                                   # settle into the chorus
+        song.play(14.0, 0.85)                                                  # the followers settle into the chorus
         start = len(song.trace)
         song.play(3.0, 0.85, kicks=kicks)
-        return song.trace[start:]
+        growth = [g for g, _i in song.trace[start:]]
+        indent = [i for _g, i in song.trace[start:]]
+        # The kicks' swing and the passage's level (a kick lands a frame earlier or later with the clock's phase,
+        # so the traces are compared by what they show, not frame for frame).
+        return (min(growth), max(growth), sum(growth) / len(growth), min(indent), max(indent))
 
     opening = chorus([])
     after_loud = chorus([(60.0, 1.0, 2.0 * MUSICAL_USUAL_LOUDNESS)])
     after_quiet = chorus([(30.0, 0.1, 0.5), (5.0, 0.0, 0.0)])
-    for other in (after_loud, after_quiet):
-        assert max(abs(a[0] - b[0]) + abs(a[1] - b[1]) for a, b in zip(opening, other)) < 1e-6
-    growth = [g for g, _i in opening]
-    assert max(growth) - min(growth) > 0.08                                    # the kicks read
+    assert after_loud == pytest.approx(opening, abs=0.004) and after_quiet == pytest.approx(opening, abs=0.004)
+    assert opening[1] - opening[0] > 0.08                                      # the kicks read
 
 
 def test_the_drives_do_not_depend_on_how_the_capture_clock_is_cut():
@@ -156,13 +159,6 @@ def test_off_the_landforms_keep_nothing_and_collect_no_onsets():
     assert song.trace[-1][0] > 0.3
     song.forms = False
     assert song.play(STEP, 1.0) == (0.0, 0.0) and not runtime.terrain_reaction_pending
-
-
-def test_the_frame_carries_two_bounded_drives():
-    frame = ShockwaveGridFrame(bars=(0.1,), bar_count=1, terrain_forms=(0.25, 0.5)) if False else None
-    assert frame is None
-    with pytest.raises(ValueError):
-        ShockwaveGridFrame.__post_init__(SimpleNamespace(terrain_forms=(0.1,)))  # type: ignore[arg-type]
 
 
 def _capture(parameters, monkeypatch, intensity=1.0):
@@ -189,12 +185,15 @@ def test_the_capture_feeds_the_drives_from_the_passage_alone(monkeypatch):
         frame, extra = capture._capture_shockwave_grid(widget, engine, context(10.0 + k * STEP))
     assert frame.terrain_forms[0] > 0.3 and frame.terrain_bands == (0.0,) * 5
     assert runtime.terrain_reaction_pending or frame.terrain_forms[0] == pytest.approx(FORMS_CEILING * 0.62, abs=0.02)
+    # The frame admits exactly two drives within 0..1.
+    assert isinstance(frame, ShockwaveGridFrame)
+    for broken in ((0.1,), (0.1, 1.2), (-0.1, 0.0), (0.1, math.nan)):
+        with pytest.raises(ValueError):
+            replace(frame, terrain_forms=broken)
     # Amounts at zero (or the reaction off): no drive, nothing kept.
+    on = dict(parameters)
     for change in ({"shockwave_grid_terrain_growth": 0.0}, {"shockwave_grid_terrain_reaction_enabled": False},
                    {"shockwave_grid_terrain_reaction_strength": 0.0}):
-        parameters.update(_reaction_parameters(shockwave_grid_terrain_peaks=0.0, shockwave_grid_terrain_pulses=0.0,
-                                               shockwave_grid_terrain_swell=0.0, shockwave_grid_terrain_growth=0.8,
-                                               **change))
+        parameters.update({**on, **change})
         off, _extra = capture._capture_shockwave_grid(widget, engine, context(20.0))
         assert off.terrain_forms == (0.0, 0.0) and not runtime._forms_on
-    assert math.isfinite(sum(off.terrain_forms))

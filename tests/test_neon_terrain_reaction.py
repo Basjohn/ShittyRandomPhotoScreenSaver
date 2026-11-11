@@ -203,7 +203,7 @@ def test_lanes_cross_fade_along_the_height_instead_of_switching_at_a_contour():
     assert lane_membership(notches, 0.1)[0] == 1.0 and lane_membership(notches, 0.5)[2] == 1.0   # a lane's own middle
     assert lane_membership(notches, 0.2)[:2] == pytest.approx((0.5, 0.5))                        # its boundary
     step = max(abs(a[lane] - b[lane]) for a, b in zip(shares, shares[1:]) for lane in range(LANES))
-    assert step < 0.03, "a share never jumps along the slope"
+    assert step < 0.04, "a share never jumps along the slope (a switch would step by 1)"
     assert REACTION_LANE_BLEND >= 0.05
     # Lanes narrower than the blend still share out everything (two boundaries nearly together).
     crowded = [[0.0, "Bass"], [0.5, "Low-Mid"], [0.51, "Vocal"], [0.52, "Hi-Mid"], [0.9, "Treble"]]

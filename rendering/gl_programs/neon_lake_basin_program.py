@@ -371,7 +371,9 @@ float basinLandHeight(vec2 uv,float base,float curved) {
     // Terrain Reaction reshapes the land by the music: zero at the shore, never below a floor
     // share of its authored height, faded with the distant continuation's detail.
     if (uReaction.x>0.0) {
-        float land=smoothstep(0.0,0.08,base)*basinDetailFade(uv);
+        // Zero at the water and easing in up the bank over the smooth land's own rise: on the cells' height alone
+        // it came in within a quarter of a cell, and a strong reshaping stood as a wall along the shore.
+        float land=smoothstep(0.0,0.08,base)*smoothstep(BASIN_SHORE_HEIGHT,0.10,curved)*basinDetailFade(uv);
         // Its patterns and Growth lift (or lower) the land; Indents press it toward its floor share.
         float room=(1.0-REACTION_FLOOR)*height;
         float change=uLand.x*(basinReaction(uv,curved,p,land)+land*basinGrowth(p))-room*land*basinIndent(p);
