@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import logging
+import sys
 from typing import Any
 
 from PySide6.QtCore import QEvent, QMetaObject, QObject, QPointF, QRect, QRectF, Signal, SIGNAL, Slot, Qt
@@ -83,6 +84,8 @@ class QuickDisplayWindow(QQuickWindow):
         self._framed_scene_filter_installed = False
         self._desired_visible = False
         self._close_queued = False
+        # Set on the first real show: only a window that was on screen can have given Windows a cursor.
+        self._native_window_shown = False
         self._scene_rect: QRectF | None = None
         # Logical rects this window's own R-63 placement produced. The native
         # device-pixel correction applies only while the window still has one
@@ -489,9 +492,20 @@ class QuickDisplayWindow(QQuickWindow):
         capture Windows sends no ``WM_SETCURSOR`` to the window under the pointer.
         Releasing the window grab drops that capture too. The window then ends on the
         arrow, and ``_retiring_pointer_event`` keeps it there until the HWND is gone.
+
+        ``setCursor`` is only a Qt property unless Qt believes the pointer is over this window, and
+        Windows never re-queries a still pointer after the window hides or the process ends (R-183), so
+        on Windows the arrow is also given to Windows itself, here, while the HWND exists.
         """
         self.setMouseGrabEnabled(False)
         self.setCursor(Qt.CursorShape.ArrowCursor)
+        if sys.platform == "win32" and self._native_window_shown:
+            from .pointer_capture import show_native_arrow_for_retiring_window
+
+            try:
+                show_native_arrow_for_retiring_window(int(self.winId()))
+            except Exception:
+                logger.exception("[CURSOR] Native arrow for the retiring window failed")
 
     def _retiring_pointer_event(self, kind: QEvent.Type) -> bool:
         """Fence a retiring window: no hover delivery, and the arrow is the only cursor.
@@ -983,6 +997,8 @@ class QuickDisplayWindow(QQuickWindow):
         self.refresh_display_identity()
 
     def _on_window_visibility_changed(self, visible: bool) -> None:
+        if visible:
+            self._native_window_shown = True
         if not visible or not self._desired_visible or self._close_queued:
             return
         self._apply_native_compat_geometry()
