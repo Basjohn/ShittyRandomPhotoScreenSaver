@@ -160,6 +160,48 @@ def test_commit_session_writes_content_sized_move_and_explicit_resize_forms():
     assert "_placement_anchor" not in payload
 
 
+def _shared_copy(display_identity: str, x: int) -> CustomLayoutSessionItem:
+    return CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("weather", display_identity), model_identity="weather",
+        baseline_global_rect=QRect(x + 20, 30, 200, 100), current_global_rect=QRect(x + 20, 30, 200, 100),
+        baseline_size_payload={}, current_size_payload={}, baseline_enabled=True, current_enabled=True,
+        source_monitor_route="ALL", current_monitor_route="ALL")
+
+
+@pytest.mark.parametrize("close_session_copy", [True, False])
+def test_a_copy_held_outside_the_session_counts_as_its_session_item_would(close_session_copy):
+    """Plan 1B.1: an Edit beside an expanded Visualizer leaves that display's copy of a shared widget outside the
+    session. The X on the session copy and Save resolve the route exactly as the same edit in a global Edit."""
+    descriptor = get_widget_runtime_descriptor("weather")
+    assert descriptor is not None
+    displays = {"screen:a": (("screen:a",), QRect(0, 0, 1000, 600), "1"),
+                "screen:b": (("screen:b",), QRect(1000, 0, 1000, 600), "2")}
+
+    def committed(*, held: bool) -> dict:
+        session = CustomLayoutSession()
+        copies = [_shared_copy("screen:a", 0)] + ([] if held else [_shared_copy("screen:b", 1000)])
+        for copy in copies:
+            session.add_item(copy)
+        session.hold_copies({"weather": 1} if held else {})
+        session.refresh_duplicate_state()
+        assert copies[0].is_duplicate
+        if close_session_copy:
+            copies[0].apply_remove_action()
+            assert copies[0].removed and copies[0].current_enabled
+        widgets = {"weather": {"enabled": True, "position": "Top Left", "monitor": "ALL"}}
+        commit_custom_session(widgets, session, {copy.source_key: descriptor for copy in copies},
+                              {key: value for key, value in displays.items() if not held or key == "screen:a"},
+                              held={"weather": (displays["screen:b"],)} if held else None)
+        return widgets
+
+    held, global_edit = committed(held=True), committed(held=False)
+    assert held["weather"]["enabled"] is global_edit["weather"]["enabled"] is True
+    assert held["weather"]["monitor"] == global_edit["weather"]["monitor"] == ("2" if close_session_copy else "ALL")
+    assert held.get("monitor_bindings") == global_edit.get("monitor_bindings")
+    # The held display's own entries are never written.
+    assert "screen:b" not in held.get("custom_layout", {}).get("displays", {})
+
+
 def test_snap_local_rect_for_edit_snaps_to_display_edges_and_grid():
     display_size = QSize(1000, 600)
 

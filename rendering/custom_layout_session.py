@@ -448,6 +448,24 @@ class CustomLayoutSessionItem:
         self.child_content_requirement = None
         self.removed = False
 
+    def matches_baseline(self) -> bool:
+        """True while every value ``restore_baseline`` restores is still the admitted one (nothing to lose)."""
+
+        return (
+            self.current_display_identity == self.source_key.display_identity
+            and self.current_monitor_route == self.source_monitor_route
+            and self.current_global_rect == self.baseline_global_rect
+            and self.current_size_payload == self.baseline_size_payload
+            and self.current_enabled == self.baseline_enabled
+            and self.resize_scale == self.baseline_resize_scale
+            and self.current_viewport_extent == self.baseline_viewport_extent
+            and self.current_content_extent == self.baseline_content_extent
+            and self.current_child_sizes == self.baseline_child_sizes
+            and self.content_sized == self.baseline_content_sized
+            and self.placement_anchor == self.baseline_placement_anchor
+            and not self.removed
+        )
+
     def restore_authored_size(
         self,
         global_rect: QRect,
@@ -488,6 +506,23 @@ class CustomLayoutSession:
         self._selection_listeners: list[
             Callable[[CustomLayoutSessionItem | None], None]
         ] = []
+        # Copies of a widget on displays this session does not edit (an Edit
+        # beside an expanded Visualizer, plan 1B.1): they count as survivors,
+        # so the X on a session copy removes only that copy, as in a global Edit.
+        self._held_copies: dict[str, int] = {}
+
+    def hold_copies(self, counts: Mapping[str, int]) -> None:
+        """Record, per widget id, the copies held on displays outside this session."""
+
+        self._held_copies = {str(widget_id): int(count) for widget_id, count in counts.items() if int(count) > 0}
+
+    def held_copies(self, widget_id: str) -> int:
+        return self._held_copies.get(str(widget_id), 0)
+
+    def has_changes(self) -> bool:
+        """Any item differs from what the session admitted (the state Cancel restores)."""
+
+        return any(not item.matches_baseline() for item in self._items.values())
 
     def add_item(self, item: CustomLayoutSessionItem) -> None:
         if item.source_key in self._items:
@@ -599,7 +634,7 @@ class CustomLayoutSession:
                 item.current_enabled
                 and not item.removed
                 and not item.profile_parked
-                and len(grouped.get(item.model_identity, ())) > 1
+                and len(grouped.get(item.model_identity, ())) + self.held_copies(item.model_identity) > 1
             )
 
     def restore_baseline(self) -> None:

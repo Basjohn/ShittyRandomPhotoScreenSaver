@@ -452,7 +452,8 @@ def test_double_right_edit_shortcut_dismisses_menu_before_starting_editor(monkey
     model = SimpleNamespace(dismiss=lambda: order.append("dismiss") or True)
     unit = SimpleNamespace(runtime=SimpleNamespace(context_menu_model=model))
     manager = SimpleNamespace(
-        _start_quick_custom_layout_session=lambda: order.append("start") or True
+        # Edit is entered on the display the shortcut came from (plan 1B.1).
+        _start_quick_custom_layout_session=lambda entry: order.append("start") or entry is unit
     )
     guards: list[tuple[int, str]] = []
     monkeypatch.setattr(

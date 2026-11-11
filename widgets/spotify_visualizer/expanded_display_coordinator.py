@@ -24,6 +24,9 @@ translates the facts in and performs the actions it returns through the existing
   display manager then opens the Edit session on the full-display overlays only (``fullscreen_edit``). A collapse
   press under it is answered through the Edit session (declined: its draft and Edit stay); the one forced end
   (an incapable mode became the Visualizer's) ends the session through ``end_fullscreen_edit``.
+* An Edit beside the view (plan 1B.1): Edit entered on another display while the view rests expanded edits that
+  display's ordinary layout (``edit_elsewhere``); the view stays expanded and running outside the session, with
+  Fullscreen Edit's holds.
 
 Fences (§0.5): the takeover generation is this coordinator's own admission serial, advanced at every owner
 admission (a Settings return or topology change replaces the display manager, and with it this object). The
@@ -177,6 +180,13 @@ class ExpandedDisplayCoordinator:
         return bool(self._state.edit_fullscreen)
 
     @property
+    def edit_elsewhere(self) -> bool:
+        """Edit is open on another display while the view stays expanded (plan 1B.1): an ordinary Edit of the other
+        displays; the view's display is not in the session."""
+
+        return bool(self._state.edit_elsewhere)
+
+    @property
     def blocks_ordinary_layout(self) -> bool:
         """True while the view is, or is becoming, display-wide: ordinary layout gestures wait."""
 
@@ -297,13 +307,14 @@ class ExpandedDisplayCoordinator:
         finally:
             self._transfer_done = False
 
-    def edit_entered(self) -> None:
-        """Before an Edit session (or a direct Alt gesture) starts. A resting expanded view stays expanded and the
-        Edit becomes Fullscreen Edit (``fullscreen_edit``); a view still entering or moving collapses at its commit
-        edge, as before (an ordinary Edit)."""
+    def edit_entered(self, *, on_view_display: bool = True) -> None:
+        """Before an Edit session (or a direct Alt gesture) starts. A resting expanded view stays expanded: Edit
+        entered on its display becomes Fullscreen Edit (``fullscreen_edit``), Edit entered on another display an
+        ordinary Edit of the other displays (``edit_elsewhere``). A view still entering or moving collapses at its
+        commit edge, as before (an ordinary Edit)."""
 
         if not self._retired and not self._state.edit_active:
-            self._feed(EditEntered(self._generation))
+            self._feed(EditEntered(self._generation, bool(on_view_display)))
 
     def edit_exited(self, *, saved: bool) -> None:
         if not self._retired and self._state.edit_active:

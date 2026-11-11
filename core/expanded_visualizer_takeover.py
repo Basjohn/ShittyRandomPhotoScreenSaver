@@ -48,6 +48,12 @@ Rules this reducer enforces:
   Save/Cancel (``RequestEditResolution``; a declined resolution drops the press), and an incapable mode request or a
   transfer is refused until Edit ends. Edit entered while an enter, exit or transfer runs is an ordinary Edit, which
   collapses as before.
+* **Edit beside the view (operator, 11 Nov, plan 1B.1).** Edit edits the display it was entered on. Entered on
+  another display while the view rests EXPANDED (``EditEntered.on_view_display`` False), it is an ordinary Edit of
+  the other displays only (``edit_elsewhere``): the view stays expanded and running, outside the session, with the
+  same holds as Fullscreen Edit (a collapse press waits for the session's own Save/Cancel, an incapable mode request
+  and a transfer are refused), since collapsing would put the view's display back into a layout the session does not
+  hold. An incapable activation collapses the view and leaves the Edit as an ordinary one (it never held the view).
 * **Rollback.** A failed enter restores ORDINARY without touching the intent and without retrying; a failed or lost
   transfer restores the source exactly as it was; a mode request held for a capable -> incapable collapse that is
   then rejected re-expands the still-active capable mode (the mode never changed, so the intent still stands).
@@ -215,6 +221,8 @@ class DisplayLost:
 @dataclass(frozen=True, slots=True)
 class EditEntered:
     generation: int
+    #: Edit was entered on the view's own display (Fullscreen Edit when expanded); False: on another display.
+    on_view_display: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -399,7 +407,11 @@ class TakeoverState:
     #: Edit was entered on a resting expanded view (Fullscreen Edit, M3c): the view stays expanded and Edit edits the
     #: full-display overlays only. Only ever True with ``edit_active`` and while EXPANDED (or retiring).
     edit_fullscreen: bool = False
-    #: A collapse press under Fullscreen Edit, waiting on the Edit session's own Save/Cancel.
+    #: Edit was entered on another display while the view rested EXPANDED (plan 1B.1): an ordinary Edit of the other
+    #: displays; the view stays expanded outside the session. Only ever True with ``edit_active`` and while EXPANDED
+    #: (or retiring); never together with ``edit_fullscreen``.
+    edit_elsewhere: bool = False
+    #: A collapse press under Fullscreen Edit (or an Edit beside the view), waiting on the session's own Save/Cancel.
     edit_collapse_press: int | None = None
     transfer_target: str | None = None
     transfer_resume_expanded: bool = False
@@ -408,10 +420,16 @@ class TakeoverState:
     clear_intent_at_rest: bool = False
 
     @property
+    def edit_keeps_view(self) -> bool:
+        """Edit is open while the view stays expanded: Fullscreen Edit, or an Edit beside the view (plan 1B.1)."""
+        return self.edit_fullscreen or self.edit_elsewhere
+
+    @property
     def eligible(self) -> bool:
-        """Expansion could be effective now (the fifth predicate, before intent). Fullscreen Edit keeps it."""
+        """Expansion could be effective now (the fifth predicate, before intent). Fullscreen Edit and an Edit beside
+        the view keep it."""
         return (self.activation is not None and self.display is not None and self.mode_capable
-                and (not self.edit_active or self.edit_fullscreen))
+                and (not self.edit_active or self.edit_keeps_view))
 
 
 @dataclass(frozen=True, slots=True)
@@ -501,7 +519,7 @@ def _after_expanded(state: TakeoverState, *actions: Action) -> Step:
         state, writes = _user_collapse(state)
         state, exit_ = _begin_exit(state, ExitReason.USER)
         return _applied(state, *actions, *writes, exit_)
-    if state.edit_active and not state.edit_fullscreen:
+    if state.edit_active and not state.edit_keeps_view:
         # An ordinary Edit (begun while the enter or transfer ran) edits the ordinary layout: collapse first.
         state, exit_ = _begin_exit(state, ExitReason.EDIT)
         return _applied(state, *actions, exit_)
@@ -512,7 +530,10 @@ def _after_expanded(state: TakeoverState, *actions: Action) -> Step:
 
 
 def _end_fullscreen_edit(state: TakeoverState) -> tuple[TakeoverState, tuple[Action, ...]]:
-    """Drop a Fullscreen Edit whose expanded view cannot stay (never on a user action)."""
+    """Drop a Fullscreen Edit whose expanded view cannot stay (never on a user action). An Edit beside the view
+    continues as an ordinary Edit: its session never held the view."""
+    if state.edit_elsewhere:
+        return replace(state, edit_elsewhere=False, edit_collapse_press=None), ()
     if not state.edit_fullscreen:
         return state, ()
     return (replace(state, edit_active=False, edit_fullscreen=False, edit_expand_press=None, edit_collapse_press=None),
@@ -574,7 +595,7 @@ def _glyph(state: TakeoverState, event: GlyphPressed) -> Step:
     if event.expand:
         if not state.mode_capable:
             return _unchanged(state, Outcome.REJECTED, "mode not capable")
-        if state.edit_active and not state.edit_fullscreen:
+        if state.edit_active and not state.edit_keeps_view:
             if state.edit_expand_press is not None:
                 return _unchanged(state, Outcome.DUPLICATE, "Edit resolution already requested")
             state = replace(state, edit_expand_press=event.press_id)
@@ -593,9 +614,9 @@ def _glyph(state: TakeoverState, event: GlyphPressed) -> Step:
         return _unchanged(state, Outcome.REJECTED, f"busy: {phase.value}")
 
     # Collapse.
-    if state.edit_fullscreen:
-        # Fullscreen Edit: the collapse waits for the Edit session's own Save/Cancel; nothing is discarded or saved
-        # implicitly (a declined resolution drops the press).
+    if state.edit_keeps_view:
+        # Fullscreen Edit (or an Edit beside the view): the collapse waits for the Edit session's own Save/Cancel;
+        # nothing is discarded or saved implicitly (a declined resolution drops the press).
         if state.edit_collapse_press is not None:
             return _unchanged(state, Outcome.DUPLICATE, "Edit resolution already requested")
         state = replace(state, edit_collapse_press=event.press_id)
@@ -676,9 +697,10 @@ def _mode_requested(state: TakeoverState, event: ModeRequested) -> Step:
     if phase is Phase.EXPANDED:
         if event.mode_capable:
             return _applied(state, ForwardModeRequest(event.request_id, event.mode_id, True))
-        if state.edit_fullscreen:
-            # Collapsing would end Fullscreen Edit under its draft: Save or Cancel first.
-            reason = "Fullscreen Edit open"
+        if state.edit_keeps_view:
+            # Collapsing would end Fullscreen Edit under its draft, or return the view's display to a layout the Edit
+            # beside it does not hold: Save or Cancel first.
+            reason = "Fullscreen Edit open" if state.edit_fullscreen else "Edit open on another display"
             return Step(state, (RejectModeRequest(event.request_id, reason),), Outcome.REJECTED, reason)
         state = replace(state, held_mode_request=HeldModeRequest(event.request_id, event.mode_id))
         state, exit_ = _begin_exit(state, ExitReason.MODE_INCAPABLE)
@@ -752,9 +774,10 @@ def _transfer_requested(state: TakeoverState, event: TransferRequested) -> Step:
         return _unchanged(state, Outcome.STALE, "transfer from another activation")
     if event.target_display == state.display:
         return _unchanged(state, Outcome.DUPLICATE, "already on that display")
-    if state.edit_fullscreen:
-        # A move would end Fullscreen Edit under its draft: Save or Cancel first.
-        reason = "Fullscreen Edit open"
+    if state.edit_keeps_view:
+        # A move would end Fullscreen Edit under its draft (or move the view under an Edit beside it): Save or Cancel
+        # first.
+        reason = "Fullscreen Edit open" if state.edit_fullscreen else "Edit open on another display"
         return Step(state, (RejectTransfer(event.request_id, reason),), Outcome.REJECTED, reason)
     if state.phase not in (Phase.DORMANT, Phase.ORDINARY, Phase.EXPANDED):
         reason = f"busy: {state.phase.value}"
@@ -813,9 +836,13 @@ def _edit_entered(state: TakeoverState, event: EditEntered) -> Step:
         return _unchanged(state, Outcome.DUPLICATE, "Edit already active")
     phase = state.phase
     if phase is Phase.EXPANDED:
-        # Fullscreen Edit (operator, 8 Nov; M3c): the view stays expanded and Edit edits the full-display overlays
-        # only. No collapse transaction; the intent is untouched.
-        return _applied(replace(state, edit_active=True, edit_fullscreen=True))
+        if event.on_view_display:
+            # Fullscreen Edit (operator, 8 Nov; M3c): the view stays expanded and Edit edits the full-display
+            # overlays only. No collapse transaction; the intent is untouched.
+            return _applied(replace(state, edit_active=True, edit_fullscreen=True))
+        # An Edit beside the view (operator, 11 Nov; plan 1B.1): Edit edits the display it was entered on; the view
+        # stays expanded and running, outside the session. No collapse transaction; the intent is untouched.
+        return _applied(replace(state, edit_active=True, edit_elsewhere=True))
     state = replace(state, edit_active=True)
     if phase is Phase.ENTER_PENDING:
         txn = state.txn
@@ -830,11 +857,12 @@ def _edit_exited(state: TakeoverState, event: EditExited) -> Step:
         return _unchanged(state, Outcome.DUPLICATE, "Edit not active")
     pending = state.edit_expand_press
     collapse = state.edit_collapse_press
-    fullscreen = state.edit_fullscreen
-    state = replace(state, edit_active=False, edit_fullscreen=False, edit_expand_press=None, edit_collapse_press=None)
-    if fullscreen:
-        # Save or Cancel ended Fullscreen Edit: the view stays expanded. A collapse press that waited for the
-        # session's resolution is the user's collapse now.
+    kept_view = state.edit_keeps_view
+    state = replace(state, edit_active=False, edit_fullscreen=False, edit_elsewhere=False, edit_expand_press=None,
+                    edit_collapse_press=None)
+    if kept_view:
+        # Save or Cancel ended Fullscreen Edit (or an Edit beside the view): the view stays expanded. A collapse press
+        # that waited for the session's resolution is the user's collapse now.
         if collapse is not None and state.phase is Phase.EXPANDED:
             state, writes = _user_collapse(state)
             state, exit_ = _begin_exit(state, ExitReason.USER)

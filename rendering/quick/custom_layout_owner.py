@@ -238,6 +238,9 @@ class QuickCustomLayoutOwner:
         self._session: CustomLayoutSession | None = None
         self._coordinator: QuickCustomLayoutSceneCoordinator | None = None
         self._bindings: dict[str, _DisplayBinding] = {}
+        # An Edit beside an expanded Visualizer (plan 1B.1): per widget id, the
+        # displays outside the session that hold a copy of it (Save counts them).
+        self._held: dict[str, tuple[_DisplayBinding, ...]] = {}
         self._descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         self._resize_origins: dict[CustomLayoutKey, _ResizeOrigin] = {}
         self._child_resize_origins: dict[CustomLayoutKey, _ChildResizeOrigin] = {}
@@ -300,6 +303,21 @@ class QuickCustomLayoutOwner:
     def is_fullscreen(self) -> bool:
         """Fullscreen Edit is open: Edit edits the expanded display's full-display overlays, nothing else."""
         return self._active and self._fullscreen is not None
+
+    def edits_display(self, unit: Any) -> bool:
+        """The open session edits ``unit``'s display (its scene is bound). Every display in a global Edit; only the
+        expanded one in Fullscreen Edit; every other one in an Edit beside an expanded Visualizer (plan 1B.1)."""
+        return self._active and any(binding.unit is unit for binding in self._bindings.values())
+
+    @property
+    def unsaved_changes(self) -> bool:
+        """The open session holds something its Cancel would discard (Fullscreen Edit's draft, or any item moved,
+        sized, closed or transferred since it started)."""
+        if not self._active or self._session is None:
+            return False
+        if self._fullscreen is not None:
+            return self.fullscreen_draft_pending
+        return self._session.has_changes()
 
     @property
     def fullscreen_draft_pending(self) -> bool:
@@ -491,7 +509,14 @@ class QuickCustomLayoutOwner:
             for unit in self._participants_provider()
         ) or self._visualizer_provider()[0] is not None
 
-    def start(self) -> bool:
+    def start(self, *, excluded_units: Sequence[Any] = ()) -> bool:
+        """Open the one Edit session on every live display, less ``excluded_units``.
+
+        An excluded display (the expanded Visualizer's, while Edit is entered on another display; plan 1B.1) is not
+        bound and has no item in the session: no Edit chrome, nothing captured or moved there, and no transfer can
+        reach it. Its copies of a shared widget are still counted (``hold_copies``, and Save's ``held``), so the X on
+        a session copy and Save resolve exactly as in a global Edit.
+        """
         if self._retired:
             return False
         if self._direct:
@@ -499,10 +524,18 @@ class QuickCustomLayoutOwner:
         if self._active:
             return True
         widgets = self._settings_manager.get_widgets_map()
-        bindings = self._live_display_bindings()
+        live = self._live_display_bindings()
+        bindings = {identity: binding for identity, binding in live.items()
+                    if not any(binding.unit is unit for unit in excluded_units)}
         if not bindings:
             return False
+        held: dict[str, list[_DisplayBinding]] = {}
+        for binding in live.values():
+            if binding.identity not in bindings:
+                for widget_id in self._editable_widget_ids(binding):
+                    held.setdefault(widget_id, []).append(binding)
         session = CustomLayoutSession()
+        session.hold_copies({widget_id: len(entries) for widget_id, entries in held.items()})
         descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         self._visualizer_pixels_per_world.clear()
         for binding in bindings.values():
@@ -563,6 +596,7 @@ class QuickCustomLayoutOwner:
             raise
 
         self._bindings = bindings
+        self._held = {widget_id: tuple(entries) for widget_id, entries in held.items()}
         self._descriptors = descriptors
         self._session = session
         self._coordinator = coordinator
@@ -570,11 +604,24 @@ class QuickCustomLayoutOwner:
         session.subscribe_selection(self._on_child_edit_selection_changed)
         self._active = True
         logger.info(
-            "[CUSTOM_LAYOUT] Started one Quick session displays=%d items=%d",
+            "[CUSTOM_LAYOUT] Started one Quick session displays=%d excluded=%d items=%d",
             len(bindings),
+            len(live) - len(bindings),
             len(session.items()),
         )
         return True
+
+    @staticmethod
+    def _editable_widget_ids(binding: _DisplayBinding) -> tuple[str, ...]:
+        """The ordinary widgets ``_admit_ordinary_items`` would admit from ``binding``'s display."""
+        presenter = binding.unit.presenter
+        return tuple(
+            widget_id for widget_id in presenter.bound_widget_ids
+            if (descriptor := get_widget_runtime_descriptor(widget_id)) is not None
+            and descriptor.supports_layout_edit_mode
+            and presenter.geometry_for(widget_id) is not None
+            and presenter.presentation_for_widget_id(widget_id) is not None
+        )
 
 
     def start_fullscreen(self, unit: Any, committed: Mapping[str, object]) -> bool:
@@ -867,7 +914,7 @@ class QuickCustomLayoutOwner:
         self._log_selected_child_geometry_boundary("save_before", selected_geo_item)
         widgets = self._settings_manager.get_widgets_map()
         commit_custom_session(
-            widgets, self._session, self._descriptors, self._bindings,
+            widgets, self._session, self._descriptors, self._bindings, held=self._held,
         )
         self._settings_manager.set_widgets_map(widgets, emit_change=False)
         self._settings_manager.save()
@@ -3597,6 +3644,7 @@ class QuickCustomLayoutOwner:
             # state observed when display 0 threw before display 1 was cleared.
             self._session = None
             self._bindings = {}
+            self._held = {}
             self._descriptors = {}
             self._resize_origins = {}
             self._child_resize_origins = {}
