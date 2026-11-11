@@ -22,8 +22,13 @@ MAX_RATE = 0.5            # height Raise/Lower add per radius of stroke at 100% 
 FLATTEN_RATE = 6.0        # Flatten's approach per radius of stroke at 100% (100% itself snaps the core)
 MIN_LAND = 0.005          # Lower never turns land into water; only the Water brush authors exact zero
 # The brush radius, as a share of the basin's side (``heightfield_basin``; the whole grid's side when the grid is
-# only its basin): a size on the scene's ground, the same however far the grid reaches or grows.
-RADIUS_RANGE = (0.03, 0.35)
+# only its basin): a size on the scene's ground, the same however far the grid reaches or grows. Before 1B.5 it was a
+# share of the whole grid, whose side is 1.75 basins on Presets 1 and 2 and one basin on Preset 3: the old default
+# (0.12) covered 0.21 of the basin there and 0.12 here, the old largest 0.61 and 0.35. One ground size now serves
+# every preset: the default sits between the two old footprints (0.76x and 1.33x of them), the range keeps the old
+# finest brush and Presets 1 and 2's old largest, a reach of about 58 cells with full falloff on the 257 grid.
+RADIUS_RANGE = (0.03, 0.6)
+RADIUS_DEFAULT = 0.16
 STRENGTH_FLOOR = 0.01
 
 
@@ -75,11 +80,11 @@ def apply_brush(old: float, mode: str, weight: float, amount: float, strength: f
 
 @dataclass(frozen=True)
 class BrushSettings:
-    """The brush's tool state (not a stored setting): mode, radius (grid uv), strength, falloff and the height
-    Flatten moves land toward (each 0..1)."""
+    """The brush's tool state (not a stored setting): mode, radius (a share of the basin's side, ``RADIUS_RANGE``),
+    strength, falloff and the height Flatten moves land toward (each 0..1)."""
 
     mode: str = "Raise"
-    radius: float = 0.12
+    radius: float = RADIUS_DEFAULT
     strength: float = 0.35
     falloff: float = 0.5
     flatten_height: float = 0.20
@@ -201,5 +206,5 @@ class HeightfieldStroke:
 
 __all__ = [
     "BrushSettings", "DAB_SPACING", "FLATTEN_RATE", "HeightfieldStroke", "MAX_RATE", "MIN_LAND", "MODES",
-    "PRESS_DEPOSIT", "RADIUS_RANGE", "apply_brush", "brush_reach", "brush_weight", "stroke_rate",
+    "PRESS_DEPOSIT", "RADIUS_DEFAULT", "RADIUS_RANGE", "apply_brush", "brush_reach", "brush_weight", "stroke_rate",
 ]

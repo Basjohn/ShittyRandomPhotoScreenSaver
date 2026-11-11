@@ -25,7 +25,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
-from rendering.gl_programs.heightfield_brush import MODES, BrushSettings, HeightfieldStroke, brush_reach
+from rendering.gl_programs.heightfield_brush import (
+    MODES, RADIUS_RANGE, BrushSettings, HeightfieldStroke, brush_reach,
+)
 
 Point = tuple[float, float]
 # (presented-frame size, the live card's world extent, the card style): what a pick projects through.
@@ -280,7 +282,7 @@ class StudioBrush:
 
     def as_map(self) -> dict:
         return {"active": self.active, "painting": self._pressed, "modes": list(MODES), "label": self.target.label,
-                "refused": self.refused, **self.settings.as_map()}
+                "refused": self.refused, "radius_range": list(RADIUS_RANGE), **self.settings.as_map()}
 
 
 __all__ = ["BrushTarget", "Geometry", "StudioBrush"]
