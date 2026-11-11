@@ -440,13 +440,20 @@ the right of the Linked / Independent button, across the row's free space.
   projection), so imported and user themes are covered automatically. Tone: `Light` when the ink is dark on a light
   surface (`uses_dark_text_on_light_surface`: ink luminance <= 0.18 and surface >= 0.55), else `Dark`. Material:
   the Settings `backdrop.mode` (`off` is Normal) or the Widget `surface_material`, labelled by
-  `SURFACE_MATERIAL_LABELS`. Colours: the hue families of the accent and the surface (Settings:
+  `SURFACE_MATERIAL_LABELS`. Colours name the theme's visible identity (Settings accent/surface:
   `control.list.selected_accent`, `panel.group.surface`; Widget: `widget.accent` else `card.border`,
   `card.background`). Hue buckets (HSV degrees): Red < 15, Orange < 45, Yellow < 70, Green < 160, Teal < 195,
-  Blue < 250, Purple < 290, Pink < 345, Red again to 360. A colour with chroma < 18 or saturation < 0.15 is
-  neutral; a theme whose accent and surface are both neutral is `Grey`.
-- **Matching.** Case-insensitive; each word matches when it is a substring of the row's display name or a prefix of
-  one of its terms; words combine with AND; an empty filter shows everything (`theme_matches_filter`).
+  Blue < 250, Purple < 290, Pink < 345, Red again to 360. The accent always contributes its family unless it is
+  neutral (chroma < 18 of 255 or saturation < 0.22: steel and slate greys). The surface contributes only when it
+  is clearly coloured to the eye (chroma >= 56 and saturation >= 0.5), so the faintly tinted near-black navy/plum
+  and near-white surfaces most themes use name nothing. A theme with no colour family is `Grey`. Guard: no colour
+  family may cover more than a third of either shipped catalogue (`test_theme_filter_terms.py`); a colour word must
+  narrow the list.
+- **Matching.** Case-insensitive; words combine with AND; an empty filter shows everything
+  (`theme_matches_filter`). A word matches a name by word start: it is a prefix of one of the name's words, split on
+  non-alphanumerics, with bracket tags such as `[Glass]` as words too (a query word spanning words, such as
+  `two-tone`, must match consecutive name words). "Red" therefore never finds "Weathered". A word matches a term
+  when it equals or prefixes it.
 - **View state only.** Filtering only hides `ThemeListWidget` rows (`set_filter_text`): the current/selected row stays
   (even hidden), no selection signal is emitted, nothing is re-applied and nothing is written to Settings.
   Favourites, their favourites-first order and the Linked pairing are unchanged; the filter is re-applied after a
@@ -455,8 +462,9 @@ the right of the Linked / Independent button, across the row's free space.
 - **Autocomplete.** A `QCompleter` completes the last word and keeps the words before it. Its model is the tones,
   materials and colour families that occur in that page's loaded list, then the theme names
   (`ThemeListWidget.filter_vocabulary`), rebuilt when the list's themes change. The popup reuses
-  `COMBOBOX_POPUP_VIEW_STYLE`; as a translucent top-level it fills `combo.popup.surface` and strokes
-  `combo.popup.border` itself as one continuous path.
+  `COMBOBOX_POPUP_VIEW_STYLE`; as a translucent top-level it fills its rounded body itself with
+  `combo.popup.surface` at full density (opaque: a suggestion list over the theme list must not let rows bleed
+  through) and strokes `combo.popup.border` as one continuous path. Its corners stay see-through.
 - **Look.** `THEME_FILTER_INPUT_STYLE` (shared_styles) uses the `control.input.*` roles at the Linked button's
   height and radius, with a transparent stylesheet border; the field strokes `control.input.border` as one
   continuous path (no seams). The clear (x) is painted in the input ink and shows only while there is text.

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication
 
@@ -229,13 +229,28 @@ def test_completer_offers_catalog_kinds_colours_and_names_and_is_themed(env):
     assert popup.property("customComboPopup") and popup.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     tab.settings_theme_filter.completer().setCompletionPrefix("qqzzxx")  # no rows: the body alone
     popup.resize(240, 120)
-    image = popup.grab().toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    grabbed = popup.grab()
     surface = get_active_settings_theme().color("combo.popup.surface")
-    centre = image.pixelColor(image.width() // 2, image.height() // 2)
-    assert abs(centre.alpha() - surface.a) <= 2
-    assert max(abs(a - b) for a, b in zip(centre.getRgb()[:3], (surface.r, surface.g, surface.b))) <= 3
-    corner = image.pixelColor(0, 0)
-    assert corner.alpha() == 0, "rounded popup corners must be see-through, not a native square"
+    # Composite the popup over two opposite high-contrast backdrops: its interior must not vary with what is
+    # behind it (a translucent body lets the theme list bleed through its suggestions).
+    composites = []
+    for backdrop in (QColor(0, 0, 0), QColor(255, 255, 255)):
+        canvas = QImage(grabbed.size(), QImage.Format.Format_ARGB32)
+        canvas.fill(backdrop)
+        painter = QPainter(canvas)
+        for x in range(0, canvas.width(), 8):  # a stripe pattern under the white/black field
+            painter.fillRect(x, 0, 4, canvas.height(), QColor(255, 0, 255))
+        painter.drawPixmap(canvas.rect(), grabbed)  # device pixels 1:1 at any device pixel ratio
+        painter.end()
+        composites.append(canvas)
+    inset = round(8 * grabbed.devicePixelRatio())
+    for y in range(inset, composites[0].height() - inset, 3):
+        for x in range(inset, composites[0].width() - inset, 3):
+            assert composites[0].pixelColor(x, y) == composites[1].pixelColor(x, y), (x, y)
+    centre = composites[0].pixelColor(composites[0].width() // 2, composites[0].height() // 2)
+    assert max(abs(a - b) for a, b in zip(centre.getRgb()[:3], (surface.r, surface.g, surface.b))) <= 2
+    image = grabbed.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    assert image.pixelColor(0, 0).alpha() == 0, "rounded popup corners must be see-through, not a native square"
 
 
 def test_imported_user_themes_are_filterable_and_offered(env):

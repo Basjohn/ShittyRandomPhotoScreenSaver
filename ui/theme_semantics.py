@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import colorsys
+import re
 from dataclasses import dataclass
 
 from ui.settings_theme_spec import Rgba
@@ -60,9 +61,13 @@ THEME_COLOUR_FAMILIES = ("Red", "Orange", "Yellow", "Green", "Teal", "Blue", "Pu
 # Upper hue bound (degrees, exclusive) of each family, walked in order; red wraps around 0/360.
 _HUE_FAMILY_BOUNDS = ((15.0, "Red"), (45.0, "Orange"), (70.0, "Yellow"), (160.0, "Green"), (195.0, "Teal"),
                       (250.0, "Blue"), (290.0, "Purple"), (345.0, "Pink"), (360.0, "Red"))
-# A colour is neutral (no hue family) below this chroma (max - min channel, 0..255) or HSV saturation.
+# An accent is neutral (no hue family) below this chroma (max - min channel, 0..255) or HSV saturation.
 NEUTRAL_CHROMA = 18
-NEUTRAL_SATURATION = 0.15
+NEUTRAL_SATURATION = 0.22  # steel/slate-grey accents (Graphite, Ghost, Chrome greys) stay Grey
+# A surface names a colour only when it is clearly coloured to the eye: both a real saturation and enough
+# chroma, so the faintly tinted near-black (navy, plum) and near-white surfaces most themes use stay neutral.
+SURFACE_MIN_CHROMA = 56
+SURFACE_MIN_SATURATION = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,11 +83,12 @@ class ThemeFilterTerms:
         return (self.tone, self.material, *self.colours)
 
 
-def colour_family(color: Rgba) -> str:
-    """The named hue family of ``color``'s RGB (alpha ignored), or Grey when it is neutral."""
+def colour_family(color: Rgba, *, min_chroma: int = NEUTRAL_CHROMA,
+                  min_saturation: float = NEUTRAL_SATURATION) -> str:
+    """The named hue family of ``color``'s RGB (alpha ignored), or Grey below the neutral limits."""
     high, low = max(color.r, color.g, color.b), min(color.r, color.g, color.b)
     chroma = high - low
-    if chroma < NEUTRAL_CHROMA or chroma / high < NEUTRAL_SATURATION:
+    if chroma < min_chroma or chroma / high < min_saturation:
         return GREY_FAMILY
     hue = colorsys.rgb_to_hsv(color.r / 255.0, color.g / 255.0, color.b / 255.0)[0] * 360.0
     return next(family for bound, family in _HUE_FAMILY_BOUNDS if hue < bound)
@@ -111,13 +117,17 @@ def theme_filter_terms(theme) -> ThemeFilterTerms:
     * Tone: Light when its ink is dark on a light surface (``uses_dark_text_on_light_surface``), else Dark.
     * Material: the Settings backdrop mode (``off`` is Normal) or the Widget card ``surface_material``,
       labelled by the card material owner.
-    * Colours: the hue families of its accent and surface; Grey when both are neutral.
+    * Colours: the visible identity: the accent's hue family always, the surface's only when the surface is
+      clearly coloured (``SURFACE_MIN_CHROMA`` and ``SURFACE_MIN_SATURATION``); Grey when neither names one.
 
     Pure: authored role maps only (no active-theme or opacity state), so imported and user themes are covered.
     """
     ink, surface, accent = _signature_colours(theme)
     tone = THEME_TONES[1] if uses_dark_text_on_light_surface(ink, surface) else THEME_TONES[0]
-    found = {colour_family(colour) for colour in (accent, surface) if colour is not None} - {GREY_FAMILY}
+    found = {colour_family(surface, min_chroma=SURFACE_MIN_CHROMA, min_saturation=SURFACE_MIN_SATURATION)}
+    if accent is not None:
+        found.add(colour_family(accent))
+    found.discard(GREY_FAMILY)
     colours = tuple(family for family in THEME_COLOUR_FAMILIES if family in found) or (GREY_FAMILY,)
     return ThemeFilterTerms(tone=tone, material=_theme_material_label(theme), colours=colours)
 
@@ -127,8 +137,29 @@ def filter_words(text: str) -> tuple[str, ...]:
     return tuple(word.casefold() for word in str(text or "").split())
 
 
+_WORD_RE = re.compile(r"[^\W_]+")
+
+
+def name_words(name: str) -> tuple[str, ...]:
+    """A display name's case-folded words, split on non-alphanumerics ("[Glass]" -> "glass")."""
+    return tuple(_WORD_RE.findall(str(name).casefold()))
+
+
+def _word_matches_name(word: str, words: tuple[str, ...]) -> bool:
+    # A query word may itself span words ("two-tone", "[glass]"): its pieces must match consecutive name words,
+    # every piece but the last exactly and the last by prefix.
+    pieces = _WORD_RE.findall(word)
+    if not pieces:
+        return True
+    *whole, last = pieces
+    span = len(pieces)
+    return any(list(words[start:start + span - 1]) == whole and words[start + span - 1].startswith(last)
+               for start in range(len(words) - span + 1))
+
+
 def theme_matches_filter(words, name: str, terms) -> bool:
-    """Every word (AND) is a substring of ``name`` or a prefix of one of ``terms``, ignoring case."""
-    folded_name = str(name).casefold()
+    """Every word (AND) starts one of ``name``'s words or equals/prefixes one of ``terms``, ignoring case."""
+    folded_words = name_words(name)
     folded_terms = tuple(str(term).casefold() for term in terms)
-    return all(word in folded_name or any(term.startswith(word) for term in folded_terms) for word in words)
+    return all(_word_matches_name(word, folded_words) or any(term.startswith(word) for term in folded_terms)
+               for word in words)

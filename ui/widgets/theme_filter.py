@@ -64,12 +64,14 @@ class _ThemeFilterPopup(QListView):
 
     def event(self, event) -> bool:  # noqa: D401 - the scroll area paints its frame from event()
         if event.type() == QEvent.Type.Paint:
-            # A translucent top-level popup gets no stylesheet background: fill the rounded body here,
-            # under the frame pass, then stroke the outline once on top.
+            # A translucent top-level popup gets no stylesheet background: fill the rounded body here, under
+            # the frame pass, then stroke the outline once on top. A suggestion list floats over the theme
+            # list, so its body is the theme's popup colour at full density: nothing behind may bleed through.
+            surface = theme_color("combo.popup.surface")
+            surface.setAlpha(255)
             painter = QPainter(self)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.fillPath(rounded_border_path(QRectF(self.rect()), self.BORDER_WIDTH, self.RADIUS),
-                             theme_color("combo.popup.surface"))
+            painter.fillPath(rounded_border_path(QRectF(self.rect()), self.BORDER_WIDTH, self.RADIUS), surface)
             painter.end()
         handled = super().event(event)
         if event.type() == QEvent.Type.Paint:

@@ -104,12 +104,61 @@ def test_terms_list_tone_material_then_colours():
 
 def test_matching_is_case_insensitive_and_and_narrows():
     terms = ("Dark", "Glass", "Blue", "Orange")
+    name = "Night Sky [Two-Tone] [Acrylic]"
     assert theme_matches_filter(filter_words(""), "Anything", terms)
-    assert theme_matches_filter(filter_words("blue"), "Night Sky", terms)          # term
-    assert theme_matches_filter(filter_words("BL"), "Night Sky", terms)            # term prefix
-    assert theme_matches_filter(filter_words("sky"), "Night Sky", terms)           # name substring
-    assert theme_matches_filter(filter_words("ght s"), "Night Sky", terms)         # each word a substring
-    assert theme_matches_filter(filter_words("dark   glass blue"), "Night Sky", terms)
-    # Negative controls: a word inside a term (not a prefix) and a failing word in an AND query.
-    assert not theme_matches_filter(filter_words("lue"), "Night Sky", terms)
-    assert not theme_matches_filter(filter_words("dark light"), "Night Sky", terms)
+    assert theme_matches_filter(filter_words("blue"), name, terms)          # term
+    assert theme_matches_filter(filter_words("BL"), name, terms)            # term prefix
+    assert theme_matches_filter(filter_words("sky"), name, terms)           # a name word
+    assert theme_matches_filter(filter_words("NI s"), name, terms)          # name word starts
+    assert theme_matches_filter(filter_words("acryl"), name, terms)         # bracket tags are words too
+    assert theme_matches_filter(filter_words("[acrylic] two-tone"), name, terms)
+    assert theme_matches_filter(filter_words("dark   glass blue"), name, terms)
+    # Negative controls: a word inside a term or inside a name word, and a failing word in an AND query.
+    assert not theme_matches_filter(filter_words("lue"), name, terms)
+    assert not theme_matches_filter(filter_words("ght"), name, terms)
+    assert not theme_matches_filter(filter_words("tone-two"), name, terms)
+    assert not theme_matches_filter(filter_words("dark light"), name, terms)
+
+
+def test_a_colour_word_never_matches_the_middle_of_a_name_word():
+    assert not theme_matches_filter(filter_words("Red"), "Weathered Iron [Two-Tone]", ("Dark", "Acrylic", "Orange"))
+    assert theme_matches_filter(filter_words("Red"), "Red Iron", ("Dark", "Acrylic", "Orange"))
+
+
+def _hsv(hue: float, saturation: float, value: float) -> Rgba:
+    r, g, b = colorsys.hsv_to_rgb(hue / 360.0, saturation, value)
+    return Rgba(round(r * 255), round(g * 255), round(b * 255))
+
+
+def test_faintly_tinted_surfaces_do_not_name_a_colour_but_clearly_coloured_ones_do():
+    orange_hue, blue_hue = (next(h for h, f in _family_centres() if f == name) for name in ("Orange", "Blue"))
+    navy = _hsv(blue_hue, 0.68, 0.28)           # the near-black navy most dark themes use
+    accent = _hsv(orange_hue, 0.6, 0.85)
+    terms = theme_filter_terms(_settings(ink=WHITE, surface=navy, accent=accent))
+    assert terms.colours == ("Orange",) and "Blue" not in terms.terms
+    pale = _hsv(blue_hue, 0.08, 0.96)           # a near-white tint
+    assert theme_filter_terms(_settings(ink=BLACK, surface=pale, accent=accent)).colours == ("Orange",)
+    vivid = _hsv(blue_hue, 0.8, 0.45)           # negative control: a clearly blue surface is Blue
+    assert theme_filter_terms(_settings(ink=WHITE, surface=vivid, accent=accent)).colours == ("Orange", "Blue")
+    # The same faint navy as an accent does name its hue: the accent always contributes.
+    assert colour_family(navy) == "Blue"
+
+
+MAX_COLOUR_SHARE = 1 / 3
+
+
+@pytest.mark.parametrize("kind", ["settings", "widgets"])
+def test_no_colour_family_swallows_the_shipped_catalog(kind):
+    """Structural discrimination: a colour word narrows the list (it never matches most of the catalog)."""
+    from collections import Counter
+    from pathlib import Path
+
+    from ui.settings_theme_catalog import build_settings_theme_catalog
+    from ui.widget_theme_catalog import build_widget_theme_catalog
+
+    root = Path(__file__).resolve().parents[1] / "themes"
+    catalog = build_settings_theme_catalog(root) if kind == "settings" else build_widget_theme_catalog(root / "widgets")
+    assert len(catalog.entries) > 10
+    counts = Counter(c for entry in catalog.entries for c in theme_filter_terms(entry.theme).colours)
+    worst, count = counts.most_common(1)[0]
+    assert count <= MAX_COLOUR_SHARE * len(catalog.entries), (worst, count, len(catalog.entries))
