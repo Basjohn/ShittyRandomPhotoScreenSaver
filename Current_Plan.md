@@ -1134,10 +1134,10 @@ noise").
 
 Many update entries lack images. A generic game cover existing is not proof an image is missing.
 
-- [~] Audit URLs, redirects/statuses, cache keys, game IDs, fallbacks, dedupe and selection order (including artwork
-  fetched but rejected downstream).
-- [~] Prefer image-bearing updates without suppressing legitimate no-image entries.
-- [~] Instrument attrition and compare natively with Feeds.
+- [ ] On a report of missing images: audit URLs, redirects/statuses, cache keys, game IDs, fallbacks, dedupe and
+  selection order (including artwork fetched but rejected downstream).
+- [ ] Then prefer image-bearing updates without suppressing legitimate no-image entries.
+- [ ] Instrument attrition and compare natively with Feeds (the lead's own comparison; no operator step).
 
 **Steam artwork 404**
 
