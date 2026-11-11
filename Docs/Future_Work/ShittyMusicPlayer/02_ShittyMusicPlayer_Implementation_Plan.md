@@ -29,7 +29,7 @@ P1 and P2 **must land before SMP work starts** (M1). P3-P5 land before the miles
 
 ### 0A.2 The `--smp` gate (operator: "Gate SMP/Library/Playlist behind --smp until production ready and feature rich")
 
-- [ ] **Mechanism:** `main.py`'s known-flag list (`parse_screensaver_args`, `:277`) gains `--smp`; a side-effect-free
+- [ ] **Mechanism:** `main.py`'s known-flag list (`parse_screensaver_args`, `main.py:254` on 11 Nov 2026) gains `--smp`; a side-effect-free
   predicate `core/smp.py::is_smp_enabled()` (beside `core/mc.py::is_mc_build()`, same style: entry point, profile
   or flag, no `SettingsManager` construction) answers True when the flag is present or the process is the SMP
   profile/entry point (M7). No environment variable, no settings key: the gate is a launch decision.
@@ -761,7 +761,7 @@ remembered", and the Visualizer's own Expanded state is never decided by a prese
   (Status → Search → Artwork → Queue …; Transport and the current focus content last). They return when space allows.
   They never overlap or go off screen.
 - **Styling:** one theme gutter between all sections, and every section uses the same card surface (Glass/Acrylic
-  from the theme, one legibility panel inset uniformly). This avoids today's mixed opaque and glass cards and
+  from the theme, the legibility layer the whole face up to the real border, never an inset panel: Card_Surface_Materials.md, M2 of 11 Nov 2026). This avoids today's mixed opaque and glass cards and
   partial inner panels.
 - **Reflow:** each content reflows to its rect instead of scaling. Library switches between grid and list by width,
   Transport compresses to icons, Artwork fits its aspect, and the Visualizer fills its section through plan 01's
