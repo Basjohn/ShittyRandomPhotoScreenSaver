@@ -215,7 +215,10 @@ without the safe path below.
   composes; the role's limits clamp; unit factors add nothing; a malformed factor reads as 1), so the artwork keeps
   its drawn size. The keys are dropped; the persisted key itself is unchanged. Tests:
   `tests/test_visualizer_expansion_overlay_settings.py::test_a_value_stored_with_the_retired_artwork_factors_loads_them_into_the_artwork_record`
-  and the saved-profile load test in `tests/test_visualizer_expansion_fullscreen_edit.py` (plan 1B.7f/h).
+  and the saved-profile load test in `tests/test_visualizer_expansion_fullscreen_edit.py` (plan 1B.7f/h); the raw
+  old file shape (never normalised by today's write path) is the fixture
+  `tests/fixtures/fullscreen_overlays_legacy_artwork_factors_profile.json`, loaded from disk by
+  `test_a_raw_profile_file_with_the_retired_artwork_factors_loads_through_the_bridge` (remove it with the bridge).
   *Horizon:* until the operator closes it (the factors exist only in profiles that used Fullscreen Edit's parent
   handles between 8 and 11 Nov 2026).
   *Blocked:* reading the factors in QML again (a second artwork size carrier), or renaming the persisted key.
