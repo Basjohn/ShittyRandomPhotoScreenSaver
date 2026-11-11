@@ -5,17 +5,22 @@ from collections import Counter
 import math
 
 from PySide6.QtCore import QEvent, QPointF, QRect, QRectF, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QColor, QPainterPath, QPen
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QToolTip
 
 from ui.settings_theme_runtime import get_active_settings_theme
+from ui.theme_semantics import (THEME_COLOUR_FAMILIES, THEME_TONES, filter_words, theme_filter_terms,
+                                theme_matches_filter)
 from ui.widgets.continuous_border import OutlinedListWidget
 
 
 PALETTE_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 FAVOURITE_ROLE = PALETTE_ROLE + 1
 _ORDER_ROLE = FAVOURITE_ROLE + 1
+# The row's derived filter terms (ui.theme_semantics.ThemeFilterTerms.terms): view data, never persisted.
+FILTER_TERMS_ROLE = _ORDER_ROLE + 1
 FAVOURITES_KEY = "ui.theme_favourites"
+EMPTY_FILTER_TEXT = "No Themes Match the Filter"
 
 
 def dominant_theme_colours(theme) -> tuple[tuple[int, int, int], ...]:
@@ -125,7 +130,11 @@ class _ThemeRowDelegate(QStyledItemDelegate):
 
 
 class ThemeListWidget(OutlinedListWidget):
-    """One delegate per list, with star hit-testing before selection/activation."""
+    """One delegate per list, with star hit-testing before selection/activation.
+
+    The type-in filter only hides rows (``set_filter_text``): selection, the current item, favourites and order
+    are untouched, and no selection signal is emitted.
+    """
     favouriteToggled = Signal(str)
 
     def __init__(self, parent=None):
@@ -134,11 +143,82 @@ class ThemeListWidget(OutlinedListWidget):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setMouseTracking(True)
         self._star_press = None
+        self._filter_words: tuple[str, ...] = ()
+        self._visible_rows = 0
+        self._vocabulary_revision = 0
 
     def add_theme_item(self, item, theme):
-        item.setData(PALETTE_ROLE, dominant_theme_colours(theme))
         item.setData(_ORDER_ROLE, self.count())
         self.addItem(item)
+        self.update_theme_item(item, theme)
+
+    def update_theme_item(self, item, theme) -> None:
+        """(Re)derive an item's palette preview and filter terms from ``theme``."""
+        item.setData(PALETTE_ROLE, dominant_theme_colours(theme))
+        item.setData(FILTER_TERMS_ROLE, theme_filter_terms(theme).terms)
+        self._vocabulary_revision += 1
+        self._apply_filter()
+
+    def remove_theme_item(self, row: int):
+        item = self.takeItem(row)
+        self._vocabulary_revision += 1
+        self._apply_filter()
+        return item
+
+    # -- type-in filter (view state only) ---------------------------------------------------------------
+
+    @property
+    def vocabulary_revision(self) -> int:
+        return self._vocabulary_revision
+
+    def filter_vocabulary(self) -> tuple[str, ...]:
+        """Completions for the filter: the tones, materials and colours this list's themes have, then names."""
+        from rendering.quick.widgets.surface_material import SURFACE_MATERIAL_LABELS, SURFACE_MATERIALS
+
+        items = sorted((self.item(row) for row in range(self.count())), key=lambda item: item.data(_ORDER_ROLE))
+        present = {term for item in items for term in (item.data(FILTER_TERMS_ROLE) or ())}
+        kinds = [*THEME_TONES, *(SURFACE_MATERIAL_LABELS[material] for material in SURFACE_MATERIALS),
+                 *THEME_COLOUR_FAMILIES]
+        vocabulary, seen = [], set()
+        for word in [*(kind for kind in kinds if kind in present), *(item.text() for item in items)]:
+            if word.casefold() not in seen:
+                seen.add(word.casefold())
+                vocabulary.append(word)
+        return tuple(vocabulary)
+
+    def set_filter_text(self, text: str) -> None:
+        words = filter_words(text)
+        if words != self._filter_words:
+            self._filter_words = words
+            self._apply_filter()
+
+    def filter_text_words(self) -> tuple[str, ...]:
+        return self._filter_words
+
+    def visible_theme_count(self) -> int:
+        return self._visible_rows
+
+    def _apply_filter(self) -> None:
+        visible = 0
+        for row in range(self.count()):
+            item = self.item(row)
+            shown = theme_matches_filter(self._filter_words, item.text(), item.data(FILTER_TERMS_ROLE) or ())
+            if item.isHidden() == shown:
+                item.setHidden(not shown)
+            visible += shown
+        self._visible_rows = visible
+        self.viewport().update()
+
+    def paintEvent(self, event):  # noqa: N802 - the viewport's paint
+        super().paintEvent(event)
+        if self._visible_rows or not self.count():
+            return
+        painter = QPainter(self.viewport())
+        painter.setPen(QColor(*get_active_settings_theme().color("text.secondary").as_tuple()))
+        painter.setFont(self.font())
+        painter.drawText(self.viewport().rect().adjusted(12, 0, -12, 0), int(Qt.AlignmentFlag.AlignCenter),
+                         EMPTY_FILTER_TEXT)
+        painter.end()
 
     def set_favourites(self, favourites):
         current = self.currentItem()
@@ -161,6 +241,8 @@ class ThemeListWidget(OutlinedListWidget):
                     self.addItem(item)
                 if current is not None:
                     self.setCurrentItem(current)
+                # Re-added rows come back unhidden: the filter's row state follows the new order.
+                self._apply_filter()
                 self.verticalScrollBar().setValue(scroll)
         finally:
             self.setUpdatesEnabled(updates)

@@ -14,10 +14,10 @@ from dataclasses import replace
 from time import perf_counter_ns
 from PySide6.QtCore import QEvent, QLineF, QSignalBlocker, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
-from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QLabel, QListWidget,
+from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QHBoxLayout, QLabel, QListWidget,
     QListWidgetItem, QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
-from ui.widgets.theme_list import (ThemeListWidget, PALETTE_ROLE, FAVOURITES_KEY,
-                                  dominant_theme_colours, read_theme_favourites)
+from ui.widgets.theme_filter import ThemeFilterField
+from ui.widgets.theme_list import ThemeListWidget, FAVOURITES_KEY, read_theme_favourites
 from core.logging.logger import get_logger
 from rendering.quick.widgets.surface_material import SURFACE_MATERIAL_LABELS
 from core.settings.settings_manager import SettingsManager
@@ -210,6 +210,14 @@ class ThemesTab(QWidget):
         )
         return button
 
+    @staticmethod
+    def _link_row(link_button,theme_filter) -> QHBoxLayout:
+        """The Linked / Independent button, then the type-in filter across the row's free space."""
+        row=QHBoxLayout(); row.setContentsMargins(0,0,0,0); row.setSpacing(12)
+        row.addWidget(link_button,0,Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(theme_filter,1,Qt.AlignmentFlag.AlignVCenter)
+        return row
+
     def _reset_view_scroll(self) -> None:
         scroll=getattr(self,"_scroll_area",None)
         if scroll is None:
@@ -248,8 +256,9 @@ class ThemesTab(QWidget):
         intro=QLabel("Choose the appearance used by the Settings window. A valid selection applies immediately.")
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
         self.settings_keep_synced=self._make_link_button()
-        group_layout.addWidget(self.settings_keep_synced,0,Qt.AlignmentFlag.AlignLeft)
         self.theme_list=ThemeListWidget(); self.theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.settings_theme_filter=ThemeFilterField(self.theme_list,height_buddy=self.settings_keep_synced)
+        group_layout.addLayout(self._link_row(self.settings_keep_synced,self.settings_theme_filter))
         self.theme_list.favouriteToggled.connect(lambda theme_id: self._toggle_theme_favourite("settings", theme_id))
         # Root Settings QSS still owns semantic list colours; only typography
         # is enlarged here for catalogue readability.
@@ -270,8 +279,9 @@ class ThemesTab(QWidget):
         )
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
         self.widget_keep_synced=self._make_link_button()
-        group_layout.addWidget(self.widget_keep_synced,0,Qt.AlignmentFlag.AlignLeft)
         self.widget_theme_list=ThemeListWidget(); self.widget_theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.widget_theme_filter=ThemeFilterField(self.widget_theme_list,height_buddy=self.widget_keep_synced)
+        group_layout.addLayout(self._link_row(self.widget_keep_synced,self.widget_theme_filter))
         self.widget_theme_list.favouriteToggled.connect(lambda theme_id: self._toggle_theme_favourite("widgets", theme_id))
         self.widget_theme_list.setStyleSheet("QListWidget { font-size: 12pt; }")
         self.widget_theme_list.setMinimumHeight(240); group_layout.addWidget(self.widget_theme_list)
@@ -486,10 +496,10 @@ class ThemesTab(QWidget):
             self.widget_theme_list.add_theme_item(custom, resolve_widget_theme(
                 replace(state, selected_id=CUSTOM_WIDGET_THEME_ID, keep_synced=False), catalog).theme)
         elif state.custom_payload is None and custom_row >= 0:
-            self.widget_theme_list.takeItem(custom_row)
+            self.widget_theme_list.remove_theme_item(custom_row)
         elif state.custom_payload is not None and custom_row >= 0:
-            self.widget_theme_list.item(custom_row).setData(PALETTE_ROLE, dominant_theme_colours(resolve_widget_theme(
-                replace(state, selected_id=CUSTOM_WIDGET_THEME_ID, keep_synced=False), catalog).theme))
+            self.widget_theme_list.update_theme_item(self.widget_theme_list.item(custom_row), resolve_widget_theme(
+                replace(state, selected_id=CUSTOM_WIDGET_THEME_ID, keep_synced=False), catalog).theme)
         self.widget_theme_list.set_favourites(read_theme_favourites(self._settings, "widgets"))
 
         resolved=resolve_widget_theme_state(
