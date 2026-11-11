@@ -170,36 +170,45 @@ def _grown_mesh_vertices(cells, extent, parts: int, fine_rows, reach) -> tuple[f
     points: list[float] = []
 
     def split(a: float, b: float, count: int) -> list[float]:
-        return [a + (b - a) * k / count for k in range(count)] + [b]
+        # The share first: k / count is the same number however a finer neighbour counts the same point (2/8, 1/4),
+        # so both sides of a shared edge place it identically.
+        return [a + (b - a) * (k / count) for k in range(count)] + [b]
 
-    for j in range(len(ys) - 1):
-        v0, v1 = ys[j], ys[j + 1]
-        for i in range(len(xs) - 1):
-            u0, u1 = xs[i], xs[i + 1]
-            sx, sy = steps(i, j)
-            below, above = max(sx, steps(i, j - 1)[0]), max(sx, steps(i, j + 1)[0])
-            left, right = max(sy, steps(i - 1, j)[1]), max(sy, steps(i + 1, j)[1])
-            if below == above == sx and left == right == sy:
-                us, vs = split(u0, u1, sx), split(v0, v1, sy)
-                for a, b in zip(vs, vs[1:]):
-                    for c, d in zip(us, us[1:]):
-                        points.extend((c, a, c, b, d, b, c, a, d, b, d, a))
-                continue
-            if sx == sy == 1 and left == right == 1 and sorted((below, above)) == [1, parts] and parts > 1:
-                # The ordinary fan of a coarse cell beside the camera-side band.
-                fine_v, coarse_v = (v0, v1) if below == parts else (v1, v0)
-                edge = split(u0, u1, parts)
-                for k in range(parts):
-                    apex = u0 if k < half else u1
-                    points.extend((edge[k], fine_v, apex, coarse_v, edge[k + 1], fine_v))
-                points.extend((edge[half], fine_v, u0, coarse_v, u1, coarse_v))
-                continue
-            border = ([(u, v0) for u in split(u0, u1, below)[:-1]] + [(u1, v) for v in split(v0, v1, right)[:-1]]
-                      + [(u, v1) for u in reversed(split(u0, u1, above)[1:])]
-                      + [(u0, v) for v in reversed(split(v0, v1, left)[1:])])
+    def patch(below: list, right: list, above: list, left: list) -> None:
+        """One step of a cell from its four edges' points (each low to high; more than two where a finer
+        neighbour's steps lie along it)."""
+        (u0, v0), (u1, v1) = (below[0], left[0]), (below[-1], left[-1])
+        if len(below) == len(right) == len(above) == len(left) == 2:
+            points.extend((u0, v0, u0, v1, u1, v1, u0, v0, u1, v1, u1, v0))
+        elif len(left) == len(right) == 2 and sorted((len(below), len(above))) == [2, parts + 1]:
+            # The ordinary fan of a coarse step beside the camera-side band's halves.
+            fine_v, coarse_v, edge = (v0, v1, below) if len(below) > 2 else (v1, v0, above)
+            for k in range(parts):
+                apex = u0 if k < half else u1
+                points.extend((edge[k], fine_v, apex, coarse_v, edge[k + 1], fine_v))
+            points.extend((edge[half], fine_v, u0, coarse_v, u1, coarse_v))
+        else:
+            border = ([(u, v0) for u in below[:-1]] + [(u1, v) for v in right[:-1]]
+                      + [(u, v1) for u in reversed(above[1:])] + [(u0, v) for v in reversed(left[1:])])
             centre = (0.5 * (u0 + u1), 0.5 * (v0 + v1))
             for a, b in zip(border, border[1:] + border[:1]):
                 points.extend((*centre, *b, *a))
+
+    for j in range(len(ys) - 1):
+        for i in range(len(xs) - 1):
+            sx, sy = steps(i, j)
+            # A shared edge takes the finer side's steps (the counts nest, so the coarser side's are among them).
+            below, above = max(sx, steps(i, j - 1)[0]) // sx, max(sx, steps(i, j + 1)[0]) // sx
+            left, right = max(sy, steps(i - 1, j)[1]) // sy, max(sy, steps(i + 1, j)[1]) // sy
+            us, vs = split(xs[i], xs[i + 1], sx), split(ys[j], ys[j + 1], sy)
+            edges = {"below": split(xs[i], xs[i + 1], sx * below), "above": split(xs[i], xs[i + 1], sx * above),
+                     "left": split(ys[j], ys[j + 1], sy * left), "right": split(ys[j], ys[j + 1], sy * right)}
+            for b in range(sy):
+                for a in range(sx):
+                    patch(edges["below"][a * below:(a + 1) * below + 1] if b == 0 else us[a:a + 2],
+                          edges["right"][b * right:(b + 1) * right + 1] if a == sx - 1 else vs[b:b + 2],
+                          edges["above"][a * above:(a + 1) * above + 1] if b == sy - 1 else us[a:a + 2],
+                          edges["left"][b * left:(b + 1) * left + 1] if a == 0 else vs[b:b + 2])
     return tuple(points)
 
 

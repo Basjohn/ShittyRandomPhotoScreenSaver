@@ -240,8 +240,14 @@ float basinOriginHeight(vec2 grid) {
     vec2 p=clamp(basinOriginTexel(grid),vec2(cells.xy),vec2(cells.zw));
     ivec2 c0=min(ivec2(floor(p)),cells.zw), c1=min(c0+1,cells.zw);
     vec2 f=p-vec2(c0);
-    return mix(mix(texelFetch(uTerrain,c0,0).r,texelFetch(uTerrain,ivec2(c1.x,c0.y),0).r,f.x),
-               mix(texelFetch(uTerrain,ivec2(c0.x,c1.y),0).r,texelFetch(uTerrain,c1,0).r,f.x),f.y);
+    // Water is decided on the origin's own cells alone, exactly: the filtered read below may weigh in a
+    // neighbouring cell past the origin by a rounding step.
+    float exact=mix(mix(texelFetch(uTerrain,c0,0).r,texelFetch(uTerrain,ivec2(c1.x,c0.y),0).r,f.x),
+                    mix(texelFetch(uTerrain,ivec2(c0.x,c1.y),0).r,texelFetch(uTerrain,c1,0).r,f.x),f.y);
+    if (exact==0.0) return 0.0;
+    // The height itself is the same filtered read the edge had before the grid grew (the snapped texel sits on
+    // the origin's own row or column), so the generated land does not shift by a filtering step.
+    return max(textureLod(uTerrain,(p+0.5)/float(uTerrainSize),0.0).r,1e-30);
 }
 float basinOriginCurve(vec2 grid) {
     if (!basinGrown()) return sceneHeightfieldCurve(uTerrain,uTerrainSize,grid);
