@@ -181,6 +181,25 @@ def test_surface_payload_is_finite_deterministic_at_boundaries_and_all_water_or_
     assert all(math.isfinite(value) for value in edge_pairs)
 
 
+def test_the_surface_payload_is_the_scalar_transforms_bytes_on_every_shape_of_field():
+    """The array form a brush preview pays for per frame packs exactly what the scalar transform does: random
+    fields at every small size, all water, all land, sparse cells of each, and the largest grid."""
+    import random
+
+    from rendering.gl_programs.heightfield import HEIGHTFIELD_MAX_SIZE, _surface_bytes_reference
+    rng = random.Random(5)
+    fields = []
+    for size in list(range(2, 24)) + [33, 65]:
+        for water in (0.0, 0.1, 0.5, 0.9, 0.99, 1.0):
+            fields.append((size, [0.0 if rng.random() < water else rng.uniform(1e-6, 1.0) for _ in range(size * size)]))
+    size = HEIGHTFIELD_MAX_SIZE
+    fields.append((size, [0.0 if (x - 90) ** 2 + (y - 140) ** 2 < 70 ** 2 or rng.random() < 0.02 else 0.3
+                          for y in range(size) for x in range(size)]))
+    for size, heights in fields:
+        record = normalize_heightfield({"version": 1, "size": size, "heights": heights})
+        assert heightfield_surface_bytes(record) == _surface_bytes_reference(record), size
+
+
 def test_heightfield_rejects_positive_float32_underflow_and_keeps_minimum_normal():
     minimum_normal = 2.0 ** -126
     terrain = normalize_heightfield({

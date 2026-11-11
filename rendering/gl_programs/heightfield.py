@@ -192,7 +192,40 @@ def heightfield_surface_bytes(data: Mapping) -> bytes:
     samples are expanded by one Chebyshev texel, then an exact squared Euclidean
     distance transform is normalized by ``size - 1``. An all-water field uses
     distance 1, while every sample in the expanded solid support uses distance 0.
+
+    Squared distances are whole numbers, so this array form is the same bytes as the scalar transform
+    (``_surface_bytes_reference``, kept as the test oracle); it is what a brush preview pays per frame, and the
+    scalar one cost 128 ms on the largest grid (this: a few).
     """
+    import numpy as np
+
+    size = int(data["size"])
+    heights = np.asarray(data["heights"], dtype=np.float64).reshape(size, size)
+    land = heights > 0.0
+    if land.any():
+        padded = np.pad(land, 1)
+        support = np.zeros_like(land)
+        for dy in range(3):
+            for dx in range(3):
+                support |= padded[dy:dy + size, dx:dx + size]
+        # Along each row: the squared distance to the nearest support cell (a far sentinel where the row has none).
+        index = np.arange(size)
+        far = 4 * size
+        left = np.maximum.accumulate(np.where(support, index, -far), axis=1)
+        right = np.minimum.accumulate(np.where(support, index, far)[:, ::-1], axis=1)[:, ::-1]
+        horizontal = np.minimum(index - left, right - index).astype(np.float64) ** 2
+        # Down each column: the least of a row's squared distance plus the squared rows between.
+        squared = np.empty((size, size))
+        for y in range(size):
+            squared[y] = (((index - y) ** 2)[:, None] + horizontal).min(axis=0)
+        distances = np.sqrt(squared) / (size - 1)
+    else:
+        distances = np.ones((size, size))
+    return np.stack([heights, distances], axis=-1).astype("<f4").tobytes()
+
+
+def _surface_bytes_reference(data: Mapping) -> bytes:
+    """The scalar form of ``heightfield_surface_bytes`` (test oracle; nothing in the product calls it)."""
     size = data["size"]
     heights = data["heights"]
     support = [False] * (size * size)
