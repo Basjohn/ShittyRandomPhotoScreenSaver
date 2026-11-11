@@ -255,7 +255,10 @@ version advancement by itself does not reopen the failed handoff. Current Quick 
   honored (composed with, not cleared); the failed `QSGClipNode` handoff proved arbitrary PySide clip
   metadata is not trustworthy, so this is only the narrower compose-with-valid-state guarantee;
 - direct GL does not clear or overwrite scene-graph clip contents as if it owned the framebuffer;
-- temporary stencil contents and every touched direct-GL state are restored.
+- temporary stencil contents and every touched direct-GL state are restored;
+- the clip is built from the record the scene draws the card from at this sync (the retained item's), never from the
+  record inside a retained snapshot, which can be older and larger after a resize or a collapse from the display-wide
+  card (R-187; `tests/test_visualizer_card_clip_contract.py` checks every registered mode, steady and retained).
 
 Do not preserve the failed clip-node route as a second selectable implementation.
 
