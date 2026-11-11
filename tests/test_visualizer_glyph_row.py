@@ -39,7 +39,7 @@ from tests.test_visualizer_expansion_overlays import (
 
 CARD_ROW = ("visualizerPreviousPresetGlyph", "visualizerNextPresetGlyph", "visualizerStudioGlyph",
             "visualizerRotateGlyph", "visualizerCameraResetGlyph", "visualizerExpandLeftGlyph",
-            "visualizerExpandGlyph")
+            "visualizerExpandGlyph", "visualizerExpandRightGlyph")
 
 
 @pytest.fixture
@@ -164,26 +164,34 @@ def test_studio_and_rotate_are_the_same_glyph_row_on_ordinary_and_expanded_cards
 @pytest.mark.qt
 @pytest.mark.parametrize("card", ["ordinary", "narrow", "expanded"])
 @pytest.mark.parametrize("studio,rotate", [(False, False), (True, True)])
-def test_two_displays_put_both_display_glyphs_at_the_rows_corner(display, card, studio, rotate):
-    """Plan 1B.12: with more than one display the up-left display glyph joins the row just before the up-right one,
-    in the same row geometry (one baseline, one size, one spacing, inside the card, on narrow cards too)."""
+@pytest.mark.parametrize("left,right", [(True, False), (False, True), (True, True)])
+def test_the_side_glyphs_join_the_row_around_this_displays_glyph(display, card, studio, rotate, left, right):
+    """Plan 1B.12 (relative form): the up-left glyph (a display to the left) joins the row just before this
+    display's glyph, the up-right one (a display to the right) after it at the corner, in the same row geometry (one
+    baseline, one size, one spacing, inside the card, on narrow cards too)."""
     if card == "expanded":
         _expanded_card(display)
     else:
         _ordinary(display, extent=(150.0, 70.0) if card == "narrow" else None)
-    display.scene.set_visualizer_expand_glyph(True, card == "expanded", display_targets=True, display=0)
+    display.scene.set_visualizer_expand_glyph(True, card == "expanded", sides=(left, right))
     _offer(display, reset=True, expand=True, studio=studio, rotate=rotate)
-    _settle(display, lambda: float(display.scene._visualizer_root.property("expandLeftPresence")) >= 1.0)
+    root = display.scene._visualizer_root
+    _settle(display, lambda: (float(root.property("expandLeftPresence")), float(root.property("expandRightPresence")))
+            == (float(left), float(right)))
     _run(display, 60)
+    sides = (("visualizerExpandLeftGlyph",) if left else ()) + ("visualizerExpandGlyph",) + (
+        ("visualizerExpandRightGlyph",) if right else ())
     expected = ("visualizerPreviousPresetGlyph", "visualizerNextPresetGlyph") + (
         ("visualizerStudioGlyph", "visualizerRotateGlyph") if studio else ()) + (
-        "visualizerCameraResetGlyph", "visualizerExpandLeftGlyph", "visualizerExpandGlyph")
+        "visualizerCameraResetGlyph",) + sides
     members = _row(display, CARD_ROW)
     _assert_one_row(members, _card_rect(display), expected)
     # Each glyph's tip sits above the row, right-aligned on the glyph it names.
-    root = display.scene._visualizer_root
     top = min(rect.top() for _name, rect in members)
-    for index, name in ((0, "visualizerExpandLeftGlyph"), (1, "visualizerExpandGlyph")):
+    names = {-1: "visualizerExpandLeftGlyph", 0: "visualizerExpandGlyph", 1: "visualizerExpandRightGlyph"}
+    for index, name in names.items():
+        if name not in sides:
+            continue
         root.setProperty("expandTipGlyph", index)
         root.setProperty("expandTipProgress", 1.0)
         _run(display, 20)

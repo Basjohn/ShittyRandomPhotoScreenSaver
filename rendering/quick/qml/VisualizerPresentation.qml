@@ -22,22 +22,53 @@ Item {
     property bool expandGlyphAvailable: false
     property bool expandedDisplay: false
     signal expandGlyphRequested(bool expand)
-    // One glyph per target display (plan 1B.12): with more than one display live the row offers up-left (Display
-    // index 0) beside up-right (index 1), each "full display on that display" from whichever display the card is
-    // on. expandGlyphDisplay is the card's own display: its glyph is the collapse while expanded. A view expanded on
-    // a display neither glyph names keeps the single collapse glyph (V reaches those displays). With one display
-    // the single glyph is exactly as before.
-    property bool expandTargetsAvailable: false
-    property int expandGlyphDisplay: -1
-    signal expandOnDisplayRequested(int display)
-    readonly property bool expandTwoGlyphs: expandTargetsAvailable && !(expandedDisplay && expandGlyphDisplay > 1)
-    // The second glyph's place fades in and out (its slot grows with it), so nothing in the row pops.
-    property real expandLeftPresence: expandTwoGlyphs ? 1.0 : 0.0
+    // Full display relative to the Visualizer's display (plan 1B.12, operator 12 Nov): the Up arrow is full display
+    // on this display (the Down arrow, its collapse, while expanded); the up-left and up-right arrows are full display
+    // on the display to the left and to the right (while expanded they move the view there). The display manager
+    // publishes whether a display lies on each side (from the displays' arrangement, never their index) and resolves
+    // a side press to a display; only the applicable arrows show.
+    property bool expandLeftAvailable: false
+    property bool expandRightAvailable: false
+    signal expandToSideRequested(int side)
+    // This display's arrow, in degrees clockwise from Up (the one place its look is chosen): 0 is the Up arrow; 45
+    // would be the up-right arrow (a single-display-only variant: "expandLeftAvailable || expandRightAvailable ? 0 : 45").
+    readonly property real expandHereArrowDegrees: 0
+    // Each side glyph's place fades in and out (its slot grows and shrinks with it), so the row never jumps.
+    property real expandLeftPresence: expandLeftAvailable ? 1.0 : 0.0
     Behavior on expandLeftPresence { NumberAnimation { duration: 600; easing.type: Easing.InOutSine } }
-    readonly property bool expandRightCollapses: expandedDisplay && (!expandTwoGlyphs || expandGlyphDisplay === 1)
-    readonly property bool expandLeftCollapses: expandedDisplay && expandTwoGlyphs && expandGlyphDisplay === 0
-    // Which glyph the full-display tip names (0: up-left, 1: up-right).
-    property int expandTipGlyph: 1
+    property real expandRightPresence: expandRightAvailable ? 1.0 : 0.0
+    Behavior on expandRightPresence { NumberAnimation { duration: 600; easing.type: Easing.InOutSine } }
+    // Which glyph the full-display tip names (-1: up-left, 0: this display, 1: up-right).
+    property int expandTipGlyph: 0
+    function expandTipText(side) {
+        if (side < 0) return "FULL DISPLAY ON THE DISPLAY TO THE LEFT"
+        if (side > 0) return "FULL DISPLAY ON THE DISPLAY TO THE RIGHT"
+        if (expandedDisplay) return "EXIT FULL DISPLAY"
+        return (expandLeftAvailable || expandRightAvailable) ? "FULL DISPLAY ON THIS DISPLAY" : "FULL DISPLAY"
+    }
+    // The full-display arrows' one painter: a 2.0 px round-capped arrow, its shaft the diagonal of a 9 px square,
+    // its two 6 px head strokes at 45 degrees, centred and turned ``degrees`` clockwise from Up. The diagonals are
+    // exactly this arrow turned by 45 degrees, so the Up and Down arrows are the same family.
+    function paintFullDisplayArrow(ctx, size, degrees) {
+        const half = 4.5 * Math.SQRT2
+        const arm = 3.0 * Math.SQRT2
+        ctx.clearRect(0, 0, size, size)
+        ctx.save()
+        ctx.translate(size / 2, size / 2)
+        ctx.rotate(degrees * Math.PI / 180)
+        ctx.strokeStyle = "#f2f4f7"
+        ctx.lineWidth = 2.0
+        ctx.lineCap = "round"
+        ctx.lineJoin = "round"
+        ctx.beginPath()
+        ctx.moveTo(0, half)
+        ctx.lineTo(0, -half)
+        ctx.moveTo(-arm, -half + arm)
+        ctx.lineTo(0, -half)
+        ctx.lineTo(arm, -half + arm)
+        ctx.stroke()
+        ctx.restore()
+    }
     // Full-display overlays (plan 01 §G, M3b): the preset toast and Now Playing. The owner sets
     // expandedOverlaysDrawn exactly while the display-wide card is drawn (and the displays are on); otherwise the
     // overlay Loader below is inactive and nothing of them exists. The rest are retained inputs the display manager
@@ -65,10 +96,10 @@ Item {
     readonly property real glyphSize: 26
     readonly property real glyphSpacing: 5
     readonly property real glyphRowInset: Math.max(12, cardBorderWidth + 6)
-    // Worst case: preset steps + Studio + Rotate + camera reset + expand (+ the second display glyph while more than
-    // one display is live; one display keeps its row exactly). The same one-row fit rule scales it uniformly on
-    // narrow cards, rather than clipping or overlapping its glyph hitboxes.
-    readonly property int glyphRowSlots: expandTargetsAvailable ? 7 : 6
+    // Worst case: preset steps + Studio + Rotate + camera reset + expand (+ each side glyph offered, counted as its
+    // place fades, so the fit eases with it; one display keeps its row exactly). The same one-row fit rule scales it
+    // uniformly on narrow cards, rather than clipping or overlapping its glyph hitboxes.
+    readonly property real glyphRowSlots: 6 + expandLeftPresence + expandRightPresence
     readonly property real glyphRowFullWidth: glyphRowSlots * glyphSize + (glyphRowSlots - 1) * glyphSpacing
     readonly property real glyphRowScale: Math.max(0.0, Math.min(1.0,
         (width - 2 * glyphRowInset) / glyphRowFullWidth, (height - 2 * glyphRowInset) / glyphSize))
@@ -90,8 +121,21 @@ Item {
         font.weight: Font.Medium
         text: "PREVIOUS PRESET"
     }
+    // The full-display tip's widest text among the offered glyphs (never the hovered one, so nothing moves on hover).
+    TextMetrics {
+        id: expandHereTipMetrics
+        font: expandTooltipText.font
+        text: visualizerPresentationRoot.expandTipText(0)
+    }
+    TextMetrics {
+        id: expandSideTipMetrics
+        font: expandTooltipText.font
+        text: visualizerPresentationRoot.expandTipText(visualizerPresentationRoot.expandRightAvailable ? 1 : -1)
+    }
+    readonly property real expandTipWidestWidth: Math.max(expandHereTipMetrics.advanceWidth,
+        (expandLeftAvailable || expandRightAvailable) ? expandSideTipMetrics.advanceWidth : 0) + 16
     readonly property real expandedOverlayControlsLeft: Math.min(
-        glyphRowRight - expandTooltip.width,
+        glyphRowRight - expandTipWidestWidth,
         controlHintsAvailable && show3DControlHints
             ? width - controlHintImage.inset - controlHintImage.width : width,
         glyphRowRight - glyphRowFullWidth * glyphRowScale,
@@ -684,94 +728,23 @@ Item {
             }
         }
 
-        // In the row while offered.
+        // In the row while offered: the up-left glyph, this display's glyph, the up-right glyph at the far corner.
         Item {
             id: expandSlot
             objectName: "visualizerExpandSlot"
             visible: visualizerPresentationRoot.expandGlyphAvailable
-            // The up-left display glyph takes its place inside this slot as it fades in (plan 1B.12), so the row
-            // never jumps by a whole member.
-            width: visualizerPresentationRoot.glyphSize + visualizerPresentationRoot.expandLeftPresence
+            // Each side glyph takes its place inside this slot as it fades in, and gives it up as it fades out
+            // (plan 1B.12), so the row never jumps by a whole member.
+            width: visualizerPresentationRoot.glyphSize
+                + (visualizerPresentationRoot.expandLeftPresence + visualizerPresentationRoot.expandRightPresence)
                 * (visualizerPresentationRoot.glyphSize + visualizerPresentationRoot.glyphSpacing)
             height: visualizerPresentationRoot.glyphSize
-            // Up-left: full display on Display index 0 (its collapse while expanded there).
-            Rectangle {
-                id: expandLeftGlyph
-                objectName: "visualizerExpandLeftGlyph"
-                x: 0
-                width: visualizerPresentationRoot.glyphSize
-                height: visualizerPresentationRoot.glyphSize
-                radius: width / 2
-                color: expandGlyph.color
-                border.width: expandGlyph.border.width
-                border.color: expandGlyph.border.color
-                visible: expandGlyph.visible && visualizerPresentationRoot.expandLeftPresence > 0.0
-                opacity: expandGlyph.opacity * visualizerPresentationRoot.expandLeftPresence
-                enabled: visible && expandGlyph.enabled && visualizerPresentationRoot.expandTwoGlyphs
-                onEnabledChanged: if (!enabled && visualizerPresentationRoot.expandTipGlyph === 0) {
-                    expandTipReveal.stop()
-                    visualizerPresentationRoot.expandTipProgress = 0.0
-                }
-                Canvas {
-                    id: expandLeftArrow
-                    objectName: "visualizerExpandLeftGlyphArrow"
-                    anchors.centerIn: parent
-                    width: 18
-                    height: 18
-                    readonly property bool collapse: visualizerPresentationRoot.expandLeftCollapses
-                    onCollapseChanged: requestPaint()
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        ctx.save()
-                        // The up-right arrow mirrored to point up-left; collapse turns it to point down-right.
-                        ctx.translate(width, 0); ctx.scale(-1, 1)
-                        if (collapse) { ctx.translate(width, height); ctx.rotate(Math.PI) }
-                        ctx.strokeStyle = "#f2f4f7"
-                        ctx.lineWidth = 2.0
-                        ctx.lineCap = "round"
-                        ctx.lineJoin = "round"
-                        ctx.beginPath()
-                        ctx.moveTo(4.5, 13.5)
-                        ctx.lineTo(13.5, 4.5)
-                        ctx.moveTo(7.5, 4.5)
-                        ctx.lineTo(13.5, 4.5)
-                        ctx.lineTo(13.5, 10.5)
-                        ctx.stroke()
-                        ctx.restore()
-                    }
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: parent.enabled
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    propagateComposedEvents: false
-                    onEntered: {
-                        visualizerPresentationRoot.expandTipGlyph = 0
-                        expandTipReveal.restart()
-                    }
-                    onExited: {
-                        if (visualizerPresentationRoot.expandTipGlyph !== 0) return
-                        expandTipReveal.stop()
-                        visualizerPresentationRoot.expandTipProgress = 0.0
-                    }
-                    onPressed: function(mouse) { mouse.accepted = true }
-                    readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
-                    onDoubleClicked: function(mouse) { mouse.accepted = true }
-                    onClicked: function(mouse) {
-                        mouse.accepted = true
-                        if (visualizerPresentationRoot.expandLeftCollapses)
-                            visualizerPresentationRoot.expandGlyphRequested(false)
-                        else
-                            visualizerPresentationRoot.expandOnDisplayRequested(0)
-                    }
-                }
-            }
+            // This display: the Up arrow (full display here); the Down arrow while expanded (the collapse).
             Rectangle {
                 id: expandGlyph
                 objectName: "visualizerExpandGlyph"
-                anchors.right: parent.right
+                x: visualizerPresentationRoot.expandLeftPresence
+                    * (visualizerPresentationRoot.glyphSize + visualizerPresentationRoot.glyphSpacing)
                 width: visualizerPresentationRoot.glyphSize
                 height: visualizerPresentationRoot.glyphSize
                 radius: width / 2
@@ -790,7 +763,7 @@ Item {
                         easing.type: Easing.InOutSine
                     }
                 }
-                onEnabledChanged: if (!enabled && visualizerPresentationRoot.expandTipGlyph === 1) {
+                onEnabledChanged: if (!enabled && visualizerPresentationRoot.expandTipGlyph === 0) {
                     expandTipReveal.stop()
                     visualizerPresentationRoot.expandTipProgress = 0.0
                 }
@@ -800,27 +773,11 @@ Item {
                     anchors.centerIn: parent
                     width: 18
                     height: 18
-                    readonly property bool collapse: visualizerPresentationRoot.expandRightCollapses
-                    onCollapseChanged: requestPaint()
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        ctx.save()
-                        // Expand points up-right; collapse is the same arrow turned to point down-left.
-                        if (collapse) { ctx.translate(width, height); ctx.rotate(Math.PI) }
-                        ctx.strokeStyle = "#f2f4f7"
-                        ctx.lineWidth = 2.0
-                        ctx.lineCap = "round"
-                        ctx.lineJoin = "round"
-                        ctx.beginPath()
-                        ctx.moveTo(4.5, 13.5)
-                        ctx.lineTo(13.5, 4.5)
-                        ctx.moveTo(7.5, 4.5)
-                        ctx.lineTo(13.5, 4.5)
-                        ctx.lineTo(13.5, 10.5)
-                        ctx.stroke()
-                        ctx.restore()
-                    }
+                    readonly property bool collapse: visualizerPresentationRoot.expandedDisplay
+                    // Collapse is the same arrow turned to point the other way (Up becomes Down).
+                    readonly property real degrees: visualizerPresentationRoot.expandHereArrowDegrees + (collapse ? 180 : 0)
+                    onDegreesChanged: requestPaint()
+                    onPaint: visualizerPresentationRoot.paintFullDisplayArrow(getContext("2d"), width, degrees)
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -828,11 +785,11 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     propagateComposedEvents: false
                     onEntered: {
-                        visualizerPresentationRoot.expandTipGlyph = 1
+                        visualizerPresentationRoot.expandTipGlyph = 0
                         expandTipReveal.restart()
                     }
                     onExited: {
-                        if (visualizerPresentationRoot.expandTipGlyph !== 1) return
+                        if (visualizerPresentationRoot.expandTipGlyph !== 0) return
                         expandTipReveal.stop()
                         visualizerPresentationRoot.expandTipProgress = 0.0
                     }
@@ -841,12 +798,68 @@ Item {
                     onDoubleClicked: function(mouse) { mouse.accepted = true }
                     onClicked: function(mouse) {
                         mouse.accepted = true
-                        if (!visualizerPresentationRoot.expandTwoGlyphs)
-                            visualizerPresentationRoot.expandGlyphRequested(!visualizerPresentationRoot.expandedDisplay)
-                        else if (visualizerPresentationRoot.expandRightCollapses)
-                            visualizerPresentationRoot.expandGlyphRequested(false)
-                        else
-                            visualizerPresentationRoot.expandOnDisplayRequested(1)
+                        visualizerPresentationRoot.expandGlyphRequested(!visualizerPresentationRoot.expandedDisplay)
+                    }
+                }
+            }
+            // The display to the left (-1) and to the right (+1): the same arrow turned 45 degrees each way, offered
+            // only while a display lies on that side. While expanded they move the view there (it stays expanded).
+            Repeater {
+                model: [-1, 1]
+                delegate: Rectangle {
+                    id: sideGlyph
+                    required property int modelData
+                    readonly property int side: modelData
+                    readonly property bool offered: side < 0 ? visualizerPresentationRoot.expandLeftAvailable
+                                                             : visualizerPresentationRoot.expandRightAvailable
+                    readonly property real presence: side < 0 ? visualizerPresentationRoot.expandLeftPresence
+                                                              : visualizerPresentationRoot.expandRightPresence
+                    objectName: side < 0 ? "visualizerExpandLeftGlyph" : "visualizerExpandRightGlyph"
+                    x: side < 0 ? 0 : expandGlyph.x + visualizerPresentationRoot.glyphSize
+                        + visualizerPresentationRoot.glyphSpacing
+                    width: visualizerPresentationRoot.glyphSize
+                    height: visualizerPresentationRoot.glyphSize
+                    radius: width / 2
+                    color: expandGlyph.color
+                    border.width: expandGlyph.border.width
+                    border.color: expandGlyph.border.color
+                    visible: expandGlyph.visible && presence > 0.0
+                    opacity: expandGlyph.opacity * presence
+                    enabled: visible && expandGlyph.enabled && offered
+                    onEnabledChanged: if (!enabled && visualizerPresentationRoot.expandTipGlyph === side) {
+                        expandTipReveal.stop()
+                        visualizerPresentationRoot.expandTipProgress = 0.0
+                    }
+                    Canvas {
+                        objectName: sideGlyph.side < 0 ? "visualizerExpandLeftGlyphArrow" : "visualizerExpandRightGlyphArrow"
+                        anchors.centerIn: parent
+                        width: 18
+                        height: 18
+                        readonly property real degrees: 45 * sideGlyph.side
+                        onPaint: visualizerPresentationRoot.paintFullDisplayArrow(getContext("2d"), width, degrees)
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: sideGlyph.enabled
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        propagateComposedEvents: false
+                        onEntered: {
+                            visualizerPresentationRoot.expandTipGlyph = sideGlyph.side
+                            expandTipReveal.restart()
+                        }
+                        onExited: {
+                            if (visualizerPresentationRoot.expandTipGlyph !== sideGlyph.side) return
+                            expandTipReveal.stop()
+                            visualizerPresentationRoot.expandTipProgress = 0.0
+                        }
+                        onPressed: function(mouse) { mouse.accepted = true }
+                        readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+                        onDoubleClicked: function(mouse) { mouse.accepted = true }
+                        onClicked: function(mouse) {
+                            mouse.accepted = true
+                            visualizerPresentationRoot.expandToSideRequested(sideGlyph.side)
+                        }
                     }
                 }
             }
@@ -861,10 +874,13 @@ Item {
             (visualizerPresentationRoot.expandTipProgress - 0.56) / 0.44))
         width: expandTooltipText.implicitWidth + 16
         height: expandTooltipText.implicitHeight + 8
-        // Above the row like the other tips, its right edge on the hovered glyph's.
-        x: Math.max(3, visualizerPresentationRoot.glyphRowPointX(
-            expandSlot.x + (visualizerPresentationRoot.expandTipGlyph === 0
-                            ? expandLeftGlyph.x + expandLeftGlyph.width : expandSlot.width)) - width)
+        // Above the row like the other tips, its right edge on the hovered glyph's (up-left at the slot's start,
+        // this display's glyph after it, up-right after that).
+        readonly property real namedGlyphRight: visualizerPresentationRoot.glyphSize
+            + (visualizerPresentationRoot.expandTipGlyph < 0 ? 0.0 : expandGlyph.x)
+            + (visualizerPresentationRoot.expandTipGlyph > 0
+               ? visualizerPresentationRoot.glyphSize + visualizerPresentationRoot.glyphSpacing : 0.0)
+        x: Math.max(3, visualizerPresentationRoot.glyphRowPointX(expandSlot.x + namedGlyphRight) - width)
         y: Math.max(3, visualizerPresentationRoot.glyphRowTop - height - 7)
         radius: 4
         z: 13
@@ -875,15 +891,8 @@ Item {
         Text {
             id: expandTooltipText
             anchors.centerIn: parent
-            // One display: the glyph's own words. Two: each glyph names its display (numbered as Settings numbers
-            // them, from 1), or exits where the view is.
-            readonly property bool namesLeftGlyph: visualizerPresentationRoot.expandTipGlyph === 0
-                && visualizerPresentationRoot.expandTwoGlyphs
-            readonly property bool namesCollapse: namesLeftGlyph ? visualizerPresentationRoot.expandLeftCollapses
-                                                                 : visualizerPresentationRoot.expandRightCollapses
-            text: namesCollapse ? "EXIT FULL DISPLAY"
-                : !visualizerPresentationRoot.expandTwoGlyphs ? "FULL DISPLAY"
-                : "FULL DISPLAY ON DISPLAY " + (namesLeftGlyph ? 1 : 2)
+            // What the glyph does relative to the Visualizer's display (never a display number).
+            text: visualizerPresentationRoot.expandTipText(visualizerPresentationRoot.expandTipGlyph)
             color: "#f6f6f8"
             font.pixelSize: 11
             font.weight: Font.Medium

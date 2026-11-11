@@ -995,8 +995,12 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   right press with the menu open; double-right still enters Edit; focus loss, mode edge, input close and display loss
   release the capture; Media Center's forced interaction; end to end on the production card, the Studio's pan
   direction and one save on release, and a stale gesture never saving another view.
-- Plan 1B.12 (one full-display glyph per display) is covered in `tests/test_visualizer_expansion_reducer.py`,
-  `..._coordinator.py`, `..._qml_native.py`, `tests/test_visualizer_glyph_row.py` and
+- Plan 1B.12 (full-display glyphs relative to the Visualizer's display: Up here, up-left / up-right to the
+  neighbours) is covered in `tests/test_display_neighbours.py` (the arrangement rule: rows of one to three from each
+  display in every key order, vertical stacks, offset and corner-only displays, nearest, ties, mixed-scaling gaps),
+  `tests/test_visualizer_expansion_reducer.py`, `..._coordinator.py` (the manager's publication and side press on
+  arrangements built from geometry with indices against the arrangement, the expanded moves, the Edit holds, V, a
+  display added or removed), `..._qml_native.py`, `tests/test_visualizer_glyph_row.py` and
   `tests/test_qtquick_custom_layout_owner.py` (the chrome-less display move).
 - `tests/test_visualizer_expansion_two_display_edit.py` — Edit edits the display it was entered on with an Expanded
   Visualizer on another display (plan 1B.1): the display manager's real Edit entry, Save, Cancel, Settings and menu

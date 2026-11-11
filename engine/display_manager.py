@@ -262,15 +262,13 @@ def _takeover_edit_exited(manager: Any, *, saved: bool) -> None:
         coordinator.edit_exited(saved=saved)
 
 
-def _publish_expand_glyph(unit: Any, available: bool, expanded: bool, *, display_targets: bool = False) -> None:
-    """``display_targets`` (plan 1B.12): more than one display is live, so the card offers a glyph per target
-    display (up-left Display 0, up-right Display 1); with one display the single glyph stays as it was."""
+def _publish_expand_glyph(unit: Any, available: bool, expanded: bool, *,
+                          sides: tuple[bool, bool] = (False, False)) -> None:
+    """``sides`` (plan 1B.12, relative form): whether a display lies to the left and to the right of ``unit``'s
+    display (``core.display_neighbours``), so the card offers the diagonal glyphs beside its own display's glyph."""
     setter = getattr(unit.runtime.scene_controller, "set_visualizer_expand_glyph", None)
     if callable(setter):
-        if display_targets:
-            setter(available, expanded, display_targets=True, display=int(unit.screen_index))
-        else:
-            setter(available, expanded)
+        setter(available, expanded, sides=(bool(sides[0]), bool(sides[1])))
 
 
 def _cover_ordinary_widgets(unit: Any, covered: bool, fade_s: float) -> None:
@@ -2425,11 +2423,11 @@ class DisplayManager(QObject):
                 bool(expand),
             )
         )
-        runtime.scene_controller.visualizer_expand_on_display_requested.connect(
-            lambda target: live_unit_route(
+        runtime.scene_controller.visualizer_expand_to_side_requested.connect(
+            lambda side: live_unit_route(
                 lambda display, value: self._route_quick_visualizer_input(
-                    display, self._route_quick_visualizer_expand_on_display, display, value),
-                int(target),
+                    display, self._route_quick_visualizer_expand_to_side, display, value),
+                int(side),
             )
         )
         runtime.visualizer_expand_toggle_requested.connect(
@@ -3515,7 +3513,7 @@ class DisplayManager(QObject):
             edit_active=lambda: bool(_call("_quick_custom_layout_session_active", default=False)),
             publish_glyph=lambda unit, available, expanded: _publish_expand_glyph(
                 unit, available, expanded,
-                display_targets=bool(_call("_expand_display_targets_offered", default=False))),
+                sides=_call("_expand_glyph_sides", unit, default=(False, False))),
             cover_widgets=_cover_ordinary_widgets,
             end_fullscreen_edit=lambda: _call("_end_fullscreen_overlay_edit"),
             move_to_display=lambda display: bool(_call("_move_quick_visualizer_to_display", display, default=False)),
@@ -3561,22 +3559,47 @@ class DisplayManager(QObject):
         return tuple(display for display in self.displays
                      if isinstance(display, QuickDisplayUnit) and not display.is_retired)
 
-    def _expand_display_targets_offered(self) -> bool:
-        """More than one display is live: the card offers one full-display glyph per target display (plan 1B.12)."""
-        return len(self._live_quick_units()) > 1
+    def _expand_glyph_neighbours(self, unit: Any) -> tuple[QuickDisplayUnit | None, QuickDisplayUnit | None]:
+        """The live displays to the left and to the right of ``unit``'s display (plan 1B.12, relative form).
 
-    def _route_quick_visualizer_expand_on_display(self, unit: QuickDisplayUnit, display: int) -> bool:
-        """A display glyph on ``unit`` (the card's): full display on screen ``display`` (plan 1B.12).
+        The one place the card's side glyphs are resolved to displays, both for what the row offers and for a press:
+        ``core.display_neighbours`` over the virtual-desktop geometry each unit carries (``display_identity``),
+        never the display index (which only breaks an exact tie)."""
+        from core.display_neighbours import side_neighbours
 
-        The request is "expand on display N" at the takeover owner: on the card's own display it is that display's
-        glyph press; on another it is one transfer transaction (move, then expand there; an expanded view moves
-        expanded). Refused like the glyph (no admission, a menu open, a display that is not live)."""
-        if unit is not self._quick_visualizer_unit or unit.is_retired:
+        def rect(live: Any) -> tuple[float, float, float, float] | None:
+            try:
+                x, y, width, height = live.runtime.display_identity.geometry
+                return float(x), float(y), float(width), float(height)
+            except Exception:
+                return None
+
+        source = rect(unit) if unit is not None else None
+        if source is None:
+            return None, None
+        others = {int(live.screen_index): live for live in self._live_quick_units() if live is not unit}
+        left, right = side_neighbours(source, {index: rect(live) for index, live in others.items()})
+        return others.get(left), others.get(right)
+
+    def _expand_glyph_sides(self, unit: Any) -> tuple[bool, bool]:
+        """Whether the card on ``unit`` offers the up-left and the up-right glyph (a display on that side)."""
+        left, right = self._expand_glyph_neighbours(unit)
+        return left is not None, right is not None
+
+    def _route_quick_visualizer_expand_to_side(self, unit: QuickDisplayUnit, side: int) -> bool:
+        """A side glyph on ``unit`` (the card's): full display on the display to the left (-1) or right (+1).
+
+        The relative choice is resolved to a display here, at the press, through the same neighbour rule the row was
+        published with; the request is then "expand on display N" at the takeover owner (one transfer transaction:
+        a collapsed view moves, then expands there; an expanded view moves expanded). Refused like the glyph (no
+        admission, a menu open, no display on that side any more)."""
+        if unit is not self._quick_visualizer_unit or unit.is_retired or int(side) not in (-1, 1):
             return False
         state = unit.runtime.input_controller.input_state
         if not state.admission_open or state.context_menu_active:
             return False
-        target = next((live for live in self._live_quick_units() if int(live.screen_index) == int(display)), None)
+        left, right = self._expand_glyph_neighbours(unit)
+        target = left if int(side) < 0 else right
         coordinator = _takeover_coordinator(self)
         if coordinator is None or target is None:
             return False

@@ -1067,25 +1067,57 @@ can most geometry normally."
   (traces and the invariant walk with the new entry), `tests/test_custom_layout_session.py`,
   `tests/test_custom_layout_contract.py` (held copies against the global Edit's result). Owed: the operator's
   physical two-monitor check.
-- *One full-display glyph per display (operator, 11 Nov; plan 1B.12, decided).* With more than one display live the
-  card's glyph row offers an up-left glyph beside the up-right one: up-left is "full display on Display index 0",
-  up-right on index 1 (the tips number displays as Settings does, from 1), from whichever display the card is on.
-  With one display the single glyph, its row and its narrow-card fit are exactly as before ("Keep it"). V is
-  unchanged (it expands where the Visualizer is); displays beyond the first two are reached with V.
+- *Full-display glyphs relative to the Visualizer's display (operator, 12 Nov; plan 1B.12, decided; supersedes the
+  absolute form of 11 Nov).* The first form offered up-left for "Display index 0" and up-right for index 1 from
+  whichever display the card was on; it is gone (no by-index route remains). Now, for consistency with three or more
+  monitors, the row's full-display glyphs are relative to the display the Visualizer is on:
+  - **Up arrow:** full display on this display (the Down arrow, its collapse, while expanded). It replaces the
+    up-right glyph as this display's glyph, on a single display too. Its look is chosen in one place
+    (`VisualizerPresentation.qml` `expandHereArrowDegrees`: 0 is Up; the comment there gives the one-line variant if
+    the operator prefers up-right on a single display).
+  - **Up-left / up-right arrows:** full display on the display to the left / to the right (while expanded they move
+    the view there, the expanded-to-expanded move below). Only the applicable arrows show: no display on a side, no
+    arrow (one display or a vertical stack shows the Up arrow alone; the middle of three shows all three). The row
+    order is up-left, Up, up-right at the far corner; each side glyph's place fades in and out (600 ms presence, its
+    slot growing with it; the row's narrow-card fit counts the presences, so it eases too), so the row glides and
+    never jumps.
+  - **Left and right** come from the displays' arrangement, never their index (`core/display_neighbours.py`, over
+    each unit's `display_identity.geometry`, the virtual-desktop rect in device-independent terms). A display is on
+    the right when its left edge is at or past the source's right edge (on the left: its right edge at or before
+    the source's left edge; 1 px slack); a display overlapping the source horizontally is above or below, never a
+    side neighbour (stacks offset or of different widths included). Among those on a side, one sharing some of the
+    source's vertical range (beside it, even offset) beats one that does not (corner-only diagonal, still offered
+    when nothing else is on that side); then the smallest horizontal gap; then the closest vertical centre; then the
+    lowest screen index (exact ties only). Qt keeps native origins and scales sizes, so mixed scaling leaves gaps,
+    never overlaps; order is preserved. One display per side: a farther display in a row is reached by moving to the
+    nearer one first.
+  - **One resolution, one request.** The display manager publishes the sides with the glyph
+    (`_publish_expand_glyph(..., sides=_expand_glyph_sides(unit))` → `set_visualizer_expand_glyph(available,
+    expanded, sides=(left, right))`) and resolves a side press at the press through the same rule
+    (`visualizer_expand_to_side_requested(-1|+1)` → `_route_quick_visualizer_expand_to_side` →
+    `_expand_glyph_neighbours`), into the owner's existing "expand on display N" (`expand_on_display`). The Up/Down
+    glyph keeps the plain glyph press (`expandGlyphRequested`, the V key's route). The sides are read at each
+    publication (the takeover's event edges); a display added or removed replaces the generation, whose admission
+    publishes the new sides.
+  - Tooltips keep the row's ALL CAPS short-tag style and say what the glyph does relative to the Visualizer ("FULL
+    DISPLAY ON THIS DISPLAY", "... ON THE DISPLAY TO THE LEFT / RIGHT", "EXIT FULL DISPLAY"; "FULL DISPLAY" on a lone
+    display), never a display number. The overlays' controls column measures the widest offered tip, never the
+    hovered one.
+  V is unchanged (it expands where the Visualizer is). The owner request and the transfer transaction below are the
+  first form's, unchanged:
   - The request is "expand on display N" at the takeover owner (`ExpandedDisplayCoordinator.expand_on_display`; the
-    scene's `visualizer_expand_on_display_requested(int)`; the manager's `_route_quick_visualizer_expand_on_display`
-    resolves N to a live unit), so a later SMP can hold one display while the Visualizer holds the other. On the
-    card's own display it is that display's glyph press (expand, or collapse while expanded there). On another
-    display it is one reducer transfer transaction: `TransferRequested(..., expand=True)` from a collapsed view is
+    manager's `_route_quick_visualizer_expand_to_side` resolves the side to a live unit), so a later SMP can hold one
+    display while the Visualizer holds the other. On the card's own display it is that display's glyph press
+    (expand, or collapse while expanded there). On another display it is one reducer transfer transaction: `TransferRequested(..., expand=True)` from a collapsed view is
     `BeginTransfer(ordinary)`, and its commit begins the user's enter there (its commit persists the intent, as the
     glyph's own enter does); a failed move rolls back to the source and nothing expands; refused for an incapable
     mode or under Edit (the glyphs are withdrawn under every Edit, so the 1B.1 holds apply unchanged).
-  - Expanded (decided): the glyph of the display the view is on is its collapse; the other glyph moves the view
-    there expanded (§D4's one transaction, now built for this route): the coordinator collapses on the source (its
-    widgets fade back), moves, and expands on the target (its widgets fade out), each half at the owner's own
+  - Expanded (decided): this display's glyph is the collapse (the Down arrow); a diagonal moves the view to that
+    neighbour expanded (§D4's one transaction, now built for this route): the coordinator collapses on the source
+    (its widgets fade back), moves, and expands on the target (its widgets fade out), each half at the owner's own
     completion edge; a refused move re-expands on the source, so the reducer's rollback finds it as it was; the
-    intent is never written by a move. A view expanded on a display neither glyph names keeps the single collapse
-    glyph (one glyph, as with one display).
+    intent is never written by a move. The Edit holds (Fullscreen Edit, an Edit beside the view) withdraw the glyphs
+    and refuse a stale side press.
   - The move is Edit's own display hop and Save with no chrome: `QuickCustomLayoutOwner.move_visualizer_to_display`
     opens a session holding only the Visualizer (no scene bound), projects its rect onto the target as the hop does
     (`_project_onto_display`, shared with `transfer_display`), lets the scene coordinator run the retained transfer
@@ -1093,20 +1125,25 @@ can most geometry normally."
     generation rebuild). It refuses while any session is open. The display seam (`_transfer_quick_visualizer_unit`)
     admits a move while layout waits only as the takeover's own transfer (`transfer_in_flight`), and does not
     report it back to the takeover.
-  - Look: the up-left glyph is the up-right arrow mirrored (collapse: turned to point down-right), the same painted
-    2.0 px strokes and disc; its place grows with a 600 ms presence fade inside the expand slot, so the row never
-    jumps by a whole member (the display count only changes with a new generation in practice). Tooltips keep the
-    row's existing ALL CAPS short-tag style ("FULL DISPLAY ON DISPLAY 1"; decided over Title Case so the row's tips
-    read alike; one string to change if the operator prefers Title Case).
-  Evidence: `tests/test_visualizer_expansion_reducer.py` (traces, invariant walk, permutations with the new flow),
-  `tests/test_visualizer_expansion_coordinator.py` (own-display press, move-then-expand, refused move, expanded move
-  and its rollback, Edit and wrong-display refusals, the manager route, the seam's own-transfer admission),
-  `tests/test_qtquick_custom_layout_owner.py` (the chrome-less move commits and promotes; a refused transfer leaves
-  the source and Settings exactly), `tests/test_visualizer_expansion_qml_native.py` and
-  `tests/test_visualizer_glyph_row.py` (one row, order, fade, directions, presses, tips); stills
-  `.artifacts/evidence/visualizers/expanded/20261111_two_glyphs/` (one display, two displays, expanded; 100% and
-  150%; frames and 2x row crops). Owed: the operator's physical two-monitor check (a real move between monitors of
-  different size/DPR and its fades).
+  - Look: one painter (`paintFullDisplayArrow`) draws all four arrows: the 2.0 px round-capped arrow on the row's
+    disc, its shaft the diagonal of a 9 px square and two 6 px head strokes at 45 degrees, turned 0 (Up), 180
+    (Down), -45 (up-left) or +45 (up-right); the diagonals are pixel-for-pixel the first form's arrows, so the Up
+    arrow is the same family turned. Tooltips: ALL CAPS decided over Title Case so the row's tips read alike (one
+    function, `expandTipText`, to change if the operator prefers Title Case).
+  Evidence: `tests/test_display_neighbours.py` (the rule), `tests/test_visualizer_expansion_reducer.py` (traces,
+  invariant walk, permutations with the transfer flow), `tests/test_visualizer_expansion_coordinator.py` (own-display
+  press, move-then-expand, refused move, expanded move and its rollback, Edit and wrong-display refusals; the
+  manager's publication and side press on arrangements built from geometry with screen indices against the
+  arrangement: one, two and three displays from each, vertical, offset, a press toward no display, expanded on the
+  middle and each diagonal's move with its rollback, the Edit holds, V, a display added and removed; the seam's
+  own-transfer admission), `tests/test_qtquick_custom_layout_owner.py` (the chrome-less move commits and promotes; a
+  refused transfer leaves the source and Settings exactly), `tests/test_visualizer_expansion_qml_native.py` and
+  `tests/test_visualizer_glyph_row.py` (one row and its order for each set of sides, the fades and the glide,
+  directions, presses, tips); stills `.artifacts/evidence/visualizers/expanded/20261112_relative_glyphs/` (one
+  display, vertical stack, two from each side, three from the middle with tips, expanded alone, on the middle and on
+  the left end; 100% and 150%; frames and 2x row crops; the first form's are `20261111_two_glyphs/`). Owed: the
+  operator's physical check on two or more monitors (the arrows from each display, a move between monitors of
+  different size or DPR and its fades).
 - *Exits (decided).* An unsaved draft is never discarded or saved implicitly; nothing ends it but the user's own Save
   or Cancel (there is no runtime prompt to reuse: the session's user-choice path is Enter/Esc, the background
   double-click and the menu). The collapse glyph is withdrawn under Edit, as in every Edit, and a stale press is

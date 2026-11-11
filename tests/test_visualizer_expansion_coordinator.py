@@ -539,30 +539,219 @@ def test_a_display_glyph_is_refused_under_edit_and_from_a_display_without_the_ca
     assert host.moves == [] and host.owner.calls == []
 
 
-def _display_glyph_manager():
+# ------------------------------------- plan 1B.12, relative form: the glyphs follow the displays' arrangement
+
+
+LEFT, HERE, RIGHT = -1, 0, 1
+
+
+def _row_rects(count: int, *, size=(1920, 1080)) -> list[tuple[int, int, int, int]]:
+    """``count`` displays edge to edge, left to right (test-owned geometry)."""
+    return [(index * size[0], 0, size[0], size[1]) for index in range(count)]
+
+
+def _arranged(rects, *, on: int, accept: bool = True, mode: str = CAPABLE, requested: bool = False,
+              indices=None):
+    """The manager harness on displays placed at ``rects`` (the Visualizer on ``rects[on]``), with the production
+    takeover wiring (the coordinator's glyph publication and display move go through the manager's own methods).
+    Screen indices run against the arrangement by default (right to left), so nothing can lean on the index."""
+    manager, owner, _published = _manager(mode, requested=requested)
+    indices = list(indices) if indices is not None else list(reversed(range(len(rects))))
+    units = [_placed(index, rect) for index, rect in zip(indices, rects)]
+    manager.displays = units
+    manager._quick_visualizer_unit = units[on]
+    moves: list[object] = []
+
+    def move(target) -> bool:
+        moves.append(target)
+        if accept:
+            manager._quick_visualizer_unit = target
+        return accept
+    manager._quick_custom_layout_owner = SimpleNamespace(is_active=False, move_visualizer_to_display=move)
+    manager._refresh_all_quick_context_menus = lambda: None
+    manager.settings_manager = SimpleNamespace(set=lambda key, value: None, save=lambda: None,
+                                               get=lambda key, default=None: None)   # the snapshot keeps the intent
+    manager._expanded_display_ready()
+    return manager, owner, units, moves
+
+
+class _ArrangedScene:
+    """A display's scene as the takeover publishes to it: the glyph (offered, expanded) and its side glyphs."""
+
+    def __init__(self) -> None:
+        self.glyph = (False, False)
+        self.sides = (False, False)
+
+    def set_visualizer_expand_glyph(self, available, expanded, *, sides=(False, False)):
+        self.glyph = (bool(available), bool(expanded))
+        self.sides = (bool(sides[0]), bool(sides[1]))
+
+    @property
+    def visualizer_expand_glyph(self):
+        return self.glyph
+
+    def set_ordinary_widgets_covered(self, covered, *, fade_s):
+        pass
+
+    def set_visualizer_expanded_overlay_config(self, config):
+        pass
+
+    def announce_visualizer_preset(self, name, *, reveal):
+        pass
+
+    def set_visualizer_overlay_media_model(self, model):
+        pass
+
+
+def _placed(index: int, rect):
+    identity = SimpleNamespace(screen_key=f"monitor-{index}", geometry=tuple(rect))
+    return SimpleNamespace(screen_index=index, is_retired=False, runtime=SimpleNamespace(
+        display_identity=identity, scene_controller=_ArrangedScene(), runtime_generation=1,
+        input_controller=SimpleNamespace(input_state=SimpleNamespace(admission_open=True, context_menu_active=False))))
+
+
+def _offered(unit) -> tuple[bool, bool, bool]:
+    """(up-left, this display, up-right) as the unit's scene shows them."""
+    available, _expanded = unit.runtime.scene_controller.glyph
+    left, right = unit.runtime.scene_controller.sides
+    return (available and left, available, available and right)
+
+
+@pytest.mark.parametrize("count", [1, 2, 3])
+def test_the_row_offers_a_side_glyph_only_where_a_display_lies(count):
+    """One display: the Up arrow alone. A row: the left end offers right only, the right end left only, a middle
+    display both. Screen indices run against the arrangement (right to left)."""
+    rects = _row_rects(count)
+    for on in range(count):
+        manager, _owner, units, _moves = _arranged(rects, on=on)
+        assert _offered(units[on]) == (on > 0, True, on < count - 1), on
+
+
+@pytest.mark.parametrize("offset", [0, 400])
+def test_a_vertical_arrangement_offers_no_side_glyph(offset):
+    rects = [(offset, -1080, 1920, 1080), (0, 0, 2560, 1440)]
+    for on in range(2):
+        _manager_, _owner, units, _moves = _arranged(rects, on=on)
+        assert _offered(units[on]) == (False, True, False)
+
+
+def test_an_offset_arrangement_follows_the_documented_rule():
+    """A display beside the Visualizer's but offset down (sharing part of its height) is its right neighbour; one
+    wholly below and to the left (corner only) is still its left neighbour, since nothing else is on that side."""
+    rects = [(0, 0, 2560, 1440), (2560, 700, 1920, 1080), (-1920, 1440, 1920, 1080)]
+    _manager_, _owner, units, _moves = _arranged(rects, on=0)
+    assert _offered(units[0]) == (True, True, True)
+
+
+@pytest.mark.parametrize("on,side", [(0, RIGHT), (1, LEFT), (1, RIGHT), (2, LEFT)])
+def test_a_side_press_moves_to_that_neighbour_and_expands_there(on, side):
+    """Three in a row: each offered side glyph is full display on the display placed on that side (resolved at the
+    press, through the owner's "expand on display N"), one user action: move, then the enter there."""
+    manager, owner, units, moves = _arranged(_row_rects(3), on=on)
+    target = units[on + side]
+    assert manager._route_quick_visualizer_expand_to_side(units[on], side)
+    assert moves == [target] and manager._quick_visualizer_unit is target
+    assert owner.calls == [(True, True)]
+    owner.finish()
+    coordinator = manager._expanded_display_coordinator
+    assert coordinator.phase is Phase.EXPANDED and manager._expanded_display_requested() is True
+    # The row on the new display shows that display's own neighbours, its glyph the collapse.
+    assert target.runtime.scene_controller.glyph == (True, True)
+    assert _offered(target) == (on + side > 0, True, on + side < 2)
+    assert units[on].runtime.scene_controller.glyph == (False, False)          # withdrawn where it left
+
+
+@pytest.mark.parametrize("on,side", [(0, LEFT), (2, RIGHT)])
+def test_a_press_toward_no_display_is_refused(on, side):
+    manager, owner, units, moves = _arranged(_row_rects(3), on=on)
+    assert not manager._route_quick_visualizer_expand_to_side(units[on], side)
+    assert moves == [] and owner.calls == []
+
+
+def test_a_side_press_from_another_display_or_under_a_menu_is_refused():
+    manager, owner, units, moves = _arranged(_row_rects(2), on=0)
+    assert not manager._route_quick_visualizer_expand_to_side(units[1], LEFT)    # not the card's display
+    units[0].runtime.input_controller.input_state.context_menu_active = True
+    assert not manager._route_quick_visualizer_expand_to_side(units[0], RIGHT)   # a menu is open
+    units[0].runtime.input_controller.input_state.context_menu_active = False
+    assert not manager._route_quick_visualizer_expand_to_side(units[0], 0)       # not a side
+    assert moves == [] and owner.calls == []
+
+
+def _expanded_on_the_middle(**kwargs):
+    manager, owner, units, moves = _arranged(_row_rects(3), on=1, **kwargs)
+    assert manager._route_quick_visualizer_expand_glyph(units[1], True)
+    owner.finish()
+    assert manager._expanded_display_coordinator.phase is Phase.EXPANDED
+    return manager, owner, units, moves
+
+
+def test_expanded_on_the_middle_display_offers_the_collapse_and_both_moves():
+    _manager_, _owner, units, _moves = _expanded_on_the_middle()
+    scene = units[1].runtime.scene_controller
+    assert scene.glyph == (True, True)                     # this display's glyph is the collapse (the Down arrow)
+    assert scene.sides == (True, True)                     # and both diagonals move the view
+
+
+@pytest.mark.parametrize("side", [LEFT, RIGHT])
+@pytest.mark.parametrize("accept", [True, False])
+def test_a_diagonal_moves_the_expanded_view_to_that_neighbour(side, accept):
+    """While expanded a diagonal is the expanded-to-expanded move: collapse on the source, the move, expand on the
+    neighbour; a refused move re-expands on the source. The intent is never written by the move."""
+    manager, owner, units, moves = _expanded_on_the_middle(accept=accept)
+    writes = manager._expanded_display_requested()
+    assert manager._route_quick_visualizer_expand_to_side(units[1], side)
+    assert owner.calls[-1] == (False, True)                # the source collapses first
+    owner.finish()
+    landed = units[1 + side] if accept else units[1]
+    assert moves == [units[1 + side]] and manager._quick_visualizer_unit is landed
+    assert owner.calls[-1] == (True, True)                 # ...then expands where it landed
+    owner.finish()
+    assert manager._expanded_display_coordinator.phase is Phase.EXPANDED
+    assert manager._expanded_display_requested() is writes
+    assert landed.runtime.scene_controller.glyph == (True, True)
+
+
+@pytest.mark.parametrize("on_view_display", [True, False])
+def test_the_edit_holds_refuse_a_side_move(on_view_display):
+    """Fullscreen Edit (Edit on the view's display) and an Edit beside the view (another display): the glyphs are
+    withdrawn and a stale side press moves nothing; the view stays expanded where it is."""
+    manager, owner, units, moves = _expanded_on_the_middle()
+    coordinator = manager._expanded_display_coordinator
+    manager._quick_custom_layout_owner.is_active = True
+    coordinator.edit_entered(on_view_display=on_view_display)
+    assert units[1].runtime.scene_controller.glyph[0] is False
+    calls = list(owner.calls)
+    for side in (LEFT, RIGHT):
+        assert not manager._route_quick_visualizer_expand_to_side(units[1], side)
+    assert moves == [] and owner.calls == calls and coordinator.phase is Phase.EXPANDED
+    assert manager._quick_visualizer_unit is units[1]
+
+
+def test_v_still_expands_on_the_current_display():
+    manager, owner, units, moves = _arranged(_row_rects(3), on=1)
     from engine.display_manager import DisplayManager
 
-    units = (_unit(0, "first"), _unit(1, "second"))
-    for unit in units:
-        unit.runtime.input_controller = SimpleNamespace(
-            input_state=SimpleNamespace(admission_open=True, context_menu_active=False))
-    calls: list[tuple[object, object]] = []
-    coordinator = SimpleNamespace(expand_on_display=lambda unit, target: calls.append((unit, target)) or True)
-    manager = SimpleNamespace(_quick_visualizer_unit=units[0], _expanded_display_coordinator=coordinator,
-                              _live_quick_units=lambda: units)
-    route = DisplayManager._route_quick_visualizer_expand_on_display.__get__(manager)
-    return route, units, calls
+    toggle = DisplayManager._toggle_quick_visualizer_expansion_from_key.__get__(manager)
+    assert toggle(units[1])
+    owner.finish()
+    assert moves == [] and manager._quick_visualizer_unit is units[1]
+    assert manager._expanded_display_coordinator.phase is Phase.EXPANDED
 
 
-def test_the_display_managers_glyph_route_names_the_target_display_by_index():
-    route, units, calls = _display_glyph_manager()
-    assert route(units[0], 1) and calls == [(units[0], units[1])]
-    assert route(units[0], 0) and calls[-1] == (units[0], units[0])
-    assert not route(units[1], 0)                                         # not the card's display
-    assert not route(units[0], 5)                                         # no such live display
-    units[0].runtime.input_controller.input_state.context_menu_active = True
-    assert not route(units[0], 1)                                         # a menu is open
-    assert len(calls) == 2
+def test_a_display_added_or_removed_changes_which_side_glyphs_show():
+    """The display set is read at each publication: a display added to the left offers the up-left glyph from the
+    next admission (a topology change replaces the generation), and a display removed withdraws its side."""
+    rects = _row_rects(2)
+    manager, _owner, units, _moves = _arranged(rects, on=0)
+    card = units[0]
+    assert _offered(card) == (False, True, True)
+    manager.displays = [_placed(7, (-1920, 0, 1920, 1080)), *units]          # one more, to the left
+    manager._expanded_display_ready()
+    assert _offered(card) == (True, True, True)
+    manager.displays = [manager.displays[0], card]                            # the right-hand display went
+    manager._expanded_display_ready()
+    assert _offered(card) == (True, True, False)
 
 
 def test_only_the_takeovers_own_transfer_passes_the_layout_wait():
@@ -610,22 +799,29 @@ _MANAGER_METHODS = ("_expanded_display", "_visualizer_section", "_expanded_displ
                     "_expanded_display_blocks_layout",
                     # M3b: the coordinator's creation publishes the full-display overlays' inputs to the scene.
                     "_publish_expanded_overlays", "_publish_expanded_overlay_media",
-                    # Plan 1B.12: the glyph publication asks how many displays are live.
-                    "_expand_display_targets_offered", "_live_quick_units")
+                    # Plan 1B.12: the glyph publication asks which sides have a display; a side press resolves
+                    # there; the takeover's move and the glyph's own routes.
+                    "_expand_glyph_neighbours", "_expand_glyph_sides", "_route_quick_visualizer_expand_to_side",
+                    "_move_quick_visualizer_to_display", "_route_quick_visualizer_expand_glyph",
+                    "_toggle_quick_visualizer_expansion_from_key")
 
 
 def _manager(mode: str, *, requested: bool):
     """The display manager's Expanded Visualizer methods on a plain host (the QObject needs a whole runtime)."""
     from engine.display_manager import DisplayManager
 
-    host_type = type("_ManagerHost", (), {name: getattr(DisplayManager, name) for name in _MANAGER_METHODS})
+    members = {name: getattr(DisplayManager, name) for name in _MANAGER_METHODS}
+    # The live units are the plain host's displays (the production filter is a type check on the Quick unit).
+    members["_live_quick_units"] = lambda self: tuple(unit for unit in self.displays if not unit.is_retired)
+    host_type = type("_ManagerHost", (), members)
     manager = host_type()
     owner = _Owner(mode)
     unit = _unit()
     published = []
     overlays = []
     unit.runtime.scene_controller = SimpleNamespace(
-        set_visualizer_expand_glyph=lambda available, expanded: published.append((available, expanded)),
+        set_visualizer_expand_glyph=lambda available, expanded, sides=(False, False): published.append(
+            (available, expanded)),
         set_ordinary_widgets_covered=lambda covered, *, fade_s: published.append(("covered", covered, fade_s)),
         set_visualizer_expanded_overlay_config=lambda config: overlays.append(("config", dict(config))),
         announce_visualizer_preset=lambda name, *, reveal: overlays.append(("preset", name, reveal)),
@@ -703,7 +899,7 @@ class _GlyphScene(SimpleNamespace):
 
     glyph = (False, False)
 
-    def set_visualizer_expand_glyph(self, available, expanded):
+    def set_visualizer_expand_glyph(self, available, expanded, *, sides=(False, False)):
         self.glyph = (bool(available), bool(expanded))
 
     @property

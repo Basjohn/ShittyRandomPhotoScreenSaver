@@ -77,7 +77,11 @@ def test_one_press_reports_the_direction_the_glyph_shows(glyph_card, expanded):
     assert bool(arrow.property("collapse")) is expanded
     tooltip = _find(card.scene._visualizer_root, "visualizerExpandTooltip")
     label = next(child for child in tooltip.childItems() if child.property("text"))
-    assert label.property("text") == ("EXIT FULL DISPLAY" if expanded else "FULL DISPLAY")
+    # The tip names the direction too (UI copy: only that it changes with the direction is asserted).
+    shown = label.property("text")
+    card.scene.set_visualizer_expand_glyph(True, not expanded)
+    assert shown and label.property("text") and label.property("text") != shown
+    card.scene.set_visualizer_expand_glyph(True, expanded)
     reported, cycles = [], []
     card.scene.visualizer_expand_requested.connect(reported.append)
     card.scene._visualizer_root.presetStepRequested.connect(lambda *_a: cycles.append(1))
@@ -145,106 +149,156 @@ def test_the_camera_controls_stay_offered_and_working_while_display_wide(glyph_c
         root.setProperty("widgetGlowAdmitted", True)
 
 
-# ------------------------------------------------- plan 1B.12: one full-display glyph per target display
+# ------------------------------------- plan 1B.12, relative form: Up here, up-left / up-right to the neighbours
 
 
-def _settle_presence(card, target: float) -> None:
-    """The second glyph's place fades (an animation): process events until it settles, gradually."""
+def _presences(card):
+    root = card.scene._visualizer_root
+    return float(root.property("expandLeftPresence")), float(root.property("expandRightPresence"))
+
+
+def _settle_presence(card, left: float, right: float, sample=None) -> list:
+    """Each side glyph's place fades (an animation): process events until both settle, gradually."""
     from PySide6.QtCore import QCoreApplication, QElapsedTimer
 
-    root = card.scene._visualizer_root
     clock = QElapsedTimer()
     clock.start()
     samples = []
-    while abs(float(root.property("expandLeftPresence")) - target) > 1e-6:
+    while max(abs(_presences(card)[0] - left), abs(_presences(card)[1] - right)) > 1e-6:
         QCoreApplication.processEvents()
-        samples.append(float(root.property("expandLeftPresence")))
-        assert clock.elapsed() < 4000, "the display glyph's place did not settle"
+        polish_glyph_row(card)
+        samples.append(_presences(card) if sample is None else sample())
+        assert clock.elapsed() < 4000, "a side glyph's place did not settle"
     polish_glyph_row(card)
     return samples
 
 
-def _left(card):
-    glyph = _find(card.scene._visualizer_root, "visualizerExpandLeftGlyph")
+def _side(card, side: int):
+    glyph = _find(card.scene._visualizer_root, "visualizerExpandLeftGlyph" if side < 0 else "visualizerExpandRightGlyph")
     assert glyph is not None
     return glyph
 
 
+def _arrow(glyph):
+    return next(child for child in glyph.childItems() if child.objectName().endswith("Arrow"))
+
+
+def _card_rect(card, item):
+    return item.mapRectToItem(card.scene._visualizer_root, QRectF(0.0, 0.0, item.width(), item.height()))
+
+
 @pytest.mark.qt
-def test_one_display_keeps_the_single_glyph_exactly(glyph_card):
+def test_one_display_shows_the_up_arrow_alone(glyph_card):
     card = glyph_card
+    root = card.scene._visualizer_root
     card.scene.set_visualizer_expand_glyph(True, False)
-    right = _glyph(card)
-    assert not _left(card).isVisible()
-    assert float(card.scene._visualizer_root.property("expandLeftPresence")) == 0.0
-    slot = _find(card.scene._visualizer_root, "visualizerExpandSlot")
-    assert abs(slot.width() - right.width()) < 0.5                    # one member's place, as before
+    here = _glyph(card)
+    assert not _side(card, -1).isVisible() and not _side(card, 1).isVisible()
+    assert _presences(card) == (0.0, 0.0)
+    slot = _find(root, "visualizerExpandSlot")
+    assert abs(slot.width() - here.width()) < 0.5                     # one member's place
+    # The operator's Up arrow (one named choice); the collapse is the same arrow turned to point down.
+    assert float(root.property("expandHereArrowDegrees")) == 0.0
+    assert float(_arrow(here).property("degrees")) == float(root.property("expandHereArrowDegrees"))
+    card.scene.set_visualizer_expand_glyph(True, True)
+    assert float(_arrow(here).property("degrees")) == float(root.property("expandHereArrowDegrees")) + 180.0
 
 
 @pytest.mark.qt
-def test_two_displays_offer_up_left_beside_up_right_and_fade_it_in_and_out(glyph_card):
+@pytest.mark.parametrize("left,right", [(True, False), (False, True), (True, True)])
+def test_only_the_offered_side_glyphs_show_around_this_displays_glyph(glyph_card, left, right):
+    """Up-left before this display's glyph, up-right after it at the far corner: one size, one baseline, one
+    spacing; each fades in (never pops) and its slot grows with it."""
     card = glyph_card
     root = card.scene._visualizer_root
-    card.scene.set_visualizer_expand_glyph(True, False, display_targets=True, display=0)
-    samples = _settle_presence(card, 1.0)
-    assert any(0.0 < sample < 1.0 for sample in samples)             # it fades in, never pops
-    left, right = _left(card), _glyph(card)
-    assert left.isVisible() and right.isVisible()
-
-    def rect(item):
-        return item.mapRectToItem(root, QRectF(0.0, 0.0, item.width(), item.height()))
-
-    a, b = rect(left), rect(right)
-    assert abs(a.bottom() - b.bottom()) < 0.5 and abs(a.width() - b.width()) < 0.5
-    assert a.right() < b.left()                                         # up-left first, then up-right at the corner
-    assert abs((b.left() - a.right()) - float(root.property("glyphSpacing")) * float(root.property("glyphRowScale"))) < 0.5
-    card.scene.set_visualizer_expand_glyph(True, False)                 # back to one display
-    samples = _settle_presence(card, 0.0)
-    assert any(0.0 < sample < 1.0 for sample in samples)             # it fades out
-    assert not left.isVisible()
+    card.scene.set_visualizer_expand_glyph(True, False, sides=(left, right))
+    samples = _settle_presence(card, float(left), float(right))
+    assert any(0.0 < value < 1.0 for sample in samples for value in sample)   # faded in
+    here = _glyph(card)
+    shown = [glyph for side, offered in ((-1, left), (1, right)) if offered for glyph in [_side(card, side)]]
+    hidden = [_side(card, side) for side, offered in ((-1, left), (1, right)) if not offered]
+    assert all(glyph.isVisible() for glyph in shown) and not any(glyph.isVisible() for glyph in hidden)
+    row = sorted([here, *shown], key=lambda glyph: _card_rect(card, glyph).left())
+    expected = ([_side(card, -1)] if left else []) + [here] + ([_side(card, 1)] if right else [])
+    assert row == expected
+    rects = [_card_rect(card, glyph) for glyph in row]
+    spacing = float(root.property("glyphSpacing")) * float(root.property("glyphRowScale"))
+    for a, b in zip(rects, rects[1:]):
+        assert abs(a.bottom() - b.bottom()) < 0.5 and abs(a.width() - b.width()) < 0.5
+        assert abs((b.left() - a.right()) - spacing) < 0.5
+    slot = _card_rect(card, _find(root, "visualizerExpandSlot"))
+    assert abs(rects[-1].right() - slot.right()) < 0.5 and abs(rects[0].left() - slot.left()) < 0.5
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize("display,expanded,left_collapses,right_collapses,two", [
-    (0, False, False, False, True), (1, False, False, False, True),
-    (0, True, True, False, True), (1, True, False, True, True),
-    # A view expanded on a display neither glyph names keeps the single collapse glyph (V reaches that display).
-    (2, True, False, True, False),
-])
-def test_each_glyph_draws_its_own_direction(glyph_card, display, expanded, left_collapses, right_collapses, two):
+def test_a_side_glyph_that_goes_fades_out_and_the_row_glides_never_jumps(glyph_card):
+    """A display on one side goes (or comes): its glyph fades with its place, and the glyphs beside it glide."""
+    card = glyph_card
+    card.scene.set_visualizer_expand_glyph(True, False, sides=(True, True))
+    _settle_presence(card, 1.0, 1.0)
+    here = _glyph(card)
+    start = _card_rect(card, here).left()
+    card.scene.set_visualizer_expand_glyph(True, False, sides=(True, False))
+    lefts = _settle_presence(card, 1.0, 0.0, sample=lambda: _card_rect(card, here).left())
+    end = _card_rect(card, here).left()
+    assert end > start                                                  # it took the corner the up-right gave up
+    steps = [abs(b - a) for a, b in zip([start, *lefts], [*lefts, end])]
+    assert len([value for value in lefts if start < value < end]) >= 3  # through the places between
+    assert max(steps) < (end - start) / 2.0                             # never one jump
+    assert not _side(card, 1).isVisible() and _side(card, -1).isVisible()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("expanded", [False, True])
+def test_each_glyph_draws_its_own_direction(glyph_card, expanded):
+    """Up-left and up-right are this display's arrow turned 45 degrees each way; expanded, this display's glyph is
+    the collapse (turned to point down) and the diagonals keep their direction (they move the view)."""
     card = glyph_card
     root = card.scene._visualizer_root
-    card.scene.set_visualizer_expand_glyph(True, expanded, display_targets=True, display=display)
-    _settle_presence(card, 1.0 if two else 0.0)
-    assert bool(root.property("expandTwoGlyphs")) is two
-    assert bool(_find(_left(card), "visualizerExpandLeftGlyphArrow").property("collapse")) is left_collapses
-    assert bool(_find(_glyph(card), "visualizerExpandGlyphArrow").property("collapse")) is right_collapses
+    card.scene.set_visualizer_expand_glyph(True, expanded, sides=(True, True))
+    _settle_presence(card, 1.0, 1.0)
+    here = float(root.property("expandHereArrowDegrees"))
+    assert bool(_arrow(_glyph(card)).property("collapse")) is expanded
+    assert float(_arrow(_glyph(card)).property("degrees")) == here + (180.0 if expanded else 0.0)
+    assert float(_arrow(_side(card, -1)).property("degrees")) == -45.0
+    assert float(_arrow(_side(card, 1)).property("degrees")) == 45.0
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize("display,expanded", [(0, False), (1, False), (0, True), (1, True)])
-def test_a_press_reports_the_target_display_or_the_collapse(glyph_card, display, expanded):
+@pytest.mark.parametrize("expanded", [False, True])
+def test_a_press_reports_the_side_or_this_displays_expand_and_collapse(glyph_card, expanded):
     card = glyph_card
-    card.scene.set_visualizer_expand_glyph(True, expanded, display_targets=True, display=display)
-    _settle_presence(card, 1.0)
-    targets, collapses = [], []
-    card.scene.visualizer_expand_on_display_requested.connect(targets.append)
-    card.scene.visualizer_expand_requested.connect(collapses.append)
+    card.scene.set_visualizer_expand_glyph(True, expanded, sides=(True, True))
+    _settle_presence(card, 1.0, 1.0)
+    sides, presses = [], []
+    card.scene.visualizer_expand_to_side_requested.connect(sides.append)
+    card.scene.visualizer_expand_requested.connect(presses.append)
     root = card.scene._visualizer_root
     tooltip = _find(root, "visualizerExpandTooltip")
     label = next(child for child in tooltip.childItems() if child.property("text"))
     texts = {}
-    for index, glyph in ((0, _left(card)), (1, _glyph(card))):
-        root.setProperty("expandTipGlyph", index)
-        texts[index] = label.property("text")
+    for side, glyph in ((-1, _side(card, -1)), (0, _glyph(card)), (1, _side(card, 1))):
+        root.setProperty("expandTipGlyph", side)
+        texts[side] = label.property("text")
         _click(card, _hovered(glyph))
-    # Each glyph names its own target (the words are UI copy, so only their difference is asserted).
-    assert texts[0] != texts[1]
-    if expanded:
-        # The card's own display glyph collapses; the other moves the view to its display.
-        assert collapses == [False] and targets == [1 - display]
-    else:
-        assert collapses == [] and targets == [0, 1]
+    assert sides == [-1, 1] and presses == [not expanded]
+    # Each glyph says what it does relative to the Visualizer's display: three different tips, no display number
+    # (the words are UI copy, so only that is asserted).
+    assert len(set(texts.values())) == 3
+    assert not any(character.isdigit() for text in texts.values() for character in text)
+
+
+@pytest.mark.qt
+def test_a_side_glyph_that_is_not_offered_takes_no_press(glyph_card):
+    card = glyph_card
+    card.scene.set_visualizer_expand_glyph(True, False, sides=(False, True))
+    _settle_presence(card, 0.0, 1.0)
+    sides = []
+    card.scene.visualizer_expand_to_side_requested.connect(sides.append)
+    left = _side(card, -1)
+    assert not left.isEnabled()
+    _click(card, _hovered(_side(card, 1)))
+    assert sides == [1]
 
 
 @pytest.mark.qt
