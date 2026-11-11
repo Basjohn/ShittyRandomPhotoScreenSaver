@@ -86,11 +86,9 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 - [ ] Bright-area text switch (operator's long-term item, plan 01 §G): overlay text white with a soft shadow should
   switch to black over a bright Visualizer area; cheap means no per-frame CPU readback (a `ShaderEffect` on the text
   sampling the already-rendered frame, or a tiny luminance probe only while an overlay shows). Not built.
-- [ ] Agent branch (plan 01 M3c "Now Playing's parts" and §G "Show On Hover"): lead audit and merge of (a) Show On
-  Hover (`now_playing.hover_reveal`; no timer or polling; nothing under Fullscreen Edit) and (b) Now Playing's parts
-  as the block's children in Fullscreen Edit (`now_playing.child_geometry`).
-- [~] Operator's live look at that branch: the feel of the child lock, a part drag and the hover re-fade on the real
-  display.
+- [~] Operator's live look at Show On Hover (`now_playing.hover_reveal`, on main since 0eda39c4) and Now Playing's
+  parts as the block's children in Fullscreen Edit (`now_playing.child_geometry`, 2100fdc2): the feel of the child
+  lock, a part drag and the hover re-fade on the real display.
 - [ ] Side defect (8 Nov): `tests/test_qtquick_system_audio_osd.py::test_osd_colour_inheritance_respects_active_widget_
   theme_and_authored_overrides` fails when run after `tests/test_visualizers_fullscreen_mode_pill.py` in one
   process (passes alone; reproduced on the base): Widget Theme state leaks between the files.
@@ -606,7 +604,7 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 
 ### Side defect: Build Runner's Inno discovery
 
-- [ ] Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1012`) and a test requires
+- [ ] Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1023`) and a test requires
   it. Replace that tool override with explicit CLI/sidecar admission when opening its owner.
 
 ### Awaiting Validation after the focused proofs
@@ -683,21 +681,16 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
     (`devcurve_runtime.py`, 20 s memory, not opt-in), and its accents read a lane "above its own recent mean"
     (reactivity guide §13D, guide pass 8 Nov).
   - [ ] Extruded Bubble (`extruded_bubble_frame_runtime.py`).
-  - [ ] Neon Lake (`logical_frame_capture.py`, `shockwave_frame_runtime.py`).
+  - [ ] Neon Lake (`logical_frame_capture.py`, `rendering/gl_programs/shockwave_grid_program.py`).
   - [ ] Oscilloscope.
   - [ ] Sphere.
   - [ ] `tools/labs/waveform_ribbon_recorded_input.py` still uses `musical_weight` and no longer matches production.
 - [ ] **Vocal-band scorer into the music-response tool (8 Nov):** the PCM vocal-band (300-3400 Hz) series behind the
   mid-led routing evidence and guide §2C lives only in scratch (`lead_audit/vocal_band.py`); add it to
   `tools/visualizer_replay/waveform_music_response.py` as a lane so it survives scratch pruning.
-- [ ] **Tool-output contract reds (found 8 Nov on `610e38c0`, not fixed there):**
-  `tests/test_artifact_paths_contract.py` fails 3 tests. Route each through `tools/artifact_paths.py` and
+- [ ] **Tool-output contract reds (found 8 Nov on `610e38c0`; the three listed there were fixed by `bed993a4`):**
+  `tests/test_artifact_paths_contract.py`: route each through `tools/artifact_paths.py` and
   `tools/evidence_media.py`, or allowlist it there with its reason:
-  - [ ] `tools/github_remote_build.py` hard-codes `logs/` (lines 200, 249, 703).
-  - [ ] `--out` / `--json` bypass `tools/artifact_paths.py` in `github_remote_build.py`, `theme_legibility.py`,
-    `vulkan_shader_readiness.py` and `visualizer_replay/{engine_main_cost,engine_worker_gate,live_engine_cost,
-    live_engine_gate,owner_production_replay,owner_worker_gate}.py`.
-  - [ ] `owner_worker_gate.py` writes PNG without `tools/evidence_media.py`.
   - [ ] The further reds recorded at 1B.2 (literal `evidence_chest` paths, PNG writes, a `delete=False` temp file).
 - [ ] **Side findings of the Waveform second tick cut (7 Nov, not fixed there):**
   - [ ] `capture_visualizer_logical_frame` refreezes the common style (`freeze_render_fields(_common_style(widget))`,
@@ -804,8 +797,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   - [ ] Card materials (`5_card_materials/`): the alternated second Glass/Normal pair. First pair: Glass costs about
     +16 % of a core on the render thread (53.7 against 37.5), publish->swap +3 ms, hitches 2.46 against 2.05 a
     minute, at the same late %.
-- [ ] Lead audit of the Gmail IMAP interruptible-session fix (branch `worktree-agent-ab77df54c8fe5d4a6`, merged as
-  64950529; the plan recorded it as awaiting the lead's audit; contract `Docs/Contracts.md` Network transports).
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 
@@ -847,13 +838,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   `Docs/Reference/Ribbon_Path.md`, `Waveform_Ribbon_Lab_Plan.md` and
   `Waveform_Ribbon_Mist_Failure_and_Replacement.md`. Left unchanged; prune or mark historical on review.
 
-**Naming follow-ups (naming-audit agent, 7 Nov; `Docs/Reference/Naming.md` is generated and test-guarded):**
-
-- [~] Operator's call: Neon Lake vs Neon Lake (edit only the registry `display_name`, then run
-  `tools/naming_reference.py --write`).
-- [ ] The "Spotify Visualizer" widget label and Spline Curve's Ghost tooltip ("for debug visibility") are audit #6,
-  not done.
-
 **Side defects (Studio stall / clip selection fix, 7 Nov):**
 
 - [ ] Bubble, Sphere and Extruded Bubble replay a change in one GUI-thread evaluation (no frame budget). While
@@ -879,8 +863,8 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] A takeover fade completes on the publication edge only: like the activation fade it has no deadline, so with no
   logical publication (displays off, parked) an expand or collapse in flight waits and finishes when publications
   resume; the coordinator meanwhile refuses mode requests and transfers as busy. Watch for it at M5 (display power).
-- [ ] The expanded card inherits the Visualizer card's surface material (it was a plain rectangle): confirm the
-  expanded card shows the theme's material with no M2 change now that cards have materials.
+- [~] Operator look: the expanded card shows the theme's surface material (the Visualizer card's
+  `visualizerCardSurfaceMaterial` exists since 0b4abe04, so it is no longer a plain rectangle).
 
 **Found while building Expanded Visualizer M3 (7 Nov night; recorded, not yet admitted):**
 
@@ -1285,7 +1269,7 @@ chosen image/settings/source; the baseline settings are applied to Preset 3.
 
 **Fixed-scale rework v7 (accepted by the lead review 6 Nov, merged; operator sign-off on Preset 4 and the trade-offs)**
 
-No adaptive memory (Adaptive Response toggle, off in every preset), Kick Accent bounded at 15% of the roll (Preset 4
+No adaptive memory (the Adaptive Response toggle is retired), Kick Accent bounded at 15% of the roll (Preset 4
 ships 0), the floor lift bounded by the card's top edge. Lessons of the rejected v4:
 `Docs/Guides/Visualizer_Reactivity_Authoring.md`; measurements: Migration Plan section 8.
 
@@ -1395,9 +1379,9 @@ Evidence `studio_20261105/floor4/`; measurements in Migration Plan section 8.
 **Fixed response, break-proof Breathing, Kick Accent (operator, 6 Nov: "when it went suddenly quiet everything become
 more reactive ... Adaptive is a very problematic approach"; "many sustained kicks ignored"; awaiting operator eyes)**
 
-Geometry drives are a fixed function of the real-music scale (Adaptive Response toggle, off in every preset). Preset 4
-differs from the tag only through it, Kick Accent and the floor lift: set Adaptive Response on and Kick Accent 0 to
-compare. Range audit: `.artifacts/evidence/visualizers/waveform_ribbon/reactivity_preset7/20261107_reactivity_preset7/rangeaudit_*.txt`.
+Geometry drives are a fixed function of the real-music scale (the Adaptive Response toggle is retired). Preset 4
+differs from the tag only through it, Kick Accent and the floor lift: compare against the tag with Kick Accent 0.
+Range audit: `.artifacts/evidence/visualizers/waveform_ribbon/reactivity_preset7/20261107_reactivity_preset7/rangeaudit_*.txt`.
 
 - [~] Operator eyes on the fixed response, Breathing and Kick Accent.
 - [ ] Rotation's drive is never above .36 on any recording (its Peak handle is never reached).
@@ -1501,7 +1485,7 @@ geometry and persistence tests alone cannot establish feel or beauty across movi
 - [ ] After the strand slice, draw ground all the way through the foreground and beyond the waveform into heavy dark
   mist that GENTLY thickens until no horizon line is visible. A strip of reflections over black is rejected.
 - [ ] Keep actors and physical floor contact correct, with smooth waveform collision rather than clipping.
-- [ ] Compare identical snapshots at canonical/wide/tall/large sizes and both projections; inspect reflection
+- [ ] Compare identical snapshots at canonical/wide/tall/large sizes in Perspective; inspect reflection
   normalization/filtering separately.
 - [ ] Preserve live reflectivity/tint/brightness and the shared resize contract; no audio-gain compensation. Columns
   remain secondary.
@@ -1700,7 +1684,6 @@ change.
 - [ ] Finish Waveform Studio acceptance first (section 7.1), then extract any remaining Waveform-shaped assumptions.
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and Neon
   Lake (`shockwave_grid`) built, Spline Curve (`devcurve`) and Oscilloscope built below):
-  - [ ] Voxel Sphere adapter (in progress).
   - [~] Neon Lake awaits operator acceptance (evidence
     `.artifacts/evidence/visualizers/shockwave_grid/studio/20261107_studio/`, Presets 1 and 3): recorded engine
     answers like Spectrum, the shared framed camera, no wallpaper; its terrain is painted with the Studio's shared
