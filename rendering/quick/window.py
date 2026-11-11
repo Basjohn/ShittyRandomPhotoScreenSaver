@@ -81,6 +81,9 @@ class QuickDisplayWindow(QQuickWindow):
         self._plain_orbit_releasing = False
         self._plain_orbit_acquiring = False
         self._plain_orbit_acquire_cancel = None
+        # The held gesture's kind (plan 1B.13): 'orbit' (held left) or 'pan' (held right over a pan-capable card).
+        # One pending -> capture machine, one capture owner, one cursor fade, one cancel for both.
+        self._plain_orbit_kind = 'orbit'
         self._framed_scene_filter_installed = False
         self._desired_visible = False
         self._close_queued = False
@@ -266,10 +269,13 @@ class QuickDisplayWindow(QQuickWindow):
             self._plain_orbit_acquire_cancel = _args or ('cancel',)
             return
         active = self._plain_orbit_card is not None
+        kind = self._plain_orbit_kind
         self._clear_plain_orbit_pending()
         self._plain_orbit_card = None
         capture = self._plain_orbit_capture
         if capture is None or self._plain_orbit_releasing:
+            if capture is None:
+                self._plain_orbit_kind = 'orbit'
             return
         self._plain_orbit_releasing = True
         try:
@@ -284,9 +290,18 @@ class QuickDisplayWindow(QQuickWindow):
                 if self._cursor_controller is not None:
                     self._cursor_controller.end_orbit_fade()
                 if self._input_controller is not None:
-                    self._input_controller.finish_plain_orbit(settle=not (_args and _args[0] == 'reset'))
+                    if kind == 'pan':
+                        # The live view pose's own save at the gesture's end (a camera reset already dropped it).
+                        self._input_controller.finish_plain_pan()
+                    else:
+                        self._input_controller.finish_plain_orbit(settle=not (_args and _args[0] == 'reset'))
+            if self._plain_orbit_capture is None:
+                self._plain_orbit_kind = 'orbit'
         if self._plain_orbit_capture is None and not active:
             self.orbit_cleanup_completed.emit()
+
+    def _plain_gesture_button(self):
+        return Qt.MouseButton.RightButton if self._plain_orbit_kind == 'pan' else Qt.MouseButton.LeftButton
 
     @property
     def orbit_cleanup_pending(self) -> bool:
@@ -329,18 +344,21 @@ class QuickDisplayWindow(QQuickWindow):
         pending = self._plain_orbit_pending
         if pending is None:
             return False
-        if not event.buttons() & Qt.MouseButton.LeftButton:
+        if not event.buttons() & self._plain_gesture_button():
             self.cancel_plain_orbit()
             return False
-        origin, card, threshold = pending
+        origin, card, threshold, global_origin = pending
         if (event.position() - origin).manhattanLength() < threshold:
             return False
         controller = self._input_controller
         target = self._plain_orbit_target
+        pan = self._plain_orbit_kind == 'pan'
+        admitted = controller is not None and (controller.plain_pan_admitted if pan
+                                               else controller.plain_orbit_admitted)
         # An existing exclusive grab declines orbit wherever it sits in the
         # stack: promotion clears passive grabs only, so taking the gesture
         # would consume that control's release and leave it pressed.
-        if (controller is None or not controller.plain_orbit_admitted or target is None
+        if (not admitted or target is None
                 or self.mouseGrabberItem() is not None
                 or event.exclusiveGrabber(event.point(0)) is not None
                 or target(origin) is not card):
@@ -373,7 +391,9 @@ class QuickDisplayWindow(QQuickWindow):
                 return False
             self._plain_orbit_card = card
             self._plain_orbit_pending = None
-            if not controller.begin_plain_orbit(origin):
+            began = (controller.begin_plain_pan(global_origin.toPoint()) if pan
+                     else controller.begin_plain_orbit(origin))
+            if not began:
                 self.cancel_plain_orbit()
                 return False
         except Exception:
@@ -383,6 +403,7 @@ class QuickDisplayWindow(QQuickWindow):
             self._plain_orbit_acquire_cancel = None
             if capture is None or not capture.cleanup_pending:
                 self._plain_orbit_capture = None
+                self._plain_orbit_kind = 'orbit'
             cursor.end_orbit_fade()
             return False
         return True
@@ -395,7 +416,7 @@ class QuickDisplayWindow(QQuickWindow):
             return True
         if kind == QEvent.Type.MouseMove:
             if (self._plain_orbit_pending is not None or self._plain_orbit_card is not None):
-                if not event.buttons() & Qt.MouseButton.LeftButton:
+                if not event.buttons() & self._plain_gesture_button():
                     self.cancel_plain_orbit()
                 else:
                     if self._plain_orbit_pending is not None:
@@ -406,7 +427,19 @@ class QuickDisplayWindow(QQuickWindow):
                         # its fading/hidden native cursor while crossing them.
                         self.mouseMoveEvent(event)
                         return True
-        if kind == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+        if (kind == QEvent.Type.MouseButtonRelease and self._plain_orbit_kind == 'pan'
+                and event.button() == Qt.MouseButton.RightButton):
+            # Held-right over a pan-capable card (plan 1B.13): a pan ends here (no menu for its press); a press
+            # released without the drag distance is a click, whose retained menu opens at the release point.
+            clicked = self._plain_orbit_pending is not None and self._plain_orbit_card is None
+            self.cancel_plain_orbit()
+            controller = self._input_controller
+            if clicked and controller is not None:
+                controller.request_context_menu_at(event.globalPosition().toPoint())
+            event.accept()
+            return True
+        if (kind == QEvent.Type.MouseButtonRelease and self._plain_orbit_kind == 'orbit'
+                and event.button() == Qt.MouseButton.LeftButton):
             if self._plain_orbit_card is not None:
                 self.mouseReleaseEvent(event)
                 return True
@@ -624,11 +657,22 @@ class QuickDisplayWindow(QQuickWindow):
                 event.accept()
                 return
         controller = self._input_controller
+        plain = (self._plain_orbit_capture is None and controller is not None and self._plain_orbit_target is not None
+                 and event.modifiers() in (Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.ControlModifier))
+        if plain and event.button() == Qt.MouseButton.RightButton and controller.plain_pan_admitted:
+            # Held-right pan (plan 1B.13), the platform's convention scoped to the one place a drag means something
+            # else: over a pan-capable card a right press opens nothing and arms a pending pan; the release opens
+            # the menu when it did not travel. Everywhere else the menu opens on press, below, exactly as before.
+            card = self._plain_orbit_target(event.position())
+            if card is not None:
+                self._plain_orbit_kind = 'pan'
+                self._plain_orbit_pending = (QPointF(event.position()), card,
+                                             QGuiApplication.styleHints().startDragDistance(),
+                                             QPointF(event.globalPosition()))
+                event.accept()
+                return
         candidate = None
-        if (self._plain_orbit_capture is None and controller is not None
-                and controller.plain_orbit_admitted and self._plain_orbit_target is not None
-                and event.button() == Qt.MouseButton.LeftButton
-                and event.modifiers() in (Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.ControlModifier)):
+        if (plain and controller.plain_orbit_admitted and event.button() == Qt.MouseButton.LeftButton):
             candidate = self._plain_orbit_target(event.position())
         if controller is not None and controller.handle_mouse_press(event):
             event.accept()
@@ -637,13 +681,15 @@ class QuickDisplayWindow(QQuickWindow):
         # Retained controls get first refusal. Their exclusive grab, including
         # PointerHandler grabs, must never be stolen by camera orbit.
         if candidate is not None:
+            self._plain_orbit_kind = 'orbit'
             self._plain_orbit_pending = (QPointF(event.position()), candidate,
-                                         QGuiApplication.styleHints().startDragDistance())
+                                         QGuiApplication.styleHints().startDragDistance(),
+                                         QPointF(event.globalPosition()))
             self._plain_orbit_press_device = event.pointingDevice()
             self._plain_orbit_press_device.grabChanged.connect(self._plain_orbit_retained_grab)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        if self._plain_orbit_card is not None and not event.buttons() & Qt.MouseButton.LeftButton:
+        if self._plain_orbit_card is not None and not event.buttons() & self._plain_gesture_button():
             self.cancel_plain_orbit()
         # Halo motion is a native-cursor timestamp only.  In interaction/Ctrl
         # mode the input controller is deliberately bypassed, so passive mouse
@@ -667,7 +713,7 @@ class QuickDisplayWindow(QQuickWindow):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event.button() == self._plain_gesture_button():
             active = self._plain_orbit_card is not None
             self.cancel_plain_orbit()
             if active:

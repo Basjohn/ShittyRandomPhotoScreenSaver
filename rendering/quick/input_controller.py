@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 
-from PySide6.QtCore import QEvent, QObject, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, Qt, Signal
 from PySide6.QtGui import QKeyEvent, QMouseEvent
 
 from rendering.runtime_input import RuntimeInputOwner
@@ -27,6 +27,11 @@ class QuickInputController(RuntimeInputOwner):
     custom_layout_lock_requested = Signal()
     diagnostic_capture_requested = Signal()
     plain_orbit_cancel_requested = Signal(str)
+    # Held-right pan over a pan-capable card (plan 1B.13): its start (rebase the press-scoped baseline), each move
+    # (the pointer's global offset since the press) and its end (the live view pose's own save).
+    scene_pan_started = Signal()
+    scene_pan_requested = Signal(QPoint)
+    scene_pan_finished = Signal()
 
     def __init__(
         self,
@@ -59,6 +64,7 @@ class QuickInputController(RuntimeInputOwner):
         self._scene_transform_enabled = False
         self._scene_transform_mode = ""
         self._projected_mode = ""           # the mode the last capability projection was for (framed or freeform)
+        self._scene_pan_origin: QPoint | None = None   # held-right pan: the global press point while it pans
 
     def set_scene_transform_enabled(self, enabled: bool, *, mode_id: str = "") -> None:
         """Event-published descriptor capability, with no passive Settings reads. ``mode_id`` is the mode the
@@ -107,6 +113,33 @@ class QuickInputController(RuntimeInputOwner):
             self._view_orbit_drag = None
             if settle:
                 self._finish_view_orbit_if_idle()
+
+    @property
+    def plain_pan_admitted(self) -> bool:
+        """Held-right pan (plan 1B.13): the held-left orbit's admission (not in Edit, not exiting, no menu open,
+        interaction or Ctrl mode) on a mode whose scene pans (its descriptor's ``scene_transform_settings``)."""
+        return bool(self.plain_orbit_admitted and self._scene_transform_enabled)
+
+    def begin_plain_pan(self, global_origin: QPoint) -> bool:
+        """Promote a held right press past the drag distance into the scene pan (the window owns capture)."""
+        if not self.plain_pan_admitted:
+            return False
+        self._scene_pan_origin = QPoint(global_origin)
+        self.scene_pan_started.emit()
+        return True
+
+    def finish_plain_pan(self) -> None:
+        if self._scene_pan_origin is not None:
+            self._scene_pan_origin = None
+            self.scene_pan_finished.emit()
+
+    def request_context_menu_at(self, global_point: QPoint) -> bool:
+        """A held-right press over a pan-capable card released without a pan: the retained menu opens at the
+        release point through the one ``context_menu_requested`` route (plan 1B.13)."""
+        if not self._state.admission_open or self._state.exiting:
+            return False
+        self.context_menu_requested.emit(QPoint(global_point))
+        return True
 
     def cancel_view_orbit_for_camera_reset(self) -> None:
         self.plain_orbit_cancel_requested.emit('reset')
@@ -170,8 +203,9 @@ class QuickInputController(RuntimeInputOwner):
 
         state = self._state
         if state.admission_open and (self._view_orbit_drag is not None
-                                     or self._visualizer_drag_origin is not None):
-            return True                       # an Alt-drag orbit or move follows the pointer in any mode
+                                     or self._visualizer_drag_origin is not None
+                                     or self._scene_pan_origin is not None):
+            return True                       # an orbit, move or pan follows the pointer in any mode
         return bool(
             state.admission_open
             and not state.exiting
@@ -335,6 +369,9 @@ class QuickInputController(RuntimeInputOwner):
         global_ctrl_held: bool = False,
     ) -> bool:
         if not self._state.admission_open:
+            return True
+        if self._scene_pan_origin is not None:
+            self.scene_pan_requested.emit(self._global_mouse_point(event) - self._scene_pan_origin)
             return True
         return super().handle_mouse_move(event, global_ctrl_held)
 

@@ -1459,6 +1459,37 @@ class DisplayManager(QObject):
         if self._begin_quick_visualizer_gesture():
             self._quick_custom_layout_owner.move_direct_visualizer(offset, cursor)
 
+    def _start_quick_scene_pan(self) -> None:
+        """Held-right pan began (plan 1B.13): rebase the press-scoped baseline (pan-capable modes only)."""
+        self._quick_scene_view_gesture = None
+        context = self._quick_scene_view_context()
+        if context is not None:
+            owner, descriptor, _presentation = context
+            self._capture_quick_scene_view_gesture(owner, descriptor)
+
+    def _pan_quick_visualizer_scene(self, offset: QPoint) -> None:
+        """Held-right pan: the pointer's global offset since the press, in the Studios' own feel (plan 1B.13).
+
+        The Studio viewport pans by ``pan_x -= dx / width``, ``pan_y += dy / height`` of its preview frame
+        (``ui/studio/controller.py`` ``pan_by``); the live card uses its content rect, and both are bounded by the
+        canonical spec (``transform_visualizer_scene`` clamps). A mode switch or replaced owner since the press
+        pans nothing."""
+        context = self._quick_scene_view_context()
+        if context is None:
+            return
+        owner, descriptor, presentation = context
+        if not self._quick_scene_view_gesture_current(owner, descriptor) or presentation is None:
+            return
+        width, height = presentation.content_rect[2:]
+        if width <= 0 or height <= 0:
+            return
+        sample = self._quick_scene_view_gesture
+        _scale, pan_x, pan_y = descriptor.scene_transform_settings
+        self._publish_quick_scene_view(owner, descriptor, {
+            pan_x: sample[3] - float(offset.x()) / float(width),
+            pan_y: sample[4] + float(offset.y()) / float(height),
+        })
+
     def _scale_quick_visualizer(self, angle_delta_y: int) -> None:
         context = self._quick_scene_view_context()
         if context is not None:
@@ -2333,6 +2364,15 @@ class DisplayManager(QObject):
                 lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
             )
         )
+        # Held-right pan (plan 1B.13): the same press-scoped baseline and the live view pose's own save.
+        for signal, callback in ((runtime.scene_pan_started, self._start_quick_scene_pan),
+                                 (runtime.scene_pan_requested, self._pan_quick_visualizer_scene),
+                                 (runtime.scene_pan_finished, self._finish_quick_visualizer_gesture)):
+            signal.connect(
+                lambda *args, callback=callback: live_unit_route(
+                    lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+                )
+            )
         self._configure_quick_visualizer_input_admission(unit)
         runtime.context_menu_requested.connect(
             lambda _position: live_unit_route(self._refresh_quick_context_menu)

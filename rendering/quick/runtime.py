@@ -69,6 +69,10 @@ class QuickDisplayRuntime(QObject):
     view_orbit_finished = Signal()
     view_camera_reset_requested = Signal()
     visualizer_move_started = Signal()
+    # Held-right pan over a pan-capable card (plan 1B.13): start, the global offset since the press, end.
+    scene_pan_started = Signal()
+    scene_pan_requested = Signal(QPoint)
+    scene_pan_finished = Signal()
     visualizer_move_requested = Signal(QPoint, QPoint)
     visualizer_scale_requested = Signal(int)
     visualizer_gesture_finished = Signal()
@@ -263,6 +267,9 @@ class QuickDisplayRuntime(QObject):
         self._input.visualizer_move_requested.connect(self.visualizer_move_requested.emit)
         self._input.visualizer_scale_requested.connect(self.visualizer_scale_requested.emit)
         self._input.visualizer_gesture_finished.connect(self.visualizer_gesture_finished.emit)
+        self._input.scene_pan_started.connect(self.scene_pan_started.emit)
+        self._input.scene_pan_requested.connect(self.scene_pan_requested.emit)
+        self._input.scene_pan_finished.connect(self.scene_pan_finished.emit)
         self._input.diagnostic_capture_requested.connect(self._capture_diagnostic_key_edge)
         self._input.custom_layout_edit_requested.connect(
             self.custom_layout_edit_requested.emit
