@@ -36,6 +36,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 panelLimits;
     float panelCeiling;   // dark ink: the panel's furthest lift toward white (SurfaceContrast.panelCeiling)
     float ownOpacity;     // a run plate's own text opacity, which its overlay must not take (else 1)
+    float edgeSoftness;   // px over which the plate fades in from its edge (a row: 1.5, its antialiasing)
 };
 layout(binding = 1) uniform sampler2D source;
 
@@ -99,27 +100,23 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
     float tintOpacity = mix(blurTint.y, blurTint.z, clamp(tintColor.a, 0.0, 1.0));
     c = mix(c, tint, adjustedDensity(tintOpacity));
 
+    // The edge highlight (Glass, faintly Frosted/Smoked) is added after the legibility layer
+    // below, so it stays at the real border; the diagonal sheen is part of the face.
+    float edgeHighlight = 0.0;
     if (glassLegibility.x > 0.0) {
         float edge = 1.0 - smoothstep(0.0, 6.0, -d);
         float facing = clamp(dot(-n, normalize(vec2(-0.55, -0.85))) * 0.5 + 0.5, 0.0, 1.0);
         float sheen = clamp(1.0 - (cardUnit.x + cardUnit.y) * 0.6, 0.0, 1.0);
-        c += vec3(glassLegibility.x) * (edge * edge * (0.35 + 0.65 * facing) + 0.10 * sheen);
+        c += vec3(glassLegibility.x) * (0.10 * sheen);
+        edgeHighlight = glassLegibility.x * (edge * edge * (0.35 + 0.65 * facing));
     }
 
     vec3 unplated = c;
 
-    // Legibility layer: the card interior 2.5 px inside the border, its corners concentric
-    // with the card's (its configured radius minus the inset, never under 2 px) and a 2 px
-    // soft edge, so it reads as one
-    // deliberate inner panel. Shift away from the text colour, then hold a
+    // Legibility layer: the whole face, up to and under the real border (no inset panel, no
+    // inner rim; Card_Surface_Materials.md 3.3). Shift away from the text colour, then hold a
     // luminance-contrast floor against it where the backdrop is busy.
-    // A negative border width (a child control drawing its own outline) puts the panel edge
-    // just outside the shape: its whole face is the panel, with no inner rim.
-    float plateInset = borderWidth < 0.0 ? -1.0 : borderWidth + (glassLegibility.y > 0.0 ? 3.0 : 2.5);
-    vec2 plateHalf = max(halfSize - vec2(plateInset), vec2(1.0));
-    vec2 plateNormal;
-    float pd = roundedBox(p, plateHalf, max(2.0, r - plateInset), plateNormal);
-    float plate = 1.0 - smoothstep(-1.0, 1.0, pd);
+    float plate = 1.0;
     float floorRatioCard = max(1.0, glassLegibility.w);
     // Work in linear light: encoded-RGB luma made the contrast floor excessively
     // dense (especially on Acrylic/Frosted). Encode only after the least adjustment.
@@ -160,20 +157,10 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
     }
     // Dark ink (light themes): the panel moves toward its anchor only as far as the bounded
     // surface, the Settings-variant shell density (never less than the reference ink needs
-    // over black); faint runs correct their own ink instead (OverlayCard.surfaceInk).
+    // over black); faint runs correct their own ink instead (OverlayCard.surfaceInkSolution).
     if (floorRatioCard > 1.0 && panelLimits.y <= 0.5)
         c = min(c, mix(unplated, vec3(1.0), panelCeiling * plate));
-
-    // Light themes only: a defined edge over busy wallpaper. A dark hairline right inside
-    // the border and a soft highlight below it. Zero for dark tints (their look is kept).
-    float edgeAmount = smoothstep(0.55, 0.7, luma(tint));
-    if (edgeAmount > 0.0) {
-        float inner = -d - max(0.0, borderWidth);
-        float hairline = 1.0 - smoothstep(0.0, 1.25, abs(inner - 0.6));
-        float highlight = (1.0 - smoothstep(1.5, 4.5, inner)) * step(1.2, inner);
-        c = mix(c, c * 0.55, 0.55 * hairline * edgeAmount);
-        c = mix(c, vec3(1.0), 0.35 * highlight * edgeAmount);
-    }
+    c += vec3(edgeHighlight);
 
     c += (grainValue - 0.5) * lightNoise.y;
     return vec4(clamp(c, 0.0, 1.0), valid);
@@ -256,7 +243,7 @@ void main() {
     vec2 halfSize = itemSize * 0.5;
     vec2 unused;
     float pd = roundedBox(local - halfSize, halfSize, clamp(rowRadius, 0.0, min(halfSize.x, halfSize.y)), unused);
-    float mask = 1.0 - smoothstep(-1.5, 0.0, pd);
+    float mask = 1.0 - smoothstep(-max(edgeSoftness, 0.5), 0.0, pd);
 
     // A run plate sits inside its run, so qt_Opacity carries the run's own opacity (a faded
     // run): the overlay takes only the opacity above the run (a whole-widget fade).

@@ -28,6 +28,9 @@ ShaderEffect {
     // A plate inside a faded run (ShadowedText's ink plate) passes the run's own opacity, which
     // the overlay must not take; a row under a line leaves 1.
     property real ownOpacity: 1.0
+    // Pixels over which the plate fades in from its edge: a row keeps its 1.5 px antialiasing;
+    // a run's ink plate fades in softly so it reads as a glow under the run, not a sticker.
+    property real edgeSoftness: 1.5
     // Below this a run is small text and needs 4.5:1 (WCAG AA body text).
     readonly property real smallTextPx: 18.0
 

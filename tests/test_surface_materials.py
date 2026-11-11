@@ -351,6 +351,10 @@ def test_text_runs_change_only_on_an_active_material() -> None:
     # as a per-run chip on every run; the soft halo drops only on an active material.
     assert text.count("Loader {") == 1 and text.count("TextLegibilityPlate {") == 1
     assert "active: shadowedText.inkNeedsPlate &&" in text
+    # It fades in from its edge (a glow under the run, not a sticker); rows keep 1.5 px.
+    assert "edgeSoftness: inkPlate.soft" in text
+    plate = (QML / "TextLegibilityPlate.qml").read_text(encoding="utf-8")
+    assert "property real edgeSoftness: 1.5" in plate
     assert "readonly property bool inkNeedsPlate: _inkSolution !== null && !_inkSolution[4]" in text
     assert "&& !(shadowedText.shadowSoft && shadowedText.onSurfaceMaterial)" in text
     assert "&& !shadowedText.onSurfaceMaterial" in text

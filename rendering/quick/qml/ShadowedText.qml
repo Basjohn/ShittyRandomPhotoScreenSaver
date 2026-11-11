@@ -42,8 +42,8 @@ Item {
     readonly property real shadowOffsetScale: shadowSoft ? 0.5 : 1.0
 
     // Card surface materials (Docs/Architecture/Card_Surface_Materials.md, 3.3). On a card
-    // whose material is active the card's own legibility panel (2.5 px inside the border,
-    // concentric with the card) holds the contrast floor, so a run adds no plate of its own;
+    // whose material is active the card's own legibility panel (its whole face, up to the
+    // border) holds the contrast floor, so a run adds no plate of its own;
     // it only drops the light-theme soft halo, which goes muddy over a colourful blur.
     // Normal cards: nothing changes.
     function _findSurfaceCard(item) {
@@ -132,7 +132,10 @@ Item {
     Loader {
         id: inkPlate
         objectName: "shadowedTextInkPlate"
-        readonly property real pad: 3.0
+        // The plate fades in over `soft` px from its edge, so it extends that far beyond the
+        // painted text: the glyphs sit on its full strength, its edge dissolves into the face.
+        readonly property real soft: 5.0
+        readonly property real pad: 2.0 + soft
         readonly property real paintedWidth: Math.min(mainText.contentWidth,
             shadowedText.width > 0 ? shadowedText.width : mainText.contentWidth)
         active: shadowedText.inkNeedsPlate && shadowedText.visible && paintedWidth > 0
@@ -140,10 +143,10 @@ Item {
         x: (shadowedText.horizontalAlignment === Text.AlignRight ? shadowedText.width - paintedWidth
             : shadowedText.horizontalAlignment === Text.AlignHCenter ? (shadowedText.width - paintedWidth) / 2.0
             : 0.0) - pad
-        y: -1.0
+        y: -soft + 1.0
         width: paintedWidth + 2.0 * pad
         height: Math.min(mainText.contentHeight, shadowedText.height > 0 ? shadowedText.height
-                                                                         : mainText.contentHeight) + 2.0
+                                                                         : mainText.contentHeight) + 2.0 * soft - 2.0
         z: -1
         sourceComponent: TextLegibilityPlate {
             card: shadowedText.surfaceCard
@@ -155,6 +158,7 @@ Item {
                               shadowedText.inkColor.a * shadowedText.opacity)
             runPixelSize: shadowedText._pixelSize
             radiusOverride: inkPlate.height / 2.0
+            edgeSoftness: inkPlate.soft
             ownOpacity: shadowedText.opacity
         }
     }
