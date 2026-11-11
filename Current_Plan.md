@@ -359,6 +359,24 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   Dark themes get reachable limits and keep following the wallpaper. The Settings variant corrects the ink and
   leaves the surface at its calibrated density (about .63-.72). The operator's third example is Pearl Blush
   (11 Nov; Plum Jade is a dark theme): prove on Platinum Workstation, Polished Chrome and Pearl Blush.
+  Design (lead, 11 Nov): do what the Settings variant does, in the same order.
+  - [ ] a. Evidence first: off-screen card renders of the three light themes and two good dark themes over one
+    dark and one bright PERSONALSET wallpaper (`tools/surface_material_capture.py`), with the wallpaper swing
+    that survives inside the card measured per theme. This is the before set and the acceptance oracle.
+  - [ ] b. The surface keeps its calibrated density for dark ink: the panel may move toward the anchor only as
+    far as the theme's own Settings-variant shell density, never to a saturated white. The solver's unreachable
+    case (target above what the ink can reach on white) must resolve to "bounded surface + corrected ink", not
+    to limit 1.0.
+  - [ ] c. Correct the ink, not the panel: where dark ink over the bounded surface misses the ratio, darken the
+    semantic ink toward its theme anchor (the 1.7a runtime ink correction), and judge faint ink at its real
+    alpha rather than the fixed 55% assumption.
+  - [ ] d. Only where a text run still fails over a busy backdrop, a text-local legibility plate (the existing
+    `TextLegibilityPlate` / `text_legibility.frag`), never a whole-card lift.
+  Guardrails: dark themes render pixel-identical before and after (their limits were already reachable); the
+  SURFACE block stays identical across `surface_material.frag`, `text_legibility.frag` and
+  `text_legibility.vert` (`tests/test_surface_materials.py`); regenerate the `.qsb` files with the Qt toolchain;
+  no extra pass, capture or per-frame Python; one focused GPU before/after on a busy card. Coordinate with 1.7b
+  (same shader): land 1B.8 first, then the border ring.
 - [ ] **1B.9 Settings and Studio window corners still bleed/escape.** Continues 1.9 with the operator's
   allowance: the border may grow by at most 2 px if that covers the escape. Measure with
   `tools/settings_native_corners.py` (four cases, 150% DPI) at +1 and +2 px, report to the operator whether
@@ -371,6 +389,19 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   from about 5 px to about 1 at 150% (0 at 100%, 3 of 8 at 200%) by squaring the corner, and does not remove it.
   Never tried: DWM corner preference on a non-layered window, a region applied before Accent, a composition-host
   clip. The tool shows a real native window; there is no Studio equivalent yet.
+  Order of experiments (lead, 11 Nov; each one reversible, measured with the four-case gate at 100/150/200%
+  before the next; a small native window is unavoidable here, so keep it Settings-sized and brief, never
+  fullscreen):
+  - [ ] a. Give the tool a Studio case (same forged edge) and a border-width argument, then measure +1 and +2 px
+    as the operator asked. Report the leftover pixels per scale with crops; adopt a width only if it removes the
+    escape rather than squaring the corner.
+  - [ ] b. Clip the material itself, cheapest first: a region applied before the Accent call; then the Windows 11
+    DWM corner preference on a non-layered variant of the window (check what it costs: shadow ownership,
+    translucency, the layered-window repaint path of §9's freeze fix); then a composition-host clip.
+  - [ ] c. Whichever clips: redo input, resize, snap/maximise, DPI change, activation and Studio-over-Settings
+    modality on the real `SettingsDialog` and Studio window before it ships.
+  - [ ] d. Window border material: after the corner is honest, the forged border ring takes the border-material
+    treatment of 1.7b (one shared rule for cards and windows), inside the +2 px budget.
 - [ ] **1B.13 Hold right-click to pan the live Visualizer, as in the Studios (operator, 11 Nov; large QoL, but the
   context menu's reliability and speed rank above it).** Design (lead): the platform's own convention, menu on
   button-up, scoped to the one place a drag can mean something else.
