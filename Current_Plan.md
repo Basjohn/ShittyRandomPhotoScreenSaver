@@ -688,14 +688,13 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 - [ ] Keep it a separate reversible fix.
 - [ ] Repeat the four-case corner/border/shadow gate before claiming improvement.
 
-### Side defect: nine reds from stale owner stubs (found 11 Nov; repair in flight, Opus Medium)
+### Test doubles for the display manager (stale-stub reds repaired 11 Nov; shared doubles in `tests/_display_manager_doubles.py`)
 
-- [ ] `test_visualizer_camera_contract.py` (2), `test_visualizer_control_hints.py` (5),
-  `test_visualizer_custom_route_contract.py` (1) and `test_visualizer_custom_geometry_profiles.py` (1) fail when
-  their files run alone: hand-built stubs lack `owner.is_started` and `set_visualizer_studio_rotate_glyphs`
-  (`engine/display_manager.py:1026-1027`, from dfceed38), and a `DisplayManager` without `displays` reaches
-  `_expand_glyph_neighbours` (`:3559`, from 32279216). Stubs brought up to the real owner's surface through one
-  shared double; a product fix only if `displays` can really be absent; sibling stubs swept.
+- [ ] Nineteen sibling test files still hand-build their own `DisplayManager` or owner stubs (green today; the
+  list is in the repair's merge, e.g. `test_qtquick_custom_layout_owner`, `test_visualizer_hover_transfer`,
+  `test_qtquick_h_cutover`): move them onto the shared doubles so one added owner member cannot break them.
+- [ ] Briefs that change a shared owner name the caller sweep: grep `tests/` for the changed methods and run
+  every file that hits (three merges ran only the files they edited; nine reds went unnoticed for a day).
 
 ### Awaiting Validation after the focused proofs
 
