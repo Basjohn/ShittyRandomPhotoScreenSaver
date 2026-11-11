@@ -686,6 +686,22 @@ The mode id is `devcurve`. The operator's crop shows a magenta band crossing the
 - [ ] Before/after 4x crops of the left and bottom border for `devcurve`; lead pixel review.
 - [ ] R-NNN entry (a contract every mode relied on was not enforced).
 
+Lead's audit note, 12 Nov: the agent's first fix (0e01e147, R-187: the clip was built from the retained
+snapshot's record, so content could cross the rounded corners between a geometry change and the next coherent
+publication) is right in itself but is a transient, and steady frames were reported clean; the operator described
+a standing condition and their crop shows lines inside the border band along the left edge. Not closed until:
+
+- [ ] Steady frames proved under the operator's own setup: theme `Amethyst Night [Single] [Glass]` (translucent
+  border), `card_border_width_px` 5, CUSTOM layout with slots, Spline Curve's own white bar border on, a 3840 x
+  2160 display at 150 %, ordinary and display-wide card; pixels counted in the border band (between the card's
+  outer edge and the drawn border's inner edge) and outside the card, before and after the fix.
+- [ ] If the band shows content: the wrong geometry named (clip inset against the configured border width, DPR
+  rounding, a translucent border over an outer-path clip, the CUSTOM record, a generous scissor) and fixed at
+  the shared owner; why Spline Curve shows it and the others do not, with one other mode beside it.
+- [ ] The clip contract test's steady check runs with a non-default border width, a Glass border and the CUSTOM
+  route, over every mode, counting the border band.
+- [ ] If nothing reproduces off-screen: the lead takes it on Display 1 with the operator's profile copy (1B.14).
+
 ### 1C.5 Volume child control: its drop shadow is cut off sharply (owner: the material agent, before M2b's review)
 
 Operator's crop: the Media widget's volume bar (a child material surface) has its drop shadow ending in a hard
