@@ -338,41 +338,38 @@ Cause: land past the authored grid is generated landscape with no stored cells, 
 - [ ] Lead pixel review on showcase WebP; then merge.
 - [~] Operator look.
 
-### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (in flight, Opus High)
+### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (merged 189fbd36c; plan 01 M3c)
 
-Slices a, b and c are built on the agent's branch (`worktree-agent-a13ffaba719c92b76`: 2630e50a seekbar
-component, f7195259 parent geometry through the ordinary Edit handlers, f6950148 alignment as declared roles),
-unaudited and unmerged. Each slice is its own checkpoint; the Media card stays pixel-identical after every one.
+Now Playing and the toast are edited by ordinary Edit's handlers; the Media seek bar is one component
+(`MediaSeekBar.qml`) and Now Playing has it as an option (Fullscreen Mode -> Now Playing -> Seek Bar, default
+off). What stays overlay-specific, with its reason, is listed in plan 01. Old profiles' artwork factors load
+through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 
-- [ ] d. Artwork: one size carrier; the parent handles act as Media's do; border and shape follow the Media
-  widget's artwork settings (colour, stroke, rounding option), not the Visualizer card chrome (lead's decision
-  from the operator's Media-parity request; supersedes the 8 Nov "themed border" wording).
-- [ ] d1. No red left in `tests/test_visualizer_expansion_fullscreen_edit.py`: rewrite
-  `test_parent_axes_resize_the_artwork_border_not_the_metadata_text_box` and
-  `test_metadata_stays_compact_and_centred_during_parent_artwork_resize[False/True]` to the new contract.
-- [ ] e. Snap and guides: display edges, centre lines and the other overlay through the ordinary guide owner;
-  resolve the red `tests/test_custom_layout_guides_contract.py:832` (it looks for
-  `modelData.containmentTarget || null`, absent from `CustomLayoutOverlay.qml`).
-- [ ] f. Storage: the key `widgets.spotify_visualizer.fullscreen_overlays` stays; its records take the ordinary
-  child-geometry schema and normaliser; old profiles' artwork factors get a load bridge and an entry in
-  `Docs/Architecture/Persisted_Input_Compatibility.md`.
-- [ ] g. Optional seekbar (default off): Fullscreen Mode option, a child part in Fullscreen Edit, the Media
-  card's seek route and double-click ownership, authored into the defaults; no timer for position.
-- [ ] h. A saved profile's overlays keep their geometry and storage (position, size, child geometry) before and
-  after; only the artwork border's look may change (to Media's).
-- [ ] i. No overlay-only geometry maths left: grep-level audit listed in the report.
-- [ ] A move that ends in a corner pin takes two undo steps (shared Edit behaviour, Media's header too): make
-  one gesture one undo step at the shared owner, or record why the pin is its own step.
-- [ ] Lead audit of a to i (each regression against the pre-change code; the Media card's before/after renders;
-  the side-by-side Edit evidence), then merge.
-- [~] Operator: Fullscreen Edit of Now Playing beside the Media widget's Edit; the seekbar.
+- [~] Operator: Fullscreen Edit of Now Playing beside the Media widget's Edit: move, corner, side handles,
+  Restore Size, the child lock and each part.
+- [~] Operator: the seek bar on Now Playing against a real player (look, fill, seeking, a double-click on it
+  never changing the Visualizer's mode).
 - [~] Operator: three behaviours changed to the Media widget's rule; say if any should go back. (1) Now Playing's
   side handles reflow the text box; they used to resize the artwork border (accepted 10 Nov). (2) The block no
   longer flips by which side of the screen it is on (accepted 10 Nov as the inward left/right layout): its
   orientation follows its anchor corner, chosen by the title's flip glyph or by ending a move in a corner.
   (3) A corner drag grows about the top centre and Restore Size keeps the top left.
-- [~] Operator: on thin Media rows in ordinary Edit the flip glyph now sits just right of the move grip (it used
-  to cover the grip, so the row could not be grabbed).
+- [~] Operator: Now Playing's artwork border now takes the Media widget's artwork colour, stroke and Rounded
+  Artwork option, not the Visualizer card's border (supersedes the 8 Nov "themed border").
+- [~] Operator: in ordinary Edit on thin Media rows the flip glyph sits just right of the move grip (it used to
+  cover the grip); a move that ends in a corner pin is now one undo step (Media's header too).
+- [ ] The safe-area edge guides are no longer drawn in Fullscreen Edit (as in ordinary Edit); confirm that is
+  wanted or restore them through the ordinary guide owner.
+- [ ] Evidence gap: no side-by-side render of the Media widget's own Edit beside Fullscreen Edit (it needs an
+  off-screen harness that drives ordinary Edit on a Media card); build it beside
+  `tools/expanded_visualizer_evidence.py`.
+- [ ] A raw old profile file on disk with the retired artwork factors is covered only by the normaliser test
+  (the round-trip test writes through the settings manager, which normalises on write): add a fixture file.
+- [ ] Side defect: `tests/test_qtquick_media_presentation.py:429` pins a default colour
+  (`app_volume_fill_color`) and fails when run after the Visualizer test files in one process (passes alone).
+- [ ] Side defect (order leak, fix on the side-defect branch): `tests/test_visualizer_held_right_pan.py` fails
+  11 of 14 when run after `tests/test_qtquick_custom_layout_owner.py` in one process (passes alone); confirm
+  the pointer-guard reset fixes it once that branch merges.
 
 ### 1B.8 Light themes are practically opaque in the saver (not started; cause found in research)
 
