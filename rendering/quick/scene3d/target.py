@@ -896,8 +896,10 @@ class SceneTarget:
         gl.glViewport(vx - x, vy - y, vw, vh)
 
     def end(self, frame: SceneFrame, resources, bloom: float = 0.0) -> None:
-        frame = scene_output_frame(frame)
+        # Only a turned Visualizer scene pays for its output frame; transitions and unturned scenes read one attribute.
         rotation = getattr(frame, "scene_output_rotation", 0)
+        if rotation:
+            frame = scene_output_frame(frame)
         x, y, width, height = self._rect
         allocated_width, allocated_height = self._key[0], self._key[1]
         multisampled = self._samples > 1

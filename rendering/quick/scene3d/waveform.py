@@ -34,6 +34,10 @@ ROOT=Path(__file__).resolve().parents[3]
 # slice; a frame used to make about 170 of them. Pixels are unchanged.
 OWNED = dict(restore=False)
 
+# Travel Direction's x mirror from the history axis into the world: one read-only constant, not rebuilt every frame.
+_HISTORY_X_MIRROR = np.diag((-1., 1., 1., 1.))
+_HISTORY_X_MIRROR.setflags(write=False)
+
 
 @contextmanager
 def unclipped_prepasses():
@@ -255,7 +259,7 @@ class WaveformScene:
         # Travel Direction: the history (ribbons, sparks, strands, their fields) lives on its own axis, mirrored into
         # the world here (world x = side * axis) and nowhere else. +1 is the identity and multiplies nothing.
         side = -1. if flow.direction < 0. else 1.
-        mirror = None if side > 0. else np.diag((-1., 1., 1., 1.))
+        mirror = None if side > 0. else _HISTORY_X_MIRROR
         history_view = view if mirror is None else view @ mirror
         self._history_mirror = mirror
         ribbon_view = history_view @ scroll

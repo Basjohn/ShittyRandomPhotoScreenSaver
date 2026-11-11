@@ -177,6 +177,10 @@ def test_left_to_right_is_the_mirror_image_with_its_fields_and_grade_in_place(qt
         rtl_fields = fields()
         ltr = _render(renderer, target, frame, plain, direction=-1., give=1.).astype(float)
         ltr_fields = fields()
+        # The mirror is one read-only constant, never rebuilt per frame (np.diag cost ~1.5 us a frame, 11 Nov).
+        from rendering.quick.scene3d import waveform as waveform_scene
+        assert renderer._scene._history_mirror is waveform_scene._HISTORY_X_MIRROR
+        assert not waveform_scene._HISTORY_X_MIRROR.flags.writeable
         mirrored, unmirrored = np.abs(ltr-rtl[:, ::-1]).mean(), np.abs(ltr-rtl).mean()
         assert mirrored < .25*unmirrored, (mirrored, unmirrored)
         # The reduced fields (mist light/shape, floor give) are world-space: mirrored about x = 0 with the history.
