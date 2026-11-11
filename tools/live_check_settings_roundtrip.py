@@ -77,6 +77,14 @@ def parse_roundtrip_memory(text: str) -> tuple[str, ...]:
     return tuple(level for level in MEMORY_LEVELS if level in levels or level == "census")
 
 
+def memory_map_file_name(index) -> str:
+    """The map snapshot's file for one observation. An observation's label may hold a colon (a completed switch is
+    ``switch3:sphere``), and on NTFS ``name:stream`` writes an alternate data stream of ``name``: an empty file in
+    every listing, its content out of sight."""
+    safe = "".join(ch if ch.isalnum() or ch in "_.-" else "_" for ch in str(index))
+    return f"memory_map_{safe}.json"
+
+
 def _type_name(obj) -> str:
     kind = type(obj)
     return f"{getattr(kind, '__module__', '?')}.{kind.__qualname__}"
@@ -405,7 +413,7 @@ class RoundTripMemoryProbe:
                   "resident_private_mb": {k: round(v[1] / 2**20, 1) for k, v in totals.items()},
                   "threads": len(snap["threads"]), "elapsed_ms": snap["elapsed_ms"]}
         if self.out_dir is not None:
-            path = self.out_dir / f"memory_map_{index}.json"
+            path = self.out_dir / memory_map_file_name(index)
             path.write_text(json.dumps(snap), encoding="utf-8")
             result["file"] = path.name
         if self._previous_map is not None:
