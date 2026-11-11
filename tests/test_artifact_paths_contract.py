@@ -48,6 +48,10 @@ NOT_EVIDENCE = {
     "tools/visualizer_replay/record.py": "the operator's recordings (logs/visualizer_recordings)",
     "tools/godzip_foundry_core.py": "GODZIP packaging of loose logs the operator asked for",
     "tools/godzip_script_runner.py": "GODZIP capture of a script run's loose logs",
+    "tools/godzip_foundry.py": "the GODZIP Foundry GUI names LOGZIP's destination (logs/evidence_chest) in its help "
+                               "and tooltips: the operator's own archives of the app's loose logs, not agent evidence",
+    "tools/godzip_logzip_retention.py": "LOGZIP's operator-chosen archive folder (logs/evidence_chest) and its "
+                                       "five-per-HEAD retention: archives of the app's loose logs, not agent evidence",
     "tools/frozen_build_audit.py": "frozen-build audit report beside the build it audits",
     "tools/defaults_foundry_core.py": "atomic in-place writes of authored defaults",
     "tools/artifact_migration.py": "one-off move of the legacy evidence roots into the layout (reads them by name)",
@@ -58,6 +62,9 @@ PNG_NOT_EVIDENCE = {
     "tools/visualizer_replay/sphere_golden.py": "test goldens (tests/goldens/visualizer_replay/sphere_visual)",
     "tools/image_worker_shm_lifecycle_harness.py": "a synthetic input PNG inside a TemporaryDirectory",
     "tools/linux_headless.py": "synthetic input images for a Linux run, in that run's scratch",
+    "tools/srpss_border_core.py": "Border Studio: the operator's own image re-encoded with the SRPSS border as release "
+                                  "media, in a folder the operator picks (not evidence)",
+    "tools/srpss_border_studio.py": "Border Studio GUI over srpss_border_core (still format choice and file filters)",
 }
 
 # logs/<name> path parts tools may name: the app's own logs and the operator's recordings (both inputs).
@@ -67,6 +74,8 @@ _LOGS_ALLOWED = re.compile(r"^(visualizer_recordings|screensaver[\w.]*|[\w.-]+\.
 TEMP_ALLOWED = {
     "tools/reddit_helper_task_harness.py": "the task XML (delete=False for schtasks) is unlinked in finally",
     "tools/godzip_script_runner.py": "the ZIP staging file sits in the output folder and is unlinked in finally",
+    "tools/visualizer_capture_core.py": "the publish staging file (delete=False so it can be hard-linked into place) "
+                                        "sits in the destination folder and is unlinked in finally",
     "tests/test_studio_worker_lifetime.py": "removes the temp folders a killed Studio worker under test left behind",
 }
 
