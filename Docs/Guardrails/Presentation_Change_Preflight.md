@@ -71,6 +71,22 @@ one is found.
   load that stalls where it used to take seconds). Name the property for what it holds (`leftText`, `leftValue`); do
   not reuse a built-in Item property name for your own state.
 
+## SMP readiness (operator, 11 Nov 2026; binds now, long before SMP is built)
+
+ShittyMusicPlayer is a long-term goal (`Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_2026-11-11.md`
+sections 7 and 8). It will run in two hosts: inside the compositor on the screensaver and MC builds, and in desktop
+windows on an SMP profile build that has no compositor. A change to presentation code must not close that off:
+
+1. The Media widget, Now Playing and the seek bar stay host-agnostic: no reach into the display compositor, the
+   image presenter or transition state from inside those components.
+2. The Visualizer stays one owner that can be retargeted between hosts and surfaces without a teardown and
+   rebuild, and renders correctly at any aspect, thin wide strips included, never outside its border.
+3. Edit's handles, guides, snapping, lock glyph and commit / cancel transaction stay reusable components and
+   helpers, not code welded to the widget layout owner; a new edit mode is a new owner over its own record that
+   uses them, never a flag inside an existing Edit owner.
+4. Custom drawing (the native core included) renders into whatever surface its host provides, with no dependency
+   on the image compositor being present.
+
 ## Acceptance
 
 Use the relevant subset:

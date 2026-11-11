@@ -745,8 +745,6 @@ two hosts, a compositor display and a desktop window (document 04 section 8).
   list): the Media widget, Now Playing and the seek bar stay host-agnostic; the Visualizer stays one owner that can
   be retargeted between hosts and rendered at any aspect, strips included; Edit's handles, guides and snapping
   stay reusable components; the native core renders into whatever surface its host gives it.
-- [ ] Add those four rules to `Docs/Guardrails/Presentation_Change_Preflight.md` as a short "SMP readiness"
-  section (Sonnet, when free), so they bind without anyone remembering this plan item.
 - [ ] The operator's answers to the mock document's section 6 (what "CS" is; whether Lyrics and Artist Collage
   are in the first full-player milestone; whether the wider dock model is wanted) are recorded there when given.
   Nothing waits on them.
