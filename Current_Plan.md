@@ -162,38 +162,52 @@ P3 ports.
   `test_bubble_reactivity.py::test_group_drift_aligns_non_swirl_bubble_motion[random-x]` depends on the draw.
 
 **Remaining sequence (dedicated Fable High, in this order; it reports at each numbered boundary for the lead's
-audit; focused proof for each):**
+audit; focused proof for each).** Steps 1 and 2 of the 10 Nov sequence (M4 rendered parity, M5, L2-L5, the POSIX
+transfer lifetime) merged 12 Nov with R-184 and R-185; records: the phase-boundary audit's "11 Nov" section, the
+design and closeout docs.
 
-1. M4 non-default production-owner parity (dynamic capacity, high-water and non-default packet tests are already
-   implemented; do not reopen them):
-   - [ ] Non-default worker/in-process **rendered** parity.
-   - [ ] The gate-2 rendered no-visual-change record.
-2. M5, L2-L5 and the POSIX Connection lifetime repair (which must own a bounded descriptor retirement before the
-   Linux worker default can depend on that transport):
-   - [ ] M5: the in-process mode-cycling memory growth (gate 4 side finding) still hits the fallback and the Studios.
-   - [ ] L2: gate 3's "GIL share" fields are wall time, not GIL hold; "revisions waiting 0/0" is zero by
-     construction on the worker path; the worker's audio feed differs from a real device.
-   - [ ] L3: `--usage` costs ~13 ms more per 15 s sample with the worker (see section 5's usage-sample hitch).
-   - [ ] L4: the wake listener takes the GIL every frame (unmeasured); presentation inputs holding a Qt type are not
-     forwarded silently; a blocked tick thread whose loop still answers heartbeats freezes undetected.
-   - [ ] L5: reconcile remaining historical qualification: gate 4's worker memory predates R-179; the earlier "next
-     frozen build" wording is already answered by frozen check 2; audit the remaining writer overstatement.
-   - [ ] POSIX transfer lifetime: design bounded ownership for an accepted Connection never decoded because its
-     worker dies. The inherited stdlib sharer can retain one sender descriptor; synchronous serialization creates it
-     earlier. Do not cancel accepted registrations through the private cache or block GUI on a sharer handshake.
-     Boundary/source evidence: phase-boundary audit L1. Linux runtime remains unverified; this is a source repair
-     task, separate from the operator-waived Linux proving step.
+- [ ] Rendered parity gate green on the merge (`tests/test_visualizer_owner_render_parity.py`, running), then push.
+- [ ] Attribute the Python-call rises since the 7 Nov overhead baseline (`2026-11-07_4bb2b775.json`): +4 in 14
+  Scene3D transitions and +5 to +32 in six modes, none from the native-core branch; find the commits, then
+  re-record the baseline (the Spectrum +2 of 1B.4 is part of it).
+- [ ] Attribute the worker's +34 MB step at the first Waveform Ribbon (63.5 MB to 103.9 MB, then flat) before P3
+  sizes geometry buffers.
+- [ ] Attribute the 26.6 MB `heap_large` block retained after the first Neon Lake.
+- [ ] Waveform Ribbon hard-codes 4 samples (`rendering/quick/scene3d/waveform.py:378`); route it through the
+  scene's sampling owner.
+- [ ] `tools/artifact_paths.py` sends a worktree's evidence to the main checkout's `.artifacts`; give it the
+  running checkout's root so worktree agents need no redirect.
+- [ ] Multisampled scene targets are not reproducible draw to draw on this GPU (the parity gate judges
+  single-sampled targets and reports product sampling beside the path's own repeat); attributed only as far as
+  "the mode's own passes".
+- [ ] M5 remainder: the Studios and the post-failure fallback were not measured separately (the in-process and
+  worker laps show a first-visit GPU high-water step, not growth).
+- [ ] L3 remainder: `collect_ms` with displays on and under load (the one live reading, 13.5-21 ms over four
+  processes, was taken with the displays asleep and the Visualizer parked).
+- [ ] L4 residual: a blocked cadence thread now fails its session closed at the worker's heartbeat, but the
+  blocked thread itself stays in the worker until it returns.
+- [~] Operator: a mode switch on the engine worker no longer leaves a faint ghost of the outgoing mode after its
+  fade-out (R-184: Sphere, Extruded Spectrum, Waveform Ribbon switches).
+
 3. H3 Linux worker-default source flip and focused tests (the operator waived **physical** Linux validation, not
    source correctness; do not claim Pulse/forkserver runtime was tested):
-   - [ ] H3: worker path has no native Linux runtime evidence (forkserver, POSIX wake, Pulse capture). After the
-     source POSIX-lifetime repair, flip Linux default and update `Linux_Plan.md`; the operator's hardware waiver
-     does not turn untested runtime behaviour into a green gate.
-4. P3's four decisions and first native rendering substrate:
-   - [ ] The native reader vs the GUI thread closing the mapping mid-copy.
-   - [ ] A single consumer and a non-consuming head read for the Python owner.
-   - [ ] EB geometry once per revision, not per frame.
-   - [ ] EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check scans a
-     fixed module list and cannot see it).
+   - [ ] Flip `visualizer_engine_worker_platform_default` for Linux; update the platform tests.
+   - [ ] Gate tools and tests that send a raw `Pipe` sender through a real supervisor switch to
+     `open_wake_channel` (they would be refused on Linux).
+   - [ ] `Linux_Plan.md`: at H3, "the POSIX wake pipe (a named pipe the session opens)"; state what is unverified
+     (no FIFO, forkserver, Pulse capture or Linux worker has run; on Linux the listener thread ends only when the
+     worker's writer closes; the in-process fallback on configure failure is the safety net).
+4. P3's four decisions and first native rendering substrate (order: D1/D2 with the drop edge, then D4, then D3;
+   the substrate is built against the single-sample parity gate, `tools/visualizer_replay/owner_render_parity.py`):
+   - [ ] D1: the native reader vs the GUI thread closing the mapping mid-copy; liveness is per stream, not per
+     process.
+   - [ ] D2: a single consumer and a non-consuming head read for the Python owner; a reader that retains a frame
+     needs an explicit drop edge (R-184).
+   - [ ] D3: EB geometry once per revision, not per frame (after the worker's Waveform Ribbon step is measured).
+   - [ ] D4: EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check
+     scans a fixed module list and cannot see it).
+   - [ ] Transport rule for the substrate: nothing through the resource sharer; a name on POSIX, an exact-process
+     handle on Windows.
 
 **P3 and P4:**
 
