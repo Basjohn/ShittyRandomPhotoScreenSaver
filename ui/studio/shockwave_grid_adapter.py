@@ -195,7 +195,13 @@ def shaper_profile(values: Mapping[str, Any]) -> dict:
     for index, (position, label) in enumerate(notches):
         top = notches[index + 1][0] if index + 1 < len(notches) else 1.0
         lanes += [[position, shaper["lanes"][label]], [top, shaper["lanes"][label]]]
-    return {"bars": [[bias, weight] for bias, weight in zip(baked["bias"], baked["weight"])], "lanes": lanes}
+    # The bake holds one weight table per lane (the lanes cross-fade along the height, their shares summing to 1):
+    # a sample's drawn weight is the sum over the lanes, the curve at the blended lane strength.
+    bias = baked["bias"]
+    samples = len(bias)
+    per_lane = baked["lanes"]
+    weights = [sum(per_lane[start + index] for start in range(0, len(per_lane), samples)) for index in range(samples)]
+    return {"bars": [[height, weight] for height, weight in zip(bias, weights)], "lanes": lanes}
 
 
 def _shaper_properties(add: Callable[..., None], workspace: str, group: str) -> ShapeSpec:

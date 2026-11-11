@@ -301,8 +301,9 @@ def test_the_engine_shapes_its_bars_with_the_functions_the_preview_uses(monkeypa
 
 
 def test_the_terrain_shapers_preview_is_the_baked_tables(studio):
-    """Neon Lake's shaper: the bars are the baked elevation tables the height shader reads, and the lane line gives
-    every baked sample the strength of the lane the bake assigned it."""
+    """Neon Lake's shaper: the bars are the baked elevation tables the height shader reads (one weight table per
+    lane, cross-fading along the height: a sample's bar is their sum), and the lane line gives each lane's span,
+    from its boundary up to the next one, that lane's strength."""
     from rendering.gl_programs.neon_terrain_reaction import REACTION_LANES, bake_terrain_shaper
     from ui.studio.shockwave_grid_adapter import SHAPER
     controller, _surface, _store = studio("shockwave_grid")
@@ -310,16 +311,24 @@ def test_the_terrain_shapers_preview_is_the_baked_tables(studio):
     view = controller.bridge.values[SHAPER]
     shaper = controller.session.values[SHAPER]
     baked = bake_terrain_shaper(shaper)
+    samples = len(baked["bias"])
+    assert len(baked["lanes"]) == samples * len(REACTION_LANES)
+    summed = [sum(baked["lanes"][lane * samples + index] for lane in range(len(REACTION_LANES)))
+              for index in range(samples)]
     assert [b[0] for b in view["bars"]] == pytest.approx(list(baked["bias"]), abs=1e-5)
-    assert [b[1] for b in view["bars"]] == pytest.approx(list(baked["weight"]), abs=1e-5)
+    assert [b[1] for b in view["bars"]] == pytest.approx(summed, abs=1e-5)
+    # Negative control: one lane's table alone is not the drawn bar wherever another lane shares that height.
+    one_lane = list(baked["lanes"][:samples])
+    assert [b[1] for b in view["bars"]] != pytest.approx(one_lane, abs=1e-5)
     spans = [(view["laneProfile"][i][0], view["laneProfile"][i + 1][0], view["laneProfile"][i][1])
              for i in range(0, len(view["laneProfile"]), 2)]
-    samples = len(baked["lane"])
-    for index, lane in enumerate(baked["lane"]):
-        height = index / (samples - 1)
-        strength = shaper["lanes"][REACTION_LANES[int(lane)]]
-        owner = [s for a, b, s in spans if a <= height + 1e-9 and (height + 1e-9 < b or b == 1.0)]
-        assert owner and owner[-1] == pytest.approx(strength), index
+    notches = shaper["notches"]
+    assert len(spans) == len(notches)
+    for index, (position, label) in enumerate(notches):
+        top = notches[index + 1][0] if index + 1 < len(notches) else 1.0
+        low, high, strength = spans[index]
+        assert (low, high) == pytest.approx((position, top))
+        assert strength == pytest.approx(shaper["lanes"][label])
     assert view["lanes"][0]["pinned"] and not any(lane["pinned"] for lane in view["lanes"][1:])
 
 
