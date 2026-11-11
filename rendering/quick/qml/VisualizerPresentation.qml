@@ -22,6 +22,22 @@ Item {
     property bool expandGlyphAvailable: false
     property bool expandedDisplay: false
     signal expandGlyphRequested(bool expand)
+    // One glyph per target display (plan 1B.12): with more than one display live the row offers up-left (Display
+    // index 0) beside up-right (index 1), each "full display on that display" from whichever display the card is
+    // on. expandGlyphDisplay is the card's own display: its glyph is the collapse while expanded. A view expanded on
+    // a display neither glyph names keeps the single collapse glyph (V reaches those displays). With one display
+    // the single glyph is exactly as before.
+    property bool expandTargetsAvailable: false
+    property int expandGlyphDisplay: -1
+    signal expandOnDisplayRequested(int display)
+    readonly property bool expandTwoGlyphs: expandTargetsAvailable && !(expandedDisplay && expandGlyphDisplay > 1)
+    // The second glyph's place fades in and out (its slot grows with it), so nothing in the row pops.
+    property real expandLeftPresence: expandTwoGlyphs ? 1.0 : 0.0
+    Behavior on expandLeftPresence { NumberAnimation { duration: 600; easing.type: Easing.InOutSine } }
+    readonly property bool expandRightCollapses: expandedDisplay && (!expandTwoGlyphs || expandGlyphDisplay === 1)
+    readonly property bool expandLeftCollapses: expandedDisplay && expandTwoGlyphs && expandGlyphDisplay === 0
+    // Which glyph the full-display tip names (0: up-left, 1: up-right).
+    property int expandTipGlyph: 1
     // Full-display overlays (plan 01 §G, M3b): the preset toast and Now Playing. The owner sets
     // expandedOverlaysDrawn exactly while the display-wide card is drawn (and the displays are on); otherwise the
     // overlay Loader below is inactive and nothing of them exists. The rest are retained inputs the display manager
@@ -48,9 +64,10 @@ Item {
     readonly property real glyphSize: 26
     readonly property real glyphSpacing: 5
     readonly property real glyphRowInset: Math.max(12, cardBorderWidth + 6)
-    // Worst case: preset steps + Studio + Rotate + camera reset + expand. The same one-row fit rule
-    // scales it uniformly on narrow cards, rather than clipping or overlapping its glyph hitboxes.
-    readonly property int glyphRowSlots: 6
+    // Worst case: preset steps + Studio + Rotate + camera reset + expand (+ the second display glyph while more than
+    // one display is live; one display keeps its row exactly). The same one-row fit rule scales it uniformly on
+    // narrow cards, rather than clipping or overlapping its glyph hitboxes.
+    readonly property int glyphRowSlots: expandTargetsAvailable ? 7 : 6
     readonly property real glyphRowFullWidth: glyphRowSlots * glyphSize + (glyphRowSlots - 1) * glyphSpacing
     readonly property real glyphRowScale: Math.max(0.0, Math.min(1.0,
         (width - 2 * glyphRowInset) / glyphRowFullWidth, (height - 2 * glyphRowInset) / glyphSize))
@@ -668,12 +685,91 @@ Item {
             id: expandSlot
             objectName: "visualizerExpandSlot"
             visible: visualizerPresentationRoot.expandGlyphAvailable
-            width: visualizerPresentationRoot.glyphSize
+            // The up-left display glyph takes its place inside this slot as it fades in (plan 1B.12), so the row
+            // never jumps by a whole member.
+            width: visualizerPresentationRoot.glyphSize + visualizerPresentationRoot.expandLeftPresence
+                * (visualizerPresentationRoot.glyphSize + visualizerPresentationRoot.glyphSpacing)
             height: visualizerPresentationRoot.glyphSize
+            // Up-left: full display on Display index 0 (its collapse while expanded there).
+            Rectangle {
+                id: expandLeftGlyph
+                objectName: "visualizerExpandLeftGlyph"
+                x: 0
+                width: visualizerPresentationRoot.glyphSize
+                height: visualizerPresentationRoot.glyphSize
+                radius: width / 2
+                color: expandGlyph.color
+                border.width: expandGlyph.border.width
+                border.color: expandGlyph.border.color
+                visible: expandGlyph.visible && visualizerPresentationRoot.expandLeftPresence > 0.0
+                opacity: expandGlyph.opacity * visualizerPresentationRoot.expandLeftPresence
+                enabled: visible && expandGlyph.enabled && visualizerPresentationRoot.expandTwoGlyphs
+                onEnabledChanged: if (!enabled && visualizerPresentationRoot.expandTipGlyph === 0) {
+                    expandTipReveal.stop()
+                    visualizerPresentationRoot.expandTipProgress = 0.0
+                }
+                Canvas {
+                    id: expandLeftArrow
+                    objectName: "visualizerExpandLeftGlyphArrow"
+                    anchors.centerIn: parent
+                    width: 18
+                    height: 18
+                    readonly property bool collapse: visualizerPresentationRoot.expandLeftCollapses
+                    onCollapseChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.save()
+                        // The up-right arrow mirrored to point up-left; collapse turns it to point down-right.
+                        ctx.translate(width, 0); ctx.scale(-1, 1)
+                        if (collapse) { ctx.translate(width, height); ctx.rotate(Math.PI) }
+                        ctx.strokeStyle = "#f2f4f7"
+                        ctx.lineWidth = 2.0
+                        ctx.lineCap = "round"
+                        ctx.lineJoin = "round"
+                        ctx.beginPath()
+                        ctx.moveTo(4.5, 13.5)
+                        ctx.lineTo(13.5, 4.5)
+                        ctx.moveTo(7.5, 4.5)
+                        ctx.lineTo(13.5, 4.5)
+                        ctx.lineTo(13.5, 10.5)
+                        ctx.stroke()
+                        ctx.restore()
+                    }
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: parent.enabled
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    propagateComposedEvents: false
+                    onEntered: {
+                        visualizerPresentationRoot.expandTipGlyph = 0
+                        expandTipReveal.restart()
+                    }
+                    onExited: {
+                        if (visualizerPresentationRoot.expandTipGlyph !== 0) return
+                        expandTipReveal.stop()
+                        visualizerPresentationRoot.expandTipProgress = 0.0
+                    }
+                    onPressed: function(mouse) { mouse.accepted = true }
+                    readonly property bool consumesDoubleClick: true   // QuickDisplayWindow._double_click_owned_by_control
+                    onDoubleClicked: function(mouse) { mouse.accepted = true }
+                    onClicked: function(mouse) {
+                        mouse.accepted = true
+                        if (visualizerPresentationRoot.expandLeftCollapses)
+                            visualizerPresentationRoot.expandGlyphRequested(false)
+                        else
+                            visualizerPresentationRoot.expandOnDisplayRequested(0)
+                    }
+                }
+            }
             Rectangle {
                 id: expandGlyph
                 objectName: "visualizerExpandGlyph"
-                anchors.fill: parent
+                anchors.right: parent.right
+                width: visualizerPresentationRoot.glyphSize
+                height: visualizerPresentationRoot.glyphSize
                 radius: width / 2
                 color: "#bb20262c"
                 border.width: 1
@@ -690,7 +786,7 @@ Item {
                         easing.type: Easing.InOutSine
                     }
                 }
-                onEnabledChanged: if (!enabled) {
+                onEnabledChanged: if (!enabled && visualizerPresentationRoot.expandTipGlyph === 1) {
                     expandTipReveal.stop()
                     visualizerPresentationRoot.expandTipProgress = 0.0
                 }
@@ -700,7 +796,7 @@ Item {
                     anchors.centerIn: parent
                     width: 18
                     height: 18
-                    readonly property bool collapse: visualizerPresentationRoot.expandedDisplay
+                    readonly property bool collapse: visualizerPresentationRoot.expandRightCollapses
                     onCollapseChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")
@@ -727,8 +823,12 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     propagateComposedEvents: false
-                    onEntered: expandTipReveal.restart()
+                    onEntered: {
+                        visualizerPresentationRoot.expandTipGlyph = 1
+                        expandTipReveal.restart()
+                    }
                     onExited: {
+                        if (visualizerPresentationRoot.expandTipGlyph !== 1) return
                         expandTipReveal.stop()
                         visualizerPresentationRoot.expandTipProgress = 0.0
                     }
@@ -737,7 +837,12 @@ Item {
                     onDoubleClicked: function(mouse) { mouse.accepted = true }
                     onClicked: function(mouse) {
                         mouse.accepted = true
-                        visualizerPresentationRoot.expandGlyphRequested(!visualizerPresentationRoot.expandedDisplay)
+                        if (!visualizerPresentationRoot.expandTwoGlyphs)
+                            visualizerPresentationRoot.expandGlyphRequested(!visualizerPresentationRoot.expandedDisplay)
+                        else if (visualizerPresentationRoot.expandRightCollapses)
+                            visualizerPresentationRoot.expandGlyphRequested(false)
+                        else
+                            visualizerPresentationRoot.expandOnDisplayRequested(1)
                     }
                 }
             }
@@ -752,8 +857,10 @@ Item {
             (visualizerPresentationRoot.expandTipProgress - 0.56) / 0.44))
         width: expandTooltipText.implicitWidth + 16
         height: expandTooltipText.implicitHeight + 8
-        // Above the row like the other tips, its right edge on the glyph's.
-        x: Math.max(3, visualizerPresentationRoot.glyphRowPointX(expandSlot.x + expandSlot.width) - width)
+        // Above the row like the other tips, its right edge on the hovered glyph's.
+        x: Math.max(3, visualizerPresentationRoot.glyphRowPointX(
+            expandSlot.x + (visualizerPresentationRoot.expandTipGlyph === 0
+                            ? expandLeftGlyph.x + expandLeftGlyph.width : expandSlot.width)) - width)
         y: Math.max(3, visualizerPresentationRoot.glyphRowTop - height - 7)
         radius: 4
         z: 13
@@ -764,7 +871,15 @@ Item {
         Text {
             id: expandTooltipText
             anchors.centerIn: parent
-            text: visualizerPresentationRoot.expandedDisplay ? "EXIT FULL DISPLAY" : "FULL DISPLAY"
+            // One display: the glyph's own words. Two: each glyph names its display (numbered as Settings numbers
+            // them, from 1), or exits where the view is.
+            readonly property bool namesLeftGlyph: visualizerPresentationRoot.expandTipGlyph === 0
+                && visualizerPresentationRoot.expandTwoGlyphs
+            readonly property bool namesCollapse: namesLeftGlyph ? visualizerPresentationRoot.expandLeftCollapses
+                                                                 : visualizerPresentationRoot.expandRightCollapses
+            text: namesCollapse ? "EXIT FULL DISPLAY"
+                : !visualizerPresentationRoot.expandTwoGlyphs ? "FULL DISPLAY"
+                : "FULL DISPLAY ON DISPLAY " + (namesLeftGlyph ? 1 : 2)
             color: "#f6f6f8"
             font.pixelSize: 11
             font.weight: Font.Medium

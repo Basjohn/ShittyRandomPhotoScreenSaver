@@ -109,6 +109,9 @@ class ExpandedDisplayServices:
     cover_widgets: Callable[[Any, bool, float], None] = lambda _unit, _covered, _fade_s: None
     #: End a Fullscreen Edit session whose expanded view cannot stay (its draft is not saved).
     end_fullscreen_edit: Callable[[], None] = lambda: None
+    #: Move the collapsed Visualizer onto the display a takeover event names (plan 1B.12): the CUSTOM display hop and
+    #: its Save, with no Edit chrome. True once committed; False (or a raise) leaves the source exactly as it was.
+    move_to_display: Callable[[str], bool] = lambda _display: False
 
 
 def display_key(unit: Any) -> str | None:
@@ -187,6 +190,12 @@ class ExpandedDisplayCoordinator:
         return bool(self._state.edit_elsewhere)
 
     @property
+    def transfer_in_flight(self) -> bool:
+        """The takeover's own display transfer is running (its move reaches the host binding while layout waits)."""
+
+        return self._state.phase is Phase.TRANSFER_PENDING and not self._transfer_done
+
+    @property
     def blocks_ordinary_layout(self) -> bool:
         """True while the view is, or is becoming, display-wide: ordinary layout gestures wait."""
 
@@ -230,6 +239,24 @@ class ExpandedDisplayCoordinator:
             self._generation, self._glyph_activation, display_key(unit), self._press_serial, bool(expand)
         ))
         return bool(step_outcomes) and step_outcomes[0] == "applied"
+
+    def expand_on_display(self, unit: Any, target: Any) -> bool:
+        """A display glyph on ``unit`` (the card's display) asked for the view display-wide on ``target``'s display
+        (plan 1B.12). On the view's own display it is that display's glyph press (expand, or collapse while
+        expanded there); on another display it is one transfer transaction of the reducer: a collapsed view moves
+        and then expands there, an expanded one moves expanded. Returns True when the reducer admitted it."""
+
+        if self._retired or self._glyph_activation is None or target is None:
+            return False
+        state = self._state
+        if display_key(unit) != state.display:
+            return False
+        if display_key(target) == state.display:
+            return self.glyph_pressed(unit, state.phase not in _EXPANDED_FACING)
+        self._request_serial += 1
+        outcomes = self._feed(TransferRequested(self._generation, self._glyph_activation, self._request_serial,
+                                                display_key(target), True, True))
+        return bool(outcomes) and outcomes[0] == "applied"
 
     def mode_requested(self, mode_id: str, forward: Callable[[], bool]) -> bool:
         """Route one canonical mode request. Returns False when it was refused (now or by the canonical path).
@@ -430,11 +457,17 @@ class ExpandedDisplayCoordinator:
             logger.warning("[EXPANDED_VIS] Fullscreen Edit ends with its view (the mode is no longer capable)")
             self._services.end_fullscreen_edit()
         elif isinstance(action, BeginTransfer):
-            # Only an ordinary move that already committed is reported. An expanded transfer is M5 (one
-            # source-collapse + transfer + target-expand transaction); until then the routes refuse it.
-            done = self._transfer_done and not action.expanded
-            self._events.append(TransferCommitted(generation, action.txn) if done
-                                else TransferFailed(generation, action.txn))
+            if self._transfer_done:
+                # An ordinary move Edit already committed (its display hop and Save) is only reported.
+                self._events.append(TransferCommitted(generation, action.txn) if not action.expanded
+                                    else TransferFailed(generation, action.txn))
+            elif not action.expanded:
+                # A display glyph's move (plan 1B.12): the CUSTOM hop and Save, then the reducer's commit edge
+                # (which begins the enter there when the user asked for full display).
+                self._events.append(TransferCommitted(generation, action.txn) if self._move(action.target_display)
+                                    else TransferFailed(generation, action.txn))
+            else:
+                self._run_expanded_transfer(generation, action)
         elif isinstance(action, (RollbackTransfer, RejectTransfer)):
             pass
         elif isinstance(action, RetireTakeover):
@@ -448,6 +481,48 @@ class ExpandedDisplayCoordinator:
                 owner.set_expanded_display(False, animate=False)
         else:  # pragma: no cover - the reducer's action set is closed
             raise TypeError(f"unknown takeover action: {action!r}")
+
+    def _move(self, target_display: str) -> bool:
+        try:
+            return bool(self._services.move_to_display(str(target_display)))
+        except Exception:
+            logger.exception("[EXPANDED_VIS] Visualizer display move failed")
+            return False
+
+    def _run_expanded_transfer(self, generation: int | None, action: BeginTransfer) -> None:
+        """One source-collapse + move + target-expand transaction (§D4, plan 1B.12).
+
+        The display-wide card collapses on its display (the widgets there fade back in with it), the collapsed card
+        moves through the CUSTOM hop and Save, and the card expands on the target (its widgets fade out). A move that
+        fails re-expands on the source, so the reducer's rollback finds it exactly as it was. Each half completes at
+        the owner's own completion edge; a stale completion (another generation or transaction) does nothing."""
+
+        owner = self._services.admitted_owner()
+        self._cover_widgets(False, animate=True)
+
+        def collapsed() -> None:
+            if self._stale_transfer(generation, action.txn):
+                return
+            moved = self._move(action.target_display)
+            live = self._services.admitted_owner()
+            self._cover_widgets(True, animate=True)
+            started = live is not None and live.set_expanded_display(
+                True, animate=True,
+                on_complete=lambda: self._complete(TransferCommitted(generation, action.txn) if moved
+                                                   else TransferFailed(generation, action.txn)))
+            if not started:
+                # Nothing can draw it display-wide any more (the owner went): the takeover answers as a failed move.
+                self._cover_widgets(False, animate=True)
+                self._complete(TransferFailed(generation, action.txn))
+
+        started = owner is not None and owner.set_expanded_display(False, animate=True, on_complete=collapsed)
+        if not started:
+            collapsed()
+
+    def _stale_transfer(self, generation: int | None, txn: int) -> bool:
+        state = self._state
+        return (self._retired or state.generation != generation or state.txn != txn
+                or state.phase is not Phase.TRANSFER_PENDING)
 
     def _preflight(self, owner: Any) -> bool:
         """D1 steps 1-5: a live, started owner on a live display, no Edit session, a positive display rect."""

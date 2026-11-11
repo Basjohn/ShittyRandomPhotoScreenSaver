@@ -445,6 +445,151 @@ def test_twenty_cycles_balance_the_cover_on_the_owning_display_only():
     assert host.writes == [True, False] * 20 and host.coordinator.phase is Phase.ORDINARY
 
 
+# ------------------------------------------------- plan 1B.12: one full-display glyph per target display
+
+
+class _TwoDisplays(_Host):
+    """Two displays; the move service is the CUSTOM hop + Save stand-in (it moves ``unit`` when it accepts)."""
+
+    def __init__(self, *, accept: bool = True) -> None:
+        self.accept = accept
+        self.moves: list[str] = []
+        super().__init__()
+        self.units = (self.unit, _unit(1, "second"))
+        services = self.coordinator._services
+        from dataclasses import replace
+        self.coordinator._services = replace(services, move_to_display=self._move)
+
+    def _move(self, display: str) -> bool:
+        self.moves.append(display)
+        # The takeover's own transfer is running while the move reaches the host binding.
+        assert self.coordinator.transfer_in_flight
+        if not self.accept:
+            return False
+        self.unit = next(unit for unit in self.units if display_key(unit) == display)
+        return True
+
+
+def test_a_display_glyph_on_the_cards_own_display_is_its_plain_expand_and_collapse():
+    host = _TwoDisplays()
+    host.coordinator.generation_ready()
+    assert host.coordinator.expand_on_display(host.unit, host.units[0])
+    host.owner.finish()
+    assert host.coordinator.phase is Phase.EXPANDED and host.moves == [] and host.writes == [True]
+    assert host.coordinator.expand_on_display(host.unit, host.units[0])        # the same glyph collapses there
+    host.owner.finish()
+    assert host.coordinator.phase is Phase.ORDINARY and host.writes == [True, False]
+
+
+def test_a_display_glyph_for_the_other_display_moves_then_expands_there_as_one_user_action():
+    host = _TwoDisplays()
+    host.coordinator.generation_ready()
+    source, target = host.units
+    assert host.coordinator.expand_on_display(source, target)
+    assert host.moves == [display_key(target)] and host.unit is target
+    assert host.coordinator.phase is Phase.ENTERING                       # the enter runs on the target
+    assert host.covers[-1] == (display_key(target), True, HALF)
+    host.owner.finish()
+    assert host.coordinator.phase is Phase.EXPANDED and host.writes == [True]   # persisted as the glyph's own
+    assert host.glyphs[-1] == (display_key(target), True, True)
+
+
+def test_a_refused_move_stays_collapsed_on_the_source():
+    host = _TwoDisplays(accept=False)
+    host.coordinator.generation_ready()
+    source, target = host.units
+    host.coordinator.expand_on_display(source, target)
+    assert host.moves == [display_key(target)] and host.unit is source
+    assert host.coordinator.phase is Phase.ORDINARY and host.owner.calls == [] and host.writes == []
+    assert host.glyphs[-1] == (display_key(source), True, False)
+
+
+@pytest.mark.parametrize("accept", [True, False])
+def test_the_other_displays_glyph_moves_an_expanded_view_expanded(accept):
+    """While expanded the card's own display glyph collapses; the other moves the view there expanded: collapse on
+    the source (its widgets fade back), the move, expand on the target (its widgets fade out). A refused move
+    re-expands on the source, so the rollback finds it exactly as it was; the intent is never written."""
+    host = _TwoDisplays(accept=accept)
+    host.coordinator.generation_ready()
+    source, target = host.units
+    assert host.press(True)
+    host.owner.finish()
+    assert host.coordinator.expand_on_display(source, target)
+    assert host.coordinator.phase is Phase.TRANSFER_PENDING and host.owner.calls[-1] == (False, True)
+    assert host.covers[-1] == (display_key(source), False, HALF)
+    assert host.glyphs[-1][1] is False                                  # withdrawn while it moves
+    host.owner.finish()                                                 # the collapse committed: move, then expand
+    landed = target if accept else source
+    assert host.unit is landed and host.owner.calls[-1] == (True, True)
+    assert host.covers[-1] == (display_key(landed), True, HALF)
+    host.owner.finish()
+    assert host.coordinator.phase is Phase.EXPANDED and host.owner.expanded_display
+    assert host.writes == [True]
+    assert host.glyphs[-1] == (display_key(landed), True, True)
+
+
+def test_a_display_glyph_is_refused_under_edit_and_from_a_display_without_the_card():
+    host = _TwoDisplays()
+    host.coordinator.generation_ready()
+    source, target = host.units
+    assert not host.coordinator.expand_on_display(target, source)         # the press must come from the card
+    host.edit = True
+    host.coordinator.edit_entered()
+    assert not host.coordinator.expand_on_display(source, target)
+    assert host.moves == [] and host.owner.calls == []
+
+
+def _display_glyph_manager():
+    from engine.display_manager import DisplayManager
+
+    units = (_unit(0, "first"), _unit(1, "second"))
+    for unit in units:
+        unit.runtime.input_controller = SimpleNamespace(
+            input_state=SimpleNamespace(admission_open=True, context_menu_active=False))
+    calls: list[tuple[object, object]] = []
+    coordinator = SimpleNamespace(expand_on_display=lambda unit, target: calls.append((unit, target)) or True)
+    manager = SimpleNamespace(_quick_visualizer_unit=units[0], _expanded_display_coordinator=coordinator,
+                              _live_quick_units=lambda: units)
+    route = DisplayManager._route_quick_visualizer_expand_on_display.__get__(manager)
+    return route, units, calls
+
+
+def test_the_display_managers_glyph_route_names_the_target_display_by_index():
+    route, units, calls = _display_glyph_manager()
+    assert route(units[0], 1) and calls == [(units[0], units[1])]
+    assert route(units[0], 0) and calls[-1] == (units[0], units[0])
+    assert not route(units[1], 0)                                         # not the card's display
+    assert not route(units[0], 5)                                         # no such live display
+    units[0].runtime.input_controller.input_state.context_menu_active = True
+    assert not route(units[0], 1)                                         # a menu is open
+    assert len(calls) == 2
+
+
+def test_only_the_takeovers_own_transfer_passes_the_layout_wait():
+    """The display seam refuses a move while the view is display-wide (an Edit hop), except the takeover's own
+    transfer, which is not reported back to it (it is already the reducer's transaction)."""
+    from engine import display_manager as dm
+
+    moved, reported = [], []
+    coordinator = SimpleNamespace(blocks_ordinary_layout=True, transfer_in_flight=False,
+                                  display_transferred=lambda: reported.append(1))
+    manager = SimpleNamespace(_expanded_display_coordinator=coordinator, _publish_expanded_overlays=lambda: None)
+    binding = SimpleNamespace(transfer=lambda target: moved.append(target) or True)
+    seam = dm.DisplayManager._transfer_quick_visualizer_unit.__get__(manager)
+    original = dm._visualizer_host_binding
+    dm._visualizer_host_binding = lambda _manager: binding
+    try:
+        with pytest.raises(RuntimeError):
+            seam("target")
+        assert moved == []
+        coordinator.transfer_in_flight = True
+        assert seam("target") and moved == ["target"] and reported == []
+        coordinator.blocks_ordinary_layout, coordinator.transfer_in_flight = False, False
+        assert seam("other") and reported == [1]                         # an ordinary Edit hop is reported
+    finally:
+        dm._visualizer_host_binding = original
+
+
 def test_after_retire_nothing_is_called():
     host = _expanded_by_user()
     host.coordinator.retire()
@@ -464,7 +609,9 @@ _MANAGER_METHODS = ("_expanded_display", "_visualizer_section", "_expanded_displ
                     "_quick_custom_layout_session_active", "_expanded_display_ready",
                     "_expanded_display_blocks_layout",
                     # M3b: the coordinator's creation publishes the full-display overlays' inputs to the scene.
-                    "_publish_expanded_overlays", "_publish_expanded_overlay_media")
+                    "_publish_expanded_overlays", "_publish_expanded_overlay_media",
+                    # Plan 1B.12: the glyph publication asks how many displays are live.
+                    "_expand_display_targets_offered", "_live_quick_units")
 
 
 def _manager(mode: str, *, requested: bool):
@@ -486,7 +633,7 @@ def _manager(mode: str, *, requested: bool):
     section = {"mode": mode, "expanded_display_requested": requested}
     manager.__dict__.update(
         _retired=False, _expanded_display_coordinator=None, _quick_visualizer_owner=owner,
-        _quick_visualizer_unit=unit, settings_manager=None,
+        _quick_visualizer_unit=unit, settings_manager=None, displays=[unit],
         _widgets_config_snapshot={"spotify_visualizer": section},
         _quick_custom_layout_owner=SimpleNamespace(is_active=False),
         _quick_visualizer_media_model=None,
