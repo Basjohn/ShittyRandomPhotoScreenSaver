@@ -432,7 +432,9 @@ answers.
 **Agents (operator, 11 Nov; replaces the 9 Nov roster):** the lead is orchestrator, auditor and final reviewer;
 all agent results pass that review before acceptance. At most one Fable High (complex/architectural/visual), one
 Opus 5.5 High (general high-quality work), one Opus 5.5 Medium (simpler/brute force) and one Sonnet Medium
-(documents and research only); reuse a loaded agent for related slices. Agents run only the tests related to what
+(documents and research only); reuse a loaded agent for related slices. Above that cap (operator, 11 Nov): one
+dedicated Fable High for the native-core sequence (§1 8b, "Remaining sequence", in its order; it reports at each
+numbered boundary for the lead's audit), and one Fable 5.2 Medium for 1B.10's presets. Agents run only the tests related to what
 they changed, never `--isolated`, never take over a display (off-screen renders and captures), and record side
 defects here instead of ignoring them. Wait for agent reports without status polling.
 
