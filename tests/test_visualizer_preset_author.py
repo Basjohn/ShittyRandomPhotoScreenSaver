@@ -27,6 +27,20 @@ def test_the_tool_admits_a_record_key_the_spec_admits(mode, key):
     assert admitted[key] == value
 
 
+def test_the_tool_refuses_a_record_value_the_spec_admits_differently():
+    """A record value the spec's admission rewrites (repairs, clamps, falls back) is refused, never authored."""
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    defaults = get_default_settings()["widgets"]["spotify_visualizer"]
+    junk = "not a record"
+    rewritten = [(mode, key) for mode, key in _record_keys_with_admission()
+                 if require_mode_settings(mode).admit_custom(key, junk, defaults[key]) != junk]
+    assert rewritten
+    for mode, key in rewritten:
+        with pytest.raises(ValueError, match="the spec admits"):
+            author._admitted(mode, {key: junk})
+
+
 def test_the_tool_still_refuses_a_key_the_spec_does_not_know():
     mode, _key = _record_keys_with_admission()[0]
     with pytest.raises(ValueError, match="has no Settings control"):

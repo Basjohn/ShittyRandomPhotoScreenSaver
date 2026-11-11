@@ -46,7 +46,7 @@ def _admitted(mode: str, values: dict) -> dict:
         else:
             raise ValueError(f"{key} has no Settings control")
         if json.loads(json.dumps(back)) != json.loads(json.dumps(value)):
-            raise ValueError(f"{key}: the Settings control admits {value!r} as {back!r}")
+            raise ValueError(f"{key}: the spec admits {value!r} as {back!r}")
         admitted[key] = back
     return admitted
 
