@@ -283,21 +283,25 @@ Qt's pointer tracking cleared artificially, so the operator's real exit path is 
 
 ### 1B.4 Shape instrument for Spectrum and Neon Lake (design regression: sliders replaced the shape control)
 
-In flight, Fable High (branch `worktree-agent-a9762f84867d7deda`; first commits 3695f429, 3aeae75e, unaudited).
+Built and merged (one instrument in Spectrum, Extruded Spectrum, Neon Lake's Frequency Response and its Reaction
+Shaper; contract: `Docs/Reference/Visualizer_Studio.md`; capture tool `tools/studio_shape_capture.py`). The lead
+passed its off-screen pixels (dark and light themes).
 
-- [ ] One reusable Studio shape instrument (schema kind + QML component), not a per-mode widget: drag nodes,
-  click to add, right-click to remove within the node limits, drag lane boundaries, lane strengths in place,
-  mirrored half with a ghost, the curve drawn by the production interpolation.
-- [ ] Spectrum uses it; the slider rows it replaces are removed.
-- [ ] Neon Lake uses it for the Frequency Response shape.
-- [ ] Neon Lake uses it for the terrain shaper (or the report says why not).
-- [ ] Extruded Spectrum uses it (same family helper).
-- [ ] One commit per drag, Studio undo/redo, stored keys and values unchanged (no migration).
-- [ ] No write per move: `tests/test_studio_drag_io_churn.py` passes with the instrument registered.
-- [ ] Lead pixel review of the off-screen renders: Spectrum and Neon Lake Studios, one dark and one light Studio
-  theme, 100% and 150%, 2x crops, a mid-drag state. Reject anything that reads as a debug widget; no seams.
-- [ ] Lead audit (behavioural tests fail on pre-change code), merge, focused Studio tests on the merge.
-- [~] Operator look at the instrument in both Studios.
+- [ ] Focused tests green on the merge (running), then push.
+- [~] Operator look at the instrument in the Spectrum and Neon Lake Studios: drag feel, cursor shapes and
+  tooltips on a real window; over a material theme on the real desktop.
+- [ ] `tests/test_studio_drag_io_churn.py`: its drag plans skip the SHAPE instrument; fold the shape drags in so
+  the one churn guard covers it (today only `tests/test_studio_shape_instrument.py` proves no write per move).
+- [ ] Side defect: long row tooltips do not wrap and run off the window (`RowLabel` in
+  `ui/studio/qml/StudioShell.qml`).
+- [ ] Side defect: a lane-strength diamond exactly under a curve node cannot be grabbed (reachable only through
+  its tag, the field or keys); give the nearer-to-pointer element the press or offset the hit areas.
+- [ ] `ui/tabs/media/spectrum_shape_editor.py` now only owns the node-limit constants and is a test subject:
+  move the constants to the shape rule owner and retire the widget with its tests.
+- [ ] `fft_to_bars` gained two helper calls per tick (`shape_bar_profile`, `lane_sample_positions`); re-record
+  the Spectrum overhead baseline so the +2 calls are attributed, not read as drift.
+- [ ] Admitted later if wanted (operator's call): a pop-out larger canvas; Spline Curve's layer nodes and Voxel
+  Sphere's zone boundaries on the same instrument; Shift axis lock, snapping, double-click reset.
 
 ### 1B.5 Neon Lake: all visible land is brush-editable (reproduced; fix decided, operator agreed 11 Nov)
 
