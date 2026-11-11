@@ -177,5 +177,17 @@ plan (§3, "Lead, the quiet machine").
   `.artifacts/evidence/visualizers/waveform_ribbon/followups/20261107_followups/`.
 - **GC freeze steady check** (`4_gc_freeze_steady/`): Bubble P1, 600 s game60 clean: no steady gen1/gen2, heap 180,685
   objects frozen at reveal and 87 left.
+- **11 Nov re-baseline** (`tools/baselines/overhead/2026-11-11_4658981b.json`, 1920x1080; other processes' CPU 16.4%
+  median (max 47.8%), GPU clock 750 MHz, 114/114 passes admitted: only the counts are read). The Python-call rises
+  since `4bb2b775` (same tree as `81959727` on the rewritten history), attributed by per-function call counts at
+  chosen commits: Scene3D content rotation (`f6328336`: the target's output frame and its `getattr`s on every
+  Scene3D transition and mode, +4 to +7), the framed horizontal cap (`0afc19cb`: Extruded Bubble's optical height
+  re-imported `framed_camera` through PySide's import hook and re-solved the lens every frame, +26, ~2.7 us) and
+  Waveform Preset 1's Left To Right travel (`50a43e0d`, authored content engaging the mirror path, +16). Fixed in
+  `4658981b`: the target turns only a turned scene's frame, EB resolves its optical height on its edges, the travel
+  mirror is a constant. Against 7 Nov the counts now read +2 in every Scene3D transition, Oscilloscope +3, Sphere +4,
+  Extruded Spectrum +5, Extruded Bubble +3, Waveform Ribbon +15 (the authored mirror path). Neon Lake's 5684 -> 5313
+  Python and 354 -> 361 GL calls (GPU relative 1.14 -> 1.44 ms) are `33912e5a`'s terrain growth and reaction tables,
+  new mode work. Evidence: `.artifacts/evidence/native_core/20261111_attribution/`.
 - **Card materials** (`5_card_materials/`, one Glass/Normal pair): Glass costs about +16 % of a core on the render
   thread (53.7 against 37.5), publish->swap +3 ms, hitches 2.46 against 2.05 a minute, at the same late %.
