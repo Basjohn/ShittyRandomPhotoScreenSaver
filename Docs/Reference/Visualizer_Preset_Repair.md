@@ -57,8 +57,13 @@ Explicit replacement owns only numbered curated filenames in registered modes. C
 unnumbered operator files survive; a conflicting unnumbered target is refused. Every touched target has a byte-exact
 before-image, checked again before promotion/deletion. Atomic individual writes are followed by stale-target removal;
 a failure restores prior writes. Rollback refuses to overwrite an independently changed target and reports the
-retained recovery directory containing before-images and their target paths. These checks are optimistic, not a
-cross-process filesystem transaction. No source directory or preset is deleted.
+retained recovery directory containing before-images and their target paths. That directory is a
+`srpss_preset_recovery_<timestamp>` folder under the data root's `preset_recovery/`
+(`core.settings.storage_paths.get_preset_recovery_dir`, the one owner of data-root paths; never `%TEMP%`, which Windows
+may empty). After a later replacement succeeds, only the newest `RECOVERY_KEEP` (3) recovery folders are kept and
+older ones are pruned; a failed replacement and the startup bootstrap of the shared tree prune nothing, and no timer
+or startup sweep exists. These checks are optimistic, not a cross-process filesystem transaction. No source directory
+or preset is deleted.
 
 A missing shared ProgramData tree may be bootstrapped once from validated bundled files. A failed bootstrap is loud
 and creates no empty replacement authority. Existing SCR/Diagnostic/MC shared catalogues are read directly, without
