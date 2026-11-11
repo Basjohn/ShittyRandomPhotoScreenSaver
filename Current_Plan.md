@@ -170,12 +170,17 @@ audit; focused proof for each).** Steps 1 and 2 of the 10 Nov sequence (M4 rende
 transfer lifetime) merged 11 Nov with R-184 and R-185; records: the phase-boundary audit's "11 Nov" section, the
 design and closeout docs.
 
-- [ ] Attribute the Python-call rises since the 7 Nov overhead baseline (`2026-11-07_4bb2b775.json`): +4 in 14
-  Scene3D transitions and +5 to +32 in six modes, none from the native-core branch; find the commits, then
-  re-record the baseline (the Spectrum +2 of 1B.4 is part of it).
-- [ ] Attribute the worker's +34 MB step at the first Waveform Ribbon (63.5 MB to 103.9 MB, then flat) before P3
-  sizes geometry buffers.
-- [ ] Attribute the 26.6 MB `heap_large` block retained after the first Neon Lake.
+Attribution merged 11 Nov (382ae139; baseline `tools/baselines/overhead/2026-11-11_4658981b.json`; record in the
+phase-boundary audit and `Docs/Reference/Benchmarks.md`; evidence `.artifacts/evidence/native_core/20261111_attribution/`).
+What it left open:
+
+- [ ] Extruded Bubble still runs 4 imports inside per-frame functions (about 2.3 us each through PySide's import
+  hook; older than the 7 Nov baseline): move them to module level, then sweep the other modes' and transitions'
+  per-frame paths for the same pattern; proof by the overhead baseline's call counts.
+- [ ] Neon Lake's driver memory at its first draw (`private_other`, about +280 MB committed, mostly not
+  resident) is not attributed: read GPU allocations around the first draw before P3 sizes anything for it.
+- [ ] Neon Lake against the new baseline: GL calls 354 -> 361 and relative GPU time 1.14 -> 1.44 ms since the land
+  work (33912e5a); the refinement round reports which change accounts for it (1B.6).
 - [ ] Waveform Ribbon hard-codes 4 samples (`rendering/quick/scene3d/waveform.py:378`); route it through the
   scene's sampling owner.
 - [ ] `tools/artifact_paths.py` sends a worktree's evidence to the main checkout's `.artifacts`; give it the
@@ -214,7 +219,9 @@ design and closeout docs.
      process.
    - [ ] D2: a single consumer and a non-consuming head read for the Python owner; a reader that retains a frame
      needs an explicit drop edge (R-184).
-   - [ ] D3: EB geometry once per revision, not per frame (after the worker's Waveform Ribbon step is measured).
+   - [ ] D3: EB geometry once per revision, not per frame. The worker's +34 MB at the first Waveform Ribbon is
+     not geometry: 32 MB is the buffer numpy's OpenBLAS reserves on the first matrix-matrix product in a process
+     (committed, not resident, never freed), so D3 sizes nothing against it.
    - [ ] D4: EB's fp64 drift solver on Vulkan, at equal quality (operator, 11 Nov: Vulkan is the front, strong,
      stable face of the product, never the fallback; OpenGL is the fallback). Direction to prove, not yet decided:
      (a) keep 64-bit floats where the device has them: `shaderFloat64` is a queryable Vulkan device feature
@@ -225,6 +232,26 @@ design and closeout docs.
      drift integrated in the worker in float64 and sent once per revision, if D3's geometry rule makes that
      natural. Pick by measured error and cost; the shader-readiness check must discover compute sources instead
      of a fixed module list.
+     Inventory (Sonnet, 11 Nov): `D:\Temp\Scratch\SRPSS\research\20261111\eb_fp64_drift_inventory.md`. Facts
+     the decision starts from: the doubles live only inside two compute programs (`CHAIN_COMPUTE`,
+     `CLOUD_COMPUTE`: step log, chain geometry, per-chain shift and phase; add, multiply, divide, `floor`, `mod`
+     only); every output the draw shaders read is already fp32; only chains carry exact fp64 state across frames
+     (the cloud's phase, span and seed are float32); the recorded reason is that a float32 span/carry moved a
+     chain's knot step one tick early against the CPU, plus 2 pi reduction of ever-growing phase; a complete
+     float64 CPU oracle exists (`MaterialDriftReference`, tests only, 1e-4, at most about 4 s of simulated time).
+   - [ ] D4 input: nothing detects fp64 today (OpenGL 4.6 Core implies it; a failed context raises "no renderer
+     fallback"); the native core needs an explicit capability read and a stated behaviour without it.
+   - [ ] D4 input: both drift shaders are on the `LEGACY_GL_ONLY` list because they fail `qsb` on loose uniforms,
+     so "qsb compiles fp64 SPIR-V" (phase-boundary audit) is not shown for them: restructure the uniforms into a
+     block and compile them, or correct the audit's claim.
+   - [ ] D4 input: the oracle comparison runs 150 to 240 ticks; extend it to a long horizon (hours of simulated
+     time, the saver's real session length) before any 32-bit formulation is judged, and state the visible
+     threshold of drift error.
+   - [ ] D4 input: option (c) would send about 3.99 MB per revision at full population (240 chains x 128 knots,
+     2500 snow, 216000 specks, 16 B each); measure the worker's CPU cost for it.
+   - [ ] The solver docstring says the CPU reference keeps positions in fp32; it keeps float64 and narrows only
+     when packing. Correct the docstring; the phase-boundary audit cites the doubles at `SOLVER:39-92`, they run
+     to line 210.
    - [ ] Transport rule for the substrate: nothing through the resource sharer; a name on POSIX, an exact-process
      handle on Windows.
 
@@ -425,8 +452,34 @@ impressive; the agent may ask the lead for a feature or architecture a better lo
 Order: Spectrum, then Extruded Bubble, then Neon Lake once 1B.6's refinement round has merged; the agent reports
 after each mode for the lead's pixel review.
 
-- [ ] Spectrum: presets 2 and up replaced with the best and most novel looks the mode can make (ghosts soft and
-  blurred like Preset 1's; no seam where a transparent-border bar meets its ghost).
+Spectrum round 1 merged 11 Nov (b9a9a4a3; evidence `.artifacts/evidence/visualizers/spectrum/presets/20261111/`).
+Operator, 11 Nov: presets 5 (Tube Lights), 6 (Quicksilver), 8 (Blueprint), 9 (Afterglow) and 10 (Frost) "are all
+ghastly ugly"; 2 Aurora, 3 Lanterns, 4 Dot Matrix and 7 Prism stand. Lead's reading: wide glossy, chrome, capsule,
+grid-on-block and dark-fill looks fail; fine luminous gradients pass. Fewer good presets beat a full slot count.
+
+- [ ] Spectrum round 2 (in flight): the five rejected presets replaced by new ideas, not re-skins; slots
+  contiguous; the whole set judged together on the peak and quiet sheets; lead pixel review before the operator
+  sees them.
+- [ ] Bar gap control (0 to about 4 px), admitted: one canonical spec entry, authored into every Spectrum preset at
+  2 px by the repair fill, shown through the spec in Settings and the Studio, a structural test, the Visualizer
+  Reference updated. Built in round 2 only if a new look needs it; otherwise it stays this open box.
+- [ ] `tools/visualizer_preset_author.py` refuses the shape keys (`spectrum_lane_strengths_linear has no Settings
+  control`): admit them through the spec's own admission and the Studio shape rules, as the agent's script did.
+- [ ] Side defect: Bar Count is admitted to 96 by the spec but `spectrum.py` clamps to 64 (`_MAX_BARS`, lines 28,
+  102, 199): a higher count would draw only the first 64 bars. One owner for the maximum; render one frame at 96.
+- [ ] Side defect: the segment border ring is lopsided (`spectrum.frag:914`: `<=` on one side, `>=` on the
+  other): two border rows at the bottom and left against one at the top and right at card scale, and the fill
+  share changes with scale. Make it symmetric; before/after at 1x and 3x on Dot Matrix.
+- [ ] Side defect: the kick lane in mirrored layouts boosts the first bars and their mirror, which are the edge
+  bars, wherever the Bass lane sits (`bar_computation.py:422-432`). It should follow the Bass lane's position.
+- [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
+  rounded tops.
+- [ ] Side defect: `tools/release_media.py:69` binds `load_scenes(paths=USU_SCENES)` at definition, so
+  `test_release_media.py::test_source_change_during_capture_discards_media` ignores its monkeypatch in a
+  worktree without the `assets/usu/scenes` originals; resolve the default at call time.
+- [ ] Side defect: seven `test_release_media.py` tests fail with `missing authored preset path: spectrum:1` when
+  run in one process after the preset and Studio preset tests (order pollution; the file passes alone and on
+  main after the merge): find the test that leaves the preset tree redirected and make it restore.
 - [ ] Extruded Bubble: one arctic-themed preset.
 - [ ] Neon Lake: three unique presets (using the shape instrument, far-land brush and the new land reactivity).
 - [ ] Every preset authored through the Studio's Save To path, complete for every control (completeness guard).
