@@ -137,7 +137,7 @@ def test_painted_cells_are_an_overlay_that_eases_out_past_the_grids_edge():
     fields = overlay_fields(painted)
     delta = np.frombuffer(fields["delta"], dtype="<f4").reshape(m, m)
     assert delta[10, m - 1] == pytest.approx(0.2, abs=1e-6) and np.count_nonzero(delta) == 1
-    left, front, right, back = fields["painted"]
+    (left, front, right, back), = fields["painted"]                  # one painted cell: one tile
     span = n - 1
     assert left * span == pytest.approx(GROW_STEP * ((m - 1 - 2) // GROW_STEP)) and right * span == m - 1
     assert front * span == pytest.approx(GROW_STEP * ((10 - 2) // GROW_STEP)) and back * span >= 12
@@ -222,17 +222,20 @@ def test_the_mesh_changes_only_under_painted_far_land_and_never_cracks():
 
     def triangle_set(mesh):
         return sorted(tuple(map(tuple, triangle)) for triangle in np.asarray(mesh).reshape(-1, 3, 2))
-    # Painted bounds that reach no cell past the origin split nothing: the same triangles, whatever their order.
-    idle = basin_mesh_vertices(cells, extent, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS, (0.2, 0.2, 0.8, 0.8))
+    # Painted tiles that reach no cell past the origin split nothing: the same triangles, whatever their order.
+    idle = basin_mesh_vertices(cells, extent, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS, ((0.2, 0.2, 0.8, 0.8),))
     assert triangle_set(idle) == triangle_set(plain)
     painted = (-1.4, -1.2, -0.5, 0.4)                                # left of the origin, across the camera-side band
-    fine = basin_mesh_vertices(cells, extent, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS, painted)
+    fine = basin_mesh_vertices(cells, extent, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS, (painted,))
     assert len(fine) > len(plain)
     xs, ys = basin_lattice(cells, extent)
-    # No crack: every edge is shared by exactly two triangles, except the mesh's own outer border.
-    for (a, b), count in _edges(fine).items():
-        border = (a[0] == b[0] and a[0] in (xs[0], xs[-1])) or (a[1] == b[1] and a[1] in (ys[0], ys[-1]))
-        assert count == (1 if border else 2), (a, b, count)
+
+    def assert_no_crack(mesh):
+        # Every edge is shared by exactly two triangles, except the mesh's own outer border.
+        for (a, b), count in _edges(mesh).items():
+            border = (a[0] == b[0] and a[0] in (xs[0], xs[-1])) or (a[1] == b[1] and a[1] in (ys[0], ys[-1]))
+            assert count == (1 if border else 2), (a, b, count)
+    assert_no_crack(fine)
     # Every mark is still a triangle vertex.
     vertices = {tuple(point) for point in np.asarray(fine).reshape(-1, 2)}
     assert {tuple(point) for point in np.asarray(basin_mesh_points(cells, extent)).reshape(-1, 2)} <= vertices
@@ -251,6 +254,54 @@ def test_the_mesh_changes_only_under_painted_far_land_and_never_cracks():
     assert inside.any()
     assert np.ptp(triangles[inside][..., 0], axis=1).max() <= 1.0 / cells[0] + 1e-9
     assert np.ptp(triangles[inside][..., 1], axis=1).max() <= 1.0 / cells[1] + 1e-9
+
+    # Two far corners painted: only the cells under their tiles split (one bounding box refined everything between
+    # them), and the two patches and an L of tiles stay crack-free against their coarser neighbours.
+    corners = ((-1.4, -0.9, -1.1, -0.6), (1.6, 0.6, 1.9, 0.9))
+    both = basin_mesh_vertices(cells, extent, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS, corners)
+    box = basin_mesh_vertices(cells, extent, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS,
+                              ((corners[0][0], corners[0][1], corners[1][2], corners[1][3]),))
+    one = [basin_mesh_vertices(cells, extent, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS, (tile,)) for tile in corners]
+    assert_no_crack(both)
+    extra = len(both) - len(plain)
+    assert extra == sum(len(mesh) - len(plain) for mesh in one) and 0 < extra < 0.25 * (len(box) - len(plain))
+    between = np.asarray(both, dtype=np.float64).reshape(-1, 3, 2)
+    middle = ((between[..., 0].min(axis=1) > -0.9) & (between[..., 0].max(axis=1) < 1.3)
+              & (between[..., 1].min(axis=1) > -0.4) & (between[..., 1].max(axis=1) < 0.3))
+    assert middle.any() and set(triangle_set(between[middle])) <= set(triangle_set(plain))
+    ell = ((-1.4, -0.9, -1.1, -0.6), (-1.1, -0.9, -0.8, -0.6), (-1.1, -0.6, -0.8, -0.3))
+    assert_no_crack(basin_mesh_vertices(cells, extent, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS, ell))
+
+
+def test_the_renderer_names_each_painted_mesh_apart():
+    """The renderer keys its one active mesh by the lattice and the painted tiles (up to 256, so by a digest)."""
+    from rendering.quick.visualizer.implementations.shockwave_grid import _mesh_key
+    lattice, extent = (24, 16), (0.375, 0.375, 0.75, 0.0)
+    tiles = ((-1.4, -0.9, -1.1, -0.6), (1.6, 0.6, 1.9, 0.9))
+    keys = {_mesh_key((lattice, extent, reach)) for reach in (None, tiles[:1], tiles, tiles[::-1][:1])}
+    assert len(keys) == 4 and all(len(key) < 120 for key in keys)
+    full = tuple((i / 16.0, j / 16.0, (i + 1) / 16.0, (j + 1) / 16.0) for j in range(16) for i in range(16))
+    assert len(_mesh_key((lattice, extent, full))) < 120
+
+
+def test_painted_cells_name_only_the_tiles_round_them():
+    """Two far corners of the largest grid painted: two tiles, nothing between; a cell at a tile's edge (within the
+    margin) names its neighbour too; a grid painted all over names every tile."""
+    from rendering.gl_programs.neon_terrain_extent import GROW_MARGIN, painted_tiles
+    n = MAX_GRID_SIZE
+    basin = (96, 96, 64)
+    touched = np.zeros((n, n), dtype=bool)
+    touched[3, 4] = touched[n - 3, n - 5] = True
+    tiles = painted_tiles(touched, basin)
+    assert len(tiles) == 2
+    in_grid = [tuple(round(v * basin[2]) + offset for v, offset in zip(tile, (basin[0], basin[1]) * 2))
+               for tile in tiles]
+    assert in_grid == [(0, 0, GROW_STEP, GROW_STEP), (n - 1 - GROW_STEP, n - 1 - GROW_STEP, n - 1, n - 1)]
+    touched[:] = False
+    touched[40, GROW_STEP * 2 + GROW_MARGIN - 1] = True                  # within the margin of the next tile's edge
+    assert len(painted_tiles(touched, basin)) == 2
+    touched[:] = True
+    assert len(painted_tiles(touched, basin)) == ((n - 1) // GROW_STEP) ** 2
 
 
 # ------------------------------------------------------------------------------------------- the GPU surface

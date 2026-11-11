@@ -21,8 +21,10 @@ drives (fixed scale).
     python -m tools.visualizer_replay.neon_lake_music_response report --music music.npy --response main=p1.npy
         [--response branch=p1b.npy] --out <dir>
 
-Offscreen pixels are real GPU output of the production renderer; the clips are replayed per song from a fresh
-activation (as the capture tool does), so this is not continuous play across songs.
+Offscreen pixels are real GPU output of the production renderer. By default the clips are replayed per song from a
+fresh activation (as the capture tool does); ``--continuous`` chains them into one replay instead (one activation,
+the songs back to back with ``CHAIN_GAP`` seconds between them, as a playlist plays), so whatever the drives carry
+from one song into the next shows (``chain_clips``).
 """
 from __future__ import annotations
 
@@ -125,7 +127,36 @@ _MASK_OVERRIDES = {
 }
 
 
-def response(clips, preset, size, fps, out: Path, overrides, start=0.0, duration=None) -> None:
+CHAIN_GAP = 1.0   # seconds between chained songs (a track change)
+
+
+def chain_clips(clips):
+    """Recorded clips back to back as one clip: each song's frames shifted to start ``CHAIN_GAP`` after the last
+    one's end, its capture serials continued past the last one's (a fresh capture history, never a stale one).
+    Returns the clip and, per song, (time it starts in the chain, its first and past-last frame index)."""
+    from dataclasses import replace
+    from widgets.spotify_visualizer.feature_frame import FeatureClip
+
+    frames, songs, offset_us, serial_base = [], [], None, 0
+    for clip in clips:
+        first = clip.frames[0].timestamp_us
+        if offset_us is None:
+            offset_us = first
+        shift = offset_us - first
+        begin, top = len(frames), serial_base
+        for frame in clip.frames:
+            history = frame.capture_history
+            if history is not None:
+                history = replace(history, capture_serial=history.capture_serial + serial_base)
+                top = max(top, history.capture_serial)
+            frames.append(replace(frame, timestamp_us=frame.timestamp_us + shift, capture_history=history))
+        songs.append(((offset_us - frames[0].timestamp_us) / 1e6, begin, len(frames)))
+        offset_us = frames[-1].timestamp_us + int(CHAIN_GAP * 1e6)
+        serial_base = top + 1
+    return FeatureClip("_then_".join(clip.name for clip in clips), tuple(frames)), songs
+
+
+def response(clips, preset, size, fps, out: Path, overrides, start=0.0, duration=None, continuous=False) -> None:
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     disable_per_call_gl_error_checking()
     import numpy as np
@@ -156,16 +187,36 @@ def response(clips, preset, size, fps, out: Path, overrides, start=0.0, duration
         np.savez_compressed(out.with_suffix(".masks.npz"), lake=lake, island=island, shore=shore)
         presentation = _build_spectrum_preview_snapshot(width=width, height=height, mode="shockwave_grid",
                                                         settings=settings).presentation
-        t_total = 0.0
-        for song, path in enumerate(clips):
-            clip = load_jsonl(Path(path))
+        loaded = [load_jsonl(Path(path)) for path in clips]
+
+        def sampled(clip, base=0):
+            """(song times of the clip's frames, the frame indices sampled at ``fps``, offset by ``base``)."""
             times = [(f.timestamp_us - clip.frames[0].timestamp_us) / 1e6 for f in clip.frames]
             stop = times[-1] if duration is None else min(times[-1], start + duration)
             wanted = sorted({min(len(times) - 1, bisect_left(times, start + i / fps))
                              for i in range(max(1, math.ceil((stop - start) * fps)))})
-            result = replay_clip(clip, "shockwave_grid", settings=settings, snapshots_at=wanted)
-            for ordinal, index in enumerate(wanted):
-                snapshot = replace(result["snapshots"][index], presentation=presentation)
+            return times, [base + index for index in wanted]
+
+        if continuous:
+            chained, songs = chain_clips(loaded)
+            plan = [(song, *sampled(clip, songs[song][1]), songs[song][1], songs[song][0])
+                    for song, clip in enumerate(loaded)]
+            result = replay_clip(chained, "shockwave_grid", settings=settings,
+                                 snapshots_at=[index for entry in plan for index in entry[2]])
+            results = [result] * len(loaded)
+        else:
+            plan, results = [], []
+            for song, clip in enumerate(loaded):
+                times, wanted = sampled(clip)
+                plan.append((song, times, wanted, 0, None))
+                results.append(replay_clip(clip, "shockwave_grid", settings=settings, snapshots_at=wanted))
+        t_total = 0.0
+        for (song, times, wanted, base, chain_start), result in zip(plan, results):
+            if chain_start is not None:
+                t_total = chain_start
+            for ordinal, global_index in enumerate(wanted):
+                index = global_index - base
+                snapshot = replace(result["snapshots"][global_index], presentation=presentation)
                 rgba, _ = _draw(host, target, snapshot, width, height, (width, height))
                 lum = _luma(rgba)
                 lines = np.maximum(0.0, lum - _box_mean(lum, 4))
@@ -187,7 +238,8 @@ def response(clips, preset, size, fps, out: Path, overrides, start=0.0, duration
                              sum(state.terrain_bands) / len(state.terrain_bands), *state.terrain_forms))
                 if ordinal % max(1, int(fps * 10)) == 0:
                     print(f"song {song} frame {ordinal + 1}/{len(wanted)} t={times[index]:.1f}s", flush=True)
-            t_total += times[-1] + 1.0
+            if chain_start is None:
+                t_total += times[-1] + 1.0
     finally:
         host.release_resources()
         target.close()
@@ -289,6 +341,8 @@ def main() -> None:
     p.add_argument("--start", type=float, default=0.0)
     p.add_argument("--duration", type=float)
     p.add_argument("--set", action="append", default=[], metavar="KEY=JSON")
+    p.add_argument("--continuous", action="store_true",
+                   help="one replay with the songs back to back (continuous play), not a fresh activation per song")
     p.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     p = sub.add_parser("report")
     p.add_argument("--music", type=Path, required=True)
@@ -305,7 +359,7 @@ def main() -> None:
             key, _, value = item.partition("=")
             overrides[key] = json.loads(value)
         response(args.clips.split(","), args.preset, tuple(int(v) for v in args.size.split("x")), args.fps,
-                 args.out, overrides, args.start, args.duration)
+                 args.out, overrides, args.start, args.duration, args.continuous)
     else:
         report(args.music, dict(item.split("=", 1) for item in args.response), args.out)
 

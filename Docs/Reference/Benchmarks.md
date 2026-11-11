@@ -189,5 +189,19 @@ plan (§3, "Lead, the quiet machine").
   Extruded Spectrum +5, Extruded Bubble +3, Waveform Ribbon +15 (the authored mirror path). Neon Lake's 5684 -> 5313
   Python and 354 -> 361 GL calls (GPU relative 1.14 -> 1.44 ms) are `33912e5a`'s terrain growth and reaction tables,
   new mode work. Evidence: `.artifacts/evidence/native_core/20261111_attribution/`.
+- **Load session, 11 Nov** (lead, game60, invisible saver, `anything_mixed2`, no agent running; other processes
+  73-78 % CPU, GPU 61-66 % at 2760 MHz in every run; evidence under
+  `.artifacts/evidence/visualizers/{waveform_ribbon,spectrum}/live_check/20261111_load_r*`):
+  - Waveform Preset 4, engine worker: 59.4 fps, render mode 10.4 / 12.7 ms (median / p90), swap gap 15.9 / 20.2
+    ms, 1.4 % late, 3.3 hitches a minute, frame take 0.76 ms, worker tick to publish 6.2 / 7.7 ms; first 2 s
+    after startup 86 frames, 3.5 % late.
+  - Waveform Preset 4, in process: 40.6 fps, render mode 14.0 / 17.4 ms, swap gap 24.0 / 29.0 ms, 37.7 % late,
+    7.2 hitches a minute, logical tick 14.5 / 20.2 ms (7.1 ms CPU); first 2 s 69 frames, 75 % late.
+  - One Settings round trip on the worker at 60 s: 7.8 s in all, stop 0.46 s, barriers complete, thawed and
+    re-frozen, no failure; RSS 823 to 862 MB, private 1271 to 1171 MB.
+  - Card materials, alternated second pair (Normal then Glass; Spectrum Preset 1; interval 8 s, 5 s random
+    transitions; 90 s each): fps 89.5 / 89.6, late 0.2 % / 0.2 %, hitches 0.73 / 0.73 a minute, publish to swap
+    10.8 / 11.6 ms median, saver tree 106.1 / 105.7 % of a core. No measurable Glass cost; the first pair's
+    +16 % of a core (below) was one unalternated pair and did not repeat.
 - **Card materials** (`5_card_materials/`, one Glass/Normal pair): Glass costs about +16 % of a core on the render
   thread (53.7 against 37.5), publish->swap +3 ms, hitches 2.46 against 2.05 a minute, at the same late %.

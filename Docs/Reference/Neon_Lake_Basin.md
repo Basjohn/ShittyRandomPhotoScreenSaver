@@ -200,7 +200,7 @@ The deformation lives in the single height owner (`basinLandHeight`), so vertice
 differences), flat-shaded normals, the skyline pass, the depth prepass and body visibility all follow it; the
 skyline is given the event count it needs for Pulses. It is zero on water and fades in over the shore band, so the
 water boundary never moves; it fades with the distant continuation's detail; land never sinks below 30% of its
-authored height and never rises more than the bounded lift. The light-ray volume's land bound is fixed by the
+authored height (Indents carve on to 8%, below) and never rises more than the bounded lift. The light-ray volume's land bound is fixed by the
 settings (never pumped by audio). The renderer only uploads amounts, five drives, the phase and the baked tables.
 
 ### Smooth reshaping, Growth and Indents (2026-11-11, 1B.6)
@@ -232,8 +232,30 @@ them like the other amounts):
   (1: cell 0.70, up to 0.72, profile power 2.6). Each site wakes at its own level of the drive, so louder music
   raises more of them and each eases in and out. They stand back from the eye (`GROWTH_EYE_CLEAR` 0.8..2.0 world
   units) instead of raising the camera floor, so turning Growth on never lifts an authored low view.
-- **Indents** press visible land toward its floor share in the same kind of sites (cell 0.85): hollows that open
-  with the passage and deepen on hits, never below 30% of the authored height, never moving the water's edge.
+- **Indents** carve bowls into visible land in the same kind of sites (cell 0.85): hollows that open with the
+  passage and deepen on hits. **Depth law (2026-11-12 refinement):** the most a point may sink is a share of its
+  authored height plus an absolute depth (`INDENT_SHARE` 0.65 x authored + `INDENT_ABSOLUTE` 0.40 x Terrain
+  Height), eased under the room above the Indents floor (`room * tanh(law / room)`, room = height - `INDENT_FLOOR`
+  0.08 x authored); the bowl's own profile scales it (`tanh(INDENT_PRESS 1.5 x press)`, so a bowl's middle at full
+  drive takes 68-90% of it and overlapping bowls ease toward it). The first law pressed toward the reaction's 30%
+  floor by a share of the land only, so dunes a tenth of the height scale sank a few hundredths and Indents were
+  barely visible (`20261111_land/growth_indents_staged_drives_p1_sheet.png`); a law that saturated the press
+  against the room instead flattened low land's bowls into shelves with sharp rims. Now the bowl's shape is the
+  same on any land and only its depth scales: over half the land's height in a full-drive bowl, dunes included.
+  Indents only lower the land (the camera floor never needs them), so they give way round the eye over a short
+  reach (`INDENT_EYE_CLEAR` 0.25..0.75 world units), not Growth's 0.8..2.0, which left every default view's near
+  dunes untouched. Never below 8% of the authored height (land never reaches the water plane; the water's edge
+  never moves: zero on water, faded in over the shore band). Evidence:
+  `.artifacts/evidence/visualizers/shockwave_grid/20261112_refine/indents_staged_drives_sheet.png`.
+- **Growth Density** (`shockwave_grid_terrain_growth_density`, 0..1, 0.5 the usual; 2026-11-12) scales Growth's
+  site cell by `growth_cell_scale` = 2^(1 - 2 x density) for both forms: fewer, wider mounds or spires toward 0,
+  more and narrower toward 1. At 0.5 the scale is exactly 1, so the usual Growth is untouched.
+- **Growth Region** (`shockwave_grid_terrain_growth_region`: Everywhere, Far Land, By Elevation; choices in
+  `neon_lake_basin_options.BASIN_GROWTH_REGIONS`, the shader's `uGrowthPlace.y`): Far Land raises Growth only past
+  the authored terrain's edge (`basinOutside`, in over `GROWTH_FAR_LAND` 0.05..0.40 of the basin), By Elevation
+  weighs it by the Reaction Shaper's curve at the land's height (`reactionBiasAt`, the same table and cubic filter
+  as the reaction's own bias). Everywhere weighs nothing (the branch is skipped). Both are authored neutral in every
+  shipped preset (repair fill); the presets render as before (`20261112_refine/new_controls_neutral_*`).
 - Both are terms of the one height owner (`basinLandHeight`): vertices, normals, skyline, depth and reflections
   follow; zero on water, faded at the shore and with distance like the rest of the reaction.
 
@@ -250,7 +272,26 @@ kept or computed. A frame nothing drives tells the shader the reaction is off.
 Cost (RTX 4090, 1300x750, PairedBench medians, separate sessions, GPU 31-37% busy): with React to Music on, GPU
 0.93 -> 0.98 ms (Preset 1), 0.86 -> 0.97 (Preset 2), 1.80 -> 1.96 (Preset 3), about the same driven; Growth spires
 driven 1.09 ms, Growth + Indents 1.21 ms. CPU thread unchanged (2.3 ms), Python calls per frame 5781 -> 5315 (the
-tables are packed once per bake), GL calls 359 -> 361 (two uniforms). Contracts:
+tables are packed once per bake), GL calls 359 -> 361 (two uniforms).
+
+**Measured again in one session (2026-11-12 refinement;** the old renderer, program and reaction GLSL loaded beside
+the current ones under alias names, each drawn by its own host, cases alternated in one PairedBench; RTX 4090,
+1300x750, GPU 37-50% busy with other work, 2775 MHz; evidence `20261112_refine/gpu_ab_*.json`): against 6aaeda50
+(1B.5 done, before the smooth reaction), React to Music off 1.73 -> 1.77 ms (Preset 3), 0.89 -> 0.88 (Preset 1);
+on with the preview's drives 1.79 -> 1.95 (+9%), 0.87 -> 0.98 (+12%); driven 1.76 -> 1.91, 0.87-0.91 -> 0.99-1.06;
+Growth + Indents driven 2.08 (Preset 3) and 1.24-1.30 (Preset 1) against the old driven land. Against main
+(0cce76a48, this round's start) every case is within 0-2% (the new Indents law and the Growth Region branch).
+Against c64ed434 (before 1B.5) React to Music off already costs about 10% more (0.80 -> 0.89, 1.60 -> 1.78; that
+session's "before" cases were noisy, 31-40%): the origin overlay's branches in the height function, paid whether or
+not the grid ever grew. Logical tick (`ShockwaveGridFrameRuntime`, heavy1 recorded, 5454 ticks, median of nine
+alternated rounds, wall time): wave ring only 9.5 us, lane drives 34.7 us (34.9 after 1B.6), Growth + Indents alone
+24.1 us, lanes + Growth + Indents 38.9 us. Per frame (`tools/overhead_baseline.py`, default settings): Python calls
+5339 -> 5145 with the camera floor resolved on its edges, GL calls 363 (361 + `uGrowthPlace` in two programs).
+Continuous play across three recorded songs back to back (`neon_lake_music_response --continuous`, evidence
+`20261112_refine/continuous_play/`): every song's kicks still lift Growth and Indents mid-song (median rise over the
+0.2 s after a wave's birth 3-20%, 30-92 kicks per third); against each song played fresh the drives differ only in
+the first seconds after a boundary (the passage follower and the lanes' 4 s level are warm instead of cold), by
+under 0.02 after 10 s and 0.0006 after that. Contracts:
 `tests/test_neon_terrain_smooth.py` (GPU, with a control that takes the cross-fade away),
 `tests/test_neon_terrain_forms.py`, `tests/test_neon_terrain_reaction.py`.
 
@@ -552,10 +593,13 @@ views is within the cap's reach (at most 89 of 192 / 144 spare cells). The growt
   through seeded samples cannot: the generated land has creases along every edge cell's extrusion, and a first
   attempt that stored seeds and drew their cubic softened them visibly (12-38% of pixels changed).
 - Past the grid's edge the edge's delta eases out over `CONTINUATION_DESCENT`, so paint never ends in a wall.
-- The triangles split finer (to the tier's own cell) only under the **painted bounds** (`overlay_fields`'
-  `painted`, stepped out to 16 cells): a finer mesh draws the generated land's creases more exactly, which is a
-  visible change, so an unpainted growth keeps the very same mesh. The split is crack-free (shared edges take the
-  finer side's steps; `neon_lake_basin_mesh._grown_mesh_vertices`) and the marks never move.
+- The triangles split finer (to the tier's own cell) only under the **painted tiles** (`overlay_fields`'
+  `painted`: each 16-cell square of the grid within 2 cells of a painted cell, `painted_tiles`; 2026-11-12, it was
+  one bounding box of all the paint, so two far corners refined everything between): a finer mesh draws the
+  generated land's creases more exactly, which is a visible change, so an unpainted growth keeps the very same mesh.
+  The split is crack-free (a lattice cell's steps along an axis depend only on its column or row, so a split and an
+  unsplit neighbour's counts nest and shared edges take the finer side's; `neon_lake_basin_mesh._grown_mesh_vertices`)
+  and the marks never move.
 - The camera floor is the generated bound exactly as before; only painted cells can raise it. The authored summit
   (`maximum`, the Reaction shaper's right edge) ignores unpainted cells.
 
@@ -568,7 +612,13 @@ more than 8, the Extend control at least 20 times more). Cost (same machine, Pai
 with other work, 2775 MHz): Preset 3 1.95 ms; grown to 257 unpainted 2.18 ms (the generated land plus its overlay
 read for the ring's vertices and fragments; the mesh is the same 345 GL calls); painted all over the 257 grid 5.65
 ms (the worst case: the triangles under the painted bounds split to the tier's cell, about seven times the
-vertices). Textures: 529 KB + 264 KB (overlay) at 257 against 34 KB at 65. A brush preview on the largest grid
+vertices). **Tiles (2026-11-12,** one PairedBench session alternating the tiles against the old bounding box on the
+same records, GPU 89% busy with other work, 2775 MHz): grown to 257 unpainted 2.27 ms; one far corner painted
+(4 tiles) 2.21 box / 2.21 tiles; two opposite far corners (8 tiles) 5.49 box / **2.29 tiles**; painted all over
+(252 tiles) 5.65 box / 5.63 tiles (every tile is painted, so the fine mesh is the whole grid either way). A
+static distance-based density was not taken: the mesh does not know the eye (it flies anywhere in a ±14 box, so
+far paint can be seen from close by) and a view-dependent mesh would rebuild and pop as the camera moves, which
+the one-active-mesh rule forbids. Textures: 529 KB + 264 KB (overlay) at 257 against 34 KB at 65. A brush preview on the largest grid
 configures in about 75 ms (the bank-distance transform went from 128 ms to 16 ms in array form, same bytes).
 Land painted past the origin is far land: it keeps the continuation's
 simpler look (no shoreline line or wet fringe, detail and glow fading with distance); **Extend Toward Horizon**

@@ -124,6 +124,33 @@ def test_raised_terrain_lifts_a_low_eye_above_the_new_land():
     assert eyes[1][1] > eyes[0][1]
 
 
+def test_the_camera_floor_is_evaluated_only_when_its_inputs_change(monkeypatch):
+    """At rest every frame asks for the same eye: the floor (cells round the eye) is evaluated once, again only when
+    the terrain record, Terrain Height, the reaction's lift or the pose changes, and the eye is the same either way."""
+    from core.settings import neon_lake_camera
+    from rendering.gl_programs import neon_lake_basin_program as program
+    parameters = dict(_snapshot(shockwave_grid_terrain_reaction_enabled=True).logical.mode_state.parameters)
+    field = (0., 0., 1600., 900.)
+    built = []
+    real = neon_lake_camera.terrain_floor
+    monkeypatch.setattr(neon_lake_camera, "terrain_floor", lambda *a, **k: built.append(1) or real(*a, **k))
+    program._EYE_MEMO[:] = [None, None, None]
+    first = program.basin_view(parameters, field).eye
+    for _frame in range(5):
+        assert program.basin_view(parameters, field).eye == first
+    assert len(built) == 1
+    for change in ({"shockwave_grid_terrain": dict(parameters["shockwave_grid_terrain"])},
+                   {"shockwave_grid_terrain_height": float(parameters["shockwave_grid_terrain_height"]) + 0.3},
+                   {"shockwave_grid_terrain_peaks": 0.0}, {"shockwave_grid_turn": 0.1},
+                   {"shockwave_grid_camera_position": [0.0, 0.1, 0.0]}):
+        count = len(built)
+        program.basin_view({**parameters, **change}, field)
+        assert len(built) == count + 1, change
+    # The memo never changes the answer: a fresh evaluation of the same inputs gives the same eye.
+    program._EYE_MEMO[:] = [None, None, None]
+    assert program.basin_view(parameters, field).eye == first
+
+
 def test_actual_sun_toggle_preserves_sky_and_sky_strength_does_not_fade_sun(target):
     capture, host = target
     base = _snapshot(shockwave_grid_glow=0., shockwave_grid_sky_enabled=True,

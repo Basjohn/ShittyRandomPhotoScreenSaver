@@ -119,19 +119,33 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 - [ ] The AC-13 remainder (`Docs/Reference/Architecture_Checklist.md`).
 - [ ] AC-14, AC-15 and AC-16 (same checklist).
 
-### Item 7. One measurement session of at most 10 minutes under game60, only after the operator's yes
+### Item 7. Load session of 11 Nov (run; 7.9 minutes under game60, four runs, no reruns)
 
-Approved by the operator on 11 Nov ("The machine will not get quieter"). The lead runs it at the first gap in
-which no agent is running tests (a measured run beside agents' GL tests is void by its own conditions), with a
-fixed run list, no reruns, the conditions recorded. Baselines and evidence paths: section 3, "Lead, the quiet
-machine".
+Run by the lead on 11 Nov evening with no agent running (before the start: CPU about 12 %, GPU 4 %; during: other
+processes 73-78 % CPU, GPU 61-66 %, clock 2760 MHz in every run). Invisible saver, recorded music
+(`anything_mixed2`). Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/live_check/20261111_load_r1_*`,
+`..._r2_*`, `.artifacts/evidence/visualizers/spectrum/live_check/20261111_load_r3_*`, `..._r4_*`; receipts
+`.artifacts/evidence/performance/load_session/20261111_load_session/driver_receipts.json`; figures in
+`Docs/Reference/Benchmarks.md` ("Load session, 11 Nov").
 
-- [ ] First reveal on the engine worker against in process under load (closes the Watchlist's latency entry).
-- [ ] A second clean Waveform tick-cut round.
-- [ ] A clean Waveform P4 GC run, and the long run with Settings round trips.
-- [ ] A Settings round-trip run.
-- [ ] The alternated Glass/Normal card-materials pair.
-- [ ] The two-monitor canonical game60 outlier (48.6 fps, never repeated).
+Results: Waveform Preset 4 on the engine worker 59.4 fps, render 10.4 / 12.7 ms (median / p90), 1.4 % late, 3.3
+hitches a minute; in process 40.6 fps, 14.0 / 17.4 ms, 37.7 % late, 7.2 hitches a minute. First two seconds
+after startup: worker 86 frames, 3.5 % late; in process 69 frames, 75 % late (the worker reveals sooner and
+cleaner under load, which closes the Watchlist's latency question). One Settings round trip on the worker: 7.8 s
+in all (stop 0.46 s), both barriers complete, thawed and re-frozen, no failure, private memory 1271 to 1171 MB.
+Card materials, alternated second pair (Normal then Glass, Spectrum Preset 1, transition-heavy): 89.5 against
+89.6 fps, 0.2 % late and 0.73 hitches a minute in both, publish to swap 10.8 against 11.6 ms, saver tree 106.1
+against 105.7 % of a core: no measurable cost for Glass (the first pair's +16 % of a core was not repeated).
+
+- [ ] Waveform Preset 4 is still over the 8 ms render budget under game60 on the worker (10.4 ms median,
+  `reflection` 1.7 and `ribbons` 1.9 ms the largest stages): a P3 input (item 8b), not a P2 fault.
+- [ ] Side defect, `tools/visualizer_live_check.py`: on the worker run with a Settings round trip the age chain's
+  medians are nonsense (`publish_to_swap_ms` and `consumed_age_at_sync_ms` medians about -48,500 ms, p90 sane):
+  records from before and after the round trip (a new worker generation, a different clock origin) are mixed.
+  Report ages per generation, or only for the steady window before the first round trip as the help text says.
+- [ ] Not run inside the ten minutes: a second Waveform tick-cut A/B against the pre-cut tree (superseded for
+  the default path, since the tick no longer runs on main's interpreter); the 600 s GC run with a frame trace;
+  the two-monitor canonical outlier (48.6 fps, never repeated). The last two are Watchlist entries now.
 
 ### Item 8. §8 Accepted-mode follow-ups
 
@@ -330,39 +344,46 @@ shape widget is retired; shape drags are in the churn guard; Studio tooltips wra
 - [ ] Admitted later if wanted (operator's call): a pop-out larger canvas; Spline Curve's layer nodes and Voxel
   Sphere's zone boundaries on the same instrument; Shift axis lock, snapping, double-click reset.
 
-### 1B.5 Neon Lake: all visible land is brush-editable (merged 33912e5ae; refinement round in flight, Opus High)
+### 1B.5 Neon Lake: all visible land is brush-editable (merged 33912e5ae; refinement round merged 11 Nov)
 
 A stroke past the grid grows the authored grid under it invisibly (grown cells are an overlay on the generated
 landscape; an authored origin keeps horizon, detail and glow; shipped presets' terrain loads byte-identical;
-one commit and one undo per stroke; a refused state at the 257 cap). Contract: `Docs/Reference/Neon_Lake_Basin.md`.
+one commit and one undo per stroke; a refused state at the 257 cap). The mesh refines under painted 16-cell tiles
+(two far corners 5.49 to 2.29 ms; an unpainted grid unchanged); Brush Radius is a share of the basin (default
+0.16, range 0.03 to 0.6, read from the brush owner); no mesh cache (the GPU mesh is the only copy). Contract:
+`Docs/Reference/Neon_Lake_Basin.md`; evidence `.artifacts/evidence/visualizers/shockwave_grid/20261111_refine/`.
 
-- [ ] Painted growth cost: the mesh refines under one bounding box of painted cells (two far corners refine
-  everything between; a fully painted 257 grid costs 5.65 ms against 1.95 ms at 65). Refine in tiles holding
-  painted cells only, crack-free; report one corner, two corners and the whole grid; distance-based density if
-  it holds without aliasing the smallest brush.
-- [ ] Brush Radius is now a share of the basin (stable across growth): rescale its default and range so the
-  default footprint on each shipped preset is about what it was (0.57x on Presets 1 and 2 today).
-- [ ] Off-screen PNG of the refused state at the cap (struck-through footprint and notice).
+- [ ] Dormancy fault from 1B.5: with React To Music off and a grid that never grew, the frame costs about 10 %
+  more GPU than before 1B.5 (c64ed434), from terrain-overlay branches that run whether or not the grid grew
+  (one noisy session, 31-40 % noise): re-measure alternated on a quiet machine, then make an ungrown grid skip
+  the overlay path entirely (identical pixels, the pre-1B.5 cost).
+- [ ] Five of the seven GL calls added per frame since the 7 Nov baseline (354 to 361; two are 1B.6's uniforms)
+  are not attributed: find them in 1B.5's path and remove the ones an ungrown grid does not need.
+- [ ] Distance-based mesh density was not built (the mesh does not know the eye, and a camera-dependent mesh
+  would rebuild and pop): no render shows whether the smallest brush aliases on far land seen up close; render
+  it once, and only then decide whether anything is owed.
 
-### 1B.6 Neon Lake: smooth land reaction, Growth and Indents (merged 33912e5ae; refinement round in flight)
+### 1B.6 Neon Lake: smooth land reaction, Growth and Indents (merged 33912e5ae; refinement round merged 11 Nov)
 
-The reaction reshapes the land smoothly (lanes cross-fade along the height, cubic tables and elevation, an eased
-floor, a shore fade); Growth (mounds to spires by Growth Shape) and Indents are optional, default off, authored
-neutral into the three presets; drives are memoryless on the fixed scale. Under music the existing presets do
-change: the tears are gone and the reaction is a little weaker on banks and very low land.
+The reaction reshapes the land smoothly; Growth (mounds to spires by Growth Shape, with Growth Density and Growth
+Region: Everywhere / Far Land / By Elevation) and Indents (a point may sink 0.65 of its authored height plus 0.40
+of Terrain Height, never below 8 % of its height, the water's edge fixed) are optional, default off, authored
+neutral into the three presets. Measured: tick 38.9 us with lanes, Growth and Indents (34.7 before); GPU with
+the reaction on +8 to +14 % against before 1B.6, Growth and Indents on top; mid-song kicks lift the drives in
+continuous play (median 3-20 %). The lead decides when the reactivity is good enough (operator, 11 Nov).
 
-- [ ] Indents are barely visible at full drive on Preset 1: a depth law that clearly sinks visible land on all
-  three presets' default views, smooth, never below the water-boundary contract; staged-drive sheet and a WebP.
-- [ ] `tools/overhead_baseline.py` for Neon Lake against the stored baseline, with system usage.
-- [ ] Logical-tick cost of the lane, Growth and Indents drives, before and after.
-- [ ] GPU before/after alternated in one session, control-relative, including React To Music off (the +5-12%
-  reaction cost so far comes from separate sessions).
-- [ ] Continuous play across two songs back to back on the music-response trace: mid-song kicks read, no state
-  across the song boundary.
-- [ ] Off-screen PNG of the Neon Lake Studio's Reaction workspace with the Growth, Growth Shape and Indents rows.
-- [ ] Growth Density (site cell size) and a Growth region bias (far land only / by elevation through the shaper):
-  canonical spec entries with Studio rows, authored neutral into every preset, dormant when neutral.
-- [ ] Lead pixel review of the refinement round; merge; then tell the preset agent Neon Lake is ready.
+- [ ] Lead's reactivity verdict: watch `indents_p1_heavy1.webp` and one driven showcase per preset with Growth
+  and Indents on, beside the music envelope (`tools/visualizer_replay/neon_lake_music_response.py --continuous`);
+  write the verdict here (good enough, or the one thing that is still weak) before any further reaction work.
+- [ ] Side defect: a paused Studio preview shows no terrain reaction at all (`advance_terrain_reaction` with
+  `playing=False` zeroes the energies), so every paused still or capture at a fixture time hides Growth, Indents
+  and the lanes. A paused seek should show the reaction the fixture has at that time (evaluate the drives for
+  the seek time; nothing per frame at rest).
+- [ ] Side defect: `tools/visualizer_replay/waveform_music_response.py:63` silently skips recordings without PCM
+  (heavy1, quiet_intro*, balanced*) and the report drops those songs without saying so: name them in the report.
+- [ ] Side defect: the cost probe does not count GL or Python calls inside modules loaded under alias names, so
+  one-session comparisons against an old renderer have meaningless call counts: count by module object.
+- [ ] Neon Lake presets (1B.10) may start: the land work they need is merged.
 
 ### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (merged 189fbd36c; plan 01 M3c)
 
@@ -452,12 +473,26 @@ Operator, 11 Nov: presets 5 (Tube Lights), 6 (Quicksilver), 8 (Blueprint), 9 (Af
 ghastly ugly"; 2 Aurora, 3 Lanterns, 4 Dot Matrix and 7 Prism stand. Lead's reading: wide glossy, chrome, capsule,
 grid-on-block and dark-fill looks fail; fine luminous gradients pass. Fewer good presets beat a full slot count.
 
-- [ ] Spectrum round 2 (in flight): the five rejected presets replaced by new ideas, not re-skins; slots
-  contiguous; the whole set judged together on the peak and quiet sheets; lead pixel review before the operator
-  sees them.
-- [ ] Bar gap control (0 to about 4 px), admitted: one canonical spec entry, authored into every Spectrum preset at
-  2 px by the repair fill, shown through the spec in Settings and the Studio, a structural test, the Visualizer
-  Reference updated. Built in round 2 only if a new look needs it; otherwise it stays this open box.
+Spectrum round 2 merged 11 Nov as it stood when the agent was interrupted (0cf6f5c6; operator: "still better
+than what we have now"; evidence `.artifacts/evidence/visualizers/spectrum/presets/20261111_round2/`): eight
+presets (1 Organs, 2 Aurora, 3 Lanterns, 4 Dot Matrix, 5 Prism, 6 Dusk, 7 Voltage, 8 Mood Ring) and the Bar Gap
+control (0 to 4 px, default 2, `tests/test_spectrum_bar_gap.py`). Lead's pixel review: Dusk (pink to violet
+curtain) stands beside the survivors; the two below do not yet.
+
+- [ ] Flaw, Preset 7 Voltage (Opus Medium, when nothing more significant waits): one flat cyan with a violet
+  ghost; no gradient, no bright tip, no structure, so it reads as a default bar chart. Give it light: a core
+  or tip that goes white-hot with level, or segment it as a thin LED ladder; keep the cyan and violet idea.
+- [ ] Flaw, Preset 8 Mood Ring: flat yellow blocks at the peak and flat orange at rest on wide bars; the colour
+  change with level is the idea but each state is a plain fill. Thinner bars and a vertical gradient through
+  the level colours, so the change is visible inside one frame; or drop the preset if it cannot stand beside 2
+  to 6.
+- [ ] Round 2 was never reported: check the Bar Gap control end to end (Settings and Studio rows through the
+  spec, every Spectrum preset authored at its value, the Visualizer Reference) and the whole-song reactivity
+  table for presets 6 to 8 (`response.json` in the evidence folder).
+- [ ] Showcase WebPs exist for 6 to 8 only as the interrupted agent's drafts; re-render after the two flaws are
+  fixed, lead review before the operator sees them.
+- [ ] Extruded Bubble: one arctic-themed preset, light and depth, not a glossy object (Opus Medium, low
+  priority, lead pixel review).
 - [ ] `tools/visualizer_preset_author.py` refuses the shape keys (`spectrum_lane_strengths_linear has no Settings
   control`): admit them through the spec's own admission and the Studio shape rules, as the agent's script did.
 - [ ] Side defect: Bar Count is admitted to 96 by the spec but `spectrum.py` clamps to 64 (`_MAX_BARS`, lines 28,
@@ -475,7 +510,6 @@ grid-on-block and dark-fill looks fail; fine luminous gradients pass. Fewer good
 - [ ] Side defect: seven `test_release_media.py` tests fail with `missing authored preset path: spectrum:1` when
   run in one process after the preset and Studio preset tests (order pollution; the file passes alone and on
   main after the merge): find the test that leaves the preset tree redirected and make it restore.
-- [ ] Extruded Bubble: one arctic-themed preset.
 - [ ] Neon Lake: three unique presets (using the shape instrument, far-land brush and the new land reactivity).
 - [ ] Every preset authored through the Studio's Save To path, complete for every control (completeness guard).
 - [ ] One showcase WebP per preset (`release_media.py`), reviewed by the lead before the operator sees them.
@@ -694,8 +728,26 @@ plan 02's "Proposal basis" and `Index.md` point to it.
   8.3 (the Visualizer / Lyrics / Artist Collage pane with glyph parity), 3 and 5.1 (the favourites and library
   filters as one filter owner), 5.2 (the track menu; Track Information alignment swap), 4 (existing sliders and
   seek bar, the alignment rule). Each change cites its requirement number; nothing is promoted into this plan.
+Operator's clarification, 11 Nov evening, written into document 04 sections 7 to 9 and plan 02 (8.2, 13, 16):
+three builds from profiles (the screensaver and MC builds carry full SMP beside the compositor; only the SMP
+profile build has none); Small mode is the Media widget on the live desktop (snapping, outer geometry always
+adjustable, children behind the lock glyph); its Up arrow enters Full mode (the mock), which defaults to full
+screen and resizes like a normal window with its sections scaling; SMP Edit rearranges sections (swap, X/Y/XY,
+move to an edge) and must not break the existing Edit modes; long term an equalizer, upmix and downmix, ReplayGain,
+device select, crossfade and a well indexed growable library; Arrange gets an SMP section (the main one on SMP
+builds); on the screensaver and MC builds Small and Full mode stay inside the compositor (Full mode as a
+display-wide presentation, as the fullscreen Visualizer is), and only the SMP build uses desktop windows. SMP
+stays behind the native core, the open defects and the fullscreen Visualizer. The route the lead chose: SMP Edit is its own owner over a section tree, built from
+the existing Edit modes' parts, one edit session per surface, written once against a small host interface with
+two hosts, a compositor display and a desktop window (document 04 section 8).
+
+- [ ] Rules that keep SMP's doors open, to check at every audit until SMP starts (document 04 section 8, last
+  list): the Media widget, Now Playing and the seek bar stay host-agnostic; the Visualizer stays one owner that can
+  be retargeted between hosts and rendered at any aspect, strips included; Edit's handles, guides and snapping
+  stay reusable components; the native core renders into whatever surface its host gives it.
 - [ ] The operator's answers to the mock document's section 6 (what "CS" is; whether Lyrics and Artist Collage
-  are in the first full-player milestone; proposal A7) are recorded there when given. Nothing waits on them.
+  are in the first full-player milestone; whether the wider dock model is wanted) are recorded there when given.
+  Nothing waits on them.
 
 ### 1C.7 Handover state after the usage limit (11 Nov evening) and the roster change
 
@@ -704,25 +756,15 @@ dropped from the group and the cap. Its Spectrum work merges as it stands ("stil
 now"); flaws the lead sees are noted in 1B.10 for an Opus Medium agent "at a point where we do not have more
 significant work". Opus and Sonnet agents resume as the lead sees fit.
 
-- [ ] Neon Lake refinement round (`worktree-agent-a849151c5ede86920`, complete, nine commits): lead pixel review
-  of `indents_staged_drives_sheet.png`, the Growth Density/Region sheet and the two Studio sheets; focused tests
-  on the merge; merge; then 1B.5/1B.6 boxes updated, its three side defects recorded (paused Studio preview
-  shows no reaction; the trace drops clips without PCM silently; the cost probe misses aliased modules), and
-  its two operator write-ups (spire glow on hits, islands) moved to section 2.
-- [ ] Spectrum presets round 2 (`worktree-agent-a6bf350be60bea91b`, interrupted; WIP commits e3249136 and
-  70bd1bc2: Bar Gap control, the five rejected presets removed, Prism to slot 5, Dusk / Voltage / Mood Ring
-  added, the last two mid-tuning): completeness and preset tests on the merge, the lead renders the contact
-  sheets and notes flaws in 1B.10, merge. The removed slots feed 1C.1's guard.
-- [ ] Material M2b (`worktree-agent-a93bb05376d4941fc`, commit a8761c8c, interrupted before its report): the
-  agent resumes (Opus), takes 1C.5 first, then reports M2b against 1B.8's boxes, then M3.
-- [ ] Small boxes batch 3 (`worktree-agent-a6ba0b17824677702`; three commits done: per-frame imports, the
-  release-media default, the preset-registry fixture; WIP 860ee38b: the preset author tool's shape keys, half
-  done; not started: rollback recovery copies, the Extruded Bubble evidence root): the agent resumes.
+- [ ] Material M2b (commit a8761c8c on `worktree-agent-a93bb05376d4941fc`, never reported): a fresh Opus High
+  agent merged that branch (old agents cannot be resumed across sessions), takes 1C.5 first, then audits and
+  reports M2b against 1B.8's boxes, then stops; M3 after the lead's review.
+- [ ] Small boxes batch 3 (`worktree-agent-a6ba0b17824677702`: three commits done, the preset author tool half
+  done as WIP 860ee38b): a fresh Opus Medium agent merged that branch, finishes the tool, does 1B.15's two
+  boxes, then 1C.9.
 - [ ] Small boxes batch 4 (`worktree-agent-a4e50f79894c549ec`; WIP edf2100a: six sibling test files moved onto
   the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
   a Medium slot is free after 1C.1 and 1C.4.
-- [ ] Load session: run 11 Nov evening at the gap (no agent running; CPU about 12 %, GPU 4 % before the
-  start); results and what the ten minutes did not cover go to item 7 and the Watchlist.
 
 ### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; when a relevant agent is free)
 
@@ -984,8 +1026,15 @@ Watchlist entry (operator, 11 Nov).
     opposite pole so it reads on its pill (2.48, 3.79, 2.86 to about 5.1); the other 197 state inks are
     unchanged.
   - Spectrum presets 2 to 15 of 7 Nov are replaced (1B.10); the five you rejected are being redone.
-- **Decisions the lead will put to the operator when their write-ups exist:** Neon Lake spire glow on hits;
-  islands rising from the lake (needs the water-boundary contract decision).
+- **Decision, Neon Lake spire glow on hits (write-up from the refinement round):** Growth's share of the height
+  would add emission into the bloom on hits. It needs the hit part of the drive exposed on its own and one spec
+  control (amount and colour, 0 = identical to today); cost one varying and a few operations per fragment.
+  Product choices: its own colour or the ridge colour; spires only or mounds too; hits only or the whole passage.
+- **Decision, Neon Lake islands rising from the lake:** this breaks today's rule that the water's edge never
+  moves. Cheap form: islands drawn as land over the static water (no shoreline glow or wet fringe round them, so
+  they read as rocks). Full form: the water's edge follows the music (bank distance, wave taper, shore glow, wet
+  fringe, reflections and the camera floor all change, plus a reaction evaluation on every water fragment). May
+  the music move the water's edge, and should islands get the full shoreline treatment?
 
 ## 3. Lead and agents: active, paused and queued work
 
@@ -1131,9 +1180,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   - [ ] GC freeze steady check (`4_gc_freeze_steady/`): a clean Waveform P4 run (the run was tainted: no steady gen2,
     3 gen1 of 9-11 ms) and the long run with Settings round trips. Bubble P1, 600 s game60 was clean: no steady
     gen1/gen2, heap 180,685 frozen at reveal and 87 left.
-  - [ ] Card materials (`5_card_materials/`): the alternated second Glass/Normal pair. First pair: Glass costs about
-    +16 % of a core on the render thread (53.7 against 37.5), publish->swap +3 ms, hitches 2.46 against 2.05 a
-    minute, at the same late %.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 
@@ -1351,8 +1397,6 @@ Live checklist: every box is an observation or a fix owed on evidence; delete an
 
 **Engine worker and platform (reopen only on evidence; no simple test exists)**
 
-- [ ] First-reveal latency under load: if the Visualizer's first appearance is noticeably later on the worker
-  than it was in process, size it in a load session (the no-load comparison is 1B.14's).
 - [ ] A hot-plugged audio device: nothing in use is hot-plugged until SMP/Library exists; the real-endpoint
   reopen test of 1B.14 covers the capture path. Revisit with SMP.
 - [ ] Linux engine worker (best effort, never run): the named wake pipe (FIFO), the worker's spawn under
@@ -1490,11 +1534,13 @@ there). Evidence `.artifacts/evidence/display/display_power/20261105_display_pow
   in Task Manager while dark, whether wake input reaches the saver, and the first seconds after wake (a stale frame,
   a jump or a hitch). Run with `--frame-trace --usage`; when something shows, read that trace and reopen here.
 
-**Card materials under load**
 
-- [ ] A transition-heavy material/Normal pair needs the separately approved measurement session (load is the
-  operator's to approve; small off-screen GPU timings do not replace it). When a session is approved, the lead runs
-  it with item 7's card-materials pair.
+**Load runs the 11 Nov session did not cover (reopen only on evidence)**
+
+- [ ] The 600 s Waveform Preset 4 and Bubble GC runs with `--frame-trace` (gen1/gen2 pauses per hour) and a long
+  run with several Settings round trips: one 85 s run with one round trip was clean (re-frozen, no barrier
+  timeout); nothing has shown a steady collection since the GC freeze merged.
+- [ ] The two-monitor canonical game60 outlier (48.6 fps once, 7 Nov, never repeated).
 
 **Installed builds as an ordinary Windows user (no such account or fresh install exists to test on; moved from 1.2-1.3)**
 

@@ -3,7 +3,10 @@
 **Status:** design reference for the full-size ShittyMusicPlayer window, the long-range goal ("far far ahead of
 us"). It is a mock: one example of the layout, coloured by one theme. The lead may adjust it for better UX and
 functionality, and adjust the plans with it. Nothing here is scheduled; the order of work is plan 02
-(`02_ShittyMusicPlayer_Implementation_Plan.md`), whose phase ladder and `--smp` gate still bind.
+(`02_ShittyMusicPlayer_Implementation_Plan.md`), whose phase ladder and `--smp` gate still bind. Sections 7 to 9
+record the operator's clarification of the same evening: the product's shape, the contract route for SMP Edit
+and the long-term audio and library goals. SMP comes after the native core, the open defects and the
+fullscreen Visualizer.
 
 **Files (in `references/`, which git ignores, so this document carries their content in words):**
 
@@ -108,11 +111,11 @@ Each is a proposal for the operator to accept or strike; none changes plan 02's 
   designed.
 - A6. **Queue header carries the count and a view menu** ("Playing Queue (12)" with a list-options glyph, as the
   material example shows); the mock's plain "Playing Tracks" loses both.
-- A7. **Edit mode affordance (R3).** Entering SMP Edit shows each pane's handles and a swap target on drag, with
-  the same handle sizes and guides as ordinary Edit; panes snap to the column grid; a "Reset Layout" lives in the
-  Edit bar. The title bar and the transport bar's left cluster (transport buttons) keep their order, since muscle
-  memory for play/pause matters more than freedom there. This narrows R3 slightly ("except title bar") and is for
-  the operator to accept or reject.
+- A7. **Edit mode affordance (R3).** Entering SMP Edit shows each section's handles and a swap target on drag,
+  with the same handle sizes and guides as ordinary Edit, and a "Reset Layout" in the Edit bar. The Transport is a
+  section like any other and can go to the top or a side (operator, P4 in section 7); only the order of the
+  buttons inside its transport cluster (previous, play/pause, next) stays fixed, since muscle memory matters more
+  than freedom there. The contract route is section 8.
 - A8. **Minimum sizes and collapse order.** When the window narrows, panes collapse in a stated order (Track
   Information first, then the left pane to a strip, then the queue to an overlay), never by clipping text.
 - A9. **Keyboard and accessibility.** Every glyph-only control has a tooltip and a key; the Tracks table is fully
@@ -141,4 +144,153 @@ What ours should do better, using what the widget material track has built or is
 
 - What "CS" in the transport bar stands for.
 - Whether Lyrics and Artist Collage are in the first full-player milestone or later presentations of the pane.
-- Whether A7's narrowing of Edit mode (the transport cluster's order fixed) is acceptable.
+- Whether the wider dock model of plan 02 section 16 (tabbed stacks, floating panels on other monitors) is
+  wanted at all, now that Full mode is a tree of sections (section 8.5).
+
+## 7. Product shape (operator, 11 Nov 2026, evening)
+
+The operator's clarification, in their order. SMP stays long term: the native core, the existing defects and the
+fullscreen Visualizer come first. It is written down now so that work done before then does not close doors.
+
+- P1. **Three builds from profiles, as the saver and MC build today.** SMP functionality exists in all three: the
+  screensaver build, the MC build and an SMP build. The screensaver and MC builds carry full SMP functionality
+  *along with* the compositor (images, transitions, every widget). Only the SMP profile build comes without the
+  compositor: no transitions, no image presenter, no widgets that are not the Visualizer or media related. At
+  least two of its media widgets do not exist yet (the Library and the Playlist / Queue of plan 02 section 3).
+- P2. **Small mode** is the Media widget as it is now, on the live user's desktop: proper snapping, its outer
+  geometry adjustable at all times, and its children adjustable behind the lock glyph.
+- P3. **The Up arrow switches Small mode to Full mode**, which is what the mock shows. (The mock's down-left arrow,
+  R1, is the way back.)
+- P4. **Full mode defaults to full screen but can be adjusted like a normal window**; the sections inside scale
+  their spacing and sizing with it. Full mode's edit, SMP Edit, rearranges as much as possible, "especially with
+  swaps and x/y adjustments": the controls on top or at the side, the Visualizer as a thin wide strip along the
+  bottom, the artwork and artist information top left. "Every 'child' should be intelligently moveable as an
+  adjustable 'section'."
+- P5. **Existing Edit modes must not break**, and in the screensaver and MC builds SMP Edit lives side by side
+  with them.
+- P7. **SMP has its own section in Arrange**, "where this can be more easily carried out"; on SMP builds it is
+  the main section of Arrange.
+- P8. **On the screensaver and MC builds, Full mode and Small mode do not need to leave the compositor.** Only
+  the SMP profile build puts them on the desktop as windows.
+- P6. **Audio and library, eventually:** an equalizer; high-end audio support ("everything from upmixing,
+  downmixing to replay gain, device select and so on, audio crossfade too"); "a well indexed growable library
+  database"; "full modern music player parity without sacrificing our unique features".
+
+## 8. SMP Edit: the contract route (the lead's design; the operator left the route to the lead)
+
+Operator: "It's a lot like Fullscreen Visualizer Edit but you can figure out the best contract route yourself."
+
+**8.1 Two presentations, one application state.** Small mode and Full mode are two presentations of the same
+live services (playback, queue, library, the one Visualizer owner). Switching between them is a retarget of live
+owners, never a teardown and rebuild: audio, queue position, the system media session and the Visualizer's clock
+and history carry across (plan 02 section 8.2 already requires this; Current_Plan 1C.2 makes "retarget before
+rebuild" a standing rule).
+
+**8.2 Small mode is the Media widget's own contract; the host differs by build (P8).** On the screensaver and MC
+builds Small mode *is* the Media widget on the compositor, exactly as today, and never leaves it. On the SMP
+profile build the same component sits in a desktop window, where its outer geometry is always live (edge and
+corner drags, snapping to screen edges, to the work area and to its own last positions) with no Edit mode to
+enter. In both hosts its children (artwork, text group, transport, volume, seek bar) keep the Media widget's Edit
+rules and are adjustable only while the lock glyph is open, so an ordinary drag can never disturb them.
+
+**8.3 Full mode is one tree of sections at every window size.** Plan 02 section 16A's tiling tree (the operator's
+"no dead/empty sections and sections must connect", 7 Nov) is the layout model for Full mode whether the window is
+full screen, maximised or dragged to any size: an internal node is a horizontal or vertical split with a normalised
+ratio; a leaf is a section holding one content. Because the tree stores ratios and never pixels, resizing the
+window scales every section's size and spacing with no reauthoring (P4). Full screen is the default window state
+and is remembered; it is a state of the window, not a different layout system. On the screensaver and MC builds
+Full mode stays inside the compositor (P8): it is a display-wide presentation on one display, the same kind of
+takeover the fullscreen Visualizer is (plan 01), and its rectangle is that display; the tree, the sections and
+every rule below are the same. Only the host of the rectangle differs.
+
+**8.4 A section is the unit, and it adapts to its shape.** Every "child" of Full mode is a section: Navigation,
+Library (Tracks), Queue (Playing Tracks), Track Information, Artwork, Visualizer (or Lyrics or Artist Collage in
+its place), Transport, Search / Filter, Status. Each content declares, as data and in one registry:
+
+- its minimum width and height, and a preferred aspect where it has one (Artwork);
+- the orientations it supports and how it presents in each: Transport as a horizontal bar (top or bottom) or a
+  vertical rail (left or right); the Visualizer as a tall pane, a wide strip or any rectangle (it is the real
+  Visualizer card, which already renders at any aspect); Track Information stacked or side by side, with its
+  alignment swap (R11); Navigation as a row or a rail;
+- its fold priority when the window is too small (plan 02 section 16A's order), and what it folds into.
+
+A section chooses its presentation from the rectangle it is given, by rule, so "controls on top or the side" and
+"the Visualizer thin and wide along the bottom" are ordinary results of moving a section, not special layouts.
+
+**8.5 The edit vocabulary.** Section 16A's four operations stand (Choose, Swap, Resize, Split or Remove), and the
+operator's P4 adds two that the tree supports without becoming free-form:
+
+- **Move to an edge:** drag a section to the top, bottom, left or right edge of the window, or of another section,
+  to re-split the tree there (a live preview shows the resulting split). This is how the Transport goes to the
+  top or the side and how the Visualizer becomes a strip along the bottom.
+- **X, Y and XY resize:** dragging a shared edge changes one split's ratio (X or Y); dragging a corner where two
+  splits meet changes both (XY). Snap stops and per-content minimums are 16A's.
+
+Nothing floats and nothing overlaps in Full mode; the only detached surface is the Visualizer's Pop Out (plan 02
+section 8.3). Plan 02 section 16's wider dock model (tabbed stacks, floating panels on other monitors) is not
+needed to meet P4 and stays unadmitted unless the operator asks for it.
+
+**8.6 SMP Edit is its own owner beside the existing Edit modes, built from the same parts.** This is what keeps
+P5 true.
+
+- *Separate owner and record.* SMP Edit edits one thing: the section tree of a Full mode layout, stored in SMP's
+  own layout record (profile scoped, with layout slots as the saver has). It never reads or writes the widget
+  layout record that ordinary Edit, Arrange and Fullscreen Visualizer Edit own, and those never touch the tree.
+  Neither owner knows the other exists; there is no mode flag inside the existing Edit owner.
+- *Shared parts, not shared state.* The handles, guides, snap rules, lock glyph, keyboard nudging, the
+  commit / cancel transaction and the "one undo per gesture" rule are the components and helpers the existing
+  Edit modes already use (the route Fullscreen Visualizer Edit took: its own surface, ordinary Edit's handlers).
+  So the three feel the same in the hand, and a fix to a handle fixes all three.
+- *One edit session per surface.* A surface (a compositor display, or the SMP build's window) is in at most
+  one edit mode at a time. On the screensaver and MC builds Full mode is a display-wide presentation inside the
+  compositor, so SMP Edit stands to it exactly as Fullscreen Visualizer Edit stands to the expanded Visualizer:
+  entered from that presentation, editing only that presentation's record, with ordinary Edit unavailable on
+  that display until the presentation collapses and available as ever on the other displays. Entering either
+  never changes the other's record.
+- *Arrange has an SMP section (P7).* Arrange gains one section for SMP that shows the Full mode section tree
+  (and Small mode's children) and offers the same operations with the precision Arrange gives the widget layout
+  today. It edits the same record through the same owner as SMP Edit, never a copy: the Edit / Arrange parity
+  rule applies, so the same gesture made in SMP Edit and in Arrange's SMP section leaves the same stored tree
+  (the parity harness pattern, extended). Arrange's existing sections are unchanged. On the SMP profile build,
+  where the compositor's sections have nothing to show, the SMP section is Arrange's main section.
+- *Inside a section, the section's own rules.* The Visualizer section keeps its glyph row and its own view
+  gestures; Track Information keeps its alignment swap. SMP Edit moves and sizes sections; it does not reach
+  inside them.
+- *Proof owed when built:* the existing Edit suites (ordinary Edit, Arrange parity, Fullscreen Edit) run unchanged
+  and green with SMP present and with SMP Edit entered; the widget layout record is byte-identical before and
+  after any SMP Edit or SMP Arrange session, the section tree is byte-identical after any ordinary Edit or
+  Arrange session, and SMP Edit and Arrange's SMP section agree gesture for gesture.
+
+**8.7 Profiles decide what is built in, by capability, and so which host SMP uses.** The SMP profile build has no
+compositor capability: the image presenter, transitions, image sources and the non-media widget families are
+absent, and the SMP runtime never imports them (plan 02 section 8.1 already has this; an import-closure test like
+the engine worker's proves it); there Small and Full mode are desktop windows. The screensaver and MC builds have
+the compositor capability and the SMP capability together; there Small and Full mode are presentations inside the
+compositor and need no desktop window (P8). The section tree, the section registry, SMP Edit and Arrange's SMP
+section are written once against a small host interface ("give me a rectangle, tell me when it changes, take
+focus, leave"), with two hosts: a compositor display and a desktop window. SMP code never assumes which one it
+has.
+
+**What must not be closed off before SMP starts** (rules for work done now):
+
+- Media widget, Now Playing and seek bar components stay host-agnostic (no reach into the display compositor).
+- The Visualizer stays one owner that can be retargeted between hosts and rendered at any aspect, strips included
+  (Current_Plan 1C.2, and the border contract of 1C.4).
+- Edit handles, guides and snapping stay reusable components, not code welded to the widget layout owner.
+- The native core (plan item 8b, P3) renders the Visualizer into whatever surface its host provides, with no
+  dependency on the image compositor.
+
+## 9. Long-term audio and library parity (P6)
+
+Plan 02 section 13 already sets the audio bar (shared and exclusive output, device selection with hot-unplug
+recovery, gapless, crossfade, ReplayGain, an equalizer in a bypassable DSP chain, a high-quality resampler) and
+section 5 sets the library's. P6 adds or sharpens:
+
+- **Upmixing and downmixing:** explicit channel-layout handling in the DSP chain (stereo to multichannel and
+  multichannel to stereo with stated coefficients, bit-transparent when source and device layouts match).
+- **The equalizer is a first-class feature** with presets and per-device memory, not only a stage in a list.
+- **A well indexed, growable library database:** schema versioned with migrations, indexes for every browse and
+  sort the UI offers, incremental scan, and measured behaviour at large sizes (plan 02 section 5 and its budgets).
+- **Full modern music-player parity without giving up what is ours:** the live Visualizer as a section, the
+  theme and material system, Edit-grade rearrangement. Parity is a checklist to be written against named players
+  when SMP is scheduled, not before.

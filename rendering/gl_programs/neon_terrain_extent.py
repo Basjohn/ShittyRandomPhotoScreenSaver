@@ -147,13 +147,44 @@ def grow_heightfield(data: Mapping, left: int, right: int, front: int, back: int
                                   "origin": [ox + left, oy + front, span]})
 
 
+def painted_tiles(touched, basin: tuple[int, int, int]) -> tuple[tuple[float, float, float, float], ...]:
+    """The ``GROW_STEP`` squares of an ``n`` x ``n`` grid (``touched``: a boolean array of painted cells, rows near
+    to far) within ``GROW_MARGIN`` cells of a painted cell, as basin-uv rects (left, front, right, back), in row
+    then column order. A square at the grid's far edge ends on its last cell."""
+    import numpy as np
+
+    n = int(touched.shape[0])
+    x0, y0, cells = basin
+    count = -(-(n - 1) // GROW_STEP)
+    # Grow the painted cells by the margin (a square of shifts), then ask each square whether it holds any.
+    padded = np.zeros((count * GROW_STEP + 2 * GROW_MARGIN + 1,) * 2, dtype=bool)
+    padded[GROW_MARGIN:GROW_MARGIN + n, GROW_MARGIN:GROW_MARGIN + n] = touched
+    near = np.zeros((count * GROW_STEP + 1,) * 2, dtype=bool)
+    for dy in range(2 * GROW_MARGIN + 1):
+        for dx in range(2 * GROW_MARGIN + 1):
+            near |= padded[dy:dy + near.shape[0], dx:dx + near.shape[1]]
+    # A square's cells run from its first to its last (shared) edge: both squares either side of an edge see it.
+    tiles = [(tr, tc) for tr in range(count) for tc in range(count)
+             if near[tr * GROW_STEP:(tr + 1) * GROW_STEP + 1, tc * GROW_STEP:(tc + 1) * GROW_STEP + 1].any()]
+    out = []
+    for tr, tc in tiles:
+        c0, r0 = tc * GROW_STEP, tr * GROW_STEP
+        c1, r1 = min(n - 1, c0 + GROW_STEP), min(n - 1, r0 + GROW_STEP)
+        out.append(((c0 - x0) / cells, (r0 - y0) / cells, (c1 - x0) / cells, (r1 - y0) / cells))
+    return tuple(out)
+
+
 def overlay_fields(data: Mapping) -> dict:
     """What the renderer needs of a grown grid besides its cells: ``origin_rect`` (the authored origin in grid uv:
     left, front, right, back), ``delta`` (float32 texels, each cell's stored height
-    minus the generated landscape's; zero where unpainted), ``painted`` (the painted cells' bounds in basin uv,
-    left / front / right / back, stepped out to whole ``GROW_STEP`` cells so strokes rarely move it; None while
-    nothing is painted) and ``maximum`` (the authored summit: the origin's and the painted cells' highest, so an
-    unpainted growth leaves it where it was). Empty for a grid that never grew."""
+    minus the generated landscape's; zero where unpainted), ``painted`` (the tiles that hold painted cells: a tuple
+    of left / front / right / back rects in basin uv, each a whole ``GROW_STEP`` square of the grid, a cell counting
+    for every tile within ``GROW_MARGIN`` of it, so strokes rarely change the set; None while nothing is painted)
+    and ``maximum`` (the authored summit: the origin's and the painted cells' highest, so an unpainted growth leaves
+    it where it was). Empty for a grid that never grew.
+
+    Tiles, not one bounding box: paint in two far corners refined everything between them (a 257 grid painted all
+    over cost 2.9 times the unpainted one, and two corners nearly as much)."""
     if _whole_origin(data):
         return {}
     import numpy as np
@@ -169,14 +200,7 @@ def overlay_fields(data: Mapping) -> dict:
     painted = None
     if touched.any():
         maximum = max(maximum, float(grid[touched].max()))
-        rows, columns = np.flatnonzero(touched.any(axis=1)), np.flatnonzero(touched.any(axis=0))
-
-        def stepped(low: int, high: int) -> tuple[int, int]:
-            low, high = low - GROW_MARGIN, high + GROW_MARGIN
-            return (max(0, GROW_STEP * (low // GROW_STEP)), min(n - 1, GROW_STEP * -(-high // GROW_STEP)))
-
-        (c0, c1), (r0, r1) = stepped(int(columns[0]), int(columns[-1])), stepped(int(rows[0]), int(rows[-1]))
-        painted = [(c0 - x0) / cells, (r0 - y0) / cells, (c1 - x0) / cells, (r1 - y0) / cells]
+        painted = painted_tiles(touched, (x0, y0, cells))
     return {"origin_rect": list(heightfield_origin_rect(data)), "delta": delta.astype("<f4").tobytes(),
             "painted": painted, "maximum": maximum}
 

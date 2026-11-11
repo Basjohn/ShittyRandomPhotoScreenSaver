@@ -24,6 +24,7 @@
           12,
           230
         ],
+        "spectrum_bar_gap": 2.0,
         "spectrum_border_radius": 2.0,
         "spectrum_drop_speed": 0.72,
         "spectrum_dynamic_floor": true,
