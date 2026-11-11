@@ -717,7 +717,19 @@ a standing condition and their crop shows lines inside the border band along the
   one-pixel disagreement named (border rounding against the clip's inner edge, the clip's soft edge, the line's
   width or fringe, a scissor wider than the stencil) and fixed at the shared bound; a full-brightness line along
   each edge added to the clip contract test.
-- [ ] If nothing reproduces off-screen: the lead takes it on Display 1 with the operator's profile copy (1B.14).
+- [ ] Not reproduced off-screen (12 Nov): with a 5 px half-transparent border in Amethyst Night's colours,
+  Glass, fills transparent and only the white lines drawn, at 100, 125 and 150 %, card origins shifted by
+  fractions of a pixel, ordinary and display-wide: zero pixels in the border band or outside the card; the
+  outermost white pixel sits 0 to 1 device pixel inside the inner edge (evidence in the agent's branch,
+  `visualizers/devcurve/20261112_white_lines/`). What was not covered: the real window on the 150 % display
+  with its overscan, the operator's own card positions and slots, pixel shift, the engine-worker path, the
+  operator's own Spline Curve preset. So it is the lead's on Display 1: the harness of 1B.14 is being built
+  (Opus Medium) with this as its first recipe.
+- [ ] Side defect, red on main: `test_3d_curated_preset_ownership[shockwave_grid-1]`, `[shockwave_grid-2]` and
+  `test_neon_experimental_presets::test_each_current_neon_art_file_has_owned_schema_roundtrip_and_independent_
+  view` fail on camera position values since the operator's preset edit (bc74cefe) or the Neon Lake merge: the
+  tests pin authored values; make them derive from the canonical source (with the 1C.1 agent).
+- [ ] Side defect: importing `core.settings.normalization` before anything else raises a circular `ImportError`.
 
 ### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
 
