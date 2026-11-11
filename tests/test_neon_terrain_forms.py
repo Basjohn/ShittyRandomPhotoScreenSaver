@@ -14,7 +14,7 @@ import pytest
 
 from widgets.spotify_visualizer.render_state import ShockwaveGridFrame
 from widgets.spotify_visualizer.shockwave_frame_runtime import (
-    FORMS_CEILING, FORMS_HIT_ATTACK, FORMS_PASSAGE, ShockwaveGridFrameRuntime, forms_hit, forms_level,
+    FORMS_CEILING, FORMS_HIT_ATTACK, FORMS_HIT_SHARE, FORMS_PASSAGE, ShockwaveGridFrameRuntime, forms_hit, forms_level,
 )
 from widgets.spotify_visualizer.transient_bus import MUSICAL_USUAL_LOUDNESS
 
@@ -61,7 +61,7 @@ def test_the_level_is_a_fixed_curve_of_the_passage_with_headroom():
     levels = [forms_level(low + (high - low) * k / 20.0) for k in range(21)]
     assert levels == sorted(levels) and levels[-1] == pytest.approx(FORMS_CEILING) and forms_level(1.0) == levels[-1]
     assert FORMS_CEILING < 1.0                                         # the loudest passage does not pin
-    assert 0.2 < forms_level(0.65) < 0.7                               # a usual passage: partly up
+    assert 0.3 < forms_level(0.65) < 0.8                               # a usual passage: clearly up, not full
     # A hit is read on the fixed loudness scale: silence nothing, a usual onset about half, a loud one more, bounded.
     assert forms_hit(0.0) == 0.0
     usual, loud = forms_hit(MUSICAL_USUAL_LOUDNESS), forms_hit(2.0 * MUSICAL_USUAL_LOUDNESS)
@@ -79,7 +79,7 @@ def test_the_drives_start_at_rest_ramp_in_and_fade_out():
     assert rise == sorted(rise) and 0.0 < rise[5] < 0.2 < rise[-1]            # it ramps: nothing pops in
     assert max(b - a for a, b in zip(rise, rise[1:])) < 0.03                   # per 60 Hz frame
     settled = song.play(4.0, 1.0)
-    assert settled[0] == pytest.approx(FORMS_CEILING * (1.0 - 0.38), abs=0.01) and settled[0] < 1.0
+    assert settled[0] == pytest.approx(FORMS_CEILING * (1.0 - FORMS_HIT_SHARE[0]), abs=0.01) and settled[0] < 1.0
     start = len(song.trace)
     song.play(8.0, 1.0, playing=False)                                         # the music stops: it lets go
     fall = [growth for growth, _indent in song.trace[start:]]
@@ -98,7 +98,8 @@ def test_a_hit_lifts_the_drives_over_a_few_frames_and_lets_go():
     growth = [g for g, _i in song.trace[start:]]
     indent = [i for _g, i in song.trace[start:]]
     peak = max(range(len(growth)), key=growth.__getitem__)
-    assert growth[peak] > rest[0] * 1.15 and indent[peak] > rest[1] * 1.3      # Indents answer hits more
+    assert growth[peak] > rest[0] * 1.08 and indent[peak] > rest[1] * 1.2      # Indents answer hits more
+    assert indent[peak] / rest[1] > growth[peak] / rest[0]
     assert max(b - a for a, b in zip(growth, growth[1:])) < 0.06               # the hit ramps in (no one-frame jump)
     assert 3 <= peak - round(0.1 / STEP) <= round(6 * FORMS_HIT_ATTACK / STEP)
     assert growth[-1] == pytest.approx(rest[0], abs=0.01) and max(growth) < 1.0  # and lets go; never pinned
@@ -184,7 +185,7 @@ def test_the_capture_feeds_the_drives_from_the_passage_alone(monkeypatch):
     for k in range(1, 121):
         frame, extra = capture._capture_shockwave_grid(widget, engine, context(10.0 + k * STEP))
     assert frame.terrain_forms[0] > 0.3 and frame.terrain_bands == (0.0,) * 5
-    assert runtime.terrain_reaction_pending or frame.terrain_forms[0] == pytest.approx(FORMS_CEILING * 0.62, abs=0.02)
+    assert runtime.terrain_reaction_pending or frame.terrain_forms[0] == pytest.approx(FORMS_CEILING * (1.0 - FORMS_HIT_SHARE[0]), abs=0.02)
     # The frame admits exactly two drives within 0..1.
     assert isinstance(frame, ShockwaveGridFrame)
     for broken in ((0.1,), (0.1, 1.2), (-0.1, 0.0), (0.1, math.nan)):

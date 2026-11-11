@@ -53,15 +53,15 @@ REACTION_MOTION = (0.15, 1.35)   # phase units per second at Motion Speed 0 and 
 # (``PassageIntensity``: loudness against ``MUSICAL_USUAL_LOUDNESS``, never against the track) and each onset's
 # emphasis (``musical_emphasis``). Nothing here remembers a level, compares against a running one or reads
 # ``musical_weight``'s presence ratio: the same music draws the same landforms wherever in a song it falls.
-FORMS_PASSAGE = (0.28, 0.98)     # passage intensity: nothing stands below the first, everything by the second
+FORMS_PASSAGE = (0.10, 0.90)     # passage intensity: nothing stands below the first, everything by the second
 FORMS_CEILING = 0.92             # the level's ceiling: headroom for a hit on top of the loudest passage
-FORMS_HIT_ATTACK = 0.05          # seconds a hit takes to arrive (it ramps, never pops)
+FORMS_HIT_ATTACK = 0.07          # seconds a hit takes to arrive (it ramps, never pops)
 FORMS_HIT_DECAY = 0.30           # seconds a hit takes to let go
 FORMS_HIT_FULL = 2.0 ** 1.5      # ``musical_emphasis`` of the loudest onset
 FORMS_HIT_CURVE = 0.7
 # How much of each drive is the passage alone and how much a hit adds on top (growth, indents): Indents answer
 # hits more, Growth holds more of the passage.
-FORMS_HIT_SHARE = (0.38, 0.55)
+FORMS_HIT_SHARE = (0.30, 0.45)
 
 
 def forms_level(intensity: float) -> float:
