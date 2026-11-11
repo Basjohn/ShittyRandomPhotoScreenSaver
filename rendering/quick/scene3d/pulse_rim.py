@@ -5,6 +5,7 @@ bytes. It is uploaded only when its bytes object changes (one small ``glTextureS
 here, so the brightening lies exactly where the published pulse is, in every Reaction Mode.
 """
 from OpenGL import GL as gl
+from PySide6.QtGui import QOpenGLContext
 import numpy as np
 from core.waveform_ribbon_dynamics import PULSE_GRID
 
@@ -34,7 +35,6 @@ class PulseRimField:
         return bool(self.texture)
 
     def _check(self):
-        from PySide6.QtGui import QOpenGLContext
         current = QOpenGLContext.currentContext()
         if current is None:
             raise RuntimeError('Pulse rim field requires its current GL context')

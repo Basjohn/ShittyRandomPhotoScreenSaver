@@ -70,9 +70,8 @@ def _admitted(tab, spec, key: str, config) -> Any:
     try:
         control = spec.control(key)
     except KeyError:
-        row = next((e for e in spec.entries if isinstance(e, Custom) and key in e.keys), None)
         value = config.get(key, default)
-        return _resolve(row.admit)(key, value, default) if row is not None and row.admit else deepcopy(value)
+        return spec.admit_custom(key, value, default) if spec.custom_row(key) is not None else deepcopy(value)
     return control.admit(read_control_value(control, config.get, default), default)
 
 

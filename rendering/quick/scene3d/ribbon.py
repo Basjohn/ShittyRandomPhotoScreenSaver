@@ -11,6 +11,7 @@ from contextlib import contextmanager
 
 import numpy as np
 from OpenGL import GL as gl
+from PySide6.QtGui import QOpenGLContext
 
 from core.ribbon_style import RibbonMaterial, RibbonSparks, RibbonStrays
 from core.ribbon_packet import MAX_PACKET_BYTES, MAX_RIBBONS, RIBBON_BYTES, KNOT_ROWS, RibbonPacket
@@ -547,7 +548,6 @@ class RibbonPrimitive:
         return values
 
     def _check_context(self, *, admit=False):
-        from PySide6.QtGui import QOpenGLContext
         current = QOpenGLContext.currentContext()
         if current is None:
             raise RuntimeError('Ribbon GL work requires its owning current context')
