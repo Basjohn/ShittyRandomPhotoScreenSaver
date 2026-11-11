@@ -131,8 +131,8 @@ def test_every_mode_follows_its_preset_through_a_catalogue_change(tmp_path, monk
         manager = _manager(tmp_path / case, case)
         _store(manager, mode, index)
         stored[case] = (manager, before[index])
-        assert _stored(manager, mode) == (index, {"preset": before[index],
-                                                  "catalogue": _stored(manager, mode)[1]["catalogue"]})
+        stored_index, reference = _stored(manager, mode)
+        assert stored_index == index and reference["preset"] == before[index] and reference["slot"] == index
 
     # The catalogue changes: one curated preset is removed, another renumbered past the user's preset.
     files = tree.files()
@@ -156,6 +156,20 @@ def test_every_mode_follows_its_preset_through_a_catalogue_change(tmp_path, monk
     assert any(before[picks["removed"]] in line for line in lines)
     assert len(lines) == len(set(lines))                 # each repair reported once
     assert user.is_file()
+
+
+def test_a_slot_chosen_after_the_catalogue_changed_in_this_process_is_kept(tmp_path, monkeypatch):
+    """A selection made against the catalogue this process holds now (Save As then select, a preset slider move)
+    writes only the index; its reference still names the slot it was written with, so the index wins."""
+    mode = _curated_modes()[0]
+    tree = _Tree(tmp_path, monkeypatch, mode)
+    manager = _manager(tmp_path, "chosen")
+    _store(manager, mode, 0)
+    tree.add("refs_test_chosen")                          # the catalogue grows in this process
+    chosen = vp.get_custom_preset_index(mode) - 1         # the new preset
+    _store(manager, mode, chosen)                         # the writer sets the index only
+    index, reference = _stored(manager, mode)
+    assert index == chosen and reference["slot"] == chosen and reference["preset"] == _identities(mode)[chosen]
 
 
 def test_an_old_profile_without_references_keeps_its_index_and_gains_references(tmp_path, monkeypatch):

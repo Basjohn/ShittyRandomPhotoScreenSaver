@@ -84,7 +84,7 @@ def catalogue_signature(identities: list[str]) -> str:
     return hashlib.sha1("\n".join(identities).encode("utf-8")).hexdigest()[:12]
 
 
-def _stored_reference(data: Mapping[str, Any], mode: str, prefix: str) -> tuple[str, str] | None:
+def _stored_reference(data: Mapping[str, Any], mode: str, prefix: str) -> tuple[str, str, int | None] | None:
     names = data.get(PRESET_REFERENCES_KEY, data.get(f"{prefix}.{PRESET_REFERENCES_KEY}"))
     entry = names.get(mode) if isinstance(names, Mapping) else None
     if not isinstance(entry, Mapping):
@@ -92,7 +92,8 @@ def _stored_reference(data: Mapping[str, Any], mode: str, prefix: str) -> tuple[
     identity, signature = entry.get("preset"), entry.get("catalogue")
     if not isinstance(identity, str) or not identity or not isinstance(signature, str):
         return None
-    return identity, signature
+    slot = entry.get("slot")
+    return identity, signature, (slot if isinstance(slot, int) and not isinstance(slot, bool) else None)
 
 
 def _report(mode: str, stored: str, signature: str, message: str, *args: Any) -> None:
@@ -133,10 +134,13 @@ def resolve_preset_index_from_mapping(
     custom_idx = get_custom_preset_index(mode)
     reference = _stored_reference(data, mode, prefix)
     if reference is not None:
-        identity, signature = reference
+        identity, signature, slot = reference
         identities = _catalogue_identities(mode)
         current = catalogue_signature(identities)
-        if signature != current or not 0 <= idx <= custom_idx:
+        # A writer that chose another slot after the reference was written (a selection made against the catalogue
+        # this process holds now) owns the index; the reference describes only the slot it was written with.
+        chosen_since = slot is not None and slot != idx and 0 <= idx <= custom_idx
+        if not chosen_since and (signature != current or not 0 <= idx <= custom_idx):
             if 0 <= idx <= custom_idx and identities[idx] == identity:
                 return idx
             if identity in identities:
@@ -167,7 +171,7 @@ def preset_reference(mode: str, index: int) -> dict[str, str]:
     """The stored reference for slot ``index`` of ``mode``'s current catalogue."""
     identities = _catalogue_identities(mode)
     index = max(0, min(len(identities) - 1, int(index)))
-    return {"preset": identities[index], "catalogue": catalogue_signature(identities)}
+    return {"preset": identities[index], "catalogue": catalogue_signature(identities), "slot": index}
 
 
 def stamp_preset_references(indices: Mapping[str, Any]) -> dict[str, dict[str, str]]:
@@ -202,6 +206,9 @@ def normalize_preset_references(value: Any) -> dict[str, dict[str, str]]:
         identity, signature = entry.get("preset"), entry.get("catalogue")
         if isinstance(identity, str) and identity and isinstance(signature, str) and signature:
             admitted[str(mode)] = {"preset": identity, "catalogue": signature}
+            slot = entry.get("slot")
+            if isinstance(slot, int) and not isinstance(slot, bool):
+                admitted[str(mode)]["slot"] = slot
     return admitted
 
 

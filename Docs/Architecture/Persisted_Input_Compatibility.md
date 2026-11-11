@@ -225,8 +225,10 @@ without the safe path below.
 
 - **Visualizer preset references** (`core/settings/visualizer_preset_indices.py`, `preset_references` beside
   the `preset_<mode>` indices; plan 1C.1, 12 Nov 2026; R-189). A stored preset is the slot index plus the preset's
-  identity (its authored name without the slot number) and a signature of the catalogue it was chosen from. While
-  the catalogue is unchanged the index is the user's choice; when it changed (presets removed, renamed or
+  identity (its authored name without the slot number), a signature of the catalogue it was chosen from and the
+  slot it was written with. While the catalogue is unchanged, or when a writer chose another slot since (the
+  stored index differs from the reference's slot: a selection made against the catalogue the process holds), the
+  index is the user's choice; when it changed (presets removed, renamed or
   renumbered by an install or round of authoring), the identity decides: the same preset wherever it now sits,
   Custom as Custom, a retired preset's recorded successor (`core/settings/visualizer_preset_compat.py`), else the
   mode's Preset 1. One log line per repair, never a dialog, never a failed open; the settings load stores the
