@@ -1711,144 +1711,179 @@ cheaper ambient CPU pass. Evidence `.artifacts/evidence/visualizers/bubble/parti
 
 ## 9. Studio for every visualizer (replaces the builders)
 
-Operator (5 Nov): instead of a Bubble UX sweep, every visualizer (Sine retired 2026-11-05) gets a version of the reusable
-Studio (`ui/studio`, mode registry + adapters) that replaces its builder. The Waveform Studio is the first adapter and
-the framework bar; each mode contributes only an adapter (typed schema from the canonical registry, truthful evaluator
-on its production logical/render path, fixtures, scene objects, workspaces and instruments), never a copied shell.
-The former Bubble scalar-to-range idea is folded in: each adapter picks the right instrument per control under the
-design pack's control policy (quiet/peak A/B, real ranges only where a true interval exists), with unchanged
-serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not change.
+Operator (5 Nov): instead of a Bubble UX sweep, every visualizer (Sine retired 2026-11-05) gets a version of the
+reusable Studio (`ui/studio`, mode registry + adapters) that replaces its builder. The Waveform Studio is the first
+adapter and the framework bar; each mode contributes only an adapter (typed schema from the canonical registry,
+truthful evaluator on its production logical/render path, fixtures, scene objects, workspaces and instruments), never
+a copied shell. The former Bubble scalar-to-range idea is folded in: each adapter picks the right instrument per
+control under the design pack's control policy (quiet/peak A/B, real ranges only where a true interval exists), with
+unchanged serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not
+change.
 
-- [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
-- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
-  Neon Lake (`shockwave_grid`) built, Spline Curve (`devcurve`) and Oscilloscope built (below); Voxel Sphere in progress). Neon Lake awaits operator acceptance
-  (evidence `.artifacts/evidence/visualizers/shockwave_grid/studio/20261107_studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
-  shared framed camera, no wallpaper; its terrain is painted with the Studio's shared brush (6 Nov; evidence
-  `.artifacts/evidence/studio/completion/20261106_completion/brush/`; the retired Settings editor's 3/4 view Sun / Moon drag is
-  now Position X / Y / Z only). Extruded Spectrum awaits operator acceptance
-  (evidence `.artifacts/evidence/visualizers/extruded_spectrum/studio/20261107_studio/`); its cast-shadow rows stay out of the Studio while
-  they are unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`). Spectrum awaits operator acceptance (evidence
-  `.artifacts/evidence/visualizers/spectrum/studio/20261105_studio/`). Every mode's Settings body is now the preset row and the Studio
-  launcher (operator 6 Nov: migrate fully once parity+ is proven; `tests/test_visualizer_studio_parity.py`). Operator
-  look pending on the migrated Settings pages (one sentence per mode) and on the terrain brush in the Studio.
-- [~] **Spline Curve Studio built (6 Nov), awaiting operator acceptance**(`ui/studio/devcurve_adapter.py`, registered;
-  so Spline Curve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/visualizers/devcurve/studio/20261107_studio/`
-  (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator
-  to judge: the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity, the Layers
-  workspace (one panel per layer), and whether the Audio Analysis group earns its place (re-analysed from PCM through the
-  production DSP, every offered control moves Spline Curve's frame; AGC Strength and Output Lift read nothing and are now
-  hidden: `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode).
-- [~] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance**(`ui/studio/oscilloscope_adapter.py`,
-  registered). Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor on Human, Preset 3 Lissajous on
-  Rag Doll: every workspace with the live traces). Recorded engine answers with the capture history recorded by
-  identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` §3). Operator to judge: Level / Afterglow / Ghosts /
-  Flare / Drive / Tone as the way to read the beam, the three workspaces, and whether the Audio Analysis group earns
-  its place (re-analysed from PCM through the production DSP, every offered control moves Flare and Drive, and Bar Count,
-  Block Size and Input Gain also move Tone: the trace itself is the raw capture, but the beam's reactions are not;
-  `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode).
-- [~] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
-  `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
-  Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
-  `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
-  the preset row and the Save To flow.
-- [ ] **Operator side requests (6 Nov, "important eventually"; queue after the running work):**
-  - **Waveform travel speed:** History Speed (`flow_speed`, 0.8-2.4, Flow bucket) and Pulse Speed exist but the
-    operator did not find them; there is no travel-speed reactivity. Make them findable (name / workspace / tooltip)
-    and consider a quiet -> peak History Speed under the flow rule (music pushes history faster, smoothly; knot spacing
-    and the anchored ends stay continuous). After the adaptive rework (same owner).
-  - **Studio clips are seamless loops (6 Nov), awaiting the operator's listen and look.** Built: the three clips are
-    12.6-13.2 s loops (0.86-1.01 MB each) with searched loop points and a 1 s equal-power crossfade baked into the
-    capture stream, and every Studio's evaluator plays on through the wrap with its state carried (no restart at
-    `t = 0`); workers prime on the loop's last 2 s. 30 s clips were measured and not chosen (size and re-analysis
-    grow, the seam does not improve): `Docs/Reference/Visualizer_Studio.md` §3 "Studio clips", evidence
-    `.artifacts/evidence/studio/clip_loop/20261106_clip_loop/`. Note the Studio plays no sound: the clips are the capture
-    stream the analysis reads, so "listen" means the music-reactive picture across the wrap. Operator: (1) let any
-    Studio loop on each of the three clips and watch the wrap (end of the 13 s timeline): the preview should not
-    jump, empty, or re-start its motion; (2) Rag Doll has no steady beat, so its seam is the least certain: judge it
-    first; (3) the clips now start and end mid-song at the loop points chosen (Human and Growing Pains on their
-    groove), not at the earlier quiet-to-hot windows; say if the quiet-to-hot arc matters more than the seam.
-- [~] **Studio chrome: Awaiting Validation.** Operator-check the shared semantic material on panels, workspace
-  tabs, section headers, tools and instrument wells, plus native snap/resize/maximise and light-theme shadows.
-  Active material work is section 1A, item 1.7; rounded native corners remain open at item 1.9. Contract:
-  `Docs/Reference/Visualizer_Studio.md` (Chrome and theme). Off-screen Studio evidence cannot establish native DWM
-  composition; preview-overlay backing stays cheap and scene colours stay independent of chrome.
-- [~] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.**Drags preview once per frame and
-  re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
-  `.artifacts/evidence/studio/drag/20261106_drag/` (per move 56 ms -> 0.07 ms on Waveform). Side defect (not measured): Bubble's,
-  Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
-  frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
-  with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
-- [ ] **UI frozen after closing a Studio, recovered by itself (operator 6 Nov 21:56, Extruded Bubble, Wine Ice
-  Acrylic): owner not found yet, instrumented.**
-  - What the log shows: the close was clean. Settings was revealed `visible enabled exposed`, native `(True, True)`,
-    and the window was destroyed after 77 ms. Then the GUI thread logged nothing for 18 s while the process was
-    idle (CPU 4.7 %, GPU 0.1 %).
-  - The event-loop recorder still delivered its 15 s summary on time at 21:56:48, so the loop was running and this
-    was not a stall. Its `period_samples=0` only means the lifecycle window was open, as it is for all of Settings.
-  - Not reproducible offscreen: in an offscreen-QPA probe with a real application-modal `StudioWindowSurface` closed
-    by its Close button, Settings ends up active, unblocked and taking clicks.
-  - Read from Qt's source (6.11): hiding the modal window unblocks Settings before the native hide. While Settings
-    is still blocked, focus given to it is handed to the modal window (`handleFocusEvent`), and a blocked window is
-    natively `WS_DISABLED`. So the suspect is native activation or enable state at the reveal, which happens while
-    the modal Studio is still shown.
-  - Next field run: the `[STUDIO] after reveal` lines (`presence.RevealWatch`, one-shot, removed at the first input
-    to Settings) name which window Windows sent the clicks to, and the state at each step. Fix the owner from them.
-  - Lead fix audit (7 Nov): this is the third round. 5 Nov (da1b86fb) fixed a real deadlock with real-Studio
-    tests. 6 Nov (583401bd, "re-expose so the layered window repaints") was proven only on a bare stand-in
-    window, and the freeze returned that night. The watch now also records Settings' first Expose, UpdateRequest
-    and Paint after the reveal, and the first-input line reports them ("repaint since reveal: none" is the
-    takes-input-but-never-repaints signature). Acceptance needs the operator's field log plus a fix proven on the
-    real SettingsDialog path, never a stand-in only.
-  - Field log 7 Nov (operator's source run): the 02:00:08 close (Neon Lake) shows Settings revealed, active,
-    enabled and exposed, the first click delivered to Settings at +853 ms, and **no Expose, UpdateRequest or Paint
-    since the reveal**. The 01:56:26 close painted at +80 ms. Cause: Settings is a layered window, so the 6 Nov
-    `RedrawWindow` re-expose produces no WM_PAINT, and when nothing else dirtied Settings Qt scheduled no repaint;
-    the screen kept the pre-Studio picture while clicks changed state underneath. Remedy (7 Nov, lead):
-    `WindowPresence.repaint_revealed` asks Qt itself to repaint Settings at the reveal and again when the Studio window
-    is destroyed. The watch now stays armed until Settings' first Paint after the first input and logs `qt_exposed`.
-    **Open until a field log** shows a paint right after the reveal and `first Paint after the first input` within a
-    frame or two.
-- [~] **Camera reset on every edit and the exit double flicker fixed (operator 8 Nov), awaiting the operator's look.**
-  Camera: on a curated preset (Include current camera view on, the default) each commit re-hydrated the framed camera
-  editor and dropped the orbit committed into the draft, so the preview snapped back to the preset's view (Neon Lake,
-  Extruded Bubble, Waveform Ribbon). Exit: Settings was raised and activated over the still-shown modal Studio, Qt
-  handed its activation back to the Studio, then the Studio hid: Settings now appears beneath the Studio and comes
-  forward once it is gone (`Docs/Reference/Visualizer_Studio.md` §4 "One transition out"). Operator to check on screen:
-  orbit, then drag sliders (the view stays); close the Studio by every path (one clean change to Settings, no swap).
-- [ ] **Per-session memory growth in the Studio (side defect, 6 Nov; the clip caches ruled out 7 Nov).** Process
-  memory grows about 2-3 MB per offscreen Extruded Bubble session (private bytes and USS, 16 sessions), the same with
-  and without the controller-leak fix (`test_closed_studio_sessions_are_released_and_live_counts_stay_flat`). The
-  sessions measured load no recorded clip, so the clip caches cannot be the cause; they are bounded now anyway
-  (AC-06 landed: 60 Audio Analysis re-analyses grew 39.3 MB before, 15.5 MB after, flat at 120). Re-measured with
-  `_sessions` (24 sessions, private bytes after `gc.collect()` per session): the first 4 sessions add ~85 MB (warm-up),
-  then ~1 MB per session that flattens, but the series swings by ±70 MB run to run (main and branch alike), and
-  tracemalloc sees only ~55 kB of Python growth per session (QML chrome objects, settings normalisation copies). What
-  grows is native (Qt Quick / GL driver heaps), not Python. Next: a native heap comparison (UMDH or VMMap) across 30
-  sessions; bar: a trend, not run-to-run noise, before any fix.
-- [ ] **Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the operator's feel check.** The cause
-  was the inspector's ScrollView: a vertical wobble past the drag threshold stole the press, on every mode at the
-  first wobble. Every drag instrument in a scrolling panel now sets `preventStealing: true`
-  (`Docs/Reference/Visualizer_Studio.md` "Drags are batched"). `tests/test_studio_drag_coalescing.py` covers it,
-  with a negative control.
-- [ ] **No automatic switch to Custom (operator 6 Nov), awaiting the operator's look.** A Studio edit on a curated
-  preset is now held, with nothing saved and the preset still selected.
-  - Closing the Studio yourself, switching preset or switching mode asks *Unsaved Preset Changes* with four
-    choices: Overwrite <Preset> (not offered on a read-only file), Save As New Preset (Settings' own Save Preset
-    As, then the new preset is selected), Place In Custom, Discard. Closing the prompt stays in the Studio.
-  - Quit, Settings going away and other closes nobody can answer keep the edits in Custom.
-  - Spec: `Docs/Reference/Visualizer_Studio.md` §4 "Canonical save". Tests:
-    `tests/test_studio_preset_row_and_save_to_preset.py` (every choice, read-only, edits returned to the preset,
-    unanswerable closes, and a Custom negative control).
-  - Operator to check: the prompt's wording and buttons over a real Studio, and that Save As New Preset's file
-    dialog lands in the right folder in an installed build (ProgramData's shared preset tree).
-- [ ] **Neon Lake: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
-  removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
-  preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit
-  on release.
-- [~] **Operator look: the Studio terrain brush**(brush button or B in the viewport toolbar; Raise, Lower, Flatten,
-  Water; left-drag paints, right/middle drag pans). Evidence `.artifacts/evidence/studio/completion/20261106_completion/brush/`.
-  Audio Analysis now moves the Spline Curve, Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Voxel Sphere previews on
-  recorded clips. Sensitivity sheet: `audio_analysis/`. Spline Curve normalises its body, so it barely shows, as live.
+- [ ] Finish Waveform Studio acceptance first (section 7.1), then extract any remaining Waveform-shaped assumptions.
+- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and Neon
+  Lake (`shockwave_grid`) built, Spline Curve (`devcurve`) and Oscilloscope built below):
+  - [ ] Voxel Sphere adapter (in progress).
+  - [~] Neon Lake awaits operator acceptance (evidence
+    `.artifacts/evidence/visualizers/shockwave_grid/studio/20261107_studio/`, Presets 1 and 3): recorded engine
+    answers like Spectrum, the shared framed camera, no wallpaper; its terrain is painted with the Studio's shared
+    brush (evidence `.artifacts/evidence/studio/completion/20261106_completion/brush/`; the retired Settings editor's
+    3/4 view Sun / Moon drag is now Position X / Y / Z only).
+  - [~] Extruded Spectrum awaits operator acceptance (evidence
+    `.artifacts/evidence/visualizers/extruded_spectrum/studio/20261107_studio/`); its cast-shadow rows stay out of the
+    Studio while they are unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`).
+  - [~] Spectrum awaits operator acceptance (evidence `.artifacts/evidence/visualizers/spectrum/studio/20261105_studio/`).
+  - [~] Operator look at the migrated Settings pages, one sentence per mode: every mode's Settings body is now the
+    preset row and the Studio launcher (operator 6 Nov: migrate fully once parity+ is proven;
+    `tests/test_visualizer_studio_parity.py`).
+
+**Spline Curve Studio built (6 Nov), awaiting operator acceptance**
+
+`ui/studio/devcurve_adapter.py`, registered; Spline Curve's preset row shows Open Studio and no Edit Preset. Evidence
+`.artifacts/evidence/visualizers/devcurve/studio/20261107_studio/` (Deep Blue on Rag Doll, Neon Skyline on Human: every
+workspace with the live traces, plus the node rows).
+
+- [~] Operator to judge the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity.
+- [~] Operator to judge the Layers workspace (one panel per layer).
+- [~] Operator to judge whether the Audio Analysis group earns its place (re-analysed from PCM through the production
+  DSP, every offered control moves Spline Curve's frame; AGC Strength and Output Lift read nothing and are now hidden:
+  `Docs/Reference/Visualizer_Reference.md` -> Audio Analysis controls per mode).
+
+**Oscilloscope Studio built (6 Nov), awaiting operator acceptance**
+
+`ui/studio/oscilloscope_adapter.py`, registered. Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor
+on Human, Preset 3 Lissajous on Rag Doll: every workspace with the live traces). Recorded engine answers with the
+capture history recorded by identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` section 3).
+
+- [~] Operator to judge Level / Afterglow / Ghosts / Flare / Drive / Tone as the way to read the beam.
+- [~] Operator to judge the three workspaces.
+- [~] Operator to judge whether the Audio Analysis group earns its place (re-analysed from PCM through the production
+  DSP, every offered control moves Flare and Drive, and Bar Count, Block Size and Input Gain also move Tone: the trace
+  itself is the raw capture, but the beam's reactions are not; `Docs/Reference/Visualizer_Reference.md` -> Audio
+  Analysis controls per mode).
+
+**Edit Preset deleted (6 Nov)**
+
+Every visualizer mode now has a Studio, so the preset row's Edit Preset button, `_open_preset_json` and its pop-up are
+gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with Open Studio and the Studio's confirmed Save
+To <Preset> (`Docs/Reference/Visualizer_Studio.md` section 4). `tools/flicker_test.py` keeps its own historical mock of
+the old row.
+
+- [~] Operator look: Open Studio's place in the preset row.
+- [~] Operator look: the Save To flow.
+
+**Operator side requests (6 Nov, "important eventually"; queue after the running work)**
+
+- [ ] **Waveform travel speed:** History Speed (`flow_speed`, 0.8-2.4, Flow bucket) and Pulse Speed exist but the
+  operator did not find them, and there is no travel-speed reactivity (after the adaptive rework; same owner).
+  - [ ] Make them findable (name / workspace / tooltip).
+  - [ ] Consider a quiet -> peak History Speed under the flow rule: music pushes history faster, smoothly; knot spacing
+    and the anchored ends stay continuous.
+- [~] **Studio clips are seamless loops (6 Nov), awaiting the operator's listen and look.** The Studio plays no sound:
+  the clips are the capture stream the analysis reads, so "listen" means the music-reactive picture across the wrap.
+  Contract `Docs/Reference/Visualizer_Studio.md` section 3 "Studio clips"; evidence
+  `.artifacts/evidence/studio/clip_loop/20261106_clip_loop/`. Operator:
+  - [~] Let any Studio loop on each of the three clips and watch the wrap (end of the 13 s timeline): the preview
+    should not jump, empty, or re-start its motion.
+  - [~] Rag Doll has no steady beat, so its seam is the least certain: judge it first.
+  - [~] The clips now start and end mid-song at the loop points chosen (Human and Growing Pains on their groove), not
+    at the earlier quiet-to-hot windows; say if the quiet-to-hot arc matters more than the seam.
+
+**Studio chrome: Awaiting Validation**
+
+Active material work is section 1A, item 1.7; rounded native corners remain open at item 1.9. Contract:
+`Docs/Reference/Visualizer_Studio.md` (Chrome and theme). Off-screen Studio evidence cannot establish native DWM
+composition; preview-overlay backing stays cheap and scene colours stay independent of chrome.
+
+- [~] Operator-check the shared semantic material on panels, workspace tabs, section headers, tools and instrument
+  wells.
+- [~] Native snap/resize/maximise.
+- [~] Light-theme shadows.
+
+**Studio drag lag fixed (6 Nov), awaiting the operator's feel check**
+
+Drags preview once per frame and re-show only the dragged key (`Docs/Reference/Visualizer_Studio.md` "Drags are
+batched"); evidence `.artifacts/evidence/studio/drag/20261106_drag/` (per move 56 ms -> 0.07 ms on Waveform).
+
+- [~] Operator's feel check of drags.
+- [ ] Side defect (not measured): Bubble's, Extruded Bubble's and Sphere's evaluators still replay exactly in one
+  evaluation from the fixture start, without the frame budget and checkpoints Waveform and the engine-answer modes now
+  share (`ui/studio/exact_replay.py`). Measure with `tools/studio_drag_profile.py` and move them onto `ExactReplay`
+  where a release stalls.
+
+**UI frozen after closing a Studio, recovered by itself (operator 6 Nov 21:56, Extruded Bubble, Wine Ice Acrylic):
+owner found in source, awaiting a field log**
+
+The close was clean (Settings revealed `visible enabled exposed`, native `(True, True)`, window destroyed after 77 ms),
+then the GUI thread logged nothing for 18 s with the process idle (CPU 4.7 %, GPU 0.1 %) while the event-loop recorder
+still delivered its 15 s summary on time at 21:56:48 (not a stall; its `period_samples=0` only means the lifecycle
+window was open, as for all of Settings). Not reproducible offscreen. The cause and the 7 Nov remedy
+(`WindowPresence.repaint_revealed`, the watch's `qt_exposed`) are recorded in `Docs/Reference/Visualizer_Studio.md`
+section 4 ("Repaint at the reveal"). This is the third round of this defect.
+
+- [ ] Open until a field log shows a paint right after the reveal and `first Paint after the first input` within a
+  frame or two (the `[STUDIO] after reveal` lines, `presence.RevealWatch`, one-shot, removed at the first input to
+  Settings, name which window Windows sent the clicks to and the state at each step; "repaint since reveal: none" is
+  the takes-input-but-never-repaints signature).
+- [ ] Acceptance needs the operator's field log plus a fix proven on the real SettingsDialog path, never a stand-in
+  only. If the lines show another owner, fix that owner from them.
+
+**Camera reset on every edit and the exit double flicker fixed (operator 8 Nov), awaiting the operator's look**
+
+On a curated preset (Include current camera view on, the default) each commit used to re-hydrate the framed camera
+editor and drop the orbit committed into the draft (Neon Lake, Extruded Bubble, Waveform Ribbon); Settings now appears
+beneath the Studio and comes forward once it is gone (`Docs/Reference/Visualizer_Studio.md` section 4 "One transition
+out").
+
+- [~] Operator on screen: orbit, then drag sliders (the view stays).
+- [~] Close the Studio by every path (one clean change to Settings, no swap).
+
+**Per-session memory growth in the Studio (side defect, 6 Nov; the clip caches ruled out 7 Nov)**
+
+Process memory grows about 2-3 MB per offscreen Extruded Bubble session (private bytes and USS, 16 sessions), the same
+with and without the controller-leak fix (`test_closed_studio_sessions_are_released_and_live_counts_stay_flat`). The
+sessions measured load no recorded clip, so the clip caches cannot be the cause; they are bounded now anyway (AC-06: 60
+Audio Analysis re-analyses grew 39.3 MB before, 15.5 MB after, flat at 120). Re-measured with `_sessions` (24 sessions,
+private bytes after `gc.collect()` per session): the first 4 sessions add ~85 MB (warm-up), then ~1 MB per session that
+flattens, but the series swings by +-70 MB run to run (main and branch alike), and tracemalloc sees only ~55 kB of
+Python growth per session (QML chrome objects, settings normalisation copies). What grows is native (Qt Quick / GL
+driver heaps), not Python.
+
+- [ ] A native heap comparison (UMDH or VMMap) across 30 sessions; bar: a trend, not run-to-run noise, before any
+  fix.
+
+**Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the operator's feel check**
+
+The cause was the inspector's ScrollView stealing the press on a vertical wobble; every drag instrument in a scrolling
+panel now sets `preventStealing: true` (`Docs/Reference/Visualizer_Studio.md` "Drags are batched";
+`tests/test_studio_drag_coalescing.py`, with a negative control).
+
+- [~] Operator's feel check: a slider drag holds through a wobble on every mode.
+
+**No automatic switch to Custom (operator 6 Nov), awaiting the operator's look**
+
+A Studio edit on a curated preset is held, with nothing saved and the preset still selected; closing, switching preset
+or switching mode asks *Unsaved Preset Changes* (spec: `Docs/Reference/Visualizer_Studio.md` section 4 "Canonical
+save"; tests `tests/test_studio_preset_row_and_save_to_preset.py`).
+
+- [~] Operator: the prompt's wording and buttons over a real Studio.
+- [~] Operator: Save As New Preset's file dialog lands in the right folder in an installed build (ProgramData's shared
+  preset tree).
+
+**Neon Lake: drag the Sun/Moon in the Studio preview**
+
+- [ ] Retiring the Settings terrain section (6 Nov, Studio brush) removed its 3/4 view, where the Sun/Moon could be
+  dragged; it is now placed with Position X/Y/Z only. Give the Studio preview a direct drag for it: the same pick
+  through the production camera as the terrain brush, one undoable commit on release.
+
+**Operator look: the Studio terrain brush**
+
+Brush button or B in the viewport toolbar; Raise, Lower, Flatten, Water; left-drag paints, right/middle drag pans.
+Evidence `.artifacts/evidence/studio/completion/20261106_completion/brush/`. Audio Analysis now moves the Spline
+Curve, Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Voxel Sphere previews on recorded clips (sensitivity sheet
+`audio_analysis/`); Spline Curve normalises its body, so it barely shows, as live.
+
+- [~] Operator look at the terrain brush in the Studio.
 
 ## Operator execution and evidence rules
 

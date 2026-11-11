@@ -620,6 +620,20 @@ control.
   at rest. Its Qt filter sits on Settings' own window, never the application. An application-wide Python filter is
   handed every Qt Quick item an event visits, and wrapping items PySide had not wrapped yet deleted a live Studio
   item in a later test (7 Nov).
+- **Repaint at the reveal (7 Nov, moved from the plan).** The 6 Nov 21:56 freeze was the third round: 5 Nov (`da1b86fb`)
+  fixed a real deadlock with real-Studio tests; 6 Nov (`583401bd`, "re-expose so the layered window repaints") was proven
+  only on a bare stand-in window and the freeze returned that night. The 7 Nov field log (operator's source run) of the
+  02:00:08 close (Neon Lake) showed Settings revealed, active, enabled and exposed, the first click delivered to Settings
+  at +853 ms, and **no Expose, UpdateRequest or Paint since the reveal** (the 01:56:26 close painted at +80 ms). Cause:
+  Settings is a layered window, so the `RedrawWindow` re-expose produces no `WM_PAINT`, and when nothing else dirtied
+  Settings Qt scheduled no repaint: the screen kept the pre-Studio picture while clicks changed state underneath.
+  Remedy: `WindowPresence.repaint_revealed` asks Qt itself to repaint Settings at the reveal and again when the Studio
+  window is destroyed; the watch records Settings' first Expose, UpdateRequest and Paint after the reveal, stays armed
+  until the first Paint after the first input and logs `qt_exposed` ("repaint since reveal: none" is the
+  takes-input-but-never-repaints signature). Acceptance needs a field log and a fix proven on the real SettingsDialog
+  path, never a stand-in only. Also read from Qt 6.11's source: hiding the modal window unblocks Settings before the
+  native hide, and while Settings is still blocked, focus given to it is handed to the modal window
+  (`handleFocusEvent`) and the blocked window is natively `WS_DISABLED`.
 - **Never hide the window from Python.** PySide holds the GIL through `QWindow.hide()`, and Qt's threaded render
   loop waits inside it for the render thread, which runs the viewport's Python (render-node release,
   `sceneGraphInvalidated`) when the non-persistent scene graph is invalidated: calling it from Python deadlocked the
