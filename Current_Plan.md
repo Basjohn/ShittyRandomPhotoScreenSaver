@@ -253,7 +253,7 @@ after parity, never leaving a second permanent renderer:
   node inside a Vulkan window.
 - [ ] P4 Mixed-resolution soft layers in the same core; thin emissive lines, dots, rims, particles and UI stay
   full resolution; no per-mode extra renderer or backend.
-- [ ] Expanded Visualizer M6 (4K acceptance) waits for P2's operator gates and the first P3 ports (plan 01).
+- [ ] Expanded Visualizer M6 (4K acceptance) waits for the first P3 ports (plan 01); P2 holds nothing.
 
 ### Item 9. SMP & Full Display
 
