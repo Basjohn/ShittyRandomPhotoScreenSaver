@@ -56,7 +56,8 @@ class _SurfaceProbe:
         assert gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) == gl.GL_FRAMEBUFFER_COMPLETE
 
     def draw(self, events=(), *, level=0.0, movement=1.0, detail=0.0, water_detail=0.0, time=0.0,
-             bank_band=0.04, uv_rect=(0.0, 0.0, 1.0, 1.0)):
+             bank_band=0.04, uv_rect=(0.0, 0.0, 1.0, 1.0), bands=None, amounts=(1.0, 1.0, 0.0), phase=0.0,
+             shaper=None, forms=(0.0, 0.0, 0.0), drives=(0.0, 0.0), eye=(0.0, 0.0, 100.0)):
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.fbo)
         gl.glViewport(0, 0, self.SIZE, self.SIZE)
         gl.glDisable(gl.GL_DEPTH_TEST)
@@ -78,13 +79,19 @@ class _SurfaceProbe:
         # Terrain Reaction: ``movement`` is its strength (0 = off), ``level`` every lane's drive.
         from core.settings.default_contract import require_canonical_default
         from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES, bake_terrain_shaper
-        tables = bake_terrain_shaper(require_canonical_default("widgets.spotify_visualizer.shockwave_grid_terrain_shaper"))
-        gl.glUniform4f(uniform("uReaction"), movement, 1.0, 1.0, 0.0)
-        gl.glUniform1fv(uniform("uReactionBands"), 5, np.asarray([level] * 5, dtype=np.float32))
-        gl.glUniform1f(uniform("uReactionPhase"), 0.0)
+        tables = bake_terrain_shaper(
+            shaper or require_canonical_default("widgets.spotify_visualizer.shockwave_grid_terrain_shaper"))
+        gl.glUniform4f(uniform("uReaction"), movement, *amounts)
+        gl.glUniform1fv(uniform("uReactionBands"), 5,
+                        np.asarray([level] * 5 if bands is None else bands, dtype=np.float32))
+        gl.glUniform1f(uniform("uReactionPhase"), phase)
         gl.glUniform1f(uniform("uReactionMaximum"), max(self.terrain["heights"]))
-        for name, key in (("uReactionLane", "lane"), ("uReactionWeight", "weight"), ("uReactionBias", "bias")):
-            gl.glUniform1fv(uniform(name), REACTION_SAMPLES, np.asarray(tables[key], dtype=np.float32))
+        gl.glUniform1fv(uniform("uReactionLanes"), 5 * REACTION_SAMPLES, np.asarray(tables["lanes"], dtype=np.float32))
+        gl.glUniform1fv(uniform("uReactionBias"), REACTION_SAMPLES, np.asarray(tables["bias"], dtype=np.float32))
+        # Growth (amount, shape), Indents (amount) scaled by the strength as the renderer binds them, and their drives.
+        gl.glUniform4f(uniform("uReactionForms"), movement * forms[0], forms[1], movement * forms[2], 0.0)
+        gl.glUniform2f(uniform("uReactionDrives"), *drives)
+        gl.glUniform3f(uniform("uEye"), *eye)                  # far from the probed land unless a test places it
         gl.glUniform1f(uniform("uTime"), time)
         gl.glUniform1f(uniform("uWaterDetail"), water_detail)
         gl.glUniform1f(uniform("uWaterBankBand"), bank_band)

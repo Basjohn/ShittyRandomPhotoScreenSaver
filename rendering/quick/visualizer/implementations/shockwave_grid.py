@@ -43,8 +43,8 @@ from .spectrum import prepare_spectrum_shader_levels
 
 _EVENT_BINDING, _HEIGHT_UNIT, _OVERLAY_UNIT = 3, 4, 5
 _VIEW_UNIFORMS = ("uMatrix", "uField", "uEye", "uRight", "uUp", "uBack", "uTan")
-_REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactionMaximum", "uReactionLane",
-                      "uReactionWeight", "uReactionBias")
+_REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactionMaximum", "uReactionLanes",
+                      "uReactionBias", "uReactionForms", "uReactionDrives")
 _CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
                      "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uStarGlowColor",
                      "uCloudColor","uHorizonColor","uClouds","uCloudDrift","uNebula","uNebulaTurn","uNebulaColorA","uNebulaColorB")
@@ -243,15 +243,22 @@ class QuickShockwaveGridRenderer:
 
     @staticmethod
     def _bind_reaction(uniforms, parameters, mode_state, terrain) -> None:
-        """Terrain Reaction for a program sampling the land height: amounts, lane drives, phase and
-        the shaper's baked elevation tables (strength 0 turns the shader's reaction off)."""
-        gl.glUniform4f(uniforms["uReaction"], *_reaction_vector(parameters))
+        """Terrain Reaction for a program sampling the land height: amounts, lane drives, phase, the
+        shaper's baked elevation tables, and Growth / Indents with their drives (strength 0 turns the
+        shader's reaction off; an amount of 0 its landforms)."""
+        reaction = _reaction_vector(parameters)
+        gl.glUniform4f(uniforms["uReaction"], *reaction)
         gl.glUniform1fv(uniforms["uReactionBands"], len(mode_state.terrain_bands), mode_state.terrain_bands)
         gl.glUniform1f(uniforms["uReactionPhase"], float(mode_state.terrain_phase))
         gl.glUniform1f(uniforms["uReactionMaximum"], float(terrain["maximum"]))
         tables = parameter(parameters, "shockwave_grid_terrain_shaper")
-        for name, key in (("uReactionLane", "lane"), ("uReactionWeight", "weight"), ("uReactionBias", "bias")):
-            gl.glUniform1fv(uniforms[name], REACTION_SAMPLES, tables[key])
+        gl.glUniform1fv(uniforms["uReactionLanes"], 5 * REACTION_SAMPLES, tables["lanes"])
+        gl.glUniform1fv(uniforms["uReactionBias"], REACTION_SAMPLES, tables["bias"])
+        gl.glUniform4f(uniforms["uReactionForms"],
+                       reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_growth")),
+                       float(parameter(parameters, "shockwave_grid_terrain_growth_shape")),
+                       reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_indents")), 0.0)
+        gl.glUniform2f(uniforms["uReactionDrives"], *mode_state.terrain_forms)
 
     @staticmethod
     def _bind_celestial(uniforms,parameters,half_width,animation_time,view):

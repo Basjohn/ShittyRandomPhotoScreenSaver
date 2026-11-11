@@ -163,6 +163,8 @@ def floor_reaction(values: Mapping[str, object]) -> float:
     def get(name):
         return values['shockwave_grid_' + name]
     strength = float(get('terrain_reaction_strength')) if bool(get('terrain_reaction_enabled')) else 0.0
+    # Growth is not in the floor: its mounds and spires stand back from the eye instead (``GROWTH_EYE_CLEAR``), so
+    # turning it on never lifts an authored low view.
     return strength * sum(max(0.0, float(get('terrain_' + part))) for part in ('peaks', 'pulses', 'swell'))
 
 

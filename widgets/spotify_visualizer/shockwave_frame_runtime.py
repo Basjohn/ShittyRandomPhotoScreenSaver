@@ -33,6 +33,7 @@ from rendering.gl_programs.shockwave_grid_program import (
 )
 from widgets.spotify_visualizer.frame_runtime_lifecycle import retirement_fenced
 from widgets.spotify_visualizer.spectrum_frame_runtime import SpectrumFrameRuntime
+from widgets.spotify_visualizer.transient_bus import audible, musical_emphasis
 
 # One admitted shockwave: (birth time, x as a share of the half width, z, strength).
 _Event = tuple[float, float, float, float]
@@ -48,12 +49,41 @@ REACTION_NOVELTY_GAIN = 2.4
 REACTION_MOTION = (0.15, 1.35)   # phase units per second at Motion Speed 0 and 1, at full drive
 
 
+# Growth and Indents (1B.6) read the music on the fixed real-music scale only: the passage's intensity
+# (``PassageIntensity``: loudness against ``MUSICAL_USUAL_LOUDNESS``, never against the track) and each onset's
+# emphasis (``musical_emphasis``). Nothing here remembers a level, compares against a running one or reads
+# ``musical_weight``'s presence ratio: the same music draws the same landforms wherever in a song it falls.
+FORMS_PASSAGE = (0.28, 0.98)     # passage intensity: nothing stands below the first, everything by the second
+FORMS_CEILING = 0.92             # the level's ceiling: headroom for a hit on top of the loudest passage
+FORMS_HIT_ATTACK = 0.05          # seconds a hit takes to arrive (it ramps, never pops)
+FORMS_HIT_DECAY = 0.30           # seconds a hit takes to let go
+FORMS_HIT_FULL = 2.0 ** 1.5      # ``musical_emphasis`` of the loudest onset
+FORMS_HIT_CURVE = 0.7
+# How much of each drive is the passage alone and how much a hit adds on top (growth, indents): Indents answer
+# hits more, Growth holds more of the passage.
+FORMS_HIT_SHARE = (0.38, 0.55)
+
+
+def forms_level(intensity: float) -> float:
+    """The share of Growth / Indents a passage holds up, 0..``FORMS_CEILING``: an S-curve of its fixed-scale
+    intensity, so quiet passages hold none and the loudest do not pin."""
+    low, high = FORMS_PASSAGE
+    t = max(0.0, min(1.0, (float(intensity) - low) / (high - low)))
+    return FORMS_CEILING * t * t * (3.0 - 2.0 * t)
+
+
+def forms_hit(loudness: float) -> float:
+    """How hard an onset at ``loudness`` hits the landforms, 0..1 on the fixed scale (audible and emphasis only)."""
+    return audible(loudness) * (musical_emphasis(loudness) / FORMS_HIT_FULL) ** FORMS_HIT_CURVE
+
+
 @dataclass(frozen=True, slots=True)
 class TerrainReactionResolved:
     bands: tuple[float, ...]
     phase: float
     changed: bool
     pending: bool
+    forms: tuple[float, float] = (0.0, 0.0)
 
 
 def reaction_lane_targets(energies, recent, musical_gain: float) -> tuple[float, ...]:
@@ -105,6 +135,14 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         self._terrain_last_ts = None
         self._terrain_identity = None
         self._terrain_pending = False
+        # Growth / Indents: the eased passage level, the newest hit's decaying target and its eased value, and the
+        # hardest onset taken since the last step (collected only while the landforms are on).
+        self._forms_on = False
+        self._forms_level = 0.0
+        self._forms_hit_target = 0.0
+        self._forms_hit = 0.0
+        self._forms_onset = 0.0
+        self._forms = (0.0, 0.0)
 
     @property
     def terrain_reaction_pending(self) -> bool:
@@ -115,8 +153,11 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
     def advance_terrain_reaction(self, spectrum, *, now_ts: float, playing: bool,
                                  identity: tuple[int, int, int], source_identity: tuple[int, int],
                                  attack: float, release: float, motion_speed: float, enabled: bool = True,
-                                 musical_gain: float = 1.0) -> TerrainReactionResolved | None:
-        """Five lane drives eased on the capture clock, and the landforms' wander phase.
+                                 musical_gain: float = 1.0, forms: bool = False,
+                                 passage_intensity: float = 0.0) -> TerrainReactionResolved | None:
+        """Five lane drives eased on the capture clock, the landforms' wander phase, and with ``forms`` the
+        Growth and Indents drives (the passage's fixed-scale intensity eased by Rise / Settle, each onset's hit
+        on top: ``forms_level`` / ``forms_hit``).
 
         The phase advances only while the music drives the land, so silence holds the land still.
         Disabled, nothing is kept or computed; re-enabling starts from rest.
@@ -126,9 +167,9 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         now = float(now_ts)
         if not math.isfinite(now):
             raise ValueError("terrain reaction capture time must be finite")
-        previous = (self._terrain_bands, self._terrain_phase)
+        previous = (self._terrain_bands, self._terrain_phase, self._forms)
         if not enabled:
-            if self._terrain_last_ts is not None:
+            if self._terrain_last_ts is not None or self._forms_on:
                 self._reset_terrain_reaction()
             return TerrainReactionResolved(self._terrain_bands, self._terrain_phase, False, False)
         source_ready = (source_identity == identity[1:] and all(value >= 0 for value in identity))
@@ -140,7 +181,7 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
             self._reset_terrain_reaction()
             self._terrain_identity = token
             self._terrain_last_ts = now
-            changed = previous != (self._terrain_bands, self._terrain_phase)
+            changed = previous != (self._terrain_bands, self._terrain_phase, self._forms)
             return TerrainReactionResolved(self._terrain_bands, self._terrain_phase, changed, False)
         musical_gain = float(musical_gain)
         if not math.isfinite(musical_gain) or not 0.0 <= musical_gain <= 1.0:
@@ -170,9 +211,46 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         self._terrain_phase = math.fmod(self._terrain_phase + dt * rate, 1000.0 * math.pi)
         self._terrain_bands = tuple(bands)
         self._terrain_last_ts = now
-        self._terrain_pending = rate > 0.0 or any(abs(a - b) >= 0.0001 for a, b in zip(bands, targets))
-        changed = previous != (self._terrain_bands, self._terrain_phase)
-        return TerrainReactionResolved(self._terrain_bands, self._terrain_phase, changed, self._terrain_pending)
+        forms_pending = self._advance_forms(dt, attack, release, playing, bool(forms), float(passage_intensity))
+        self._terrain_pending = (rate > 0.0 or forms_pending
+                                 or any(abs(a - b) >= 0.0001 for a, b in zip(bands, targets)))
+        changed = previous != (self._terrain_bands, self._terrain_phase, self._forms)
+        return TerrainReactionResolved(self._terrain_bands, self._terrain_phase, changed, self._terrain_pending,
+                                       self._forms)
+
+    def _advance_forms(self, dt: float, attack: float, release: float, playing: bool, enabled: bool,
+                       intensity: float) -> bool:
+        """Ease the Growth / Indents drives on the capture clock; True while they are still moving. Off, the state
+        is at rest and no onset is collected."""
+        if not enabled:
+            if self._forms_on:
+                self._forms_on = False
+                self._forms_level = self._forms_hit_target = self._forms_hit = self._forms_onset = 0.0
+                self._forms = (0.0, 0.0)
+            return False
+        if not math.isfinite(intensity):
+            raise ValueError("terrain reaction passage intensity must be finite")
+        self._forms_on = True
+        onset, self._forms_onset = self._forms_onset, 0.0
+        target = forms_level(intensity) if playing else 0.0
+        if dt > 0.0:
+            tau = attack if target > self._forms_level else release
+            self._forms_level = target + (self._forms_level - target) * math.exp(-dt / tau)
+            if abs(self._forms_level - target) < 0.0001:
+                self._forms_level = target
+            # The hit: its target falls away by itself and an onset raises it; the value climbs to it over the
+            # attack and follows it down, so a hit ramps in and lets go smoothly.
+            self._forms_hit_target = max(self._forms_hit_target * math.exp(-dt / FORMS_HIT_DECAY),
+                                         onset if playing else 0.0)
+            if self._forms_hit_target < 0.0001:
+                self._forms_hit_target = 0.0
+            if self._forms_hit < self._forms_hit_target:
+                self._forms_hit += (self._forms_hit_target - self._forms_hit) * (1.0 - math.exp(-dt / FORMS_HIT_ATTACK))
+            else:
+                self._forms_hit = self._forms_hit_target
+        level, hit = self._forms_level, self._forms_hit
+        self._forms = tuple(max(0.0, min(1.0, level * (1.0 - share + share * hit))) for share in FORMS_HIT_SHARE)
+        return level != target or self._forms_hit_target > 0.0 or hit > 0.0
 
     @property
     def onset_serial(self) -> int:
@@ -195,6 +273,9 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
             if onset.serial <= self._onset_serial:
                 continue
             self._onset_serial = onset.serial
+            if self._forms_on and playing:
+                # Growth / Indents take every onset (a wave's spacing gap is the water's, not theirs).
+                self._forms_onset = max(self._forms_onset, forms_hit(onset.loudness))
             birth = min(now, float(onset.timestamp))
             if not playing or birth - self._last_event_ts < gap:
                 continue

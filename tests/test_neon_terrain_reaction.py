@@ -180,12 +180,34 @@ def test_baked_tables_follow_the_shaper_along_the_land_height():
         "notches": [[0.0, "Bass"], [0.2, "Low-Mid"], [0.4, "Vocal"], [0.6, "Hi-Mid"], [0.8, "Treble"]],
         "lanes": {"Bass": 1.0, "Low-Mid": 0.5, "Vocal": 0.5, "Hi-Mid": 0.5, "Treble": 0.25}}, DEFAULT_SHAPER)
     tables = bake_terrain_shaper(shaper)
-    assert all(len(tables[key]) == REACTION_SAMPLES for key in ("lane", "weight", "bias"))
-    assert tables["lane"][0] == 0.0 and tables["lane"][-1] == float(LANES - 1)
-    assert list(tables["lane"]) == sorted(tables["lane"]), "lanes run from shoreline to summit"
+    assert len(tables["bias"]) == REACTION_SAMPLES and len(tables["lanes"]) == LANES * REACTION_SAMPLES
+    lanes = [tables["lanes"][lane * REACTION_SAMPLES:(lane + 1) * REACTION_SAMPLES] for lane in range(LANES)]
     assert list(tables["bias"]) == sorted(tables["bias"]), "the bias is the curve itself"
-    assert tables["weight"][0] == pytest.approx(tables["bias"][0] * 1.0)
-    assert tables["weight"][-1] == pytest.approx(tables["bias"][-1] * 0.25)
+    # Lanes run from shoreline to summit: each owns its own stretch of the height outright.
+    assert lanes[0][0] == pytest.approx(tables["bias"][0] * 1.0) and not any(lane[0] for lane in lanes[1:])
+    assert lanes[-1][-1] == pytest.approx(tables["bias"][-1] * 0.25) and not any(lane[-1] for lane in lanes[:-1])
+    middle = REACTION_SAMPLES // 2                                   # height ~0.5: the Vocal lane's stretch
+    assert lanes[2][middle] == pytest.approx(tables["bias"][middle] * 0.5, rel=0.02)
+    peak = [max(range(REACTION_SAMPLES), key=lane.__getitem__) for lane in lanes[1:4]]
+    assert peak == sorted(peak)
+
+
+def test_lanes_cross_fade_along_the_height_instead_of_switching_at_a_contour():
+    """1B.6: a lane used to start at its boundary's contour, where two different patterns met and loud music tore
+    the land. Every height now belongs to its lanes by shares that sum to one and change gradually."""
+    from rendering.gl_programs.neon_terrain_reaction import REACTION_LANE_BLEND, lane_membership
+    notches = [[0.0, "Bass"], [0.2, "Low-Mid"], [0.4, "Vocal"], [0.6, "Hi-Mid"], [0.8, "Treble"]]
+    heights = [index / 400.0 for index in range(401)]
+    shares = [lane_membership(notches, height) for height in heights]
+    assert all(sum(share) == pytest.approx(1.0) and min(share) >= 0.0 for share in shares)
+    assert lane_membership(notches, 0.1)[0] == 1.0 and lane_membership(notches, 0.5)[2] == 1.0   # a lane's own middle
+    assert lane_membership(notches, 0.2)[:2] == pytest.approx((0.5, 0.5))                        # its boundary
+    step = max(abs(a[lane] - b[lane]) for a, b in zip(shares, shares[1:]) for lane in range(LANES))
+    assert step < 0.03, "a share never jumps along the slope"
+    assert REACTION_LANE_BLEND >= 0.05
+    # Lanes narrower than the blend still share out everything (two boundaries nearly together).
+    crowded = [[0.0, "Bass"], [0.5, "Low-Mid"], [0.51, "Vocal"], [0.52, "Hi-Mid"], [0.9, "Treble"]]
+    assert all(sum(lane_membership(crowded, height)) == pytest.approx(1.0) for height in heights)
 
 
 def _capture_rig(parameters, engine_overrides=None):
@@ -224,6 +246,8 @@ def _reaction_parameters(**changes):
             "shockwave_grid_terrain_peaks": 0.7, "shockwave_grid_terrain_pulses": 0.8,
             "shockwave_grid_terrain_swell": 0.0, "shockwave_grid_terrain_motion_speed": 0.5,
             "shockwave_grid_terrain_growth_attack": 0.35, "shockwave_grid_terrain_growth_release": 1.2,
+            "shockwave_grid_terrain_growth": 0.0, "shockwave_grid_terrain_growth_shape": 0.5,
+            "shockwave_grid_terrain_indents": 0.0,
             "shockwave_grid_sky_enabled": False, **changes}
 
 

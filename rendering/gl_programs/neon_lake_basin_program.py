@@ -370,8 +370,15 @@ float basinLandHeight(vec2 uv,float base,float curved) {
     float height=curved*smoothstep(0.0,0.015,base)*uLand.x*(1.0+0.16*uLand.y*basinDetail(p));
     // Terrain Reaction reshapes the land by the music: zero at the shore, never below a floor
     // share of its authored height, faded with the distant continuation's detail.
-    float land=smoothstep(0.0,0.08,base)*basinDetailFade(uv);
-    height=max(height+uLand.x*basinReaction(uv,base,p,land),REACTION_FLOOR*height);
+    if (uReaction.x>0.0) {
+        float land=smoothstep(0.0,0.08,base)*basinDetailFade(uv);
+        // Its patterns and Growth lift (or lower) the land; Indents press it toward its floor share.
+        float room=(1.0-REACTION_FLOOR)*height;
+        float change=uLand.x*(basinReaction(uv,curved,p,land)+land*basinGrowth(p))-room*land*basinIndent(p);
+        // Downward, the change eases onto the floor share instead of stopping at it: a hard stop creased the
+        // land along the line where it was reached.
+        height+=change<0.0 ? -room*tanh(-change/max(room,1e-6)) : change;
+    }
     // A shallow convex distant world produces a real terrain/sky tangency,
     // rather than an exposed remote mesh edge or an infinitely flat plane.
     // The authored basin and its immediate continuation are untouched.
