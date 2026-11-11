@@ -695,6 +695,20 @@ imported, no worker runs). The rises entered between 7 Nov and this branch's bas
 to a commit here: that needs a baseline at the base, which was not taken. Evidence:
 `.artifacts/evidence/native_core/20261111_overhead_baseline/`.
 
+### H3: the Linux worker-default source flip
+
+The operator waived this finding's Linux proving prerequisite (8 Nov: no Linux machine), so H3's fix is the source
+flip, not a Linux run. `experiment_flags.visualizer_engine_worker_platform_default()` answers the worker on every
+platform (it returned `IS_WINDOWS`); `--viz-in-process` / `--viz-engine-worker` choose as before, and the in-process
+fallback on a failed wake pipe, start or configure (logged at WARNING with its reason) is the safety net. The
+selection is pinned by `tests/test_platform_selection.py` with the platform injected both ways (the non-Windows case
+fails on the pre-flip function) and by `tests/test_linux_runtime_branches.py` on Linux;
+`tests/test_visualizer_owner_production_path.py` is no longer gated to Windows. The tests that send a wake pipe
+through a real supervisor use `wake_channel.open_wake_channel` (a raw pipe end is refused on POSIX).
+**Linux runtime is UNVERIFIED:** no FIFO, forkserver spawn, Pulse capture in the worker or Linux worker has run;
+on Linux the wake listener ends only when the worker's writer closes. Every proof here is source correctness and
+Windows-run unit tests (`Linux_Plan.md`, Phase 4).
+
 ## P3 readiness
 
 What ABI 2 already gives the native core:
@@ -781,7 +795,7 @@ Traps to decide before P3's first slice:
 - A real audio device in the worker under load. The live checks always refuse the device. Not checked: the
   PyAudioWPatch GIL hold in `Pa_Initialize`/`Pa_Terminate` (A11-L6), and the 5.3 physical checks.
 - Linux in any form (H3): forkserver, Pulse on a sink change, the POSIX wake, the resource tracker with an attached
-  `SharedMemory`.
+  `SharedMemory`. The worker is the Linux default at source level since the H3 flip; none of this has run.
 - Mixed DPR. Frozen check 2 had two displays, but their DPRs are not recorded. Not checked whether any mode's payload
   grows with the extent (Expanded or full display at 4K); the probes used the default card.
 - Whether payloads outside Extruded Bubble can exceed the slot through non-Slider/Range controls (Choices,

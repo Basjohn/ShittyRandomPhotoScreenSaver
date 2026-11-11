@@ -1744,7 +1744,7 @@ class ProcessSupervisor:
         if worker_type == WorkerType.VISUALIZER:
             # The engine worker has no Settings switch of its own: the Visualizer's own enable decides whether an
             # owner exists, and its process path (``experiment_flags.visualizer_engine_worker_admitted``: the worker
-            # by default on Windows) whether that owner starts this worker (native core P2b, work order 5).
+            # by default) whether that owner starts this worker (native core P2b, work order 5).
             return True
 
         key = (

@@ -70,12 +70,32 @@ data locations, product builds (including from Windows) and the Linux test route
 ### Phase 4: Linux backends
 
 - [x] MPRIS media controller; parec monitor capture; pactl system/app volume.
-- [ ] **Visualizer engine worker (native core P2) is the default on Linux too.** Operator, 8 Nov: there is no Linux
-  machine to prove it on, so assume it works with basic support; no Linux proving step. It is done with the
-  Windows worker-default change (Linux remains in process in that slice: flip
-  `visualizer_engine_worker_platform_default` to every platform and update the platform tests). Order and context:
-  `Current_Plan.md` §1, item 8b, remaining P2 audit order. Untested on Linux: worker spawn under forkserver, the POSIX wake pipe and
-  mapping lifetime, `parec` capture in the worker; the in-process path stays the automatic fallback.
+- [~] **Visualizer engine worker (native core P2) is the default on Linux too: source landed 12 Nov (H3), Linux
+  runtime UNVERIFIED.** Operator, 8 Nov: there is no Linux machine to prove it on, so assume it works with basic
+  support; no Linux proving step. `visualizer_engine_worker_platform_default` now answers the worker on every
+  platform; `--viz-in-process` chooses the in-process path. Order and context: `Current_Plan.md` §1, item 8b.
+  - **What the source does on Linux.** The session's wake pipe is the POSIX wake pipe (a named pipe the session
+    opens): the main process makes a FIFO in a private directory, `VIS_CONFIGURE` carries its name, and the worker
+    opens its own writer end (`core/visualizer_engine/wake_channel.py`). Nothing crosses through the
+    multiprocessing resource sharer, so a worker that dies before decoding its configure leaves no descriptor
+    behind. The frame mapping is a `SharedMemory` the main process creates and unlinks and the worker attaches by
+    name; capture in the worker goes through the ordinary Linux backend (`parec`).
+  - **What has never run.** No FIFO, no forkserver spawn of this worker, no Pulse capture inside it and no Linux
+    worker at all: every worker test and gate has run on Windows only. The POSIX branch of the wake pipe is covered
+    by unit tests of its ordering and rollback with the system calls injected, which is all Windows can run. The
+    attached mapping's resource-tracker behaviour and the non-blocking framed wake write are likewise unexercised.
+  - **Known Linux behaviour to expect, unconfirmed.** The wake listener thread blocks in a read; closing its
+    descriptor does not wake it on Linux, so it ends only when the worker's writer end closes (the session's stop
+    or the worker's exit). It is a daemon thread holding one descriptor until then.
+  - **The safety net.** A wake pipe that cannot be made, a worker that does not start, or a configure the worker
+    refuses or never answers (six seconds) leaves that activation in process, logged at WARNING/ERROR with its
+    reason; a session that fails later is replaced once and then the run stays in process. So a Linux worker path
+    that does not work should show as a logged fallback and a working Visualizer, not as a missing one. That
+    outcome is itself unverified.
+  - **First evidence will come from** the worker tests when the suite runs on Linux
+    (`tests/test_visualizer_owner_production_path.py` is no longer gated to Windows; the owner, link and session
+    tests never were) and from an installed run's log: look for `[ENGINE_WORKER]` lines and any "runs in process"
+    reason. Record the result here before this box is ticked.
 
 ### Phase 5: build and desktop integration
 

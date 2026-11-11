@@ -51,13 +51,14 @@ Hard: one accelerated runtime surface per selected display; standalone `QQuickWi
 Quick scene graph; Settings may remain QWidget; business/runtime ownership remains Python; transition+visualizer GL
 remains inline in the one Quick scene; no permanent old/software presenter fallback.
 
-Visualizer process model (native core P2): on Windows the Visualizer's audio capture, DSP and
+Visualizer process model (native core P2): the Visualizer's audio capture, DSP and
 logical tick run in one engine worker process (`WorkerType.VISUALIZER`, leased by the display's Visualizer owner and
 retired with it); the main process sends control edges and presents the worker's frames from shared memory, so the
 tick no longer holds the main process's GIL. In process is the bounded fallback when the worker cannot run or keeps
 failing, and the `--viz-in-process` diagnostic control. Automatic fallbacks log their reason at WARNING/ERROR;
-capacity-contract violations remain terminal. Linux stays in process for this slice; its later default change is
-ordered in `Current_Plan.md` and `Linux_Plan.md` without a Linux proving prerequisite.
+capacity-contract violations remain terminal. The worker is the default on every platform; it is measured and
+accepted on Windows, and on Linux it is a source-level default that has never run (`Linux_Plan.md`, Phase 4: the
+operator waived a Linux proving step, and the in-process fallback is the safety net there).
 A session whose cadence stops stepping while its process still answers heartbeats fails closed and is recovered like
 any failed session. The worker path draws the in-process path's pixels (gate 2, recorded 11 Nov 2026 at non-default
 settings for every mode). The session's wake pipe crosses to the worker as a pipe handle on Windows and as a name on
