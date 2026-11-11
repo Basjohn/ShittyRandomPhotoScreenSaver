@@ -119,19 +119,33 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 - [ ] The AC-13 remainder (`Docs/Reference/Architecture_Checklist.md`).
 - [ ] AC-14, AC-15 and AC-16 (same checklist).
 
-### Item 7. One measurement session of at most 10 minutes under game60, only after the operator's yes
+### Item 7. Load session of 11 Nov (run; 7.9 minutes under game60, four runs, no reruns)
 
-Approved by the operator on 11 Nov ("The machine will not get quieter"). The lead runs it at the first gap in
-which no agent is running tests (a measured run beside agents' GL tests is void by its own conditions), with a
-fixed run list, no reruns, the conditions recorded. Baselines and evidence paths: section 3, "Lead, the quiet
-machine".
+Run by the lead on 11 Nov evening with no agent running (before the start: CPU about 12 %, GPU 4 %; during: other
+processes 73-78 % CPU, GPU 61-66 %, clock 2760 MHz in every run). Invisible saver, recorded music
+(`anything_mixed2`). Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/live_check/20261111_load_r1_*`,
+`..._r2_*`, `.artifacts/evidence/visualizers/spectrum/live_check/20261111_load_r3_*`, `..._r4_*`; receipts
+`.artifacts/evidence/performance/load_session/20261111_load_session/driver_receipts.json`; figures in
+`Docs/Reference/Benchmarks.md` ("Load session, 11 Nov").
 
-- [ ] First reveal on the engine worker against in process under load (closes the Watchlist's latency entry).
-- [ ] A second clean Waveform tick-cut round.
-- [ ] A clean Waveform P4 GC run, and the long run with Settings round trips.
-- [ ] A Settings round-trip run.
-- [ ] The alternated Glass/Normal card-materials pair.
-- [ ] The two-monitor canonical game60 outlier (48.6 fps, never repeated).
+Results: Waveform Preset 4 on the engine worker 59.4 fps, render 10.4 / 12.7 ms (median / p90), 1.4 % late, 3.3
+hitches a minute; in process 40.6 fps, 14.0 / 17.4 ms, 37.7 % late, 7.2 hitches a minute. First two seconds
+after startup: worker 86 frames, 3.5 % late; in process 69 frames, 75 % late (the worker reveals sooner and
+cleaner under load, which closes the Watchlist's latency question). One Settings round trip on the worker: 7.8 s
+in all (stop 0.46 s), both barriers complete, thawed and re-frozen, no failure, private memory 1271 to 1171 MB.
+Card materials, alternated second pair (Normal then Glass, Spectrum Preset 1, transition-heavy): 89.5 against
+89.6 fps, 0.2 % late and 0.73 hitches a minute in both, publish to swap 10.8 against 11.6 ms, saver tree 106.1
+against 105.7 % of a core: no measurable cost for Glass (the first pair's +16 % of a core was not repeated).
+
+- [ ] Waveform Preset 4 is still over the 8 ms render budget under game60 on the worker (10.4 ms median,
+  `reflection` 1.7 and `ribbons` 1.9 ms the largest stages): a P3 input (item 8b), not a P2 fault.
+- [ ] Side defect, `tools/visualizer_live_check.py`: on the worker run with a Settings round trip the age chain's
+  medians are nonsense (`publish_to_swap_ms` and `consumed_age_at_sync_ms` medians about -48,500 ms, p90 sane):
+  records from before and after the round trip (a new worker generation, a different clock origin) are mixed.
+  Report ages per generation, or only for the steady window before the first round trip as the help text says.
+- [ ] Not run inside the ten minutes: a second Waveform tick-cut A/B against the pre-cut tree (superseded for
+  the default path, since the tick no longer runs on main's interpreter); the 600 s GC run with a frame trace;
+  the two-monitor canonical outlier (48.6 fps, never repeated). The last two are Watchlist entries now.
 
 ### Item 8. §8 Accepted-mode follow-ups
 
@@ -721,8 +735,6 @@ significant work". Opus and Sonnet agents resume as the lead sees fit.
 - [ ] Small boxes batch 4 (`worktree-agent-a4e50f79894c549ec`; WIP edf2100a: six sibling test files moved onto
   the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
   a Medium slot is free after 1C.1 and 1C.4.
-- [ ] Load session: run 11 Nov evening at the gap (no agent running; CPU about 12 %, GPU 4 % before the
-  start); results and what the ten minutes did not cover go to item 7 and the Watchlist.
 
 ### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; when a relevant agent is free)
 
@@ -1131,9 +1143,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   - [ ] GC freeze steady check (`4_gc_freeze_steady/`): a clean Waveform P4 run (the run was tainted: no steady gen2,
     3 gen1 of 9-11 ms) and the long run with Settings round trips. Bubble P1, 600 s game60 was clean: no steady
     gen1/gen2, heap 180,685 frozen at reveal and 87 left.
-  - [ ] Card materials (`5_card_materials/`): the alternated second Glass/Normal pair. First pair: Glass costs about
-    +16 % of a core on the render thread (53.7 against 37.5), publish->swap +3 ms, hitches 2.46 against 2.05 a
-    minute, at the same late %.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 
@@ -1351,8 +1360,6 @@ Live checklist: every box is an observation or a fix owed on evidence; delete an
 
 **Engine worker and platform (reopen only on evidence; no simple test exists)**
 
-- [ ] First-reveal latency under load: if the Visualizer's first appearance is noticeably later on the worker
-  than it was in process, size it in a load session (the no-load comparison is 1B.14's).
 - [ ] A hot-plugged audio device: nothing in use is hot-plugged until SMP/Library exists; the real-endpoint
   reopen test of 1B.14 covers the capture path. Revisit with SMP.
 - [ ] Linux engine worker (best effort, never run): the named wake pipe (FIFO), the worker's spawn under
@@ -1490,11 +1497,13 @@ there). Evidence `.artifacts/evidence/display/display_power/20261105_display_pow
   in Task Manager while dark, whether wake input reaches the saver, and the first seconds after wake (a stale frame,
   a jump or a hitch). Run with `--frame-trace --usage`; when something shows, read that trace and reopen here.
 
-**Card materials under load**
 
-- [ ] A transition-heavy material/Normal pair needs the separately approved measurement session (load is the
-  operator's to approve; small off-screen GPU timings do not replace it). When a session is approved, the lead runs
-  it with item 7's card-materials pair.
+**Load runs the 11 Nov session did not cover (reopen only on evidence)**
+
+- [ ] The 600 s Waveform Preset 4 and Bubble GC runs with `--frame-trace` (gen1/gen2 pauses per hour) and a long
+  run with several Settings round trips: one 85 s run with one round trip was clean (re-frozen, no barrier
+  timeout); nothing has shown a steady collection since the GC freeze merged.
+- [ ] The two-monitor canonical game60 outlier (48.6 fps once, 7 Nov, never repeated).
 
 **Installed builds as an ordinary Windows user (no such account or fresh install exists to test on; moved from 1.2-1.3)**
 
