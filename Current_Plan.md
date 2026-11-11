@@ -982,33 +982,19 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
 Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its `[~]`
 validation steps and open side defects.
 
-**Slow startup (operator, 6 Nov 10:30; owners fixed, awaiting the operator's cold start)**
+**Slow startup (operator, 6 Nov 10:30; owners fixed, awaiting the lead's cold start)**
 
 Evidence `.artifacts/evidence/lifecycle/slow_startup/20261106_slow_startup/`; the held-lock rule is in
 `Docs/Guardrails/Performance_Optimization_Contract.md` section 5, the optional-worker start in its appendix.
 
-- [~] Operator: cold start with `--usage`, then read the log:
-  - [~] No `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame. The 166-240 ms `FEED_GUI_DELIVERY` lines at
+- [ ] D1 run (1B.14 harness): cold start with `--usage`, then the lead reads the log:
+  - [ ] No `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame. The 166-240 ms `FEED_GUI_DELIVERY` lines at
     10:30:40-42 were not reproduced offline (Feeds cache delivery including the NEWS card model is 0.1-15 ms per
     source at 18 publishers x 40 stories; `_complete` excludes QML) and are treated as the post-block backlog on a
     97-100% CPU machine.
-  - [~] The first `collect_ms` is small.
+  - [ ] The first `collect_ms` is small.
 - [ ] Side defect: a prefetch batch asked for before the optional image_prefetch child is ready fails as "not
   running" (a logged `[PREFETCH]` error); that batch is not retried.
-
-**Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's overnight check)**
-
-Contract: `Docs/Architecture/Compositor_Architecture.md` -> Display power (hardware findings 6 Nov are recorded
-there). Evidence `.artifacts/evidence/display/display_power/20261105_display_power/`.
-
-- [~] Operator: leave a heavy preset (Waveform Ribbon (`waveform_ribbon`) Preset 1 or Neon Lake (`shockwave_grid`))
-  overnight and let Windows' screen timeout turn both displays off (not the panels' own buttons: an HDMI panel that
-  stays enumerated gives no signal and the TV rejects DDC/CI queries; operator decision 6 Nov: no Screens Off
-  command, the burden stays off the user; they enabled the power plan's display timeout and will report how SRPSS
-  handles it). Run with `--frame-trace --usage`, then check:
-  - [~] Task Manager CPU/GPU for the saver while dark.
-  - [~] Wake input reaches the saver.
-  - [~] The first seconds after wake: no stale frame, jump or hitch.
 
 **Spline Curve (`devcurve`) "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then
 operator eyes)**
@@ -1017,7 +1003,8 @@ Contract: guide section 13D -> DevCurve. Evidence and before/after WebPs (loud e
 `.artifacts/evidence/visualizers/devcurve/reactivity/20261105_reactivity/` (`PROGRESS.md`).
 
 - [ ] Lead review of the second cut.
-- [~] Operator eyes on the second cut.
+- [ ] Lead review on the rendered before/after WebPs (loud end and a quiet passage, P1/P6): the second cut reads
+  more alive while keeping the flow.
 - [ ] Open: the strongest preset's bass (Deep Blue) stays ~18% below pre-work main's loud RMS (a smooth wave cannot
   match a slope-limited triangle at the same slope).
 - [ ] Open: the quiet-passage evidence is one recording's cold start (9 kicks).
@@ -1049,23 +1036,18 @@ in source, confirm on the next build**
 
 Contract: `Spec.md` (frozen QML package contract); `test_every_shipped_qml_import_survives_the_frozen_prune`.
 
-- [~] Operator: open a Studio from a fresh build.
+- [ ] Frozen run (1B.14): open a Studio from the fresh frozen build (the GitHub Remote artifact), on D1.
 
 **Widget/Settings material appearance: Awaiting Validation**
 
 Active density/composition work and native evidence: section 1A, items 1.7/1.9. Durable owners:
 `Docs/Architecture/Card_Surface_Materials.md` and `Docs/Architecture/Settings_Theme_Architecture.md`.
 
-- [~] Operator, in the running app:
-  - [~] The inner rim.
-  - [~] Transport, mute and volume.
-  - [~] Dark and light palettes.
-  - [~] Linked material choice.
-
-**Awaiting Validation, material cost under load**
-
-- [~] A lead-scheduled transition-heavy material/Normal pair, only within the separately approved measurement
-  session. Small off-screen GPU timings do not replace it.
+- [ ] D1 run (1B.14 harness), lead review of grabbed frames, in the running app:
+  - [ ] The inner rim.
+  - [ ] Transport, mute and volume.
+  - [ ] Dark and light palettes.
+  - [ ] Linked material choice.
 
 **Widget theme legibility (open)**
 
@@ -1084,7 +1066,7 @@ Presets 1-8 stay pixel-identical. Shared controls, each dormant at 0: Ember Grai
 reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 72-73; evidence
 `.artifacts/evidence/visualizers/extruded_bubble/deep_red_ocean_pass2/20261106_deep_red_ocean_pass2/`.
 
-- [~] Operator eyes on Preset 9 against the mock.
+- [ ] Lead review of side-by-side sheets (mock | ours, full resolution plus crops) of Preset 9 against the mock.
 - [ ] Shells are paler and smoother inside than the mock's copper, busy-interior glass, and too many crowd together.
 - [ ] Embers are partly along-stream strokes rather than torn debris.
 - [ ] The lower right is far too busy (the mock's band fades out there).
@@ -1205,6 +1187,24 @@ rendering.
 
 - [ ] Inspect the helper/log-path authority before relying on that diagnostic route; do not hide it behind a silent
   local fallback.
+
+**Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; needs the machine's own screen timeout)**
+
+Contract: `Docs/Architecture/Compositor_Architecture.md` -> Display power (hardware findings 6 Nov are recorded
+there). Evidence `.artifacts/evidence/display/display_power/20261105_display_power/`.
+
+- [ ] When a heavy preset (Waveform Ribbon (`waveform_ribbon`) Preset 1 or Neon Lake (`shockwave_grid`)) is left
+  overnight and Windows' screen timeout turns both displays off (not the panels' own buttons: an HDMI panel that
+  stays enumerated gives no signal and the TV rejects DDC/CI queries; operator decision 6 Nov: no Screens Off
+  command, the burden stays off the user; they enabled the power plan's display timeout), notice the saver's CPU/GPU
+  in Task Manager while dark, whether wake input reaches the saver, and the first seconds after wake (a stale frame,
+  a jump or a hitch). Run with `--frame-trace --usage`; when something shows, read that trace and reopen here.
+
+**Card materials under load**
+
+- [ ] A transition-heavy material/Normal pair needs the separately approved measurement session (load is the
+  operator's to approve; small off-screen GPU timings do not replace it). When a session is approved, the lead runs
+  it with item 7's card-materials pair.
 
 **Installed builds as an ordinary Windows user (no such account or fresh install exists to test on; moved from 1.2-1.3)**
 
