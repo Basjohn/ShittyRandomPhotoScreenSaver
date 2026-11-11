@@ -295,9 +295,17 @@ The existing Python substrate is `rendering/quick/scene3d/` and `rendering/gl_pr
 `Docs/Reference/Scene3D_Resources.md` (its "Shared Scene3D capability inventory" is the starting list). Rules
 for every stage: read the 3D foundation lessons (`Docs/Reference/Transitions.md`) before it and append after it;
 each primitive is proved on its own off-screen harness scene with measured cost (GPU time median and p90),
-lazy creation, zero work when dormant and clean retirement; none waits for a consumer; none becomes a second
-renderer, clock or camera; parity is judged on single-sampled targets against the Python renderer it replaces,
-which retires only after parity.
+lazy creation, zero work when dormant and clean retirement; none becomes a second renderer, clock or camera;
+parity is judged on single-sampled targets against the Python renderer it replaces, which retires only after
+parity.
+
+**Which primitives are built without a consumer (operator, 12 Nov: "don't strictly build primitives when they
+have a consumer, we like to open potential. High potential primitives should be built regardless, low potential
+only when a consumer. We can always improve.").** A primitive is high potential when several modes, transitions
+or SMP surfaces could plausibly use it and it changes what scenes can look like; it is then built and proved on
+its harness in its place in the order below, with no mode waiting for it. A low-potential primitive (one effect,
+one mode) is built only when that consumer is admitted. The lead classifies and may reclassify; the
+classification is written at each item.
 
 *N0. Inventory and contract (design; no C++; can start now)*
 
@@ -377,7 +385,9 @@ substrate's guarantee (plan 1C.4's contract: no pass of any mode writes outside 
 - [ ] N4.g Edge and propagation fields, sphere impostors, shared optics and underwater light: Extruded Bubble
   and the transitions that use them.
 - [ ] N4.h Shared shadows (S3D-6: one fitted directional depth map, bounded soft filtering, caster and receiver
-  admission) only when a consumer is admitted; never a revival of the rejected Extruded cast shadows.
+  admission, measured tiers). **High potential: built without a consumer** (every lit 3D scene gains depth
+  from it), proved on a harness scene; this is the shared primitive, not a revival of the rejected Extruded
+  cast shadows, and no mode turns it on without its own review.
 
 *N5. Modes and transitions onto the substrate, simplest first, each retiring its Python renderer at parity*
 
@@ -396,13 +406,25 @@ substrate's guarantee (plan 1C.4's contract: no pass of any mode writes outside 
   path's, Settings/Studio and engine-worker parity, GPU time per pass, no cost at rest, the mode's own tests
   green, then the Python renderer and its shaders deleted in the same change (never two permanent renderers).
 
-*N6. Primitives planned but never built: native only, after N5, each when a mode is admitted that needs it*
+*N6. Primitives planned but never built: native only, after the substrate (N3); the high-potential ones in
+this order without waiting for a mode, the low-potential ones when a consumer is admitted*
 
-- [ ] N6.1 Static scene geometry and materials (S3D-3: authored static meshes with their own shading; photo-
-  textured shells and planes with real depth).
-- [ ] N6.2 Dynamic surface field (S3D-4: a bounded GPU height and velocity grid with impulse injection, a
-  displaced mesh with true normals, an opt-in deformable sheet).
-- [ ] N6.3 Lightning and advected smoke on the volume primitive (the rest of S3D-7).
+- [ ] N6.1 Dynamic surface field (S3D-4). **High potential** (water, ripples, pools, melt, any reactive
+  surface; Neon Lake's water and SMP surfaces could use it): a bounded GPU height and velocity grid with
+  impulse injection and damping, a displaced mesh with true normals, reflection distortion driven by it
+  (with N4.d).
+- [ ] N6.2 Static scene geometry and materials (S3D-3). **High potential** (it is what turns a mode into a
+  place: floors, walls, wells, simple skyline and tunnel slices, with roughness, bevel and contact shading,
+  built once and kept).
+- [ ] N6.3 Advected smoke and haze on the volume primitive (the rest of S3D-7's volumes). **High potential**
+  (atmosphere for every 3D scene; shares N4.f's reduced-resolution path).
+- [ ] N6.4 Photo-textured shells and planes with real depth (from the fracture-portal and depth-slice
+  concepts). **Low potential until a consumer** (a transition or a mode built round the user's photos).
+- [ ] N6.5 The opt-in deformable sheet (shapes a heightfield cannot make). **Low potential until a consumer.**
+- [ ] N6.6 Lightning: procedural bolt geometry and its light. **Low potential until a consumer** (one effect).
+- [ ] When a high-potential primitive lands: one showcase WebP from its harness scene and a short "what this
+  makes possible" note in `Docs/Reference/Scene3D_Resources.md`, so the potential is visible when modes are
+  next designed.
 - [ ] Expanded Visualizer M6 (4K acceptance) waits for the first P3 ports (plan 01); P2 holds nothing.
 
 ### Item 9. SMP & Full Display
@@ -424,11 +446,12 @@ Windows-default supervised Python worker; P3 is the planned C++/QRhi native rend
 - [ ] New modes (Reactive Liquid / Melt Pool -> Concrete Rain -> Usu Moonscape, lab-first per §7.0) wait for the
   native core and are built on it only, never in the Python OpenGL renderer (item 8b, N1.5 and N6): the
   triggers have fired, so the native Vulkan core precedes them.
-- [ ] What follows the native core and Vulkan parity is the operator's to choose. The lead's opinion (asked for
-  on 12 Nov): SMP's foundations (library, playlists, a playback service that meets the measured audio bar)
-  before more modes, because that work closes reliably without visual sign-off, gives the Visualizer decoded
-  audio with look-ahead instead of a loopback capture, and proves "one Visualizer owner, any surface"; the
-  visual track meanwhile only finishes what is open. Recorded in section 2 as a decision.
+- [ ] After the native core and Vulkan parity: SMP's foundations first (operator, 12 Nov: "SMP foundations
+  first after native parity, as you suggest"): the library, the playlists and a playback service that meets
+  the measured audio bar (plan 02's first milestones), then the question of how far to go before returning to
+  modes. Reasons on record: that work closes reliably without visual sign-off, gives the Visualizer decoded
+  audio with look-ahead instead of a loopback capture, and proves "one Visualizer owner, any surface". The
+  visual track meanwhile finishes what is open and builds the high-potential primitives (item 8b, N4 and N6).
 
 ## 1B. Operator defects and requests (11 Nov; run first, in this order)
 
@@ -1225,9 +1248,6 @@ Watchlist entry (operator, 11 Nov).
   and Growing Pains on their groove) for a seamless wrap, not at the earlier quiet-to-hot windows. Keep the seam, or
   restore the quiet-to-hot arc?
 
-- **Decision, what follows the native core and Vulkan parity:** SMP's foundations first (the lead's opinion,
-  item 10) or more Visualizer modes. Nothing waits on it until the native core is at parity.
-
 - **Changed on 11 Nov (no action needed; say only if one should go back):**
   - Now Playing follows the Media widget's Edit rules: its side handles reflow the text box (they resized the
     artwork border, accepted 10 Nov); the block's orientation follows its anchor corner, set by the title's flip
@@ -1815,11 +1835,13 @@ Operator, 12 Nov: the 3D work goes into the native work plan, in detail and orde
 rewrites every mode's renderer, so the shared 3D architecture is decided and built as part of it, not after it
 and not twice. The primitives this section listed live there now: S3D-1 ribbon and strip is N4.b; S3D-2
 populations N4.c; S3D-5 reflections and wet surfaces N4.d; S3D-7 reduced-resolution volumes N4.f (with P4) and
-its lightning N6.3; S3D-6 shadows N4.h; S3D-3 static scene geometry N6.1; S3D-4 dynamic surface field N6.2. The
-rules stay as they were (the 3D foundation lessons before each slice; each primitive proved on its own harness
-with measured, bounded cost, lazy creation, zero dormant work and clean retirement; none waits for a consumer;
-none becomes a second renderer, clock or camera), and one is added: from now on no new 3D primitive is built in
-the Python OpenGL renderer unless an open defect needs it (N1.5).
+its smoke N6.3 and lightning N6.6; S3D-6 shadows N4.h; S3D-4 dynamic surface field N6.1; S3D-3 static scene
+geometry N6.2 (its photo-textured shells N6.4). The rules stay as they were (the 3D foundation lessons before
+each slice; each primitive proved on its own harness with measured, bounded cost, lazy creation, zero dormant
+work and clean retirement; none becomes a second renderer, clock or camera), with two changes of 12 Nov: no new
+3D primitive is built in the Python OpenGL renderer unless an open defect needs it (N1.5), and high-potential
+primitives are built without waiting for a consumer while low-potential ones wait for one (operator; the
+classification is at each item in 8b).
 
 What already exists in the Python substrate and is therefore a port, not new work: the ribbon history and
 oriented strip, compacted populations with sprites and streaks, planar reflections and rough receivers, the fog
