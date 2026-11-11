@@ -749,6 +749,9 @@ Applicable 3D geometry/layout-profile contracts still apply, but no overflow opt
 Neon Lake (`shockwave_grid`) uses this presentation contract; `Docs/Reference/Neon_Lake_Basin.md` owns its terrain and lifecycle detail.
 
 Free-form 3D (Extruded Spectrum (`extruded_spectrum`) and Voxel Sphere (`sphere`)) retains WASD orbit and Alt+left drag. Framed Extruded Bubble instead uses **plain WASD for physical camera-relative travel**, **Shift+W/S for pitch and Shift+A/D for yaw**, plus Q/E as alternative yaw keys, and Alt+left drag for orbit; Alt+right pan and Alt+scroll card scaling retain their established meanings. EB travel does not alter scene zoom or lens FOV. Neon Lake is pending a separate mode-capability audit, not implicitly changed by this binding.
+A held right-drag over a pan-capable card (a mode with a scene pan, interaction or Ctrl mode, outside Edit) pans the
+scene as the Studios do; a right click there opens the context menu on release, at the release point; every other
+right press opens the menu on press as before (plan 1B.13; routing in `Docs/Contracts.md`).
 For framed 3D modes these operations affect internal scene turn/tilt/pan/scale only; they never change the outer card's
 geometry or viewport. The canonical view-pose owner persists them separately from art presets and CUSTOM geometry.
 Save Preset As can capture the settled pose as optional `starting_view` metadata, outside its artwork snapshot;

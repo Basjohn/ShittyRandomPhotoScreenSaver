@@ -738,7 +738,17 @@ Descriptor-owned orbit admission is separate from footprint visibility, so empty
 content geometry. CUSTOM's native pointer block remains binding. Orbit/Alt-left uses the existing view resolver. For unframed 3D modes,
 Alt-right move and Alt-wheel resize use the current `CustomLayoutSession`. Framed 3D modes instead route admitted
 Alt-right/Alt-wheel gestures to their shared internal-camera pan/scale capability: their card rectangle, viewport and CUSTOM
-geometry never change from those inputs. Plain CUSTOM geometry controls retain their ordinary behavior. Its fixed card
+geometry never change from those inputs. **Held-right pan (plan 1B.13).** Outside Edit, over a pan-capable card (the
+held-left plain orbit's admission: interaction or Ctrl mode, not exiting, no menu open, view orbit admitted, and the
+mode declares `scene_transform_settings`; the expanded card is the whole display), a plain right press opens nothing and
+arms a pending pan in `QuickDisplayWindow`'s one pending -> capture machine (its gesture kind `'pan'`). Travel past
+the system drag distance while held promotes it through the same capture owner and cursor fade as the orbit, rebases
+the press-scoped scene baseline (`DisplayManager._start_quick_scene_pan`) and pans by the Studio's own rule
+(`pan_x -= dx / content width`, `pan_y += dy / content height`, canonical bounds); its release, focus loss, mode edge,
+input close or display loss ends it through the live view pose's existing save. A release without that travel opens the
+retained menu at the release point through the one `context_menu_requested` route, so `context_menu_active` never
+becomes true for a pan. Every other right press (another widget, the wallpaper, Edit, Alt-right, a mode that cannot
+pan, outside interaction/Ctrl) takes the unchanged press path. No timer or hold delay. Plain CUSTOM geometry controls retain their ordinary behavior. Its fixed card
 rectangle owns selection; the projected internal guide is clipped derivative paint. See
 [Neon Lake](Reference/Neon_Lake_Basin.md). Wheel input preserves signed movement on either Qt axis; zero
 movement is a no-op. Geometry/settings/orbit edges refresh framing; ordinary audio and closed/deselected Edit add no continuing
