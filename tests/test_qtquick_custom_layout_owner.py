@@ -532,6 +532,40 @@ def test_visualizer_display_hop_uses_nearest_direction_and_preserves_shape() -> 
     assert item.current_global_rect == QRect(900, 100, 420, 280)
 
 
+def test_visualizer_display_hop_offers_no_side_on_a_vertical_stack_of_different_widths() -> None:
+    """Edit's hop and the fullscreen glyphs share one left/right rule (``core.display_neighbours``): a display stacked
+    above another overlaps it horizontally, so it is on neither side even when the centres differ in x."""
+
+    from core.display_neighbours import side_neighbours
+
+    def binding(identity: str, route: str, rect: QRect) -> _DisplayBinding:
+        return _DisplayBinding(identity, route, SimpleNamespace(runtime=SimpleNamespace()), object(), rect)
+
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    rects = {"display:top": QRect(0, 0, 1920, 1080), "display:bottom": QRect(0, 1080, 2560, 1440)}
+    bindings = {key: binding(key, str(index + 1), rect) for index, (key, rect) in enumerate(rects.items())}
+    as_tuple = {key: (rect.x(), rect.y(), rect.width(), rect.height()) for key, rect in rects.items()}
+
+    for identity in rects:
+        others = {key: value for key, value in as_tuple.items() if key != identity}
+        glyph_sides = side_neighbours(as_tuple[identity], others)
+        hop_sides = tuple(owner._adjacent_binding_for_identity(identity, direction, bindings)
+                          for direction in ("left", "right"))
+        assert hop_sides == glyph_sides == (None, None)
+
+    # Negative control: the same two displays side by side do offer the hop, in the glyphs' direction.
+    beside = {"display:top": binding("display:top", "1", QRect(0, 0, 1920, 1080)),
+              "display:bottom": binding("display:bottom", "2", QRect(1920, 0, 2560, 1440))}
+    assert owner._adjacent_binding_for_identity("display:top", "right", beside).identity == "display:bottom"
+    assert owner._adjacent_binding_for_identity("display:bottom", "left", beside).identity == "display:top"
+    assert owner._adjacent_binding_for_identity("display:top", "left", beside) is None
+
+
 def test_single_quick_custom_owner_cancel_restores_same_retained_item(qt_app) -> None:
     widgets = _clock_widgets()
     settings = _Settings(widgets)
