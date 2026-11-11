@@ -233,6 +233,13 @@ class HiddenDisplayHost:
         self.app = QGuiApplication.instance()
         if self.app is None or self.app.platformName().strip().lower() != "windows":
             raise RuntimeError("the hidden production-host render needs the Windows QPA GL")
+        from PySide6.QtQuick import QSGRendererInterface
+
+        if QQuickWindow.graphicsApi() != QSGRendererInterface.GraphicsApi.OpenGL:
+            # Qt Quick's own default here is Direct3D: an OpenGL graphics device on it dies in the first sync (an
+            # access violation, no Python frame). The product and the tests select OpenGL before the application.
+            raise RuntimeError("the hidden production-host render needs Qt Quick on OpenGL: call "
+                               "rendering.quick.bootstrap.configure_quick_graphics before creating the application")
         self._gl = gl
         self.logical = (width, height)
         self.dpr = float(dpr)

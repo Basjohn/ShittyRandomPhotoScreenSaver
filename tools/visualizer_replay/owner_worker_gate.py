@@ -162,8 +162,13 @@ class OwnerRig:
     """
 
     def __init__(self, mode: str, *, worker: bool | None, supervisor: Any = None, playing: bool = True,
-                 clock: list | None = None, cadence: str = "manual", paced: Any = None, extra_modes=()) -> None:
+                 clock: list | None = None, cadence: str = "manual", paced: Any = None, extra_modes=(),
+                 settings: Any = None, scene_mirror: Any = None) -> None:
         self.mode = mode
+        #: ``settings``: Settings-section values laid over the rig's section before the binding resolves the
+        #: activation (non-default controls, a preset index). ``scene_mirror``: ``owner_render_parity.SceneMirror``,
+        #: attached to the unshown runtime's scene before the owner is built (it draws what the owner commits).
+        self.scene_mirror = scene_mirror
         self.default_path = worker is None
         if worker is None:
             from core.diagnostics.experiment_flags import visualizer_engine_worker_admitted
@@ -191,6 +196,8 @@ class OwnerRig:
             "spotify_visualizer": {"enabled": True, "visualizers_enabled": True, "mode": mode, f"preset_{mode}": 0,
                                    "mode_activation": {m: True for m in (mode, *extra_modes)}},
         }
+        if settings:
+            self.widgets["spotify_visualizer"].update(settings)
         self._stack = contextlib.ExitStack()
 
     # ------------------------------------------------------------------------------------- in-process engine
@@ -291,6 +298,8 @@ class OwnerRig:
         self._stack.callback(app.processEvents)
         self._stack.callback(factory.deleteLater)
         self._stack.callback(runtime.close_runtime)
+        if self.scene_mirror is not None:
+            self.scene_mirror.attach(runtime)           # before the owner binds its render source to the scene
         manager = ThreadManager()
         self._stack.callback(manager.shutdown, wait=True, timeout=30.0)
         self._stack.callback(self._stop_engines)
@@ -422,9 +431,11 @@ class OwnerRig:
 
 
 def identity_run(mode: str, script, *, worker: bool | None, supervisor: Any = None,
-                 namespace: int | None = None) -> dict:
+                 namespace: int | None = None, settings: Any = None, scene_mirror: Any = None) -> dict:
     """One owner through ``script``; the digests of the logical frames it published to its render bridge. ``worker``
-    as ``OwnerRig`` states it (None: the product's default path, as the platform resolves it)."""
+    as ``OwnerRig`` states it (None: the product's default path, as the platform resolves it). ``settings`` and
+    ``scene_mirror`` as ``OwnerRig`` takes them; with a mirror the report also carries ``pixels``, the mirror's
+    record of the frame drawn after each input's presentation."""
     import itertools
 
     import tools.expanded_visualizer_evidence as evidence
@@ -437,11 +448,12 @@ def identity_run(mode: str, script, *, worker: bool | None, supervisor: Any = No
     first = next(value for kind, value in script if kind == "input")
     partner = next((value for kind, value in script if kind == "mode"), None)
     rig = OwnerRig(mode, worker=worker, supervisor=supervisor, playing=bool(first.playing), clock=clock,
-                   extra_modes=(partner,) if partner else ())
+                   extra_modes=(partner,) if partner else (), settings=settings, scene_mirror=scene_mirror)
     worker = rig.worker
     stream = CaptureHistoryStream()
     saved_revisions = extruded_bubble_drift_log._REVISIONS
     report: dict = {"mode": mode, "worker": worker}
+    pixels: list = []
     try:
         with contextlib.ExitStack() as stack:
             stack.enter_context(pinned_authored_clock(lambda: clock[0]))
@@ -473,6 +485,8 @@ def identity_run(mode: str, script, *, worker: bool | None, supervisor: Any = No
                     else:
                         rig.tick_in_process(value, stream)
                     owner.sync_present()
+                    if scene_mirror is not None:
+                        pixels.append(scene_mirror.frame(inputs))
                     # An activation the presentation committed may restart capture (another block size) on its lane:
                     # settled before the next block, as the session's own activation settles it.
                     rig.settle()
@@ -505,7 +519,11 @@ def identity_run(mode: str, script, *, worker: bool | None, supervisor: Any = No
                           on_worker=bool(owner._worker is not None) if worker else None)
             report["digests"] = [evidence.frame_digest(logical) for logical in rig.published]
             report["phases"] = list(rig.phases)
+            if scene_mirror is not None:
+                report["pixels"] = pixels
     finally:
+        if scene_mirror is not None:
+            scene_mirror.close()                        # its GL goes while the owner's bridge is still alive
         rig.close()
         extruded_bubble_drift_log._REVISIONS = saved_revisions
     return report

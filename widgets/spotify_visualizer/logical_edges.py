@@ -581,30 +581,68 @@ def presentation_input_attrs(mode_id: str) -> tuple[str, ...]:
 
 def presentation_inputs_snapshot(presentation_state: Any, mode_id: str) -> dict[str, Any]:
     """The values of ``presentation_input_attrs(mode_id)`` the engine worker's tick needs (the main side's, forwarded
-    latest-wins with the framed view): plain data only (a Qt value stays on the presentation side). The values are
-    the state's own, read every presentation and compared by value with the last send; only a changed one is copied,
-    by ``detach_presentation_value``, into the send and the record of what the session holds (checkpoint audit 8,
-    A8-L6)."""
+    latest-wins with the framed view): plain data only. The values are the state's own, read every presentation and
+    compared by value with the last send; only a changed one is copied, by ``detach_presentation_value``, into the send
+    and the record of what the session holds (checkpoint audit 8, A8-L6).
+
+    A Qt value never crosses (the worker loads QtCore only, and a pickled Qt object would drag its module in), and it
+    is never dropped silently either (phase-boundary audit L4): a colour goes as the (r, g, b, a) the in-process
+    capture freezes it to (``plain_presentation_value``); any other Qt value is refused with one error per attribute
+    and type (``report_unforwarded_presentation_input``), as the in-process capture refuses it
+    (``render_state.freeze_render_value``'s TypeError), and the session keeps the value it holds."""
     values: dict[str, Any] = {}
     for attr in presentation_input_attrs(mode_id):
         value = getattr(presentation_state, attr, None)
         if type(value).__module__.startswith("PySide6"):
-            continue
+            try:
+                value = plain_presentation_value(value)
+            except TypeError as exc:
+                report_unforwarded_presentation_input(attr, exc)
+                continue
         values[attr] = value
     return values
+
+
+_UNFORWARDED_REPORTED: set[tuple[str, str]] = set()
+
+
+def report_unforwarded_presentation_input(attr: str, failure: Exception) -> None:
+    """One error per attribute and failure for a presentation input the engine worker's session cannot be given (a Qt
+    value with no plain form): the worker's tick keeps the value its session holds, so the Visualizer on the worker
+    would differ from in process for as long as the state holds it. Once, never per presentation."""
+    key = (str(attr), str(failure))
+    if key in _UNFORWARDED_REPORTED:
+        return
+    _UNFORWARDED_REPORTED.add(key)
+    logger.error("[SPOTIFY_VIS][ENGINE_WORKER] Presentation input %s is not forwarded to the engine worker: %s "
+                 "(the session keeps the value it holds)", attr, failure)
+
+
+def plain_presentation_value(value: Any) -> Any:
+    """A Qt value's plain form for the engine worker: a colour as the (r, g, b, a) ``getRgb()`` gives, what the
+    in-process capture freezes it to (``render_state.freeze_render_value``) and what the Qt-free presentation config
+    holds (``config_applier._color_or_none``). Any other Qt value has none: TypeError, as in the capture."""
+    get_rgba = getattr(value, "getRgb", None)
+    if callable(get_rgba):
+        return tuple(int(channel) for channel in get_rgba()[:4])
+    raise TypeError(f"a {type(value).__name__} has no plain form")
 
 
 def detach_presentation_value(value: Any) -> Any:
     """``value`` with every nested list and dict copied (the same types), so the copy shares nothing mutable with the
     presentation state: an in-place edit of the state's value then compares unequal to the copy and is forwarded
-    (A8-L6: Waveform Ribbon's palette is a dict of lists). Immutable values come back as they are."""
+    (A8-L6: Waveform Ribbon's palette is a dict of lists). Immutable values come back as they are; a Qt value nested
+    in one goes as its plain form or raises TypeError (``plain_presentation_value``: it never leaves the process)."""
     kind = type(value)
     if kind is list:
         return [detach_presentation_value(item) for item in value]
     if kind is dict:
         return {key: detach_presentation_value(item) for key, item in value.items()}
-    if kind is tuple and any(type(item) in (list, dict, tuple) for item in value):
+    if kind is tuple and any(type(item) in (list, dict, tuple) or type(item).__module__.startswith("PySide6")
+                             for item in value):
         return tuple(detach_presentation_value(item) for item in value)
+    if kind.__module__.startswith("PySide6"):
+        return plain_presentation_value(value)
     return value
 
 
@@ -628,6 +666,8 @@ __all__ = [
     "VIEW_RECORD_ATTRS",
     "apply_presentation_inputs",
     "detach_presentation_value",
+    "plain_presentation_value",
+    "report_unforwarded_presentation_input",
     "presentation_input_attrs",
     "presentation_inputs_snapshot",
     "DEFAULT_LOGICAL_HZ",

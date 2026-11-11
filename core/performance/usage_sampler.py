@@ -102,6 +102,7 @@ class ProcessUsageCollector:
         *,
         heavy_refresh_samples: int = DEFAULT_HEAVY_REFRESH_SAMPLES,
         topology_snapshot_provider: Callable[[int], Mapping[int, int]] | None = None,
+        unique_set_size_provider: Callable[[int], int] | None = None,
     ) -> None:
         self._main = process or psutil.Process(os.getpid())
         self._processes: dict[int, psutil.Process] = {self._main.pid: self._main}
@@ -142,6 +143,24 @@ class ProcessUsageCollector:
                 self._topology_snapshot_provider = None
         else:
             self._topology_snapshot_provider = None
+        # Per-process USS on every sample. psutil's ``memory_full_info()`` walks the whole working set with the GIL
+        # held (milliseconds per process, growing with its resident size: the one costly per-process read, and what
+        # every further process of the tree added to a sample). On Windows the same count is read with the GIL
+        # released (``windows_working_set``); elsewhere, and for test doubles, psutil's stays.
+        self._uss_fallback_logged = False
+        self._working_set_reader: Any | None = None       # owns the process handles it keeps between samples
+        if unique_set_size_provider is not None:
+            self._unique_set_size_provider = unique_set_size_provider
+        elif os.name == "nt" and isinstance(self._main, psutil.Process):
+            try:
+                from core.performance.windows_working_set import WorkingSetReader
+
+                self._working_set_reader = WorkingSetReader()
+                self._unique_set_size_provider = self._working_set_reader.unique_set_size
+            except Exception:
+                self._unique_set_size_provider = None
+        else:
+            self._unique_set_size_provider = None
         self._prime_cpu(self._main)
         psutil.cpu_percent(interval=None)
 
@@ -277,6 +296,33 @@ class ProcessUsageCollector:
         }
         return live, None, "psutil"
 
+    def close(self) -> None:
+        """Give back what the collector keeps between samples (the working-set reader's process handles)."""
+        reader = self._working_set_reader
+        if reader is not None:
+            reader.close()
+
+    def _unique_set_size(self, process: psutil.Process) -> int | None:
+        """One process's USS in bytes, or None when it cannot be read (the process went, or is not ours to read)."""
+        provider = self._unique_set_size_provider
+        if provider is not None:
+            try:
+                return int(provider(process.pid))
+            except OSError:
+                # This process only (exited between the topology refresh and this read, or refused): psutil's read
+                # below reports the same condition its own way.
+                pass
+            except Exception:
+                if not self._uss_fallback_logged:
+                    logger.warning("[USAGE] Native unique-set-size read failed; falling back to psutil's GIL-held "
+                                   "working-set walk", exc_info=True)
+                    self._uss_fallback_logged = True
+                self._unique_set_size_provider = None
+        try:
+            return getattr(process.memory_full_info(), "uss", None)
+        except (psutil.Error, OSError, AttributeError):
+            return None
+
     def collect(self) -> ProcessUsageSnapshot:
         # Refresh process topology/thread counts only on the slow sub-cadence.
         # Between refreshes, reuse cached process objects; dead children naturally
@@ -347,11 +393,7 @@ class ProcessUsageCollector:
                 if process.pid == self._main.pid:
                     private_main = int(private_value)
 
-            try:
-                full_memory = process.memory_full_info()
-                uss_value = getattr(full_memory, "uss", None)
-            except (psutil.Error, OSError, AttributeError):
-                uss_value = None
+            uss_value = self._unique_set_size(process)
             if uss_value is None:
                 uss_available = False
             else:
@@ -399,6 +441,9 @@ class ProcessUsageCollector:
             threads_app = self._last_threads_app
 
         self.last_process_breakdown = breakdown
+        reader = self._working_set_reader
+        if reader is not None:
+            reader.retain(live_pids)                  # a process that left the tree gives its handle back
         system_cpu = max(0.0, float(psutil.cpu_percent(interval=None)))
         snapshot = ProcessUsageSnapshot(
             pids=tuple(sorted(live_pids)),
@@ -721,7 +766,7 @@ class UsageTelemetryService:
             except Exception:
                 pass
         if not self._in_flight:
-            self._gpu_collector.close()
+            self._close_collectors()
         sidecar = self._handle_attribution_sidecar
         if sidecar is not None:
             try:
@@ -732,6 +777,12 @@ class UsageTelemetryService:
                     exc_info=True,
                 )
         logger.info("[USAGE] session_stop sequence=%d", self._sequence)
+
+    def _close_collectors(self) -> None:
+        self._gpu_collector.close()
+        close = getattr(self._process_collector, "close", None)
+        if callable(close):
+            close()
 
     def _request_sample(self) -> None:
         if self._stopped or getattr(self._thread_manager, "_shutdown", False):
@@ -1009,4 +1060,4 @@ class UsageTelemetryService:
         finally:
             self._in_flight = False
             if self._stopped:
-                self._gpu_collector.close()
+                self._close_collectors()

@@ -2054,6 +2054,13 @@ class QuickDisplayVisualizerOwner:
             # The hidden transaction's profile switch, before the session commits the target: its configuration and
             # first tick read the target's committed layout metrics, as in process (sent now, before VIS_SET_MODE).
             controller.render_bridge.discard_pending()
+            # The discarded snapshot was the fade-out's last, at zero content opacity, published in this same GUI
+            # turn: the render item never consumed it and still retains the frame before it. In process the
+            # target's identity is bound in this turn, which drops that frame at the next sync; here the identity
+            # waits for the reply, so the outgoing frame is dropped explicitly (R-184).
+            drop = getattr(self._presentation_runtime.scene_controller, "drop_visualizer_retained_frame", None)
+            if callable(drop):
+                drop()
             self._activate_committed_layout_profile(target)
             self._view_dirty = False
             link.send_view(force=True)

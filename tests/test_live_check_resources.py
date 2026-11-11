@@ -106,6 +106,69 @@ def test_the_verdict_judges_the_supervisors_workers_and_flags_handle_growth(tmp_
     assert summary["exact_not_flat"] == ["viz_mappings"]
 
 
+def _mode_cycle(tmp_path, private_by_lap, modes=("a", "b", "c", "d")):
+    """Mode-switch readings: ``private_by_lap[lap][i]`` is the main process's private MB at ``modes[i]``'s visit."""
+    readings = [_reading(900.0, "startup_reveal", 0, main_handles=1500)]
+    index = 1
+    for lap in private_by_lap:
+        for mode, private in zip(modes, lap):
+            reading = _reading(900.0 + 10 * index, "mode_switch", index, main_handles=1500)
+            reading["edge"]["mode"] = mode
+            reading["processes"][0]["private_mb"] = private
+            readings.append(reading)
+            index += 1
+    (tmp_path / "logs").mkdir(parents=True)
+    (tmp_path / "logs" / "screensaver.log").write_text("", encoding="utf-8")
+    (tmp_path / "resource_readings.json").write_text(json.dumps({"settle_s": 5.0, "readings": readings}),
+                                                     encoding="utf-8")
+    return resources.analyse_resource_readings(tmp_path, kinds=("mode_switch",))
+
+
+def test_memory_over_mode_switches_is_judged_per_mode_from_the_second_visit(tmp_path):
+    """Native core P2 M5: a mode's first visit precedes the heavier modes' high-water, so the first-to-second step
+    is the process settling, not a trend (the series across modes read it as growth, on both process paths)."""
+    modes = tuple("abcdefghi")
+    # Measured, the main process's private MB over nine modes (in process, 11 Nov 2026): two laps of one run, three
+    # of another. Measurements of a run, not settings.
+    two_laps = [[1041.2, 1031.9, 1015.9, 1140.4, 1142.8, 1212.8, 1334.6, 1421.5, 1195.7],
+                [1210.3, 1185.5, 1164.2, 1268.6, 1282.3, 1317.9, 1385.7, 1420.2, 1176.6]]
+    three_laps = [[1038.4, 1032.3, 1012.6, 1116.2, 1237.2, 1203.9, 1339.1, 1472.4, 1378.5],
+                  [1215.6, 1173.1, 1157.0, 1253.6, 1374.0, 1312.4, 1400.5, 1426.1, 1373.0],
+                  [1210.2, 1175.9, 1147.5, 1243.7, 1364.8, 1305.5, 1411.5, 1457.7, 1376.7]]
+
+    # Two laps: the series across modes reads growth (what the gate reported); per mode there is only the first
+    # step, which is reported and not judged.
+    summary = _mode_cycle(tmp_path / "two", two_laps, modes)
+    verdict = summary["metrics"]["private_main_mb"]
+    assert verdict["series_growth"] is True
+    assert verdict["by_mode"]["first_step_median"] > 50.0 and verdict["by_mode"]["later_steps"] == 0
+    assert verdict["growth"] is None and "private_main_mb" not in summary["growth"]
+
+    # Three laps: flat from the second visit on.
+    summary = _mode_cycle(tmp_path / "flat", three_laps, modes)
+    verdict = summary["metrics"]["private_main_mb"]
+    assert verdict["by_mode"]["later_steps"] == len(modes) and abs(verdict["by_mode"]["later_step_median"]) < 10.0
+    assert verdict["growth"] is False and "private_main_mb" not in summary["growth"]
+
+    # Negative control: every mode 40 MB higher on every later visit.
+    leaking = three_laps[:2] + [[value + 40.0 * lap for value in three_laps[1]] for lap in (1, 2, 3)]
+    summary = _mode_cycle(tmp_path / "leak", leaking, modes)
+    assert summary["metrics"]["private_main_mb"]["growth"] is True and "private_main_mb" in summary["growth"]
+
+    # Settings round trips have no mode: their memory stays one series.
+    roles = {20: "image"}
+    reveals = [_reading(1000.0 + 25 * i, "settings_reveal", i, main_handles=1500) for i in range(8)]
+    assert "by_mode" not in _run_folder(tmp_path / "reveals", reveals, roles)["metrics"]["private_main_mb"]
+
+
+def test_a_memory_map_file_never_names_an_alternate_data_stream():
+    from tools.live_check_settings_roundtrip import memory_map_file_name
+
+    names = [memory_map_file_name(index) for index in ("switch0:oscilloscope", "switch1:bubble", 3, "reveal 2")]
+    assert len(set(names)) == len(names)
+    assert all(":" not in name and " " not in name and name.endswith(".json") for name in names)
+
+
 def test_recorded_edges_are_the_reveals_and_completed_mode_switches(tmp_path):
     (tmp_path / "settings_roundtrip.json").write_text(json.dumps({"events": [
         {"event": "armed", "wall": 1.0}, {"event": "reveal", "wall": 2.0, "generation": 0},

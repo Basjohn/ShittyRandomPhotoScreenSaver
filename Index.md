@@ -68,6 +68,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | runtime Widget Theme / style override ownership | `Docs/Guides/Custom_Style_Implementation.md` |
 | Settings/Widget Opacity Adjust, combined surface density and cached semantic ink | `core/settings/surface_opacity.py`; `ui/settings_surface_composition.py`; `Docs/Architecture/Settings_Theme_Architecture.md` |
 | ordered visualizer controls, synchronous admission and transferred wake-handle ownership | `core/process/control_messages.py`; `Docs/Contracts.md` → Process path; `Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md` → L1 |
+| engine worker wake pipe per platform (a handle on Windows, a name on POSIX), cadence liveness, worker-versus-in-process drawn parity | `core/visualizer_engine/wake_channel.py`; `core/visualizer_engine/engine_worker.py` → `watch_cadence_liveness`; `tools/visualizer_replay/owner_render_parity.py`; `Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md` → 11 Nov |
 | safety / guardrail router | `Docs/Guardrails.md` |
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | wallpaper cache, speculative source batches and image-worker ownership | `Docs/Contracts.md` → Wallpaper image cache and prefetch |

@@ -16,7 +16,8 @@ retired with its generation.
 * **Verdict** (``analyse_resource_readings``): per cycle, per metric, a least-squares slope per cycle and a growth
   flag. Growth is a monotonic rise beyond noise: the fitted rise over the run exceeds both the metric's floor and twice
   the spread of the first readings, AND the later half's median sits above the earlier half's. Process and mapping
-  counts must be exactly flat.
+  counts must be exactly flat. Over mode switches the memory metrics are judged per mode instead, from each mode's
+  second visit on (``growth_by_mode``): a mode's first visit precedes the heavier modes' high-water.
 
 Roles: the saver's own process is the tree's ``--runner`` process with no ``--runner`` child (a venv launcher is its
 parent); every ``--multiprocessing-fork`` child is a worker, and its role comes from the supervisor's own log line
@@ -466,6 +467,38 @@ def growth(values: list[float], floor: float) -> dict:
             "rises": sum(1 for s in steps if s > 0), "falls": sum(1 for s in steps if s < 0), "growth": grows}
 
 
+#: Memory metrics whose reading depends on the mode drawn: over mode switches each mode is judged against its own
+#: earlier visits, never as one series across modes.
+MODE_DEPENDENT = ("rss_main_mb", "private_main_mb", "rss_worker_mb", "private_worker_mb")
+
+
+def growth_by_mode(cycles: list[dict], metric: str, floor: float) -> dict | None:
+    """One memory metric over mode-switch readings, each mode against its own earlier visits.
+
+    A lap of switches visits modes of very different size, and the first visit of a mode comes before the heavier
+    modes have set the process's high-water (the GPU driver keeps what they committed, largely not resident: measured
+    11 Nov 2026, +100 to +190 MB of private bytes from a mode's first visit to its second on both process paths, then
+    flat). So the step from the first visit to the second is reported and never judged; growth is a rise from the
+    second visit on: the median later step above the floor with most later steps rising. With no later visit of any
+    mode there is nothing to judge (``growth`` None). None when the readings hold no repeated mode at all.
+    """
+    visits: dict[str, list[float]] = {}
+    for row in cycles:
+        if row.get("kind") == "mode_switch" and row.get("mode") and row.get(metric) is not None:
+            visits.setdefault(str(row["mode"]), []).append(float(row[metric]))
+    if not visits or max(len(values) for values in visits.values()) < 2:
+        return None
+    first = [values[1] - values[0] for values in visits.values() if len(values) >= 2]
+    later = [b - a for values in visits.values() for a, b in zip(values[1:], values[2:])]
+    grows = None
+    if later:
+        grows = bool(statistics.median(later) > floor and sum(1 for step in later if step > 0) > len(later) / 2)
+    return {"modes": len(visits), "visits": max(len(values) for values in visits.values()),
+            "first_step_median": round(statistics.median(first), 2), "first_step_max": round(max(first), 2),
+            "later_steps": len(later), "later_step_median": round(statistics.median(later), 2) if later else None,
+            "later_step_max": round(max(later), 2) if later else None, "growth": grows}
+
+
 def reading_row(reading: dict, roles: dict[int, str]) -> dict:
     """One reading as the per-cycle table's row (the main process, the engine worker, the tree)."""
     processes = reading["processes"]
@@ -523,6 +556,12 @@ def analyse_resource_readings(out: Path, *, kinds: tuple[str, ...]) -> dict:
                       if isinstance(value, (int, float)) and not isinstance(value, bool)
                       and key not in ("index", "wall", "late_s", "generation", "engine_worker_pid")})
     verdicts = {metric: growth([row.get(metric) for row in cycles], FLOORS.get(metric, 0.0)) for metric in metrics}
+    for metric in MODE_DEPENDENT:
+        by_mode = growth_by_mode(cycles, metric, FLOORS.get(metric, 0.0)) if metric in verdicts else None
+        if by_mode is not None:
+            # The series across modes is kept for the table; the verdict is the per-mode one.
+            verdicts[metric] = {**verdicts[metric], "series_growth": verdicts[metric].get("growth"),
+                                "by_mode": by_mode, "growth": by_mode["growth"]}
     exact_changes = {metric: sorted({row.get(metric) for row in cycles} - {None})
                      for metric in EXACT if metric in metrics}
     grown = sorted(metric for metric, verdict in verdicts.items() if verdict.get("growth"))
@@ -552,7 +591,15 @@ def print_resource_table(summary: dict) -> None:
             cells.append("-" if value is None else (f"{value:g}" if isinstance(value, float) else str(value)))
         print(f"  {row['kind']:16s} " + " ".join(f"{cell:>8s}" for cell in cells))
     for metric, verdict in summary["metrics"].items():
-        if verdict.get("slope") is not None:
+        by_mode = verdict.get("by_mode")
+        if by_mode is not None:
+            judged = ("not judged (no mode was visited three times)" if by_mode["growth"] is None
+                      else "GROWTH" if by_mode["growth"] else "flat")
+            print(f"  {metric:22s} by mode, {by_mode['visits']} visits: first step median "
+                  f"{by_mode['first_step_median']:>8} (reported, never judged); later steps "
+                  f"{by_mode['later_steps']} median {by_mode['later_step_median']} max {by_mode['later_step_max']} "
+                  f"{judged}")
+        elif verdict.get("slope") is not None:
             print(f"  {metric:22s} slope/cycle {verdict['slope']:>9} rise {verdict['fitted_rise']:>8} "
                   f"head spread {verdict['head_spread']:>7} {'GROWTH' if verdict['growth'] else 'flat'}")
     print(f"resource verdict: {summary['cycles']} cycles, growth {summary['growth'] or 'none'}, "

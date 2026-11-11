@@ -58,6 +58,10 @@ tick no longer holds the main process's GIL. In process is the bounded fallback 
 failing, and the `--viz-in-process` diagnostic control. Automatic fallbacks log their reason at WARNING/ERROR;
 capacity-contract violations remain terminal. Linux stays in process for this slice; its later default change is
 ordered in `Current_Plan.md` and `Linux_Plan.md` without a Linux proving prerequisite.
+A session whose cadence stops stepping while its process still answers heartbeats fails closed and is recovered like
+any failed session. The worker path draws the in-process path's pixels (gate 2, recorded 11 Nov 2026 at non-default
+settings for every mode). The session's wake pipe crosses to the worker as a pipe handle on Windows and as a name on
+POSIX (source-level only there); no control message registers a descriptor with the multiprocessing resource sharer.
 Contract: `Docs/Contracts.md` "Process path".
 
 The dependency floor is PySide6/Qt 6.11.2. Production requests OpenGL 4.6 Core and uses GLSL 460 core;

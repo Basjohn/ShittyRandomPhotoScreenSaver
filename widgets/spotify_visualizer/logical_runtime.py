@@ -606,6 +606,12 @@ class VisualizerLogicalRuntime:
             self._last_step_ts = now
 
     # -- accounting ----------------------------------------------------
+    @property
+    def steps(self) -> int:
+        """Steps finished so far (one plain read, no lock): what a liveness watch on another thread compares."""
+
+        return self._steps
+
     def describe(self) -> dict:
         return {
             "generation": self._generation,

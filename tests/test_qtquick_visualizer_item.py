@@ -126,6 +126,45 @@ def test_item_consumes_exact_bridge_identity_once_and_resets_on_replacement() ->
     assert node.snapshot is None
 
 
+def test_a_retained_frame_drop_clears_the_node_at_the_next_sync_and_keeps_the_source() -> None:
+    """R-184: a hidden activation whose target identity is bound later (the engine worker's commit reply) drops the
+    outgoing frame explicitly; the bound source, its identity and later publications are untouched."""
+    presentation = _presentation()
+    bridge = VisualizerSnapshotBridge()
+    identity = bridge.begin_activation(runtime_generation=0, engine_generation=0, activation_id=0, mode_id="spectrum")
+    retained = _snapshot(presentation)
+    assert bridge.publish(retained)
+    item = VisualizerRenderItem()
+    item.set_presentation(presentation)
+    item.bind_render_source(bridge, identity)
+    node = item.updatePaintNode(None, None)
+    assert node.snapshot is retained
+
+    # Without the drop an unchanged identity keeps the last consumed pixels (the bridge's contract).
+    assert bridge.publish(_snapshot(presentation, revision=2))
+    bridge.discard_pending()
+    item.updatePaintNode(node, None)
+    assert node.snapshot is retained
+
+    item.drop_retained_frame()
+    item.updatePaintNode(node, None)
+    assert node.snapshot is None
+    assert node.identity == identity and item.render_identity == identity
+
+    # One sync only: the next publication is drawn again.
+    fresh = _snapshot(presentation, revision=3)
+    assert bridge.publish(fresh)
+    item.updatePaintNode(node, None)
+    assert node.snapshot is fresh
+
+    # A snapshot taken at the drop's own sync is newer than the edge and is kept.
+    newest = _snapshot(presentation, revision=4)
+    assert bridge.publish(newest)
+    item.drop_retained_frame()
+    item.updatePaintNode(node, None)
+    assert node.snapshot is newest
+
+
 def test_bubble_retained_sync_logs_logical_and_device_radius(
     monkeypatch,
 ) -> None:

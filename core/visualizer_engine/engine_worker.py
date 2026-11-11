@@ -82,12 +82,24 @@ class EngineSession:
     #: retry, as in process. A count of steps, never a timer.
     FAILED_STEPS_BEFORE_CLOSE = 60
 
+    #: A worker-paced session whose cadence thread is blocked inside a step (a lock, a native call) fails closed too
+    #: (phase-boundary audit L4): the process's message loop still answers the supervisor's heartbeat, so nothing else
+    #: sees it, and the Visualizer would stay frozen on its last frame for the run. The worker's heartbeat handler asks
+    #: the session (``watch_cadence_liveness``): after this many consecutive heartbeats, each at least
+    #: ``STALL_OBSERVATION_MIN_S`` after the one before (heartbeats that queued behind a long control edge arrive
+    #: together and count once), with the cadence running, not parked and not one step further, the session fails
+    #: closed as above. The heartbeat is the supervisor's own (3 s): no timer, thread or polling of the session's.
+    STALLED_HEARTBEATS_BEFORE_CLOSE = 2
+    STALL_OBSERVATION_MIN_S = 1.0
+
     # Defaults (a recorded session configured from the offline request); ``_construct`` owns the instance values.
     _activation: Any = None
     _device = False
     _capture_failed = False
     _failed: str | None = None
     _failed_steps = 0
+    _liveness_seen: tuple | None = None
+    _stalled_heartbeats = 0
 
     def __init__(self, **kwargs: Any) -> None:
         # A session that fails while being built releases what it entered (the pinned authored clock, the attached
@@ -161,11 +173,21 @@ class EngineSession:
         # revisions start at ``namespace << 32`` (the main process's own counter stays far below). Namespace 0 numbers
         # from 1, as a fresh in-process replay does (the identity gates).
         extruded_bubble_drift_log._REVISIONS = itertools.count((int(label_namespace) << 32) + 1)
-        # ``wake``: the writer end of the owner's wake pipe (one byte per publish; the owner's emitter coalesces).
+        # ``wake``: the writer end of the owner's wake pipe (one byte per publish; the owner's emitter coalesces), or
+        # on POSIX the pipe's name, which the session opens itself (``wake_channel``: no descriptor crosses the
+        # control channel there, so none can be left behind by a worker that dies before decoding its configure).
         # ``publish_stamps``: the owner's ``--frame-trace`` is admitted, so every slot carries its publish time (the
         # main side's trace records the publish from it; gate 3). Off: the slot carries 0 and no clock is read.
-        self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake,
-                                     publish_stamps=bool(publish_stamps))
+        from core.visualizer_engine.wake_channel import open_wake_sender
+
+        wake_sender = open_wake_sender(wake)
+        try:
+            self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake_sender,
+                                         publish_stamps=bool(publish_stamps))
+        except BaseException:
+            if wake_sender is not None and wake_sender is not wake:
+                wake_sender.close()               # opened here by name, and the mailbox never took it
+            raise
         self._stack.callback(self.mailbox.close)
         self._live = inputs == "live"
         if self._live:
@@ -562,8 +584,42 @@ class EngineSession:
         """Why the session failed closed on its own (``_fail_closed``), or None."""
         return self._failed
 
+    def watch_cadence_liveness(self, now: float | None = None) -> bool:
+        """The message thread, at each of the supervisor's heartbeats (``VisualizerEngineWorker._handle_heartbeat``):
+        whether the session failed closed here because its cadence thread stopped stepping
+        (``STALLED_HEARTBEATS_BEFORE_CLOSE``). Reads the runtime's step count, nothing else: no lock the cadence
+        thread could hold, no wait. A parked cadence (display power, a session already failed closed), one stopped
+        for an activation commit and an input-paced session are not watched; a park that was requested and never
+        reached (the step it waits behind is the blocked one) is. A step that only raises still counts as a step:
+        that run is ``FAILED_STEPS_BEFORE_CLOSE``'s."""
+        if self._failed is not None or not self._paced:
+            return False
+        runtime = self._controller.logical_runtime
+        if runtime is None or not runtime.is_running() or runtime.is_parked():
+            self._liveness_seen, self._stalled_heartbeats = None, 0
+            return False
+        if now is None:
+            import time
+
+            now = time.perf_counter()
+        steps = runtime.steps
+        seen = self._liveness_seen
+        if seen is None or seen[0] is not runtime or seen[1] != steps:
+            self._liveness_seen, self._stalled_heartbeats = (runtime, steps, float(now)), 0
+            return False
+        if float(now) - seen[2] < self.STALL_OBSERVATION_MIN_S:
+            return False                       # queued heartbeats handled together: one observation
+        self._liveness_seen = (runtime, steps, float(now))
+        self._stalled_heartbeats += 1
+        if self._stalled_heartbeats < self.STALLED_HEARTBEATS_BEFORE_CLOSE:
+            return False
+        self._fail_closed(f"the cadence thread made no step across {self._stalled_heartbeats} heartbeats while "
+                          f"running (blocked inside step {steps + 1}; parked={runtime.park_requested})")
+        return True
+
     def _fail_closed(self, reason: str) -> None:
-        """The cadence thread: the session's steps keep failing. Park the cadence (requested, never awaited: this runs
+        """The cadence thread (its steps keep failing) or the message thread (the cadence is blocked,
+        ``watch_cadence_liveness``). Park the cadence (requested, never awaited: this may run
         inside its own step) and end the wake pipe, so the owner sees the session's end as an event (its listener's
         ``on_closed``) and recovers; any later edge is answered with ``session_closed`` (``VisualizerEngineWorker``)."""
         import logging
@@ -987,6 +1043,10 @@ class VisualizerEngineWorker(BaseWorker):
                 except Exception as exc:
                     _log().exception('VIS_STOP failed; closing the engine session')
                     error = f"{type(exc).__name__}: {exc}"
+                    if session is not None and session.failed is not None:
+                        # Why it failed closed (a blocked cadence never joins, so no report carries it): the main
+                        # side logs this reply's error, and the worker's own log lines never reach the main log.
+                        error += f"; the session had failed closed: {session.failed}"
                     try:
                         self._close_session()           # drops the session first, then unwinds all it holds
                     except Exception as close_exc:
@@ -1000,6 +1060,19 @@ class VisualizerEngineWorker(BaseWorker):
             _log().exception('%s failed', msg.msg_type.value)
             return self._reply(msg, success=False, error=f"{type(exc).__name__}: {exc}")
         return self._reply(msg, success=False, error=f"unsupported message {msg.msg_type}")
+
+    def _handle_heartbeat(self, msg: WorkerMessage) -> None:
+        """The supervisor's heartbeat (the message thread): answered as every worker answers it, after the session's
+        cadence liveness is read (phase-boundary audit L4; ``EngineSession.watch_cadence_liveness``). The message loop
+        answering proves only itself: the frames come from the session's own cadence thread. The watch never raises
+        into the acknowledgement and never waits."""
+        session = self._session
+        if session is not None:
+            try:
+                session.watch_cadence_liveness()
+            except Exception:
+                _log().exception("[SPOTIFY_VIS][ENGINE_WORKER] The cadence liveness watch failed")
+        super()._handle_heartbeat(msg)
 
     def _close_session(self) -> None:
         if self._session is not None:

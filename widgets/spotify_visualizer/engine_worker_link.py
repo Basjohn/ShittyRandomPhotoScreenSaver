@@ -245,7 +245,9 @@ class EngineWorkerLink:
         self._thread_manager = thread_manager
         self._on_lost = on_lost
         self._mailbox: Any = None
-        self._sender: Any = None                  # the main side's copy of the wake pipe's writer end, until configured
+        # The session's wake pipe as the main side holds it (``wake_channel``): its own writer end, and on POSIX the
+        # pipe's name, until the session answers the configure.
+        self._wake_channel: Any = None
         self._closed = False
         self._stopping = False                    # an ordered stop: the session's end that follows is not a loss
         self._lost_reported = False
@@ -488,29 +490,33 @@ class EngineWorkerLink:
         """``VIS_CONFIGURE``: a fresh mapping, wake pipe and label namespace; the session configured with the host
         binding's own activation. Returns at once (the worker's spawn included); the reply calls ``on_configured`` with
         the engine's (generation, activation id) for the owner's render binding. The reader listens from now on (the
-        main side holds the writer end until the reply, so the pipe cannot end before the session exists)."""
-        import multiprocessing
+        main side holds the writer end until the reply, so the pipe cannot end before the session exists).
 
+        What crosses in ``wake`` is the wake channel's transfer (``core.visualizer_engine.wake_channel``): the writer
+        end on Windows, duplicated into the worker process by the control channel; the pipe's name on POSIX, where
+        the session opens its own end and nothing is handed over through the resource sharer."""
         from core.process.types import MessageType
         from core.visualizer_engine.packet_mailbox import PacketMailbox
         from core.visualizer_engine.frame_capacity import required_slot_bytes
+        from core.visualizer_engine.wake_channel import open_wake_channel
 
         missing = [key for key in ACTIVATION_KEYS if key not in activation]
         if missing:
             raise EngineWorkerFailure(f"incomplete activation inputs: {missing}")
         slot_bytes = required_slot_bytes(str(mode), activation['logical_kwargs'])
-        receiver, sender = multiprocessing.Pipe(duplex=False)
+        channel = open_wake_channel()
+        receiver = channel.receiver
         try:
             mailbox = PacketMailbox(role="reader", slot_bytes=slot_bytes)
         except BaseException:
             receiver.close()
-            sender.close()
+            channel.release_sender()
             raise
         logger.info('[SPOTIFY_VIS][ENGINE_WORKER] Frame capacity admitted mode=%s slot_bytes=%d', mode, slot_bytes)
         self.label_namespace = next_label_namespace()
         payload: dict[str, Any] = {
             "mapping": mailbox.mapping_name, "mode": str(mode), "runtime_generation": int(runtime_generation),
-            "bar_count": int(bar_count), "label_namespace": self.label_namespace, "wake": sender,
+            "bar_count": int(bar_count), "label_namespace": self.label_namespace, "wake": channel.transfer,
             # Production: the live engine on the worker's own cadence and the loopback device (no ``pcm``).
             "inputs": "live", "order": "free", "cadence": "worker",
             "activation": {key: activation[key] for key in ACTIVATION_KEYS},
@@ -521,7 +527,7 @@ class EngineWorkerLink:
         if _test_session_overrides is not None:
             payload.update(_test_session_overrides)
         self._mailbox = mailbox
-        self._sender = sender
+        self._wake_channel = channel
         self.mapping_name = mailbox.mapping_name
         try:
             mailbox.listen_for_wakes(receiver, on_closed=self._session_ended)
@@ -544,12 +550,10 @@ class EngineWorkerLink:
             raise
 
     def _close_sender(self) -> None:
-        sender, self._sender = self._sender, None
-        if sender is not None:
-            try:
-                sender.close()
-            except OSError:
-                pass
+        """Give back the main side's writer end of the wake pipe and, on POSIX, the pipe's name (idempotent)."""
+        channel, self._wake_channel = self._wake_channel, None
+        if channel is not None:
+            channel.release_sender()
 
     def start(self, playing: bool, *, on_failed: Callable[[EngineWorkerFailure], None] | None = None) -> None:
         """``VIS_START``: the host binding's play edge and the owner's ``start`` (the worker's cadence)."""
@@ -606,9 +610,22 @@ class EngineWorkerLink:
         if snapshot == self._view_sent and not changed:
             return False
         from core.process.types import MessageType
-        from widgets.spotify_visualizer.logical_edges import detach_presentation_value
+        from widgets.spotify_visualizer.logical_edges import (detach_presentation_value,
+                                                              report_unforwarded_presentation_input)
 
-        changed = {attr: detach_presentation_value(value) for attr, value in changed.items()}
+        refused: dict[str, Any] = {}
+        for attr, value in tuple(changed.items()):
+            try:
+                changed[attr] = detach_presentation_value(value)
+            except TypeError as exc:
+                # A Qt value with no plain form nested in the input (audit L4): never pickled to the worker (its
+                # process loads QtCore only), reported once, and recorded as it is so the same value is not tried
+                # again at every presentation; the session keeps what it holds until the state's value changes.
+                report_unforwarded_presentation_input(attr, exc)
+                refused[attr] = changed.pop(attr)
+        sent.update(refused)
+        if snapshot == self._view_sent and not changed:
+            return False
         extent, rotations, override_extent, override_rotations = snapshot
         self._view_sent = snapshot
         sent.update(changed)
@@ -712,11 +729,12 @@ class EngineWorkerLink:
         if self._closed:
             return None
         self._stopping = True
+        # A link that never configured has no mapping: its stop is addressed to no session in particular.
+        mailbox = self._mailbox
+        candidates = self._capacity_candidates or (mailbox.mapping_candidates if mailbox is not None else ())
         try:
             response = self._await(MessageType.VIS_STOP,
-                                   {"mapping": self.mapping_name,
-                                    'mapping_candidates': (self._capacity_candidates
-                                                           or self._mailbox.mapping_candidates)},
+                                   {"mapping": self.mapping_name, 'mapping_candidates': candidates},
                                    timeout_ms=timeout_ms)
         except EngineWorkerFailure as exc:
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Stop: %s", exc)
@@ -830,15 +848,15 @@ def _consume_stop_report(mapping: str | tuple[str, ...], response: Any) -> None:
     if not isinstance(report, Mapping):
         diagnostic_logger.warning('%s empty mapping=%s', prefix, mapping)
         return
-    candidates = (mapping,) if isinstance(mapping, str) else mapping
-    if report.get('mapping') not in candidates:
+    candidates = (mapping,) if isinstance(mapping, str) else tuple(mapping or ())
+    if candidates and report.get('mapping') not in candidates:      # an unaddressed stop names no mapping to match
         diagnostic_logger.error('%s mapping mismatch expected=%s actual=%s', prefix, candidates, report.get('mapping'))
         return
     engine = report.get('engine') or {}
     failed = report.get('failed')
     write = diagnostic_logger.error if failed else diagnostic_logger.info
     write('%s mapping=%s revision=%s failed=%s capture_failed=%s capture_reopens=%s capture_resumed=%s',
-          prefix, report['mapping'], report.get('revision'), failed, engine.get('capture_failed'),
+          prefix, report.get('mapping'), report.get('revision'), failed, engine.get('capture_failed'),
           engine.get('capture_reopens'), engine.get('capture_resumed'))
 
 

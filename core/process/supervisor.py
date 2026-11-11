@@ -11,6 +11,7 @@ Manages lifecycle of worker processes including:
 from __future__ import annotations
 
 import multiprocessing as mp
+import os
 import threading
 import time
 import uuid
@@ -41,6 +42,28 @@ from core.process.shared_memory_transport import (
 )
 
 logger = get_logger(__name__)
+
+
+def process_has_exited(process: Any) -> bool:
+    """Whether a worker process has exited or is on its way out (R-185).
+
+    ``Process.is_alive()`` on Windows waits on the process handle, which is signalled only when teardown has finished:
+    measured 5 to 24 ms after a kill, growing with the child's memory. For that long a dead worker still reads as
+    alive, while its handle table is already gone: the session's wake pipe has ended (the owner is already
+    recovering) and ``DuplicateHandle`` into it is refused. The exit status is set when termination begins, before the
+    handles go, so it is read as well. Anywhere else, and for a stand-in without a process handle, ``is_alive()``
+    decides."""
+    if not process.is_alive():
+        return True
+    if os.name == "nt":
+        try:
+            import _winapi
+
+            return _winapi.GetExitCodeProcess(process.sentinel) != _winapi.STILL_ACTIVE
+        except (AttributeError, OSError, TypeError, ValueError):
+            return False
+    return False
+
 
 class ProcessSupervisor:
     """
@@ -225,7 +248,7 @@ class ProcessSupervisor:
     def _start_role(self, worker_type: WorkerType) -> bool:
         with self._lock:
             # Check if already running
-            if worker_type in self._workers and self._workers[worker_type].is_alive():
+            if worker_type in self._workers and not process_has_exited(self._workers[worker_type]):
                 logger.debug("%s worker already running", worker_type.value)
                 return True
 
@@ -346,13 +369,19 @@ class ProcessSupervisor:
         the engine worker's link stopped the role itself before every start."""
         with self._lock:
             process = self._workers.get(worker_type)
-            dead = process is not None and not process.is_alive()
+            dead = process is not None and process_has_exited(process)
             orphaned_listener = process is None and worker_type in self._response_listener_threads
         if not dead and not orphaned_listener:
             return
         logger.info("Retiring the dead %s worker before its start", worker_type.value)
         self._stop_response_listener(worker_type, reason="worker_died")
         if dead:
+            # A process still being torn down (``process_has_exited``) finishes within milliseconds: wait for it
+            # here (the role's lifecycle lock, never the state lock or the GUI thread), so its handle is closed with
+            # the role instead of being terminated again as a worker that would not stop.
+            join = getattr(process, "join", None)
+            if callable(join):
+                join(timeout=PROCESS_TERMINATE_TIMEOUT_S)
             self._stop_role(worker_type, 0.0)
 
     def _stop_if_current(self, worker_type: WorkerType, process: Any, timeout: float) -> bool:
@@ -597,9 +626,9 @@ class ProcessSupervisor:
             if worker_type in self._transitioning or worker_type not in self._workers:
                 return None
             
-            if not self._workers[worker_type].is_alive():
+            if process_has_exited(self._workers[worker_type]):
                 return None
-            
+
             req_queue = self._request_queues.get(worker_type)
             if not req_queue:
                 return None
@@ -626,7 +655,16 @@ class ProcessSupervisor:
                 process = self._workers[worker_type]
                 # Queue's feeder must never serialize user payloads: that can
                 # fail after the caller already accepted an ordered edge.
-                encoded = EncodedControl(message.to_dict(), process)
+                try:
+                    encoded = EncodedControl(message.to_dict(), process)
+                except OSError:
+                    # The target died between the check above and its handle transfer (R-185): not running, as
+                    # documented, never an exception out of a send to a dead worker.
+                    if process_has_exited(process):
+                        logger.warning('Ordered %s control %s not sent: the worker process has exited',
+                                       worker_type.value, msg_type.value)
+                        return None
+                    raise
                 try:
                     req_queue.put_nowait(encoded.data)
                 except Exception as exc:
@@ -911,7 +949,7 @@ class ProcessSupervisor:
         with self._lock:
             if worker_type in self._transitioning or worker_type not in self._workers:
                 return False
-            return self._workers[worker_type].is_alive()
+            return not process_has_exited(self._workers[worker_type])
     
     def get_health(self, worker_type: WorkerType) -> HealthStatus:
         """Get health status for a worker."""
@@ -1823,7 +1861,7 @@ class ProcessSupervisor:
             for worker_type, process in list(self._workers.items()):
                 if worker_type in self._transitioning:
                     continue
-                if not process.is_alive():
+                if process_has_exited(process):
                     logger.warning(
                         "%s worker process died unexpectedly",
                         worker_type.value,

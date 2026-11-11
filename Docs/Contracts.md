@@ -571,10 +571,24 @@ environment flag. Design and gates: `Docs/Future_Work/Native_Core_P2_Engine_Desi
 Ordered application controls for `CLIENT_RESTARTED_ROLES` never evict an earlier edge. The supervisor serializes each
 snapshot once before queue admission; refusal returns None and serialization failure raises into the link's existing
 queued failure path. Only the visualizer worker decodes these bytes; other roles and internal controls retain their
-existing dictionary protocol. Windows wake-pipe transfers belong to the exact supervised process handle. Cleanup
-reclaims only never-submitted transfers; the CPython 3.14 private sharer adapter must not cancel accepted entries or
-block on the sharer service. Accepted POSIX unread-transfer retention remains an explicit audit follow-up.
+existing dictionary protocol. Windows wake-pipe transfers belong to the exact supervised process handle, and cleanup
+reclaims only never-submitted ones. **No ordered control ever creates a resource-sharer registration**: a
+`multiprocessing.Connection` or socket that only the stdlib sharer could hand over is refused before anything is
+registered (`control_messages.SharerBackedTransferRefused`), because an accepted registration keeps a sender-side
+descriptor that a worker dying before it decodes the message never collects, and the supported API cannot cancel one.
+No private sharer state is read or written. On POSIX the session's wake pipe is therefore a named pipe whose **name**
+crosses in `VIS_CONFIGURE` and which the session opens itself (`core/visualizer_engine/wake_channel.py`); the link
+holds its reader, its own writer end and the name until the configure's reply, and its `close` gives back whatever it
+still holds, so a worker that never decodes its configure leaves nothing behind. That POSIX branch is source-level
+only (unit-tested with its system calls injected; never run on Linux). The supervisor judges a role's process by its
+exit status as well as its handle (`process_has_exited`, R-185): a worker being torn down is not running.
 A first-configure deadline miss disables the worker for that run, so later owners do not repeat the cold wait.
+
+A worker-paced session whose cadence thread makes no step across two of the supervisor's heartbeats (at least a second
+apart, running and not parked) fails closed like one whose steps keep failing: its wake pipe ends and the owner
+recovers. The worker's heartbeat handler asks the session; there is no timer, thread or polling for it. A presentation
+input holding a Qt value is forwarded to the session as plain data (a colour as its `(r, g, b, a)`) or refused with
+one error per attribute: it is never dropped silently and never pickled to the QtCore-only worker.
 
 Bar-count reconfiguration must leave controller authority, the shared engine generation and the controller-owned logical
 display-bar mirror/freshness state coherent. Legacy overlay-only mirrors get no Quick successor unless an exact retained

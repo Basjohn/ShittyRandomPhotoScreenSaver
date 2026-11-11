@@ -263,75 +263,219 @@ def test_target_death_between_duplication_and_enqueue_refusal_needs_no_pid_looku
         receiver.close()
 
 
-@pytest.mark.parametrize('refusal', ('serialize', 'enqueue'))
-def test_never_submitted_sharer_registration_is_locally_reclaimed(refusal):
-    """Exercise the stdlib registration path on Windows sockets and POSIX FDs."""
-    import socket
-    from multiprocessing import connection, resource_sharer
-    from core.process.control_messages import _registration_service
-    first, second = socket.socketpair()
-    sender, receiver = connection.Connection(first.detach()), connection.Connection(second.detach())
-    service = _registration_service()
-    # This unrelated, unpublished registration must remain entirely untouched.
-    closed = []
-    unrelated = service.register(lambda *_: None, lambda: closed.append(True))
-    class Refused(queue.Queue):
-        def put_nowait(self, value):
-            raise queue.Full
-    supervisor = _supervisor(Refused() if refusal == 'enqueue' else queue.Queue())
+def _heavy_unread_worker(channel, ready, release):
+    ballast = bytearray(96 * 1024 * 1024)                   # a longer teardown, as a real worker's
+    for index in range(0, len(ballast), 4096):
+        ballast[index] = 1
+    ready.set()
+    release.wait(30)
+
+
+@pytest.mark.skipif(__import__('sys').platform != 'win32', reason='the Windows process-handle teardown window')
+@pytest.mark.parametrize('pre_fix', (False, True))
+def test_a_worker_being_torn_down_is_not_running_and_a_send_to_it_never_raises(monkeypatch, pre_fix):
+    # R-185: a killed worker's process handle is signalled only when its teardown has finished (5 to 24 ms measured),
+    # but its handle table goes first: the session's wake pipe ends (the owner starts recovering) while ``is_alive()``
+    # still says True. The replacement's configure was then sent "to a running worker", and the wake handle's
+    # duplication into the dying process raised access denied out of ``send_message``: a second failure, the engine
+    # worker off for the run. The exit status is set when termination begins, so the supervisor reads it: the role
+    # is not running (the link starts a fresh worker), a send returns None, nothing is duplicated or leaked.
+    # Negative control (``is_alive()`` alone, as before): still "running" right after the kill.
+    import _winapi
+
+    from core.process import supervisor as supervisor_module
+
+    if pre_fix:
+        monkeypatch.setattr(supervisor_module, 'process_has_exited', lambda process: not process.is_alive())
+    context = multiprocessing.get_context('spawn')
+    channel = context.Queue(maxsize=4)
+    ready, release = context.Event(), context.Event()
+    child = context.Process(target=_heavy_unread_worker, args=(channel, ready, release))
+    receiver, sender = context.Pipe(duplex=False)
+    child.start()
+    supervisor = _supervisor(channel, child)
     try:
-        before = set(service._cache)
-        for _ in range(8):
-            payload = {'wake': sender}
-            if refusal == 'serialize':
-                payload['bad'] = lambda: None
-                with pytest.raises((pickle.PicklingError, AttributeError, TypeError)):
-                    supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_SET_VIEW, payload)
+        assert ready.wait(30)
+        assert supervisor.is_running(WorkerType.VISUALIZER)
+        before = _windows_handles()
+        _winapi.TerminateProcess(child.sentinel, 1)
+        running = supervisor.is_running(WorkerType.VISUALIZER)       # at once: teardown has only begun
+        assert running is pre_fix, running
+        if pre_fix:
+            return
+        assert child.is_alive() or child.exitcode is not None        # either way the role reads as gone
+        for _ in range(200):                                         # all through the teardown and after it
+            assert supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE,
+                                           {'wake': sender}) is None
+        child.join(5)
+        assert not child.is_alive() and not supervisor.is_running(WorkerType.VISUALIZER)
+        assert _windows_handles() == before
+        sender.send_bytes(b'original still owned')
+        assert receiver.recv_bytes() == b'original still owned'
+    finally:
+        if child.is_alive():
+            child.terminate()
+            child.join(5)
+        _close(supervisor)
+        child.close()
+        sender.close()
+        receiver.close()
+
+
+@pytest.mark.skipif(__import__('sys').platform != 'win32', reason='the Windows process-handle teardown window')
+def test_a_send_whose_target_dies_during_the_handle_transfer_is_not_running_not_an_error(monkeypatch):
+    # The target exits between the supervisor's check and the wake handle's duplication into it: the send answers
+    # None (the worker is not running), never an exception. An OSError from a live target still propagates.
+    from core.process import control_messages
+    from core.process import supervisor as supervisor_module
+
+    exited: list = []
+
+    class _Refused:
+        def __init__(self, _message, _process):
+            raise PermissionError(5, 'Access is denied')
+
+    monkeypatch.setattr(control_messages, 'EncodedControl', _Refused)
+    monkeypatch.setattr(supervisor_module, 'process_has_exited', lambda _process: bool(exited))
+    channel = queue.Queue()
+    supervisor = _supervisor(channel)
+    try:
+        with pytest.raises(PermissionError):
+            supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {})
+
+        def exits_after_the_check(_process, _calls=[]):
+            _calls.append(True)
+            return len(_calls) > 1                           # alive at the check, gone at the transfer
+
+        monkeypatch.setattr(supervisor_module, 'process_has_exited', exits_after_the_check)
+        assert supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {}) is None
+        assert channel.empty()
+    finally:
+        _close(supervisor)
+
+
+def _socket_connections():
+    """A sharer-backed pair: ``multiprocessing.connection.Connection`` over a socket (the class every POSIX pipe end
+    has; on Windows, where pipes are ``PipeConnection``, the socket-backed one)."""
+    import socket
+    from multiprocessing import connection
+    first, second = socket.socketpair()
+    return connection.Connection(first.detach()), connection.Connection(second.detach())
+
+
+class _SharerSpy:
+    """Counts the resource sharer's registrations through its public wrappers (``DupFd`` / ``DupSocket``): each
+    construction registers one sender-side duplicate. The wrappers stay real, so a registration made under the spy can
+    be collected again through the supported ``detach``."""
+
+    def __init__(self, monkeypatch):
+        from multiprocessing import resource_sharer
+        self.made: list = []
+        for name in ('DupFd', 'DupSocket'):
+            wrapper_type = getattr(resource_sharer, name, None)
+            if wrapper_type is None:
+                continue
+
+            def recording(wrapper, *args, _init=wrapper_type.__init__, **kwargs):
+                _init(wrapper, *args, **kwargs)
+                self.made.append(wrapper)
+
+            monkeypatch.setattr(wrapper_type, '__init__', recording)   # the class stays itself (it is pickled)
+
+    def collect(self) -> None:
+        """Take back every registration made (the sender asks its own service, as a receiver would)."""
+        made, self.made = self.made, []
+        for wrapper in made:
+            taken = wrapper.detach()
+            close = getattr(taken, 'close', None)
+            if callable(close):
+                close()
             else:
-                assert supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_SET_VIEW, payload) is None
-            assert set(service._cache) == before and closed == []
+                os.close(taken)
+
+
+@pytest.mark.parametrize('pre_fix', (False, True))
+def test_a_sharer_backed_connection_is_refused_before_anything_is_registered(monkeypatch, pre_fix):
+    # The POSIX transfer-lifetime repair: a Connection that only the resource sharer could hand over is never
+    # serialised for the ordered channel, so no sender-side duplicate exists for a worker to leave uncollected by
+    # dying before it decodes the message. Refused synchronously, nothing registered, nothing queued, the caller's
+    # Connection untouched. Negative control (the stock reducer, as before the repair): the send is accepted and one
+    # registration sits in the sharer with no receiver that will ever ask for it.
+    from multiprocessing import connection, reduction
+    from core.process import control_messages
+    from core.process.control_messages import SharerBackedTransferRefused
+
+    spy = _SharerSpy(monkeypatch)
+    if pre_fix:
+        monkeypatch.setattr(control_messages, '_refuse_sharer_backed',
+                            reduction.ForkingPickler._extra_reducers[connection.Connection])
+    sender, receiver = _socket_connections()
+    channel = queue.Queue()
+    supervisor = _supervisor(channel)
+    try:
+        if pre_fix:
+            assert supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {'wake': sender})
+            assert len(spy.made) == 1 and not channel.empty()      # accepted: a registration nobody will collect
+            return
+        for _ in range(8):
+            with pytest.raises(SharerBackedTransferRefused, match='wake_channel'):
+                supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {'wake': sender})
+        assert spy.made == [] and channel.empty()
         sender.send_bytes(b'original remains usable')
         assert receiver.recv_bytes() == b'original remains usable'
     finally:
-        with service._lock:
-            _send, close = service._cache.pop(unrelated[1])
-        close()
+        spy.collect()
         sender.close()
         receiver.close()
         _close(supervisor)
 
 
-def test_unsupported_sharer_shape_fails_before_registration(monkeypatch):
+def test_a_socket_is_refused_like_a_sharer_backed_connection(monkeypatch):
     import socket
-    from multiprocessing import connection
-    from core.process import control_messages
+    from core.process.control_messages import SharerBackedTransferRefused
+
+    spy = _SharerSpy(monkeypatch)
     first, second = socket.socketpair()
-    sender = connection.Connection(first.detach())
     channel = queue.Queue()
     supervisor = _supervisor(channel)
-    monkeypatch.setattr(control_messages.resource_sharer, '_resource_sharer', SimpleNamespace(_cache=None))
     try:
-        with pytest.raises(RuntimeError, match='audited CPython 3.14'):
-            supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_SET_VIEW, {'wake': sender})
-        assert channel.empty()
+        with pytest.raises(SharerBackedTransferRefused):
+            supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {'socket': first})
+        assert spy.made == [] and channel.empty()
     finally:
-        sender.close()
+        spy.collect()
+        first.close()
         second.close()
         _close(supervisor)
 
 
-def test_unpublished_posix_adapter_claims_only_its_own_registration_once():
-    """Pure adapter proof; Windows execution does not establish Linux IPC."""
-    import threading
-    from core.process.control_messages import _UnsubmittedRegistration
-    closed = []
-    service = SimpleNamespace(_lock=threading.Lock(), _address='service', _cache={
-        7: (lambda *_: None, lambda: closed.append('ours')),
-        8: (lambda *_: None, lambda: closed.append('unrelated')),
-    })
-    rollback = _UnsubmittedRegistration(service, ('service', 7))
-    rollback.cancel()
-    rollback.cancel()
-    assert closed == ['ours'] and set(service._cache) == {8}
-    _UnsubmittedRegistration(service, ('another-service', 8)).cancel()
-    assert closed == ['ours'] and set(service._cache) == {8}
+def test_a_refused_transfer_reaches_the_links_failure_event_and_frees_what_came_before_it(qapp, monkeypatch):
+    # A refused Connection behind an accepted pipe end in one payload (Windows: the pipe end was already duplicated
+    # into the target): the duplicate is taken back, the link's request fails as an event, nothing is registered.
+    from widgets.spotify_visualizer.engine_worker_link import EngineWorkerLink
+
+    spy = _SharerSpy(monkeypatch)
+    refused, other = _socket_connections()
+    receiver, pipe_end = multiprocessing.Pipe(duplex=False)
+    channel = queue.Queue()
+    supervisor = _supervisor(channel)
+    supervisor._response_queues[WorkerType.VISUALIZER] = queue.Queue()
+    link = EngineWorkerLink(supervisor, on_lost=lambda *_: None)
+    failed = []
+    try:
+        link._send(MessageType.VIS_SET_PLAYING, {'bad': lambda: None}, on_failed=lambda _failure: None)
+        qapp.processEvents()                     # the first failure event (its one-time handles are not the subject)
+        before = _windows_handles() if os.name == 'nt' else None
+        link._send(MessageType.VIS_SET_PLAYING, {'first': pipe_end, 'second': refused}, on_failed=failed.append)
+        assert failed == []
+        qapp.processEvents()
+        assert len(failed) == 1 and 'could not be sent' in str(failed[0])
+        assert spy.made == [] and channel.empty() and not link.busy
+        if before is not None:
+            assert _windows_handles() == before
+    finally:
+        spy.collect()
+        link.close()
+        for end in (refused, other, receiver, pipe_end):
+            end.close()
+        _close(supervisor)

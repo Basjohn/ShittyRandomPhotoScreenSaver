@@ -2813,6 +2813,19 @@ class QuickSceneController(QObject):
                 root.setProperty("transitionVisualizerFrames", float(self._transition_visualizer_frames))
         return True
 
+    def drop_visualizer_retained_frame(self) -> bool:
+        """Stop drawing the retained visualizer frame at the next sync, keeping its source bound.
+
+        An edge, from the owner of a hidden activation whose target identity is bound later (the engine worker's
+        commit reply): the outgoing frame must not stay drawn meanwhile. No clock, cadence, timer or queue.
+        """
+
+        item = self._visualizer_item
+        if item is None:
+            return False
+        item.drop_retained_frame()
+        return True
+
     def quiesce_for_retirement(self) -> None:
         """Close state admission; item deletion waits for legal invalidation."""
 

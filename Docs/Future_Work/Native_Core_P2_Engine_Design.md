@@ -88,8 +88,11 @@ there is no multiword diagnostic snapshot to tear. The append is zero-neutral, m
 so ABI 2 readers that ignore the reserved bytes remain valid. It is a terminal admission-contract failure, logged
 once with actual/capacity bytes, with no worker recovery, in-process retry or reconstruction loop.
 
-- **Writer (worker):** picks the slot that is neither the newest nor being read, bumps `sequence_begin` to odd,
-  writes, sets `sequence_end`, publishes `latest_sequence`. Never blocks on the reader.
+- **Writer (worker):** writes the slot after the newest one (`(latest + 1) % SLOT_COUNT`, `packet_abi.py`: it avoids
+  only the newest slot and cannot know which slot a reader is copying; a reader overtaken mid-copy sees the seqlock
+  change and keeps its previous frame), bumps `sequence_begin` to odd, writes, sets `sequence_end`, publishes
+  `latest_sequence`. Never blocks on the reader. (Corrected 11 Nov, audit L5: this read "neither the newest nor being
+  read". A reader-written `reading_slot` that would make that true is one of P3's ABI points.)
 - **Reader (main, at sync):** reads `latest_sequence`, copies the slot, accepts it only if `sequence_begin ==
   sequence_end ==` an even value at or after the last accepted one; otherwise keeps the previous frame (newest-state
   semantics, the bridge's own: never a queue, never catch-up replay).
@@ -159,11 +162,15 @@ those values per tick, so they define the equivalence.
 1. **Identity:** byte-identical packets on all recordings x all modes, worker against in-process (the existing replay
    paths: feature replay for the six feature-frame modes, `waveform_fidelity_frames` / the Studio recorded inputs for
    Waveform Ribbon and Extruded Bubble). The codec round-trip test runs per mode on every canonical frame type.
-2. **No visual change:** the existing pixel oracles and BTF checks unchanged (P2 changes no drawing).
+2. **No visual change:** the existing pixel oracles and BTF checks unchanged (P2 changes no drawing). **Recorded 11
+   Nov** ("11 Nov reconciliation" below): the production owner's drawn pixels on the worker path equal the in-process
+   path's at non-default settings for all nine modes, with the scene targets single-sampled; it found and fixed R-184
+   first. BTF checks were not rerun.
 3. **Gain:** GIL share and frame age before/after in ONE game60 run of at most 10 minutes, only after the operator's
    yes (lead only); `--usage`/PERF instrumentation, compared against the stored baselines. **Measured 8 Nov** (the
    Gate 3 record under work order 6): main's GIL share 0.85 -> 0.08, frame age down; the pair's GPU conditions are not
-   established equal.
+   established equal. (That "GIL share" is wall time per tick times the rate, not a GIL profile: audit L2. The live
+   check's fields are named for what they measure since 11 Nov.)
 4. **Dormancy and lifecycle:** overhead baseline identical with the Visualizer off; no process, mapping or handle growth
    over 20 Settings open/close and 20 mode switches; worker retired with its generation. **Passed 8 Nov** (the Gate 4
    record under work order 6; it found and fixed R-178 first).
@@ -1493,6 +1500,12 @@ are specified above.
 
        Main RSS (the working set) rises over the laps on both paths while the worker path's main private bytes stay
        flat: no commit grows on the worker path. Every switch completed, in 0.85-2.1 s on both.
+
+       *Corrections, 11 Nov (audit L5 and M5; "11 Nov reconciliation" below).* The worker row was read on `e713dd74`,
+       before R-179's fix; re-read with the fix it has the same shape (63.5 MB, 103.9 MB from the first Waveform
+       Ribbon, 101.5-104.7 MB across the second lap), so it was not the codec sawtooth and it is not growth. The two
+       "Private, main" medians compare a first lap with a last one, and the first lap is each mode's one-time GPU
+       resource creation on both paths: measured over three laps, neither path grows from the second visit on.
      - *The worker is retired with its generation:* in all 20 round trips the supervisor's `Stopped visualizer worker`
        and the lifetime's `Engine worker retired ... (pid=N)` come before `Entering settings dialog exec`, and the next
        PID's start after `Settings dialog destroyed` (Settings open retires it; Settings close respawns it; the
@@ -1523,7 +1536,12 @@ are specified above.
        collection at each switch frees under 1 MB; tracked objects plateau after the first lap), not the heaps (heap,
        heap_large and arenas +30 / +45 / +17 MB over a lap); `private_other` (VirtualAlloc outside the heaps, mostly not
        resident) 629 -> 1376 MB by Waveform Ribbon and 940 MB back at Bubble on lap 2 (601 on lap 1). On the worker path
-       main's private bytes stay flat and the worker plateaus.
+       main's private bytes stay flat and the worker plateaus. **Superseded 11 Nov (audit M5):** over three laps the
+       same mode's private bytes rise only from its first visit to its second (+61 to +177 MB for the seven modes
+       visited first, -46 and -5.5 MB for the two visited last: the lap's driver allocations for each mode's GPU
+       resources) and then hold (-10 to +32 MB from the second visit to the third); the worker path's main process
+       takes the same first-lap step. It is a high-water mark of the rendering process, not growth, and not specific to the
+       in-process path.
      - Evidence: `.artifacts/evidence/architecture/native_core_p2/20261108_gate4_dormancy/` (`per_cycle_tables.md`, one
        folder per run with `resource_readings.json`, `resource_samples.jsonl`, `resource_summary.json`, the drivers'
        state and the saver's logs; `console/`; `overhead_flag_off.json` / `_on.json`; frame traces deleted, profile
@@ -1555,6 +1573,12 @@ are specified above.
        the worker path the frame take (`frame_take_ms`: slot copy, decode and the owner's completion, measured by
        `tools/eb_live_phases.py`'s passive wrapper on `PacketMailbox._read`); `worker_tick_ms` / `worker_gil_share`
        are the worker's own. A worker run with no publish records fails.
+       *Renamed 11 Nov (audit L2):* these shares are wall time per call times the rate, so the fields are now
+       `tick_wall_share`, `main_wall_share` (with `main_per_frame_work` naming the work), `logical_tick_wall_share`
+       and `worker_tick_wall_share`, beside `main_cpu_share` from the step's own thread CPU time. The waiting count is
+       None on the worker path (untaken frames are never recorded there, so its 0 / 0 below says nothing), and
+       `audio_delivery` names how the audio reached the tick. The tables below keep the names they were recorded
+       under.
      - *Proof (invisible MC saver, Spectrum P1, recorded `anything_mixed2`, `--load none`, `--usage`, 120 s each,
        admission on then off; other processes ~24-28% CPU median, GPU ~42-44% busy, other sessions):*
 
@@ -1823,6 +1847,34 @@ are specified above.
        leaves the in-process Visualizer at rest until the next play edge) now concerns only the fallback and the
         control. The phase-boundary audit is not complete: `Current_Plan.md` keeps M2/L1, M4 and the remaining findings
         ahead of P3's explicit decisions. H1/H2 and default-merge evidence are in the audit resolution section.
+
+## 11 Nov reconciliation (audit M4, M5, L2-L5, the POSIX transfer lifetime)
+
+Details, numbers and tests for each item: `Native_Core_P2_Phase_Boundary_Audit.md`, "11 Nov". What changes in this
+design:
+
+- **Gate 2 record.** Method: `tools/visualizer_replay/owner_render_parity.py`. The real owner on each path over the
+  same recorded inputs; every presentation mirrored into the production `DisplayScene.qml`, drawn through
+  `QQuickRenderControl` into a hidden texture (never a window); the card's pixels of every drawn frame hashed and
+  compared. Settings moved off every default for the mode and its switch partner, two variants. Result with the scene
+  targets single-sampled: **exact for all nine modes in both variants** (549 frames each), with a repeat control
+  (exact) and a nudge control (296-542 frames change). At the product's sampling the two paths differ by no more than
+  one path differs from its own repeat (1-2 levels on a few thousand edge pixels at most), because a multisampled
+  target is not reproducible draw to draw on this GPU; that is reported, not judged. Gate 2 holds on drawn pixels, not
+  only by construction. It was false before R-184's fix for a switch that changes the layout profile.
+- **A consumer that retains a frame needs a drop edge (R-184).** `VisualizerRenderItem.drop_retained_frame()` is the
+  one the worker path's hidden activation uses. P3's native reader holds the same kind of state: decision D1/D2 should
+  name its drop edge beside the mapping's lifetime.
+- **Liveness now covers the frame stream.** Heartbeat acknowledged and cadence stepping are separate facts; the
+  worker's heartbeat handler checks the second (`EngineSession.watch_cadence_liveness`), and a stall fails the session
+  closed like a run of failing steps. Nothing was added that runs between heartbeats.
+- **The wake pipe's transport is per platform** (`core/visualizer_engine/wake_channel.py`): Windows as designed (the
+  writer end duplicated into the worker by the control channel); POSIX a named pipe opened by the session, because a
+  `Connection` through a queue leaves a sender-side resource-sharer registration that a worker dying before decode
+  never collects. No ordered control registers with the sharer on any platform. POSIX is source-level only.
+- **Supervision judges exit status as well as the process handle** (`process_has_exited`, R-185).
+- **Memory records corrected in place** (gate 4's worker row and the in-process cycle note above; gate 3's field
+  names).
 
 ## Risks
 

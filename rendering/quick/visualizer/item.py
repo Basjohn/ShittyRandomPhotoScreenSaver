@@ -211,6 +211,7 @@ class VisualizerRenderItem(QQuickItem):
         self._identity: VisualizerRenderIdentity | None = None
         self._presentation: ResolvedVisualizerPresentation | None = None
         self._custom_layout_presentation_authority = False
+        self._drop_retained = False
         self._bound_window: QQuickWindow | None = None
         self._diag_last_render_playing: bool | None = None
         self._diag_spectrum_handoff_remaining = 0
@@ -288,6 +289,19 @@ class VisualizerRenderItem(QQuickItem):
             window=self._bound_window,
             active_mode_id=None,
         )
+        self.update()
+
+    def drop_retained_frame(self) -> None:
+        """GUI thread: the node stops drawing the snapshot it retains, at the next sync; the source stays bound.
+
+        For a hidden activation whose target identity is bound later than its outgoing frame is retired (the engine
+        worker's commit reply): a new identity drops the retained snapshot by itself, an unchanged one does not, and
+        the outgoing frame would stay drawn at its last consumed opacity until the reply. A snapshot taken at that
+        same sync is kept (it is newer than the edge).
+        """
+        if self._identity is None:
+            return
+        self._drop_retained = True
         self.update()
 
     def set_custom_layout_presentation_authority(self, enabled: bool) -> None:
@@ -559,12 +573,15 @@ class VisualizerRenderItem(QQuickItem):
                 ),
                 auxiliary=int(snapshot.logical.runtime_generation),
             )
+        drop_retained = self._drop_retained
+        if drop_retained:
+            self._drop_retained = False
         node.synchronize(
             identity=identity,
             snapshot=snapshot,
             logical_size=logical_size,
             device_pixel_ratio=(1.0 if presentation is None else presentation.dpr),
-            clear_snapshot=clear_snapshot,
+            clear_snapshot=clear_snapshot or drop_retained,
             screen_index=screen_index,
         )
         if snapshot is not None and self._frame_trace is not None:
