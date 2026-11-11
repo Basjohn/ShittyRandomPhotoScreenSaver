@@ -59,8 +59,10 @@ reuses Settings' owners rather than restating them:
   Settings), a drag from maximised restores under the pointer, the window sides and corners resize through
   `startSystemResize`, and Esc / Alt+F4 / the title bar's × close through the same close path as before.
 - **Rounded edge.** `StudioWindowEdge` paints `ui/settings_window_edge.py:paint_forged_window_edge`, the function
-  `SettingsDialog.paintEvent` calls: the same radius, outer border (`chrome.outer_border`), backing and opaque corner
-  caps (`window.titlebar.surface`), square when maximised. There is one forged edge, not one per window.
+  Settings' edge overlay calls: the same radius and outer border (`chrome.outer_border`), see-through outside the
+  border, square when maximised. There is one edge, not one per window. The shell's full-window fills (window
+  surface, title bar) are rounded to `windowFillRadius` (7) so nothing the scene paints reaches the corner
+  (`Docs/Architecture/Settings_Theme_Architecture.md`, "See-through corners").
 - **Material.** Normal (`backdrop.mode` off) is opaque with no native material call. Every enabled Settings
   material uses the shared `native_backdrop_request()` (untinted Accent state 3) on the existing window.
   `SettingsThemeSpec.window_surface()` combines the calibrated material tint and semantic shell once in Qt;
