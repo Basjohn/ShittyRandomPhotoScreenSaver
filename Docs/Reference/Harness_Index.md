@@ -821,6 +821,7 @@ docstring before running one. Anything that opens a window is operator-only (pro
 - `tools/pytest_qt_noenv.py`: opt-in `QApplication` fixture (`-p tools.pytest_qt_noenv`) for focused GL tests that own their storage.
 - `tools/freeze_visualizer_settings.py`: freezes resolved Visualizer settings as test fixtures (`[mode ...]`).
 - `tools/qsg_render_timing_report.py`: summarises Qt Quick native scenegraph timing from `screensaver_qml.log`.
+- `tools/now_playing_edit_sheet.py`: the Expanded Visualizer's Now Playing in Fullscreen Edit beside the Media card's own Edit (plan 1C.3), off-screen in the hidden host: one sheet of the resize gestures (natural, width given/taken, height given/taken, corner) per owner, one of Now Playing moved to each side of the display, and `geometry.json` (artwork, block, text group). `.\.venv\Scripts\python.exe tools/now_playing_edit_sheet.py --output .artifacts/evidence/visualizers/shared/expanded_now_playing/<YYYYMMDD>_<label> --label <label>`.
 
 **Hitch and contention attribution**
 - `tools/gc_gen2_attribution_harness.py`: headless GC attribution for the P0 lead-B Gen2 hitch.
