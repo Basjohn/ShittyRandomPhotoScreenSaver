@@ -376,6 +376,19 @@ unaudited and unmerged. Each slice is its own checkpoint; the Media card stays p
 
 ### 1B.8 Light themes are practically opaque in the saver (not started; cause found in research)
 
+**Material track (operator, 11 Nov: proper transparency on light themes, no inset while keeping the material on
+all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint:**
+
+- [ ] M1. Light-theme transparency: boxes a to i below (dark themes pixel-identical at this step).
+- [ ] M2. No inset on any theme: the `plateInset` rim box of 1.7b (section 1A): the material face reaches the
+  inside of the real border, dark and light, content padding unchanged; before/after renders of every material
+  on one dark and one light theme, and text still passes on the composed pixels with M1's ink rule.
+- [ ] M3. Widget border material: the remaining boxes of 1.7b (ring shading from the same backdrop, Border
+  Material and Border Opacity Adjust in Style Overrides, Normal/Flat pixel-identical).
+- [ ] M4. Window border material: 1B.9's box (the Settings/Studio border ring takes the same rule).
+- [ ] Each step: `.qsb` regenerated, the SURFACE block kept identical across its three shader files, one focused
+  GPU before/after, lead pixel review on the operator's two wallpapers.
+
 Cause (arithmetic, not yet pixels): `SurfaceContrast.js` cannot reach its 4.8:1 target for dark ink at 55% alpha
 even on white, so it saturates and `surface_material.frag` fills the card interior white. The Settings variant
 corrects the ink and keeps the surface at its calibrated density (about .63-.72).
