@@ -34,6 +34,8 @@ layout(std140, binding = 0) uniform buf {
     vec4 lightNoise;
     vec4 glassLegibility;
     vec4 panelLimits;
+    float panelCeiling;   // dark ink: the panel's furthest lift toward white (SurfaceContrast.panelCeiling)
+    float ownOpacity;     // a run plate's own text opacity, which its overlay must not take (else 1)
 };
 layout(binding = 1) uniform sampler2D source;
 
@@ -104,6 +106,8 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
         c += vec3(glassLegibility.x) * (edge * edge * (0.35 + 0.65 * facing) + 0.10 * sheen);
     }
 
+    vec3 unplated = c;
+
     // Legibility layer: the card interior 2.5 px inside the border, its corners concentric
     // with the card's (its configured radius minus the inset, never under 2 px) and a 2 px
     // soft edge, so it reads as one
@@ -154,6 +158,11 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
             }
         }
     }
+    // Dark ink (light themes): the panel moves toward its anchor only as far as the bounded
+    // surface, the Settings-variant shell density (never less than the reference ink needs
+    // over black); faint runs correct their own ink instead (OverlayCard.surfaceInk).
+    if (floorRatioCard > 1.0 && panelLimits.y <= 0.5)
+        c = min(c, mix(unplated, vec3(1.0), panelCeiling * plate));
 
     // Light themes only: a defined edge over busy wallpaper. A dark hairline right inside
     // the border and a soft highlight below it. Zero for dark tints (their look is kept).
@@ -249,6 +258,8 @@ void main() {
     float pd = roundedBox(local - halfSize, halfSize, clamp(rowRadius, 0.0, min(halfSize.x, halfSize.y)), unused);
     float mask = 1.0 - smoothstep(-1.5, 0.0, pd);
 
-    float a = t * mask * here.a * qt_Opacity;
+    // A run plate sits inside its run, so qt_Opacity carries the run's own opacity (a faded
+    // run): the overlay takes only the opacity above the run (a whole-widget fade).
+    float a = t * mask * here.a * min(1.0, qt_Opacity / max(ownOpacity, 1e-3));
     fragColor = vec4((lift ? vec3(1.0) : vec3(0.0)) * a, a);
 }

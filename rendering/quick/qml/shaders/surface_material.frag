@@ -22,6 +22,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 lightNoise;
     vec4 glassLegibility;
     vec4 panelLimits;
+    float panelCeiling;   // dark ink: the panel's furthest lift toward white (SurfaceContrast.panelCeiling)
 };
 layout(binding = 1) uniform sampler2D source;
 
@@ -92,6 +93,8 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
         c += vec3(glassLegibility.x) * (edge * edge * (0.35 + 0.65 * facing) + 0.10 * sheen);
     }
 
+    vec3 unplated = c;
+
     // Legibility layer: the card interior 2.5 px inside the border, its corners concentric
     // with the card's (its configured radius minus the inset, never under 2 px) and a 2 px
     // soft edge, so it reads as one
@@ -142,6 +145,11 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
             }
         }
     }
+    // Dark ink (light themes): the panel moves toward its anchor only as far as the bounded
+    // surface, the Settings-variant shell density (never less than the reference ink needs
+    // over black); faint runs correct their own ink instead (OverlayCard.surfaceInk).
+    if (floorRatioCard > 1.0 && panelLimits.y <= 0.5)
+        c = min(c, mix(unplated, vec3(1.0), panelCeiling * plate));
 
     // Light themes only: a defined edge over busy wallpaper. A dark hairline right inside
     // the border and a soft highlight below it. Zero for dark tints (their look is kept).
