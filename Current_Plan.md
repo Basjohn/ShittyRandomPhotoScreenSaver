@@ -684,16 +684,18 @@ Files: `references/ShittyMusicPlayer-Miami-Afterdark-Mock-DETAILS.png` (the anno
 long-range goal) and `references/SMP Material Surfaces And Vibrancy ONLY Example.png` (a material/vibrancy
 example; operator: "we can do better"). The lead may adjust the mock's UX and the plans.
 
-- [ ] Transcribe the mock and every annotation into a tracked document
-  (`Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_2026-11-11.md`), since the images are not in the
-  repository: layout regions, each annotation as a requirement, and where each lands in plan 02's sections.
-- [ ] Reconcile plan 02 with it: the "Proposal basis" line (it still says the concept image is not in the tree),
-  the tab set (Podcasts becomes Audiobooks as a Library special group with bookmarks and chapters, long term),
-  SMP Edit mode (every element but the title bar movable, sizeable and swappable), the Visualizer / Lyrics /
-  Artist Collage pane with glyph parity, the favourites and library filters, the track menu, alignment rules.
-- [ ] The lead's UX adjustments, each stated with its reason, kept apart from the operator's requirements.
-- [ ] Material direction for SMP noted against today's material track (what the example shows, what ours
-  should do better: real backdrop materials, legible ink by the one ink rule, no inset panels).
+Documented 11 Nov in `Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_2026-11-11.md` (layout, sixteen
+requirements R1-R16 from the annotations, their place in plan 02, the lead's proposals A1-A9, material direction);
+plan 02's "Proposal basis" and `Index.md` point to it.
+
+- [ ] Reconcile plan 02's body with R1-R16 section by section (Sonnet, when the slot is free): 5.1 (Audiobooks as
+  a Library special group with bookmarks and chapters, replacing Podcasts), 7.1 (the down-left arrow into Mini /
+  Normal Media), 8.2 and 16 (SMP Edit mode: every element but the title bar movable, sizeable and swappable),
+  8.3 (the Visualizer / Lyrics / Artist Collage pane with glyph parity), 3 and 5.1 (the favourites and library
+  filters as one filter owner), 5.2 (the track menu; Track Information alignment swap), 4 (existing sliders and
+  seek bar, the alignment rule). Each change cites its requirement number; nothing is promoted into this plan.
+- [ ] The operator's answers to the mock document's section 6 (what "CS" is; whether Lyrics and Artist Collage
+  are in the first full-player milestone; proposal A7) are recorded there when given. Nothing waits on them.
 
 ### 1C.7 Handover state after the usage limit (11 Nov evening) and the roster change
 
