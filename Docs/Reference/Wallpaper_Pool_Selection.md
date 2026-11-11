@@ -15,7 +15,7 @@ contract. Wallpaper acquisition is separate from the FEEDS news-widget runtime i
   two-column list; Space & Daily and optional Image Boards keep their choices across navigation. The shared transparent
   scroll surface exposes the semantic popup background rather than an opaque native palette. Provider/ranking details
   belong in tooltips, not an explanatory paragraph. Sources summarizes enabled counts with full names in its tooltip,
-  and lists each active pool as a `JMIT POOL -> <Pool Name>` row with its stored validity mark beside the custom
+  and lists each active pool as a `JMIT POOL → <Pool Name>` row (tag, arrow and name in their theme roles) with its stored validity mark beside the custom
   feeds (`Feeds.md` § Wallpaper feeds; `sources/rss/source_health.py`).
 - `sources/rss/coordinator.py` remains the wallpaper pass/acquisition owner. Existing startup IO and background
   cadence drive its pass lock, image-attempt budget, rejection memory, cache, cancellation and session rotation.

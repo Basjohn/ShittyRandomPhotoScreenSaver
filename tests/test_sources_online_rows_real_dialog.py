@@ -150,10 +150,10 @@ def _mark_colours(list_widget, item):
     """The distinct colours painted inside an item's mark box (the list rendered off-screen with grab())."""
     image = list_widget.viewport().grab().toImage()   # renders off-screen; never shown
     scale = image.devicePixelRatio()                  # device pixels (150 % displays)
-    box = rows.OnlineSourceRowDelegate.mark_rect(list_widget.visualItemRect(item))
+    box = rows.OnlineSourceRowDelegate.mark_rect(list_widget.visualItemRect(item), list_widget.font())
     colours = set()
-    for x in range(int(box.left() * scale), int((box.right() + 1) * scale)):
-        for y in range(int(box.top() * scale), int((box.bottom() + 1) * scale)):
+    for x in range(int(box.left() * scale), int(box.right() * scale) + 1):
+        for y in range(int(box.top() * scale), int(box.bottom() * scale) + 1):
             colour = image.pixelColor(x, y)
             colours.add((colour.red(), colour.green(), colour.blue()))
     return colours

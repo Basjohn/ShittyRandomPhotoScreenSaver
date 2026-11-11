@@ -260,9 +260,8 @@ class ThemesTab(QWidget):
         self.settings_theme_filter=ThemeFilterField(self.theme_list,height_buddy=self.settings_keep_synced)
         group_layout.addLayout(self._link_row(self.settings_keep_synced,self.settings_theme_filter))
         self.theme_list.favouriteToggled.connect(lambda theme_id: self._toggle_theme_favourite("settings", theme_id))
-        # Root Settings QSS still owns semantic list colours; only typography
-        # is enlarged here for catalogue readability.
-        self.theme_list.setStyleSheet("QListWidget { font-size: 12pt; }")
+        # Root Settings QSS owns the list colours; typography and row geometry are the shared list style.
+        shared_styles.apply_settings_list_style(self.theme_list)
         self.theme_list.setMinimumHeight(240); group_layout.addWidget(self.theme_list)
         self.theme_status=QLabel(""); self.theme_status.setWordWrap(True)
         shared_styles.apply_shared_label_style(self.theme_status,"INFO_LABEL_STYLE"); group_layout.addWidget(self.theme_status)
@@ -283,7 +282,7 @@ class ThemesTab(QWidget):
         self.widget_theme_filter=ThemeFilterField(self.widget_theme_list,height_buddy=self.widget_keep_synced)
         group_layout.addLayout(self._link_row(self.widget_keep_synced,self.widget_theme_filter))
         self.widget_theme_list.favouriteToggled.connect(lambda theme_id: self._toggle_theme_favourite("widgets", theme_id))
-        self.widget_theme_list.setStyleSheet("QListWidget { font-size: 12pt; }")
+        shared_styles.apply_settings_list_style(self.widget_theme_list)
         self.widget_theme_list.setMinimumHeight(240); group_layout.addWidget(self.widget_theme_list)
         self.widget_theme_status=QLabel(""); self.widget_theme_status.setWordWrap(True)
         shared_styles.apply_shared_label_style(self.widget_theme_status,"INFO_LABEL_STYLE"); group_layout.addWidget(self.widget_theme_status)

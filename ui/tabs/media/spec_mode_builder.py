@@ -25,7 +25,9 @@ from ui.tabs.media import framed_camera_editor as fce
 from ui.tabs.media.builder_scaffold import build_mode_body
 
 
-def _resolve(path: str):
+def resolve_spec_reference(path: str):
+    """The object a spec names as ``"module:name"``, e.g. a control's ``availability`` capability flag
+    (``core/settings/visualizer_mode_settings.py``)."""
     module, _, name = path.partition(":")
     return getattr(import_module(module), name)
 
