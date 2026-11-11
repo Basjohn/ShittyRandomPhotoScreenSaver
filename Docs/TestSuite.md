@@ -1006,6 +1006,12 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   opposite-corner solver), its side handle reflows the text box and leaves the artwork factors (red on the former
   artwork-border rule), Restore Size returns the canonical size and keeps the top left; the frame is what is drawn.
   The parity map and the Volume OSD's corner now expect the ordinary rules.
+- Plan 1B.7d (one artwork size carrier, Media's artwork look), same file:
+  `test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size` and
+  `test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box[False/True]` (the d1 rewrites of the
+  retired artwork-border tests: the side handles reflow the text box, the artwork keeps its size, its radius and
+  stroke follow the Media model's `artworkLook`, Rounded Artwork off squares it); the load bridge in
+  `test_visualizer_expansion_overlay_settings.py::test_a_value_stored_with_the_retired_artwork_factors_loads_them_into_the_artwork_record`.
 - Plan 1B.7c (alignment as declared roles), same file:
   `test_now_playings_alignment_is_declared_and_stable_across_the_display_midpoint` (corner side, flipped only by the
   title's record; red on the former position-based mirroring) and

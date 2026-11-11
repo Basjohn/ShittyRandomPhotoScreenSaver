@@ -1617,6 +1617,18 @@ class MediaPresentationModel(QObject):
             "height": float(self.progressHeight),
         }, sort_keys=True)
 
+    @Property(str, notify=stateChanged)
+    def artworkLook(self) -> str:
+        """The Media card's artwork frame look (its border colour and stroke, the Rounded Artwork option) as one JSON
+        object of plain values, for the artwork's second drawing: the Expanded Visualizer's Now Playing artwork (plan
+        1B.7d). A string for the reason ``transportBarLook`` gives."""
+
+        return json.dumps({
+            "borderColor": QColor(self.artworkBorderColor).name(QColor.NameFormat.HexArgb),
+            "borderWidth": float(self.artworkBorderWidth),
+            "rounded": bool(self.roundedArtwork),
+        }, sort_keys=True)
+
 
 class RetainedMediaPresentation:
     def __init__(

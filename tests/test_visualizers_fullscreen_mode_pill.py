@@ -100,7 +100,8 @@ def test_every_control_writes_the_one_canonical_value_and_keeps_what_it_does_not
     seeded = deepcopy(canonical)
     for overlay in OVERLAY_IDS:
         seeded[overlay].update(offset_x=0.125, offset_y=-0.25, scale=1.25)
-    seeded["now_playing"]["artwork_scale"] = 1.5
+    seeded["now_playing"]["child_geometry"] = {"artwork": {"width_scale": 1.5, "height_scale": 1.5,
+                                                           "x_offset": 0.0, "y_offset": 0.0}}
     manager.set(FULLSCREEN_OVERLAYS_KEY, seeded)
     dialog, tab = _dialog(manager)
     page = tab._fullscreen_page
@@ -135,7 +136,7 @@ def test_every_control_writes_the_one_canonical_value_and_keeps_what_it_does_not
         assert (stored[overlay]["offset_x"], stored[overlay]["offset_y"]) == (rebased["offset_x"],
                                                                               rebased["offset_y"])
         assert stored[overlay]["scale"] == 1.25
-    assert stored["now_playing"]["artwork_scale"] == 1.5
+    assert stored["now_playing"]["child_geometry"]["artwork"]["width_scale"] == 1.5
     _destroy(dialog)
 
 

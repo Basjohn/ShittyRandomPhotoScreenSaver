@@ -70,6 +70,16 @@ Item {
         const value = mediaBarLook[name]
         return value === undefined || value === null ? fallback : value
     }
+    // The Media card's artwork frame look (MediaPresentationModel.artworkLook: border colour and stroke, Rounded
+    // Artwork; plan 1B.7d): Now Playing's artwork follows the Media widget's artwork settings, not the card chrome.
+    readonly property var mediaArtLook: {
+        const text = mediaModel ? mediaModel.artworkLook : undefined
+        return typeof text === "string" && text.length > 0 ? JSON.parse(text) : ({})
+    }
+    function artLook(name, fallback) {
+        const value = mediaArtLook[name]
+        return value === undefined || value === null ? fallback : value
+    }
     // Fullscreen Edit: an overlay's (or a part's) geometry changed; only emitted while editing.
     signal editGeometryChanged()
     // The Volume OSD's placement over the expanded card (``volume_osd``) depends on the safe area and on the OSD being
@@ -309,16 +319,8 @@ Item {
         // The bar's size against the Media card's own bar (its outline, radius and shadow scale by this).
         readonly property real controlsFactor: controlsHeight / Math.max(
             38.0, overlays.mediaLook("fontSize", 17.0) * 2.15)
-        function factor(raw) {
-            const value = Number(raw)
-            return isFinite(value) && value > 0 ? Math.max(0.5, Math.min(3.0, value)) : 1.0
-        }
-        // The Now Playing parent's X/Y handles resize its actual artwork border, not the text box.
-        // Individual child handles can still override the artwork and every metadata part independently.
-        // The corner chooses which side has room for the text; no edit writes that default placement.
-        readonly property real artworkScale: factor(options.artworkScale)
-        readonly property real artworkWidthFactor: factor(options.artworkWidth)
-        readonly property real artworkHeightFactor: factor(options.artworkHeight)
+        // The artwork's size has one carrier, its ``artwork`` child record (plan 1B.7d, as the Media card's): the block's
+        // parent handles reflow the text box (ordinary Edit's content box), never the artwork.
         // The one-line text stack supplies a stable artwork baseline independent of wrapping, track changes or
         // authored text-box height. A parent's resize must not make its artwork jump as metadata reflows.
         readonly property real titleLineHeight: Math.max(1.0, Math.ceil(titleMetrics.height))
@@ -326,17 +328,16 @@ Item {
             + (albumShown ? textColumn.spacing + Math.ceil(albumMetrics.height) : 0.0)
             + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controlsHeight : 0.0)
         readonly property real artBase: Math.max(Math.round(fontSize * 3.1), Math.ceil(naturalTextHeight))
-        readonly property real artWidth: Math.round(artBase * artworkScale * artworkWidthFactor)
-        readonly property real artHeight: Math.round(artBase * artworkScale * artworkHeightFactor)
+        readonly property real artWidth: Math.round(artBase)
+        readonly property real artHeight: Math.round(artBase)
         readonly property real gap: Math.round(fontSize * 0.55)
-        // Keep the natural metadata width stable as the artwork's X extent changes. The half-screen cap still
-        // applies to the *unedited* layout, while a deliberate artwork resize may grow the whole block inward.
-        // Actual screen capacity remains the final constraint, so long titles fit instead of crossing the edge.
+        // The natural metadata width: the half-screen cap applies to the unedited layout; the screen's capacity is the
+        // final constraint, so long titles fit instead of crossing the edge.
         readonly property real textWidthLimit: Math.max(48.0,
-            Math.min(maxBoxWidth - artWidth - gap, maxContentWidth - artBase * artworkScale - gap))
-        // Legacy authored text-box dimensions remain supported, but parent geometry handles change the artwork
-        // border instead. Extra text-box height must never manufacture gaps between existing metadata rows; it
-        // can give a genuinely wrapping title/artist more lines, otherwise the stack stays naturally grouped.
+            Math.min(maxBoxWidth - artWidth - gap, maxContentWidth - artWidth - gap))
+        // The parent's side handles set the text box (ordinary Edit's content box, as the Media card's). Extra box
+        // height never manufactures gaps between the metadata rows; it gives a genuinely wrapping title/artist more
+        // lines, otherwise the stack stays naturally grouped and centred.
         readonly property real naturalTextWidth: Math.min(textWidthLimit,
             Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth,
                               albumShown ? albumText.implicitWidth : 0.0, controlsShown ? controlsWidth : 0.0)))
@@ -429,7 +430,17 @@ Item {
             height: Math.round(nowPlayingSlot.artHeight * nowPlayingSlot.childHeightScale("artwork"))
             x: nowPlayingSlot.containX(authoredX + nowPlayingSlot.childOffsetX("artwork"), width)
             y: nowPlayingSlot.containY(authoredY + nowPlayingSlot.childOffsetY("artwork"), height)
-            readonly property real imageInset: Math.max(0.75, overlays.borderWidth * 0.65)
+            // The Media card's artwork frame (MediaPresentation.qml's artworkFrame): its border colour, its stroke (a
+            // painted stroke never below 1.5 px), Rounded Artwork's radius of an eighth of the short side, the image
+            // inset concentric with the stroke.
+            readonly property bool rounded: overlays.artLook("rounded", true) === true
+            readonly property real strokeWidth: {
+                const width = Number(overlays.artLook("borderWidth", 2.75))
+                return isFinite(width) && width > 0.0 ? Math.max(1.5, width) : 0.0
+            }
+            readonly property color strokeColor: overlays.artLook("borderColor", "#ffffffff")
+            readonly property real radius: rounded ? Math.min(width, height) / 8.0 : 0.0
+            readonly property real imageInset: Math.max(0.75, strokeWidth * 0.65)
             onXChanged: overlays.noteEditGeometry()
             onYChanged: overlays.noteEditGeometry()
             onWidthChanged: overlays.noteEditGeometry()
@@ -437,7 +448,7 @@ Item {
 
             RectangularShadow {
                 anchors.fill: parent
-                radius: overlays.cornerRadius
+                radius: artFrame.radius
                 color: "#73000000"
                 blur: 14.0
                 offset: Qt.vector2d(0.0, 3.0)
@@ -448,7 +459,7 @@ Item {
             Rectangle {
                 objectName: "expandedOverlayArtworkFallback"
                 anchors.fill: parent
-                radius: overlays.cornerRadius
+                radius: artFrame.radius
                 color: overlays.cardColor
             }
             Canvas {
@@ -456,8 +467,8 @@ Item {
                 anchors.centerIn: parent
                 width: Math.round(Math.min(parent.width, parent.height) * 0.42)
                 height: width
-                readonly property color ink: Qt.rgba(overlays.borderColor.r, overlays.borderColor.g,
-                                                     overlays.borderColor.b, 0.55)
+                readonly property color ink: Qt.rgba(artFrame.strokeColor.r, artFrame.strokeColor.g,
+                                                     artFrame.strokeColor.b, 0.55)
                 onInkChanged: requestPaint()
                 onWidthChanged: requestPaint()
                 onPaint: {
@@ -491,7 +502,7 @@ Item {
                 asynchronous: true
                 cache: true
                 // Rounded containment (Contracts: rounded artwork frames): a concentric mask, the outline on top.
-                layer.enabled: overlays.cornerRadius > 0.0
+                layer.enabled: artFrame.rounded
                 layer.effect: MultiEffect {
                     maskEnabled: true
                     maskSource: artworkMask
@@ -500,18 +511,18 @@ Item {
             Rectangle {
                 id: artworkMask
                 anchors.fill: artwork
-                radius: Math.max(0.0, overlays.cornerRadius - artFrame.imageInset)
+                radius: Math.max(0.0, artFrame.radius - artFrame.imageInset)
                 visible: false
                 layer.enabled: true
             }
-            // The themed card border: colour, the shared Card Border Width and the card radius.
+            // The Media card's artwork border: its colour and stroke, Rounded Artwork's radius.
             Rectangle {
                 objectName: "expandedOverlayArtworkBorder"
                 anchors.fill: parent
-                radius: overlays.cornerRadius
+                radius: artFrame.radius
                 color: "transparent"
-                border.width: overlays.borderWidth
-                border.color: overlays.borderColor
+                border.width: artFrame.strokeWidth
+                border.color: artFrame.strokeColor
             }
         }
 

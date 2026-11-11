@@ -79,12 +79,11 @@ EDIT_ID_PREFIX = "fullscreen_overlay."
 #: Visualizer item.
 CARD_EDIT_ID = f"{EDIT_ID_PREFIX}visualizer"
 #: Edit part -> (the overlay whose value holds it, the members it writes).
-#: Now Playing's block also carries M3c's artwork sizing (drawn as stored; Restore Size resets it) and its children's
-#: records (ordinary Edit's ``child_geometry``).
+#: Now Playing's block also carries its children's records (ordinary Edit's ``child_geometry``; the artwork's size is
+#: its record's alone, plan 1B.7d).
 PARTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "preset": ("preset", ("offset_x", "offset_y", "scale", "text_width", "text_height")),
-    "now_playing": ("now_playing", ("offset_x", "offset_y", "scale", "text_width", "text_height",
-                                    "artwork_scale", "artwork_width", "artwork_height", CHILD_GEOMETRY_KEY)),
+    "now_playing": ("now_playing", ("offset_x", "offset_y", "scale", "text_width", "text_height", CHILD_GEOMETRY_KEY)),
     "volume_osd": ("volume_osd", ("offset_x", "offset_y", "scale")),
 }
 #: The size factor the item's ``resize_scale`` (corner handles and the wheel) projects into.

@@ -863,6 +863,21 @@ can most geometry normally."
   edge solver, wheel and Restore Size were deleted. Each item declares `layout_minimum_size` (1 x 1 px: a frame may
   be one line of text), Restore Size's `authored_size_payload` (the canonical size members) and its scale as
   `baseline_resize_scale`.
+- **Superseded by the operator's 11 Nov Media-parity request (plan 1B.7; the operator: "its artwork and metadata and
+  controls should all behave the same as the media widget's edits do ... inherits traits/style"):**
+  - *10 Nov accepted "parent side handles resize the artwork border"* -> **new rule:** Now Playing's parent X/Y
+    handles are ordinary Edit's content box (as the Media card's): they reflow the text box (`text_width` /
+    `text_height`); the artwork's size has one carrier, its `artwork` child record (1B.7b, 1B.7d).
+  - *10 Nov accepted "position-based inward left/right layout"* -> **new rule:** one chosen, stable orientation: the
+    anchor corner's side, flipped by the title's flip glyph (1B.7c).
+  - *8 Nov "the themed card border" on the artwork* -> **new rule:** the artwork's border and shape are the Media
+    widget's artwork settings (its border colour and stroke, Rounded Artwork: radius an eighth of the short side),
+    carried by `MediaPresentationModel.artworkLook`, not the Visualizer card chrome (1B.7d). Guardrail h is narrowed
+    to geometry and storage: a saved profile keeps its position, size and child geometry and loads without loss; the
+    artwork border's look may change to Media's.
+  - Storage (1B.7d): `now_playing.artwork_scale` / `artwork_width` / `artwork_height` are retired; a stored value
+    with them loads through the one normaliser's bridge into the `artwork` record
+    (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 - *Alignment as declared roles (plan 1B.7c, 11 Nov; supersedes the 8 Nov position-based mirroring).* Now Playing has
   one orientation, chosen and stable as the Media card's: its authored side is the anchor corner's (a right corner
   puts the artwork on the right, the text on its right rails); the `title` role, like Media's header, declares

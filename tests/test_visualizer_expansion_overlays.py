@@ -23,6 +23,7 @@ every value a test writes is test-owned.
 """
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import numpy
@@ -61,7 +62,12 @@ class _Media(QObject):
     def __init__(self, **values) -> None:
         super().__init__()
         self.values = dict(hasTrack=True, title="Track One", artist="Artist One", artworkSource="",
-                           album="", showAlbum=False, playbackState="playing", canPrevious=True, canNext=True, canPlayPause=True)
+                           album="", showAlbum=False, playbackState="playing", canPrevious=True, canNext=True, canPlayPause=True,
+                           artworkLook=json.dumps({"borderColor": "#ff3a7bd5", "borderWidth": 2.75, "rounded": True}),
+                           seekBarLook=json.dumps({"trackColor": "#4affffff", "fillColor": "#e6ffffff",
+                                                   "shadowEnabled": False, "shadowColor": "#66000000",
+                                                   "glowEnabled": True, "glowColor": "#b4ffffff", "height": 6.0}),
+                           progressFraction=0.4, canSeek=True, interactionEnabled=True, progressAvailable=True)
         self.values.update(values)
 
     def update(self, **values) -> None:
@@ -81,6 +87,12 @@ class _Media(QObject):
     canPrevious = _value("canPrevious", bool)
     canNext = _value("canNext", bool)
     canPlayPause = _value("canPlayPause", bool)
+    artworkLook = _value("artworkLook", str)
+    seekBarLook = _value("seekBarLook", str)
+    progressFraction = _value("progressFraction", float)
+    canSeek = _value("canSeek", bool)
+    interactionEnabled = _value("interactionEnabled", bool)
+    progressAvailable = _value("progressAvailable", bool)
 
 
 @pytest.fixture
