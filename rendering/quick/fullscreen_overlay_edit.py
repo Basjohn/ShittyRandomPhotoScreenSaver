@@ -55,6 +55,7 @@ from typing import Any
 from PySide6.QtCore import QPoint, QRect
 
 from core.settings.fullscreen_overlays import (
+    BASE_WIDTH_KEY,
     CHILD_GEOMETRY_KEY,
     NOW_PLAYING_CHILD_ROLES,
     OFFSET_MAX,
@@ -84,7 +85,8 @@ CARD_EDIT_ID = f"{EDIT_ID_PREFIX}visualizer"
 #: multiplies the size the block's box gives it, plan 1C.3).
 PARTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "preset": ("preset", ("offset_x", "offset_y", "scale", "text_width", "text_height")),
-    "now_playing": ("now_playing", ("offset_x", "offset_y", "scale", "text_width", "text_height", CHILD_GEOMETRY_KEY)),
+    "now_playing": ("now_playing", ("offset_x", "offset_y", "scale", "text_width", "text_height", BASE_WIDTH_KEY,
+                                    CHILD_GEOMETRY_KEY)),
     "volume_osd": ("volume_osd", ("offset_x", "offset_y", "scale")),
 }
 #: The size factor the item's ``resize_scale`` (corner handles and the wheel) projects into.
@@ -94,6 +96,10 @@ SCALE_KEY = {"preset": "scale", "now_playing": "scale", "volume_osd": "scale"}
 #: the text reflow inside it by the Media card's artwork rule).
 EXTENT_KEYS = {"preset": ("text_width", "text_height"), "now_playing": ("text_width", "text_height"),
                "volume_osd": ()}
+#: The parts whose box has a base (plan 1C.3, lead 12 Nov): the block's width and height are stored at the first size
+#: gesture on it (a side handle, a corner, the wheel), and its width there as ``base_width``, the Media artwork rule's
+#: reference, so that first sample moves nothing.
+BASE_KEYS = {"now_playing": BASE_WIDTH_KEY}
 #: The parts with extents declare both content axes: the Edit layer draws their side strips and diagonal corners.
 CONTENT_AXES = frozenset({"horizontal", "vertical"})
 #: The parts whose children ordinary Edit's child editor edits (role descriptors, from the one settings owner).
@@ -423,12 +429,24 @@ class FullscreenOverlayEdit:
                    if name in item.current_size_payload}
         scale = _clamp_scale(item.resize_scale)
         item.resize_scale = scale
-        payload[SCALE_KEY[part]] = scale
         box = item.current_content_extent
         snapshot = self._geometry()
         if snapshot is None:
+            payload[SCALE_KEY[part]] = scale
             item.current_size_payload = payload
             return
+        base_key = BASE_KEYS.get(part)
+        sizing = scale != float(payload.get(SCALE_KEY[part], scale)) or box is not None
+        if base_key is not None and sizing and float(payload.get(base_key) or 0.0) <= 0.0:
+            # The first size gesture on the block: store the block as drawn now (its box on both axes, read before
+            # this sample changes anything, in ems of the font it is drawn at) and its width as the base. The gesture
+            # then changes the box from there, so its first sample moves nothing.
+            drawn_now = self._drawn_extents(part, True, True, snapshot)
+            for name, value in drawn_now.items():
+                if float(payload.get(name) or 0.0) <= 0.0:
+                    payload[name] = value
+            payload[base_key] = drawn_now[EXTENT_KEYS[part][0]]
+        payload[SCALE_KEY[part]] = scale
         if box is not None and EXTENT_KEYS[part]:
             last = self._boxes.get(key)
             reference = last if last is not None else (previous.width() / scale, previous.height() / scale)

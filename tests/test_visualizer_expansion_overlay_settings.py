@@ -72,6 +72,9 @@ def _flipped() -> dict:
         options["scale"] = 1.5 if options["scale"] != 1.5 else 0.75
         for key in TEXT_EXTENT_KEYS:
             options[key] = 7.5 if options[key] != 7.5 else 3.25
+        if "base_width" in options:
+            # A set block width carries its base (Fullscreen Edit stores both at the first size gesture; plan 1C.3).
+            options["base_width"] = 4.25 if options["base_width"] != 4.25 else 2.5
     return value
 
 
@@ -294,6 +297,14 @@ def test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_gr
         if key != "child_geometry":
             assert now[key] == item, key
     assert loaded["preset"] == normalize_fullscreen_overlays(raw)["preset"]
+    # Plan 1C.3 (12 Nov): a stored block width without a base gets the base the first 1C.3 rule measured against
+    # (the text's minimum room beside the natural artwork), so it draws what that rule drew.
+    from core.settings.fullscreen_overlays import BASE_WIDTH_KEY, now_playing_text_room
+
+    assert "base_width" not in raw_now
+    assert now[BASE_WIDTH_KEY] == round(now_playing_text_room(
+        raw["font_size"], raw_now["scale"], raw_now["media_controls"]), 4)
+    assert normalize_fullscreen_overlays(loaded) == loaded                 # a second load changes nothing
 
     settings = _manager_for(tmp_path, application)
     settings.set(FULLSCREEN_OVERLAYS_KEY, loaded)

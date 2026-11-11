@@ -361,8 +361,9 @@ Item {
         readonly property real gap: Math.round(fontSize * 0.55)
         // The natural metadata width: the half-screen cap applies to the unedited layout; the screen's capacity is the
         // final constraint, so long titles fit instead of crossing the edge.
-        readonly property real textWidthLimit: Math.max(48.0,
-            Math.min(maxBoxWidth - artBase - gap, maxContentWidth - artBase - gap))
+        // (Whole pixels, so a block stored at its first edit draws exactly the natural block it was.)
+        readonly property real textWidthLimit: Math.max(48.0, Math.floor(
+            Math.min(maxBoxWidth - artBase - gap, maxContentWidth - artBase - gap)))
         readonly property real naturalTextWidth: Math.min(textWidthLimit,
             Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth,
                               albumShown ? albumText.implicitWidth : 0.0, controlsShown ? controlsWidth : 0.0)))
@@ -370,31 +371,39 @@ Item {
         // Its side handles are ordinary Edit's content box, as the Media card's content extent: they give or take the
         // block's width and height, and the artwork reflows inside it by the Media card's one artwork rule
         // (MediaArtworkRule.js) with Now Playing's own spec: the artwork is as tall as the block; its width is its
-        // natural width plus the rule's share of the width given beyond a reference block (the natural artwork, the
-        // gap and the text's minimum room: geometry only), or minus it when width is taken, never under the artwork
-        // role's own minimum (0.4 of its natural size), leaving the text its room, and at most 16:9 (Now Playing may
-        // go landscape; the Media card's spec keeps its artwork never wider than tall). The text group takes the rest
-        // of the width and elides in it. The artwork's size therefore comes only from the stored block geometry, the
-        // font and the shown rows, never from a track's text (lead, 12 Nov). A corner or the wheel scales the whole
-        // block (``scale``). The artwork child record multiplies on top, as on Media.
-        // Stored in ems of the block's font (``text_width`` / ``text_height``, 0 = natural): the width as the block's
-        // width beyond its natural artwork column (the artwork's natural side and the gap: a value written before 1C.3,
-        // when it set the text box beside a natural artwork, draws the same block width), the height as the block's
-        // height (at least the text stack). An unset width is the natural block: the artwork keeps its natural width
-        // and the block hugs the text beside it.
+        // natural width plus the rule's share of the width given since the block's base (or minus it, taken), never
+        // under the artwork role's own minimum (0.4 of its natural size), leaving the text its room, and at most 16:9
+        // (Now Playing may go landscape; the Media card's spec keeps its artwork never wider than tall). The text group
+        // takes the rest of the width and elides in it. A corner or the wheel scales the whole block (``scale``). The
+        // artwork child record multiplies on top, as on Media.
+        // Stored in ems of the block's font (0 = natural): ``text_width`` is the block's width beyond its natural
+        // artwork column (the artwork's natural side and the gap), ``text_height`` its height (at least the text
+        // stack), and ``base_width`` the block's width (same unit) at the first edit gesture on it, stored once by
+        // Fullscreen Edit with the block's height at that instant (lead, 12 Nov). At that instant the share is zero,
+        // so the first sample of any gesture moves nothing; from then on the artwork follows the stored geometry only,
+        // never the current track's text. Never edited (no base): the natural block, hugging its text beside a natural
+        // artwork.
         readonly property real artMaxAspect: 16.0 / 9.0
         readonly property real artFloor: Math.round(artBase * 0.4)
         readonly property real textRoom: Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0)
-        readonly property real artReferenceWidth: artBase + gap + textRoom
+        readonly property real setBaseWidth: {
+            const value = Number(options.baseWidth)
+            return isFinite(value) && value > 0 ? value * fontSize : 0.0
+        }
+        // The text's room never exceeds the room it had at the base (so the first sample of a gesture changes nothing).
+        readonly property real artRoom: setBaseWidth > 0.0 ? Math.min(textRoom, setBaseWidth) : textRoom
         readonly property real boxWidth: setTextWidth > 0.0
-            ? Math.round(Math.min(maxBoxWidth, Math.max(artFloor + gap + textRoom, setTextWidth + artBase + gap)))
+            ? Math.round(Math.min(maxBoxWidth, Math.max(artFloor + gap + artRoom, setTextWidth + artBase + gap)))
             : 0.0
         readonly property real boxHeight: setTextHeight > 0.0
             ? Math.round(Math.min(maxBoxHeight, Math.max(stackHeight, setTextHeight))) : 0.0
         readonly property real blockHeight: boxHeight > 0.0 ? boxHeight : artBase
+        // The width given since the base (none without a stored width and base).
+        readonly property real artExtraWidth: boxWidth > 0.0 && setBaseWidth > 0.0
+            ? boxWidth - (setBaseWidth + artBase + gap) : 0.0
         readonly property real artWidth: Math.round(ArtworkRule.authoredWidth(
-            ArtworkRule.provisionalWidth(artBase, boxWidth > 0.0 ? boxWidth - artReferenceWidth : 0.0,
-                                         (boxWidth > 0.0 ? boxWidth : artReferenceWidth) - gap, textRoom, artFloor),
+            ArtworkRule.provisionalWidth(artBase, artExtraWidth,
+                                         (boxWidth > 0.0 ? boxWidth : artBase + gap + artRoom) - gap, artRoom, artFloor),
             blockHeight, artMaxAspect))
         readonly property real artHeight: Math.round(blockHeight)
         readonly property real naturalBlockWidth: artWidth + gap + naturalTextWidth

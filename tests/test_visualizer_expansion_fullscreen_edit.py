@@ -466,13 +466,17 @@ def test_the_overlay_blocks_parent_gestures_are_the_ordinary_edit_handlers(displ
     assert abs((grown.x() + grown.width() / 2) - (before.x() + before.width() / 2)) <= 1
     assert draft["scale"] == pytest.approx(item.resize_scale) and draft["scale"] > seeded["now_playing"]["scale"]
     assert edit.drawn()["now_playing"] == grown.getRect()
+    # The corner was the block's first size gesture: it stored the block and its base (plan 1C.3).
+    assert draft["base_width"] > 0.0 and draft["text_width"] > 0.0 and draft["text_height"] > 0.0
+    scaled = dict(draft)
 
     edit.side("now_playing", "right", 120)
     _run(display, 60)
     draft = edit.owner._fullscreen.draft_value()["now_playing"]
     assert item.current_content_extent is not None
-    assert draft["text_width"] != seeded["now_playing"]["text_width"]
-    assert draft["text_height"] == seeded["now_playing"]["text_height"]            # the untouched axis
+    assert draft["text_width"] != scaled["text_width"]
+    assert draft["text_height"] == scaled["text_height"]                                # the untouched axis
+    assert draft["base_width"] == scaled["base_width"]                                  # stored once
     assert "artwork" not in draft["child_geometry"]          # the artwork's one carrier is untouched
 
     top_left = QRect(item.current_global_rect).topLeft()
@@ -480,7 +484,7 @@ def test_the_overlay_blocks_parent_gestures_are_the_ordinary_edit_handlers(displ
     _run(display, 60)
     draft = edit.owner._fullscreen.draft_value()["now_playing"]
     canonical = canonical_fullscreen_overlays()["now_playing"]
-    assert all(draft[key] == canonical[key] for key in ("scale", "text_width", "text_height"))
+    assert all(draft[key] == canonical[key] for key in ("scale", "text_width", "text_height", "base_width"))
     assert (item.current_global_rect.topLeft() - top_left).manhattanLength() <= 2
     assert edit.owner.cancel()
 
@@ -822,7 +826,13 @@ def test_a_side_handle_changes_only_its_own_axis(display, tmp_path, part, handle
     changed, untouched = EXTENT_KEYS[part] if horizontal else EXTENT_KEYS[part][::-1]
     now = edit.item(part).current_size_payload
     assert now[changed] != payload[changed]
-    assert now[untouched] == payload[untouched] and now[SCALE_KEY[part]] == payload[SCALE_KEY[part]]
+    assert now[SCALE_KEY[part]] == payload[SCALE_KEY[part]]
+    if part == "now_playing" and not payload["base_width"]:
+        # Plan 1C.3: the first size gesture stores the block as drawn and its width as the base; the untouched axis
+        # keeps its drawn size (asserted on the frame above) and now stores it.
+        assert now[untouched] > 0.0 and now["base_width"] > 0.0
+    else:
+        assert now[untouched] == payload[untouched]
     assert edit.frames() == edit.drawn()
     edit.owner.cancel()
 
@@ -840,13 +850,14 @@ def _media_rule_artwork(slot) -> tuple[float, float]:
     def value(name: str) -> float:
         return float(slot.property(name))
 
-    # Now Playing's spec: the share is measured against its reference block (geometry only), up to its widest shape.
-    box = value("boxWidth")
-    extra = box - value("artReferenceWidth") if box > 0.0 else 0.0
-    content = (box if box > 0.0 else value("artReferenceWidth")) - value("gap")
+    # Now Playing's spec: the share is measured against the block's stored base (the block at its first edit), the
+    # text's room no more than it had there, up to its widest shape (16:9).
+    box, base, room = value("boxWidth"), value("setBaseWidth"), value("artRoom")
+    extra = box - (base + value("artBase") + value("gap")) if box > 0.0 and base > 0.0 else 0.0
+    content = (box if box > 0.0 else value("artBase") + value("gap") + room) - value("gap")
     width = engine.evaluate(
         f"Math.round(authoredWidth(provisionalWidth({value('artBase')}, {extra}, {content}, "
-        f"{value('textRoom')}, {value('artFloor')}), {value('blockHeight')}, {value('artMaxAspect')}))").toNumber()
+        f"{room}, {value('artFloor')}), {value('blockHeight')}, {value('artMaxAspect')}))").toNumber()
     return float(width), float(round(value("blockHeight")))
 
 
@@ -950,6 +961,67 @@ def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_pat
     _run(display, 30)
     assert float(border.property("radius")) == 0.0
     edit.owner.cancel()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("handle", ["right", "left", "top", "bottom", "bottom_right", "content_bottom_right"])
+def test_the_first_sample_of_a_gesture_on_a_never_edited_block_moves_nothing(display, tmp_path, handle):
+    """Plan 1C.3 (lead, 12 Nov: "the first touch of any handle must change nothing by itself"): on a block never edited
+    (it hugs a long title), the first sample of a side handle, a corner or a two-axis diagonal stores the block and its
+    base and leaves the block's and the artwork's rectangles exactly where they were. Then taking width narrows the
+    artwork below its natural width and giving width widens it (the right handle; the Media rule on the base)."""
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"offset_x": 0.05, "offset_y": -0.3})
+    media = _Media(title="A Considerably Longer Track Title For The Natural Block")
+    _draw(display, media=media, config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    root = _root(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    art_item = root.findChild(QQuickItem, "expandedOverlayArtwork")
+
+    def rects() -> tuple[QRectF, QRectF]:
+        _run(display, 60)
+        return _rect(slot, root), _rect(art_item, root)
+
+    natural = rects()
+    row = edit.row("now_playing")
+    frame = edit._local(edit.item("now_playing").current_global_rect)
+    corner = handle.removeprefix("content_")
+    x = frame.x() if corner.endswith("left") else (frame.x() + frame.width() if corner.endswith("right")
+                                                    else frame.center().x())
+    y = frame.y() if corner.startswith("top") else (frame.y() + frame.height() if corner.startswith("bottom")
+                                                     else frame.center().y())
+    assert edit.model.beginResize(row, handle, x, y)
+    edit.model.resizeItem(row, handle, x, y, False)                       # the first sample: no motion yet
+    assert rects() == natural
+    payload = edit.item("now_playing").current_size_payload
+    if handle == "bottom_right":
+        # A corner is a uniform scale: its first moving sample stores the block (in ems, so it scales whole) and the
+        # artwork keeps its natural shape, scaled with the block.
+        edit.model.resizeItem(row, handle, x + 30, y + 10, False)
+        block, art = rects()
+        assert art.width() == art.height() and art.width() > natural[1].width()
+        payload = edit.item("now_playing").current_size_payload
+        assert payload.get("base_width", 0.0) > 0.0 and payload["text_width"] > 0.0 and payload["text_height"] > 0.0
+        assert block.width() / natural[0].width() == pytest.approx(block.height() / natural[0].height(), abs=0.02)
+        assert edit.owner.cancel()
+        return
+    if handle == "right":
+        edit.model.resizeItem(row, handle, x - 50, y, False)              # width taken
+        taken = rects()[1]
+        assert taken.width() < natural[1].width() and taken.height() == natural[1].height()
+        edit.model.resizeItem(row, handle, x + 50, y, True)               # width given
+        given = rects()[1]
+        assert given.width() > natural[1].width() and given.height() == natural[1].height()
+    else:
+        edit.model.resizeItem(row, handle, x, y, True)
+        assert rects() == natural
+    payload = edit.item("now_playing").current_size_payload
+    assert payload.get("base_width", 0.0) > 0.0 and payload["text_width"] > 0.0 and payload["text_height"] > 0.0
+    assert edit.owner.cancel()
 
 
 @pytest.mark.qt
@@ -2048,6 +2120,8 @@ def test_a_saved_profile_with_the_retired_artwork_factors_loads_to_the_same_geom
     # (``text_width``) also reshapes the artwork by the Media rule, so the record multiplies the rule's width.
     rule_width, _rule_height = _media_rule_artwork(slot)
     assert abs(art.width() - round(rule_width * records["artwork"]["width_scale"])) <= 1
+    # Its block width had no base: the bridge's base is the first 1C.3 rule's reference (the text's minimum room).
+    assert abs(float(slot.property("setBaseWidth")) - float(slot.property("textRoom"))) < 0.05
     assert abs(art.height() - round(base * 1.5 * 0.8)) <= 1
 
 
