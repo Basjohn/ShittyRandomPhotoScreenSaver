@@ -10,12 +10,12 @@ from core.settings import SettingsManager
 from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor, get_visualizer_view_pose_keys
 from core.settings.visualizer_presets import VISUALIZER_CUSTOM_STORAGE_KEY
-from engine.display_manager import DisplayManager
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
 from rendering.quick.display_unit import create_quick_display_unit
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
+from tests._display_manager_doubles import bare_display_manager
 from tests.test_qtquick_custom_layout_owner import _configure_visualizer, _LiveCommitEngine
 from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
 from widgets.spotify_visualizer.view_orbit import scene_pan_delta, view_pose_values
@@ -47,16 +47,10 @@ def card(qt_app, tmp_path, monkeypatch):
     unit.attach_visualizer_owner(visualizer)
     layout = QuickCustomLayoutOwner(settings_manager=settings, participants_provider=lambda: (unit,),
         visualizer_provider=lambda: (visualizer, unit), reload_request=lambda reason: None, live_config_commit=lambda config: None)
-    manager = DisplayManager.__new__(DisplayManager)
-    manager._quick_visualizer_owner = visualizer
-    manager._quick_visualizer_unit = unit
-    manager._quick_custom_layout_owner = layout
-    manager._runtime_generation = 617
-    manager._quick_view_orbit_pending = None
-    manager._quick_view_pose_owner = None
-    manager._quick_scene_view_gesture = None
-    manager._widgets_config_snapshot = widgets
-    manager.settings_manager = settings
+    manager = bare_display_manager(
+        _quick_visualizer_owner=visualizer, _quick_visualizer_unit=unit, _quick_custom_layout_owner=layout,
+        _runtime_generation=617, _quick_view_orbit_pending=None, _quick_view_pose_owner=None,
+        _quick_scene_view_gesture=None, _widgets_config_snapshot=widgets, settings_manager=settings)
     manager._refresh_all_quick_context_menus = lambda: None
     manager._refresh_quick_visualizer_edit_content_envelope = lambda *a: None
     _configure_visualizer(visualizer, playing=True)

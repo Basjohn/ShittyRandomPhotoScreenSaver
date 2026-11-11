@@ -5,6 +5,8 @@ import pytest
 
 from tests._display_manager_doubles import (
     bare_display_manager,
+    display_runtime_double,
+    display_unit_double,
     input_controller_double,
     scene_controller_double,
     visualizer_owner_double,
@@ -37,3 +39,20 @@ def test_the_owner_double_is_the_real_owners_read_surface():
     assert owner.is_started is False and owner.is_retired is False
     with pytest.raises(AttributeError):
         visualizer_owner_double(object(), no_such_member=True)
+
+
+def test_unit_and_runtime_doubles_are_the_real_read_surfaces():
+    from rendering.quick.scene_controller import QuickSceneController
+
+    unit = display_unit_double(screen_index=1)
+    assert unit.is_retired is False and unit.screen_index == 1
+    # The runtime's controllers default to the setter doubles: every real setter is there.
+    setters = [name for name in dir(QuickSceneController) if name.startswith("set_")]
+    assert setters and all(hasattr(unit.runtime.scene_controller, name) for name in setters)
+    assert hasattr(unit.runtime.input_controller, "set_view_orbit_enabled")
+    scene = object()
+    assert display_unit_double(display_runtime_double(scene_controller=scene)).runtime.scene_controller is scene
+    with pytest.raises(AttributeError):
+        display_unit_double(no_such_member=True)
+    with pytest.raises(AttributeError):
+        display_runtime_double(no_such_member=True)
