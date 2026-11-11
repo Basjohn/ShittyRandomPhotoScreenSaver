@@ -179,6 +179,10 @@ design and closeout docs.
 - [ ] Multisampled scene targets are not reproducible draw to draw on this GPU (the parity gate judges
   single-sampled targets and reports product sampling beside the path's own repeat); attributed only as far as
   "the mode's own passes".
+- [ ] P2-C1 remainder (closeout doc section 2): a failed high-water admission preserves the last good frame
+  without silently changing the worker path; the load part only after the operator's yes.
+- [ ] P2-C2 remainder: leases and holds release exactly once across Settings, mode switches, worker death, a
+  failed reload and a Visualizer-off run; one worker/mapping at most and zero worker cost while disabled.
 - [ ] M5 remainder: the Studios and the post-failure fallback were not measured separately (the in-process and
   worker laps show a first-visit GPU high-water step, not growth).
 - [ ] L3 remainder: `collect_ms` with displays on and under load (the one live reading, 13.5-21 ms over four
