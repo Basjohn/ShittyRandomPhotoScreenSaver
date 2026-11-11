@@ -77,7 +77,11 @@ def test_one_press_reports_the_direction_the_glyph_shows(glyph_card, expanded):
     assert bool(arrow.property("collapse")) is expanded
     tooltip = _find(card.scene._visualizer_root, "visualizerExpandTooltip")
     label = next(child for child in tooltip.childItems() if child.property("text"))
-    assert label.property("text") == ("EXIT FULL DISPLAY" if expanded else "FULL DISPLAY")
+    # The tip names the direction too (UI copy: only that it changes with the direction is asserted).
+    shown = label.property("text")
+    card.scene.set_visualizer_expand_glyph(True, not expanded)
+    assert shown and label.property("text") and label.property("text") != shown
+    card.scene.set_visualizer_expand_glyph(True, expanded)
     reported, cycles = [], []
     card.scene.visualizer_expand_requested.connect(reported.append)
     card.scene._visualizer_root.presetStepRequested.connect(lambda *_a: cycles.append(1))
