@@ -392,6 +392,18 @@ def _forget_runtime_pointer_suppression():
         module.clear_runtime_pointer_input_suppression()
 
 
+@pytest.fixture(autouse=True)
+def _forget_active_widget_theme():
+    """The active Widget Theme (``ui.widget_theme_active``) is one process-local authority: a test that builds
+    Settings or applies a theme selection leaves its theme active for every later test in the process, whose
+    colours then resolve through it (a System Audio OSD track read another theme's role). Each test starts on the
+    default theme. Restored through the owner, so live subscribers hear it like any theme change."""
+    yield
+    module = sys.modules.get("ui.widget_theme_active")
+    if module is not None:
+        module.reset_active_widget_theme()
+
+
 @pytest.fixture(autouse=True, scope="module")
 def _no_studio_worker_outlives_its_module():
     """A module that started a Studio clip worker (``ClipLoadJob``) leaves none running: every job is cancelled or
