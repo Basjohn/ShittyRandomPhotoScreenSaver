@@ -1006,6 +1006,14 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   opposite-corner solver), its side handle reflows the text box and leaves the artwork factors (red on the former
   artwork-border rule), Restore Size returns the canonical size and keeps the top left; the frame is what is drawn.
   The parity map and the Volume OSD's corner now expect the ordinary rules.
+- Plan 1B.7g (the optional Seek Bar):
+  `tests/test_visualizer_expansion_fullscreen_edit.py::test_the_optional_seek_bar_is_the_media_cards_one_with_its_seek_route_and_a_child_part[False/True]`
+  (off by default; the shared component under the metadata and above the controls; its look and fill from the
+  model, a progress event moves it; double-click ownership; the scene's seek signal; a child part whose move Saves),
+  `tests/test_visualizer_expansion_overlays.py::test_the_display_manager_sends_a_seek_to_the_one_media_seek_owner`
+  (admission and owner order), the Fullscreen Mode page's checkbox in `tests/test_visualizers_fullscreen_mode_pill.py`.
+  Saved-profile load (1B.7f):
+  `tests/test_visualizer_expansion_fullscreen_edit.py::test_a_saved_profile_with_the_retired_artwork_factors_loads_to_the_same_geometry`.
 - Plan 1B.7e (snap and guides through the ordinary owner), same file:
   `test_a_move_snaps_to_the_safe_area_and_draws_its_guide_on_the_edit_layer` (safe-area centre and edge, and the
   other overlay as an ordinary peer with its guide in the Edit layer's coordinates); the one-step undo of a child

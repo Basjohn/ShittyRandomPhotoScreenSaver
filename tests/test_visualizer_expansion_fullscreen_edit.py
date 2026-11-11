@@ -1661,6 +1661,72 @@ def test_a_move_snaps_to_the_safe_area_and_draws_its_guide_on_the_edit_layer(dis
 
 
 @pytest.mark.qt
+@pytest.mark.parametrize("controls", [False, True])
+def test_the_optional_seek_bar_is_the_media_cards_one_with_its_seek_route_and_a_child_part(display, tmp_path, controls):
+    """Plan 1B.7g: Seek Bar (default off) draws the Media card's one MediaSeekBar from the Media model's seekBarLook
+    under the metadata (the card's order: metadata, seek, transport); its fill follows the model's progress on the
+    model's own events (no timer); a seek leaves through the scene controller's seek route; it owns its double-click
+    (over the Visualizer's mode cycle); in Fullscreen Edit it is a child part like the others (the Media card's
+    ``seek_bar`` role) whose move is saved as a record."""
+    import json
+
+    from PySide6.QtGui import QColor
+
+    settings = _manager(tmp_path)
+    media = _Media()
+    off = _seed(settings, now_playing={"always_show": True, "media_controls": controls})
+    assert off["now_playing"]["seek_bar"] is False                       # an option, off unless chosen
+    _draw(display, media=media, config=_projection(off))
+    _open(display)
+    _run(display, 120)
+    stage = _root(display)
+    bar = stage.findChild(QQuickItem, "expandedOverlaySeekBar")
+    assert bar is not None and not bar.isVisible()
+    off_height = stage.findChild(QQuickItem, "expandedOverlayNowPlayingText").height()
+
+    seeded = _seed(settings, now_playing={"always_show": True, "media_controls": controls, "seek_bar": True})
+    display.scene.set_visualizer_expanded_overlay_config(_projection(seeded))
+    _run(display, 120)
+    assert bar.isVisible()
+    text = stage.findChild(QQuickItem, "expandedOverlayNowPlayingText")
+    assert text.height() > off_height                                    # it takes its own row
+    artist = _rect(stage.findChild(QQuickItem, "expandedOverlayArtist"), stage)
+    seek = _rect(bar, stage)
+    assert seek.top() >= artist.bottom() - 0.5 and seek.width() > 0.0 and seek.height() >= 2.0
+    if controls:
+        assert _rect(stage.findChild(QQuickItem, "expandedOverlayMediaControls"), stage).top() >= seek.bottom() - 0.5
+    look = json.loads(media.values["seekBarLook"])
+    assert QColor(bar.property("trackColor")) == QColor(look["trackColor"])
+    fill = stage.findChild(QQuickItem, "expandedOverlaySeekFill")
+    assert abs(fill.width() - bar.width() * media.values["progressFraction"]) <= 1.0
+    media.update(progressFraction=0.75)                                  # a timeline event, nothing else
+    _run(display, 10)
+    assert abs(fill.width() - bar.width() * 0.75) <= 1.0
+    area = stage.findChild(QQuickItem, "expandedOverlaySeekArea")
+    assert area.property("consumesDoubleClick") is True
+    seeks = []
+    display.scene.visualizer_overlay_seek_requested.connect(seeks.append)
+    bar.seekRequested.emit(0.3)
+    assert seeks == [pytest.approx(0.3)]
+
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    _centred(edit)
+    _room(edit)
+    edit.open_children()
+    before = _rect(bar, stage)
+    edit.child_move("seek_bar", 20, 6)
+    _run(display, 60)
+    after = _rect(bar, stage)
+    assert after.topLeft() != before.topLeft() and after.size() == before.size()
+    assert "seek_bar" in edit.owner._fullscreen.draft_value()["now_playing"]["child_geometry"]
+    assert edit.owner.save()
+    _run(display, 60)
+    assert "seek_bar" in _value(settings)["now_playing"]["child_geometry"]
+
+
+@pytest.mark.qt
 def test_a_saved_profile_with_the_retired_artwork_factors_loads_to_the_same_geometry(display, tmp_path):
     """Plan 1B.7f: the persisted key stays; a profile saved before the one artwork carrier (block factors
     ``artwork_scale`` / ``artwork_width`` / ``artwork_height`` beside an artwork record) reloads from disk through the

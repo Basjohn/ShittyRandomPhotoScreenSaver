@@ -26,6 +26,12 @@ Rectangle {
     // The Settings-authored seek height the glow's blur and spread follow (not the drawn, possibly edited height).
     property real glowBaseHeight: 6.0
 
+    // ---- input. false: the card's pointer handling. true: the seek area holds every press of its own, a double-click's
+    // second included (consumesDoubleClick: QuickDisplayWindow._double_click_owned_by_control), for a bar over a
+    // surface whose own double-click means something else (the Visualizer's mode cycle), as MediaTransportBar's
+    // exclusivePress.
+    property bool exclusivePress: false
+
     // ---- object names (the callers' test and capture hooks)
     property alias hoverWashObjectName: hoverWash.objectName
     property alias glowObjectName: glow.objectName
@@ -97,6 +103,8 @@ Rectangle {
         hoverEnabled: enabled
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         acceptedButtons: Qt.LeftButton
+        readonly property bool consumesDoubleClick: seekBar.exclusivePress   // QuickDisplayWindow._double_click_owned_by_control
+        onDoubleClicked: function(mouse) { mouse.accepted = seekBar.exclusivePress }
         onReleased: function(mouse) {
             seekBar.seekRequested(seekBar.fractionAt(mouse.x, width))
         }

@@ -648,6 +648,11 @@ def test_the_overlays_sit_below_the_cards_controls_the_osd_lane_and_the_menu(dis
     handlers = [child for item in _visual(layer) for child in item.children()
                 if child.metaObject().className().startswith(("QQuickTapHandler", "QQuickHoverHandler",
                                                               "QQuickWheelHandler", "QQuickDragHandler"))]
+    # The Seek Bar's area (plan 1B.7g) exists but takes nothing while its option is off (not shown); it owns its
+    # double-click like the segments when shown.
+    seek_areas = [item for item in takers if item.objectName() == "expandedOverlaySeekArea"]
+    assert len(seek_areas) == 1 and not seek_areas[0].isVisible() and seek_areas[0].property("consumesDoubleClick")
+    takers = [item for item in takers if item not in seek_areas]
     # The one handler is Show On Hover's: passive (never blocking, never a press) and off unless the option is on.
     assert len(takers) == 3 and [handler.objectName() for handler in handlers] == ["expandedOverlayNowPlayingHover"]
     assert handlers[0].property("blocking") is False and handlers[0].property("enabled") is False
@@ -855,6 +860,34 @@ def test_the_display_manager_sends_a_press_to_the_one_media_transport_route():
     closed_route, closed_calls = _manager_route(closed_unit, admission=False)
     assert menu_route(menu_unit, "next") is False and closed_route(closed_unit, "next") is False
     assert menu_calls == [] and closed_calls == [] and len(calls) == 3
+
+
+def test_the_display_manager_sends_a_seek_to_the_one_media_seek_owner():
+    """Plan 1B.7g: the Seek Bar's seek takes the Media Controls' admission and owner order: the expanded unit's Media
+    owner first, then the others, the first that takes it wins (never fanned out); never another display's, under the
+    menu, with admission closed or from a retired unit."""
+    from engine.display_manager import DisplayManager
+
+    def unit(taken: bool, menu=False, admission=True):
+        state = SimpleNamespace(admission_open=admission, context_menu_active=menu)
+        calls: list[float] = []
+        made = SimpleNamespace(is_retired=False, calls=calls,
+                               runtime=SimpleNamespace(input_controller=SimpleNamespace(input_state=state)),
+                               request_media_seek=lambda fraction: calls.append(fraction) or taken)
+        return made
+
+    expanded, other, third = unit(False), unit(True), unit(True)
+    host = SimpleNamespace(_quick_visualizer_unit=expanded, _retired=False, displays=[other, expanded, third])
+    route = lambda target, fraction: DisplayManager._route_expanded_overlay_seek(host, target, fraction)  # noqa: E731
+    assert route(expanded, 0.4) is True
+    assert expanded.calls == [0.4] and other.calls == [0.4] and third.calls == []
+    assert route(other, 0.4) is False
+    for blocked in (unit(True, menu=True), unit(True, admission=False)):
+        host._quick_visualizer_unit = blocked
+        assert route(blocked, 0.5) is False and blocked.calls == []
+    host._quick_visualizer_unit = expanded
+    expanded.is_retired = True
+    assert route(expanded, 0.5) is False
 
 
 # ------------------------------------------------------------------------------------ the one Media source

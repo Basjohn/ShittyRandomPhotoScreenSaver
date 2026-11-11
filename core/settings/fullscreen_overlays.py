@@ -89,6 +89,9 @@ NOW_PLAYING_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
                               authored_alignment="left"),
     CustomChildRoleDescriptor("controls", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
                               maximum_scale=(2.50, 2.50), uniform_scale=False, movable=True),
+    # The optional Seek Bar (plan 1B.7g): the Media card's ``seek_bar`` role, its limits included.
+    CustomChildRoleDescriptor("seek_bar", axes=("horizontal", "vertical"), minimum_scale=(0.35, 0.50),
+                              maximum_scale=(2.00, 3.00), uniform_scale=False, movable=True),
 )
 #: The children's offsets are fractions of a square of this many ems of the overlay's (scaled) font: they move with the
 #: block's scale and the font size, and never with a track's text length.

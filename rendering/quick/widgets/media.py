@@ -1779,6 +1779,12 @@ class RetainedMediaPresentation:
 
         return self._model.request_transport(key)
 
+    def request_seek(self, fraction: float) -> bool:
+        """Route an already-admitted seek (the Expanded Visualizer's Now Playing seek bar, plan 1B.7g) to the card's
+        own seek owner, as ``request_transport`` routes its Media Controls."""
+
+        return self._model.request_seek(fraction)
+
     def request_system_mute_toggle(self) -> bool:
         """Route an already-admitted keyboard system-mute action."""
 

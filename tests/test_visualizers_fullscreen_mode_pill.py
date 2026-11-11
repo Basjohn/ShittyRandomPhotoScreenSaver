@@ -109,7 +109,7 @@ def test_every_control_writes_the_one_canonical_value_and_keeps_what_it_does_not
 
     checks = {
         (overlay, key): getattr(page, f"{overlay}_{key}")
-        for overlay in OVERLAY_IDS for key in ("always_show", "card", "media_controls", "hover_reveal")
+        for overlay in OVERLAY_IDS for key in ("always_show", "card", "media_controls", "seek_bar", "hover_reveal")
         if hasattr(page, f"{overlay}_{key}")
     }
     assert len(checks) == sum(1 for overlay in OVERLAY_IDS for key, value in canonical[overlay].items()

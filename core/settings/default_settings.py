@@ -1310,6 +1310,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                                                             'offset_x': 0.0,
                                                                             'offset_y': 0.0,
                                                                             'scale': 1.0,
+                                                                            'seek_bar': False,
                                                                             'text_height': 0.0,
                                                                             'text_width': 0.0},
                                                             'preset': {'always_show': False,

@@ -70,6 +70,17 @@ Item {
         const value = mediaBarLook[name]
         return value === undefined || value === null ? fallback : value
     }
+    // The Seek Bar's seeks (plan 1B.7g): Python routes them to the Media card's own seek owner.
+    signal seekRequested(real fraction)
+    // The Media card's seek bar look (MediaPresentationModel.seekBarLook: its progress colours, shadow, glow, height).
+    readonly property var mediaSeekLook: {
+        const text = mediaModel ? mediaModel.seekBarLook : undefined
+        return typeof text === "string" && text.length > 0 ? JSON.parse(text) : ({})
+    }
+    function seekLook(name, fallback) {
+        const value = mediaSeekLook[name]
+        return value === undefined || value === null ? fallback : value
+    }
     // The Media card's artwork frame look (MediaPresentationModel.artworkLook: border colour and stroke, Rounded
     // Artwork; plan 1B.7d): Now Playing's artwork follows the Media widget's artwork settings, not the card chrome.
     readonly property var mediaArtLook: {
@@ -326,7 +337,13 @@ Item {
         readonly property real titleLineHeight: Math.max(1.0, Math.ceil(titleMetrics.height))
         readonly property real naturalTextHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistMetrics.height)
             + (albumShown ? textColumn.spacing + Math.ceil(albumMetrics.height) : 0.0)
+            + (seekShown ? 2.0 * textColumn.spacing + seekHeight : 0.0)
             + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controlsHeight : 0.0)
+        // Seek Bar (plan 1B.7g, default off): the Media card's seek bar (MediaSeekBar.qml, its look from the Media
+        // model) under the metadata, the card's seek height in proportion to Now Playing's controls.
+        readonly property bool seekShown: options.seekBar === true
+        readonly property real seekHeight: Math.max(2.0, Math.round(Number(overlays.seekLook("height", 6.0))
+                                                                     * controlsFactor))
         readonly property real artBase: Math.max(Math.round(fontSize * 3.1), Math.ceil(naturalTextHeight))
         readonly property real artWidth: Math.round(artBase)
         readonly property real artHeight: Math.round(artBase)
@@ -397,6 +414,8 @@ Item {
             {"roleId": "album", "target": albumText, "normalizationTarget": nowPlayingSlot,
              "geometryDependencies": [textBlock, textColumn]},
             {"roleId": "controls", "target": controls, "normalizationTarget": nowPlayingSlot,
+             "geometryDependencies": [textBlock, textColumn]},
+            {"roleId": "seek_bar", "target": seekBar, "normalizationTarget": nowPlayingSlot,
              "geometryDependencies": [textBlock, textColumn]}
         ]
         readonly property var customEditableChildRequirementTarget: null
@@ -556,8 +575,16 @@ Item {
                 readonly property real spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
                 readonly property real naturalHeight: titleText.height + spacing + artistText.height
                     + (nowPlayingSlot.albumShown ? spacing + albumText.height : 0.0)
+                    + (nowPlayingSlot.seekShown ? 2.0 * spacing + nowPlayingSlot.seekHeight : 0.0)
                     + (nowPlayingSlot.controlsShown ? 2.0 * spacing + controlsSpacer.height + nowPlayingSlot.controlsHeight
                        : 0.0)
+                // The metadata rows' bottom, and below them the Seek Bar's row (the Media card's order: metadata, seek,
+                // transport).
+                readonly property real metadataBottom: nowPlayingSlot.albumShown ? albumText.y + albumText.height
+                                                                                : artistText.y + artistText.height
+                readonly property real seekRowY: metadataBottom + 2.0 * spacing
+                readonly property real rowsBottom: nowPlayingSlot.seekShown ? seekRowY + nowPlayingSlot.seekHeight
+                                                                            : metadataBottom
                 height: naturalHeight
 
                 MediaMetadataText {
@@ -692,12 +719,43 @@ Item {
                     shadowOffsetX: 0.0
                     shadowOffsetY: overlays.textShadowOffset
                 }
+                // Seek Bar (plan 1B.7g, default off): the Media card's one seek bar (MediaSeekBar.qml), its look the
+                // Media model's (seekBarLook), its position the model's own timeline events (no timer here), its seeks
+                // the Media card's seek owner. A part of the block (``seek_bar``, the Media card's role): the text box's
+                // width by default, sized on each axis and moved by its child record, kept inside the block. Over the
+                // Visualizer, whose double-click cycles its mode, it holds its own presses (exclusivePress).
+                MediaSeekBar {
+                    id: seekBar
+                    objectName: "expandedOverlaySeekBar"
+                    readonly property var model: overlays.mediaModel
+                    visible: nowPlayingSlot.seekShown
+                    x: nowPlayingSlot.containX(nowPlayingSlot.columnX + nowPlayingSlot.childOffsetX("seek_bar"), width)
+                       - nowPlayingSlot.columnX
+                    y: nowPlayingSlot.containY(nowPlayingSlot.columnY + textColumn.seekRowY
+                                               + nowPlayingSlot.childOffsetY("seek_bar"), height) - nowPlayingSlot.columnY
+                    width: Math.max(1.0, Math.round(textColumn.width * nowPlayingSlot.childWidthScale("seek_bar")))
+                    height: Math.max(1.0, Math.round(nowPlayingSlot.seekHeight * nowPlayingSlot.childHeightScale("seek_bar")))
+                    fraction: !!model && isFinite(Number(model.progressFraction)) ? Number(model.progressFraction) : 0.0
+                    seekEnabled: nowPlayingSlot.interactive && !!model && model.canSeek === true
+                    trackColor: overlays.seekLook("trackColor", "#4dffffff")
+                    fillColor: overlays.seekLook("fillColor", "#ffffffff")
+                    shadowEnabled: overlays.seekLook("shadowEnabled", false) === true
+                    shadowColor: overlays.seekLook("shadowColor", "#00000000")
+                    glowEnabled: overlays.seekLook("glowEnabled", false) === true
+                    glowColor: overlays.seekLook("glowColor", "#00000000")
+                    glowBaseHeight: nowPlayingSlot.seekHeight
+                    exclusivePress: true
+                    hoverWashObjectName: "expandedOverlaySeekHoverWash"
+                    glowObjectName: "expandedOverlaySeekGlow"
+                    fillObjectName: "expandedOverlaySeekFill"
+                    seekAreaObjectName: "expandedOverlaySeekArea"
+                    onSeekRequested: function(value) { overlays.seekRequested(value) }
+                }
                 // Media Controls (default off): a small version of the Media card's own transport bar (the one
                 // MediaTransportBar, its look from the Media model), on the Media card's own transport owner.
                 Item {
                     id: controlsSpacer
-                    y: (nowPlayingSlot.albumShown ? albumText.y + albumText.height : artistText.y + artistText.height)
-                        + textColumn.spacing
+                    y: textColumn.rowsBottom + textColumn.spacing
                     width: textColumn.width
                     height: Math.round(nowPlayingSlot.fontSize * 0.25)
                     visible: nowPlayingSlot.controlsShown

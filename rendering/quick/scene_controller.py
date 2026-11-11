@@ -414,6 +414,8 @@ class QuickSceneController(QObject):
     visualizer_preset_step_requested = Signal(int)
     # Expanded Visualizer overlays (plan 01 §G, M3b): a Media Controls press ("previous", "play" or "next").
     visualizer_overlay_transport_requested = Signal(str)
+    # The full-display Now Playing's seek bar (plan 1B.7g): a fraction of the track, for the Media card's seek owner.
+    visualizer_overlay_seek_requested = Signal(float)
     custom_layout_save_requested = Signal()
     # Semantic Edit-only routes.  The native input block remains intact while
     # the retained overlay forwards these to DisplayManager's existing orbit
@@ -3003,6 +3005,9 @@ class QuickSceneController(QObject):
         overlay_transport = getattr(root, "expandedOverlayTransportRequested", None)
         if overlay_transport is not None and hasattr(overlay_transport, "connect"):
             overlay_transport.connect(self.visualizer_overlay_transport_requested.emit)
+        overlay_seek = getattr(root, "expandedOverlaySeekRequested", None)
+        if overlay_seek is not None and hasattr(overlay_seek, "connect"):
+            overlay_seek.connect(self.visualizer_overlay_seek_requested.emit)
         overlay_geometry = getattr(root, "expandedOverlayEditGeometryChanged", None)
         if overlay_geometry is not None and hasattr(overlay_geometry, "connect"):
             overlay_geometry.connect(self._on_expanded_overlay_edit_geometry_changed)

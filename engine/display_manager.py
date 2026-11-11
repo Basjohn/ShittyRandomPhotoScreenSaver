@@ -2459,6 +2459,13 @@ class DisplayManager(QObject):
                 str(key),
             )
         )
+        runtime.scene_controller.visualizer_overlay_seek_requested.connect(
+            lambda fraction: live_unit_route(
+                lambda display, value: self._route_quick_visualizer_input(
+                    display, self._route_expanded_overlay_seek, display, value),
+                float(fraction),
+            )
+        )
         runtime.scene_controller.custom_layout_visualizer_orbit_requested.connect(
             self._orbit_quick_visualizer_view_from_edit_drag
         )
@@ -3682,6 +3689,20 @@ class DisplayManager(QObject):
         if not state.admission_open or state.context_menu_active:
             return False
         return self._route_quick_media_transport(unit, str(key))
+
+    def _route_expanded_overlay_seek(self, unit: QuickDisplayUnit, fraction: float) -> bool:
+        """A seek on the full-display Now Playing's seek bar (plan 1B.7g): the Media card's own seek owner, with the
+        Media Controls' admission and owner order (never a second controller, never fanned out)."""
+
+        if unit is not self._quick_visualizer_unit or unit.is_retired or self._retired:
+            return False
+        state = unit.runtime.input_controller.input_state
+        if not state.admission_open or state.context_menu_active:
+            return False
+        for candidate in (unit, *(other for other in self.displays if other is not unit)):
+            if not candidate.is_retired and candidate.request_media_seek(float(fraction)):
+                return True
+        return False
 
     def _expanded_display_blocks_layout(self) -> bool:
         return _takeover_blocks_layout(self)

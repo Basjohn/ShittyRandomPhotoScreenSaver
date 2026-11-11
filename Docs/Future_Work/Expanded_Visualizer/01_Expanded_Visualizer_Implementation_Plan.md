@@ -878,6 +878,16 @@ can most geometry normally."
   - Storage (1B.7d): `now_playing.artwork_scale` / `artwork_width` / `artwork_height` are retired; a stored value
     with them loads through the one normaliser's bridge into the `artwork` record
     (`Docs/Architecture/Persisted_Input_Compatibility.md`).
+- *Seek Bar (plan 1B.7g, default off).* `now_playing.seek_bar` (Settings: Fullscreen Mode -> Now Playing -> Seek
+  Bar). Now Playing draws the Media card's one seek bar (`MediaSeekBar.qml`, extracted in 1B.7a) under the metadata
+  (the card's order: metadata, seek, transport), its look from `MediaPresentationModel.seekBarLook`, its fill from the
+  model's `progressFraction` (the Media timeline's own events, no timer), the text box's width and the card's seek
+  height in proportion to the controls. A seek leaves as `seekRequested` -> `expandedOverlaySeekRequested` ->
+  `QuickSceneController.visualizer_overlay_seek_requested` -> `DisplayManager._route_expanded_overlay_seek` (the Media
+  Controls' admission and owner order) -> `QuickDisplayUnit.request_media_seek` -> the Media presentation's
+  `request_seek`. Over the Visualizer it holds its own presses, a double-click's second included
+  (`exclusivePress` -> `consumesDoubleClick`). In Fullscreen Edit it is the child part `seek_bar` (the Media card's
+  role and limits).
 - *Snap and guides (plan 1B.7e).* The overlays snap through the ordinary guide owner inside the safe area: its
   edges bound them (no edge guide is drawn, as in ordinary Edit; the 8 Nov "edge" guide kind is retired), its centre
   and the other items (the other overlay, the Volume OSD) are guides, published in the Edit layer's coordinates.

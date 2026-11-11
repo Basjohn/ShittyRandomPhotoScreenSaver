@@ -46,6 +46,9 @@ def resolve_expanded_overlay_config(section: Mapping[str, Any] | None, *, card_t
         if "media_controls" in options:
             projected["mediaControls"] = bool(options["media_controls"])
             projected["mediaControlsStyle"] = str(options["media_controls_style"])
+        if "seek_bar" in options:
+            # Seek Bar (plan 1B.7g, default off): the Media card's seek bar (MediaSeekBar.qml) as a Now Playing part.
+            projected["seekBar"] = bool(options["seek_bar"])
         if "hover_reveal" in options:
             # Show On Hover: the pointer resting where Now Playing is placed fades it back in (QML HoverHandler edges).
             projected["hoverReveal"] = bool(options["hover_reveal"])

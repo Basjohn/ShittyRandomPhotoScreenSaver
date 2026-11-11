@@ -339,7 +339,7 @@ def test_now_playings_part_records_are_ordinary_child_geometry_and_old_values_re
 
     canonical = canonical_fullscreen_overlays()
     roles = {role.role_id: role for role in NOW_PLAYING_CHILD_ROLES}
-    assert {"artwork", "title", "artist", "album", "controls"} == set(roles)
+    assert {"artwork", "title", "artist", "album", "controls", "seek_bar"} == set(roles)
     assert all(role.movable for role in roles.values())
     assert CHILD_GEOMETRY_KEY in PLACEMENT_KEYS["now_playing"] and CHILD_GEOMETRY_KEY not in canonical["preset"]
     # The canonical value holds no record: every part where today's layout puts it.
