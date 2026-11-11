@@ -351,6 +351,92 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
 
 
 @pytest.mark.qt
+def test_the_same_gestures_through_the_edit_layer_and_the_owners_own_seams_store_the_same_record(display, tmp_path):
+    """Plan 1C.3 parity (the Edit/Arrange parity pattern): one gesture script (the block's width and height given, a
+    corner, the wheel, the text group moved and scaled, the artist line moved, the artwork resized on one axis) run once
+    through the Edit layer's model (what the pointer drives) and once through the ``QuickCustomLayoutOwner``'s own
+    handlers with the session's change publication (the seams the model forwards to), each from the same saved value
+    and saved: both store exactly the same Now Playing record, and both draw the same frames."""
+    seed ={"offset_x": 0.1, "offset_y": -0.3, "always_show": True}
+
+    def run(through_layer: bool) -> tuple[dict, dict]:
+        settings = _manager(tmp_path / ("layer" if through_layer else "owner"))
+        value = _seed(settings, now_playing=seed)
+        if through_layer:
+            _draw(display, media=_Media(), config=_projection(value))
+            _open(display)
+        else:
+            display.scene.set_visualizer_expanded_overlay_config(_projection(value))
+        _run(display, 120)
+        edit = _Fullscreen(display, settings)
+        assert edit.start()
+        _shown_and_settled(display)
+        owner, item = edit.owner, edit.item("now_playing")
+        origin = edit.model._display_origin
+
+        def side(handle: str, dx: int, dy: int) -> None:
+            if through_layer:
+                edit.side("now_playing", handle, dx or dy)
+                return
+            rect = QRect(item.current_global_rect)
+            x = rect.x() if handle.endswith("left") else (rect.x() + rect.width() if handle.endswith("right")
+                                                           else rect.center().x())
+            y = rect.y() if handle.startswith("top") else (rect.y() + rect.height() if handle.startswith("bottom")
+                                                            else rect.center().y())
+            assert owner.begin_resize(item, handle, QPoint(x, y))
+            owner.update_resize(item, handle, QPoint(round(x + dx / 2), round(y + dy / 2)), False)
+            owner.session.notify_item_changed(item)
+            owner.update_resize(item, handle, QPoint(x + dx, y + dy), True)
+            owner.session.notify_item_changed(item)
+
+        def child_move(role: str, dx: int, dy: int) -> None:
+            if through_layer:
+                edit.child_move(role, dx, dy)
+                return
+            frame = edit.child_frame(role)
+            point = edit._child_point(frame, 0.5, 0.5)
+            cursor = QPoint(round(point.x()), round(point.y())) + origin
+            assert owner.begin_child_move(item, role, cursor, float(frame.property("normalizationWidth")),
+                                          float(frame.property("normalizationHeight")))
+            owner.update_child_move(item, role, cursor + QPoint(dx // 2, dy // 2), False)
+            owner.session.notify_item_changed(item)
+            owner.update_child_move(item, role, cursor + QPoint(dx, dy), True)
+            owner.session.notify_item_changed(item)
+            _run(display, 30)
+
+        side("right", 120, 0)
+        side("top", 0, -50)
+        if through_layer:
+            edit.corner("now_playing", "bottom_right", 30, 20)
+            edit.wheel("now_playing", 1)
+        else:
+            rect = QRect(item.current_global_rect)
+            corner = rect.bottomRight() + QPoint(1, 1)
+            assert owner.begin_resize(item, "bottom_right", corner)
+            owner.update_resize(item, "bottom_right", corner + QPoint(15, 10), False)
+            owner.session.notify_item_changed(item)
+            owner.update_resize(item, "bottom_right", corner + QPoint(30, 20), True)
+            owner.session.notify_item_changed(item)
+            assert owner.resize_wheel(item, 120)
+            owner.session.notify_item_changed(item)
+        _run(display, 60)
+        edit.open_children()
+        child_move("metadata", 30, 12)
+        child_move("artist", -10, 8)
+        frames = edit.frames()
+        assert owner.save()
+        _run(display, 120)
+        return _value(settings)["now_playing"], frames
+
+    by_layer, layer_frames = run(True)
+    by_owner, owner_frames = run(False)
+    assert by_layer["text_width"] > 0.0 and by_layer["text_height"] > 0.0
+    assert {"metadata", "artist"} <= set(by_layer["child_geometry"])
+    assert by_owner == by_layer
+    assert owner_frames == layer_frames
+
+
+@pytest.mark.qt
 def test_the_overlay_blocks_parent_gestures_are_the_ordinary_edit_handlers(display, tmp_path):
     """Plan 1B.7b: the block's corner, side handle and Restore Size are ordinary Edit's (the owner's handlers, bounded
     by the safe area), so they behave as the Media card's do: a corner grows the frame about its top centre, a side
