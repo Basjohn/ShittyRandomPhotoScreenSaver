@@ -752,13 +752,17 @@ Descriptor-owned orbit admission is separate from footprint visibility, so empty
 content geometry. CUSTOM's native pointer block remains binding. Orbit/Alt-left uses the existing view resolver. For unframed 3D modes,
 Alt-right move and Alt-wheel resize use the current `CustomLayoutSession`. Framed 3D modes instead route admitted
 Alt-right/Alt-wheel gestures to their shared internal-camera pan/scale capability: their card rectangle, viewport and CUSTOM
-geometry never change from those inputs. **Held-right pan (plan 1B.13).** Outside Edit, over a pan-capable card (the
+geometry never change from those inputs. **One pan direction (operator, 11 Nov 2026: the Studio's).** Alt+right,
+held-right and the Studio viewport pan through one function, `scene_pan_delta`
+(`widgets/spotify_visualizer/view_orbit.py`): `pan_x -= dx / width`, `pan_y += dy / height` of the frame (the live
+card's content rect, the Studio's preview frame), bounded by each caller's canonical clamp. Alt+right formerly raised
+pan X on a right drag (the opposite horizontal direction; the vertical sign always matched).
+**Held-right pan (plan 1B.13).** Outside Edit, over a pan-capable card (the
 held-left plain orbit's admission: interaction or Ctrl mode, not exiting, no menu open, view orbit admitted, and the
 mode declares `scene_transform_settings`; the expanded card is the whole display), a plain right press opens nothing and
 arms a pending pan in `QuickDisplayWindow`'s one pending -> capture machine (its gesture kind `'pan'`). Travel past
 the system drag distance while held promotes it through the same capture owner and cursor fade as the orbit, rebases
-the press-scoped scene baseline (`DisplayManager._start_quick_scene_pan`) and pans by the Studio's own rule
-(`pan_x -= dx / content width`, `pan_y += dy / content height`, canonical bounds); its release, focus loss, mode edge,
+the press-scoped scene baseline (`DisplayManager._start_quick_scene_pan`) and pans by the one pan rule above; its release, focus loss, mode edge,
 input close or display loss ends it through the live view pose's existing save. A release without that travel opens the
 retained menu at the release point through the one `context_menu_requested` route, so `context_menu_active` never
 becomes true for a pan. Every other right press (another widget, the wallpaper, Edit, Alt-right, a mode that cannot

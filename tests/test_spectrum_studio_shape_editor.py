@@ -19,7 +19,7 @@ MIRRORED = "spectrum_mirrored"
 
 def test_structural_edits_are_single_undoable_admitted_edits(qt_app, dialog_tab, settings_manager, no_gl_checks):
     from ui.studio.settings_link import open_mode_studio
-    from ui.tabs.media.spectrum_shape_editor import _MAX_NODES, _MIN_NODES
+    from ui.studio.spectrum_shape import MAX_NODES as _MAX_NODES, MIN_NODES as _MIN_NODES
     _dialog, tab = dialog_tab()
     surfaces = []
     controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces))

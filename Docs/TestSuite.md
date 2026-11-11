@@ -454,6 +454,11 @@ A conftest guard stops the session at any test that leaves a plain (non-GUI) `QC
 process's application: Qt cannot replace it, and the next OpenGL context creation in that process
 crashes the interpreter far from the cause.
 
+Two process-wide product states end with each test (autouse fixtures in `tests/conftest.py`, never per-test
+patches): the runtime pointer guard (`suppress_runtime_pointer_input`, 700 ms after Save/Cancel, a menu action or
+the double-right Edit; it swallowed the next test's right-click) and the active Widget Theme
+(`ui/widget_theme_active.py`, reset to the default; a Settings build left its theme resolving later tests' colours).
+
 ### 3.3 Broad reconciliation diagnostic
 
 ```powershell

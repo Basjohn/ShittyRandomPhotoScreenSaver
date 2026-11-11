@@ -16,6 +16,9 @@ from typing import Any, Callable, Mapping
 
 from ui.studio.schema import SHAPE, SHAPE_BLEND, SWITCH, ShapeLayout, ShapeSpec
 
+MIN_NODES = 1                                # the shape's node count (Settings' former editor: 1..5)
+MAX_NODES = 5
+
 ADD_NODE = "shape.add_node"
 REMOVE_NODE = "shape.remove_node."          # + node index
 LANE_PREVIOUS = "shape.lane_previous."      # + "1." (mirrored) / "0." (linear) + boundary index
@@ -63,8 +66,7 @@ def canonical(key: str):
 
 
 def node_limits() -> tuple[int, int]:
-    from ui.tabs.media.spectrum_shape_editor import _MAX_NODES, _MIN_NODES
-    return _MIN_NODES, _MAX_NODES
+    return MIN_NODES, MAX_NODES
 
 
 # ------------------------------------------------------------------------------- admission
@@ -165,7 +167,7 @@ def added_node(nodes) -> list:
     """Settings adds a node where the user clicks; the Studio adds one at the middle of the widest gap along the
     bars (the ends included), on the current silhouette (``interpolate_nodes``, the curve the engine samples), so
     adding a node barely changes the shape until it is moved."""
-    from ui.tabs.media.spectrum_shape_editor import interpolate_nodes
+    from utils.curve_nodes import interpolate_nodes
     current = [[float(x), float(y)] for x, y in nodes]
     xs = [0.0] + [x for x, _y in current] + [1.0]
     width, left = max((xs[i + 1] - xs[i], xs[i]) for i in range(len(xs) - 1))

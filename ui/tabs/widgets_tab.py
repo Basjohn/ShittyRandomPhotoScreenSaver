@@ -1758,16 +1758,13 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
                 )
                 
                 if message:
-                    if can_stack:
-                        status_label.setText(message)
-                        status_label.setStyleSheet(
-                            f"{STATUS_LABEL_STYLE} color: #4CAF50;"
-                        )
-                    else:
-                        status_label.setText(message)
-                        status_label.setStyleSheet(
-                            f"{STATUS_LABEL_STYLE} color: #FF9800;"
-                        )
+                    # The theme's success / warning roles, live across theme changes (never fixed colours).
+                    status_label.setText(message)
+                    shared_styles.bind_shared_styles(
+                        status_label,
+                        "STATUS_SUCCESS_LABEL_STYLE" if can_stack else "STATUS_WARNING_LABEL_STYLE",
+                        base_style="",
+                    )
                 else:
                     status_label.setText("")
                     status_label.setStyleSheet("")

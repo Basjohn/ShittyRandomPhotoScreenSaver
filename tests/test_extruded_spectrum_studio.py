@@ -169,7 +169,7 @@ def _loudest_instant(data) -> float:
 def _vector_elements() -> set[tuple]:
     """Every element of a vector value Settings edits: the shared colours' alphas, every shape-node slot (both
     axes), every frequency boundary and lane strength of both layouts."""
-    from ui.tabs.media.spectrum_shape_editor import _MAX_NODES
+    from ui.studio.spectrum_shape import MAX_NODES as _MAX_NODES
     from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
     shared = get_owned_mode_setting_keys(MODE, "shared_bar")
     canonical = require_canonical_default("widgets.spotify_visualizer")
@@ -254,7 +254,7 @@ def test_instruments_bounds_choices_and_conditions_come_from_the_registry():
 
 
 def test_shape_rules_follow_the_shape_editor():
-    from ui.tabs.media.spectrum_shape_editor import _MAX_NODES
+    from ui.studio.spectrum_shape import MAX_NODES as _MAX_NODES
     schema = build_schema()
     nodes = [list(n) for n in canonical_section()[SHAPE.nodes]]
     moved = [list(n) for n in nodes]

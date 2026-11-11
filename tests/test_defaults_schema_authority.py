@@ -306,11 +306,8 @@ def test_settings_visualizer_builders_do_not_reintroduce_shadow_defaults() -> No
     widgets_media = _text("ui/tabs/widgets_tab_media.py")
     widgets_tab = _text("ui/tabs/widgets_tab.py")
     visualizers_tab = _text("ui/tabs/visualizers_tab.py")
-    spectrum_editor = _text("ui/tabs/media/spectrum_shape_editor.py")
 
     assert "software_visualizer_enabled" not in widgets_media
-    assert "DEFAULT_NODES" not in spectrum_editor
-    assert "_LANE_STRENGTHS_" not in spectrum_editor
 
     # Settings controls must initialize from the canonical Widget defaults, not
     # stale local numbers/colours that can later leak through a save path.

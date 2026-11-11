@@ -108,8 +108,9 @@ def test_all_render_pass_world_positions_use_same_physical_eye():
 
 
 def test_pan_follow_screen_pointer_sign_is_not_inverted_again():
-    # Scene Pan is screen-normalised with Y down: Qt Alt-right drag right/down
-    # MUST carry the visible world right/down. The previous physical-camera
+    # Scene Pan is screen-normalised with Y down: a positive pan X/Y MUST carry
+    # the visible world right/down (the gestures' own direction is
+    # view_orbit.scene_pan_delta's, one owner). The previous physical-camera
     # candidate accidentally negated X (and its initial implementation Y).
     original = physical_camera(0, 0, 16/9)
     panned = physical_camera(0, 0, 16/9, pan_x=0.1, pan_y=0.1)

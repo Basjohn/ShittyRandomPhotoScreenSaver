@@ -9,7 +9,6 @@ Covers:
 6. UI save path emits correct keys
 """
 from __future__ import annotations
-from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 import json
 from dataclasses import asdict
@@ -18,8 +17,6 @@ from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
 
 from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer.bar_computation import (
@@ -33,27 +30,6 @@ ROOT = Path(__file__).resolve().parent.parent
 # ---------------------------------------------------------------------------
 # 1. SpectrumShapeConfig dataclass
 # ---------------------------------------------------------------------------
-
-
-def _canonical_spectrum_editor(mirrored: bool):
-    """Build a SpectrumShapeEditor with canonical spotify_visualizer defaults.
-
-    The editor now *requires* its default nodes/notches/lane-strengths to be
-    injected (product defaults live in canonical Settings, not hardcoded on the
-    widget), mirroring the production spectrum_builder wiring.
-    """
-    from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
-    from core.settings.default_contract import require_canonical_default
-
-    canonical = require_canonical_default("widgets.spotify_visualizer")
-    return SpectrumShapeEditor(
-        mirrored=mirrored,
-        default_nodes=canonical["spectrum_shape_nodes"],
-        default_notches_mirrored=canonical["spectrum_notch_positions_mirrored"],
-        default_notches_linear=canonical["spectrum_notch_positions_linear"],
-        default_lane_strengths_mirrored=canonical["spectrum_lane_strengths_mirrored"],
-        default_lane_strengths_linear=canonical["spectrum_lane_strengths_linear"],
-    )
 
 
 class TestSpectrumShapeConfig:
@@ -87,7 +63,7 @@ class TestSpectrumShapeConfig:
         assert asdict(restored) == d
 
     def test_interpolate_nodes_mirrored_even_bar_counts_stay_edge_symmetric(self):
-        from ui.tabs.media.spectrum_shape_editor import interpolate_nodes_mirrored
+        from utils.curve_nodes import interpolate_nodes_mirrored
 
         nodes = [[0.0, 0.98], [0.16, 0.98], [0.58, 0.76], [0.86, 0.90], [1.0, 0.26]]
         vals = interpolate_nodes_mirrored(nodes, 34)
@@ -118,76 +94,6 @@ class TestSpectrumShapeConfig:
         assert "uniform float u_bars_left;" in src
         assert "float bar_width = u_bar_width_px;" in src
         assert "float bars_left = u_bars_left;" in src
-
-
-class TestSpectrumShapeEditorNotches:
-    @staticmethod
-    def _mouse_event(event_type, x, y, button, buttons=None):
-        if buttons is None:
-            buttons = button
-        return QMouseEvent(
-            event_type,
-            QPointF(x, y),
-            QPointF(x, y),
-            QPointF(x, y),
-            button,
-            buttons,
-            Qt.KeyboardModifier.NoModifier,
-        )
-
-    @pytest.mark.qt
-    def test_dragged_notch_can_cross_neighbors_without_pulling_them(self, qt_app):
-        editor = _canonical_spectrum_editor(mirrored=True)
-        try:
-            editor.resize(320, 180)
-            keep_off_screen(editor)
-            editor.show()
-
-            original = editor.get_notch_positions()
-            plot = editor._plot_rect()
-            center_x = plot.left() + plot.width() * 0.5
-            half_w = plot.width() * 0.5
-            notch_y = plot.bottom() + 10.0
-
-            drag_idx = 1  # Vocal
-            start_frac = float(original[drag_idx][0])
-            start_x = center_x - start_frac * half_w
-            move_target_x = center_x - (float(original[0][0]) + 0.01) * half_w
-
-            editor.mousePressEvent(
-                self._mouse_event(
-                    QEvent.Type.MouseButtonPress,
-                    start_x,
-                    notch_y,
-                    Qt.MouseButton.LeftButton,
-                )
-            )
-            editor.mouseMoveEvent(
-                self._mouse_event(
-                    QEvent.Type.MouseMove,
-                    move_target_x,
-                    notch_y,
-                    Qt.MouseButton.NoButton,
-                    Qt.MouseButton.LeftButton,
-                )
-            )
-            editor.mouseReleaseEvent(
-                self._mouse_event(
-                    QEvent.Type.MouseButtonRelease,
-                    move_target_x,
-                    notch_y,
-                    Qt.MouseButton.LeftButton,
-                )
-            )
-
-            updated = editor.get_notch_positions()
-            labels_to_positions = {str(label): float(pos) for pos, label in updated}
-            assert labels_to_positions["Mid"] == pytest.approx(float(original[0][0]), abs=1e-6)
-            assert labels_to_positions["Low-Mid"] == pytest.approx(float(original[2][0]), abs=1e-6)
-            assert labels_to_positions["Vocal"] < float(original[0][0]) + 0.03
-            assert labels_to_positions["Vocal"] >= 0.0
-        finally:
-            editor.deleteLater()
 
 
 # NOTE: TestConfigApplierShaping removed - it drove the retired combined

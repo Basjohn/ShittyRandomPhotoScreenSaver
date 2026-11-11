@@ -54,6 +54,9 @@ class GeocodeCompleter(QCompleter):
         super().__init__(self._model, parent or line_edit)
         self.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.setFilterMode(Qt.MatchFlag.MatchContains)
+        # Settings' one themed autocomplete popup (shared with the theme filter), never Qt's default list.
+        from ui.widgets.theme_filter import ThemedCompleterPopup
+        self.setPopup(ThemedCompleterPopup())
 
         self._line_edit = line_edit
         self._pending_query: str = ""

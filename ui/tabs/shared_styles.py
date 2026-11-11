@@ -1500,6 +1500,23 @@ STATUS_LABEL_STYLE = (
 STATUS_READY_COLOR = "#72d696"
 STATUS_ATTENTION_COLOR = "#efad5a"
 
+
+def _build_status_success_label_style() -> str:
+    """Status text that confirms something good (a free service, a working link): the theme's success role."""
+    return f"{STATUS_LABEL_STYLE} color: {_theme_qss_color('popup.icon.success')};"
+
+
+STATUS_SUCCESS_LABEL_STYLE = _build_status_success_label_style()
+
+
+def _build_status_warning_label_style() -> str:
+    """Status text that warns (a clash the user should resolve): the theme's warning role."""
+    return f"{STATUS_LABEL_STYLE} color: {_theme_qss_color('popup.icon.warning')};"
+
+
+STATUS_WARNING_LABEL_STYLE = _build_status_warning_label_style()
+
+
 def _build_info_label_style() -> str:
     return (
         f"color: {_theme_qss_color('text.secondary')};"
@@ -1731,6 +1748,8 @@ _THEME_STYLE_BUILDERS = {
     "THEME_LINK_BUTTON_STYLE": _build_theme_link_button_style,
     "THEME_FILTER_INPUT_STYLE": _build_theme_filter_input_style,
     "TEXT_SECONDARY_COLOR_STYLE": _build_text_secondary_color_style,
+    "STATUS_SUCCESS_LABEL_STYLE": _build_status_success_label_style,
+    "STATUS_WARNING_LABEL_STYLE": _build_status_warning_label_style,
     "SLIDER_STYLE": _build_slider_style,
     "CIRCLE_CHECKBOX_STYLE": _build_circle_checkbox_style,
     "ACCESSIBILITY_TITLE_STYLE": _build_accessibility_title_style,

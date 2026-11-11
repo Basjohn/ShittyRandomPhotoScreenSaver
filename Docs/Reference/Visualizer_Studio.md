@@ -96,6 +96,11 @@ reuses Settings' owners rather than restating them:
   (the scene's pixels are unchanged) while every slot corner lies inside the frame's rounded outline; the frame's
   border is drawn over the scene (`viewportFrameBorder`), covering the slot's square corners. The render node, its
   scissor and the saver's clip path are untouched.
+- **Tooltips.** Every `C.ToolTip` in the shell is Qt's one shared tooltip, styled once per Studio
+  (`styleSharedToolTip`): the theme's raised surface made opaque, its outline and text, wrapped to at most
+  `tipMaxWidth` (420 px, never wider than the window less the popup's 12 px margins, which keep it inside). The
+  instance belongs to the QML engine and outlives a Studio, so each shell restyles it with its own theme. No per-row
+  tooltip styling (`tests/test_studio_tooltip.py`).
 | `ui/studio/<mode>_adapter.py`, `<mode>_recorded_inputs.py` | One adapter per registered mode plus its recorded-clip extractor. |
 
 ## 3. Adapter contract
@@ -373,7 +378,9 @@ when both toolbar groups cannot fit side by side.
   - *Gestures.* Drag a node; click empty space to add one there and keep holding it; right-click a node, Delete, or
     the strip's Remove Node to remove it; drag a lane's tag along the axis (a pinned lane's tag stays) and its
     diamond up and down; the header's two layout chips choose the layout (the one boolean that is not a
-    `SwitchRow`: both layouts are named, beside the canvas they change). While an element is selected a strip under
+    `SwitchRow`: both layouts are named, beside the canvas they change). A press goes to the nearer of the nearest
+    node and the nearest diamond; where they overlap (a diamond under a node, as at the right edge of the default
+    curves), a press more than 1.5 px below the diamond's centre takes the diamond, any other the node. While an element is selected a strip under
     the canvas holds its exact Position and Height / Strength fields, Remove Node or the lane swaps; arrow keys
     step it (Shift: ten steps), Esc drops a held drag, then the selection. Hovering says in the header what the
     pointer would do there.
@@ -426,7 +433,10 @@ when both toolbar groups cannot fit side by side.
   `view_orbit_settings`, turn and tilt): its rows are view-pose rows and the mode navigates it (framed modes through
   `framed.camera_navigation`, free-orbit modes, Sphere and Extruded Spectrum, through `framed.orbit_navigation`).
   Without the preset row's camera choice (Sphere and Extruded Spectrum have none) the dragged view holds for the
-  session and Save Camera keeps it. Until 11 Nov Sphere's View Turn / Tilt were plain committed rows: the canonical
+  session and Save Camera keeps it. The Studio's orbit notices, the Keep View tip and the help name that route from
+  one rule of the mode's capabilities (`framed.orbit_save_route`: the camera choice exactly when the mode declares a
+  scene transform, as the preset row does; otherwise Save Camera, or a preview when the store cannot save one;
+  `tests/test_studio_orbit_save_route.py`). Until 11 Nov Sphere's View Turn / Tilt were plain committed rows: the canonical
   save, which leaves view keys to the camera owner, read the old view back and the slider snapped back
   (`tests/test_studio_view_pose_sliders.py`).
 - **Previews.** `preset_preview` (starting-point tiles) and `card_preview` (rendered cards at the Quiet or Peak

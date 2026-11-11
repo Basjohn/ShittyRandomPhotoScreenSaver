@@ -419,6 +419,58 @@ Rectangle {
         }
     }
 
+    // The Studio's one tooltip form. Every `C.ToolTip.*` in this shell shows Qt's single shared tooltip, so styling
+    // that instance once gives every row, button and handle the same tip: theme surface, outline and text; wrapped
+    // to at most `tipMaxWidth` (never wider than the window less the popup's margins, which keep it inside). The
+    // instance belongs to the QML engine, which outlives one Studio, so each shell restyles it with its own theme.
+    readonly property real tipMaxWidth: Math.max(160, Math.min(420, width - 2 * 12))
+    Component {
+        id: studioTipBackground
+        Rectangle {
+            objectName: "studioTipBackground"
+            radius: 5
+            color: Qt.rgba(shell.cRaised.r, shell.cRaised.g, shell.cRaised.b, 1)   // opaque over any material
+            border.width: 1
+            border.color: shell.cOutline
+        }
+    }
+    Component {
+        id: studioTipText
+        Text {
+            objectName: "studioTipText"
+            property var popup: null
+            text: popup ? popup.text : ""
+            wrapMode: Text.Wrap
+            color: shell.cText
+            font.pixelSize: shell.fontBase - 1
+            lineHeight: 1.1
+        }
+    }
+    function styleSharedToolTip() {
+        var tip = C.ToolTip.toolTip
+        if (!tip)
+            return
+        tip.objectName = "studioToolTip"
+        tip.margins = 12
+        tip.padding = 8
+        var oldBackground = tip.background, oldContent = tip.contentItem
+        // Created under the shell (an item, so Qt does not warn), then unparented: a control adopts only a piece
+        // with no parent, and an adopted-elsewhere text would draw at the shell's corner instead of in the tip.
+        var background = studioTipBackground.createObject(shell)
+        var content = studioTipText.createObject(shell, { popup: tip })
+        background.parent = null
+        content.parent = null
+        tip.background = background
+        tip.contentItem = content
+        // Only a previous Studio's created pieces are ours to free (the style's own are declared, not created).
+        if (oldBackground && oldBackground.objectName === "studioTipBackground") oldBackground.destroy()
+        if (oldContent && oldContent.objectName === "studioTipText") oldContent.destroy()
+        tip.implicitWidth = Qt.binding(function() {
+            return Math.min(shell.tipMaxWidth, tip.implicitContentWidth + tip.leftPadding + tip.rightPadding)
+        })
+    }
+    Component.onCompleted: styleSharedToolTip()
+
     // One line that never overflows: elided to its width, the full text on hover when it is cut.
     component HintText: Text {
         id: hint
@@ -1347,19 +1399,30 @@ Rectangle {
                                ? Qt.ArrowCursor : Qt.SizeHorCursor
                     return shp.hoverPart === "add" && shp.shown.canAdd === true ? Qt.CrossCursor : Qt.ArrowCursor
                 }
+                // The press goes to the nearer of the nearest node and the nearest strength marker. Where the two
+                // overlap (within a pixel of the same distance, as a diamond exactly under a node), the pointer's half
+                // decides, stable and visible in the hover cursor: more than 1.5 px below the marker's centre takes
+                // the strength marker (a vertical drag), otherwise the node (a press on its centre stays the node's);
+                // so both stay reachable.
                 function hit(mx, my) {
-                    var best = -1, reach = 13 * 13, i, dx, dy, d
+                    var node = -1, nodeD = 13 * 13, lane = -1, laneD = 11 * 11, i, dx, dy, d
                     for (i = 0; i < shp.nodes.length; ++i) {
                         dx = mx - shp.px(shp.nodes[i][0]); dy = my - shp.py(shp.nodes[i][1]); d = dx * dx + dy * dy
-                        if (d <= reach) { reach = d; best = i }
+                        if (d <= nodeD) { nodeD = d; node = i }
                     }
-                    if (best >= 0) return {"part": "node", "index": best}
-                    reach = 11 * 11
                     for (i = 0; i < shp.lanes.length; ++i) {
                         dx = mx - shp.px(shp.lanes[i].x); dy = my - shp.py(shp.lanes[i].strength); d = dx * dx + dy * dy
-                        if (d <= reach) { reach = d; best = i }
+                        if (d <= laneD) { laneD = d; lane = i }
                     }
-                    if (best >= 0) return {"part": "strength", "index": best}
+                    if (node >= 0 && lane >= 0) {
+                        var toNode = Math.sqrt(nodeD), toLane = Math.sqrt(laneD)
+                        if (Math.abs(toNode - toLane) < 1.0)
+                            return my > shp.py(shp.lanes[lane].strength) + 1.5 ? {"part": "strength", "index": lane}
+                                                                                : {"part": "node", "index": node}
+                        return toNode < toLane ? {"part": "node", "index": node} : {"part": "strength", "index": lane}
+                    }
+                    if (node >= 0) return {"part": "node", "index": node}
+                    if (lane >= 0) return {"part": "strength", "index": lane}
                     if (my >= shp.tagT - 2 && my <= shp.tagT + shp.tagH + 2)
                         for (i = 0; i < shp.lanes.length; ++i)
                             if (mx >= shp.tagX[i] && mx <= shp.tagX[i] + shp.tagWidth(i))
@@ -2895,8 +2958,8 @@ Rectangle {
                             }
                             StudioButton { icon: "check"; iconSize: 20; width: 36; enabledState: studio.viewModified
                                            objectName: "keepViewButton"; visible: shell.caps.camera === true
-                                           tip: "Keep View: save the previewed lens (FOV); the orbit saves only when the "
-                                                + "preset's camera checkbox is on; dolly and pan stay previews"
+                                           tip: "Keep View: save the previewed lens (FOV); " + studio.orbitSaveHint
+                                                + "; dolly and pan stay previews"
                                            onClicked: studio.keepView() }
                             StudioButton { icon: "rotate-content"; iconSize: 20; width: 36
                                            objectName: "rotateContentButton"; visible: studio.canRotateContent
@@ -3836,7 +3899,7 @@ Rectangle {
         readonly property var gestures: {
             var out = []
             if (shell.caps.camera === true) {
-                out.push(["view", "Drag the preview", "Orbit the camera (saved only with the preset's camera checkbox)"])
+                out.push(["view", "Drag the preview", "Orbit the camera (" + studio.orbitSaveHint + ")"])
                 out.push(["lens", "Mouse wheel", "Zoom the lens; Shift+wheel moves the camera closer or further"])
                 out.push(["flow", "Middle or right drag", "Pan the view (a preview only)"])
                 out.push(["reset", "Double-click the preview", "Back to the saved camera; the tick button keeps the view"])

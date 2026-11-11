@@ -217,7 +217,34 @@ def _drags(controller):
             plans.append((prop.id, prop, lambda: None,
                           [lambda p=prop, n=n: bridge.previewGradient(p.id, n) for n in payloads],
                           lambda p=prop, n=last: bridge.commitGradient(p.id, n)))
+    for shape in session.schema.shapes:
+        plans += _shape_drags(controller, session.schema.find(shape.property))
     return plans
+
+
+def _shape_drags(controller, prop):
+    """The SHAPE instrument's drags (``ui/studio/shape.py``) through the slots its canvas calls: a curve node, a lane
+    boundary (its tag) and a lane's strength marker, each a press, held moves and one release."""
+    from ui.studio.session import read_path
+    bridge, values = controller.bridge, controller.session.values
+    layout = bridge.shapes.instrument(prop.id).layout(values)
+    nodes = [list(node) for node in read_path(values, prop.path)]
+    notches = [list(notch) for notch in read_path(values, layout.notches)]
+    strengths = dict(read_path(values, layout.lanes))
+    node = nodes[-1]
+    rise = -0.05 if node[1] > 0.5 else 0.05
+    lane = len(notches) - 1
+    room = notches[lane][0] - notches[lane - 1][0]
+    strength = strengths[notches[lane][1]]
+    step = -0.05 if strength > 0.5 else 0.05
+    gestures = (("node", len(nodes) - 1, [(node[0], node[1] + rise * k) for k in (1, 2, 3, 4)]),
+                ("lane", lane, [(notches[lane][0] - room * 0.1 * k, 0.0) for k in (1, 2, 3, 4)]),
+                ("strength", lane, [(0.0, strength + step * k) for k in (1, 2, 3, 4)]))
+    return [(f"{prop.id}.shape.{part}", prop,
+             lambda p=prop, part=part, index=index: bridge.shapePress(p.id, part, index),
+             [lambda p=prop, x=x, y=y: bridge.shapeDrag(p.id, x, y) for x, y in moves],
+             bridge.shapeRelease)
+            for part, index, moves in gestures]
 
 
 def _per_move(counts, moves: int):
@@ -253,6 +280,9 @@ def test_no_drag_instrument_writes_while_moving_and_each_release_commits_once(op
     controller, surface, counter = opened(mode)
     plans = _drags(controller)
     assert plans, f"{mode}: the schema exposes no drag instrument"
+    names = {name for name, *_rest in plans}
+    for shape in controller.session.schema.shapes:          # every registered shape: node, lane and strength drags
+        assert {f"{shape.property}.shape.{part}" for part in ("node", "lane", "strength")} <= names, mode
     churn, release_faults = {}, {}
     for name, prop, begin, moves, release in plans:
         held = controller.session.committed_values[prop.path[0]]
@@ -355,6 +385,19 @@ def test_a_save_per_move_is_seen_by_the_counters_negative_control(opened):
     moving, _released, _commits, _changed = _drive(controller, surface, counter, lambda: None, moves, lambda: None)
     assert moving.get("tab.save", 0) == 4 and moving.get("settings.set_widgets_map", 0) >= 4
     assert moving.get("settings.revision")
+
+
+def test_a_shape_commit_per_move_is_seen_by_the_counters_negative_control(opened):
+    """A churning shape instrument: each move commits (its exact entry commits per call), and the plan check sees it."""
+    controller, surface, counter = opened("spectrum")
+    bridge = controller.bridge
+    prop_id = controller.session.schema.shapes[0].property
+    from ui.studio.session import read_path
+    height = read_path(controller.session.values, controller.session.schema.find(prop_id).path)[0][1]
+    step = -0.05 if height > 0.5 else 0.05
+    moves = [lambda k=k: bridge.shapeCommitText(prop_id, "node", 0, 1, f"{height + step * k:.3f}") for k in (1, 2, 3, 4)]
+    moving, _released, _commits, _changed = _drive(controller, surface, counter, lambda: None, moves, lambda: None)
+    assert moving.get("tab.save", 0) == 4 and moving.get("settings.revision")
 
 
 def test_a_file_written_per_move_is_seen_by_the_counters_negative_control(opened, tmp_path):

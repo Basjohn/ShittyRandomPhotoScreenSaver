@@ -90,7 +90,9 @@ Ctrl+C cancels the runs on GitHub. Installers are compiled from the Build Runner
 
 ## Installers (local)
 
-The installers are local jobs, exactly the venv tab's own: the same Inno Setup path and version stamping, compiling
+The installers are local jobs, exactly the venv tab's own: the same Inno Setup path (`ISCC.exe` from the Inno Setup 7
+then 6 install folders, else PATH; `--iscc <path>` on `tools/build_runner.py` is the only override, no environment
+variable) and version stamping, compiling
 whatever `release\` holds (operator, 8 Nov: "It's supposed to be local, github has no say"). On this tab they run after
 this run's GitHub products are published when those are selected, and straight away when they are not (for example
 after an earlier GitHub run or a headless `tools/github_remote_build.py run`). Like the venv tab, an installer is

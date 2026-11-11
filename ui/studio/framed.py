@@ -101,6 +101,28 @@ def camera_navigation(mode_id: str, prefix: str) -> StudioNavigation:
                             saved_on_keep=frozenset({prefix + "camera_fov"}))
 
 
+CAMERA_CHOICE = "camera_choice"   # the preset row's "Include current camera view" choice saves the orbit
+SAVE_CAMERA = "save_camera"       # no such choice: the orbit holds for the session; Save Camera keeps it
+PREVIEW_ONLY = "preview_only"     # neither: the orbit is a preview view
+
+
+def orbit_save_route(mode_id: str, *, can_save_camera: bool) -> str:
+    """How a Studio orbit of ``mode_id`` is saved when it was not saved by the gesture itself: one rule from the
+    mode's capabilities. The preset row offers the camera choice exactly when the mode declares a scene transform
+    (``ui/tabs/media/preset_slider.py``); Sphere and Extruded Spectrum declare none and save through Save Camera."""
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    if get_visualizer_mode_descriptor(mode_id).scene_transform_settings:
+        return CAMERA_CHOICE
+    return SAVE_CAMERA if can_save_camera else PREVIEW_ONLY
+
+
+def orbit_save_hint(route: str) -> str:
+    """The orbit's save route in a few words, for the Studio's notices."""
+    return {CAMERA_CHOICE: "the orbit saves only with the preset's camera checkbox",
+            SAVE_CAMERA: "Save Camera keeps the orbit",
+            PREVIEW_ONLY: "the orbit is a preview view"}[route]
+
+
 def orbit_navigation(mode_id: str) -> StudioNavigation:
     """A free-orbit mode's navigation (no lens, dolly or pan of its own): drag orbits the descriptor's declared
     live view pose (``view_orbit_settings``: turn, tilt), bounded by the registry. The orbit is a live view, saved
