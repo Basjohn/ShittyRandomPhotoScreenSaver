@@ -3232,26 +3232,39 @@ Rectangle {
                             width: viewportSlot.logicalFrameWidth; height: viewportSlot.logicalFrameHeight
                             rotation: studio.contentRotationQuarters * 90
                             readonly property var rings: studio.brushCursor
+                            // Land past the largest grid's reach: the footprint is drawn struck through, in the
+                            // danger colour, under a forbidden pointer (a stroke there paints nothing).
+                            readonly property bool refused: studio.brushState.refused === true
                             Canvas {
                                 id: brushCanvas
+                                objectName: "brushCanvas"
                                 anchors.fill: parent
                                 onPaint: {
                                     var ctx = getContext("2d"); ctx.reset()
                                     var rings = brushLayer.rings || []
+                                    var refused = brushLayer.refused
                                     for (var r = 0; r < rings.length; ++r) {
                                         var pts = rings[r]
                                         if (pts.length < 2) continue
+                                        if (refused && r > 0) continue              // the outer ring alone
                                         for (var pass = 0; pass < 2; ++pass) {
-                                            ctx.strokeStyle = pass === 0 ? "#80000000" : (r === 0 ? shell.cAccent : "#e6ffffff")
+                                            ctx.strokeStyle = pass === 0 ? "#80000000"
+                                                            : (refused ? shell.cDanger : (r === 0 ? shell.cAccent : "#e6ffffff"))
                                             ctx.lineWidth = pass === 0 ? 4 : 1.6
-                                            ctx.setLineDash(r === 0 || pass === 0 ? [] : [5, 4])
+                                            ctx.setLineDash(pass === 0 ? [] : (refused ? [7, 5] : (r === 0 ? [] : [5, 4])))
                                             ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1])
                                             for (var i = 1; i < pts.length; ++i) ctx.lineTo(pts[i][0], pts[i][1])
+                                            if (refused) {                          // struck through, edge to edge
+                                                var a = pts[Math.floor(pts.length / 8)]
+                                                var b = pts[Math.floor(5 * pts.length / 8)]
+                                                ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1])
+                                            }
                                             ctx.stroke()
                                         }
                                     }
                                 }
-                                Connections { target: brushLayer; function onRingsChanged() { brushCanvas.requestPaint() } }
+                                Connections { target: brushLayer; function onRingsChanged() { brushCanvas.requestPaint() }
+                                              function onRefusedChanged() { brushCanvas.requestPaint() } }
                             }
                             MouseArea {
                                 id: brushArea
@@ -3261,7 +3274,7 @@ Rectangle {
                                 hoverEnabled: true
                                 acceptedButtons: Qt.LeftButton
                                 preventStealing: true
-                                cursorShape: Qt.CrossCursor
+                                cursorShape: brushLayer.refused ? Qt.ForbiddenCursor : Qt.CrossCursor
                                 onPressed: function(m) { shell.forceActiveFocus(); studio.brushPress(m.x, m.y) }
                                 onPositionChanged: function(m) {
                                     if (pressed) studio.brushMove(m.x, m.y)
@@ -3308,7 +3321,7 @@ Rectangle {
                                 Repeater {
                                     model: [
                                         { name: "radius", label: "Radius", from: 0.03, to: 0.35,
-                                          tip: "The brush size, as a share of the terrain grid's side." },
+                                          tip: "The brush size on the ground, as a share of the basin's width (the same wherever you paint)." },
                                         { name: "strength", label: "Strength", from: 0.01, to: 1.0,
                                           tip: "How much a stroke changes the land per brush-width it travels. Low values build up gently; Flatten snaps to its height only at 100%." },
                                         { name: "falloff", label: "Falloff", from: 0.0, to: 1.0,

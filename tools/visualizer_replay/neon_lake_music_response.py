@@ -12,7 +12,8 @@ frame, on masks taken once from the preset's own geometry:
   shore        mean luminance within a few pixels of the lake's edge (the shoreline and its glow);
   frame_mean   the whole frame's mean luminance;
 and the logical drives the renderer reads that frame: midband, beat pulse, mean bar level, live wave count, the summed
-live wave strength (faded as the shader fades it) and the mean Terrain Reaction drive.
+live wave strength (faded as the shader fades it), the mean Terrain Reaction lane drive and the Growth and Indents
+drives (fixed scale).
 
     python -m tools.visualizer_replay.neon_lake_music_response music --clips a.jsonl,b.jsonl --out music.npy
     python -m tools.visualizer_replay.neon_lake_music_response response --clips a.jsonl,b.jsonl --preset 1
@@ -38,7 +39,8 @@ from tools import artifact_paths  # noqa: E402
 from tools import evidence_media  # noqa: E402
 
 RESPONSE_COLUMNS = ("t", "song", "song_time", "lake_lines", "lake_mean", "island", "shore", "frame_mean",
-                    "midband", "beat_pulse", "bars_mean", "waves", "wave_strength", "terrain_drive")
+                    "midband", "beat_pulse", "bars_mean", "waves", "wave_strength", "terrain_drive",
+                    "growth_drive", "indent_drive")
 _LUMA = (0.2126, 0.7152, 0.0722)
 
 
@@ -182,7 +184,7 @@ def response(clips, preset, size, fps, out: Path, overrides, start=0.0, duration
                              float(lum[island].mean()) if island.any() else 0.0,
                              float(lum[shore].mean()) if shore.any() else 0.0,
                              float(lum.mean()), midband, pulse, sum(bars) / max(1, count), len(live), strength,
-                             sum(state.terrain_bands) / len(state.terrain_bands)))
+                             sum(state.terrain_bands) / len(state.terrain_bands), *state.terrain_forms))
                 if ordinal % max(1, int(fps * 10)) == 0:
                     print(f"song {song} frame {ordinal + 1}/{len(wanted)} t={times[index]:.1f}s", flush=True)
             t_total += times[-1] + 1.0
@@ -222,7 +224,7 @@ def report(music_path: Path, responses: dict[str, Path], out: Path) -> None:
         panels = [("loudness 3-17", [(ms[:, 1], ms[:, 5], white)]), ("rms dBFS", [(ms[:, 1], ms[:, 2], white)]),
                   ("flux", [(ms[:, 1], _smooth(ms[:, 4], 9), white)])]
         for label in ("lake_lines", "island", "shore", "lake_mean", "frame_mean", "midband", "beat_pulse",
-                      "wave_strength", "terrain_drive"):
+                      "wave_strength", "terrain_drive", "growth_drive", "indent_drive"):
             panels.append((label, [(rs[:, col["song_time"]], rs[:, col[label]], colours[k])
                                    for k, rs in enumerate(series.values())]))
         image = Image.new("RGB", (width, 30 + row_h * len(panels)), (14, 14, 20))

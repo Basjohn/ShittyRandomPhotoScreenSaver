@@ -350,13 +350,17 @@ def _capture_shockwave_grid(
     if events is None:
         return None
     parameters = config_applier.shockwave_grid_parameters(widget, context.now_ts)
-    reaction_enabled = (bool(parameters["shockwave_grid_terrain_reaction_enabled"])
-                        and float(parameters["shockwave_grid_terrain_reaction_strength"]) > 0.0
-                        and any(float(parameters[f"shockwave_grid_terrain_{part}"]) > 0.0
-                                for part in ("peaks", "pulses", "swell")))
+    reaction_on = (bool(parameters["shockwave_grid_terrain_reaction_enabled"])
+                   and float(parameters["shockwave_grid_terrain_reaction_strength"]) > 0.0)
+    lanes_enabled = reaction_on and any(float(parameters[f"shockwave_grid_terrain_{part}"]) > 0.0
+                                        for part in ("peaks", "pulses", "swell"))
+    # Growth / Indents read only the passage's fixed-scale intensity and the onsets (the runtime's own step).
+    forms_enabled = reaction_on and any(float(parameters[f"shockwave_grid_terrain_{part}"]) > 0.0
+                                        for part in ("growth", "indents"))
+    reaction_enabled = lanes_enabled or forms_enabled
     reaction_gain = 0.0
     reaction_spectrum = ()
-    if reaction_enabled:
+    if lanes_enabled:
         loudness, presence = engine.get_musical_level()
         reaction_gain = passage_ramp(intensity, 0.15) * musical_weight(loudness, presence)
         reaction_spectrum = engine.get_pre_agc_analysis_spectrum()
@@ -390,11 +394,14 @@ def _capture_shockwave_grid(
         motion_speed=float(parameters["shockwave_grid_terrain_motion_speed"]),
         enabled=reaction_enabled,
         musical_gain=reaction_gain,
+        forms=forms_enabled,
+        passage_intensity=intensity,
     )
     if reaction is None or controller.peek_logical_mode_state("shockwave_grid") is not runtime:
         return None
     extra["_quick_mode_changed"] = bool(extra.get("_quick_mode_changed", False) or reaction.changed)
-    return replace(frame, terrain_bands=reaction.bands, terrain_phase=reaction.phase), extra
+    return replace(frame, terrain_bands=reaction.bands, terrain_phase=reaction.phase,
+                   terrain_forms=reaction.forms), extra
 
 
 def _capture_extruded_bubble(

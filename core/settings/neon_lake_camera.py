@@ -55,6 +55,29 @@ def _packed_heights(size: int, data: bytes) -> tuple[float, ...]:
     return struct.unpack(f"<{size * size * 2}f", data)[::2]
 
 
+@lru_cache(maxsize=4)
+def _packed_delta(size: int, data: bytes) -> tuple[float, ...] | None:
+    """A grown grid's overlay (each cell's paint over the generated land), unpacked once per immutable payload;
+    None while nothing is painted."""
+    return struct.unpack(f"<{size * size}f", data) if any(data) else None
+
+
+_SETTINGS_DELTA: list = [None, None]     # the newest settings record's heights (by identity) and its overlay
+
+
+def _painted(terrain: Mapping, size: int) -> tuple[float, ...] | None:
+    """Per cell, what the brush has painted over the generated land of a grown grid (None: nothing)."""
+    if "delta" in terrain:
+        return _packed_delta(size, terrain["delta"])
+    if "heights" not in terrain:
+        return None
+    # A settings record: derive the overlay once per record (flight and Settings ask for the floor repeatedly).
+    if _SETTINGS_DELTA[0] is not terrain["heights"]:
+        from rendering.gl_programs.neon_terrain_extent import overlay_fields
+        _SETTINGS_DELTA[:] = [terrain["heights"], overlay_fields(terrain).get("delta")]
+    return None if _SETTINGS_DELTA[1] is None else _packed_delta(size, _SETTINGS_DELTA[1])
+
+
 def _smoothstep(low: float, high: float, x: float) -> float:
     t = max(0.0, min(1.0, (x - low) / (high - low)))
     return t * t * (3.0 - 2.0 * t)
@@ -66,19 +89,48 @@ def terrain_floor(terrain: Mapping, terrain_height: float, half_width: float = N
 
     ``reaction`` is the music's largest lift in lane units (strength x (peaks + pulses + swell)).
     """
-    from rendering.gl_programs.heightfield import heightfield_grid_transform
+    from rendering.gl_programs.heightfield import heightfield_grid_transform, heightfield_origin_rect
     size, heights = _heights(terrain)
     # The render record carries its precomputed transform; a settings record derives it from its basin.
-    grid_left, grid_front, grid_scale = (tuple(terrain["grid"]) if "grid" in terrain
-                                         else heightfield_grid_transform(terrain))
+    if "grid" in terrain:
+        grid_left, grid_front, grid_scale = tuple(terrain["grid"])
+        origin = tuple(terrain.get("origin_rect", (0.0, 0.0, 1.0, 1.0)))
+    else:
+        grid_left, grid_front, grid_scale = heightfield_grid_transform(terrain)
+        origin = heightfield_origin_rect(terrain)
+    grown = origin != (0.0, 0.0, 1.0, 1.0)
+    # The authored origin's own cells: the generated landscape past it reads no others.
+    low_col, low_row, high_col, high_row = (round(value * (size - 1)) for value in origin)
+    painted = _painted(terrain, size) if grown else None
     scale = max(0.0, float(terrain_height))
     lift = _REACTION_HEIGHT * max(0.0, float(reaction))
 
-    def cell_max(u: float, v: float) -> float:
-        # The highest of the cell's four samples bounds its smooth surface.
+    def cell(u: float, v: float, bounds) -> tuple[tuple[int, int], tuple[int, int]]:
+        # The cell's columns and rows; a point on a cell line (an origin edge carried through a grown grid's uv)
+        # belongs to that line, not to whichever side the last bit of the product falls.
+        c_low, r_low, c_high, r_high = bounds
         col, row = max(0.0, min(1.0, u)) * (size - 1), max(0.0, min(1.0, v)) * (size - 1)
-        c0, r0 = int(col), int(row)
-        return max(heights[r * size + c] for r in (r0, min(size - 1, r0 + 1)) for c in (c0, min(size - 1, c0 + 1)))
+        if grown:
+            col, row = (round(x) if abs(x - round(x)) < 1e-6 else x for x in (col, row))
+        c0, r0 = max(c_low, min(c_high, int(col))), max(r_low, min(r_high, int(row)))
+        return (c0, min(c_high, c0 + 1)), (r0, min(r_high, r0 + 1))
+
+    def cell_max(u: float, v: float, bounds=(0, 0, size - 1, size - 1)) -> float:
+        # The highest of the cell's four samples bounds its smooth surface.
+        columns, rows = cell(u, v, bounds)
+        return max(heights[r * size + c] for r in rows for c in columns)
+
+    def cell_painted(u: float, v: float) -> bool:
+        columns, rows = cell(u, v, (0, 0, size - 1, size - 1))
+        return any(painted[r * size + c] != 0.0 for r in rows for c in columns)
+
+    def continued(local: float, outside: float) -> float:
+        # The shader's continuation: from the nearest edge down to low rolling ground (water at the
+        # edge instead flows on to the horizon and stays at the ripple floor).
+        if outside > 0.0 and local > 0.0:
+            descent = _smoothstep(*_DESCENT, outside)
+            local = max(_CONTINUATION, local * (1.0 - descent) + _CONTINUATION * descent)
+        return local
 
     def floor(x: float, z: float) -> float:
         r = _COLLISION_RADIUS
@@ -87,13 +139,19 @@ def terrain_floor(terrain: Mapping, terrain_height: float, half_width: float = N
     def floor_at(x: float, z: float) -> float:
         # Basin uv, then the authored grid's uv (it may reach past the basin toward the horizon).
         u, v = ((x / half_width + 1.0) * 0.5 + grid_left) * grid_scale, (-z / DEPTH + grid_front) * grid_scale
-        local = cell_max(u, v)
-        outside = math.hypot(u - max(0.0, min(1.0, u)), v - max(0.0, min(1.0, v))) / grid_scale
-        if outside > 0.0 and local > 0.0:
-            # The shader's continuation: from the nearest edge down to low rolling ground (water at the
-            # grid's edge instead flows on to the horizon and stays at the ripple floor).
-            descent = _smoothstep(*_DESCENT, outside)
-            local = max(_CONTINUATION, local * (1.0 - descent) + _CONTINUATION * descent)
+        if not grown:
+            past = math.hypot(u - max(0.0, min(1.0, u)), v - max(0.0, min(1.0, v))) / grid_scale
+            local = continued(cell_max(u, v), past)
+        else:
+            # The generated land from the origin's edge, exactly as before the grid grew (growing it never moves
+            # the eye); painted cells past the origin, and their paint easing out past the grid's edge, can only
+            # raise the floor.
+            eu, ev = max(origin[0], min(origin[2], u)), max(origin[1], min(origin[3], v))
+            local = continued(cell_max(eu, ev, (low_col, low_row, high_col, high_row)),
+                              math.hypot(u - eu, v - ev) / grid_scale)
+            if painted is not None and (eu, ev) != (u, v) and cell_painted(u, v):
+                past = math.hypot(u - max(0.0, min(1.0, u)), v - max(0.0, min(1.0, v))) / grid_scale
+                local = max(local, continued(cell_max(u, v), past))
         land = scale * (local * _DETAIL + (lift if local > 0.0 else 0.0))
         return max(_RIPPLE, land)
 
@@ -105,6 +163,8 @@ def floor_reaction(values: Mapping[str, object]) -> float:
     def get(name):
         return values['shockwave_grid_' + name]
     strength = float(get('terrain_reaction_strength')) if bool(get('terrain_reaction_enabled')) else 0.0
+    # Growth is not in the floor: its mounds and spires stand back from the eye instead (``GROWTH_EYE_CLEAR``), so
+    # turning it on never lifts an authored low view.
     return strength * sum(max(0.0, float(get('terrain_' + part))) for part in ('peaks', 'pulses', 'swell'))
 
 

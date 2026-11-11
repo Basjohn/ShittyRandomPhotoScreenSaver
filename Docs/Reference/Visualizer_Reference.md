@@ -422,7 +422,7 @@ approximate the live engine's while structural facts (a control that reaches not
 | Mode | What its frame reads from the engine | Audio Analysis controls that move it | Inert (read by nothing the frame publishes) |
 | --- | --- | --- | --- |
 | Spectrum, Extruded Spectrum | shaped, smoothed bars (Bar Count of them) and their peaks | all offered; Kick Lane Gain / Mix and Transient Clamp only slightly | Transient Pulse (hidden) |
-| Neon Lake | the same bars, onset waves from the bus, the analysis spectrum for Terrain Reaction | all offered, Kick Lane Gain included (it moves the frame; offered since the 7 Nov spec fold, the old mode filter had hidden it) | Transient Pulse (hidden) |
+| Neon Lake | the same bars, onset waves from the bus, the analysis spectrum for Terrain Reaction; Growth / Indents read only the passage intensity and the onsets' loudness on the fixed scale (`Neon_Lake_Basin.md`, 1B.6) | all offered, Kick Lane Gain included (it moves the frame; offered since the 7 Nov spec fold, the old mode filter had hidden it) | Transient Pulse (hidden) |
 | Oscilloscope | raw capture history for the trace; onsets, musical level / intensity and the analysis spectrum for Flare, Drive, Tone | all offered (Bar Count, Block Size and Gain also move Tone) | none offered |
 | Bubble | the Bubble feed, transient lanes, the event scheduler | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Pulse / Clamp / Mixes (Vocal Mix only through Rotation Amount) | **AGC Strength, Output Lift, Kick Lane Gain** (hidden) |
 | Extruded Bubble | onsets from the bus; fixed-scale body bands | all offered; Sensitivity and the floors reach it only through onset detection (the body bands sit ahead of them) | none offered |

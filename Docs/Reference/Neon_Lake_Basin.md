@@ -103,8 +103,9 @@ unique points on the actual displaced surface lattice, about ten percent denser 
 Quality and Surface Detail bound that lattice; points and triangles always share it to avoid hiding points beneath a different approximation. Glass alone creates no point mesh and retires an existing one. Glass + Vertices uses smaller outlined markers to keep the combined picture readable. Reflected marks draw before depth-writing water, direct marks after it; point-size and
 depth-function state restore even when drawing fails.
 
-The canonical terrain record is `{version: 1, size: N, heights: [N*N floats]}`, with `N` within 2..65 and finite heights
-within 0..1. Rows run near/front to far/back. Explicit malformed records raise; missing old terrain receives the canonical
+The canonical terrain record is `{version: 1, size: N, heights: [N*N floats]}`, with `N` within 2..257 and finite heights
+within 0..1, plus two optional squares of whole cells (each the whole grid when absent): `basin` (where the scene's
+basin sits in a grid that reaches past it) and `origin` (the grid the terrain brush grew it from: "Terrain brush"). Rows run near/front to far/back. Explicit malformed records raise; missing old terrain receives the canonical
 basin seed. Positive values below the normal float32 minimum are rejected so packing cannot silently turn authored land
 into water. `rendering/gl_programs/heightfield.py` owns admission, float32 packing and the bilinear CPU sampler. Water is
 exactly an authored sampled height of zero, independent of waves, view pose and land height scale.
@@ -201,6 +202,57 @@ skyline is given the event count it needs for Pulses. It is zero on water and fa
 water boundary never moves; it fades with the distant continuation's detail; land never sinks below 30% of its
 authored height and never rises more than the bounded lift. The light-ray volume's land bound is fixed by the
 settings (never pumped by audio). The renderer only uploads amounts, five drives, the phase and the baked tables.
+
+### Smooth reshaping, Growth and Indents (2026-11-11, 1B.6)
+
+Operator: "true smooth (no tearing/jagged edges) deformation ... optional growth of spires, mounds and land that
+doesn't visibly exist at low reactivity and indents of land that does."
+
+**The tearing and its cause.** Driven hard, the land tore into terraces and cliffs along elevation contours and
+ridge lines broke into kinked segments (`.artifacts/evidence/visualizers/shockwave_grid/20261111_land/`:
+`tearing_before_p1_staged_full_drive.png`, `tearing_before_p1.webp` on heavy1). `basinReaction` looked the lane up
+by elevation in a table and switched lane at each boundary within one table step (1/31 of the height): two different
+signed patterns met along that contour. The elevation was the bilinear cell height, creased along every cell line,
+and the floor was a hard `max`. It is the height function, not the mesh (High tier lattice 189x126, the near band
+split 2x): the same mesh draws the smooth version.
+
+**Smooth at every drive.** Lanes cross-fade along the height (`lane_membership`: `REACTION_LANE_BLEND` 0.06 either
+side of a boundary, shares summing to 1); the baked tables are per lane (`lanes`, 5 x 32) and are read through the
+land's own cubic filter; the elevation is the smooth cubic land; downward change eases onto the floor share
+(`-room * tanh`) instead of stopping on it; the reshaping comes in up a bank over the smooth land's rise
+(`smoothstep(shore, 0.10, curved)` beside the old cell-height term) so it no longer stands as a wall along a
+shore. At rest the picture is unchanged (Preset 1, drives zero: the run-to-run floor, max 1/255); under music the
+same patterns move the land without the tears, a little less on banks and land under a tenth of the height scale.
+
+**Growth and Indents** (Terrain Reaction bucket, both 0 by default and in every shipped preset; Strength scales
+them like the other amounts):
+- **Growth** raises landforms that do not exist at rest: one site per cell of a fixed lattice of the land
+  (`basinSites`, an integer hash, world units), a smooth compact bump with zero height and slope at its rim.
+  **Growth Shape** runs from broad low mounds (0: cell 1.05, up to 0.30 of Terrain Height) to slender tall spires
+  (1: cell 0.70, up to 0.72, profile power 2.6). Each site wakes at its own level of the drive, so louder music
+  raises more of them and each eases in and out. They stand back from the eye (`GROWTH_EYE_CLEAR` 0.8..2.0 world
+  units) instead of raising the camera floor, so turning Growth on never lifts an authored low view.
+- **Indents** press visible land toward its floor share in the same kind of sites (cell 0.85): hollows that open
+  with the passage and deepen on hits, never below 30% of the authored height, never moving the water's edge.
+- Both are terms of the one height owner (`basinLandHeight`): vertices, normals, skyline, depth and reflections
+  follow; zero on water, faded at the shore and with distance like the rest of the reaction.
+
+**Their drives** are the terrain reaction owner's own (`ShockwaveGridFrameRuntime._advance_forms`, capture clock,
+`ShockwaveGridFrame.terrain_forms`), on the fixed real-music scale only: the passage's intensity through an S-curve
+(`forms_level`: nothing below 0.10, `FORMS_CEILING` 0.92 from 0.90), eased by Rise / Settle, with each onset's hit
+on top (`forms_hit`: `audible` x `musical_emphasis`, in over 0.07 s, out over 0.30 s; 30% of Growth's drive, 45%
+of Indents'). No learned level, no presence ratio, no spectrum: with only these on the capture reads nothing but
+the intensity it already had. Measured on recordings (production runtime, every recorded frame): growth p50
+0.45-0.67, p95 0.66-0.79, max 0.85, never at 0.9; 0.09 at the 5th percentile of quiet_intro; a wave's birth lifts it
+a median 6-10% early, mid and late in heavy1 alike. Off (amount 0 or React to Music off) nothing is collected,
+kept or computed. A frame nothing drives tells the shader the reaction is off.
+
+Cost (RTX 4090, 1300x750, PairedBench medians, separate sessions, GPU 31-37% busy): with React to Music on, GPU
+0.93 -> 0.98 ms (Preset 1), 0.86 -> 0.97 (Preset 2), 1.80 -> 1.96 (Preset 3), about the same driven; Growth spires
+driven 1.09 ms, Growth + Indents 1.21 ms. CPU thread unchanged (2.3 ms), Python calls per frame 5781 -> 5315 (the
+tables are packed once per bake), GL calls 359 -> 361 (two uniforms). Contracts:
+`tests/test_neon_terrain_smooth.py` (GPU, with a control that takes the cross-fade away),
+`tests/test_neon_terrain_forms.py`, `tests/test_neon_terrain_reaction.py`.
 
 ## Glass, celestial body and light
 
@@ -479,11 +531,49 @@ framed camera: the ray from the eye meets the CPU mirror of the drawn land (`ren
 neon_terrain_surface.py: scene_surface`, the mirror of `basinCurve` / `basinLandHeight`: the smooth cubic land at the
 scene's Terrain Height, without the music's reaction or fine detail), so a hill hides what is behind it. During a
 stroke points are picked on the ground as it was when the stroke began, or a raised ridge would catch every next
-point on its face and climb toward the camera. Only the authored grid is paintable. Land the scene draws past the
-grid (the continuation and far hills) is visible but refused: on preset 1/2 dollied back about 13-20% of the land on
-screen, on an unextended grid (preset 3) about 26% at the default view, reaching basin uv about -1.1..2.5 across and
--1.7..1.9 deep (`tests/test_neon_lake_brush_reach.py`; strict xfail until the paintable domain is decided, 1B.5).
-Every point on the grid is paintable (no narrower clamp).
+point on its face and climb toward the camera.
+
+**All visible land is paintable (2026-11-11, 1B.5).** Land the scene draws past the stored grid (the continuation and
+far hills: on presets 1/2 dollied back 13-20% of the land on screen, on preset 3 26% at its start view and 87% dollied
+back) had no cells to paint. A stroke there grows the grid under it through the extend owner
+(`neon_terrain_extent.grow_heightfield`; whole `GROW_STEP` = 16 cells, square, toward the brush, the axis that needs
+less padded toward the horizon; `MAX_GRID_SIZE` 257). On the shipped presets every land point on screen at those
+views is within the cap's reach (at most 89 of 192 / 144 spare cells). The growth is **invisible**:
+
+- The record keeps its **authored origin** (`origin: [column, row, cells]`, `heightfield.heightfield_origin`; the
+  whole grid by default, so every shipped terrain loads exactly as stored). The generated landscape belongs to the
+  origin: the continuation, far hills, distant curvature (`basinDistantDrop`), the fade of detail and glow, the
+  waves' and ridge energy's reach, the shoreline's domain and the mark lattice are all measured from the origin's
+  edge and read only the origin's own cells (`uTerrainOrigin`, `basinOriginHeight` / `basinOriginCurve`).
+- Cells past the origin are an **overlay** on that landscape. A grown cell stores the height the scene drew at its
+  point (zero where it drew water); the scene adds only the cell's delta (stored minus generated,
+  `neon_terrain_surface.terrain_delta`, a second R32F texture `uTerrainDelta` that exists only for a grown grid),
+  smoothed by the land's own cubic. An unpainted growth therefore draws the generated landscape itself. A cubic
+  through seeded samples cannot: the generated land has creases along every edge cell's extrusion, and a first
+  attempt that stored seeds and drew their cubic softened them visibly (12-38% of pixels changed).
+- Past the grid's edge the edge's delta eases out over `CONTINUATION_DESCENT`, so paint never ends in a wall.
+- The triangles split finer (to the tier's own cell) only under the **painted bounds** (`overlay_fields`'
+  `painted`, stepped out to 16 cells): a finer mesh draws the generated land's creases more exactly, which is a
+  visible change, so an unpainted growth keeps the very same mesh. The split is crack-free (shared edges take the
+  finer side's steps; `neon_lake_basin_mesh._grown_mesh_vertices`) and the marks never move.
+- The camera floor is the generated bound exactly as before; only painted cells can raise it. The authored summit
+  (`maximum`, the Reaction shaper's right edge) ignores unpainted cells.
+
+Measured (RTX 4090, 1300x750, Preset 3 grown from 65 to 257 with nothing painted, four views): against a
+run-to-run floor of 0.2-0.6% of pixels differing by 1/255, the growth leaves 0.3-0.6% differing, 4-113 pixels by
+more than 2/255 and 2-20 by more than 8 (single pixels inside the basin: the filtered read of a larger texture
+rounds its 8-bit weights differently); the authored Extend by the same cells changes 12-38%. Every preset is held
+to that in `tests/test_neon_terrain_growth.py` (mean change within 0.02/255 of the floor, under 0.02% of pixels by
+more than 8, the Extend control at least 20 times more). Cost (same machine, PairedBench medians, GPU 31-57% busy
+with other work, 2775 MHz): Preset 3 1.95 ms; grown to 257 unpainted 2.18 ms (the generated land plus its overlay
+read for the ring's vertices and fragments; the mesh is the same 345 GL calls); painted all over the 257 grid 5.65
+ms (the worst case: the triangles under the painted bounds split to the tier's cell, about seven times the
+vertices). Textures: 529 KB + 264 KB (overlay) at 257 against 34 KB at 65. A brush preview on the largest grid
+configures in about 75 ms (the bank-distance transform went from 128 ms to 16 ms in array form, same bytes).
+Land painted past the origin is far land: it keeps the continuation's
+simpler look (no shoreline line or wet fringe, detail and glow fading with distance); **Extend Toward Horizon**
+still turns the whole grid into ordinary authored land (and so moves the generated landscape's start). Past the
+largest grid's reach the brush refuses out loud (`Visualizer_Studio.md`, Brush).
 
 ## Layered water (2026-10-24)
 

@@ -13,6 +13,12 @@ save through the canonical store, one undo entry. Cancel (Escape, a lost window)
 While a stroke runs, points are picked on the ground as it was when the stroke began: picking on the land being
 raised would land each next point on the new slope's face, nearer the camera, and a stroke would climb toward the
 viewer as a wall.
+
+A target may let its grid grow under the brush (``BrushTarget.grow``: Neon Lake's land past its authored grid). The
+stroke then carries on over the grown record with its path re-mapped (``_placed``), still one preview a frame and
+one commit: the growth and the paint are one undo step. Land past the largest grid's reach is refused out loud:
+``refused`` while the pointer is over it (the cursor's state) and ``refusals`` for the points a stroke dropped
+there (the controller's one-line notice).
 """
 from __future__ import annotations
 
@@ -29,13 +35,24 @@ Geometry = tuple[tuple[float, float], Any, Any]
 @dataclass(frozen=True)
 class BrushTarget:
     """What a mode hands the brush. ``pick(frame, values, point, geometry)`` returns the grid uv under ``point`` on the
-    drawn ground (None off the authored grid or on the sky); ``footprint(frame, values, uv, rings, geometry)`` returns
-    one screen polyline (presented-frame pixels) per ring radius in grid uv, resting on the drawn ground."""
+    drawn ground (None on the sky; outside 0..1 where the ground lies past the stored grid);
+    ``footprint(frame, values, uv, rings, geometry)`` returns one screen polyline (presented-frame pixels) per ring
+    radius (in brush radius units, ``heightfield_brush.RADIUS_RANGE``), resting on the drawn ground.
+
+    A target whose grid can grow under the brush also gives ``grow(record, uv, reach)``: the record grown to hold a
+    brush touching ``reach`` (grid uv) round ``uv`` with the whole cells added before its first column and row,
+    ``(record, left, front)``; the same record and zeros when it already fits or cannot grow further; None when
+    ``uv`` itself is out of the largest grid's reach. ``reachable(size, uv)`` answers that last question alone for a
+    grid of ``size`` cells a side (the hover's check: nothing grows), and ``refusal`` is the one-line notice for it.
+    Without ``grow`` only the stored grid is paintable."""
 
     key: str
     label: str
     pick: Callable[[Any, Mapping[str, Any], Point, Geometry], Point | None]
     footprint: Callable[[Any, Mapping[str, Any], Point, tuple[float, ...], Geometry], list]
+    grow: Callable[[Mapping[str, Any], Point, float], tuple[Mapping[str, Any], int, int] | None] | None = None
+    reachable: Callable[[int, Point], bool] | None = None
+    refusal: str = ""
 
 
 class StudioBrush:
@@ -56,10 +73,15 @@ class StudioBrush:
         self._pressed = False
         self._stroke: HeightfieldStroke | None = None
         self._base: dict | None = None    # the values the stroke picks on (the record as the stroke began)
+        # Where a point picked on that record lies in the stroke's own (it may have grown): uv * scale + offset.
+        self._map: tuple[float, float, float] = (1.0, 0.0, 0.0)
+        self._full = False               # the stroke's grid cannot grow further
         self._changed = False
         self._hover: Point | None = None
         self._hover_dirty = False
         self.cursor: list = []           # the footprint over the hovered point (screen polylines)
+        self.refused = False             # the pointer is over land past the largest grid's reach
+        self.refusals = 0                # presses and stroke points refused there
         self.previews = 0                # previews applied (at most one per frame start while painting)
         self.pointer_events = 0          # pointer points handed over (any number per frame)
 
@@ -99,8 +121,7 @@ class StudioBrush:
         if self._pressed:
             self.release()
         self._pressed = True
-        self._stroke = None
-        self._base = None
+        self._end_stroke()
         self._changed = False
         self._points = [(float(point[0]), float(point[1]))]
         self._hover = self._points[0]
@@ -121,8 +142,15 @@ class StudioBrush:
         self._hover_dirty = True
         if self._hover is None:
             self.cursor = []
+            self.refused = False
         else:
             self._request_frame()
+
+    def _end_stroke(self) -> None:
+        self._stroke = None
+        self._base = None
+        self._map = (1.0, 0.0, 0.0)
+        self._full = False
 
     def release(self) -> bool:
         """Apply the held points and commit the stroke once. Returns True when something was saved."""
@@ -130,8 +158,7 @@ class StudioBrush:
             return False
         self.flush()
         self._pressed = False
-        self._stroke = None
-        self._base = None
+        self._end_stroke()
         self._points = []
         if not self._changed:
             if self._session.gesture_active:
@@ -145,8 +172,7 @@ class StudioBrush:
         if not self._pressed:
             return
         self._pressed = False
-        self._stroke = None
-        self._base = None
+        self._end_stroke()
         self._points = []
         if self._changed:
             self._session.cancel_gesture()
@@ -182,12 +208,14 @@ class StudioBrush:
         for point in points:
             uv = self.target.pick(frame, values, point, geometry)
             if uv is None:
-                continue                                    # over the sky or past the grid: the stroke waits
+                continue                                    # over the sky: the stroke waits
             if self._stroke is None:
                 self._stroke = HeightfieldStroke(self._session.values[self.target.key], self.settings)
-                self._stroke.press(uv)
-            else:
-                self._stroke.to(uv)
+            uv = self._placed(uv)
+            if uv is None:
+                self.refusals += 1                          # past the largest grid's reach: the stroke waits
+                continue
+            self._stroke.to(uv)                             # the first point presses
             moved = True
         if not moved or self._stroke is None:
             return
@@ -200,10 +228,47 @@ class StudioBrush:
         self._changed = True
         self.previews += 1
 
+    def _placed(self, uv: Point) -> Point | None:
+        """Where a point picked on the stroke's first record lies in the stroke's own, growing that record first when
+        the brush would reach past its edge (the path so far is carried along); None past the largest grid's reach."""
+        stroke = self._stroke
+        scale, du, dv = self._map
+        u, v = uv[0] * scale + du, uv[1] * scale + dv
+        reach = stroke.reach()
+        inside = 0.0 <= u <= 1.0 and 0.0 <= v <= 1.0
+        if reach <= u <= 1.0 - reach and reach <= v <= 1.0 - reach:
+            return u, v
+        if self.target.grow is None or self._full:
+            return (u, v) if inside else None
+        grown = self.target.grow(stroke.record(), (u, v), reach)
+        if grown is None:
+            return None
+        record, left, front = grown
+        old, new = stroke.size - 1, int(record["size"]) - 1
+        if new == old:
+            self._full = True                               # at the largest grid: the footprint is clipped
+            return (u, v) if inside else None
+        stroke.regrid(record, left, front)
+        ratio = old / new
+        self._map = (scale * ratio, du * ratio + left / new, dv * ratio + front / new)
+        return (u * old + left) / new, (v * old + front) / new
+
+    def _reachable(self, values: Mapping[str, Any], uv: Point) -> bool:
+        """Whether a stroke could paint at ``uv`` (picked on ``values``' record)."""
+        if self._stroke is not None:
+            scale, du, dv = self._map
+            uv, size = (uv[0] * scale + du, uv[1] * scale + dv), self._stroke.size
+        else:
+            size = int(values[self.target.key]["size"])
+        if 0.0 <= uv[0] <= 1.0 and 0.0 <= uv[1] <= 1.0:
+            return True
+        return self.target.reachable is not None and not self._full and bool(self.target.reachable(size, uv))
+
     def _footprint(self, scene) -> list:
         frame, values, geometry = scene
         values = self._picked_on(values)
         uv = self.target.pick(frame, values, self._hover, geometry)
+        self.refused = uv is not None and not self._reachable(values, uv)
         if uv is None:
             return []
         radius = self.settings.radius
@@ -215,7 +280,7 @@ class StudioBrush:
 
     def as_map(self) -> dict:
         return {"active": self.active, "painting": self._pressed, "modes": list(MODES), "label": self.target.label,
-                **self.settings.as_map()}
+                "refused": self.refused, **self.settings.as_map()}
 
 
 __all__ = ["BrushTarget", "Geometry", "StudioBrush"]

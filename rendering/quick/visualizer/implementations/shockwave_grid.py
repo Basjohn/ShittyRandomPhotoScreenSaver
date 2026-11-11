@@ -7,6 +7,7 @@ card target. Optional sky and bloom retire with this activation.
 from __future__ import annotations
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
 
+import ctypes
 import math
 from contextlib import contextmanager
 from OpenGL import GL as gl
@@ -41,17 +42,17 @@ from ..implementation_values import parameter, rgba
 from ..render_contract import QuickVisualizerRenderFrame
 from .spectrum import prepare_spectrum_shader_levels
 
-_EVENT_BINDING, _HEIGHT_UNIT = 3, 4
+_EVENT_BINDING, _HEIGHT_UNIT, _OVERLAY_UNIT = 3, 4, 5
 _VIEW_UNIFORMS = ("uMatrix", "uField", "uEye", "uRight", "uUp", "uBack", "uTan")
-_REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactionMaximum", "uReactionLane",
-                      "uReactionWeight", "uReactionBias")
+_REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactionMaximum", "uReactionLanes",
+                      "uReactionBias", "uReactionForms", "uReactionDrives")
 _CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
                      "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uStarGlowColor",
                      "uCloudColor","uHorizonColor","uClouds","uCloudDrift","uNebula","uNebulaTurn","uNebulaColorA","uNebulaColorB")
 _UNIFORMS = _VIEW_UNIFORMS + (
-    "uTerrainGrid", "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
+    "uTerrainGrid", "uTerrainOrigin", "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
     "uScroll", "uLineColor", "uCrestColor", "uWaterColor", "uFloor", "uGlow", "uEdgePx",
-    "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells",
+    "uTerrain", "uTerrainDelta", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells",
     "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
     "uWaterLineGlowColor","uWaterLineGlow","uWaterShine","uDepthScale","uShoreGlow","uShoreGlowColor","uContourLines",
@@ -59,9 +60,9 @@ _UNIFORMS = _VIEW_UNIFORMS + (
 ) + _CELESTIAL_UNIFORMS + _REACTION_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
     "uSkyPass","uShaftSpread","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow",
-    "uTerrainGrid", "uHalfWidth", "uLand")
+    "uTerrainGrid", "uTerrainOrigin", "uHalfWidth", "uLand")
 _SKYLINE_UNIFORMS = _VIEW_UNIFORMS + (
-    "uTerrainGrid", "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uEventCount",
+    "uTerrainGrid", "uTerrainOrigin", "uHalfWidth", "uTerrain", "uTerrainDelta", "uTerrainSize", "uLand", "uEventCount",
     "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness", "uDepthScale") + _REACTION_UNIFORMS
 
 
@@ -99,20 +100,24 @@ class QuickShockwaveGridRenderer:
         self._points_cells = None
         self._points_data = None
         self._lattice_extent = NO_EXTENT
+        self._lattice_reach = None
+        self._overlay = HeightfieldTexture("Neon Lake overlay", components=1)
+        self._terrain_origin = (0.0, 0.0, 1.0, 1.0)
         self._terrain_grid = (0.0, 0.0, 1.0)
 
     def _mesh(self,cells):
-        cells = (tuple(cells), self._lattice_extent)
+        cells = (tuple(cells), self._lattice_extent, self._lattice_reach)
         if cells != self._mesh_cells:
             if self._mesh_cells is not None:
                 self._resources.drop_mesh(_mesh_key(self._mesh_cells))
             self._mesh_data = self._resources.mesh(
-                _mesh_key(cells), basin_mesh_vertices(*cells, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS), (2,))
+                _mesh_key(cells), basin_mesh_vertices(*cells[:2], BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS,
+                                                      cells[2]), (2,))
             self._mesh_cells = cells
         return self._mesh_data
 
     def _points(self, cells):
-        cells = (tuple(cells), self._lattice_extent)
+        cells = (tuple(cells), self._lattice_extent)        # the marks stay on the origin's lattice
         if cells != self._points_cells:
             self._drop_points()
             self._points_data=self._resources.mesh(_point_key(cells),basin_mesh_points(*cells),(2,))
@@ -127,12 +132,40 @@ class QuickShockwaveGridRenderer:
 
     @property
     def has_resources(self) -> bool:
-        return any(owner.has_resources for owner in (self._resources, self._target, self._stream, self._heightfield))
+        return any(owner.has_resources for owner in (self._resources, self._target, self._stream, self._heightfield,
+                                                     self._overlay))
 
     def _adopt_terrain(self, terrain) -> None:
-        """The authored grid's reach past the basin (mesh extent) and its basin-to-grid transform."""
+        """The authored origin's reach past the basin (the mark lattice), the bounds of what the brush has painted
+        past it (the triangles' fine region; None while nothing is), the basin-to-grid transform and the origin's
+        rect in grid uv."""
         self._lattice_extent = tuple(float(v) for v in terrain.get("extent", NO_EXTENT))
+        painted = terrain.get("painted")
+        self._lattice_reach = None if painted is None else tuple(float(v) for v in painted)
         self._terrain_grid = tuple(float(v) for v in terrain.get("grid", (0.0, 0.0, 1.0)))
+        self._terrain_origin = tuple(float(v) for v in terrain.get("origin_rect", (0.0, 0.0, 1.0, 1.0)))
+
+    def _ensure_heightfields(self, terrain) -> None:
+        """The stored cells, and for a grown grid its overlay on the generated land (dropped again otherwise)."""
+        self._heightfield.ensure(terrain["size"], terrain["data"])
+        delta = terrain.get("delta")
+        if delta is not None:
+            self._overlay.ensure(terrain["size"], delta)
+        elif self._overlay.has_resources:
+            self._overlay.release()
+
+    @staticmethod
+    def _overlay_unit(terrain) -> int:
+        # An ungrown grid never reads the overlay: its sampler rests on the stored cells' unit.
+        return _OVERLAY_UNIT if terrain.get("delta") is not None else _HEIGHT_UNIT
+
+    @contextmanager
+    def _overlay_bound(self, terrain):
+        if terrain.get("delta") is None:
+            yield
+            return
+        with self._overlay.bound(_OVERLAY_UNIT):
+            yield
 
     def _view(self, frame, parameters):
         field = tuple(float(value) for value in frame.logical_content_rect)
@@ -163,7 +196,7 @@ class QuickShockwaveGridRenderer:
         if not warm_programs(self._programs(parameters, samples, glow > 0.0, frame.scene_output_rotation)):
             return False
         self._adopt_terrain(parameter(parameters, "shockwave_grid_terrain"))
-        if not r.has_mesh(_mesh_key((tuple(cells), self._lattice_extent))):
+        if not r.has_mesh(_mesh_key((tuple(cells), self._lattice_extent, self._lattice_reach))):
             self._mesh(cells)
             return False
         style=_wire_display(parameters)
@@ -179,9 +212,9 @@ class QuickShockwaveGridRenderer:
             r.mesh("sky", scene3d_grid_vertices(1, 1), (2,))
             return False
         terrain = parameter(parameters, "shockwave_grid_terrain")
-        uploads = self._heightfield.uploads
-        self._heightfield.ensure(terrain["size"], terrain["data"])
-        if self._heightfield.uploads != uploads:
+        uploads = self._heightfield.uploads + self._overlay.uploads
+        self._ensure_heightfields(terrain)
+        if self._heightfield.uploads + self._overlay.uploads != uploads:
             return False
         if not self._stream.warm():
             return False
@@ -191,6 +224,7 @@ class QuickShockwaveGridRenderer:
     def _bind_view(self, uniforms, frame, view):
         if "uTerrainGrid" in uniforms:          # programs that read the terrain
             gl.glUniform3f(uniforms["uTerrainGrid"], *self._terrain_grid)
+            gl.glUniform4f(uniforms["uTerrainOrigin"], *self._terrain_origin)
         gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
         gl.glUniform4f(uniforms["uField"], *view.field)
         gl.glUniform3f(uniforms["uEye"], *view.eye)
@@ -210,15 +244,26 @@ class QuickShockwaveGridRenderer:
 
     @staticmethod
     def _bind_reaction(uniforms, parameters, mode_state, terrain) -> None:
-        """Terrain Reaction for a program sampling the land height: amounts, lane drives, phase and
-        the shaper's baked elevation tables (strength 0 turns the shader's reaction off)."""
-        gl.glUniform4f(uniforms["uReaction"], *_reaction_vector(parameters))
+        """Terrain Reaction for a program sampling the land height: amounts, lane drives, phase, the
+        shaper's baked elevation tables, and Growth / Indents with their drives (strength 0 turns the
+        shader's reaction off; an amount of 0 its landforms)."""
+        reaction = _reaction_vector(parameters)
+        if not (mode_state.events or any(mode_state.terrain_bands) or any(mode_state.terrain_forms)):
+            # Nothing drives the land this frame (silence, no wave alive): every term is zero, so the shader is
+            # told the reaction is off and skips its work per vertex instead of computing zeros.
+            reaction = (0.0, *reaction[1:])
+        gl.glUniform4f(uniforms["uReaction"], *reaction)
         gl.glUniform1fv(uniforms["uReactionBands"], len(mode_state.terrain_bands), mode_state.terrain_bands)
         gl.glUniform1f(uniforms["uReactionPhase"], float(mode_state.terrain_phase))
         gl.glUniform1f(uniforms["uReactionMaximum"], float(terrain["maximum"]))
-        tables = parameter(parameters, "shockwave_grid_terrain_shaper")
-        for name, key in (("uReactionLane", "lane"), ("uReactionWeight", "weight"), ("uReactionBias", "bias")):
-            gl.glUniform1fv(uniforms[name], REACTION_SAMPLES, tables[key])
+        lanes, bias = _reaction_tables(parameter(parameters, "shockwave_grid_terrain_shaper"))
+        gl.glUniform1fv(uniforms["uReactionLanes"], 5 * REACTION_SAMPLES, lanes)
+        gl.glUniform1fv(uniforms["uReactionBias"], REACTION_SAMPLES, bias)
+        gl.glUniform4f(uniforms["uReactionForms"],
+                       reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_growth")),
+                       float(parameter(parameters, "shockwave_grid_terrain_growth_shape")),
+                       reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_indents")), 0.0)
+        gl.glUniform2f(uniforms["uReactionDrives"], *mode_state.terrain_forms)
 
     @staticmethod
     def _bind_celestial(uniforms,parameters,half_width,animation_time,view):
@@ -290,10 +335,11 @@ class QuickShockwaveGridRenderer:
         self._adopt_terrain(parameter(parameters, "shockwave_grid_terrain"))
         vao, vertices = self._mesh(cells)
         terrain = parameter(parameters, "shockwave_grid_terrain")
-        self._heightfield.ensure(terrain["size"], terrain["data"])
+        self._ensure_heightfields(terrain)
         records = SHOCKWAVE_EVENTS.pack(events or [{"age": 0.0, "x": 0.0, "z": 0.0, "strength": 0.0}])
         with self._target.scope(frame, samples, r, overlay=presentation.content_fade, bloom=1.4 * glow,
-                                shafts=_rays_admitted(parameters)), _scene_depth(), self._heightfield.bound(_HEIGHT_UNIT):
+                                shafts=_rays_admitted(parameters)), _scene_depth(), \
+                self._heightfield.bound(_HEIGHT_UNIT), self._overlay_bound(terrain):
             sky=None
             if _sky_admitted(parameters):
                 sky = r.program("sky", NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE)
@@ -383,6 +429,7 @@ class QuickShockwaveGridRenderer:
             gl.glUniform1f(uniforms["uLightStrength"],light_strength)
             self._bind_reaction(uniforms, parameters, mode_state, terrain)
             gl.glUniform1i(uniforms["uTerrain"], _HEIGHT_UNIT)
+            gl.glUniform1i(uniforms["uTerrainDelta"], self._overlay_unit(terrain))
             gl.glUniform1i(uniforms["uTerrainSize"], terrain["size"])
             gl.glUniform2f(uniforms["uLand"], float(parameter(parameters, "shockwave_grid_terrain_height")),
                            float(parameter(parameters, "shockwave_grid_terrain_detail")))
@@ -429,6 +476,7 @@ class QuickShockwaveGridRenderer:
                     self._bind_view(skyline_uniforms,frame,view)
                     gl.glUniform1f(skyline_uniforms["uHalfWidth"],half_width)
                     gl.glUniform1i(skyline_uniforms["uTerrain"],_HEIGHT_UNIT)
+                    gl.glUniform1i(skyline_uniforms["uTerrainDelta"],self._overlay_unit(terrain))
                     gl.glUniform1i(skyline_uniforms["uTerrainSize"],terrain["size"])
                     gl.glUniform2f(skyline_uniforms["uLand"],
                                    float(parameter(parameters,"shockwave_grid_terrain_height")),
@@ -528,7 +576,8 @@ class QuickShockwaveGridRenderer:
 
     def release_resources(self) -> None:
         errors = []
-        for release in (self._target.release, self._stream.release, self._heightfield.release, self._resources.release_resources):
+        for release in (self._target.release, self._stream.release, self._heightfield.release, self._overlay.release,
+                        self._resources.release_resources):
             try:
                 release()
             except Exception as exc:
@@ -543,8 +592,9 @@ class QuickShockwaveGridRenderer:
 
 
 def _mesh_key(lattice) -> str:
-    (columns, rows), extent = lattice
-    return f"basin {columns}x{rows} reach {','.join(f'{v:.4f}' for v in extent)}"
+    (columns, rows), extent, reach = lattice
+    grown = "" if reach is None else f" painted {','.join(f'{v:.4f}' for v in reach)}"
+    return f"basin {columns}x{rows} reach {','.join(f'{v:.4f}' for v in extent)}{grown}"
 
 
 def _point_key(lattice) -> str:
@@ -554,6 +604,19 @@ def _point_key(lattice) -> str:
 
 def _wire_display(parameters):
     return BASIN_SURFACE_STYLES[str(parameter(parameters,"shockwave_grid_wire_display"))]
+
+
+_REACTION_TABLES: list = [None, None]
+
+
+def _reaction_tables(tables):
+    """The baked shaper tables as float arrays GL takes without converting them element by element: packed once
+    per baked tables (their lane tuple's identity), not on each of a frame's two uploads."""
+    lanes = tables["lanes"]
+    if _REACTION_TABLES[0] is not lanes:
+        bias = tables["bias"]
+        _REACTION_TABLES[:] = [lanes, ((ctypes.c_float * len(lanes))(*lanes), (ctypes.c_float * len(bias))(*bias))]
+    return _REACTION_TABLES[1]
 
 
 def _reaction_vector(parameters) -> tuple[float, float, float, float]:

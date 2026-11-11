@@ -13,7 +13,7 @@ import math
 from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
-from rendering.gl_programs.heightfield import heightfield_basin, normalize_heightfield
+from rendering.gl_programs.heightfield import heightfield_basin, heightfield_origin, normalize_heightfield
 
 MODES = ("Raise", "Lower", "Flatten", "Water")
 DAB_SPACING = 0.15        # radii between dabs along a stroke
@@ -21,7 +21,9 @@ PRESS_DEPOSIT = 0.25      # a press that never moves applies this much stroke (i
 MAX_RATE = 0.5            # height Raise/Lower add per radius of stroke at 100% strength
 FLATTEN_RATE = 6.0        # Flatten's approach per radius of stroke at 100% (100% itself snaps the core)
 MIN_LAND = 0.005          # Lower never turns land into water; only the Water brush authors exact zero
-RADIUS_RANGE = (0.03, 0.35)   # the brush radius, in grid uv (a share of the grid's side)
+# The brush radius, as a share of the basin's side (``heightfield_basin``; the whole grid's side when the grid is
+# only its basin): a size on the scene's ground, the same however far the grid reaches or grows.
+RADIUS_RANGE = (0.03, 0.35)
 STRENGTH_FLOOR = 0.01
 
 
@@ -104,28 +106,52 @@ class HeightfieldStroke:
     ``DAB_SPACING`` radii along the path, the leftover distance carrying to the next move."""
 
     def __init__(self, record: Mapping[str, Any], settings: BrushSettings) -> None:
-        data = normalize_heightfield(record)
-        self._size = int(data["size"])
-        self._heights = list(data["heights"])
-        self._basin = heightfield_basin(data)
         self._settings = settings
         self._last: tuple[float, float] | None = None
         self._carry = 0.0
         self.dabs = 0
+        self._adopt(normalize_heightfield(record))
+
+    def _adopt(self, data: Mapping[str, Any]) -> None:
+        self._size = int(data["size"])
+        self._heights = list(data["heights"])
+        self._basin = heightfield_basin(data)
+        self._origin = heightfield_origin(data)
 
     @property
     def settings(self) -> BrushSettings:
         return self._settings
 
+    @property
+    def size(self) -> int:
+        return self._size
+
     def record(self) -> dict:
-        """The painted heightfield as a canonical record (the basin carried as stored)."""
+        """The painted heightfield as a canonical record (the basin and the authored origin carried as stored)."""
         out = {"version": 1, "size": self._size, "heights": list(self._heights)}
         if self._basin != (0, 0, self._size - 1):
             out["basin"] = list(self._basin)
+        if self._origin != (0, 0, self._size - 1):
+            out["origin"] = list(self._origin)
         return out
 
+    def regrid(self, record: Mapping[str, Any], left: int, front: int) -> None:
+        """Carry the stroke on over ``record``: this stroke's own record grown by ``left`` columns and ``front`` rows
+        before its first cell (and any number after its last). The path so far keeps its place on the ground."""
+        old = self._size - 1
+        self._adopt(normalize_heightfield(record))
+        if self._last is not None:
+            new = self._size - 1
+            self._last = ((self._last[0] * old + left) / new, (self._last[1] * old + front) / new)
+
     def _radius(self) -> float:
-        return max(RADIUS_RANGE[0], min(RADIUS_RANGE[1], float(self._settings.radius)))
+        """The brush radius in this grid's uv: the setting is a share of the basin's side."""
+        radius = max(RADIUS_RANGE[0], min(RADIUS_RANGE[1], float(self._settings.radius)))
+        return radius * self._basin[2] / (self._size - 1)
+
+    def reach(self) -> float:
+        """How far from a dab's centre the brush touches a cell, in this grid's uv."""
+        return self._radius() * brush_reach(self._settings.falloff)
 
     def _physical(self, du: float, dv: float) -> float:
         """A grid-uv offset's length in brush radii (the grid is square: a round brush)."""
@@ -135,7 +161,7 @@ class HeightfieldStroke:
         """One dab at grid uv (u, v) standing for ``amount`` radii of stroke."""
         n = self._size
         settings = self._settings
-        reach = self._radius() * brush_reach(settings.falloff)
+        reach = self.reach()
         lower_x, upper_x = max(0, math.floor((u - reach) * (n - 1))), min(n - 1, math.ceil((u + reach) * (n - 1)))
         lower_y, upper_y = max(0, math.floor((v - reach) * (n - 1))), min(n - 1, math.ceil((v + reach) * (n - 1)))
         strength = max(STRENGTH_FLOOR, min(1.0, float(settings.strength)))

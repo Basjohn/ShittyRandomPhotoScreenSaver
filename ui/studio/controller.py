@@ -788,9 +788,21 @@ class StudioBridge(QObject):
         if brush is None:
             return
         cursor = brush.cursor
-        self._guard(brush.flush)
+        self._brush_step(brush.flush)
         if brush.cursor is not cursor:
             self.brushCursorChanged.emit()
+
+    def _brush_step(self, step: Callable[[], Any]) -> None:
+        """Run a brush step and say what it refused: the cursor's refused state (``brushState.refused``) whenever it
+        flips, and the target's one-line notice when a press or a stroke landed on land the brush cannot reach."""
+        brush = self.brush
+        refused, refusals = brush.refused, brush.refusals
+        self._guard(step)
+        if brush.refused != refused:
+            self.brushChanged.emit()
+        notice = brush.target.refusal
+        if brush.refusals != refusals and notice and getattr(self, "_message", "") != notice:
+            self.notify(notice)
 
     @Slot(bool)
     def setBrushActive(self, active: bool) -> None:
@@ -830,15 +842,18 @@ class StudioBridge(QObject):
     @Slot()
     def brushLeave(self) -> None:
         if self.brush is not None:
+            refused = self.brush.refused
             self.brush.hover(None)
             self.brushCursorChanged.emit()
+            if refused:
+                self.brushChanged.emit()
 
     @Slot()
     def brushRelease(self) -> None:
         """The stroke ends: the held points are painted and the record is saved once (one undo entry)."""
         if self.brush is None:
             return
-        self._guard(self.brush.release)
+        self._brush_step(self.brush.release)
         self.brushChanged.emit()
         self.brushCursorChanged.emit()
 

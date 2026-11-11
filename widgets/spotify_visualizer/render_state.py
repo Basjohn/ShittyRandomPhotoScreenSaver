@@ -411,6 +411,8 @@ class ShockwaveGridFrame(SpectrumFrame):
     # Terrain Reaction: the eased drive (0..1) of each shaper lane (Bass .. Treble) and the landforms' wander.
     terrain_bands: tuple[float, ...] = (0.0,) * 5
     terrain_phase: float = 0.0
+    # Growth and Indents: the music's eased fixed-scale drive (0..1) of each (zero while their amounts are).
+    terrain_forms: tuple[float, ...] = (0.0, 0.0)
 
     def __post_init__(self) -> None:
         SpectrumFrame.__post_init__(self)
@@ -418,6 +420,10 @@ class ShockwaveGridFrame(SpectrumFrame):
         if len(bands) != 5 or any(value < 0.0 or value > 1.0 for value in bands):
             raise ValueError("terrain reaction requires five lane drives within 0..1")
         object.__setattr__(self, "terrain_bands", bands)
+        forms = _float_tuple(self.terrain_forms, name="terrain forms")
+        if len(forms) != 2 or any(value < 0.0 or value > 1.0 for value in forms):
+            raise ValueError("terrain reaction requires the Growth and Indents drives within 0..1")
+        object.__setattr__(self, "terrain_forms", forms)
         phase = float(self.terrain_phase)
         if not math.isfinite(phase):
             raise ValueError("terrain reaction phase must be finite")

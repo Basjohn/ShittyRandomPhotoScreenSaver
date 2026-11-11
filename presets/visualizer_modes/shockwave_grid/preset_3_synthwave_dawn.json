@@ -4470,9 +4470,12 @@
           12,
           255
         ],
+        "shockwave_grid_terrain_growth": 0.0,
         "shockwave_grid_terrain_growth_attack": 0.17230769230769222,
         "shockwave_grid_terrain_growth_release": 0.3,
+        "shockwave_grid_terrain_growth_shape": 0.5,
         "shockwave_grid_terrain_height": 0.9,
+        "shockwave_grid_terrain_indents": 0.0,
         "shockwave_grid_terrain_motion_speed": 0.30631868131868123,
         "shockwave_grid_terrain_peaks": 0.19917582417582408,
         "shockwave_grid_terrain_pulses": 0.4986263736263736,

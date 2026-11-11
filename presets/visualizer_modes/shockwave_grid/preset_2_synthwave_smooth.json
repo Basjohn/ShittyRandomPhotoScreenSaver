@@ -13019,9 +13019,12 @@
           10,
           255
         ],
+        "shockwave_grid_terrain_growth": 0.0,
         "shockwave_grid_terrain_growth_attack": 0.08,
         "shockwave_grid_terrain_growth_release": 0.3,
+        "shockwave_grid_terrain_growth_shape": 0.5,
         "shockwave_grid_terrain_height": 1.4,
+        "shockwave_grid_terrain_indents": 0.0,
         "shockwave_grid_terrain_motion_speed": 0.5,
         "shockwave_grid_terrain_peaks": 0.16895604395604394,
         "shockwave_grid_terrain_pulses": 0.5563186813186812,

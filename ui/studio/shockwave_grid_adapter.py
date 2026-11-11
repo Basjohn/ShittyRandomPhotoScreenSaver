@@ -30,6 +30,7 @@ Truthfulness: the Studio changes no Neon Lake simulation, timing, engine or rend
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from functools import cache
 from typing import Any, Callable, Mapping
 
@@ -428,22 +429,42 @@ def terrain_view(frame, geometry):
                       aperture_scale=framed_aperture_scale(resolved, content=True))
 
 
-def _terrain_surface(values: Mapping[str, Any]):
-    """(size, heights grid, basin, Terrain Height) of the values' authored terrain."""
+@dataclass(frozen=True)
+class _Terrain:
+    """The values' authored terrain as the brush reads it: the stored grid, where the basin and the authored origin
+    sit in it, a grown grid's overlay on the generated land and the scene's Terrain Height."""
+    size: int
+    grid: Any
+    basin: tuple[int, int, int]
+    origin: tuple[int, int, int]
+    delta: Any
+    height: float
+
+
+_SURFACE: list = [None, None]      # the newest record (by identity) and its arrays: a stroke picks on one record
+
+
+def _terrain_surface(values: Mapping[str, Any]) -> _Terrain:
     import numpy as np
-    from rendering.gl_programs.heightfield import heightfield_basin
-    record = admit_terrain(values[TERRAIN], values[TERRAIN])
-    size = int(record["size"])
-    grid = np.asarray(record["heights"], dtype=np.float64).reshape(size, size)
-    return size, grid, heightfield_basin(record), float(values[PREFIX + "terrain_height"])
+    from rendering.gl_programs.heightfield import heightfield_basin, heightfield_origin
+    from rendering.gl_programs.neon_terrain_surface import terrain_delta
+    source = values[TERRAIN]
+    if _SURFACE[0] is not source:
+        record = admit_terrain(source, source)
+        size = int(record["size"])
+        grid = np.asarray(record["heights"], dtype=np.float64).reshape(size, size)
+        basin, origin = heightfield_basin(record), heightfield_origin(record)
+        _SURFACE[:] = [source, (size, grid, basin, origin, terrain_delta(grid, basin, origin))]
+    return _Terrain(*_SURFACE[1], float(values[PREFIX + "terrain_height"]))
 
 
-def _ground(grid, basin, terrain_height: float, gu, gv):
-    """The drawn ground's world height at grid uv (land scaled by Terrain Height, water at the scene's level)."""
+def _ground(terrain: _Terrain, gu, gv):
+    """The drawn ground's world height at grid uv, on the stored grid or past it (land scaled by Terrain Height,
+    water at the scene's level)."""
     import numpy as np
     from rendering.gl_programs.neon_terrain_surface import scene_surface
-    land, water = scene_surface(grid, basin, gu, gv)
-    return np.where(water, land, land * terrain_height)
+    land, water = scene_surface(terrain.grid, terrain.basin, gu, gv, terrain.origin, terrain.delta)
+    return np.where(water, land, land * terrain.height)
 
 
 def _grid_uv(size: int, basin, x, z):
@@ -455,8 +476,9 @@ def _grid_uv(size: int, basin, x, z):
 
 
 def pick_terrain(frame, values: Mapping[str, Any], point, geometry):
-    """The authored grid's uv under ``point`` (presented-frame pixels): the first place the camera's ray through it
-    meets the drawn ground; None on the sky, past the grid or outside the card's field."""
+    """The grid uv under ``point`` (presented-frame pixels): the first place the camera's ray through it meets the
+    drawn ground, on the stored grid (0..1) or on the generated land past it (outside 0..1: the brush grows the grid
+    to paint there); None on the sky or outside the card's field."""
     import numpy as np
     from core.constants.neon_lake_world import FAR_PLANE
     if frame is None or getattr(frame, "mode_state", None) is None:
@@ -466,13 +488,14 @@ def pick_terrain(frame, values: Mapping[str, Any], point, geometry):
     u, v = (float(point[0]) - fx) / fw, (float(point[1]) - fy) / fh
     if not (0.0 <= u <= 1.0 and 0.0 <= v <= 1.0):
         return None
-    size, grid, basin, height = _terrain_surface(values)
+    terrain = _terrain_surface(values)
+    size, basin = terrain.size, terrain.basin
     eye, direction = np.asarray(view.eye, dtype=np.float64), np.asarray(view.ray(u, v), dtype=np.float64)
 
     def above(t):
         p = eye + np.multiply.outer(t, direction)
         gu, gv = _grid_uv(size, basin, p[..., 0], p[..., 2])
-        return p[..., 1] - _ground(grid, basin, height, gu, gv)
+        return p[..., 1] - _ground(terrain, gu, gv)
 
     t = np.geomspace(0.01, FAR_PLANE, _PICK_SAMPLES)
     crossing = np.flatnonzero(above(t) <= 0.0)
@@ -488,26 +511,25 @@ def pick_terrain(frame, values: Mapping[str, Any], point, geometry):
             far = middle
     hit = eye + far * direction
     gu, gv = _grid_uv(size, basin, float(hit[0]), float(hit[2]))
-    if not (0.0 <= gu <= 1.0 and 0.0 <= gv <= 1.0):
-        return None
     return float(gu), float(gv)
 
 
 def terrain_footprint(frame, values: Mapping[str, Any], uv, rings, geometry) -> list:
-    """Each ring (a radius in grid uv round ``uv``, clipped to the grid) on the drawn ground, in presented-frame
-    pixels; parts behind the eye are left out."""
+    """Each ring (a brush radius, as a share of the basin's side, round grid uv ``uv``) on the drawn ground, on the
+    stored grid or past it, in presented-frame pixels; parts behind the eye are left out."""
     import numpy as np
     from rendering.gl_programs.neon_terrain_surface import world_points
     if frame is None or getattr(frame, "mode_state", None) is None:
         return []
     view = terrain_view(frame, geometry)
-    size, grid, basin, height = _terrain_surface(values)
+    terrain = _terrain_surface(values)
+    size, basin = terrain.size, terrain.basin
     angle = np.linspace(0.0, 2.0 * math.pi, _RING_POINTS + 1)
     out = []
     for radius in rings:
-        gu = np.clip(uv[0] + radius * np.cos(angle), 0.0, 1.0)
-        gv = np.clip(uv[1] + radius * np.sin(angle), 0.0, 1.0)
-        world = world_points(size, basin, gu, gv, _ground(grid, basin, height, gu, gv))
+        radius = radius * basin[2] / (size - 1)             # the basin's share -> this grid's uv
+        gu, gv = uv[0] + radius * np.cos(angle), uv[1] + radius * np.sin(angle)
+        world = world_points(size, basin, gu, gv, _ground(terrain, gu, gv))
         line = []
         for point in world:
             if view.depth(tuple(point)) > 1e-3:
@@ -518,10 +540,34 @@ def terrain_footprint(frame, values: Mapping[str, Any], uv, rings, geometry) -> 
     return out
 
 
+def grow_terrain(record: Mapping[str, Any], uv, reach: float):
+    """The record grown (invisibly: ``neon_terrain_extent.grow_heightfield``) to hold a brush touching ``reach`` round
+    grid uv ``uv``, with the columns and rows added before its first: ``(record, left, front)``. The same record and
+    zeros when the brush already fits or the grid is at its largest; None when ``uv`` is out of its reach."""
+    from rendering.gl_programs.neon_terrain_extent import grow_heightfield, growth_cells
+    cells = growth_cells(record, float(uv[0]), float(uv[1]), float(reach))
+    if cells is None:
+        return None
+    if not any(cells):
+        return record, 0, 0
+    return grow_heightfield(record, *cells), cells[0], cells[2]
+
+
+def terrain_reachable(size: int, uv) -> bool:
+    """Whether a grid of ``size`` cells a side can still grow to hold grid uv ``uv``."""
+    from rendering.gl_programs.neon_terrain_extent import growth_cells
+    return growth_cells({"size": int(size)}, float(uv[0]), float(uv[1]), 0.0) is not None
+
+
 def brush_target():
-    """The terrain brush's target: the authored heightfield, picked and drawn on the preview's ground."""
+    """The terrain brush's target: the authored heightfield, picked and drawn on the preview's ground. Land the scene
+    draws past the stored grid is paintable too: a stroke there grows the grid under it (invisibly) up to the
+    largest grid; beyond that the brush refuses."""
     from ui.studio.brush import BrushTarget
-    return BrushTarget(TERRAIN, "Terrain", pick_terrain, terrain_footprint)
+    return BrushTarget(TERRAIN, "Terrain", pick_terrain, terrain_footprint, grow=grow_terrain,
+                       reachable=terrain_reachable,
+                       refusal=f"The terrain grid is at its largest ({_max_grid()} cells a side): this land is out of "
+                               "the brush's reach.")
 
 
 def _max_grid() -> int:

@@ -24,12 +24,31 @@ def _stream_terrain(size=9):
 
 
 class _GridProbe(_SurfaceProbe):
-    """The production surface probe with the terrain's basin-to-grid transform bound."""
+    """The production surface probe with the terrain's basin-to-grid transform bound, and for a grown grid its
+    authored origin and its overlay on the generated land (as the renderer binds them)."""
 
     def draw(self, *args, **kwargs):
+        from rendering.gl_programs.heightfield import heightfield_origin_rect
+        from rendering.gl_programs.neon_terrain_extent import overlay_fields
+        from rendering.quick.scene3d.heightfield import HeightfieldTexture
         gl.glUseProgram(self.program)
         gl.glUniform3f(gl.glGetUniformLocation(self.program, "uTerrainGrid"), *heightfield_grid_transform(self.terrain))
-        return super().draw(*args, **kwargs)
+        gl.glUniform4f(gl.glGetUniformLocation(self.program, "uTerrainOrigin"), *heightfield_origin_rect(self.terrain))
+        overlay = overlay_fields(self.terrain)
+        if not overlay:
+            gl.glUniform1i(gl.glGetUniformLocation(self.program, "uTerrainDelta"), 0)
+            return super().draw(*args, **kwargs)
+        if getattr(self, "overlay", None) is None:
+            self.overlay = HeightfieldTexture("basin overlay probe", components=1)
+        self.overlay.ensure(self.terrain["size"], overlay["delta"])
+        gl.glUniform1i(gl.glGetUniformLocation(self.program, "uTerrainDelta"), 1)
+        with self.overlay.bound(1):
+            return super().draw(*args, **kwargs)
+
+    def close(self):
+        if getattr(self, "overlay", None) is not None:
+            self.overlay.release()
+        super().close()
 
 
 def test_water_at_the_grids_edge_flows_on_to_the_horizon_and_dry_edges_stay_land(qt_app):

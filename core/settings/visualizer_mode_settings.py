@@ -925,6 +925,16 @@ _SHOCKWAVE_GRID = ModeSettings(
                "the rest.", bucket="reaction", when=_TERRAIN_REACTION),
         Slider("shockwave_grid_terrain_swell", "Swell:", 0.0, 1.0,
                "A broad, slow rise and fall across the whole land.", bucket="reaction", when=_TERRAIN_REACTION),
+        Slider("shockwave_grid_terrain_growth", "Growth:", 0.0, 1.0,
+               "Mounds and spires that stand only while the music holds them up: none in quiet passages, more and "
+               "taller the louder it gets, each hit lifting them further. 0 turns it off.",
+               bucket="reaction", when=_TERRAIN_REACTION),
+        Slider("shockwave_grid_terrain_growth_shape", "Growth Shape:", 0.0, 1.0,
+               "What Growth raises: broad low mounds at 0, slender tall spires at 100%.",
+               bucket="reaction", when=_TERRAIN_REACTION),
+        Slider("shockwave_grid_terrain_indents", "Indents:", 0.0, 1.0,
+               "Dents pressed into the land with the music: hollows open in loud passages and deepen on each hit, "
+               "never below the land's floor. 0 turns it off.", bucket="reaction", when=_TERRAIN_REACTION),
         Custom("terrain_shaper", "reaction", keys=("shockwave_grid_terrain_shaper",)),
         Slider("shockwave_grid_terrain_motion_speed", "Motion Speed:", 0.0, 1.0,
                "How quickly the reshaping wanders while the music plays; it holds still in silence.",
