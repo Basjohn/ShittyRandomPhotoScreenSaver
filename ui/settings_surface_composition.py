@@ -85,7 +85,10 @@ def _state_inks(raw, colors, native):
     for state, stack in CONTROL_STATE_TEXT_STACKS:
         locations[state].extend((_surface(native, colors, stack, pole), 5.1) for pole in (0, 255))
     for state, surfaces in locations.items():
-        colors[f"@control.mode.{state}"] = _correct_ink(raw["control.mode.text"], surfaces)
+        # A state fill may sit on the other side of the authored ink (a dark checked pill
+        # under dark mode text): its derived ink may flip polarity when nothing else reads.
+        colors[f"@control.mode.{state}"] = _correct_ink(raw["control.mode.text"], surfaces,
+                                                        state_ink=True)
     colors["@window.composed"] = combine_surface_tint(colors["window.dialog_glass"], native)
     return colors, native
 
@@ -124,8 +127,12 @@ def _surface(tint, colors, stack, pole):
     return base
 
 
-def _correct_ink(ink, locations):
-    """Raise alpha, then correct contrast without reversing authored ink polarity."""
+def _correct_ink(ink, locations, *, state_ink=False):
+    """Raise alpha, then correct contrast without reversing authored ink polarity.
+
+    ``state_ink``: a derived checked/hover ink for its own state fill. Only it may cross to
+    the opposite pole, and only when neither alpha nor its own pole reaches the bar; ordinary
+    semantic inks always keep their polarity."""
     def quality(candidate):
         return min(contrast_ratio(composite_over(candidate, surface), surface) / bar
                    for surface, bar in locations)
@@ -161,12 +168,21 @@ def _correct_ink(ink, locations):
                    for background, bar in luminances)
 
     # Retain useful corrections for truly light/dark surfaces, without ever
-    # crossing to the opposite foreground polarity. No surface fills are edited.
-    for amount in range(1, 256):
-        candidate = Rgba(*(round(channel + (pole - channel) * amount / 255)
-                           for channel in (ink.r, ink.g, ink.b)))
-        if opaque_quality(candidate) >= 1.0:
-            return candidate
+    # crossing to the opposite foreground polarity (a state ink alone may, after its own pole
+    # fails). No surface fills are edited.
+    def beyond_every_location(candidate, target):
+        # A flipped ink must sit on its new side of every location (never a grey between them).
+        light = relative_luminance(candidate)
+        return all(light > background if target == 255 else light < background
+                   for background, _bar in luminances)
+
+    for target in ((pole, 255 - pole) if state_ink else (pole,)):
+        for amount in range(1, 256):
+            candidate = Rgba(*(round(channel + (target - channel) * amount / 255)
+                               for channel in (ink.r, ink.g, ink.b)))
+            if opaque_quality(candidate) >= 1.0 and (target == pole
+                                                     or beyond_every_location(candidate, target)):
+                return candidate
     # If the requested contrast cannot coexist with the theme's ink polarity,
     # return its authored RGB at full alpha. The background owner, not an
     # unintended text recolouring, must resolve any remaining contrast failure.

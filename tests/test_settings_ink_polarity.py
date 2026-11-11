@@ -50,6 +50,23 @@ def test_default_dark_glass_projection_keeps_active_labels_readable(adjustment):
     assert projected["window.dialog_glass"].r == theme.colors["window.dialog_glass"].r
 
 
+def test_only_a_state_ink_may_flip_polarity_when_its_own_pole_cannot_read():
+    # Dark mode text over a dark checked fill: black cannot reach the bar there.
+    dark_fill = [(Rgba(64, 67, 70), 5.1), (Rgba(64, 67, 70), 5.1)]
+    dark_text = Rgba(30, 32, 34)
+    assert _correct_ink(dark_text, dark_fill) == dark_text          # ordinary ink keeps its polarity
+    flipped = _correct_ink(dark_text, dark_fill, state_ink=True)
+    assert flipped.r > 128 and contrast_ratio(flipped, Rgba(64, 67, 70)) >= 5.1
+    # Where its own pole reads, a state ink still takes the least move toward it (no flip).
+    light_fill = [(Rgba(236, 238, 240), 5.1)]
+    midtone = Rgba(120, 122, 124)
+    kept = _correct_ink(midtone, light_fill, state_ink=True)
+    assert kept.r < midtone.r and contrast_ratio(kept, Rgba(236, 238, 240)) >= 5.1
+    # Competing desktop extremes: no flip can serve both, so the authored ink stands.
+    extremes = [(Rgba(0, 0, 0), 4.5), (Rgba(255, 255, 255), 4.5)]
+    assert _correct_ink(Rgba(255, 255, 255), extremes, state_ink=True) == Rgba(255, 255, 255)
+
+
 def test_feasible_alpha_and_dark_ink_corrections_still_work():
     dim_background = Rgba(23, 33, 43)
     translucent_ink = Rgba(196, 212, 228, 105)
