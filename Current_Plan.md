@@ -397,7 +397,7 @@ through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
   off-screen harness that drives ordinary Edit on a Media card); build it beside
   `tools/expanded_visualizer_evidence.py`.
 
-### 1B.8 Light themes are practically opaque in the saver (M1 4674e801, M2 63e22431 merged; M2b in flight)
+### 1B.8 Light themes are practically opaque in the saver (M1, M2 and M2b merged; M3 waits behind the native core)
 
 **Material track (operator, 11 Nov: proper transparency on light themes, no inset while keeping the material on
 all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint.** Contract:
@@ -413,21 +413,32 @@ the whole face up to the real border on every theme and material (no inset panel
 inner hairline is gone, the ink plate fades over 5 px, legibility tables unchanged, no GPU rise. The Linked
 button's state ink may cross polarity (R-186; stills `.artifacts/evidence/settings/linked_button/`).
 
-- [ ] M2b. One ink rule on every theme (lead, 11 Nov: a uniform contract, not a light-theme exception): a text
-  run that misses its ratio on a dark theme corrects its own ink as light themes do (authored ink where it
-  reads, else more alpha, else toward white keeping hue); the dark panel gets no denser; runs that pass stay
-  byte-identical. Measured before: Default Dark on the bright wallpaper has 8-10 small runs at 3.89-4.27;
-  `widget.accent` fails 4.5:1 over the white pole on 46 of 98 material themes, all dark (Midnight Cobalt 3.42,
-  worst Royal Orchard 1.44).
-- [ ] M2b. Text runs only; graphic uses of the accent (bars, dividers, fills, icons) listed where they fall
-  under 3:1, not recoloured.
-- [ ] M2b. Themes whose corrected accent collapses toward `card.text` named with 3x crops before the operator
-  sees them; the table of every changed theme (before/after ratio and colour) goes to section 2's "Changed".
-- [ ] M2b. `tools/theme_legibility.py` over all 98 material themes, both wallpapers: zero small runs below
-  4.5:1, or the exact remainder and why.
-- [ ] M2b. Offscreen checks M2 left out: 150% and 200% device pixel ratio (one light, one dark theme), the
-  Visualizer card and the Context Menu on a light theme.
-- [ ] Mid-transition frames and a real display for M1/M2: a D1 run (1B.14 harness), lead review.
+M2b landed 12 Nov (evidence `.artifacts/evidence/materials/20261111_m2b/`): a text run that misses its ratio
+on a dark theme corrects its own ink; card roles under 4.5:1 on the materials went from 46 themes to 0, small
+runs from 3-10 a frame to 0, light themes and Normal unchanged, no shader change. Two faults found in audit
+and fixed (the solver added the Glass sheen after the legibility limit; a hidden crossfade copy held a plate).
+58 dark themes change; the table is `changed_table.md` in the evidence folder.
+
+- [ ] Ink is judged against the card panel even where a run sits on another fill: Midnight Cobalt's System Stats
+  labels change (#668cff to #7e9eff, 4.95 to 8.17) though they read on their metric panel. Pass the underlying
+  fill into the ink solve (the legibility plate already has `underlayColor`), so a run that reads where it sits
+  is not touched.
+- [ ] 27 groups of runs that already read at 4.5:1 gain a few percent of alpha because the solver aims for 4.8
+  (its headroom): decide whether a run at or above 4.5 is left exactly as authored (the lead's rule was
+  byte-identical for passing runs) and make the solver do that.
+- [ ] Accents whose corrected text ink collapses toward the card text: Royal Orchard most (#3e4f2c to #97a08d,
+  48 % of its colour kept) and Smoke Quartz; Slate Lavender, Tungsten Blues, Lantern Grove and Riviera Dusk keep
+  61-70 % (`accent_collapse_candidates_3x.png`). A theme-authoring matter: these six accents are too dark for a
+  dark card; note it for the theme files, no solver change.
+- [ ] The accent as a graphic (bars, dividers, icons; not recoloured) is under 3:1 on eight dark themes: Royal
+  Orchard 1.44, Tungsten Blues 2.27, Lantern Grove 2.32, Slate Lavender 2.35, Smoke Quartz 2.59, Riviera Dusk
+  2.67, Forest Rose 2.89, Nordic Signal 2.89. The same theme-authoring note.
+- [ ] The Context Menu does not go through the ink rule: its submenu arrows are 1.7-3.6:1 on Polished Chrome and
+  Pearl Blush (2.3-3.0 on Normal too; older than M2b). Give the arrow the label's ink.
+- [ ] Side defect: `tests/test_live_normalization_role_lifetime_contract.py::test_card_and_accessory_
+  normalization_changes_cannot_rebuild_role_lists` fails for Reddit (5 against an expected 2), unrelated to the
+  material work; reproduce with that file alone.
+- [ ] Mid-transition frames and a real display for M1, M2 and M2b: a D1 run (1B.14 harness), lead review.
 - [ ] M3. Widget border material: the remaining boxes of 1.7b (ring shading from the same backdrop, Border
   Material and Border Opacity Adjust in Style Overrides, Normal/Flat pixel-identical).
 - [ ] M3. With the inner hairline gone, the border stays clearly distinct from the face on the three light
@@ -708,19 +719,19 @@ a standing condition and their crop shows lines inside the border band along the
   each edge added to the clip contract test.
 - [ ] If nothing reproduces off-screen: the lead takes it on Display 1 with the operator's profile copy (1B.14).
 
-### 1C.5 Volume child control: its drop shadow is cut off sharply (owner: the material agent, before M2b's review)
+### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
 
-Operator's crop: the Media widget's volume bar (a child material surface) has its drop shadow ending in a hard
-edge instead of fading. First suspect: M2 (63e22431), which changed `ChildMaterialSurface.qml` and the child
-branch of the surface shader; the shadow's extent or the child item's clip may no longer include the blur.
+Cause: two clips (`overlayAccessoryLayer` in `OverlayWidget.qml`, `mediaAppVolumeSlider` in `MediaPresentation.qml`,
+both from b5bb788e) cut the track's shadow at the edge of the volume's own strip; at the default layout it fits by
+0.3 px, and once Edit widens, heightens or moves the track it is cut square. M1 and M2 were not the cause. The
+strip's clip now grows by the shadow's reach; guard `test_media_child_shadows_are_never_clipped_by_their_lane_or_
+card`. Evidence `.artifacts/evidence/materials/20261111_m2b/before_after_*_4x.png` (the "before" matches the
+operator's crop).
 
-- [ ] Root cause: off-screen 4x crops of the volume bar, the transport bar and the mute button on Glass and on
-  Normal, at main before M1 (533dc7f1), after M1 (4674e801) and after M2 (63e22431); name the commit and the line.
-- [ ] Fix at the owner of the child's shadow (its extent or the clip of its parent), not by removing the shadow;
-  every child control with a shadow is checked, on dark and light themes, both wallpapers.
-- [ ] A structural guard so a child surface's shadow cannot be clipped again: the shadow's painted extent lies
-  inside its item's unclipped bounds (derived from the shadow parameters, no pixel values pinned).
-- [ ] Before/after crops in the M2b evidence folder; lead pixel review.
+- [ ] The agent could not reproduce the cut at the operator's stored Media layout (no volume edits in their
+  settings): a D1 run with a copy of the operator's profile (1B.14), a 4x crop of the volume bar, lead review.
+- [ ] A volume track heightened past about 1.2x (the descriptor allows 2.5x) is taller than its strip and is cut
+  square itself: clamp the descriptor to what the strip can hold, or let the strip grow, at the owner.
 
 ### 1C.6 SMP full-player mock restored (operator, 11 Nov; `references/` is ignored by git)
 
@@ -766,9 +777,6 @@ dropped from the group and the cap. Its Spectrum work merges as it stands ("stil
 now"); flaws the lead sees are noted in 1B.10 for an Opus Medium agent "at a point where we do not have more
 significant work". Opus and Sonnet agents resume as the lead sees fit.
 
-- [ ] Material M2b (commit a8761c8c on `worktree-agent-a93bb05376d4941fc`, never reported): a fresh Opus High
-  agent merged that branch (old agents cannot be resumed across sessions), takes 1C.5 first, then audits and
-  reports M2b against 1B.8's boxes, then stops; M3 after the lead's review.
 - [ ] Small boxes batch 4 (`worktree-agent-a4e50f79894c549ec`; WIP edf2100a: six sibling test files moved onto
   the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
   a Medium slot is free after 1C.1 and 1C.4.
@@ -891,43 +899,20 @@ last because it touches the water's edge)**
   one session; lead pixel review. If the analytic edge cannot be made to look right, stop and report with the
   renders rather than shipping rocks without a shoreline.
 
-### 1C.9 Sources: RSS Pools shows which pools are active and valid (rows merged 11 Nov; restyle owed, Opus Medium)
+### 1C.9 Sources: RSS Pools shows which pools are active and valid (rows and restyle merged 12 Nov)
 
-Merged: each active Just Make It Work pool is a row `JMIT POOL -> <Pool Name>` in the Sources list beside the custom
-feeds, with a right-aligned mark (check, X, hollow circle for untried) read from the health the sources already
-store (`sources/rss/source_health.py`, `core.feeds.cache.peek_feed_health`: no network, no timer); pool rows are
-not removable there; an empty state; tests on the real `SettingsDialog` (`tests/test_sources_online_rows_real_
-dialog.py`). Operator on the stills, 11 Nov: "Those stills are a bad font and not semantically styled by theme."
-The lead had passed them; the rows are painted by a private delegate (`ui/tabs/online_source_rows.py`) with a
-synthesised italic and a plain list box, instead of following a list the theme already styles.
+Active Just Make It Work pools are rows in the Sources list (the heading reads "Pools and Custom Feeds"), told
+apart by an accent "JMIT POOL" tag and an arrow glyph, with a right-aligned validity mark read from stored health;
+no network, no timer. One shared list style (`shared_styles.SETTINGS_LIST_STYLE`, Jost 12 pt, 32 px rows) now
+serves the Themes lists, the Folders list and this one; the delegate sets no font. Evidence
+`.artifacts/evidence/settings/rss_pools/20261111_restyle/` (Sources above Themes at 2x on three themes).
 
-- [ ] Inventory first: which Settings lists are themed today and by what (`ui/tabs/shared_styles.py`,
-  `ui/settings_theme_qss.py`, `ui/theme_typography.py`, `ui/theme_semantics.py`; the Themes tab's theme list and
-  its filter popup; the Folders list in this same tab): the font family, size, weight and letter spacing their
-  rows use, and the semantic tokens for row text, secondary text, hover, selection, the list's surface and border.
-- [ ] Check the capture before judging the font: the off-screen stills must load the product's bundled fonts
-  (`ui/font_registration.py`); if the stills' face differs from the product's, fix the capture, then look again.
-- [ ] Rows take the theme's list typography from the one typography owner: no font set by hand in the delegate,
-  no synthesised italic or bold anywhere (a face the family does not ship is never faked).
-- [ ] A pool row is told apart semantically, not by slant: "JMIT POOL" as a short ALL CAPS tag in the theme's
-  tag or accent treatment (the pattern short tags already use in Settings), the operator's arrow drawn as the
-  theme's arrow glyph, then the pool name in the row's normal text (Title Case as the catalogue has it).
-- [ ] Custom-feed rows use the same row typography; a long URL elides in the middle and never runs under the mark.
-- [ ] The list's surface, border, radius, row height, padding, hover and selection come from the shared list
-  style every themed list uses (one owner; if none exists as a reusable piece, make the Themes list's style the
-  shared one and move both onto it), on dark, light and material themes.
-- [ ] The marks keep their semantic colours (`popup.icon.success`, `popup.icon.error`, tertiary for untried),
-  sized to the row's cap height, with the stroke weight of the theme's other painted glyphs.
-- [ ] The heading above the list says what it lists (it reads "Custom Feeds" while pools are listed too).
-- [ ] Side defect seen in the light still: a native dotted size grip shows at the Settings window's bottom-right
-  corner; it should be the themed resize affordance or none (1B.9's corner work).
-- [ ] Side defect: `ui/studio/extruded_spectrum_adapter.py:90` cites `spec_mode_builder._apply_availability`,
-  which does not exist, and line 94 imports the private `_resolve` from `ui/tabs/media/spec_mode_builder.py`:
-  give the helper a public name in its owner and fix the docstring.
-- [ ] Evidence: the Sources list beside the Themes list (the reference), same theme, same scale, on Default
-  Dark, Pearl Blush and one Glass theme, full tab and 2x crops of three rows; the lead compares them side by
-  side before the operator sees them (mock-parity standard: every row element against its reference).
 - [ ] The marks seen with real stored health once (a D1 or frozen run of 1B.14 after a real fetch), lead review.
+- [ ] Not rendered: a Mica theme; the onboarding lists keep their own style (decide whether they join the shared
+  one when onboarding is next touched).
+- [ ] List scrollbars draw as unthemed black native bars in off-screen renders (the Themes list too; older than
+  this change): the same box as 1B.11's, checked on a real display in the D1 run and themed through
+  `shared_styles` if they are native there.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
@@ -1131,6 +1116,11 @@ Watchlist entry (operator, 11 Nov).
     opposite pole so it reads on its pill (2.48, 3.79, 2.86 to about 5.1); the other 197 state inks are
     unchanged.
   - Spectrum presets 2 to 15 of 7 Nov are replaced (1B.10); the five you rejected are being redone.
+  - Dark themes on material cards (12 Nov): text that was under 4.5:1 is now lighter (58 themes; on Royal
+    Orchard and Smoke Quartz the accent-coloured text ends up close to the plain text colour). Bars, dividers
+    and icons in the accent colour are unchanged.
+  - Settings lists (12 Nov): the Themes, Folders and online lists share one style (12 pt, 32 px rows); the
+    Sources list's heading reads "Pools and Custom Feeds"; the window's resize grip is three solid lines.
 
 ## 3. Lead and agents: active, paused and queued work
 
