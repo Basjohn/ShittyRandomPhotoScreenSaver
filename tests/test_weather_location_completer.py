@@ -68,6 +68,21 @@ def test_the_location_completer_uses_the_theme_filters_popup(weather):
     assert popup.property("customComboPopup")
 
 
+@pytest.mark.parametrize("can_stack,role", [(True, "popup.icon.success"), (False, "popup.icon.warning")])
+def test_the_stack_status_draws_in_the_themes_success_or_warning_role(weather, monkeypatch, can_stack, role):
+    """The same fixed-colour defect on the Widgets tab's stack status (formerly #4CAF50 / #FF9800)."""
+    import ui.tabs.widgets_tab as widgets_tab
+    from ui.settings_theme_runtime import get_active_settings_theme
+    monkeypatch.setattr(widgets_tab, "get_position_status_for_widget", lambda *a, **k: (can_stack, "stack note"))
+    weather._update_stack_status()
+    labels = [target.status_label for target in widgets_tab.collect_widget_stack_status_targets(weather)]
+    assert labels
+    expected = get_active_settings_theme().color(role)
+    for label in labels:
+        drawn = _qss_color(label)
+        assert (drawn.red(), drawn.green(), drawn.blue()) == (expected.r, expected.g, expected.b)
+
+
 def test_the_service_note_follows_the_themes_success_role(weather):
     from ui.settings_theme_io import load_settings_theme_file
     from ui.settings_theme_runtime import get_active_settings_theme, set_active_settings_theme
