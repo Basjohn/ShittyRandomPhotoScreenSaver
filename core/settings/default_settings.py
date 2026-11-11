@@ -5881,6 +5881,8 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'shockwave_grid_terrain_fill_color': [5, 2, 12, 255],
                                     'shockwave_grid_terrain_growth': 0.0,
                                     'shockwave_grid_terrain_growth_attack': 0.35,
+                                    'shockwave_grid_terrain_growth_density': 0.5,
+                                    'shockwave_grid_terrain_growth_region': 'Everywhere',
                                     'shockwave_grid_terrain_growth_release': 1.2,
                                     'shockwave_grid_terrain_growth_shape': 0.5,
                                     'shockwave_grid_terrain_height': 0.9,

@@ -247,6 +247,15 @@ them like the other amounts):
   dunes untouched. Never below 8% of the authored height (land never reaches the water plane; the water's edge
   never moves: zero on water, faded in over the shore band). Evidence:
   `.artifacts/evidence/visualizers/shockwave_grid/20261112_refine/indents_staged_drives_sheet.png`.
+- **Growth Density** (`shockwave_grid_terrain_growth_density`, 0..1, 0.5 the usual; 2026-11-12) scales Growth's
+  site cell by `growth_cell_scale` = 2^(1 - 2 x density) for both forms: fewer, wider mounds or spires toward 0,
+  more and narrower toward 1. At 0.5 the scale is exactly 1, so the usual Growth is untouched.
+- **Growth Region** (`shockwave_grid_terrain_growth_region`: Everywhere, Far Land, By Elevation; choices in
+  `neon_lake_basin_options.BASIN_GROWTH_REGIONS`, the shader's `uGrowthPlace.y`): Far Land raises Growth only past
+  the authored terrain's edge (`basinOutside`, in over `GROWTH_FAR_LAND` 0.05..0.40 of the basin), By Elevation
+  weighs it by the Reaction Shaper's curve at the land's height (`reactionBiasAt`, the same table and cubic filter
+  as the reaction's own bias). Everywhere weighs nothing (the branch is skipped). Both are authored neutral in every
+  shipped preset (repair fill); the presets render as before (`20261112_refine/new_controls_neutral_*`).
 - Both are terms of the one height owner (`basinLandHeight`): vertices, normals, skyline, depth and reflections
   follow; zero on water, faded at the shore and with distance like the rest of the reaction.
 

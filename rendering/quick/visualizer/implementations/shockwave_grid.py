@@ -25,8 +25,10 @@ from rendering.gl_programs.neon_lake_basin_program import (
     basin_pixel_scale, basin_view,
 )
 from rendering.gl_programs.neon_celestial import basin_body_position, celestial_placement
-from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES
-from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
+from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES, growth_cell_scale
+from rendering.gl_programs.neon_lake_basin_options import (
+    BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES,
+)
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE,
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, SHOCKWAVE_HALF_WIDTH,
@@ -46,7 +48,7 @@ from .spectrum import prepare_spectrum_shader_levels
 _EVENT_BINDING, _HEIGHT_UNIT, _OVERLAY_UNIT = 3, 4, 5
 _VIEW_UNIFORMS = ("uMatrix", "uField", "uEye", "uRight", "uUp", "uBack", "uTan")
 _REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactionMaximum", "uReactionLanes",
-                      "uReactionBias", "uReactionForms", "uReactionDrives")
+                      "uReactionBias", "uReactionForms", "uReactionDrives", "uGrowthPlace")
 _CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
                      "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uStarGlowColor",
                      "uCloudColor","uHorizonColor","uClouds","uCloudDrift","uNebula","uNebulaTurn","uNebulaColorA","uNebulaColorB")
@@ -266,6 +268,11 @@ class QuickShockwaveGridRenderer:
                        float(parameter(parameters, "shockwave_grid_terrain_growth_shape")),
                        reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_indents")), 0.0)
         gl.glUniform2f(uniforms["uReactionDrives"], *mode_state.terrain_forms)
+        # Growth Density as the site cell's scale (1 at the usual) and Growth Region (0 everywhere: no weighting).
+        gl.glUniform2f(uniforms["uGrowthPlace"],
+                       growth_cell_scale(parameter(parameters, "shockwave_grid_terrain_growth_density")),
+                       float(BASIN_GROWTH_REGIONS.get(str(parameter(parameters, "shockwave_grid_terrain_growth_region")),
+                                                      0)))
 
     @staticmethod
     def _bind_celestial(uniforms,parameters,half_width,animation_time,view):

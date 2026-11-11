@@ -25,6 +25,14 @@ REACTION_LANE_BLEND = 0.06
 GROWTH_HEIGHT = (0.30, 0.72)
 GROWTH_CELL = (1.05, 0.70)
 GROWTH_SHARPNESS = (1.0, 2.6)   # the site profile's power: a rounded dome to a slender peak
+# Growth Density (0..1, 0.5 the usual): the site cell scales by 2^(1 - 2 x density), twice as wide at 0 and half at 1.
+# Growth Region "Far Land": Growth comes in past the authored terrain's edge over this much of the basin.
+GROWTH_FAR_LAND = (0.05, 0.40)
+
+
+def growth_cell_scale(density: float) -> float:
+    """Growth Density as the site cell's scale: exactly 1 at the usual 0.5 (so that value changes nothing)."""
+    return 2.0 ** (1.0 - 2.0 * max(0.0, min(1.0, float(density))))
 INDENT_CELL = 0.85
 # Indents carve bowls into visible land. The depth law, at full drive in a bowl's middle: a share of the land's own
 # height there plus an absolute depth (a share of Terrain Height), eased onto a floor share of the authored height.
@@ -161,9 +169,12 @@ uniform float uReactionLanes[5 * REACTION_SAMPLES];   // per lane, its eased wei
 uniform float uReactionBias[REACTION_SAMPLES];
 uniform vec4 uReactionForms;             // Growth (amount), its shape (0 mounds .. 1 spires), Indents (amount)
 uniform vec2 uReactionDrives;            // the music's fixed-scale drive of Growth and of Indents, 0..1
+uniform vec2 uGrowthPlace;               // Growth's site cell scale (1 = the usual), its region (0 everywhere,
+                                         // 1 far land, 2 by elevation through the shaper's curve)
 const vec2 GROWTH_HEIGHT = vec2({GROWTH_HEIGHT[0]:.6f}, {GROWTH_HEIGHT[1]:.6f});
 const vec2 GROWTH_CELL = vec2({GROWTH_CELL[0]:.6f}, {GROWTH_CELL[1]:.6f});
 const vec2 GROWTH_SHARPNESS = vec2({GROWTH_SHARPNESS[0]:.6f}, {GROWTH_SHARPNESS[1]:.6f});
+const vec2 GROWTH_FAR_LAND = vec2({GROWTH_FAR_LAND[0]:.6f}, {GROWTH_FAR_LAND[1]:.6f});
 const float INDENT_CELL = {INDENT_CELL:.6f};
 const float INDENT_SHARE = {INDENT_SHARE:.6f};
 const float INDENT_ABSOLUTE = {INDENT_ABSOLUTE:.6f};
@@ -217,8 +228,18 @@ float basinGrowth(vec2 p) {{
     float clear = reactionEyeClear(p);
     if (clear <= 0.0) return 0.0;
     return clear * uReactionForms.x * mix(GROWTH_HEIGHT.x, GROWTH_HEIGHT.y, shape)
-           * basinSites(p, mix(GROWTH_CELL.x, GROWTH_CELL.y, shape), mix(GROWTH_SHARPNESS.x, GROWTH_SHARPNESS.y, shape),
-                        uReactionDrives.x, 11u);
+           * basinSites(p, mix(GROWTH_CELL.x, GROWTH_CELL.y, shape) * uGrowthPlace.x,
+                        mix(GROWTH_SHARPNESS.x, GROWTH_SHARPNESS.y, shape), uReactionDrives.x, 11u);
+}}
+// The shaper's curve (how strongly each elevation deforms) at a land height ``elevation``: Growth Region's
+// By Elevation weight, read through the same cubic filter as the reaction's own bias.
+float reactionBiasAt(float elevation) {{
+    float f = clamp(elevation / max(uReactionMaximum, 1e-3), 0.0, 1.0) * float(REACTION_SAMPLES - 1);
+    int i = min(int(floor(f)), REACTION_SAMPLES - 1);
+    vec4 w = reactionFilter(f - float(i));
+    ivec4 at = clamp(ivec4(i - 1, i, i + 1, i + 2), 0, REACTION_SAMPLES - 1);
+    return w.x * uReactionBias[at.x] + w.y * uReactionBias[at.y] + w.z * uReactionBias[at.z]
+         + w.w * uReactionBias[at.w];
 }}
 // Indents: how hard the land is pressed in here, 0 (not at all) .. 1 (a bowl's middle at full drive).
 float basinIndent(vec2 p) {{
@@ -292,7 +313,9 @@ float basinReaction(vec2 uv, float elevation, vec2 p, float landFade) {{
 
 __all__ = [
     "GROWTH_CELL",
+    "GROWTH_FAR_LAND",
     "GROWTH_HEIGHT",
+    "growth_cell_scale",
     "INDENT_CELL",
     "INDENT_EYE_CLEAR",
     "INDENT_FLOOR",

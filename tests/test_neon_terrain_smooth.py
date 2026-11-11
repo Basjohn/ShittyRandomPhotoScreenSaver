@@ -14,7 +14,7 @@ import pytest
 
 from rendering.gl_programs.heightfield import normalize_heightfield
 from rendering.gl_programs.neon_terrain_reaction import (
-    GROWTH_EYE_CLEAR, INDENT_EYE_CLEAR, INDENT_FLOOR, REACTION_FLOOR, REACTION_LANES, normalize_terrain_shaper,
+    GROWTH_EYE_CLEAR, GROWTH_FAR_LAND, INDENT_EYE_CLEAR, INDENT_FLOOR, REACTION_FLOOR, REACTION_LANES, normalize_terrain_shaper,
 )
 from tests.test_neon_lake_reaction import _SurfaceProbe
 
@@ -142,6 +142,51 @@ def test_spires_stand_taller_and_slimmer_than_mounds(probe):
                       for shape in (0.0, 1.0))
     assert spires.max() > 1.5 * mounds.max()
     assert (spires > 0.5 * spires.max()).mean() < (mounds > 0.5 * mounds.max()).mean()
+
+
+def _peaks(lift: np.ndarray) -> int:
+    """Local maxima of a lift field that stand clear of the flat (one per standing form)."""
+    inner = lift[1:-1, 1:-1]
+    around = np.max([lift[1 + dy:lift.shape[0] - 1 + dy, 1 + dx:lift.shape[1] - 1 + dx]
+                     for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dy or dx], axis=0)
+    return int(((inner > around) & (inner > 0.02)).sum())
+
+
+def test_growth_density_packs_more_narrower_forms_and_is_neutral_at_the_usual(probe):
+    """Growth Density scales the site cell: the usual (0.5) is a scale of exactly 1, so it changes nothing; denser
+    stands more, narrower forms over the same land, sparser fewer and wider."""
+    from rendering.gl_programs.neon_terrain_reaction import growth_cell_scale
+    assert growth_cell_scale(0.5) == 1.0 and growth_cell_scale(1.0) < 1.0 < growth_cell_scale(0.0)
+    surface = probe(_plain())
+    rest = surface.draw(movement=1.0, level=0.0)[..., 0]
+    grown = dict(movement=1.0, level=0.0, forms=(1.0, 0.0, 0.0), drives=(0.95, 0.0))
+    counts = [_peaks(surface.draw(place=(growth_cell_scale(d), 0.0), **grown)[..., 0] - rest) for d in (0.0, 0.5, 1.0)]
+    assert counts[0] < counts[1] < counts[2], counts
+
+
+def test_growth_region_far_land_and_by_elevation(probe):
+    """Far Land raises nothing on the authored terrain and the usual Growth past its edge; By Elevation follows the
+    shaper's curve, so a curve that is zero over the low half of the land grows nothing there."""
+    surface = probe(_slope())
+    grown = dict(movement=1.0, level=0.0, forms=(1.0, 0.0, 0.0), drives=(0.95, 0.0))
+    past = 1.0 + GROWTH_FAR_LAND[1] + 0.02                                # wholly in by here
+    for rect in ((0.05, 0.05, 0.95, 0.95), (past, 0.1, past + 1.0, 0.9)):   # on the terrain, and far land past it
+        rest = surface.draw(movement=1.0, level=0.0, uv_rect=rect)[..., 0]
+        everywhere = surface.draw(uv_rect=rect, **grown)[..., 0] - rest
+        far = surface.draw(uv_rect=rect, place=(1.0, 1.0), **grown)[..., 0] - rest
+        assert everywhere.max() > 0.05
+        if rect[0] < 1.0:
+            assert not far.any()                                          # none on the authored terrain
+        else:
+            assert np.allclose(far, everywhere, atol=1e-6)                # the usual Growth past it
+    rect = (0.05, 0.05, 0.95, 0.95)
+    rest = surface.draw(movement=1.0, level=0.0, uv_rect=rect)[..., 0]
+    high_only = {**SHAPER, "nodes": [[0.0, 0.0], [0.5, 0.0], [1.0, 1.0]]}
+    shaper = normalize_terrain_shaper(high_only, _shaper())
+    by_height = surface.draw(uv_rect=rect, place=(1.0, 2.0), shaper=shaper, **grown)[..., 0] - rest
+    rows = np.linspace(rect[1], rect[3], surface.SIZE)
+    low, high = rows < 0.4, rows > 0.7                                    # the slope rises front to back
+    assert not by_height[low].any() and by_height[high].max() > 0.05
 
 
 def test_growth_stands_back_from_the_eye(probe):

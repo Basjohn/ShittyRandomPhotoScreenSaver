@@ -13021,6 +13021,8 @@
         ],
         "shockwave_grid_terrain_growth": 0.0,
         "shockwave_grid_terrain_growth_attack": 0.08,
+        "shockwave_grid_terrain_growth_density": 0.5,
+        "shockwave_grid_terrain_growth_region": "Everywhere",
         "shockwave_grid_terrain_growth_release": 0.3,
         "shockwave_grid_terrain_growth_shape": 0.5,
         "shockwave_grid_terrain_height": 1.4,

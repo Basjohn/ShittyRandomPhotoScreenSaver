@@ -59,7 +59,9 @@ from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 from rendering.gl_programs.spectrum_options import (
     SPECTRUM_GEOMETRIC_PATTERNS, SPECTRUM_GHOST_COLOUR_SOURCES, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS,
 )
-from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
+from rendering.gl_programs.neon_lake_basin_options import (
+    BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES,
+)
 from core.constants.neon_lake_world import TILT_RANGE as NEON_TILT_RANGE, TURN_RANGE as NEON_TURN_RANGE
 # The Field of View sliders admit exactly their framed camera spec's lens range (one owner per mode).
 from core.settings.extruded_bubble_camera import SPEC as EB_CAMERA_SPEC
@@ -842,6 +844,7 @@ def shared_family_entries(mode_id: str) -> tuple[Control, ...]:
 # ---- Neon Lake (`shockwave_grid`) ----------------------------------------------------------
 
 _BASIN_WIRE_CHOICES = tuple(BASIN_SURFACE_STYLES)
+NEON_GROWTH_REGIONS = tuple(BASIN_GROWTH_REGIONS)
 _BASIN_GLASS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&4)
 _BASIN_PLAIN_POINTS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&2 and not bits&4)
 _BASIN_GLASS_POINTS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&6==6)
@@ -932,6 +935,13 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_terrain_growth_shape", "Growth Shape:", 0.0, 1.0,
                "What Growth raises: broad low mounds at 0, slender tall spires at 100%.",
                bucket="reaction", when=_TERRAIN_REACTION),
+        Slider("shockwave_grid_terrain_growth_density", "Growth Density:", 0.0, 1.0,
+               "How closely Growth's mounds or spires stand: fewer and wider toward 0, more and narrower toward "
+               "100%. 50% is the usual spacing.", bucket="reaction", when=_TERRAIN_REACTION),
+        Choice("shockwave_grid_terrain_growth_region", "Growth Region:", NEON_GROWTH_REGIONS,
+               "Where Growth may rise: everywhere on the land, only on the far land past the authored terrain, "
+               "or by elevation, following the Reaction Shaper's curve.", bucket="reaction",
+               when=_TERRAIN_REACTION),
         Slider("shockwave_grid_terrain_indents", "Indents:", 0.0, 1.0,
                "Dents pressed into the land with the music: hollows open in loud passages and deepen on each hit, "
                "never below the land's floor. 0 turns it off.", bucket="reaction", when=_TERRAIN_REACTION),

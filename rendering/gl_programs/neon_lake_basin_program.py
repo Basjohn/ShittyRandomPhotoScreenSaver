@@ -377,7 +377,13 @@ float basinLandHeight(vec2 uv,float base,float curved) {
         // Its patterns and Growth lift (or lower) the land.
         float authored=height;
         float room=(1.0-REACTION_FLOOR)*authored;
-        float change=uLand.x*(basinReaction(uv,curved,p,land)+land*basinGrowth(p));
+        float growth=basinGrowth(p);
+        // Growth Region: far land only (past the authored terrain's edge) or by elevation through the shaper's
+        // curve. Everywhere (0) weighs nothing, so the usual Growth is untouched.
+        if (growth>0.0 && uGrowthPlace.y>0.5)
+            growth*=uGrowthPlace.y<1.5 ? smoothstep(GROWTH_FAR_LAND.x,GROWTH_FAR_LAND.y,basinOutside(uv))
+                                       : reactionBiasAt(curved);
+        float change=uLand.x*(basinReaction(uv,curved,p,land)+land*growth);
         // Downward, the change eases onto the floor share instead of stopping at it: a hard stop creased the
         // land along the line where it was reached.
         height+=change<0.0 ? -room*tanh(-change/max(room,1e-6)) : change;
