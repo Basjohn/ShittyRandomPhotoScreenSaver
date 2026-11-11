@@ -302,7 +302,7 @@ passed its off-screen pixels (dark and light themes).
 - [ ] Admitted later if wanted (operator's call): a pop-out larger canvas; Spline Curve's layer nodes and Voxel
   Sphere's zone boundaries on the same instrument; Shift axis lock, snapping, double-click reset.
 
-### 1B.5 Neon Lake: all visible land is brush-editable (reproduced; fix decided, operator agreed 11 Nov)
+### 1B.5 Neon Lake: all visible land is brush-editable (in flight, Fable High; fix decided, operator agreed)
 
 Cause: land past the authored grid is generated landscape with no stored cells, so `pick_terrain` refuses it
 (26% of on-screen land on Preset 3; 13-20% on Presets 1-2 dollied back). Queued for Fable High after 1B.4.
@@ -322,7 +322,7 @@ Cause: land past the authored grid is generated landscape with no stored cells, 
 - [ ] Docs: `Docs/Reference/Neon_Lake_Basin.md`, `Docs/Reference/Visualizer_Studio.md` (brush).
 - [~] Operator: paint far land in the Studio.
 
-### 1B.6 Neon Lake: land reactivity pass for smooth deformation (queued for Fable High with 1B.5)
+### 1B.6 Neon Lake: land reactivity pass for smooth deformation (in flight after 1B.5, same agent)
 
 - [ ] Reproduce the tearing/jagged edges first: stills and one animated WebP at high reactivity on recorded
   music, with the mesh density and the reaction path that produce them named.
@@ -340,7 +340,7 @@ Cause: land past the authored grid is generated landscape with no stored cells, 
 - [ ] Lead pixel review on showcase WebP; then merge.
 - [~] Operator look.
 
-### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (not started)
+### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (in flight, Opus High)
 
 Already shared: child editor, descriptor type, child-geometry normaliser, transport bar, metadata fit. Each slice
 is its own reviewed checkpoint, in this order; the Media card stays pixel-identical after every one.
@@ -394,7 +394,7 @@ corrects the ink and keeps the surface at its calibrated density (about .63-.72)
 - [ ] i. Docs: `Docs/Architecture/Card_Surface_Materials.md`; closes 1.7a's density question (update it there).
 - [~] Operator look on the three light themes.
 
-### 1B.9 Settings and Studio window corners bleed (not started; continues 1.9 with the +2 px allowance)
+### 1B.9 Settings and Studio window corners bleed (boxes a-d in flight, Opus Medium; continues 1.9)
 
 Both windows are rectangular layered HWNDs with Accent blur over the whole rectangle; `paint_forged_window_edge`
 forges the rounded look (radius 6.5, 4 px border). Model estimate: +2 px leaves about 1 px at 150% and 3 of 8 at
