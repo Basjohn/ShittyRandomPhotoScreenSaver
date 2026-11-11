@@ -692,7 +692,8 @@ mode/activation changes need it per slot.**
   is checked after the step. Callbacks pushed before adoption are admitted by `_capture_start_pending`
   (`audio_worker.py:728-730`), so the first push does not race the capture lane.
 - The import fix: `utils.curve_nodes.interpolate_nodes(_mirrored)` is the function the editor re-exports
-  (`ui/tabs/media/spectrum_shape_editor.py:99`).
+  (`ui/tabs/media/spectrum_shape_editor.py:99`; the widget and its re-export were retired 11 Nov 2026, its node
+  limits now live in `ui/studio/spectrum_shape.py`).
 - The gate report matches the doc (27 pairs, 31,644 frames, 0 mismatching).
 
 ### Not verified

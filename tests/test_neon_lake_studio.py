@@ -147,7 +147,7 @@ def _vector_elements() -> set[tuple]:
     node slot and both layouts' boundaries and lane strengths, every terrain-shaper node slot, its movable
     boundaries (the first is pinned at the shoreline by the canonical shaper rule) and its lane strengths."""
     from rendering.gl_programs.neon_terrain_reaction import REACTION_LANES
-    from ui.tabs.media.spectrum_shape_editor import _MAX_NODES
+    from ui.studio.spectrum_shape import MAX_NODES as _MAX_NODES
     canonical = require_canonical_default("widgets.spotify_visualizer")
     out = {(c.key, 3) for c in spec().body_controls if isinstance(c, Colour) and c.alpha}
     out |= {(c.key, i) for c in spec().body_controls if isinstance(c, SceneCameraPosition) for i in range(3)}
