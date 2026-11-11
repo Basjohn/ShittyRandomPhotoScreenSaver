@@ -379,6 +379,8 @@ _PRESETS: Dict[str, List[VisualizerPreset]] = {
 _PRESET_SOURCE_PATHS: Dict[str, List[Path]] = {mode: [] for mode in MODES}
 _PRESET_SOURCE_SLOTS: Dict[str, List[int]] = {mode: [] for mode in MODES}
 _LOADED_SOURCE_PATHS: Dict[str, Dict[int, Path]] = {mode: {} for mode in MODES}
+# Per mode: the curated folder's files as last loaded (``reload_presets_if_changed``).
+_LOADED_FOLDER_STATE: Dict[str, tuple] = {mode: () for mode in MODES}
 
 
 def _looks_like_onefile_extraction_path(path: Path) -> bool:
@@ -900,7 +902,49 @@ def _load_mode_presets_from_disk(mode: str) -> Dict[int, VisualizerPreset]:
         logger.warning("[VIS_PRESETS] %s has no usable settings", json_path.name)
 
     _LOADED_SOURCE_PATHS[mode] = dict(source_paths)
+    _LOADED_FOLDER_STATE[mode] = _folder_state(folder)
     return overrides
+
+
+def _folder_state(folder: Path) -> tuple:
+    """What a mode's curated folder holds: each JSON file's name, size and modification time."""
+    try:
+        return tuple(sorted((path.name, path.stat().st_size, path.stat().st_mtime_ns)
+                            for path in folder.glob("*.json")))
+    except OSError:
+        return ()
+
+
+def reload_presets_if_changed(mode: str) -> bool:
+    """Rebuild ``mode``'s catalogue when its folder no longer holds what was loaded (an install replaced the tree,
+    another process saved or removed a preset). Called where Settings and the Studio open a mode, never per frame.
+    Returns whether it reloaded."""
+    if mode not in MODES:
+        return False
+    if _folder_state(_presets_root() / mode) == _LOADED_FOLDER_STATE.get(mode):
+        return False
+    logger.info("[VIS_PRESETS] %s presets changed on disk since they were loaded; reloading", mode)
+    reload_presets(mode)
+    return True
+
+
+class NoAuthoredPresets(RuntimeError):
+    """A mode's curated folder holds no readable preset (missing, empty, or mid-replacement by an install)."""
+
+
+def _rebuild_mode(mode: str) -> None:
+    """Rebuild one mode's catalogue from disk. A rebuild that finds no readable preset keeps the catalogue already
+    loaded (logged once) instead of failing the Settings page or Studio that asked: a folder can be briefly empty
+    while an install replaces the tree (1C.1). A process that never loaded any preset still fails loudly."""
+    previous = dict(_LOADED_SOURCE_PATHS.get(mode, {}))
+    try:
+        _PRESETS[mode] = _build_presets_for_mode(mode)
+    except NoAuthoredPresets:
+        if not _PRESET_SOURCE_PATHS.get(mode):
+            raise
+        _LOADED_SOURCE_PATHS[mode] = previous
+        logger.warning("[VIS_PRESETS] %s has no readable presets in %s right now; keeping the %d already loaded",
+                       mode, _presets_root() / mode, len(_PRESET_SOURCE_PATHS[mode]))
 
 
 def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
@@ -917,7 +961,7 @@ def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
     )
 
     if not curated:
-        raise RuntimeError(f"visualizer mode {mode!r} has no authored presets")
+        raise NoAuthoredPresets(f"visualizer mode {mode!r} has no authored presets")
 
     # Authored slot numbers are stable ordering identities only. Users are free
     # to delete arbitrary preset files, so gaps such as [0, 1, 4] are valid.
@@ -1016,11 +1060,11 @@ def reload_presets(mode: str | None = None) -> None:
     if mode is not None:
         if mode not in MODES:
             return
-        _PRESETS[mode] = _build_presets_for_mode(mode)
+        _rebuild_mode(mode)
         return
 
     for _mode in MODES:
-        _PRESETS[_mode] = _build_presets_for_mode(_mode)
+        _rebuild_mode(_mode)
 
 
 def get_active_preset_index(settings: "SettingsManager", mode: str) -> int:
