@@ -992,6 +992,46 @@ can most geometry normally."
   (traces and the invariant walk with the new entry), `tests/test_custom_layout_session.py`,
   `tests/test_custom_layout_contract.py` (held copies against the global Edit's result). Owed: the operator's
   physical two-monitor check.
+- *One full-display glyph per display (operator, 11 Nov; plan 1B.12, decided).* With more than one display live the
+  card's glyph row offers an up-left glyph beside the up-right one: up-left is "full display on Display index 0",
+  up-right on index 1 (the tips number displays as Settings does, from 1), from whichever display the card is on.
+  With one display the single glyph, its row and its narrow-card fit are exactly as before ("Keep it"). V is
+  unchanged (it expands where the Visualizer is); displays beyond the first two are reached with V.
+  - The request is "expand on display N" at the takeover owner (`ExpandedDisplayCoordinator.expand_on_display`; the
+    scene's `visualizer_expand_on_display_requested(int)`; the manager's `_route_quick_visualizer_expand_on_display`
+    resolves N to a live unit), so a later SMP can hold one display while the Visualizer holds the other. On the
+    card's own display it is that display's glyph press (expand, or collapse while expanded there). On another
+    display it is one reducer transfer transaction: `TransferRequested(..., expand=True)` from a collapsed view is
+    `BeginTransfer(ordinary)`, and its commit begins the user's enter there (its commit persists the intent, as the
+    glyph's own enter does); a failed move rolls back to the source and nothing expands; refused for an incapable
+    mode or under Edit (the glyphs are withdrawn under every Edit, so the 1B.1 holds apply unchanged).
+  - Expanded (decided): the glyph of the display the view is on is its collapse; the other glyph moves the view
+    there expanded (§D4's one transaction, now built for this route): the coordinator collapses on the source (its
+    widgets fade back), moves, and expands on the target (its widgets fade out), each half at the owner's own
+    completion edge; a refused move re-expands on the source, so the reducer's rollback finds it as it was; the
+    intent is never written by a move. A view expanded on a display neither glyph names keeps the single collapse
+    glyph (one glyph, as with one display).
+  - The move is Edit's own display hop and Save with no chrome: `QuickCustomLayoutOwner.move_visualizer_to_display`
+    opens a session holding only the Visualizer (no scene bound), projects its rect onto the target as the hop does
+    (`_project_onto_display`, shared with `transfer_display`), lets the scene coordinator run the retained transfer
+    transaction, then Saves (commit where Edit commits it, the monitor route included, and live promotion, no
+    generation rebuild). It refuses while any session is open. The display seam (`_transfer_quick_visualizer_unit`)
+    admits a move while layout waits only as the takeover's own transfer (`transfer_in_flight`), and does not
+    report it back to the takeover.
+  - Look: the up-left glyph is the up-right arrow mirrored (collapse: turned to point down-right), the same painted
+    2.0 px strokes and disc; its place grows with a 600 ms presence fade inside the expand slot, so the row never
+    jumps by a whole member (the display count only changes with a new generation in practice). Tooltips keep the
+    row's existing ALL CAPS short-tag style ("FULL DISPLAY ON DISPLAY 1"; decided over Title Case so the row's tips
+    read alike; one string to change if the operator prefers Title Case).
+  Evidence: `tests/test_visualizer_expansion_reducer.py` (traces, invariant walk, permutations with the new flow),
+  `tests/test_visualizer_expansion_coordinator.py` (own-display press, move-then-expand, refused move, expanded move
+  and its rollback, Edit and wrong-display refusals, the manager route, the seam's own-transfer admission),
+  `tests/test_qtquick_custom_layout_owner.py` (the chrome-less move commits and promotes; a refused transfer leaves
+  the source and Settings exactly), `tests/test_visualizer_expansion_qml_native.py` and
+  `tests/test_visualizer_glyph_row.py` (one row, order, fade, directions, presses, tips); stills
+  `.artifacts/evidence/visualizers/expanded/20261111_two_glyphs/` (one display, two displays, expanded; 100% and
+  150%; frames and 2x row crops). Owed: the operator's physical two-monitor check (a real move between monitors of
+  different size/DPR and its fades).
 - *Exits (decided).* An unsaved draft is never discarded or saved implicitly; nothing ends it but the user's own Save
   or Cancel (there is no runtime prompt to reuse: the session's user-choice path is Enter/Esc, the background
   double-click and the menu). The collapse glyph is withdrawn under Edit, as in every Edit, and a stale press is

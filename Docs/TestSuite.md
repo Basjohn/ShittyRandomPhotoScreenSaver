@@ -974,6 +974,9 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   (Cancel writes nothing), writes only the edited key into a tmp copy of a real curated preset in the file's own
   shape (LF and CRLF), reloads presets, and a read-only file gives the message and writes nothing (negative
   control: writable prompts); opened on Custom it is not offered; the shared patcher touches nothing else.
+- Plan 1B.12 (one full-display glyph per display) is covered in `tests/test_visualizer_expansion_reducer.py`,
+  `..._coordinator.py`, `..._qml_native.py`, `tests/test_visualizer_glyph_row.py` and
+  `tests/test_qtquick_custom_layout_owner.py` (the chrome-less display move).
 - `tests/test_visualizer_expansion_two_display_edit.py` — Edit edits the display it was entered on with an Expanded
   Visualizer on another display (plan 1B.1): the display manager's real Edit entry, Save, Cancel, Settings and menu
   routes, the real takeover coordinator and Edit owner, a real clock display beside the hidden production scene drawn
