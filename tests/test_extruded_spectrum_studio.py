@@ -182,14 +182,16 @@ def _vector_elements() -> set[tuple]:
     return out
 
 
-def _uncovered(properties) -> set:
+def _uncovered(properties, shapes=None) -> set:
     """Registry keys (every available spec control, every Custom row's keys, every technical control, the mode's
-    shared bar and rainbow families) with no Studio property, plus vector elements no property edits."""
-    paths = {tuple(p.path) for p in properties}
+    shared bar and rainbow families) with no Studio property, plus vector elements nothing edits (neither a
+    property nor the shape instrument: ``shapes`` are the schema's ``ShapeSpec``s)."""
+    from tests.test_studio_shape_instrument import shape_uncovered
+    shapes = build_schema().shapes if shapes is None else shapes
     roots = {p.path[0] for p in properties}
     custom_keys = {key for e in spec().entries if isinstance(e, Custom) for key in e.keys}
     keys = ({c.key for c in spec().body_controls} | custom_keys | technical_keys() | family_keys()) - unavailable_keys()
-    return (keys - roots) | {element for element in _vector_elements() if element not in paths}
+    return (keys - roots) | shape_uncovered(properties, shapes, _vector_elements())
 
 
 def test_every_extruded_spectrum_control_is_editable_in_the_studio():
@@ -208,9 +210,10 @@ def test_coverage_check_detects_a_missing_control_negative_control():
                     PREFIX + "solid_bar_hysteresis_enabled", PREFIX + "bar_border_opacity", PREFIX + "depth",
                     PREFIX + "turn", PREFIX + "sensitivity"):
         assert dropped in _uncovered([p for p in properties if p.path[0] != dropped]), dropped
+    # Without the shape instrument nothing edits a node, a lane's position or its strength.
     lanes = SHAPE.lanes[True]
     label = next(iter(require_canonical_default("widgets.spotify_visualizer")[lanes]))
-    assert (lanes, label) in _uncovered([p for p in properties if tuple(p.path) != (lanes, label)])
+    assert {(lanes, label), (SHAPE.nodes, 0, 1), (SHAPE.notches[False], 0, 0)} <= _uncovered(properties, shapes=())
 
 
 def test_unavailable_controls_follow_settings_availability(monkeypatch):
@@ -691,15 +694,15 @@ def test_edits_save_through_the_settings_owners_and_every_exit_restores_settings
     bridge.commitValue(PREFIX + "solid_bar_hysteresis_enabled", 0, stabilize)
     assert stored()[PREFIX + "solid_bar_hysteresis_enabled"] is stabilize
     height = session.values[SHAPE.nodes][0][1]
-    bridge.commitValue(f"{SHAPE.nodes}.0.1", 0, round(1.0 - height, 3))
+    bridge.shapeCommitText(SHAPE.nodes, "node", 0, 1, f"{round(1.0 - height, 3)}")
     assert stored()[SHAPE.nodes][0][1] == pytest.approx(round(1.0 - height, 3))
     mirrored = bool(session.values[SHAPE.mirrored])
     notches, lanes = SHAPE.notches[mirrored], SHAPE.lanes[mirrored]
     low, high = session.values[notches][0][0], session.values[notches][1][0]
-    bridge.commitValue(f"{notches}.0", 0, round((low + high) / 2, 3))
+    bridge.shapeCommitText(SHAPE.nodes, "lane", 0, 0, f"{round((low + high) / 2, 3)}")
     assert stored()[notches][0][0] == pytest.approx(round((low + high) / 2, 3))
-    lane = next(iter(session.values[lanes]))
-    bridge.commitValue(f"{lanes}.{lane}", 0, 0.25)
+    lane = session.values[notches][1][1]
+    bridge.shapeCommitText(SHAPE.nodes, "lane", 1, 1, "0.25")
     assert stored()[lanes][lane] == pytest.approx(0.25)
     bridge.commitValue(PREFIX + "bar_fill_color.3", 0, 120)
     assert stored()[PREFIX + "bar_fill_color"][3] == 120

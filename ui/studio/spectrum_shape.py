@@ -1,17 +1,20 @@
-"""The Spectrum family's authored shape editor as Studio rows (mode-neutral over the family's key prefix).
+"""The Spectrum family's authored shape for the Studio (mode-neutral over the family's key prefix).
 
-Spectrum and Extruded Spectrum store the same shape (``<prefix>mirrored``, ``<prefix>shape_nodes``, the mirrored /
-linear frequency boundaries and lane strengths) and Settings edits both through the same ``SpectrumShapeEditor``
-rules. This module turns those rules into Studio properties, admission and structural edits for any family mode;
-adapters pass their prefix and never copy them.
+Spectrum, Extruded Spectrum and Neon Lake's Frequency Response store the same shape (``<prefix>mirrored``,
+``<prefix>shape_nodes``, the mirrored / linear frequency lanes and their strengths) under the rules of Settings'
+former ``SpectrumShapeEditor``. This module owns those rules for the Studio: the admission of each stored value, the
+structural edits (add / remove node, lane swap), the shape instrument's spec (``ui.studio.shape``: one canvas with
+the curve, its nodes and the lanes) and the preview the canvas draws under the curve, computed by the engine's own
+functions. Adapters pass their prefix and never copy any of it.
 """
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Mapping
 
-from ui.studio.schema import SCALAR, SWITCH, StudioAction, StudioProperty
+from ui.studio.schema import SHAPE, SHAPE_BLEND, SWITCH, ShapeLayout, ShapeSpec
 
 ADD_NODE = "shape.add_node"
 REMOVE_NODE = "shape.remove_node."          # + node index
@@ -45,6 +48,14 @@ class ShapeKeys:
     def all(self) -> tuple[str, ...]:
         return (self.mirrored, self.nodes, *self.notches.values(), *self.lanes.values())
 
+    @property
+    def bar_count(self) -> str:
+        return self.prefix + "bar_count"
+
+    @property
+    def profile_floor(self) -> str:
+        return self.prefix + "profile_floor"
+
 
 def canonical(key: str):
     from core.settings.default_contract import require_canonical_default
@@ -71,8 +82,9 @@ def percent(value: Any, previous: Any, low: float = 0.0) -> float:
 
 
 def admit_nodes(candidate: Any, previous: Any, fallback: str = "spectrum_shape_nodes") -> list:
-    """The shape editor's rules: 1..5 nodes of [x, y] in 0..1, kept in x order. A moved node stops at its
-    neighbours (Settings re-sorts a node dragged past one; a Studio slider keeps addressing the same node)."""
+    """The shape editor's rules: 1..5 nodes of [x, y] in 0..1, kept in x order. A candidate that keeps the order
+    is taken as it is (the shape instrument hands over the list with the dragged node already in its place, as
+    Settings re-sorted one dragged past a neighbour); a node moved out of order stops at its neighbours."""
     low, high = node_limits()
     try:
         old = [[float(x), float(y)] for x, y in previous]
@@ -189,57 +201,57 @@ def structure_edit(keys: ShapeKeys, action_id: str, values: Mapping[str, Any]):
     return None
 
 
-def row_label(keys: ShapeKeys, prop: StudioProperty, values: Mapping[str, Any]) -> str:
-    """A boundary row is titled by the lane it currently bounds (lanes can be reordered)."""
-    key = prop.path[0]
-    if key in keys.notches.values() and len(prop.path) == 3:
-        layout = "Mirrored" if key == keys.notches[True] else "Linear"
-        return f"{values[key][prop.path[1]][1]} Boundary ({layout})"
-    return prop.label
+def profile(keys: ShapeKeys, values: Mapping[str, Any]) -> dict:
+    """What the shape does to the bars, for the instrument's preview under the curve: per bar, the authored
+    silhouette and that height at the lane's authored strength; and the lane strength along the lane axis. All of it
+    is the engine's own (``bar_computation``: the functions ``fft_to_bars`` shapes the bars with), on the Studio's
+    current values. ``bars`` run left to right as drawn; ``lanes`` are (position, strength) corner points."""
+    import numpy as np
+    from widgets.spotify_visualizer.bar_computation import (
+        lane_sample_positions, lane_strength_profile, shape_bar_profile,
+    )
+    mirrored = bool(values[keys.mirrored])
+    nodes = [[float(x), float(y)] for x, y in values[keys.nodes]]
+    notches, strengths = values[keys.notches[mirrored]], values[keys.lanes[mirrored]]
+    bands = max(2, int(values[keys.bar_count]))
+    silhouette = shape_bar_profile(np, nodes, bands, mirrored, float(values[keys.profile_floor]))
+    driven = silhouette * lane_strength_profile(np, lane_sample_positions(np, bands, mirrored), notches, strengths)
+    # The strength is linear between the lanes and held outside them, so its corner points draw it exactly.
+    corners = sorted({0.0, 1.0, *(max(0.0, min(1.0, float(x))) for x, _label in notches)})
+    weights = lane_strength_profile(np, np.asarray(corners, dtype="float32"), notches, strengths)
+    return {"bars": [[float(a), float(b)] for a, b in zip(silhouette, driven)],
+            "lanes": [[x, float(w)] for x, w in zip(corners, weights)]}
 
 
-def add_node_action() -> StudioAction:
-    _low, high = node_limits()
-    return StudioAction(ADD_NODE, "Add Node", "plus", f"Add a node to the silhouette in its widest gap (at most {high}).")
-
-
-def shape_properties(keys: ShapeKeys, add: Callable[..., None], workspace: str, group: str) -> None:
-    """The shape editor's rows through the adapter's ``add(id, path, label, workspace, group, instrument, **extra)``:
-    the layout switch, every node slot (both axes), and both layouts' boundaries and lane strengths (shown only
-    under their layout)."""
-    _low, high = node_limits()
-    add(keys.mirrored, (keys.mirrored,), "Mirrored Layout", workspace, group, SWITCH,
+def shape_properties(keys: ShapeKeys, add: Callable[..., None], workspace: str, group: str,
+                     label: str = "Silhouette") -> ShapeSpec:
+    """The shape through the adapter's ``add(id, path, label, workspace, group, instrument, **extra)``: ONE shape
+    instrument. Its row is the curve's nodes; the layout switch and both layouts' lanes and strengths are values it
+    edits and the session carries (``instrument_only``). Returns the instrument's spec for the schema's ``shapes``."""
+    low, high = node_limits()
+    add(keys.mirrored, (keys.mirrored,), "Mirrored Layout", workspace, group, SWITCH, instrument_only=True,
         tooltip="On: the shape is mirrored around the centre (centre <-> edge). Off: a left-to-right profile.")
-    for index in range(high):
-        for axis, word in ((0, "Position"), (1, "Height")):
-            remove = (StudioAction(f"{REMOVE_NODE}{index}", f"Remove Node {index + 1}", "minus",
-                                   "Remove this node (the shape keeps at least one)."),) if axis == 0 else ()
-            add(f"{keys.nodes}.{index}.{axis}", (keys.nodes, index, axis), f"Node {index + 1} {word}", workspace,
-                group, SCALAR, minimum=0.0, maximum=1.0, decimals=3, priority=200 + 2 * index + axis,
-                actions=remove,
-                tooltip="A control node of the authored silhouette (across the bars, then its height). A node "
-                        "stops at its neighbours; Add Node adds one in the widest gap.")
-    for mirrored in (True, False):
-        layout = "Mirrored" if mirrored else "Linear"
+    add(keys.nodes, (keys.nodes,), label, workspace, group, SHAPE, priority=200,
+        tooltip="The authored silhouette across the bars and the frequency lanes that drive it. Drag a node to "
+                f"reshape it, click empty space to add one ({low} to {high} nodes), right-click a node to remove "
+                "it. Drag a lane's tag to move it and its marker to set how strongly it drives its bars.")
+    layouts = {}
+    for mirrored in (False, True):
+        name = "Mirrored" if mirrored else "Linear"
         notches, lanes = keys.notches[mirrored], keys.lanes[mirrored]
+        add(notches, (notches,), f"Lane Positions ({name})", workspace, group, SHAPE, instrument_only=True)
+        add(lanes, (lanes,), f"Lane Strengths ({name})", workspace, group, SHAPE, instrument_only=True)
         flag = "1" if mirrored else "0"
-        for index, (_x, lane) in enumerate(canonical(notches)):
-            swaps = (StudioAction(f"{LANE_PREVIOUS}{flag}.{index}", "Swap With Previous Lane", "chevron-left",
-                                  "Exchange this lane with the one before it (the boundaries stay)."),
-                     StudioAction(f"{LANE_NEXT}{flag}.{index}", "Swap With Next Lane", "chevron-right",
-                                  "Exchange this lane with the one after it (the boundaries stay)."))
-            add(f"{notches}.{index}", (notches, index, 0), f"{lane} Boundary ({layout})", workspace, group, SCALAR,
-                minimum=0.0, maximum=1.0, decimals=3, priority=300 + index, when=((keys.mirrored, (mirrored,)),),
-                actions=swaps,
-                tooltip="Where this frequency lane sits across the bars. A boundary stops at its neighbours.")
-        for index, lane in enumerate(canonical(lanes)):
-            add(f"{lanes}.{lane}", (lanes, lane), f"{lane} Strength ({layout})", workspace, group, SCALAR,
-                minimum=0.0, maximum=1.0, decimals=2, priority=320 + index, when=((keys.mirrored, (mirrored,)),),
-                tooltip="How strongly this lane drives its bars.")
+        layouts[mirrored] = ShapeLayout((notches,), (lanes,), name=name, low="Centre" if mirrored else "Low",
+                                        high="Edge" if mirrored else "High", mirrored=mirrored,
+                                        previous=f"{LANE_PREVIOUS}{flag}.", next=f"{LANE_NEXT}{flag}.")
+    return ShapeSpec(keys.nodes, (layouts[False], layouts[True]), layout_switch=(keys.mirrored,),
+                     node_limits=(low, high), lane_mode=SHAPE_BLEND, add=ADD_NODE, remove=REMOVE_NODE,
+                     profile=partial(profile, keys), reads=(keys.bar_count, keys.profile_floor))
 
 
 __all__ = [
-    "ADD_NODE", "LANE_NEXT", "LANE_PREVIOUS", "REMOVE_NODE", "ShapeKeys", "add_node_action", "added_node",
+    "ADD_NODE", "LANE_NEXT", "LANE_PREVIOUS", "REMOVE_NODE", "ShapeKeys", "added_node",
     "admit_colour", "admit_lanes", "admit_notches", "admit_nodes", "admit_shape", "canonical", "node_limits",
-    "percent", "row_label", "shape_properties", "structure_edit", "unit",
+    "percent", "profile", "shape_properties", "structure_edit", "unit",
 ]

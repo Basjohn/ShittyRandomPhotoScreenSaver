@@ -114,10 +114,6 @@ def structure_edit(action_id: str, values: Mapping[str, Any]):
     return spectrum_shape.structure_edit(SHAPE, action_id, values)
 
 
-def row_label(prop: StudioProperty, values: Mapping[str, Any]) -> str:
-    return spectrum_shape.row_label(SHAPE, prop, values)
-
-
 # ---------------------------------------------------------------------------------- schema
 def build_schema() -> StudioSchema:
     from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
@@ -199,9 +195,9 @@ def build_schema() -> StudioSchema:
     add(border, (border,), "Border Opacity", "look", BAR_COLOUR_GROUP, SCALAR, minimum=opacity.low,
         maximum=opacity.high, decimals=2, tooltip="Opacity of the bar edge lines.")
 
-    # The shape editor (Custom): layout, curve nodes, frequency boundaries and lane strengths.
+    # The shape (Custom): the layout switch and the shape instrument (curve nodes, frequency lanes and strengths).
     shape = titles["shape"]
-    spectrum_shape.shape_properties(SHAPE, add, "shape", shape)
+    shape_spec = spectrum_shape.shape_properties(SHAPE, add, "shape", shape)
 
     technical = technical_properties(MODE, workspace="shape")
     props.extend(prop for prop, _defn in technical.values())
@@ -250,8 +246,7 @@ def build_schema() -> StudioSchema:
     return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), admit,
                         group_traces=((titles["response"], ("Level", "Peak")), (titles["effects"], ("Ghost",)),
                                       (titles["shape"], ("Level",))),
-                        group_icons=tuple(group_icons.items()), object_noun="Bar",
-                        group_actions=((shape, (spectrum_shape.add_node_action(),)),), row_label=row_label)
+                        group_icons=tuple(group_icons.items()), object_noun="Bar", shapes=(shape_spec,))
 
 
 # ------------------------------------------------------------------------------- evaluator

@@ -20,7 +20,7 @@ from PySide6.QtQml import QQmlPropertyMap
 
 from core.logging.logger import get_logger
 from ui.studio.adapter import RECORDED, StudioFixture, StudioModeAdapter
-from ui.studio.schema import CHOICE, COLOUR, COUNT, GRADIENT, QUIET_PEAK, SCALAR, SWITCH, StudioProperty
+from ui.studio.schema import CHOICE, COLOUR, COUNT, GRADIENT, QUIET_PEAK, SCALAR, SHAPE, SWITCH, StudioProperty
 from ui.studio.session import CanonicalStore, StudioEditSession, read_path
 from ui.studio.transport import StudioTransport
 
@@ -170,6 +170,9 @@ class StudioBridge(QObject):
         self._source = response.sources[0].id if response is not None and response.sources else ""
         if self._target:
             self._source = self._dominant_source(self._target)
+        # The shape instruments (curve nodes and frequency lanes on one canvas) and their live gesture.
+        from ui.studio.shape import StudioShapes
+        self.shapes = StudioShapes(schema, controller.session)
         self.brush = None
         if controller.capabilities.as_map().get("brush"):
             target = controller.adapter.brush_target()
@@ -546,11 +549,27 @@ class StudioBridge(QObject):
             return True, _gradient_display(prop, value)
         return False, None
 
+    def _shown(self, prop: StudioProperty, values: Mapping[str, Any]) -> tuple[bool, Any]:
+        """(held, display value) of one property: a SHAPE row shows its instrument's whole display model (a SHAPE
+        property without an instrument only carries a value one edits)."""
+        if prop.instrument != SHAPE:
+            return self._displayed(prop, values)
+        if prop.id not in self.shapes:
+            return False, None
+        try:
+            return True, self.shapes.view(prop.id, values)
+        except (KeyError, IndexError, TypeError, ValueError):
+            return False, None
+
+    def _stored_keys(self, prop: StudioProperty) -> frozenset[str]:
+        """The settings keys ``prop``'s shown value follows (a SHAPE row follows its lanes and layout too)."""
+        return self.shapes.keys(prop.id) if prop.id in self.shapes else frozenset((prop.path[0],))
+
     def _rebuild_values(self) -> None:
         values = self._c.evaluation_values()
         out: dict[str, Any] = {}
         for prop in self._schema.properties:
-            held, shown = self._displayed(prop, values)
+            held, shown = self._shown(prop, values)
             if held:
                 out[prop.id] = shown
         self._values.publish(out)
@@ -574,10 +593,10 @@ class StudioBridge(QObject):
         out: dict[str, Any] = {}
         only = set()
         for prop in self._schema.properties:
-            if prop.path[0] not in keys:
+            if not keys & self._stored_keys(prop):
                 continue
             only.add(prop.id)
-            held, shown = self._displayed(prop, values)
+            held, shown = self._shown(prop, values)
             if held:
                 out[prop.id] = shown
         self._values.publish(out, only=frozenset(only))
@@ -654,13 +673,82 @@ class StudioBridge(QObject):
                 self._guard(lambda: self._apply_value(property_id, endpoint, payload))
             elif kind == "colour":
                 self._guard(lambda: self._apply_colour(property_id, payload))
+            elif kind == "shape":
+                self._guard(lambda: self.shapes.drag(*payload))
             else:
                 self._guard(lambda: self._apply_gradient(property_id, payload))
 
     def drop_pending_previews(self) -> None:
         self._pending.clear()
+        self.shapes.gesture = None          # whatever dropped the previews also ends or cancels the session gesture
         if self.brush is not None:
             self.brush.cancel()
+
+    # --------------------------------------------------------- the shape instrument (shared instrument)
+    # An exact entry or a keyboard step can carry its element past a neighbour: (property id, part, new index).
+    shapeSelected = Signal(str, str, int)
+
+    @Slot(str, str, int)
+    def shapePress(self, property_id: str, part: str, index: int) -> None:
+        """The pointer took hold of a node ("node"), a lane's tag ("lane"), a lane's strength marker ("strength")
+        or empty space ("add"). Nothing changes until ``shapeDrag``."""
+        if self._c.session.gesture_active:
+            self.apply_pending_previews()
+            self._guard(self._c.session.end_gesture)       # another gesture ends before this one starts
+        self.shapes.gesture = None
+        self._guard(lambda: self.shapes.press(str(property_id), str(part), int(index)))
+
+    @Slot(str, float, float)
+    def shapeDrag(self, property_id: str, x: float, y: float) -> None:
+        """The held pointer (position along the axis, value; both 0..1): applied at the next frame start, the
+        newest only."""
+        gesture = self.shapes.gesture
+        if gesture is not None and gesture.property_id == property_id:
+            self._queue_preview(property_id, 0, "shape", (float(x), float(y)))
+
+    @Slot()
+    def shapeRelease(self) -> None:
+        """The gesture ends at the last held position: one save and one undo entry when anything changed."""
+        self.apply_pending_previews()
+        self._guard(self.shapes.release)
+
+    @Slot()
+    def shapeCancel(self) -> None:
+        self._pending.clear()
+        self.shapes.cancel()
+
+    @Slot(str, str, int, float, float)
+    def shapeStep(self, property_id: str, part: str, index: int, dx: float, dy: float) -> None:
+        """A keyboard step of a node ("node") or a lane ("lane": dx its position, dy its strength): one committed
+        edit per step."""
+        from ui.studio.shape import STEP
+        current = self.shapes.element(str(property_id), str(part), int(index))
+        if current is None:
+            return
+        x = current[0] + float(dx) * STEP if dx else None
+        y = current[1] + float(dy) * STEP if dy else None
+        self.apply_pending_previews()
+        self._guard(lambda: self._shape_set(str(property_id), str(part), int(index), x, y))
+
+    def _shape_set(self, property_id: str, part: str, index: int, x, y) -> None:
+        moved = self.shapes.set(property_id, part, index, x, y)
+        if moved >= 0 and moved != index:
+            self.shapeSelected.emit(property_id, part, moved)
+
+    @Slot(str, str, int, int, str)
+    def shapeCommitText(self, property_id: str, part: str, index: int, axis: int, text: str) -> None:
+        """An exact value typed for a node or a lane (axis 0: its position; 1: its value or strength)."""
+        self.apply_pending_previews()
+
+        def run():
+            typed = float(str(text).strip() or "nan")
+            if typed != typed:
+                raise ValueError("enter a number")
+            if not 0.0 <= typed <= 1.0:
+                self.notify("Limited to 0..1")
+            position, value = (typed, None) if int(axis) == 0 else (None, typed)
+            self._shape_set(str(property_id), str(part), int(index), position, value)
+        self._guard(run)
 
     # --------------------------------------------------------- the terrain brush (shared instrument)
     brushChanged = Signal()
