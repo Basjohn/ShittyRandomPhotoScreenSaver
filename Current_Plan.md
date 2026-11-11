@@ -431,20 +431,23 @@ impressive; the agent may ask the lead for a feature or architecture a better lo
 - [ ] Feature requests from the agent recorded here as their own boxes when admitted.
 - [~] Operator look.
 
-### 1B.11 Theme filter in the Linked row (operator request; not started; independent, next free Opus slot)
+### 1B.11 Theme filter in the Linked row (operator request; built on an agent branch, in its refinement round)
 
-- [ ] One pure function both theme catalogs share derives each theme's kinds from its own data: Dark/Light
-  (ink and surface luminance), material, colour families (hue of accent and surface). No hand-kept tag table.
-- [ ] A type-in filter beside the Linked / Independent button on the Settings Themes page.
-- [ ] The same on the Widget Themes page (`ui/tabs/themes_tab.py`, `ui/widgets/theme_list.py`).
-- [ ] Matching: name substring or kind/colour ("Blue" finds Blue-named and blue-coloured themes); several words
-  narrow together; empty shows everything.
-- [ ] Autocomplete offers kinds, colour families and theme names.
-- [ ] The active theme is never deselected by filtering; favourites and linking behave as today.
-- [ ] Filter text is view state, not a saved setting.
-- [ ] Styled from the theme's input role, Title Case, one-sentence tooltip; checked in a dark and a light theme.
-- [ ] Tests on the real `SettingsDialog` (built tabs), derived from catalog data, never pinned theme names.
-- [~] Operator look.
+Built: the shared term derivation, the filter on both pages, autocomplete, hidden-row rules, view-state only,
+real-dialog tests. The lead's pixel review sent three things back (in flight, Opus Medium):
+
+- [ ] Colour terms discriminate: the accent always counts, the surface only when clearly coloured ("Blue" listed
+  almost every dark theme); a per-term distribution table for both catalogs, no family above about a third.
+- [ ] Names match by word start, not any substring ("Red" found "Weathered Iron").
+- [ ] The autocomplete popup is opaque (the list behind bled through its text in light themes), with a pixel test.
+- [ ] Lead pixel review of the re-rendered set, audit (tests fail on pre-change code), merge.
+- [ ] Side defect (red on main): `tests/test_surface_opacity_adjust.py::test_real_link_button_uses_state_ink_for_
+  checked_text_and_lock_icon_offscreen` fails (worst contrast 1.58 against 4.5): the Linked button's checked
+  text/lock ink. Fix with 1B.8's ink correction or at the link button's style owner.
+- [ ] Side defect: the Weather location autocomplete (`ui/widgets/geocode_completer.py:52-69`) uses Qt's default
+  popup (unthemed); give it the theme filter's popup.
+- [ ] Side defect: `ui/tabs/widgets_tab_weather.py:157` hard-codes `#4CAF50` instead of a theme role.
+- [~] Operator look on a real display (popup placement, scrollbar).
 
 ### 1B.12 Two fullscreen glyphs, one per display (operator; in flight, Opus High)
 
