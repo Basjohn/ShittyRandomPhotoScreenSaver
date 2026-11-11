@@ -377,7 +377,7 @@ through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
   off-screen harness that drives ordinary Edit on a Media card); build it beside
   `tools/expanded_visualizer_evidence.py`.
 
-### 1B.8 Light themes are practically opaque in the saver (M1 merged 4674e801; M2 in flight, Opus High)
+### 1B.8 Light themes are practically opaque in the saver (M1 4674e801, M2 63e22431 merged; M2b in flight)
 
 **Material track (operator, 11 Nov: proper transparency on light themes, no inset while keeping the material on
 all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint.** Contract:
@@ -388,26 +388,33 @@ M1 landed: dark ink's panel is bounded at the card's Settings-variant shell dens
 shader uniform `panelCeiling`), faint runs correct their own ink (`legibleInk`), and a run faded by item opacity
 takes a text-local plate. Wallpaper swing inside light cards went from 0.0 to 0.08-0.25; dark themes identical.
 
-- [ ] M2. No inset on any theme: the `plateInset` rim box of 1.7b (section 1A): the material face reaches the
-  inside of the real border, dark and light, content padding unchanged; before/after renders of every material
-  on one dark and one light theme, and text still passes on the composed pixels with M1's ink rule.
-- [ ] M2. The ink plate behind faded runs (the pill behind "PLAYING" on Polished Chrome, Mica) re-checked at 1x
-  and 3x on the three light themes once the inset is gone; softened or tightened if it reads as a sticker.
-- [ ] M2. Dark-identity comparison that separates "inset gone" from any other change on dark themes.
+M2 landed (evidence `.artifacts/evidence/materials/20261111_m2/`, `card_edge_zooms_3x.png`): the legibility layer is
+the whole face up to the real border on every theme and material (no inset panel, no inner rim), the light-theme
+inner hairline is gone, the ink plate fades over 5 px, legibility tables unchanged, no GPU rise. The Linked
+button's state ink may cross polarity (R-186; stills `.artifacts/evidence/settings/linked_button/`).
+
+- [ ] M2b. One ink rule on every theme (lead, 11 Nov: a uniform contract, not a light-theme exception): a text
+  run that misses its ratio on a dark theme corrects its own ink as light themes do (authored ink where it
+  reads, else more alpha, else toward white keeping hue); the dark panel gets no denser; runs that pass stay
+  byte-identical. Measured before: Default Dark on the bright wallpaper has 8-10 small runs at 3.89-4.27;
+  `widget.accent` fails 4.5:1 over the white pole on 46 of 98 material themes, all dark (Midnight Cobalt 3.42,
+  worst Royal Orchard 1.44).
+- [ ] M2b. Text runs only; graphic uses of the accent (bars, dividers, fills, icons) listed where they fall
+  under 3:1, not recoloured.
+- [ ] M2b. Themes whose corrected accent collapses toward `card.text` named with 3x crops before the operator
+  sees them; the table of every changed theme (before/after ratio and colour) goes to section 2's "Changed".
+- [ ] M2b. `tools/theme_legibility.py` over all 98 material themes, both wallpapers: zero small runs below
+  4.5:1, or the exact remainder and why.
+- [ ] M2b. Offscreen checks M2 left out: 150% and 200% device pixel ratio (one light, one dark theme), the
+  Visualizer card and the Context Menu on a light theme.
+- [ ] Mid-transition frames and a real display for M1/M2: a D1 run (1B.14 harness), lead review.
 - [ ] M3. Widget border material: the remaining boxes of 1.7b (ring shading from the same backdrop, Border
   Material and Border Opacity Adjust in Style Overrides, Normal/Flat pixel-identical).
+- [ ] M3. With the inner hairline gone, the border stays clearly distinct from the face on the three light
+  themes over a busy bright wallpaper and over a dark one (3x edge zooms); no second line inside the card.
 - [ ] M4. Window border material: 1B.9's box (the Settings/Studio border ring takes the same rule).
 - [ ] Each step: `.qsb` regenerated, the SURFACE block kept identical across its three shader files, one focused
   GPU before/after, lead pixel review on the operator's two wallpapers.
-- [ ] Known dark-theme shortfalls measured in M1, written into `Card_Surface_Materials.md` with their numbers
-  (Default Dark on the bright wallpaper 3.9-4.3; Midnight Cobalt accent 3.42), and whether M2 moves them.
-- [ ] Card shell bound (about 0.73-0.76) against the real Settings window (0.63-0.72): recorded in
-  `Card_Surface_Materials.md` with the reason cards do not read the linked Settings theme at runtime (lead, 11
-  Nov: a card must not depend on Settings window state).
-- [ ] Linked button red test (1B.11's side defect) fixed as its own commit before M2: a state ink may flip
-  polarity in `ui/settings_surface_composition.py` `_correct_ink` when neither more alpha nor its own pole can
-  reach the ratio; ordinary semantic inks keep their polarity; stills before and after; R-NNN entry if it was a
-  silent long-lived red.
 - [ ] Feature requests from the agent recorded here as their own boxes when admitted.
 
 ### 1B.9 Settings and Studio window corners bleed (see-through corners merged a89ce123; continues 1.9)
@@ -478,9 +485,6 @@ grid-on-block and dark-fill looks fail; fine luminous gradients pass. Fewer good
 
 - [ ] The theme list's and the popup's scrollbars render as the native black/white bar in off-screen captures;
   confirm on a real display and theme them through `shared_styles` if they are native there too.
-- [ ] Side defect (red on main): `tests/test_surface_opacity_adjust.py::test_real_link_button_uses_state_ink_for_
-  checked_text_and_lock_icon_offscreen` fails (worst contrast 1.58 against 4.5): the Linked button's checked
-  text/lock ink. Fix with 1B.8's ink correction or at the link button's style owner.
 
 ### 1B.12 Fullscreen glyphs relative to the Visualizer's display (merged 9bb4e806c; contract: plan 01 M3c)
 
@@ -753,6 +757,13 @@ Watchlist entry (operator, 11 Nov).
   - Neon Lake under music: the land no longer tears; the reaction is a little weaker on banks and very low
     land; paint past the old grid edge renders as far land (no shoreline line or wet fringe).
   - Brush Radius in the Neon Lake Studio is a share of the basin (its default is being rescaled).
+  - Widget cards on every theme: no inset panel inside the border any more (the material face reaches the
+    border); on light themes the dark hairline just inside the border is gone too, and the wallpaper shows
+    through the card again.
+  - Settings, Linked button: on Ghost, Monochrome Frost and Smoke Quartz the checked text switched to the
+    opposite pole so it reads on its pill (2.48, 3.79, 2.86 to about 5.1); the other 197 state inks are
+    unchanged.
+  - Spectrum presets 2 to 15 of 7 Nov are replaced (1B.10); the five you rejected are being redone.
 - **Decisions the lead will put to the operator when their write-ups exist:** Neon Lake spire glow on hits;
   islands rising from the lake (needs the water-boundary contract decision).
 
