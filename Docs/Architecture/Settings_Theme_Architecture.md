@@ -430,6 +430,39 @@ IDs for returning files. Star clicks and focused-list Ctrl+D toggle only this pr
 and linked theme state unchanged. Widget Custom previews refresh from the existing stored Custom snapshot on page entry.
 Names elide before the decorations; the square remains at the visible viewport's right edge.
 
+## Theme filter
+
+Both theme pages carry a type-in filter (`ui/widgets/theme_filter.py` `ThemeFilterField`) in the Linked row, to
+the right of the Linked / Independent button, across the row's free space.
+
+- **Terms are derived, never tagged.** `ui.theme_semantics.theme_filter_terms(theme)` is the one pure function both
+  catalogues share; it reads only the theme's authored role map and material (no active theme, no opacity
+  projection), so imported and user themes are covered automatically. Tone: `Light` when the ink is dark on a light
+  surface (`uses_dark_text_on_light_surface`: ink luminance <= 0.18 and surface >= 0.55), else `Dark`. Material:
+  the Settings `backdrop.mode` (`off` is Normal) or the Widget `surface_material`, labelled by
+  `SURFACE_MATERIAL_LABELS`. Colours: the hue families of the accent and the surface (Settings:
+  `control.list.selected_accent`, `panel.group.surface`; Widget: `widget.accent` else `card.border`,
+  `card.background`). Hue buckets (HSV degrees): Red < 15, Orange < 45, Yellow < 70, Green < 160, Teal < 195,
+  Blue < 250, Purple < 290, Pink < 345, Red again to 360. A colour with chroma < 18 or saturation < 0.15 is
+  neutral; a theme whose accent and surface are both neutral is `Grey`.
+- **Matching.** Case-insensitive; each word matches when it is a substring of the row's display name or a prefix of
+  one of its terms; words combine with AND; an empty filter shows everything (`theme_matches_filter`).
+- **View state only.** Filtering only hides `ThemeListWidget` rows (`set_filter_text`): the current/selected row stays
+  (even hidden), no selection signal is emitted, nothing is re-applied and nothing is written to Settings.
+  Favourites, their favourites-first order and the Linked pairing are unchanged; the filter is re-applied after a
+  favourites reorder. When nothing matches the list paints a short empty-state line. Filtering runs on
+  `textChanged`; there are no timers.
+- **Autocomplete.** A `QCompleter` completes the last word and keeps the words before it. Its model is the tones,
+  materials and colour families that occur in that page's loaded list, then the theme names
+  (`ThemeListWidget.filter_vocabulary`), rebuilt when the list's themes change. The popup reuses
+  `COMBOBOX_POPUP_VIEW_STYLE`; as a translucent top-level it fills `combo.popup.surface` and strokes
+  `combo.popup.border` itself as one continuous path.
+- **Look.** `THEME_FILTER_INPUT_STYLE` (shared_styles) uses the `control.input.*` roles at the Linked button's
+  height and radius, with a transparent stylesheet border; the field strokes `control.input.border` as one
+  continuous path (no seams). The clear (x) is painted in the input ink and shows only while there is text.
+- Tests: `tests/test_theme_filter_terms.py` (synthetic specs), `tests/test_theme_filter_real_dialog.py` (real
+  `SettingsDialog` on a temporary theme tree with imported themes; expectations derived from the catalogue).
+
 ## Theme sorting (standalone tool)
 
 [Theme Sorter Foundry](../Guides/Theme_Sorter_Foundry.md) previews editable Settings themes on itself and performs explicit paired Widget/Settings theme file rename/delete using `linked_settings_theme_id`. It does not change product theme selection. [Mutable test-oracle audit](../Audits/Mutable_Test_Oracle_Theme_Sorter_2026-10-23.md) prevents freezing current curated colours, file names or pack count in tests.
