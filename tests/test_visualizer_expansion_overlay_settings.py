@@ -231,7 +231,8 @@ def test_a_raw_profile_file_with_the_retired_artwork_factors_loads_through_the_b
     for key, item in raw_now.items():
         if key not in LEGACY_ARTWORK_FACTOR_KEYS and key != "child_geometry":
             assert now[key] == item, key
-    assert now["child_geometry"]["title"] == raw_now["child_geometry"]["title"]
+    # (Plan 1C.3: the title's record from before the text group loads as the group's, through its own bridge.)
+    assert now["child_geometry"]["metadata"] == raw_now["child_geometry"]["title"]
     artwork_role = next(role for role in NOW_PLAYING_CHILD_ROLES if role.role_id == "artwork")
     record, stored = now["child_geometry"]["artwork"], raw_now["child_geometry"]["artwork"]
     assert record["width_scale"] == pytest.approx(min(artwork_role.maximum_scale[0], stored["width_scale"]
@@ -251,6 +252,56 @@ def test_a_raw_profile_file_with_the_retired_artwork_factors_loads_through_the_b
 
 def _manager_for(root: Path, application: str) -> SettingsManager:
     return SettingsManager(organization="TestOrg", application=application, storage_base_dir=root)
+
+
+TEXT_LINES_PROFILE = Path(__file__).resolve().parent / "fixtures" / "fullscreen_overlays_now_playing_text_lines_profile.json"
+
+
+def test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_group(tmp_path):
+    """Plan 1C.3: a settings file as 1B.7 wrote it (Now Playing's title and album as parts of their own, the parent's
+    text box) loads through a fresh manager reading the file: the title's record becomes the text group's (its offset,
+    scale, alignment), the album's is dropped (the album moves with the group), every other record and member is kept
+    exactly (``text_width`` keeps its value: it now measures the block beyond its natural artwork column, which is the
+    text box a natural artwork stood beside, so the block draws the same width), and a save + reload changes nothing."""
+    import json
+    import shutil
+
+    from core.settings.fullscreen_overlays import RETIRED_TEXT_ROLES, normalize_now_playing_children
+    from core.settings.json_store import determine_storage_path
+
+    raw = json.loads(TEXT_LINES_PROFILE.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"][KEY]
+    raw_now = raw["now_playing"]
+    # The fixture is the old shape (distinguishing: the retired text-line parts, no group record).
+    assert set(RETIRED_TEXT_ROLES) <= set(raw_now["child_geometry"]) and "metadata" not in raw_now["child_geometry"]
+
+    application = f"TestApp_{uuid.uuid4().hex}"
+    path = determine_storage_path(application, base_dir=tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(TEXT_LINES_PROFILE, path)
+
+    loaded = normalize_fullscreen_overlays(_manager_for(tmp_path, application).get(FULLSCREEN_OVERLAYS_KEY))
+    now, records = loaded["now_playing"], loaded["now_playing"]["child_geometry"]
+    assert not set(RETIRED_TEXT_ROLES) & set(records)
+    # Each record in ordinary Edit's canonical form (the shared parse) of what the file held.
+    def canonical(role: str, record: dict) -> dict:
+        return normalize_now_playing_children({role: record})[role]
+
+    assert records["metadata"] == canonical("metadata", raw_now["child_geometry"]["title"])
+    assert records["metadata"]["alignment"] == raw_now["child_geometry"]["title"]["alignment"]   # the flip kept
+    for role in ("artist", "seek_bar"):
+        assert records[role] == canonical(role, raw_now["child_geometry"][role]), role
+    for key, item in raw_now.items():
+        if key != "child_geometry":
+            assert now[key] == item, key
+    assert loaded["preset"] == normalize_fullscreen_overlays(raw)["preset"]
+
+    settings = _manager_for(tmp_path, application)
+    settings.set(FULLSCREEN_OVERLAYS_KEY, loaded)
+    settings.save()
+    assert normalize_fullscreen_overlays(_manager_for(tmp_path, application).get(FULLSCREEN_OVERLAYS_KEY)) == loaded
+    # A value that already has a group record keeps it (the title's would never overwrite it).
+    both = {"now_playing": {"child_geometry": {"metadata": {"x_offset": 0.2}, "title": {"x_offset": -0.3}}}}
+    assert normalize_fullscreen_overlays(both)["now_playing"]["child_geometry"]["metadata"]["x_offset"] == 0.2
 
 
 def test_a_value_stored_before_the_single_axis_extents_reads_them_as_the_natural_look():
@@ -378,10 +429,10 @@ def test_the_qml_projection_carries_every_option():
     assert projected["nowPlaying"]["hoverReveal"] is value["now_playing"]["hover_reveal"]
     assert "hoverReveal" not in projected["preset"]
     # Now Playing's part records reach the QML as plain values (never a reference into the settings value).
-    value["now_playing"]["child_geometry"] = {"title": {"width_scale": 1.25, "height_scale": 1.25, "x_offset": 0.5}}
+    value["now_playing"]["child_geometry"] = {"metadata": {"width_scale": 1.25, "height_scale": 1.25, "x_offset": 0.5}}
     projected = resolve_expanded_overlay_config({KEY: value})
     assert projected["nowPlaying"]["childGeometry"] == value["now_playing"]["child_geometry"]
-    assert projected["nowPlaying"]["childGeometry"]["title"] is not value["now_playing"]["child_geometry"]["title"]
+    assert projected["nowPlaying"]["childGeometry"]["metadata"] is not value["now_playing"]["child_geometry"]["metadata"]
     assert "childGeometry" not in projected["preset"]
 
 
@@ -397,7 +448,7 @@ def test_now_playings_part_records_are_ordinary_child_geometry_and_old_values_re
 
     canonical = canonical_fullscreen_overlays()
     roles = {role.role_id: role for role in NOW_PLAYING_CHILD_ROLES}
-    assert {"artwork", "title", "artist", "album", "controls", "seek_bar"} == set(roles)
+    assert {"artwork", "metadata", "artist", "controls", "seek_bar"} == set(roles)
     assert all(role.movable for role in roles.values())
     assert CHILD_GEOMETRY_KEY in PLACEMENT_KEYS["now_playing"] and CHILD_GEOMETRY_KEY not in canonical["preset"]
     # The canonical value holds no record: every part where today's layout puts it.
@@ -411,16 +462,16 @@ def test_now_playings_part_records_are_ordinary_child_geometry_and_old_values_re
         assert item == (stored["now_playing"][key] if key in stored["now_playing"] else canonical["now_playing"][key])
     assert normalize_fullscreen_overlays(result) == result
 
-    title_max = roles["title"].maximum_scale[0]
-    raw = {"title": {"width_scale": title_max * 10, "x_offset": 0.25},
+    group_max = roles["metadata"].maximum_scale[0]
+    raw = {"metadata": {"width_scale": group_max * 10, "x_offset": 0.25},
            "artwork": {"width_scale": 1.5, "height_scale": 0.75, "y_offset": -0.5},
            "controls": {"width_scale": 1.0, "height_scale": 1.0},          # authored: omitted
            "artist": "junk", "stray": {"width_scale": 2.0}}
     records = normalize_fullscreen_overlays({"now_playing": {CHILD_GEOMETRY_KEY: raw}})["now_playing"][
         CHILD_GEOMETRY_KEY]
-    assert set(records) == {"title", "artwork"}
-    assert records["title"]["width_scale"] == records["title"]["height_scale"] == title_max   # uniform, clamped
-    assert records["title"]["x_offset"] == 0.25
+    assert set(records) == {"metadata", "artwork"}
+    assert records["metadata"]["width_scale"] == records["metadata"]["height_scale"] == group_max   # uniform, clamped
+    assert records["metadata"]["x_offset"] == 0.25
     assert records["artwork"] == raw["artwork"] | {"width_scale": 1.5, "height_scale": 0.75}
     value = normalize_fullscreen_overlays({"now_playing": {CHILD_GEOMETRY_KEY: records}})
     assert value["now_playing"][CHILD_GEOMETRY_KEY] == records

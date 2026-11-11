@@ -17,7 +17,8 @@ This module is what differs about those items:
 * **Now Playing's parts are its block's children** (operator, 8 Nov: "allow movement within the block that is not
   drawn like we already do for child elements in normal geometry. I should be able to move every element around in
   that block and change it"). The block's item declares ordinary Edit's child roles
-  (``core.settings.fullscreen_overlays.NOW_PLAYING_CHILD_ROLES``: artwork, title, artist, controls), its payload
+  (``core.settings.fullscreen_overlays.NOW_PLAYING_CHILD_ROLES``: artwork, the text group, artist, controls, seek
+  bar), its payload
   carries ordinary Edit's ``child_geometry`` record map and the Now Playing slot (QML) is its presentation, exposing
   ``customEditableChildRoles`` as every child-capable widget does. So the one child editor (``CustomLayoutOverlay.qml``'s
   child layer; the owner's ``begin_child_move``/``update_child_move``/``begin_child_resize``/``update_child_resize``

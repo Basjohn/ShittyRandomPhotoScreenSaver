@@ -76,8 +76,8 @@ def _panel(frame, rect: tuple[float, float, float, float], label: str):
     draw = ImageDraw.Draw(panel)
     draw.text((8, 4), label, fill=(235, 238, 242), font=_font(17))
     # Where on the display: a small map of the whole display with the measured rectangle on it.
-    mw, mh = 96, round(96 * image.height / max(1, image.width))
-    mx, my = PANEL[0] - mw - 6, PANEL[1] - mh - 6
+    mw, mh = 40, round(40 * image.height / max(1, image.width))
+    mx, my = PANEL[0] - mw - 6, 6
     draw.rectangle((mx, my, mx + mw, my + mh), outline=(150, 156, 166))
     k = mw / image.width
     draw.rectangle((mx + x * k, my + y * k, mx + (x + w) * k, my + (y + h) * k), fill=(90, 160, 240))

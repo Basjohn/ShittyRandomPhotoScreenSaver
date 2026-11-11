@@ -1,0 +1,46 @@
+{
+  "version": 2,
+  "profile": "fullscreen-overlays-now-playing-text-lines",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "fullscreen_overlays": {
+          "font_family": "Fixture Sans",
+          "font_size": 30,
+          "preset": {
+            "corner": "top_left",
+            "always_show": false,
+            "card": false,
+            "offset_x": 0.02,
+            "offset_y": 0.04,
+            "scale": 1.0,
+            "text_width": 7.5,
+            "text_height": 0.0
+          },
+          "now_playing": {
+            "corner": "bottom_left",
+            "always_show": true,
+            "card": false,
+            "media_controls": false,
+            "seek_bar": true,
+            "offset_x": 0.06,
+            "offset_y": -0.12,
+            "scale": 1.1,
+            "text_width": 11.25,
+            "text_height": 0.0,
+            "child_geometry": {
+              "title": {"width_scale": 1.3, "height_scale": 1.3, "x_offset": 0.04, "y_offset": -0.02,
+                        "alignment": "right"},
+              "album": {"width_scale": 0.8, "height_scale": 0.8, "x_offset": 0.1, "y_offset": 0.05},
+              "artist": {"width_scale": 1.1, "height_scale": 1.1, "x_offset": -0.03, "y_offset": 0.0},
+              "seek_bar": {"width_scale": 0.9, "height_scale": 1.0, "x_offset": 0.0, "y_offset": 0.0}
+            }
+          }
+        }
+      }
+    }
+  },
+  "metadata": {
+    "fixture": "fullscreen_overlays_now_playing_text_lines_before_1C.3 (the 1B.7 shape: title and album parts of their own, the text box)"
+  }
+}

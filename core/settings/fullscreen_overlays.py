@@ -25,7 +25,8 @@ changes a curated Visualizer preset.
 
 Now Playing's parts (Fullscreen Edit's child editing, operator 8 Nov: "I should be able to move every element around in
 that block and change it"): ``now_playing.child_geometry`` is ordinary Edit's CUSTOM ``child_geometry`` carrier for the
-block's children (:data:`NOW_PLAYING_CHILD_ROLES`: the artwork, title, artist, optional album and Media Controls bar),
+block's children (:data:`NOW_PLAYING_CHILD_ROLES`: the artwork, the text group, the artist line inside it, and the
+optional Media Controls bar and Seek Bar),
 one record per moved or sized part (``width_scale``/``height_scale`` of its own drawn size, ``x_offset``/``y_offset``
 in fractions of :data:`CHILD_NORMALIZATION_EMS` ems of the overlay's font); ``{}`` (the canonical default) is today's
 layout, so a value stored before it reads as it always drew (no bridge). It is parsed by ordinary Edit's own
@@ -76,21 +77,20 @@ TEXT_EXTENT_MAX = 60.0
 #: Now Playing's per-part geometry member (ordinary Edit's CUSTOM ``child_geometry`` carrier).
 CHILD_GEOMETRY_KEY = CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY
 #: Now Playing's children in Fullscreen Edit (ordinary Edit's child-role descriptors, mirroring the Media card's): the
-#: artwork is ordinary Edit's freeform artwork frame (free X/Y, the image cropped); the title and the artist line scale
-#: uniformly (their text keeps its shape, as the Media card's metadata and artist do); the Media Controls bar sizes
-#: freely on each axis (as the Media card's transport controls). Every one moves. Alignment is declared as on the Media
-#: card (plan 1B.7c): the title, like Media's header, carries the block's one orientation (``alignment_flip``: its record's
-#: ``alignment`` flips the corner's authored side) and its ``semantic_corner_anchor``; the artist and album lines flip
-#: their own text alignment on top of that orientation (Media's metadata and artist).
+#: artwork is ordinary Edit's freeform artwork frame (free X/Y, the image cropped); the text group (``metadata``, the
+#: Media card's role and limits; plan 1C.3: the title, artist and album lines in one box that moves and scales as one)
+#: and the artist line inside it (the Media card's ``artist``) scale uniformly; the Media Controls bar sizes freely on
+#: each axis (as the Media card's transport controls). Every one moves. Alignment is declared as on the Media card: the
+#: group's record (``alignment_flip``) is the explicit flip on top of the block's side of the display, and it carries the
+#: ``semantic_corner_anchor`` (as Media's header); the artist line flips its own text alignment on top of that. The
+#: title and album have no part of their own (Media has none); their records from before 1C.3 load through
+#: :func:`_bridge_text_group`.
 NOW_PLAYING_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     freeform_artwork_child_role("artwork", minimum_scale=(0.40, 0.40), maximum_scale=(3.00, 3.00), movable=True),
-    CustomChildRoleDescriptor("title", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
+    CustomChildRoleDescriptor("metadata", axes=("horizontal", "vertical"), minimum_scale=(0.55, 0.55),
+                              maximum_scale=(1.90, 1.90), uniform_scale=True, movable=True, alignment_flip=True,
                               authored_alignment="left", semantic_corner_anchor=True),
     CustomChildRoleDescriptor("artist", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
-                              authored_alignment="left"),
-    CustomChildRoleDescriptor("album", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
                               maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
                               authored_alignment="left"),
     CustomChildRoleDescriptor("controls", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
@@ -214,12 +214,34 @@ def _bridge_artwork_factors(raw: Mapping[str, Any], target: dict[str, Any]) -> N
     target[CHILD_GEOMETRY_KEY] = normalize_now_playing_children(children)
 
 
+#: Now Playing's text-line parts before plan 1C.3 grouped them: the title's record becomes the group's, the album's is
+#: dropped (:func:`_bridge_text_group`).
+RETIRED_TEXT_ROLES = ("title", "album")
+
+
+def _bridge_text_group(raw: Any) -> Any:
+    """Load bridge (plan 1C.3): before the text group, the title and album lines were parts of their own. The title
+    led the text and carried the block's flip and corner pin, so its record (offset, scale, alignment, anchor) becomes
+    the group's (``metadata``) when the value has none: the whole group goes where the title went and keeps its flip.
+    The album's own placement has no part any more and is dropped (it moves with the group). A value without them is
+    returned unchanged, so a second load does nothing."""
+
+    if not isinstance(raw, Mapping) or not any(role in raw for role in RETIRED_TEXT_ROLES):
+        return raw
+    bridged = {key: value for key, value in raw.items() if key not in RETIRED_TEXT_ROLES}
+    title = raw.get("title")
+    if "metadata" not in bridged and isinstance(title, Mapping):
+        bridged["metadata"] = dict(title)
+    return bridged
+
+
 def normalize_now_playing_children(raw: Any) -> dict[str, dict[str, Any]]:
     """Now Playing's ``child_geometry`` as stored: ordinary Edit's parse (known roles, clamped, authored records
-    omitted), each record in its canonical mapping form."""
+    omitted), each record in its canonical mapping form; records of the retired text-line parts load through
+    :func:`_bridge_text_group`."""
 
     return {role_id: size.to_mapping()
-            for role_id, size in normalize_child_geometry(raw, NOW_PLAYING_CHILD_ROLES).items()}
+            for role_id, size in normalize_child_geometry(_bridge_text_group(raw), NOW_PLAYING_CHILD_ROLES).items()}
 
 
 def rebase_offset_for_corner(options: Mapping[str, Any], corner: str) -> dict[str, Any]:
@@ -299,6 +321,7 @@ __all__ = [
     "TEXT_EXTENT_KEYS",
     "TEXT_EXTENT_MAX",
     "NOW_PLAYING_CHILD_ROLES",
+    "RETIRED_TEXT_ROLES",
     "VOLUME_OSD_ID",
     "canonical_fullscreen_overlays",
     "normalize_fullscreen_overlays",

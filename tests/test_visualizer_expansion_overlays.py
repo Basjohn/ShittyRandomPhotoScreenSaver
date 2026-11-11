@@ -761,7 +761,11 @@ def test_long_metadata_uses_media_fitting_and_allotted_lines_for_every_row(displ
     rows = [_named(layer, "expandedOverlay" + role) for role in ("Title", "Artist", "Album")]
     assert all(_qml_type(row) == "MediaMetadataText" for row in rows)
     roles = slot.property("customEditableChildRoles").toVariant()
-    assert next(role for role in roles if role["roleId"] == "album")["target"] is rows[2]
+    # The rows are the text group's (plan 1C.3: one part for all of them, the Media card's ``metadata``); the title and
+    # album have no part of their own.
+    group = next(role for role in roles if role["roleId"] == "metadata")["target"]
+    assert all(row.parentItem() is group for row in rows)
+    assert not {role["roleId"] for role in roles} & {"title", "album"}
     for row in rows:
         main = row.findChild(QQuickItem, "shadowedTextMain")
         assert main is not None and row.property("fontSizeMode") != 0

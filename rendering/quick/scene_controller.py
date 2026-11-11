@@ -1454,7 +1454,10 @@ class QuickSceneController(QObject):
         stage = self._expanded_overlay_stage()
         if stage is None:
             return None
-        target = overlay.item
+        try:
+            target = overlay.item
+        except RuntimeError:
+            return None         # the Edit layer retired with the scene (a late geometry report reads nothing)
 
         def rect(item: QQuickItem) -> tuple[float, float, float, float]:
             mapped = item.mapRectToItem(target, QRectF(0.0, 0.0, item.width(), item.height()))
