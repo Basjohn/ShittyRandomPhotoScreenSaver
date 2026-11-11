@@ -9,6 +9,7 @@ from widgets.spotify_visualizer.presentation_geometry import framed_aperture_sca
 
 import ctypes
 import math
+import zlib
 from contextlib import contextmanager
 from OpenGL import GL as gl
 
@@ -136,12 +137,13 @@ class QuickShockwaveGridRenderer:
                                                      self._overlay))
 
     def _adopt_terrain(self, terrain) -> None:
-        """The authored origin's reach past the basin (the mark lattice), the bounds of what the brush has painted
-        past it (the triangles' fine region; None while nothing is), the basin-to-grid transform and the origin's
-        rect in grid uv."""
+        """The authored origin's reach past the basin (the mark lattice), the tiles the brush has painted past it
+        (the triangles' fine region; None while nothing is), the basin-to-grid transform and the origin's rect in
+        grid uv."""
         self._lattice_extent = tuple(float(v) for v in terrain.get("extent", NO_EXTENT))
         painted = terrain.get("painted")
-        self._lattice_reach = None if painted is None else tuple(float(v) for v in painted)
+        self._lattice_reach = (None if not painted
+                               else tuple(tuple(float(v) for v in tile) for tile in painted))
         self._terrain_grid = tuple(float(v) for v in terrain.get("grid", (0.0, 0.0, 1.0)))
         self._terrain_origin = tuple(float(v) for v in terrain.get("origin_rect", (0.0, 0.0, 1.0, 1.0)))
 
@@ -593,7 +595,9 @@ class QuickShockwaveGridRenderer:
 
 def _mesh_key(lattice) -> str:
     (columns, rows), extent, reach = lattice
-    grown = "" if reach is None else f" painted {','.join(f'{v:.4f}' for v in reach)}"
+    # Painted tiles (up to 256 of them): named by their count and a digest of their exact bounds.
+    grown = ("" if reach is None else
+             f" painted {len(reach)} tiles {zlib.crc32(repr(reach).encode('ascii')):08x}")
     return f"basin {columns}x{rows} reach {','.join(f'{v:.4f}' for v in extent)}{grown}"
 
 

@@ -565,10 +565,13 @@ views is within the cap's reach (at most 89 of 192 / 144 spare cells). The growt
   through seeded samples cannot: the generated land has creases along every edge cell's extrusion, and a first
   attempt that stored seeds and drew their cubic softened them visibly (12-38% of pixels changed).
 - Past the grid's edge the edge's delta eases out over `CONTINUATION_DESCENT`, so paint never ends in a wall.
-- The triangles split finer (to the tier's own cell) only under the **painted bounds** (`overlay_fields`'
-  `painted`, stepped out to 16 cells): a finer mesh draws the generated land's creases more exactly, which is a
-  visible change, so an unpainted growth keeps the very same mesh. The split is crack-free (shared edges take the
-  finer side's steps; `neon_lake_basin_mesh._grown_mesh_vertices`) and the marks never move.
+- The triangles split finer (to the tier's own cell) only under the **painted tiles** (`overlay_fields`'
+  `painted`: each 16-cell square of the grid within 2 cells of a painted cell, `painted_tiles`; 2026-11-12, it was
+  one bounding box of all the paint, so two far corners refined everything between): a finer mesh draws the
+  generated land's creases more exactly, which is a visible change, so an unpainted growth keeps the very same mesh.
+  The split is crack-free (a lattice cell's steps along an axis depend only on its column or row, so a split and an
+  unsplit neighbour's counts nest and shared edges take the finer side's; `neon_lake_basin_mesh._grown_mesh_vertices`)
+  and the marks never move.
 - The camera floor is the generated bound exactly as before; only painted cells can raise it. The authored summit
   (`maximum`, the Reaction shaper's right edge) ignores unpainted cells.
 
@@ -581,7 +584,13 @@ more than 8, the Extend control at least 20 times more). Cost (same machine, Pai
 with other work, 2775 MHz): Preset 3 1.95 ms; grown to 257 unpainted 2.18 ms (the generated land plus its overlay
 read for the ring's vertices and fragments; the mesh is the same 345 GL calls); painted all over the 257 grid 5.65
 ms (the worst case: the triangles under the painted bounds split to the tier's cell, about seven times the
-vertices). Textures: 529 KB + 264 KB (overlay) at 257 against 34 KB at 65. A brush preview on the largest grid
+vertices). **Tiles (2026-11-12,** one PairedBench session alternating the tiles against the old bounding box on the
+same records, GPU 89% busy with other work, 2775 MHz): grown to 257 unpainted 2.27 ms; one far corner painted
+(4 tiles) 2.21 box / 2.21 tiles; two opposite far corners (8 tiles) 5.49 box / **2.29 tiles**; painted all over
+(252 tiles) 5.65 box / 5.63 tiles (every tile is painted, so the fine mesh is the whole grid either way). A
+static distance-based density was not taken: the mesh does not know the eye (it flies anywhere in a ±14 box, so
+far paint can be seen from close by) and a view-dependent mesh would rebuild and pop as the camera moves, which
+the one-active-mesh rule forbids. Textures: 529 KB + 264 KB (overlay) at 257 against 34 KB at 65. A brush preview on the largest grid
 configures in about 75 ms (the bank-distance transform went from 128 ms to 16 ms in array form, same bytes).
 Land painted past the origin is far land: it keeps the continuation's
 simpler look (no shoreline line or wet fringe, detail and glow fading with distance); **Extend Toward Horizon**

@@ -7,6 +7,7 @@ Both triangles and point markers consume the exact same coordinates.
 """
 from __future__ import annotations
 
+import bisect
 import math
 from functools import lru_cache
 
@@ -71,40 +72,46 @@ def _subdivided(axis: tuple[float, ...], parts: int) -> tuple[float, ...]:
     return tuple(out)
 
 
-def _reach_parts(axis: tuple[float, ...], cells: int, lead: float, trail: float, low: float, high: float
-                 ) -> tuple[list[int], list[bool], list[bool]]:
+def _reach_parts(axis: tuple[float, ...], cells: int, lead: float, trail: float
+                 ) -> tuple[list[int], list[bool]]:
     """Per lattice interval along one axis: how many equal steps bring it to the tier's own cell width (an even
-    count past the origin, so it nests with the camera-side band's halves; 1 on the origin, already that fine),
-    whether the painted bounds (``low`` .. ``high``, basin uv) reach it, and whether it lies past the origin."""
+    count past the origin, so it nests with the camera-side band's halves; 1 on the origin, already that fine) and
+    whether it lies past the origin."""
     inner_low, inner_high = -lead, 1.0 + trail
-    steps, reached, past = [], [], []
+    steps, past = [], []
     for a, b in zip(axis, axis[1:]):
         outside = a < inner_low - 1e-9 or b > inner_high + 1e-9
         steps.append(max(2, 2 * math.ceil((b - a) * cells / 2.0 - 1e-9)) if outside else 1)
-        reached.append(b > low + 1e-9 and a < high - 1e-9)
         past.append(outside)
-    return steps, reached, past
+    return steps, past
+
+
+def _reached(axis: tuple[float, ...], low: float, high: float) -> range:
+    """The lattice intervals along one axis that ``low`` .. ``high`` (basin uv) reaches into."""
+    first = bisect.bisect_right(axis, low + 1e-9) - 1
+    last = bisect.bisect_left(axis, high - 1e-9)
+    return range(max(0, first), min(len(axis) - 1, last))
 
 
 @lru_cache(maxsize=8)
 def basin_mesh_vertices(cells: tuple[int, int], extent: tuple[float, float, float, float] = NO_EXTENT,
                         subdivide: int = 1, fine_rows: tuple[float, float] = (-math.inf, math.inf),
-                        reach: tuple[float, float, float, float] | None = None) -> tuple[float, ...]:
+                        reach: tuple[tuple[float, float, float, float], ...] | None = None) -> tuple[float, ...]:
     """Triangles over the mark lattice. Rows inside ``fine_rows`` (basin v from, to; the camera's side of the basin)
     split every lattice cell ``subdivide`` times along both axes, so the surface (and the ridge lines drawn from its
     silhouette) follows the smooth land between marks there instead of straight segments from mark to mark, where
     the cells are largest on screen. The coarse rows either side fan to the fine rows' extra vertices, so the two
     never leave a crack; every mark stays exactly a triangle vertex.
 
-    ``extent`` is the authored origin's reach past the basin (the mark lattice's fine part). ``reach`` is the bounds
-    of what the terrain brush has painted past the origin (left, front, right, back in basin uv; None while nothing
-    is): the overscan cells it covers are split to the tier's own cell width, so land painted there has triangles
-    to stand on, while the marks and every triangle outside it stay exactly as they were."""
+    ``extent`` is the authored origin's reach past the basin (the mark lattice's fine part). ``reach`` is the tiles
+    the terrain brush has painted past the origin (each left, front, right, back in basin uv; None while nothing
+    is): the overscan cells under them are split to the tier's own cell width, so land painted there has triangles
+    to stand on, while the marks and every triangle outside them stay exactly as they were."""
     parts = int(subdivide)
     if parts < 1:
         raise ValueError('invalid basin mesh subdivision')
-    if reach is not None:
-        return _grown_mesh_vertices(cells, extent, parts, fine_rows, tuple(reach))
+    if reach:
+        return _grown_mesh_vertices(cells, extent, parts, fine_rows, tuple(tuple(tile) for tile in reach))
     xs, ys = basin_lattice(cells, extent)
     fine_xs = _subdivided(xs, parts)
     points = []
@@ -152,8 +159,11 @@ def _grown_mesh_vertices(cells, extent, parts: int, fine_rows, reach) -> tuple[f
     columns, rows = cells
     xs, ys = basin_lattice(cells, extent)
     lead_x, trail_x, lead_y, trail_y = extent
-    steps_x, reached_x, past_x = _reach_parts(xs, columns, lead_x, trail_x, reach[0], reach[2])
-    steps_y, reached_y, past_y = _reach_parts(ys, rows, lead_y, trail_y, reach[1], reach[3])
+    steps_x, past_x = _reach_parts(xs, columns, lead_x, trail_x)
+    steps_y, past_y = _reach_parts(ys, rows, lead_y, trail_y)
+    # The lattice cells under any painted tile.
+    reached = {(i, j) for left, front, right, back in reach
+               for j in _reached(ys, front, back) for i in _reached(xs, left, right)}
     half = parts // 2
 
     def band(j: int) -> bool:
@@ -162,8 +172,10 @@ def _grown_mesh_vertices(cells, extent, parts: int, fine_rows, reach) -> tuple[f
     def steps(i: int, j: int) -> tuple[int, int]:
         if not (0 <= i < len(xs) - 1 and 0 <= j < len(ys) - 1):
             return 1, 1
-        # Under the stored grid and past the origin (on either axis): the grown ring.
-        grown = reached_x[i] and reached_y[j] and (past_x[i] or past_y[j])
+        # Under a painted tile and past the origin (on either axis): the grown ring. A cell's steps along one axis
+        # depend only on its column (or row) when it is grown, so a grown and an ungrown neighbour's counts along
+        # their shared edge still nest (one of them is 1).
+        grown = (i, j) in reached and (past_x[i] or past_y[j])
         scale = parts if band(j) else 1
         return (steps_x[i] if grown else 1) * scale, (steps_y[j] if grown else 1) * scale
 
