@@ -641,30 +641,12 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 - [ ] D1 run (1B.14 harness), lead review of grabbed frames: long fullscreen metadata and controls.
 - [ ] D1 run (1B.14 harness), native frames grabbed: material comparisons on native pixels.
 
-## 2. Awaiting the operator (eyes, ears, hardware, decisions; details stay at the item)
+## 2. Awaiting the operator (decisions only; details stay at the item)
 
-One line each; the detail and evidence live in the section named. Nothing here needs an agent until the operator
-answers.
+One line each; the detail and evidence live in the section named. Nothing here holds a phase open, and nothing here
+is an operator look: looks, listens and feels are the lead's proofs (1B.14), and what has no simple test is a
+Watchlist entry (operator, 11 Nov).
 
-- **GitHub Remote builds (8 Nov, proven end to end):** Build Runner's third tab and
-  `tools/github_remote_build.py` compile Standard/Media Center on GitHub runners, validate and publish them, and
-  compile opted-in installers locally (`Docs/Guides/GitHub_Remote_Build.md`). Lead's headless run from the Build
-  Runner CLI on e9bbd7a4: both remote builds downloaded, validated (manifest + PE version) and published, and both
-  installers compiled locally (`release/installers/Setup_SRPSS.exe`, `Setup_SRPSS_Media_Center.exe`). The run before
-  it showed the installer gate refusing a Standard installer whose presets had changed after the remote build.
-  Open: the operator installing a remote-built product. Since checkpoint audit 11 (8 Nov) the tab's Linux job runs
-  beside the Windows runs on its own process owner (never holding their retrieval) and a stop cancels its run even
-  before it was followed; tested with fakes only, so the next Remote run with Linux selected is its first real one.
-- **Read:** Bubble / Extruded Bubble "terrible performance" (6 Nov log 10:32-10:35) was our load (97-100% system CPU
-  from the agents' game60 checks), not the product: on the quiet machine Bubble P1 ran 65.9 fps, tick 1.47 ms, GIL
-  0.13, 3.9% late; Extruded Bubble 45-69 fps (`.artifacts/evidence/performance/live_check/20261106_live/`). Heavy load-generator runs are
-  scheduled by the lead only.
-- **§4 Slow startup:** a cold start with `--usage` (no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line over a frame).
-- **§4 Displays off:** the overnight check with the power plan's display timeout (`--frame-trace --usage`).
-- **§4 Spline Curve (`devcurve`) "more alive":** eyes after the lead's review.
-- **§4 Frozen builds:** open a Studio from a fresh build.
-- **Materials/Studio:** native operator comparison at section 1A, item 1.7; Settings corners remain open at item 1.9.
-- **§4 Extruded Bubble Deep Red Ocean (Preset 9):** eyes on the second pass.
 - **Framed aperture on the saver card (8 Nov, decision):** the writer is fixed (R-181: the Visualizer's uniform-scale
   minimum is absolute, and settings load lifts stored cards to it). That alone does not restore the saver card's 45°
   look: the repaired 592x592 card holds a 1480x1480 world (0.4 px per world unit, aperture 5.29), still at the 90° x
@@ -673,14 +655,6 @@ answers.
   vertical view) as well, or leave it to Edit (Restore Size, wheel up, side drag back to the wanted width).
 - **§1 8b P2:** decide whether to size the frame-age gain with a matched-GPU repeat game60 pair; gates 3/4 and their
   measurement limits are in the design record. The Windows default and H1/H2 repairs are already integrated.
-- **§7.1 Waveform:** Preset 4 trade-offs of the fixed-scale v7 (sign off or ask for the tag's exact dynamics);
-  Preset 7 and the Reaction Modes; Breathing; four-ribbon Preset 3; Particles; Strands; Colour/floor/mist; Fixed
-  response; Floor Give; Pulse Rim; swell visibility; Travel Direction; Unified atmosphere.
-- **§8 Bubble:** R-170 eyes-on (tall, wide and TV cards); Particle glow.
-- **§9 Studios:** Neon Lake (`shockwave_grid`), Extruded Spectrum, Spectrum, Spline Curve and Oscilloscope Studios; the migrated Settings
-  pages; Open Studio in the preset row and the Save To flow; the seamless clip loops; the chrome; the drag feel; the
-  terrain brush.
-- **§5 Frozen release gate:** operator-run builds and installer checks.
 - **Decision, Waveform Preset 4 (the reference):** sign off the fixed-scale v7 trade-offs against main and the
   "floor first" lift (`TROUGH_LIFT_MAX` 1.5 -> 3: Preset 4's ribbon rides about .7 higher at p90 and stops dipping
   into the floor, operator: "rather it goes a bit higher when it has to than clips"), or ask for the tag's exact
@@ -1192,6 +1166,30 @@ rendering.
 
 - [ ] Inspect the helper/log-path authority before relying on that diagnostic route; do not hide it behind a silent
   local fallback.
+
+**GitHub Remote builds (8 Nov, proven end to end; moved from section 2)**
+
+Build Runner's third tab and `tools/github_remote_build.py` compile Standard/Media Center on GitHub runners, validate
+and publish them, and compile opted-in installers locally (`Docs/Guides/GitHub_Remote_Build.md`). Lead's headless run
+from the Build Runner CLI on e9bbd7a4: both remote builds downloaded, validated (manifest + PE version) and
+published, and both installers compiled locally (`release/installers/Setup_SRPSS.exe`,
+`Setup_SRPSS_Media_Center.exe`). The run before it showed the installer gate refusing a Standard installer whose
+presets had changed after the remote build. Installing a remote-built product on an ordinary user account is the
+"Installed builds" entry below; the frozen run of 1B.14 covers the artifact.
+
+- [ ] Since checkpoint audit 11 (8 Nov) the tab's Linux job runs beside the Windows runs on its own process owner
+  (never holding their retrieval) and a stop cancels its run even before it was followed; tested with fakes only, so
+  the next Remote run with Linux selected is its first real one: read its log and fix what it shows.
+
+**Bubble / Extruded Bubble "terrible performance" reports (6 Nov log 10:32-10:35; moved from section 2)**
+
+That log was our load (97-100% system CPU from the agents' game60 checks), not the product: on the quiet machine
+Bubble P1 ran 65.9 fps, tick 1.47 ms, GIL 0.13, 3.9% late; Extruded Bubble 45-69 fps
+(`.artifacts/evidence/performance/live_check/20261106_live/`). Heavy load-generator runs are scheduled by the lead
+only.
+
+- [ ] On a new report, read the log's system CPU first: a load-driven reading is not a product defect; otherwise
+  reproduce on the quiet machine against those numbers.
 
 **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; needs the machine's own screen timeout)**
 
