@@ -230,18 +230,17 @@ without the safe path below.
   stored index differs from the reference's slot: a selection made against the catalogue the process holds), the
   index is the user's choice; when it changed (presets removed, renamed or
   renumbered by an install or round of authoring), the identity decides: the same preset wherever it now sits,
-  Custom as Custom, a retired preset's recorded successor (`core/settings/visualizer_preset_compat.py`), else the
-  mode's Preset 1. One log line per repair, never a dialog, never a failed open; the settings load stores the
+  Custom as Custom, else the mode's Preset 1. Presets are authored, mutable content: deleting or renaming one
+  needs no record anywhere and has no consequence beyond that quiet fallback (operator, 12 Nov 2026). One log line per repair, never a dialog, never a failed open; the settings load stores the
   resolved reference once (`repair_preset_references`; a second load changes nothing). **Bridge:** a profile
   written before 12 Nov 2026 has indices only: an index the catalogue still has keeps its slot, one past it falls
   back to Preset 1, and the load writes the reference. Fixture:
   `tests/fixtures/visualizer_preset_reference_old_profile.json`; tests:
-  `tests/test_visualizer_preset_references.py` (every curated mode; the real Settings dialog and Studio),
-  `tests/test_visualizer_preset_compat.py` (the tree and the compatibility record agree: removing, renaming or
-  adding a curated preset needs its line). *Horizon:* the index-only bridge stays while shipped profiles may
+  `tests/test_visualizer_preset_references.py` (every curated mode; the real Settings dialog and Studio).
+  *Horizon:* the index-only bridge stays while shipped profiles may
   predate references. *Blocked:* resolving by index alone after a catalogue change (a stored Custom silently
-  became a curated preset, a removed slot silently became its neighbour), or pinning the shipped preset names in
-  a test instead of the compatibility record.
+  became a curated preset, a removed slot silently became its neighbour); and any list, record or test of the
+  shipped presets' names, counts or contents (a guard of that kind was merged and removed on 12 Nov 2026).
 
 ### Not debt — current input contracts (do not "simplify")
 

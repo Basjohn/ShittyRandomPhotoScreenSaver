@@ -39,8 +39,8 @@ so a mode whose catalogue was empty could never be rebuilt (every file "failed" 
   after a catalogue change, repaired once at load, with a bridge for older profiles
   (`Docs/Architecture/Persisted_Input_Compatibility.md`, "Visualizer preset references"); the Settings mode page
   reloads presets that changed on disk since the process loaded them.
-- Guard: `tests/test_visualizer_preset_compat.py` fails when a curated preset is removed, renamed or added without
-  its line in `core/settings/visualizer_preset_compat.py`.
+- No guard over the preset tree: presets are deleted and renamed freely; a stored reference to a preset that no
+  longer exists falls back to Preset 1 with one log line.
 - Tests: `tests/test_visualizer_preset_unreadable_folder.py`, `tests/test_visualizer_preset_references.py`
   (every curated mode; the real Settings dialog and Studio on a profile copy), negative controls described in each.
 
