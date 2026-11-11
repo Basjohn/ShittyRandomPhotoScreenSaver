@@ -419,3 +419,21 @@ schemas follow the bridge procedure. **Size:** S. **Depends on:** SS-02 (it dele
   The MC build's own theme root could differ in which mirrors or material themes it ships.
 - **The 10 mirrors that differ from generator output.** Whether those deviations are deliberate authoring or stale
   generations is the operator's or theme author's call. SS-01's fill-only fix is safe either way.
+
+## Resolution: the Settings SSOT fold (merged 7 Nov, bd625f28; moved from `Current_Plan.md`, 11 Nov 2026)
+
+All seven items are built as AC-17 to AC-23 (AC-17 last); the lead re-checked the audit's key lines in source and all
+seven survived. AC-19: Reset and Import re-derive the active Settings and Widget themes and the Themes tab reloads.
+AC-22: one MC predicate decides whether interaction is forced. AC-18: the Technical controls are spec entries (3090
+preset fields identical, 27/27 replay digests match; `technical_controls.py` deleted). AC-21: the shared Bar
+Appearance and Rainbow families are spec entries (the hidden holder and `shared_appearance_controls.py` are gone).
+AC-23: the dead residue is removed and three disclosure schemas are retired through the bridge. AC-20: the Particle,
+Blinds and Burn pages read their ranges from the transition spec. The rest of A-12 (the page-level Bar Appearance and
+Rainbow hidden rows) is folded by AC-21.
+
+Visible changes: Neon Lake's (`shockwave_grid`) Kick Lane Gain is now offered (the renderer always read it; the old
+`_KICK_GAIN_MODES` filter hid it, and folding it into `technical_hidden_suffixes` made the analysis-controls audit
+fail, so the stored values and presets, always authored, did not change); the Particle radius default is 8 (what
+always ran); Particle Gloss Size offers 16-128 (what the resolver admits); Manual Floor's low is 0.0 everywhere;
+Technical tooltips use the registry names. A 211-file Settings, Studio, transition, preset and lifecycle gate on the
+merge passed 210; the one failure was a source-text test left stale by AC-01, fixed in e3b28e93.
