@@ -444,51 +444,32 @@ impressive; the agent may ask the lead for a feature or architecture a better lo
   popup (unthemed); give it the theme filter's popup.
 - [ ] Side defect: `ui/tabs/widgets_tab_weather.py:157` hard-codes `#4CAF50` instead of a theme role.
 
-### 1B.12 Two fullscreen glyphs, one per display (operator; in flight, Opus High)
+### 1B.12 Two fullscreen glyphs, one per display (merged 21da6fbc; contract: plan 01 M3c)
 
-For the Expanded Visualizer now and SMP later: the target is a display, not "the Visualizer's display".
+Up-left expands on Display 1 of Settings' numbering (the first display), up-right on the second; one display
+keeps the single glyph; the request is "expand on display N" (`expand_on_display`), the shape SMP will reuse.
+The expanded-to-expanded move between displays (plan 01's unbuilt M5 step) was built here as its transfer.
 
-- [ ] A second glyph (diagonal arrow up-left) beside the existing up-right one, painted in the glyph row's
-  style (no seams, strokes >= 1.5 px), Title Case tooltips.
-- [ ] More than one display: both show; up-left expands onto Display 0, up-right onto Display 1, from whichever
-  display the card is on, through the existing transfer + expand transaction (no second path).
-- [ ] One display: the single existing glyph exactly as today (operator: "Keep it").
-- [ ] V still expands on the display the Visualizer is on; displays beyond the first two are reached with V.
-- [ ] While expanded: the expanded display's glyph collapses; the other moves the expanded view there; the
-  Edit holds of 1B.1 still refuse a transfer.
-- [ ] The glyphs fade in and out when the display count changes.
-- [ ] The owner request is "expand on display N" (the shape SMP will reuse).
-- [ ] Off-screen PNG evidence at 100% and 150% with 2x crops (one display, two displays, expanded); lead pixel
-  review.
-- [ ] Lead audit, merge; plan 01 updated.
-- [~] Operator look on two monitors.
+- [~] Operator, two monitors: both glyphs from each display; the move while expanded (collapse, move, expand);
+  a move between displays of different size or DPI and its fades; V unchanged.
+- [~] Operator decision: the two glyphs' tooltips are ALL CAPS ("FULL DISPLAY ON DISPLAY 1") to match the rest
+  of the glyph row; Title Case is a one-line change.
+- [ ] Record in the QML guide: a QML property named `left` on a `Text` (colliding with Item's built-in `left`)
+  hangs the hidden-scene load silently instead of raising.
 
-### 1B.13 Hold right-click to pan the live Visualizer (operator; queued behind 1B.12, same agent)
+### 1B.13 Hold right-click to pan the live Visualizer (merged 21da6fbc; contract: Spec.md / Contracts.md input)
 
-The context menu's reliability and speed rank above this feature. Design: menu on button-up, only over a
-pan-capable Visualizer card; everywhere else the menu opens on press exactly as today, untouched.
+Over a pan-capable card a right press arms a pending pan; travel past the drag distance pans (no menu for that
+press); a still release opens the menu at the release point; every other right press opens on press as before.
+Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us after (run-to-run noise 300-426).
 
-- [ ] Baseline first: press-to-menu-visible timing on the untouched path recorded.
-- [ ] Over a pan-capable card (not in Edit, not exiting, no menu open, mode has `scene_transform_settings`) a
-  right press opens nothing and arms a pending pan.
-- [ ] Travel past the system drag distance while held becomes the pan (the existing pan baseline
-  `_quick_scene_view_gesture` and the one pointer-capture owner); no menu for that press;
-  `context_menu_active` never true.
-- [ ] Release ends the pan through the live view-pose owner's existing save rule (no new persistence rule).
-- [ ] Release without that travel opens the retained menu at the release point through
-  `context_menu_requested`.
-- [ ] Pan feel (direction, scale per pixel, limits) matches the Studios (`ui/studio/viewport.py`).
-- [ ] No timer or hold delay; no menu flash-and-dismiss.
-- [ ] The pan cursor goes through the cursor owner and ends on R-183's retire path.
-- [ ] Existing context-menu, R39 hover-handoff, double-right Edit and single-menu-per-display tests pass
-  unchanged.
-- [ ] New tests: click (menu once, on release); drag (pan, no menu); press on the card, release off it; second
-  right press with the menu open; double-right over the card; focus loss, mode switch, exit and display loss
-  mid-pan; the expanded card; Media Center mode.
-- [ ] After: press-to-menu-visible on the untouched path equal to the baseline; release-to-menu-visible on the
-  card reported.
-- [ ] Docs: `Spec.md` / `Docs/Contracts.md` input routing.
-- [~] Operator feel check.
+- [~] Operator feel check on the real display: pan direction and scale against the Studios; a quick right
+  click on the card still opens the menu; double-right still enters Edit.
+- [~] Operator decision: the two pans go opposite ways horizontally. Alt+right drag increases pan X when
+  dragged right (`engine/display_manager.py` `_move_quick_visualizer`); the Studios and held-right decrease it.
+  Pick one convention; the lead's recommendation is the Studio's for all three.
+- [ ] Native pointer capture on a real foreground window is unproven (tests use a stand-in capture): add the
+  pan to the opt-in native harness pattern of R-183 or verify with the operator's check above.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
