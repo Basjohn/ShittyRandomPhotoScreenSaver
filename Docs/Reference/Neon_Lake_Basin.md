@@ -200,7 +200,7 @@ The deformation lives in the single height owner (`basinLandHeight`), so vertice
 differences), flat-shaded normals, the skyline pass, the depth prepass and body visibility all follow it; the
 skyline is given the event count it needs for Pulses. It is zero on water and fades in over the shore band, so the
 water boundary never moves; it fades with the distant continuation's detail; land never sinks below 30% of its
-authored height and never rises more than the bounded lift. The light-ray volume's land bound is fixed by the
+authored height (Indents carve on to 8%, below) and never rises more than the bounded lift. The light-ray volume's land bound is fixed by the
 settings (never pumped by audio). The renderer only uploads amounts, five drives, the phase and the baked tables.
 
 ### Smooth reshaping, Growth and Indents (2026-11-11, 1B.6)
@@ -232,8 +232,21 @@ them like the other amounts):
   (1: cell 0.70, up to 0.72, profile power 2.6). Each site wakes at its own level of the drive, so louder music
   raises more of them and each eases in and out. They stand back from the eye (`GROWTH_EYE_CLEAR` 0.8..2.0 world
   units) instead of raising the camera floor, so turning Growth on never lifts an authored low view.
-- **Indents** press visible land toward its floor share in the same kind of sites (cell 0.85): hollows that open
-  with the passage and deepen on hits, never below 30% of the authored height, never moving the water's edge.
+- **Indents** carve bowls into visible land in the same kind of sites (cell 0.85): hollows that open with the
+  passage and deepen on hits. **Depth law (2026-11-12 refinement):** the most a point may sink is a share of its
+  authored height plus an absolute depth (`INDENT_SHARE` 0.65 x authored + `INDENT_ABSOLUTE` 0.40 x Terrain
+  Height), eased under the room above the Indents floor (`room * tanh(law / room)`, room = height - `INDENT_FLOOR`
+  0.08 x authored); the bowl's own profile scales it (`tanh(INDENT_PRESS 1.5 x press)`, so a bowl's middle at full
+  drive takes 68-90% of it and overlapping bowls ease toward it). The first law pressed toward the reaction's 30%
+  floor by a share of the land only, so dunes a tenth of the height scale sank a few hundredths and Indents were
+  barely visible (`20261111_land/growth_indents_staged_drives_p1_sheet.png`); a law that saturated the press
+  against the room instead flattened low land's bowls into shelves with sharp rims. Now the bowl's shape is the
+  same on any land and only its depth scales: over half the land's height in a full-drive bowl, dunes included.
+  Indents only lower the land (the camera floor never needs them), so they give way round the eye over a short
+  reach (`INDENT_EYE_CLEAR` 0.25..0.75 world units), not Growth's 0.8..2.0, which left every default view's near
+  dunes untouched. Never below 8% of the authored height (land never reaches the water plane; the water's edge
+  never moves: zero on water, faded in over the shore band). Evidence:
+  `.artifacts/evidence/visualizers/shockwave_grid/20261112_refine/indents_staged_drives_sheet.png`.
 - Both are terms of the one height owner (`basinLandHeight`): vertices, normals, skyline, depth and reflections
   follow; zero on water, faded at the shore and with distance like the rest of the reaction.
 

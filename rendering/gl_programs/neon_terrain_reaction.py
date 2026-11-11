@@ -30,9 +30,15 @@ INDENT_CELL = 0.85
 # height there plus an absolute depth (a share of Terrain Height), eased onto a floor share of the authored height.
 # The share alone left low land (dunes a tenth of the height scale) with dips too shallow to see; the absolute term
 # is what carves them, and the floor is what keeps every bowl dry land above the water plane.
-INDENT_SHARE = 0.45
-INDENT_ABSOLUTE = 0.24
-INDENT_FLOOR = 0.10
+INDENT_SHARE = 0.65
+INDENT_ABSOLUTE = 0.40
+INDENT_FLOOR = 0.08
+INDENT_SHARPNESS = 1.0
+INDENT_PRESS = 1.5   # a bowl's middle (press 0.55..1 at full drive) takes 68..90% of the depth
+# Indents only lower the land, so the camera floor never needs to know them: they give way round the eye only over
+# a short reach (the ground just under the eye stays put), not Growth's wide one, which left the near dunes of
+# every default view untouched.
+INDENT_EYE_CLEAR = (0.25, 0.75)
 
 
 # Growth stands back from the eye: nothing within the first distance (world units, along the ground), whole by
@@ -162,6 +168,8 @@ const float INDENT_CELL = {INDENT_CELL:.6f};
 const float INDENT_SHARE = {INDENT_SHARE:.6f};
 const float INDENT_ABSOLUTE = {INDENT_ABSOLUTE:.6f};
 const float INDENT_FLOOR = {INDENT_FLOOR:.6f};
+const float INDENT_SHARPNESS = {INDENT_SHARPNESS:.6f};
+const float INDENT_PRESS = {INDENT_PRESS:.6f};
 // The tables are read through the land's own cubic filter: a weight that changes along the slope does so with a
 // continuous slope and curvature, so the surface it scales keeps continuous normals.
 vec4 reactionFilter(float t) {{
@@ -215,16 +223,21 @@ float basinGrowth(vec2 p) {{
 // Indents: how hard the land is pressed in here, 0 (not at all) .. 1 (a bowl's middle at full drive).
 float basinIndent(vec2 p) {{
     if (uReactionForms.z <= 0.0) return 0.0;
-    float clear = reactionEyeClear(p);
+    float clear = smoothstep({INDENT_EYE_CLEAR[0]:.6f}, {INDENT_EYE_CLEAR[1]:.6f}, length(p - uEye.xz));
     if (clear <= 0.0) return 0.0;
-    return clear * min(1.0, uReactionForms.z * basinSites(p, INDENT_CELL, 1.0, uReactionDrives.y, 29u));
+    // Uncapped: overlapping bowls add, and the depth law's own easing bounds them (a cap creased where it bit).
+    return clear * uReactionForms.z * basinSites(p, INDENT_CELL, INDENT_SHARPNESS, uReactionDrives.y, 29u);
 }}
 // How far that press sinks land standing at ``height`` whose authored height is ``authored`` (both world units;
 // ``scale`` is Terrain Height): a share of the authored height plus an absolute depth, eased onto the floor share
 // so a bowl in low land flattens toward the water plane without ever reaching it.
 float basinIndentDepth(float press, float height, float authored, float scale) {{
-    float space = max(height - INDENT_FLOOR * authored, 1e-6);
-    return space * tanh(press * (INDENT_SHARE * authored + INDENT_ABSOLUTE * scale) / space);
+    float space = max(height - INDENT_FLOOR * authored, 0.0);
+    // The deepest this point may sink: the law, eased under the room above the floor (never all of it).
+    float most = space * tanh((INDENT_SHARE * authored + INDENT_ABSOLUTE * scale) / max(space, 1e-6));
+    // The bowl's own profile scales that depth. Saturating the press against the room instead flattened a bowl in
+    // low land into a shelf with a sharp rim; overlapping bowls ease toward the most rather than adding past it.
+    return most * tanh(INDENT_PRESS * press);
 }}
 // Each lane reshapes with its own pattern: low lanes heave broad ground up and down, high lanes
 // lift finer crests. Signed patterns raise some places and lower others, so the land changes shape.
@@ -281,6 +294,8 @@ __all__ = [
     "GROWTH_CELL",
     "GROWTH_HEIGHT",
     "INDENT_CELL",
+    "INDENT_EYE_CLEAR",
+    "INDENT_FLOOR",
     "REACTION_FLOOR",
     "REACTION_LANE_BLEND",
     "GROWTH_EYE_CLEAR",
