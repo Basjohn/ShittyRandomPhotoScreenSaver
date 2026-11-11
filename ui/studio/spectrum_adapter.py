@@ -18,8 +18,8 @@ Truthfulness: the Studio changes no Spectrum simulation, timing, engine or rende
   previous answers (with their own engine values) staying on screen meanwhile.
 * The production ``QuickSpectrumRenderer`` draws the resulting ``VisualizerLogicalFrame``.
 
-The recorder, inputs and evaluator are the Spectrum family's shared ``ui.studio.engine_answers`` and the shape editor
-rows ``ui.studio.spectrum_shape``; this module supplies Spectrum's schema and names.
+The recorder, inputs and evaluator are the Spectrum family's shared ``ui.studio.engine_answers`` and the shape (its
+rules and its instrument) ``ui.studio.spectrum_shape``; this module supplies Spectrum's schema and names.
 """
 from __future__ import annotations
 
@@ -131,11 +131,6 @@ def structure_edit(action_id: str, values: Mapping[str, Any]):
     return spectrum_shape.structure_edit(SHAPE, action_id, values)
 
 
-def row_label(prop: StudioProperty, values: Mapping[str, Any]) -> str:
-    """A boundary row is titled by the lane it currently bounds (lanes can be reordered)."""
-    return spectrum_shape.row_label(SHAPE, prop, values)
-
-
 # ---------------------------------------------------------------------------------- schema
 def build_schema() -> StudioSchema:
     spec = require_mode_settings(MODE)
@@ -216,9 +211,9 @@ def build_schema() -> StudioSchema:
         minimum=speed.low, maximum=speed.high, decimals=2, when=((rainbow["rainbow_enabled"], (True,)),),
         tooltip=speed.tooltip)
 
-    # The shape editor (Custom): layout, curve nodes, frequency boundaries and lane strengths.
+    # The shape (Custom): the layout switch and the shape instrument (curve nodes, frequency lanes and strengths).
     shape = titles["shape"]
-    spectrum_shape.shape_properties(SHAPE, add, "shape", shape)
+    shape_spec = spectrum_shape.shape_properties(SHAPE, add, "shape", shape)
 
     technical = technical_properties(MODE, workspace="shape")
     props.extend(prop for prop, _defn in technical.values())
@@ -264,12 +259,10 @@ def build_schema() -> StudioSchema:
 
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _GROUP_PANEL.items() if key in titles}
     group_icons.update({TECHNICAL_GROUP: "bars", BAR_COLOUR_GROUP: "colour", RAINBOW_GROUP: "gradient"})
-    add_node = spectrum_shape.add_node_action()
     return StudioSchema(MODE, studio_title(MODE), tuple(workspaces), tuple(props), admit,
                         group_traces=((titles["audio"], ("Level", "Peak")), (titles["ghost"], ("Ghost",)),
                                       (titles["render"], ("Level",))),
-                        group_icons=tuple(group_icons.items()), object_noun="Bar",
-                        group_actions=((shape, (add_node,)),), row_label=row_label)
+                        group_icons=tuple(group_icons.items()), object_noun="Bar", shapes=(shape_spec,))
 
 
 # ------------------------------------------------------------------------------- evaluator

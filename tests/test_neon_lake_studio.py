@@ -163,13 +163,14 @@ def _vector_elements() -> set[tuple]:
 
 def _uncovered(properties, schema=None) -> set:
     """Registry keys (every spec control, every Custom row's keys, every technical control) with no Studio property,
-    vector elements no property edits, and the terrain record without its whole-record actions."""
+    vector elements nothing edits (neither a property nor a shape instrument of ``schema``), and the terrain record
+    without its whole-record actions."""
+    from tests.test_studio_shape_instrument import shape_uncovered
     schema = schema or build_schema()
-    paths = {tuple(p.path) for p in properties}
     roots = {p.path[0] for p in properties}
     custom_keys = {key for e in spec().entries if isinstance(e, Custom) for key in e.keys}
     keys = {c.key for c in spec().body_controls} | custom_keys | technical_keys()
-    missing = (keys - roots) | {element for element in _vector_elements() if element not in paths}
+    missing = (keys - roots) | shape_uncovered(properties, schema.shapes, _vector_elements())
     terrain_actions = {a.id for _group, actions in schema.group_actions for a in actions if a.id.startswith("terrain.")}
     if TERRAIN in roots and not terrain_actions:
         missing.add((TERRAIN, "actions"))
@@ -197,8 +198,10 @@ def test_coverage_check_detects_a_missing_control_negative_control():
                     TERRAIN, PREFIX + "visual_smoothing", PREFIX + "camera_position", PREFIX + "sensitivity",
                     PREFIX + "turn"):
         assert dropped in _uncovered([p for p in properties if p.path[0] != dropped]), dropped
+    # Without their shape instruments nothing edits a shaper lane, a shaper node or a Frequency Response node.
     lane = (SHAPER, "lanes", next(iter(require_canonical_default("widgets.spotify_visualizer")[SHAPER]["lanes"])))
-    assert lane in _uncovered([p for p in properties if tuple(p.path) != lane])
+    assert {lane, (SHAPER, "nodes", 0, 1), (SHAPE.nodes, 0, 0)} <= _uncovered(properties, replace(
+        schema, properties=tuple(p for p in properties if p.instrument != "shape"), shapes=()))
     bare = replace(schema, group_actions=tuple((g, tuple(a for a in acts if not a.id.startswith("terrain.")))
                                                for g, acts in schema.group_actions))
     assert (TERRAIN, "actions") in _uncovered(properties, bare)
@@ -709,13 +712,13 @@ def test_edits_save_through_the_settings_owners_and_every_exit_restores_settings
     bridge.commitValue(PREFIX + "camera_position.0", 0, 0.25)
     assert stored()[PREFIX + "camera_position"][0] == pytest.approx(0.25)
     height = session.values[SHAPER]["nodes"][1][1]
-    bridge.commitValue(f"{SHAPER}.nodes.1.1", 0, round(1.0 - height, 3))
+    bridge.shapeCommitText(SHAPER, "node", 1, 1, f"{round(1.0 - height, 3)}")
     assert stored()[SHAPER]["nodes"][1][1] == pytest.approx(round(1.0 - height, 3))
-    lane = next(iter(session.values[SHAPER]["lanes"]))
-    bridge.commitValue(f"{SHAPER}.lanes.{lane}", 0, 0.25)
+    lane = session.values[SHAPER]["notches"][1][1]
+    bridge.shapeCommitText(SHAPER, "lane", 1, 1, "0.25")
     assert stored()[SHAPER]["lanes"][lane] == pytest.approx(0.25)
     shape_height = session.values[SHAPE.nodes][0][1]
-    bridge.commitValue(f"{SHAPE.nodes}.0.1", 0, round(1.0 - shape_height, 3))
+    bridge.shapeCommitText(SHAPE.nodes, "node", 0, 1, f"{round(1.0 - shape_height, 3)}")
     assert stored()[SHAPE.nodes][0][1] == pytest.approx(round(1.0 - shape_height, 3))
     bridge.commitValue(PREFIX + "visual_smoothing", 0, 0.73)
     assert stored()[PREFIX + "visual_smoothing"] == pytest.approx(0.73)

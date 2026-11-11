@@ -19,7 +19,8 @@ CHOICE = "choice"            # categorical: chips
 QUIET_PEAK = "quiet_peak"    # two response endpoints of ONE quantity: Quiet|Peak A/B selector + one slider
 COLOUR = "colour"            # display swatch + exact hex entry
 GRADIENT = "gradient"        # ordered colour nodes [[position, rgb], ...]: draggable strip + picker
-INSTRUMENTS = frozenset({SCALAR, COUNT, SWITCH, CHOICE, QUIET_PEAK, COLOUR, GRADIENT})
+SHAPE = "shape"              # a node curve with its frequency lanes on one canvas (``ShapeSpec``)
+INSTRUMENTS = frozenset({SCALAR, COUNT, SWITCH, CHOICE, QUIET_PEAK, COLOUR, GRADIENT, SHAPE})
 
 Path = tuple  # (settings_key, *index)
 
@@ -210,6 +211,76 @@ class CardSpec:
     rendered: bool = False
 
 
+SHAPE_BLEND = "blend"        # a lane is a point: strengths interpolate between the lanes' positions
+SHAPE_BANDS = "bands"        # a lane is a span: it owns the axis from its position up to the next lane's
+
+
+@dataclass(frozen=True)
+class ShapeLayout:
+    """One layout of a shape instrument's lanes: where they sit ([[x, label], ...]) and how strong each is
+    ({label: 0..1})."""
+    notches: Path
+    lanes: Path
+    # What the layout is called where two are offered, and the words for the two ends of its axis.
+    name: str = ""
+    low: str = "Low"
+    high: str = "High"
+    # Drawn as the editable half (x = 0 at the centre) beside a ghost of its mirror image.
+    mirrored: bool = False
+    # ``StudioAction`` id prefixes (+ the lane's index): exchange a lane with the one before / after it.
+    previous: str = ""
+    next: str = ""
+
+
+@dataclass(frozen=True)
+class ShapeSpec:
+    """The SHAPE instrument of one property, whose path holds the curve's nodes ([[x, y], ...] in 0..1).
+
+    The framework owns the canvas and its gestures; every rule stays the mode's: values pass the schema's
+    ``admit``, node add / remove and lane swaps are the adapter's ``structure_edit`` actions named here, and what the
+    shape does is ``profile`` (the mode's production functions on the current values)."""
+    property: str
+    layouts: tuple[ShapeLayout, ...]
+    # A stored boolean choosing the layout (False: ``layouts[0]``, True: ``layouts[1]``); None: one layout. The
+    # instrument offers the choice itself, so the SWITCH property holding it is carried (``instrument_only``).
+    layout_switch: Path | None = None
+    node_limits: tuple[int, int] = (1, 5)
+    lane_mode: str = SHAPE_BLEND
+    # Leading lanes whose position the mode pins (their strength is still editable).
+    pinned_lanes: int = 0
+    value_label: str = "Height"
+    # What a node and a lane are called in undo labels and on the canvas.
+    node_noun: str = "Shape Node"
+    lane_noun: str = "Lane"
+    # ``StudioAction`` ids: add a node (in the widest gap), remove a node (prefix + its index).
+    add: str = ""
+    remove: str = ""
+    # (values) -> {"bars": [[silhouette, driven], ...] left to right, "lanes": [[x, weight], ...] along the node
+    # axis}: the preview under the curve, from the mode's production functions. None: no preview.
+    profile: Callable[[Any], Any] | None = field(compare=False, repr=False, default=None)
+    # Other keys ``profile`` reads (the instrument is re-shown when one of them changes).
+    reads: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.layouts or (self.layout_switch is None) != (len(self.layouts) == 1):
+            raise ValueError(f"Studio shape {self.property} needs one layout, or two with a layout switch")
+        if self.lane_mode not in (SHAPE_BLEND, SHAPE_BANDS):
+            raise ValueError(f"Studio shape {self.property} has an unknown lane mode {self.lane_mode!r}")
+        if not 1 <= self.node_limits[0] <= self.node_limits[1]:
+            raise ValueError(f"Studio shape {self.property} has inverted node limits")
+
+    @property
+    def paths(self) -> tuple[Path, ...]:
+        """Every stored value the instrument edits besides its property's own nodes."""
+        return tuple(path for layout in self.layouts for path in (layout.notches, layout.lanes))
+
+    @property
+    def keys(self) -> frozenset[str]:
+        """Every settings key the instrument shows (its lanes, its layout switch and what its preview reads)."""
+        switch = (self.layout_switch[0],) if self.layout_switch is not None else ()
+        return frozenset((*(path[0] for path in self.paths), *switch, *self.reads))
+
+
 @dataclass(frozen=True)
 class StudioSchema:
     """A mode's complete editable surface."""
@@ -237,6 +308,8 @@ class StudioSchema:
     # A row label that follows the current values (property, values) -> label, e.g. a list element whose meaning
     # moves with it; None: the property's own label.
     row_label: Callable[[StudioProperty, Any], str] | None = field(compare=False, repr=False, default=None)
+    # The SHAPE instruments: one spec per SHAPE row (a SHAPE property without one only carries its value).
+    shapes: tuple[ShapeSpec, ...] = ()
 
     def __post_init__(self) -> None:
         ids = [prop.id for prop in self.properties]
@@ -246,6 +319,32 @@ class StudioSchema:
         for prop in self.properties:
             if prop.workspace not in known:
                 raise ValueError(f"Studio property {prop.id} names unknown workspace {prop.workspace}")
+        carried = {prop.path[0] for prop in self.properties}
+        by_id = {prop.id: prop for prop in self.properties}
+        for spec in self.shapes:
+            prop = by_id.get(spec.property)
+            if prop is None or prop.instrument != SHAPE or prop.instrument_only:
+                raise ValueError(f"Studio shape {spec.property} is not a SHAPE row of this schema")
+            missing = sorted(key for key in spec.keys if key not in carried)
+            if missing:
+                raise ValueError(f"Studio shape {spec.property} edits values no property carries: {missing}")
+        if len({spec.property for spec in self.shapes}) != len(self.shapes):
+            raise ValueError("A Studio SHAPE row has one spec")
+        rows = {prop.id for prop in self.properties if prop.instrument == SHAPE and not prop.instrument_only}
+        if rows != {spec.property for spec in self.shapes}:
+            raise ValueError("Every Studio SHAPE row needs its ShapeSpec")
+
+    def shape(self, property_id: str) -> ShapeSpec | None:
+        """The SHAPE instrument's spec of ``property_id``, or None."""
+        return next((spec for spec in self.shapes if spec.property == property_id), None)
+
+    def edits(self, path: Path) -> bool:
+        """Whether ``path`` (a stored value or an element of one) is editable here: a property addresses it or an
+        ancestor of it, or a SHAPE instrument edits it."""
+        path = tuple(path)
+        owners = [tuple(prop.path) for prop in self.properties]
+        owners += [tuple(shape_path) for spec in self.shapes for shape_path in spec.paths]
+        return any(path[:len(owner)] == owner for owner in owners)
 
     def find(self, property_id: str) -> StudioProperty:
         for prop in self.properties:
@@ -288,6 +387,7 @@ __all__ = [
     "RESPONSE_PANEL", "WorkspaceColumn",
     "CardSpec", "GRADIENT", "LifecycleSpec", "StudioPreset",
     "ResponseCell", "ResponseSource", "ResponseTarget", "StudioResponse",
-    "CHOICE", "COLOUR", "COUNT", "INSTRUMENTS", "QUIET_PEAK", "SCALAR", "SWITCH",
-    "SceneObject", "StudioAction", "StudioProperty", "StudioSchema", "Workspace", "condition_hidden",
+    "CHOICE", "COLOUR", "COUNT", "INSTRUMENTS", "QUIET_PEAK", "SCALAR", "SHAPE", "SHAPE_BANDS", "SHAPE_BLEND",
+    "SWITCH", "SceneObject", "ShapeLayout", "ShapeSpec", "StudioAction", "StudioProperty", "StudioSchema",
+    "Workspace", "condition_hidden",
 ]

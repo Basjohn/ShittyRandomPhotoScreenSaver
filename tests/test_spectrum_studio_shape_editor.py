@@ -1,9 +1,10 @@
-"""The Spectrum Studio's shape-editor structural edits (Add Node, Remove Node, lane swaps).
+"""The Spectrum Studio's shape structural edits (Add Node, Remove Node, lane swaps).
 
 The Studio is the only Spectrum shape editor since 6 Nov (Settings' body is the preset row and the launcher). Before
 that, this file drove every capability of Settings' own shape editor and proved the Studio reached exactly what it
 saved (commit 2f44e510); what remains is the Studio's own rule: each structural edit is one undoable, admitted edit
-within the node limits. Nothing shows a window.
+within the node limits. The shape instrument runs these same actions (its Add Node button, right-click / Delete, its
+lane swap buttons); its gestures are covered by ``tests/test_studio_shape_instrument.py``. Nothing shows a window.
 """
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ def test_structural_edits_are_single_undoable_admitted_edits(qt_app, dialog_tab,
         bridge.runAction(f"{REMOVE_NODE}0")
     bridge.runAction(f"{REMOVE_NODE}0")                              # at the minimum: refused
     assert len(session.values[SHAPE_NODES]) == _MIN_NODES
-    # A lane swap keeps the boundaries and the lane set, and the boundary row follows its lane.
+    # A lane swap keeps the boundaries and the lane set, and the shape instrument's canvas follows it.
     key = NOTCHES[bool(session.values[MIRRORED])]
     before = [list(n) for n in session.values[key]]
     bridge.setWorkspace("shape")
@@ -51,6 +52,5 @@ def test_structural_edits_are_single_undoable_admitted_edits(qt_app, dialog_tab,
     after = session.values[key]
     assert [x for x, _l in after] == [x for x, _l in before]
     assert (after[0][1], after[1][1]) == (before[1][1], before[0][1])
-    row = next(r for g in bridge.inspector for r in g["rows"] if r["id"] == f"{key}.0")
-    assert row["label"].startswith(after[0][1])
+    assert [lane["label"] for lane in bridge.values[SHAPE_NODES]["lanes"]] == [label for _x, label in after]
     controller.close()
