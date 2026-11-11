@@ -31,8 +31,9 @@ Every tool writes evidence and scratch through one owner, `tools/artifact_paths.
   `oscilloscope` (Oscilloscope), `bubble` (Bubble), `devcurve` (Spline Curve), `sphere` (Voxel Sphere),
   `extruded_spectrum` (Extruded Spectrum), `shockwave_grid` (Neon Lake; also `neon_lake`),
   `extruded_bubble` (Extruded Bubble), `waveform_ribbon` (Waveform Ribbon), plus `shared` and the retired
-  `blob`/`sine_wave`. `python tools/artifact_paths.py areas` prints the current list. From a linked worktree the layout
-  resolves to the main checkout's `.artifacts`, so an agent's evidence outlives its worktree.
+  `blob`/`sine_wave`. `python tools/artifact_paths.py areas` prints the current list. The layout resolves to the
+  `.artifacts` of the checkout the tool runs from, a linked worktree's own included (no redirect); a worktree agent
+  lists its evidence paths and the lead copies them into the main checkout when merging.
 - A tool's output argument defaults to the layout. An explicit one must lie inside it: anything else
   (elsewhere in the repository, `logs/`, `%TEMP%`, a Claude session scratchpad, another drive) is refused
   with a usage error. Programmatic APIs that tests call still take `tmp_path`.

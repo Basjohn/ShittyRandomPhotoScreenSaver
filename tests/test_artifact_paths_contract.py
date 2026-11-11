@@ -371,6 +371,47 @@ def test_a_junctioned_layout_root_still_counts_as_inside(tmp_path):
         (artifacts / "evidence").rmdir()        # removes the junction, never its target
 
 
+def _load_owner_from(checkout: Path):
+    """``tools/artifact_paths.py`` as it runs from ``checkout`` (a copy imported under a private name)."""
+    import importlib.util
+    import shutil
+
+    target = checkout / "tools" / "artifact_paths.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(Path(artifact_paths.__file__), target)
+    spec = importlib.util.spec_from_file_location(f"_artifact_paths_{checkout.name}", target)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_layout_is_the_running_checkouts_own_even_in_a_linked_worktree(tmp_path):
+    """Run from a linked git worktree, the owner resolves to THAT checkout's ``.artifacts`` (the repository root of
+    the running file), never the main checkout's: worktree agents need no redirect. ``main_checkout`` still names
+    the main checkout (inputs that live only there). Negative control: the main checkout's own copy resolves to its
+    own ``.artifacts``, so the two differ."""
+    main = tmp_path / "main"
+    (main / ".git" / "worktrees" / "agent").mkdir(parents=True)
+    (main / ".git" / "worktrees" / "agent" / "commondir").write_text("../..\n", encoding="utf-8")
+    worktree = tmp_path / "main" / ".claude" / "worktrees" / "agent"
+    worktree.mkdir(parents=True)
+    (worktree / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'agent'}\n", encoding="utf-8")
+
+    in_worktree = _load_owner_from(worktree)
+    assert in_worktree.REPO_ROOT == worktree.resolve()
+    assert in_worktree.ARTIFACTS_ROOT == worktree.resolve() / ".artifacts"
+    assert in_worktree.SCRATCH_ROOT == worktree.resolve() / ".artifacts" / "scratch"
+    assert in_worktree.main_checkout() == main.resolve()
+    assert in_worktree.checked_output(worktree / ".artifacts" / "evidence" / "tests" / "probe" / "20261111_a")
+    with pytest.raises(in_worktree.ArtifactPathError):
+        in_worktree.checked_output(main / ".artifacts" / "evidence" / "tests" / "probe" / "20261111_a")
+
+    in_main = _load_owner_from(main)
+    assert in_main.ARTIFACTS_ROOT == main.resolve() / ".artifacts" != in_worktree.ARTIFACTS_ROOT
+    # The repository's own copy: this checkout's root, whichever checkout runs the suite.
+    assert artifact_paths.ARTIFACTS_ROOT == ROOT / ".artifacts"
+
+
 def test_pytest_never_pins_a_shared_basetemp():
     """A --basetemp in addopts would let concurrent runs (agents, chunked isolation) wipe each other's folders."""
     import configparser
