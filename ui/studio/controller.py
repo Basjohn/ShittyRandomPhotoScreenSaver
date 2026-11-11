@@ -312,8 +312,12 @@ class StudioBridge(QObject):
 
     def _can_rotate_content(self) -> bool:
         from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
-        return self._c.capabilities.viewport and get_visualizer_presentation_policy(
-            self._c.adapter.mode_id).content_rotation_capable
+        if not self._c.capabilities.viewport:
+            return False
+        try:
+            return get_visualizer_presentation_policy(self._c.adapter.mode_id).content_rotation_capable
+        except KeyError:                  # an adapter outside the visualizer registry (the shell's own test modes)
+            return False
 
     canRotateContent = Property(bool, _can_rotate_content, constant=True)
     contentRotationQuarters = Property(int, lambda self: self._c.content_rotation_quarters,
@@ -643,6 +647,14 @@ class StudioBridge(QObject):
     def pending_previews(self) -> int:
         return len(self._pending)
 
+    _pose_dirty = False
+
+    def note_pose(self) -> None:
+        """Navigation moved the preview view (an orbit / pan / wheel step, a held camera key): the values map, the
+        view readout and the starting-point state follow at the next frame start, once per frame however many
+        pointer moves arrive (each used to rebuild the whole map and re-bind the inspector, 1-4 ms a move)."""
+        self._pose_dirty = True
+
     def apply_pending_previews(self) -> None:
         """Frame start (and before anything that ends or replaces the gesture): apply the held previews."""
         self._flush_brush()
@@ -656,6 +668,9 @@ class StudioBridge(QObject):
                 self._guard(lambda: self._apply_colour(property_id, payload))
             else:
                 self._guard(lambda: self._apply_gradient(property_id, payload))
+        if self._pose_dirty:                     # after the held values: a view-pose slider's preview included
+            self._pose_dirty = False
+            self._rebuild_values()
 
     def drop_pending_previews(self) -> None:
         self._pending.clear()
@@ -2305,7 +2320,7 @@ class StudioController(QObject):
         if moved:
             self._pose.update(moved)
             if self.bridge is not None:
-                self.bridge.on_session_changed("pose")
+                self.bridge.note_pose()
             self._invalidate()
 
     def release_navigation_keys(self) -> None:
@@ -2402,7 +2417,7 @@ class StudioController(QObject):
             value = self.session.schema.admit(key, value, self.session.values[key])
         self._pose[key] = float(value)
         if self.bridge is not None:
-            self.bridge.on_session_changed("pose")
+            self.bridge.note_pose()                  # the inspector follows at the next frame start
         self._invalidate()
 
     def end_orbit(self) -> None:

@@ -389,6 +389,17 @@ no longer build the settings model (evaluation per frame 29.7 -> 7.3 ms median o
 release replay spreads over frames within the budget (one 222 ms evaluation -> about 8.4 ms per frame); evidence
 `.artifacts/evidence/studio/followups/20261107_followups/drag_profile/`.
 
+**No I/O while a drag moves (1B.3, 11 Nov).** A pointer move only holds a value (sliders, lanes, grips, the response
+curve, XY handles, pickers, gradient nodes, brush points) or a preview pose (orbit / pan / wheel): nothing reaches the
+canonical store, the tab's save, a file, a log line or an engine analysis until the release, which commits once
+(one session commit, one tab save). Navigation is coalesced the same way: a pose step marks the values map stale
+(`StudioBridge.note_pose`) and it is rebuilt once at the next frame start; before, every orbit / pan move rebuilt the
+whole map and re-bound the inspector (1-4 ms a move, Neon Lake the most). `tests/test_studio_drag_io_churn.py` drives
+every drag-capable schema property of every registered Studio, the camera, the transport scrub and the brush through
+a real Settings store on a temporary profile and counts store revisions, `SettingsManager` writes, saves, flushes,
+files opened for writing or replaced, INFO+ log lines that keep pace with the moves and engine analyses, with negative
+controls (a save per move, a file and a log line per move, a rebuild per orbit move).
+
 A drag holds until release. Drag instruments that sit in a scrolling panel set `preventStealing: true`: the value
 slider, the colour picker's field and hue bar, gradient nodes, and the response curve in the scrolling dock (it
 scrolls sideways when narrow and down when short, its vertical bar in the dock's right margin beside the fields; at
