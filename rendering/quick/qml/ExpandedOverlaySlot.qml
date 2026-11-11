@@ -61,9 +61,9 @@ Item {
     // never reaches the right-hand controls.
     readonly property real maxContentWidth: stage ? Math.max(48.0, stage.safeWidth * 0.45 - 2.0 * padding) : 48.0
 
-    // Legacy text-box extents in ems of this overlay's font (zero = natural size). The preset toast's
-    // parent Edit handles change these; Now Playing's parent handles change its artwork border instead,
-    // while its saved text extents remain readable and independently projected. The box may use the safe area.
+    // The parent's box extents in ems of this overlay's font (zero = natural size), set by its Fullscreen Edit side
+    // handles: the preset toast's text box; Now Playing's block (its caller reads them: its height, and its width beyond
+    // the natural artwork column; plan 1C.3). The box may use the safe area.
     readonly property real setTextWidth: {
         const value = Number(options.textWidth)
         return isFinite(value) && value > 0 ? value * fontSize : 0.0

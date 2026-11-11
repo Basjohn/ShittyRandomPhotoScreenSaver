@@ -751,7 +751,9 @@ def test_long_metadata_uses_media_fitting_and_allotted_lines_for_every_row(displ
     media = _Media(title="An Unusually Long Track Name For A Narrow Text Box",
                    artist="A Very Long Artist Credit Featuring Several Other Artists",
                    album="A Long Album Name For The Same Narrow Text Box", showAlbum=True)
-    _draw(display, media=media, config=_config(now_playing={"always_show": True, "text_width": 9.0}))
+    # A narrow block (plan 1C.3: ``text_width`` is the block's width beyond its natural artwork column; the Media
+    # artwork rule narrows the artwork in it and gives the text the rest).
+    _draw(display, media=media, config=_config(now_playing={"always_show": True, "text_width": 6.0}))
     _open(display)
     slot = _slot(display, "expandedOverlayNowPlaying")
     _settle(display, lambda: _prop(slot, "presence") >= 1.0)
@@ -766,7 +768,7 @@ def test_long_metadata_uses_media_fitting_and_allotted_lines_for_every_row(displ
         # The engine's effective font shrinks, rather than just clipping an unchanged large font.
         assert qml_value(main, "fontInfo.pixelSize") < row.property("font").pixelSize()
     display.scene.set_visualizer_expanded_overlay_config(_config(
-        now_playing={"always_show": True, "text_width": 9.0, "text_height": 12.0}))
+        now_playing={"always_show": True, "text_width": 6.0, "text_height": 12.0}))
     _run(display, 180)
     for row in rows:
         assert row.property("maximumLineCount") > 1

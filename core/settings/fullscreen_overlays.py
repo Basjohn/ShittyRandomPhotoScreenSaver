@@ -13,10 +13,15 @@ child record (plan 1B.7d; the retired ``artwork_scale`` / ``artwork_width`` / ``
 edits exactly these placement values: the offsets, the scales and the single-axis extents below. The corner is Settings'
 (the anchor); changing it rebases the offset (:func:`rebase_offset_for_corner`).
 
-Single-axis sizing (Fullscreen Edit's side handles, ordinary Edit's content box; plan 1B.7b): each overlay's parent
-edits its text box, ``text_width`` / ``text_height`` in ems of its font size (``0`` = natural), as the Media card's
-content extent reflows its content; the artwork's size is its child record's alone. Individual artwork, metadata and control child geometry remains separately editable. No resize changes a curated
-Visualizer preset.
+Single-axis sizing (Fullscreen Edit's side handles, ordinary Edit's content box; plan 1B.7b, 1C.3): each overlay's
+parent edits its box in ems of its font size (``0`` = natural), as the Media card's content extent reflows its content.
+The preset toast's box is its text (``text_width`` / ``text_height``). Now Playing's box is its whole block (plan 1C.3,
+operator 11 Nov: "X/Y artwork should adjust, media does this well"): ``text_height`` is the block's height and
+``text_width`` its width beyond the natural artwork column (the artwork's natural side and the gap; a value written
+when it set the text box beside a natural artwork draws the same block width), and the artwork and the text reflow in
+it by the Media card's one artwork rule (``rendering/quick/qml/MediaArtworkRule.js``); the artwork child record
+multiplies on top. Individual artwork, metadata and control child geometry remains separately editable. No resize
+changes a curated Visualizer preset.
 
 Now Playing's parts (Fullscreen Edit's child editing, operator 8 Nov: "I should be able to move every element around in
 that block and change it"): ``now_playing.child_geometry`` is ordinary Edit's CUSTOM ``child_geometry`` carrier for the
@@ -64,7 +69,8 @@ SCALE_KEYS = ("scale",)
 #: Retired Now Playing members (plan 1B.7d: one artwork size carrier, its ``artwork`` child record). A stored value
 #: that still has them loads through :func:`_bridge_artwork_factors` (Docs/Architecture/Persisted_Input_Compatibility.md).
 LEGACY_ARTWORK_FACTOR_KEYS = ("artwork_scale", "artwork_width", "artwork_height")
-#: Text-box extents in ems (0 = natural): each overlay's parent side handles edit them (ordinary Edit's content box).
+#: Box extents in ems (0 = natural): each overlay's parent side handles edit them (ordinary Edit's content box): the
+#: preset toast's text box, Now Playing's block (its height; its width beyond the natural artwork column).
 TEXT_EXTENT_KEYS = ("text_width", "text_height")
 TEXT_EXTENT_MAX = 60.0
 #: Now Playing's per-part geometry member (ordinary Edit's CUSTOM ``child_geometry`` carrier).

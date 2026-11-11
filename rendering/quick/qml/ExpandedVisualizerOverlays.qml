@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import "MediaArtworkRule.js" as ArtworkRule
 
 // The Expanded Visualizer's full-display overlays (plan 01 §G, milestone M3b): the preset's name and Now Playing
 // (Artist, Song and Artwork), each fading in and out gently on its own event.
@@ -298,8 +299,9 @@ Item {
         swapOutMs: 700
         swapInMs: 900
         stackShift: overlays.stackShiftFor(nowPlayingSlot, presetSlot)
-        naturalWidth: artWidth + gap + textBlock.width
-        naturalHeight: Math.max(artHeight, textBlock.height)
+        // The block is its content box: the artwork beside the text group (plan 1C.3).
+        naturalWidth: blockWidth
+        naturalHeight: blockHeight
 
         // Alignment as declared roles (plan 1B.7c, as the Media card's): the block has ONE orientation, chosen and
         // stable. Its authored side is the anchor corner's (Settings' Corner: a right corner puts the artwork on the
@@ -330,10 +332,7 @@ Item {
         // The bar's size against the Media card's own bar (its outline, radius and shadow scale by this).
         readonly property real controlsFactor: controlsHeight / Math.max(
             38.0, overlays.mediaLook("fontSize", 17.0) * 2.15)
-        // The artwork's size has one carrier, its ``artwork`` child record (plan 1B.7d, as the Media card's): the block's
-        // parent handles reflow the text box (ordinary Edit's content box), never the artwork.
-        // The one-line text stack supplies a stable artwork baseline independent of wrapping, track changes or
-        // authored text-box height. A parent's resize must not make its artwork jump as metadata reflows.
+        // The one-line text stack supplies a stable artwork baseline independent of wrapping and track changes.
         readonly property real titleLineHeight: Math.max(1.0, Math.ceil(titleMetrics.height))
         readonly property real naturalTextHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistMetrics.height)
             + (albumShown ? textColumn.spacing + Math.ceil(albumMetrics.height) : 0.0)
@@ -344,26 +343,46 @@ Item {
         readonly property bool seekShown: options.seekBar === true
         readonly property real seekHeight: Math.max(2.0, Math.round(Number(overlays.seekLook("height", 6.0))
                                                                      * controlsFactor))
+        // The natural artwork: a square as tall as the natural block (at least 3.1 ems, at least the text stack).
         readonly property real artBase: Math.max(Math.round(fontSize * 3.1), Math.ceil(naturalTextHeight))
-        readonly property real artWidth: Math.round(artBase)
-        readonly property real artHeight: Math.round(artBase)
         readonly property real gap: Math.round(fontSize * 0.55)
         // The natural metadata width: the half-screen cap applies to the unedited layout; the screen's capacity is the
         // final constraint, so long titles fit instead of crossing the edge.
         readonly property real textWidthLimit: Math.max(48.0,
-            Math.min(maxBoxWidth - artWidth - gap, maxContentWidth - artWidth - gap))
-        // The parent's side handles set the text box (ordinary Edit's content box, as the Media card's). Extra box
-        // height never manufactures gaps between the metadata rows; it gives a genuinely wrapping title/artist more
-        // lines, otherwise the stack stays naturally grouped and centred.
+            Math.min(maxBoxWidth - artBase - gap, maxContentWidth - artBase - gap))
         readonly property real naturalTextWidth: Math.min(textWidthLimit,
             Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth,
                               albumShown ? albumText.implicitWidth : 0.0, controlsShown ? controlsWidth : 0.0)))
+        readonly property real naturalBlockWidth: artBase + gap + naturalTextWidth
+        // ---- The block's content box (plan 1C.3; the operator: "X/Y artwork should adjust, media does this well").
+        // Its side handles are ordinary Edit's content box, as the Media card's content extent: they give or take the
+        // block's width and height, and the artwork and the text group reflow inside it by the Media card's one
+        // artwork rule (MediaArtworkRule.js): the artwork is as tall as the block, its width its natural width plus a
+        // share of the width given (or taken), never under the artwork role's own minimum (0.4 of its natural size),
+        // leaving the text its room and never wider than tall; the text group takes the rest of the width. A corner or
+        // the wheel scales the whole block (``scale``). The artwork child record multiplies on top, as on Media.
+        // Stored in ems of the block's font (``text_width`` / ``text_height``, 0 = natural): the width as the block's
+        // width beyond its natural artwork column (the artwork's natural side and the gap: so a value written before
+        // 1C.3, when it set the text box beside a natural artwork, draws the same block width), the height as the
+        // block's height (at least the text stack).
+        readonly property real artFloor: Math.round(artBase * 0.4)
+        readonly property real textRoom: Math.min(naturalTextWidth,
+                                                  Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0))
         readonly property real boxWidth: setTextWidth > 0.0
-            ? Math.round(Math.min(Math.max(1.0, maxBoxWidth - artWidth - gap),
-                                  Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0, setTextWidth)))
+            ? Math.round(Math.min(maxBoxWidth, Math.max(artFloor + gap + textRoom, setTextWidth + artBase + gap)))
             : 0.0
         readonly property real boxHeight: setTextHeight > 0.0
             ? Math.round(Math.min(maxBoxHeight, Math.max(naturalTextHeight, setTextHeight))) : 0.0
+        readonly property real blockWidth: boxWidth > 0.0 ? boxWidth : naturalBlockWidth
+        readonly property real blockHeight: boxHeight > 0.0 ? boxHeight : artBase
+        readonly property real artWidth: Math.round(ArtworkRule.authoredWidth(
+            ArtworkRule.provisionalWidth(artBase, blockWidth - naturalBlockWidth, blockWidth - gap, textRoom, artFloor),
+            blockHeight))
+        readonly property real artHeight: Math.round(blockHeight)
+        // The text group's column: the block's width beside the artwork.
+        readonly property real textColumnWidth: Math.max(1.0, blockWidth - artWidth - gap)
+        // Extra block height never manufactures gaps between the metadata rows; it gives a genuinely wrapping
+        // title/artist more lines, otherwise the group stays naturally grouped and centred on the artwork.
         readonly property int metadataLines: boxHeight > 0.0
             ? 1 + Math.max(0, Math.floor((boxHeight - naturalTextHeight + 0.5)
                                        / (titleLineHeight + artistMetrics.height + (albumShown ? albumMetrics.height : 0)))) : 1
@@ -558,8 +577,9 @@ Item {
             objectName: "expandedOverlayNowPlayingText"
             x: nowPlayingSlot.contentRightSide ? 0.0 : nowPlayingSlot.artWidth + nowPlayingSlot.gap
             y: (parent.height - height) / 2.0
-            width: nowPlayingSlot.boxWidth > 0.0 ? nowPlayingSlot.boxWidth : nowPlayingSlot.naturalTextWidth
-            height: nowPlayingSlot.boxHeight > 0.0 ? nowPlayingSlot.boxHeight : textColumn.height
+            // The block's width beside the artwork (the Media rule's rest); as tall as its stack, centred on the artwork.
+            width: nowPlayingSlot.textColumnWidth
+            height: textColumn.height
             onXChanged: overlays.noteEditGeometry()
             onYChanged: overlays.noteEditGeometry()
             onWidthChanged: overlays.noteEditGeometry()

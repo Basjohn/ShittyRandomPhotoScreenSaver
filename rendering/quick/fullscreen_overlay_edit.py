@@ -79,8 +79,8 @@ EDIT_ID_PREFIX = "fullscreen_overlay."
 #: Visualizer item.
 CARD_EDIT_ID = f"{EDIT_ID_PREFIX}visualizer"
 #: Edit part -> (the overlay whose value holds it, the members it writes).
-#: Now Playing's block also carries its children's records (ordinary Edit's ``child_geometry``; the artwork's size is
-#: its record's alone, plan 1B.7d).
+#: Now Playing's block also carries its children's records (ordinary Edit's ``child_geometry``; the artwork child record
+#: multiplies the size the block's box gives it, plan 1C.3).
 PARTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "preset": ("preset", ("offset_x", "offset_y", "scale", "text_width", "text_height")),
     "now_playing": ("now_playing", ("offset_x", "offset_y", "scale", "text_width", "text_height", CHILD_GEOMETRY_KEY)),
@@ -88,7 +88,9 @@ PARTS: dict[str, tuple[str, tuple[str, ...]]] = {
 }
 #: The size factor the item's ``resize_scale`` (corner handles and the wheel) projects into.
 SCALE_KEY = {"preset": "scale", "now_playing": "scale", "volume_osd": "scale"}
-#: The (horizontal, vertical) text-box extents the item's content box (side and diagonal handles) projects into.
+#: The (horizontal, vertical) extents the item's content box (side and diagonal handles) projects into: the toast's
+#: text box; Now Playing's block (its width beyond the natural artwork column, its height; plan 1C.3: the artwork and
+#: the text reflow inside it by the Media card's artwork rule).
 EXTENT_KEYS = {"preset": ("text_width", "text_height"), "now_playing": ("text_width", "text_height"),
                "volume_osd": ()}
 #: The parts with extents declare both content axes: the Edit layer draws their side strips and diagonal corners.
@@ -161,8 +163,8 @@ def offsets_for_position(position: tuple[float, float], anchored: tuple[float, f
 def extent_value(size: float, *, font_size: float, inset: float = 0.0) -> float:
     """The stored text-box extent (ems of the overlay's font) that draws a frame of ``size`` px on one axis.
 
-    ``inset`` is what the frame holds besides the text box on that axis: the card padding on both sides, and on Now
-    Playing's horizontal axis its artwork and the gap beside it.
+    ``inset`` is what the frame holds besides the box on that axis: the card padding on both sides, and on Now
+    Playing's horizontal axis its natural artwork column (the artwork's natural side and the gap).
     """
 
     box = max(1.0, float(size) - float(inset))
@@ -437,7 +439,7 @@ class FullscreenOverlayEdit:
         self._project_value(self.draft_value())
         snapshot = self._geometry() or snapshot
         if box is not None and EXTENT_KEYS[part]:
-            # The text box as drawn (its floors and the safe area applied) on the axes the box changed.
+            # The box as drawn (its floors and the safe area applied) on the axes the box changed.
             settled = self._drawn_extents(part, width is not None, height is not None, snapshot)
             if settled and settled != {name: payload.get(name) for name in settled}:
                 item.current_size_payload = {**payload, **settled}
@@ -543,7 +545,7 @@ class FullscreenOverlayEdit:
 
     def _drawn_extents(self, part: str, horizontal: bool, vertical: bool,
                        snapshot: Mapping[str, Any]) -> dict[str, float]:
-        """The extent members the overlay really drew on the touched axes (its text box; floors and the safe area
+        """The extent members the overlay really drew on the touched axes (its box; floors and the safe area
         applied)."""
 
         slot = snapshot["slots"][PARTS[part][0]]

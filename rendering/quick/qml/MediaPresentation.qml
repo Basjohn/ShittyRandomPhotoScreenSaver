@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import "MediaArtworkRule.js" as ArtworkRule
 
 OverlayWidget {
     id: mediaRoot
@@ -574,9 +575,11 @@ OverlayWidget {
                 readonly property real minimumMetadataRoom: Math.max(
                     180.0, mediaRoot.mediaModel.fontSize * 10.0
                 )
-                readonly property real provisionalArtworkWidth: Math.min(
-                    Math.max(88.0, baseArtworkWidth + extraHorizontalRoom * 0.35),
-                    Math.max(1.0, mediaRoot.authoredCardContentWidth - minimumMetadataRoom)
+                // The one Media artwork rule (MediaArtworkRule.js; Now Playing's
+                // block draws it too): this card's base, floor and metadata room.
+                readonly property real provisionalArtworkWidth: ArtworkRule.provisionalWidth(
+                    baseArtworkWidth, extraHorizontalRoom,
+                    mediaRoot.authoredCardContentWidth, minimumMetadataRoom, 88.0
                 )
                 readonly property real provisionalArtworkX:
                     mediaRoot.authoredCardContentWidth - provisionalArtworkWidth
@@ -604,7 +607,7 @@ OverlayWidget {
                 readonly property real referenceHeight: Math.max(
                     1.0, bottomInColumn - topInColumn
                 )
-                readonly property real authoredArtworkWidth: Math.min(
+                readonly property real authoredArtworkWidth: ArtworkRule.authoredWidth(
                     provisionalArtworkWidth, referenceHeight
                 )
                 readonly property real artworkStrokeWidth: mediaRoot.scaleAwareStrokeWidth(

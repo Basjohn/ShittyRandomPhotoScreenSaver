@@ -741,13 +741,35 @@ def test_a_side_handle_changes_only_its_own_axis(display, tmp_path, part, handle
     edit.owner.cancel()
 
 
+def _media_rule_artwork(slot) -> tuple[float, float]:
+    """The artwork size the Media card's one artwork rule (``MediaArtworkRule.js``, evaluated as written) gives Now
+    Playing's block as it is drawn now: (width, height)."""
+    from PySide6.QtQml import QJSEngine
+
+    engine = QJSEngine()
+    source = (Path(__file__).resolve().parents[1] / "rendering" / "quick" / "qml" / "MediaArtworkRule.js").read_text(
+        encoding="utf-8")
+    engine.evaluate(source.replace(".pragma library", ""))
+
+    def value(name: str) -> float:
+        return float(slot.property(name))
+
+    width = engine.evaluate(
+        f"Math.round(authoredWidth(provisionalWidth({value('artBase')}, "
+        f"{value('blockWidth') - value('naturalBlockWidth')}, {value('blockWidth') - value('gap')}, "
+        f"{value('textRoom')}, {value('artFloor')}), {value('blockHeight')}))").toNumber()
+    return float(width), float(round(value("blockHeight")))
+
+
 @pytest.mark.qt
-def test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size(display, tmp_path):
-    """Plan 1B.7d (d1; supersedes "parent axes resize the artwork border", 10 Nov): Now Playing's parent X/Y handles
-    are ordinary Edit's content box, as the Media card's: they reflow the text box (a set width elides, a set height
-    gives a wrapping title its lines) and never size the artwork, whose one size carrier is its ``artwork`` child
-    record. Its border and shape are the Media card's artwork look (colour, stroke, Rounded Artwork), not the card
-    chrome. The preset toast's extents keep their own text semantics."""
+def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_path):
+    """Plan 1C.3 (operator, 11 Nov: "X/Y artwork should adjust, media does this well"; withdraws 1B.7d's "the parent
+    axes never size the artwork"): Now Playing's parent X/Y handles give or take the block's width and height, and the
+    artwork reflows inside it by the Media card's one artwork rule: as tall as the block, its width its natural width
+    plus a share of the width given or taken, never wider than tall; the text group takes the rest of the width. The
+    artwork child record is untouched (it multiplies on top, as on Media). Its border and shape are the Media card's
+    artwork look (colour, stroke, Rounded Artwork), not the card chrome. The preset toast's extents keep their own text
+    semantics."""
     import json
 
     from PySide6.QtGui import QColor
@@ -782,20 +804,42 @@ def test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size(di
     assert abs(float(border.property("radius")) - min(art_item.width(), art_item.height()) / 8.0) < 0.01
     assert QColor(art_item.property("strokeColor")) == QColor(look["borderColor"])
     assert float(art_item.property("strokeWidth")) == max(1.5, look["borderWidth"])
+    slot = _slot(display, "expandedOverlayNowPlaying")
     before_art = (art_item.width(), art_item.height())
-    before_text = (text_block.width(), text_block.height())
+    assert before_art == _media_rule_artwork(slot) and before_art[0] == before_art[1]     # natural: square
+    before_text = text_block.width()
+
+    def follows_the_rule(label: str) -> None:
+        drawn = (art_item.width(), art_item.height())
+        assert drawn == _media_rule_artwork(slot), label
+        # The text group's column is the rest of the block's width.
+        gap = float(slot.property("gap"))
+        assert abs(text_block.width() - (float(slot.property("blockWidth")) - drawn[0] - gap)) < 1.0, label
+        assert edit.frames() == edit.drawn(), label
+
+    # Width taken: the artwork narrows (the shape changes), the text column too; the height stays.
     edit.side("now_playing", "right", -120)
     _run(display, 60)
-    assert text_block.width() < before_text[0] and (art_item.width(), art_item.height()) == before_art
+    follows_the_rule("width taken")
+    assert art_item.width() < before_art[0] and art_item.height() == before_art[1]
+    assert text_block.width() < before_text
     assert title.property("truncated") or int(title.property("lineCount")) >= 1
+    narrowed = (art_item.width(), art_item.height())
+    # Height given: the artwork grows taller (it is the block's height) and may widen up to square.
     edit.side("now_playing", "bottom", 90)
     _run(display, 60)
-    assert text_block.height() > before_text[1] and (art_item.width(), art_item.height()) == before_art
-    # The box's extra room goes to the title's lines (it wraps or fits into them), never to gaps between rows.
+    follows_the_rule("height given")
+    assert art_item.height() > narrowed[1] and art_item.width() >= narrowed[0]
+    # Width given back: with the height there to take it, the artwork widens.
+    edit.side("now_playing", "right", 160)
+    _run(display, 60)
+    follows_the_rule("width given")
+    assert art_item.width() > narrowed[0]
+    # The block's extra height goes to the title's lines (it wraps or fits into them), never to gaps between rows.
     assert int(layer.findChild(QQuickItem, "expandedOverlayTitle").property("maximumLineCount")) >= 2
     payload = edit.item("now_playing").current_size_payload
     assert payload["text_width"] > 0.0 and payload["text_height"] > 0.0
-    assert "artwork" not in (payload.get("child_geometry") or {})
+    assert "artwork" not in (payload.get("child_geometry") or {})        # the child record is untouched
 
     edit.open_children()
     child_before = art_item.width()
@@ -816,9 +860,9 @@ def test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size(di
 @pytest.mark.qt
 @pytest.mark.parametrize("controls", [False, True])
 def test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box(display, tmp_path, controls):
-    """Plan 1B.7d (d1): the parent's side handles reflow the text box, never manufacturing gaps between title,
-    artist and controls; the stack stays centred on the artwork and the artwork keeps its size; Save draws the
-    draft exactly."""
+    """Plan 1B.7d (d1) and 1C.3: the parent's side handles reflow the block, never manufacturing gaps between title,
+    artist and controls; the stack stays centred on the artwork, and the artwork follows the Media card's artwork rule
+    (1C.3; it had kept its size under 1B.7d); Save draws the draft exactly."""
     settings = _manager(tmp_path)
     _draw(display, media=_Media(title="A Considerably Longer Track Title", artist="Some Artist With A Long Name"),
           config=_projection(_seed(settings, now_playing={"media_controls": controls, "always_show": True})))
@@ -845,11 +889,13 @@ def test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box(d
         assert abs(box.center().y() - artwork.center().y()) <= 1.0, label
         return drawn
 
-    original = check("original")
+    check("original")
+    slot = _slot(display, "expandedOverlayNowPlaying")
     for handle, delta in (("bottom", 60), ("right", 90), ("top", -35), ("right", -45), ("bottom", -20)):
         edit.side("now_playing", handle, delta)
         drawn = check(f"{handle} {delta}")
-        assert drawn["expandedOverlayArtwork"].size() == original["expandedOverlayArtwork"].size()
+        artwork = drawn["expandedOverlayArtwork"]
+        assert (artwork.width(), artwork.height()) == _media_rule_artwork(slot), (handle, delta)
     draft = check("draft")
     assert edit.owner.save()
     _run(display, 300)
