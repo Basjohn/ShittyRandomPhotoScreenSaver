@@ -46,6 +46,13 @@ class FakeUnit:
         self.runtime = SimpleNamespace(scene_controller=scene_controller_double(),
                                        input_controller=input_controller_double())
         runtime = self.runtime
+        # Every signal the real runtime declares (DisplayManager also connects some in loops, which the source scan
+        # below cannot see: 2983f64f's held-right pan), then the nested owners' signals it connects directly.
+        from PySide6.QtCore import Signal
+        from rendering.quick.runtime import QuickDisplayRuntime
+        for name in dir(QuickDisplayRuntime):
+            if not name.startswith("_") and isinstance(getattr(QuickDisplayRuntime, name, None), Signal):
+                setattr(runtime, name, FakeSignal())
         tree = ast.parse((ROOT / 'engine/display_manager.py').read_text(encoding='utf-8'))
         cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'DisplayManager')
         node = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == '_connect_quick_runtime')
