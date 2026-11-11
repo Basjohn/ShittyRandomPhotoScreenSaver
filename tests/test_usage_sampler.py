@@ -829,7 +829,12 @@ def test_the_working_set_reader_keeps_one_handle_per_process_and_gives_them_back
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the working-set reader is Windows-only")
 def test_a_python_thread_keeps_running_while_the_working_set_is_walked():
-    """What the fix is for: during psutil's walk no other Python thread runs; during the reader's, one does."""
+    """What the fix is for: psutil's walk stalls every other Python thread for the whole walk; the reader's does not.
+
+    Judged by the longest stall of a spinning thread inside each call, as a share of that call (the median of the
+    calls). Not by the spinner's progress: after a GIL-held C call returns, its caller yields for a switch interval
+    before its next line runs, and that interval counted as progress "during" the call (about half of it once the
+    walk is as long as the interval, which is what a large test process makes it)."""
     import threading
 
     import psutil
@@ -837,38 +842,44 @@ def test_a_python_thread_keeps_running_while_the_working_set_is_walked():
     from core.performance.windows_working_set import WorkingSetReader
 
     ballast = bytearray(b"x") * (256 * 1024 * 1024)          # a working set large enough to take milliseconds
-    counter, stop = [0], threading.Event()
+    stop, worst, clock = threading.Event(), [0.0], time.perf_counter
 
     def spin():
+        last = clock()
         while not stop.is_set():
-            counter[0] += 1
+            now = clock()
+            if now - last > worst[0]:
+                worst[0] = now - last
+            last = now
 
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(0.0005)                            # short turns: a stall is the call's, not the scheduler's
     thread = threading.Thread(target=spin, daemon=True)
     thread.start()
     process, reader = psutil.Process(), WorkingSetReader()
     try:
         reader.unique_set_size(os.getpid())                 # sizes the buffer and opens the handle once
-        time.sleep(0.05)
-        before, started = counter[0], time.perf_counter()
-        time.sleep(0.3)                                     # this thread asleep: what the spinner makes unopposed
-        free_rate = (counter[0] - before) / (time.perf_counter() - started)
 
-        def share(call, repeats=9):
-            """The spinner's progress during ``call`` against its unopposed rate, the median of ``repeats``: about 0
-            when the call held the GIL throughout, towards 1 when it gave it up (a switch interval may fall inside
-            one call's Python wrapper: the median is not moved by it)."""
+        def stalled_share(call, repeats=15):
             shares = []
             for _ in range(repeats):
-                before, started = counter[0], time.perf_counter()
+                time.sleep(0.003)                           # the spinner runs: its last stall is behind it
+                worst[0] = 0.0
+                started = clock()
                 call()
-                shares.append((counter[0] - before) / max(free_rate * (time.perf_counter() - started), 1e-9))
+                elapsed = clock() - started
+                time.sleep(0.003)                           # the spinner runs again and records the stall it had
+                shares.append(worst[0] / max(elapsed, 1e-9))
             return sorted(shares)[len(shares) // 2]
 
-        held = share(process.memory_full_info)
-        released = share(lambda: reader.unique_set_size(os.getpid()))
+        held = stalled_share(process.memory_full_info)
+        released = stalled_share(lambda: reader.unique_set_size(os.getpid()))
     finally:
         stop.set()
         thread.join(5)
+        sys.setswitchinterval(interval)
         reader.close()
         del ballast
-    assert held < 0.15 and released > 0.3, (held, released)
+    # psutil: one stall as long as the walk. The reader: the walk runs with the GIL released, so the longest stall is
+    # one of its short GIL-held pieces (the handle call's return, a numpy pass).
+    assert held > 0.6 and released < 0.45 and held > 1.5 * released, (held, released)

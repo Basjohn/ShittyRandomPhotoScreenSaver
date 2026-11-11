@@ -629,8 +629,11 @@ loopback thread). The 8 Nov records keep their numbers; read "GIL share" there a
 process's working set with the GIL held, 3.0 to 4.4 ms for the main process's ~670 MB working set, once per process per
 sample; a spinning Python thread made no progress during it. `core/performance/windows_working_set.py` reads the same
 value through `K32QueryWorkingSet` (the GIL released for the call, one kept buffer, cached process handles); the
-values equal psutil's and a spinning thread keeps 0.69 to 0.96 of its free rate. Tests: `tests/test_usage_sampler.py`
-(the collector never runs psutil's walk; a thread keeps running through the read). *Not verified:* `collect_ms` under
+values equal psutil's. Measured as the longest stall of a spinning thread inside each call: psutil's walk stalls it
+for 97 to 100% of the call (2.1-2.5 ms with 256 MB more resident, 5.4-7.7 ms with 768 MB, 29-33 ms with 1.8 GB), the
+reader for 0.1 to 1.7% at the same wall time. Tests: `tests/test_usage_sampler.py` (the collector never runs psutil's
+walk; a thread keeps running through the read: judged by that stall share, after the first form of the test, which
+judged the spinner's progress, failed in a large test process for a reason of its own). *Not verified:* `collect_ms` under
 load, and with the displays on: the one live reading after the fix was taken with the operator's displays asleep
 (13.5 to 21 ms for four processes, the Visualizer parked).
 
@@ -683,7 +686,8 @@ real-process test for it was red. Fixed in the supervisor (`process_has_exited`)
 Conditions: other processes' CPU 22% median (the reference: 3.4%), GPU busy 24%, 109 of 125 passes admitted, so only
 the deterministic counts are read. GL calls: no rise in any case. Python calls: 20 rows rise, +4 in each Scene3D
 transition (Blinds 3D Slats 668 -> 672 and thirteen like it) and +5 to +32 in six Visualizer modes (Waveform Ribbon
-6987 -> 7010, Extruded Bubble 6395 -> 6427); the node path (1216) and the 2D transitions are unchanged. **None of it
+6987 -> 7010, Extruded Bubble 6395 -> 6427); the node path (1216), the surfaces and every other transition and mode
+are not higher. **None of it
 is this work's:** of the product modules these commits change, the baseline loads three, and none adds a call on a
 measured path (`rendering/quick/visualizer/item.py`: two attribute reads in `updatePaintNode`;
 `widgets/spotify_visualizer/logical_runtime.py`: a property nothing here calls; `core/process/supervisor.py`:
