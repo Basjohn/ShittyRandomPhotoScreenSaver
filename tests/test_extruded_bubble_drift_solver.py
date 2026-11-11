@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from widgets.spotify_visualizer.extruded_bubble_drift import DRIFT_DIRECTIONS
-from widgets.spotify_visualizer.extruded_bubble_drift_log import STEP_HISTORY, MaterialDriftReference
+from widgets.spotify_visualizer.extruded_bubble_drift_log import STEP_FLOATS, STEP_HISTORY, MaterialDriftReference
 from widgets.spotify_visualizer.extruded_bubble_simulation import (
     ExtrudedBubbleControls, ExtrudedBubbleSimulation, MusicInput,
 )
@@ -92,7 +92,7 @@ def test_a_render_gap_beyond_the_published_history_restarts_cleanly(qt_app):
         data = np.empty(offsets['_total'] * 4, dtype=np.float32)
         gl.glGetNamedBufferSubData(solver.output, 0, data.nbytes, data)
         assert np.isfinite(data).all()
-        assert all(state.serial == int(np.frombuffer(log[-1][1][-8 * 24:], dtype=np.float64)[0])
+        assert all(state.serial == int(np.frombuffer(log[-1][1][-8 * STEP_FLOATS:], dtype=np.float64)[0])
                    for state in solver._families.values())
     finally:
         solver.release()

@@ -19,7 +19,7 @@ import pytest
 from core.constants.extruded_bubble_world import WORLD_UNIT
 from widgets.spotify_visualizer import extruded_bubble_drift as drift
 from widgets.spotify_visualizer.extruded_bubble_drift_log import (
-    KNOT_DECISION, STEP_INDEX, KnotDecisions, MaterialDriftReference, float_pair, reduced_angles, seed_heads,
+    KNOT_DECISION, STEP_INDEX, MaterialDriftReference, float_pair, newest_knots, reduced_angles, seed_heads,
     unpack_steps,
 )
 from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES
@@ -115,8 +115,8 @@ def velocity32(kind, world, phase, angles, direction, across, depth, origin, amo
 
 def _field(record):
     vec = lambda name: record[R[name + "_x"]:R[name + "_x"] + 3].astype(F)
-    return (int(record[R["kind"]]), reduced_angles(float(record[R["phase"]])), vec("direction"), vec("across"),
-            vec("depth"), vec("origin"))
+    angles = tuple(record[R[name]] for name in ("angle_wander", "angle_wander_2", "angle_deep", "angle_swish"))
+    return int(record[R["kind"]]), angles, vec("direction"), vec("across"), vec("depth"), vec("origin")
 
 
 # -- the two programs, modelled -------------------------------------------------------------------------------------
@@ -211,8 +211,9 @@ class CloudModel:
     def _geometry(family):
         start, spans, seed, carry, phases = family.source
         head = seed_heads(seed)
+        rows = np.frombuffer(family.geometry, dtype=F).reshape(-1, 2, 4)   # the published carry / span pair
         return dict(start=start.astype(F), span=spans.astype(F), seed=(head, head * F(2. ** -24)),
-                    ratio=float_pair(carry / spans), phase=phases.astype(F), carry=F(carry))
+                    ratio=(rows[:, 1, 2].copy(), rows[:, 1, 3].copy()), phase=phases.astype(F), carry=F(carry))
 
     def _resize(self, capacity: int) -> None:
         keep = min(capacity, len(self.displacement))
@@ -255,8 +256,7 @@ class CloudModel:
             self.displacement[:n] += self.base[:n] - (g["start"][:n] + direction * (previous * g["span"][:n])[:, None])
             self.rebase = None
         count = int(record[R[f"count_{self.name}"]])
-        travel = float_pair(float(record[R["travel"]]))
-        travel = (F(travel[0]), F(travel[1]))
+        travel = (F(record[R["travel_high"]]), F(record[R["travel_low"]]))
         live = np.arange(len(self.displacement)) < count
         reset = ~live | ~alive
         self.displacement[reset], self.po_high[reset], self.po_low[reset] = 0., 0., 0.
@@ -308,32 +308,23 @@ def long_log(kind, ticks, start, *, seed=11, edit_at=None, resize_at=None, emiss
             c = replace(c, bead_chains=(3., 4.))
         state = sim.advance(MusicInput(1 / 60, True, body, (('kick', 1.),) if tick % 20 == 0 else (),
                                        (body, body * .8, .5)), c)
-        yield state.drift_families, state.drift_steps
+        yield state.drift_families, state.drift_steps, state.drift_knots
 
 
 class ModelRun:
-    """Drives the reference and the float32 model over one log; the logical side's decisions come from its own
-    ``KnotDecisions`` as the drift log publishes them."""
+    """Drives the reference and the float32 model over one log, with the decisions the drift log published."""
 
     def __init__(self) -> None:
         self.reference = MaterialDriftReference()
         self.chains, self.clouds = ChainModel(), {name: CloudModel(name) for name in ("snow", "specks")}
         self.plain, self.plain_channel = {name: CloudModel(name, plain=True) for name in ("snow", "specks")}, 0.
-        self.decisions, self.decided_revision = KnotDecisions(), None
         self.worst, self.wrap_mismatches, self.moved_equal, self.moved_steps = {}, 0, 0, 0
 
-    def apply(self, families, steps) -> None:
+    def apply(self, families, steps, knots) -> None:
         record = unpack_steps(steps)[-1]
         live = {family.family: family for family in families}
         chains = live.get("chains")
-        decisions = None
-        if chains is not None:
-            if chains.revision != self.decided_revision and chains.rebase_from != self.decided_revision:
-                self.decisions = KnotDecisions()
-            self.decided_revision = chains.revision
-            decisions = self.decisions.step(chains.source, int(record[R["chain_rows"]]), float(record[R["travel"]]),
-                                            float(record[R["speed"]]), float(record[R["dt"]]),
-                                            float(record[R["amount_chains"]]))
+        decisions = newest_knots(steps, knots)[1]
         payload = self.reference.apply(families, steps)
         got = {}
         if chains is not None:
@@ -364,9 +355,9 @@ class ModelRun:
 
 def run(log) -> ModelRun:
     model = ModelRun()
-    for families, steps in log:
+    for families, steps, knots in log:
         if families:
-            model.apply(families, steps)
+            model.apply(families, steps, knots)
     return model
 
 

@@ -19,7 +19,9 @@ def required_slot_bytes(mode: str, logical_kwargs: Mapping) -> int:
     if mode != 'extruded_bubble':
         return BASE_SLOT_BYTES
     from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL
-    from widgets.spotify_visualizer.extruded_bubble_drift_log import CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import (
+        CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES, KNOT_DECISION_BYTES, STEP_HISTORY,
+    )
     from widgets.spotify_visualizer.extruded_bubble_material_paths import drawable_chains
 
     def active(suffix):
@@ -29,7 +31,9 @@ def required_slot_bytes(mode: str, logical_kwargs: Mapping) -> int:
         return BASE_SLOT_BYTES
     geometry = 0
     if active('drift_chains'):
-        geometry += drawable_chains(logical_kwargs['extruded_bubble_bead_chains'])*CHAIN_GEOMETRY_BYTES
+        # Each chain's geometry row, and its knot decision beside every step of the published history.
+        geometry += drawable_chains(logical_kwargs['extruded_bubble_bead_chains'])*(
+            CHAIN_GEOMETRY_BYTES+STEP_HISTORY*KNOT_DECISION_BYTES)
     if active('particles'):
         if active('drift_snow'):
             geometry += SNOW_FULL*CLOUD_GEOMETRY_BYTES

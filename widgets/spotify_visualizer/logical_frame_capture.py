@@ -453,7 +453,7 @@ def _capture_extruded_bubble(
         motion_phase=snapshot.motion_phase, wakes=wake_record_bytes(snapshot.wakes), passage=snapshot.passage,
         chain_activity=snapshot.chain_activity, chain_drive=snapshot.chain_drive,
         drift_families=tuple(family.render_descriptor for family in snapshot.drift_families),
-        drift_steps=snapshot.drift_steps,
+        drift_steps=snapshot.drift_steps, drift_knots=snapshot.drift_knots,
         parameters=_render_parameters({name: value for name, value in extra.items() if not name.startswith("_quick_")},
                                       memo=runtime.parameter_fields),
     )

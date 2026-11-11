@@ -117,23 +117,26 @@ def load_clips(directory: Path = FIXTURES) -> dict[str, FeatureClip]:
 _configure = configure_offline_controller
 
 
-def _record_drift_step(logical, history: list[bytes]) -> None:
-    """Keep each Extruded Bubble drift step once (the newest record of the published history)."""
+def _record_drift_step(logical, history: list[tuple[bytes, bytes]]) -> None:
+    """Keep each Extruded Bubble drift step once (the newest record of the published history, with its chains'
+    knot decisions)."""
     steps = getattr(logical.mode_state, "drift_steps", b"")
     if steps:
-        from widgets.spotify_visualizer.extruded_bubble_drift_log import STEP_FLOATS
-        newest = steps[-8 * STEP_FLOATS:]
-        if not history or history[-1] != newest:
+        from widgets.spotify_visualizer.extruded_bubble_drift_log import newest_knots
+        newest = newest_knots(steps, logical.mode_state.drift_knots)
+        if not history or history[-1][0] != newest[0]:
             history.append(newest)
 
 
-def _with_drift_history(snapshot, history: list[bytes]):
+def _with_drift_history(snapshot, history: list[tuple[bytes, bytes]]):
     """A sparse capture skips presentations, so its renderer never saw the steps in between: hand it every step
     since the previous returned snapshot (the live runtime presents each revision and needs no such help)."""
     state = snapshot.logical.mode_state
     if not getattr(state, "drift_families", ()) or not history:
         return snapshot
-    return replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(state, drift_steps=b"".join(history))))
+    steps, knots = (b"".join(part) for part in zip(*history))
+    return replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(state, drift_steps=steps,
+                                                                                    drift_knots=knots)))
 
 
 def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset: int = 0, overrides=None,
@@ -166,7 +169,7 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
         display = (1920.0, 1080.0) if extent is None else (max(1920.0, extent[0]), max(1080.0, extent[1]))
         snapshots = {}
         wanted = frozenset(snapshots_at)
-        drift_history: list[bytes] = []   # EB drift steps since the last returned snapshot
+        drift_history: list[tuple[bytes, bytes]] = []   # EB drift steps (and knots) since the last returned snapshot
         sync = QuickVisualizerPresentationSync(
             controller,
             resolve_presentation=lambda: resolve_visualizer_presentation(

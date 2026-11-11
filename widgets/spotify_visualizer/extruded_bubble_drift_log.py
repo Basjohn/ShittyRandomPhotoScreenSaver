@@ -2,7 +2,10 @@
 
 The logical tick no longer integrates the free chains, marine snow and specks. Each tick it records one step
 (``STEP_FIELDS``: dt, motion phase, travel, stream speed, each family's signed drift amount, the cloud counts and
-the field basis) and keeps the last ``STEP_HISTORY`` of them. Each active family carries an immutable
+the field basis) and keeps the last ``STEP_HISTORY`` of them. The float64 work the GPU must not do is done here,
+once per step: the field's growing phase arguments reduced mod 2 pi and travel split into a float pair (fields of
+the step), and each free chain's knot decision (``KnotDecisions``: the reference's own ``KnotClock``), kept beside
+the steps as ``knots`` (``chain_rows`` ``KNOT_DECISION`` records per step). Each active family carries an immutable
 ``DriftFamily`` descriptor: its stable seeded geometry, which changes only when its geometry is edited (a new
 ``revision`` that continues from the previous one) or grows. The renderer applies every step it has not applied,
 in order, to persistent per-mote state (``rendering/quick/visualizer/implementations/extruded_bubble_drift_solver``);
@@ -26,12 +29,15 @@ FAMILIES = ("chains", "snow", "specks")
 STEP_FIELDS = ("serial", "dt", "phase", "travel", "speed", "kind",
                "amount_chains", "amount_snow", "amount_specks", "count_snow", "count_specks", "chain_rows",
                "direction_x", "direction_y", "direction_z", "across_x", "across_y", "across_z",
-               "depth_x", "depth_y", "depth_z", "origin_x", "origin_y", "origin_z")
+               "depth_x", "depth_y", "depth_z", "origin_x", "origin_y", "origin_z",
+               # Published for the GPU, exactly float32 values: t x PHASE_RATES mod 2 pi, and travel's float pair.
+               "angle_wander", "angle_wander_2", "angle_deep", "angle_swish", "travel_high", "travel_low")
 STEP_FLOATS = len(STEP_FIELDS)
 STEP_INDEX = {name: index for index, name in enumerate(STEP_FIELDS)}
 STEP_HISTORY = 128  # ~1.4 s of logical ticks: a render gap longer than this restarts drift (a lifecycle event)
 # Geometry rows: chains as 12 float64 (start, span, end, carry, phase, 0, 0, 0) so the knot shift crosses its
-# integer steps on exactly the CPU's ticks; clouds as two float32 vec4s (start, span), (seed, phase, 0, 0).
+# integer steps on exactly the CPU's ticks; clouds as two float32 vec4s (start, span),
+# (seed, phase, carry / span as a float pair).
 CHAIN_GEOMETRY_DOUBLES = 12
 CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES = 8 * CHAIN_GEOMETRY_DOUBLES, 32
 _REVISIONS = itertools.count(1)
@@ -101,10 +107,11 @@ def pack_geometry(family: str, geometry) -> bytes:
         rows[:, 4:7] = base[:, -1]; rows[:, 7] = carry
         rows[:, 8] = phases
     else:
-        start, spans, seed, _carry, phases = geometry
+        start, spans, seed, carry, phases = geometry
         rows = np.zeros((len(spans), 2, 4), dtype=np.float32)
         rows[:, 0, :3] = start; rows[:, 0, 3] = spans
         rows[:, 1, 0] = seed; rows[:, 1, 1] = phases
+        rows[:, 1, 2], rows[:, 1, 3] = float_pair(carry / np.asarray(spans, dtype=np.float64))
     return rows.tobytes()
 
 
@@ -115,6 +122,7 @@ class _Live:
     lifetime: float           # travel after which every knot/mote has recycled at least once
     zero_from: float | None = None
     edited: bool = False
+    knots: KnotDecisions | None = None   # the free chains' knot clock (it continues across an edit, as the reference)
 
 
 class DriftLog:
@@ -124,8 +132,10 @@ class DriftLog:
         self.serial = 0
         self._live: dict[str, _Live] = {}
         self._steps: deque[bytes] = deque(maxlen=STEP_HISTORY)
+        self._knots: deque[bytes] = deque(maxlen=STEP_HISTORY)   # beside each step: its chains' knot decisions
         self.families: tuple[DriftFamily, ...] = ()
         self.steps: bytes = b""
+        self.knots: bytes = b""
 
     def family(self, name: str) -> DriftFamily | None:
         live = self._live.get(name)
@@ -156,7 +166,8 @@ class DriftLog:
         descriptor = DriftFamily(name, next(_REVISIONS), live.descriptor.revision if live is not None else 0,
                                  serial, capacity, packed, carry, geometry)
         # An edit continues the old history with a phase offset, which never decays: such a family never retires.
-        self._live[name] = _Live(descriptor, key, lifetime_of(geometry), None, live is not None)
+        knots = (live.knots if live is not None else KnotDecisions()) if name == "chains" else None
+        self._live[name] = _Live(descriptor, key, lifetime_of(geometry), None, live is not None, knots)
 
     def record(self, *, dt, phase, travel, speed, kind, amounts, counts, chain_rows, direction, across, depth_axis,
                origin) -> None:
@@ -164,14 +175,21 @@ class DriftLog:
         self.serial += 1
         if not self._live:
             self.families, self.steps = (), b"".join(self._steps) if self._steps else b""
+            self.knots = b"".join(self._knots) if self._knots else b""
             return
+        high, low = float_pair(travel)
         row = np.array((self.serial, dt, phase, travel, speed, float(DRIFT_DIRECTIONS.index(kind)),
                         amounts.get("chains", 0.0), amounts.get("snow", 0.0), amounts.get("specks", 0.0),
                         counts.get("snow", 0), counts.get("specks", 0), chain_rows,
-                        *direction, *across, *depth_axis, *origin), dtype=np.float64)
+                        *direction, *across, *depth_axis, *origin, *reduced_angles(phase), high, low),
+                       dtype=np.float64)
+        chains = self._live.get("chains")
         self._steps.append(row.tobytes())
+        self._knots.append(chains.knots.step(chains.descriptor.source, chain_rows, travel, speed, dt,
+                                             amounts.get("chains", 0.0)) if chains is not None else b"")
         self.families = tuple(self._live[name].descriptor for name in FAMILIES if name in self._live)
         self.steps = b"".join(self._steps)
+        self.knots = b"".join(self._knots)
 
     def zero_gain(self, name: str, travel: float, zero: bool) -> bool:
         """Track a family whose signed drift is zero; True once it holds no displacement and can retire.
@@ -202,6 +220,19 @@ def unpack_steps(steps: bytes) -> np.ndarray:
     if len(steps) % (8 * STEP_FLOATS):
         raise ValueError("Extruded Bubble drift steps must be whole float64 records")
     return np.frombuffer(steps, dtype=np.float64).reshape(-1, STEP_FLOATS)
+
+
+def knot_starts(records: np.ndarray) -> np.ndarray:
+    """Where each step's knot decisions begin in the knots beside ``records`` (in records), and the total last."""
+    rows = records[:, STEP_INDEX["chain_rows"]].astype(np.int64)
+    return np.concatenate(((0,), np.cumsum(rows)))
+
+
+def newest_knots(steps: bytes, knots: bytes) -> tuple[bytes, bytes]:
+    """The newest step of a published history and its knot decisions (a sparse capture keeps each step once)."""
+    newest = steps[-8 * STEP_FLOATS:]
+    rows = int(np.frombuffer(newest, dtype=np.float64)[STEP_INDEX["chain_rows"]])
+    return newest, (knots[len(knots) - rows * KNOT_DECISION_BYTES:] if rows else b"")
 
 
 class MaterialDriftReference:
@@ -307,5 +338,5 @@ def _reference_step(name, family, paths, record) -> bytes:
 __all__ = ["CHAIN_GEOMETRY_BYTES", "CHAIN_GEOMETRY_DOUBLES", "CLOUD_GEOMETRY_BYTES", "DriftFamily", "DriftLog", "FAMILIES",
            "KNOT_DECISION", "KNOT_DECISION_BYTES", "KnotDecisions", "MaterialDriftReference", "STEP_FIELDS",
            "STEP_FLOATS", "STEP_HISTORY", "STEP_INDEX", "chain_inputs", "chain_lifetime", "cloud_lifetime",
-           "float_pair", "pack_geometry", "reduced_angles", "seed_heads",
+           "float_pair", "knot_starts", "newest_knots", "pack_geometry", "reduced_angles", "seed_heads",
            "unpack_steps"]

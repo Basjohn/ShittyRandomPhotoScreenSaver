@@ -7,7 +7,9 @@ def test_extruded_bubble_capacity_covers_full_geometry_and_dormant_modes_stay_sm
     from core.visualizer_engine.packet_mailbox import DEFAULT_SLOT_BYTES
     from core.visualizer_engine.packet_abi import SLOT_OVERHEAD
     from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL
-    from widgets.spotify_visualizer.extruded_bubble_drift_log import CLOUD_GEOMETRY_BYTES, CHAIN_GEOMETRY_BYTES
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import (
+        CLOUD_GEOMETRY_BYTES, CHAIN_GEOMETRY_BYTES, KNOT_DECISION_BYTES, STEP_HISTORY,
+    )
     from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_PATHS
 
     controls = {'extruded_bubble_drift': [.2, .8], 'extruded_bubble_drift_chains': [.4, 1.],
@@ -15,7 +17,8 @@ def test_extruded_bubble_capacity_covers_full_geometry_and_dormant_modes_stay_sm
                 'extruded_bubble_particles': [.1, .35], 'extruded_bubble_bead_chains': [20., 20.]}
     size = required_slot_bytes('extruded_bubble', controls)
     assert size % 16 == 0
-    geometry = (SPECKS_FULL+SNOW_FULL)*CLOUD_GEOMETRY_BYTES + CHAIN_PATHS*CHAIN_GEOMETRY_BYTES
+    geometry = ((SPECKS_FULL+SNOW_FULL)*CLOUD_GEOMETRY_BYTES
+                + CHAIN_PATHS*(CHAIN_GEOMETRY_BYTES+STEP_HISTORY*KNOT_DECISION_BYTES))
     assert size-SLOT_OVERHEAD >= geometry+DEFAULT_SLOT_BYTES-SLOT_OVERHEAD
     # Endpoint-only sizing would under-admit musical overshoot. Any active cloud reserves its full canonical cap.
     assert required_slot_bytes('extruded_bubble', {**controls, 'extruded_bubble_particles': [.01, .02]}) == size
@@ -264,8 +267,10 @@ def test_full_extruded_bubble_geometry_step_wake_and_body_frame_reproduces_old_o
     from core.visualizer_engine.packet_abi import FrameCapacityError
     from core.visualizer_engine import frame_codec
     from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL, WAKE_STRIDE
+    import numpy as np
     from widgets.spotify_visualizer.extruded_bubble_drift_log import (
-        DriftFamily, CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES, STEP_HISTORY, STEP_FLOATS,
+        DriftFamily, CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES, KNOT_DECISION_BYTES, STEP_HISTORY, STEP_FLOATS,
+        STEP_INDEX,
     )
     from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_PATHS
     from widgets.spotify_visualizer.extruded_bubble_simulation import MAX_BUBBLES, BUBBLE_STRIDE, CLUSTER_STRIDE
@@ -289,8 +294,11 @@ def test_full_extruded_bubble_geometry_step_wake_and_body_frame_reproduces_old_o
                          ('chains', CHAIN_PATHS, CHAIN_GEOMETRY_BYTES),
                          ('snow', SNOW_FULL, CLOUD_GEOMETRY_BYTES),
                          ('specks', SPECKS_FULL, CLOUD_GEOMETRY_BYTES)), 1))
+    # A full history in which every step moves every chain: its knot decisions ride beside the steps.
+    steps = np.zeros((STEP_HISTORY, STEP_FLOATS))
+    steps[:, STEP_INDEX['chain_rows']] = CHAIN_PATHS
     full = replace(frame, mode_state=replace(frame.mode_state, drift_families=families,
-                   drift_steps=b'\0'*(STEP_HISTORY*STEP_FLOATS*8),
+                   drift_steps=steps.tobytes(), drift_knots=b'\0'*(STEP_HISTORY*CHAIN_PATHS*KNOT_DECISION_BYTES),
                    wakes=b'\0'*(2*MAX_BUBBLES*WAKE_STRIDE*4), bubbles=(0.,)*(MAX_BUBBLES*BUBBLE_STRIDE),
                    clusters=(0.,)*((MAX_BUBBLES//2)*CLUSTER_STRIDE)))
     old = PacketMailbox()
