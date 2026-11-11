@@ -670,6 +670,34 @@ Each foundation slice adds what it learned here.
 - Comparisons of the same inputs on EB are not bit-exact (weighted OIT over thousands of micro-glass fragments):
   tests compare within its noise floor (max 2 levels, under 1e-4 of pixels), measured, never zero.
 
+**Heightfield land: growing and deforming one surface (Neon Lake, 2026-11-11)**
+- A stored cubic cannot stand in for a generated surface. Storing samples of a procedural landscape and drawing
+  their cubic changed 12-38% of the picture: the generated land had creases (an edge profile carried outward) that
+  no smooth surface through samples reproduces. Store what is authored as a **delta over the generated surface**
+  (zero where untouched) and add its cubic: an untouched extension is then the generated surface itself.
+- A finer mesh is a visible change even when the height function is the same: it draws creases and thin ridges the
+  coarse mesh aliased. Refine only where the content changed (the painted bounds), never with the grid's extent.
+- Decide exact zero (water) on exact reads (`texelFetch`), take heights from the filtered read: hardware bilinear
+  weights are 8-bit, so a filtered read beside a nonzero neighbour is not exactly zero, and the same texel read
+  from a larger texture rounds differently (a few single pixels differ; say so, do not chase it).
+- Give every origin-relative quantity (distance fades, curvature, mark lattice, camera floor) one stored origin;
+  measuring from "the data's edge" moves them all when the data grows.
+- Splitting part of a triangle lattice: step counts must nest (1, 2, p even, 2p), a shared edge takes the finer
+  side's steps, and both sides must place a shared point by the same share (`a + (b - a) * (k / n)`, never
+  `(b - a) * k / n`: 2/8 and 1/4 are the same float, the products are not). Test: every interior edge belongs to
+  exactly two triangles.
+- Per-vertex deformation indexed by a property of the surface (elevation lanes) tears along that property's
+  contours unless the index cross-fades: blend memberships (they sum to 1), read tables through a smooth filter,
+  index by the smooth surface (not its bilinear cells) and replace hard `max` floors with an eased bound. Prove it
+  on the GPU's own height function against a control with the blend removed.
+- Landforms that appear with a drive: a fixed site lattice (integer hash, compact bumps with zero slope at the rim,
+  radius at most half a cell so a 3x3 block holds every contributor) with a per-site wake level; calibrate the
+  drive on recorded music first (the first scale put ordinary passages at 0.26 and nothing showed).
+- Geometry the camera floor cannot know about (music-driven forms) should give way round the eye rather than raise
+  the floor: a floor tall enough for a spire lifts every authored low view when the control is merely enabled.
+- Uniform tables uploaded every frame: pack them once per bake (ctypes array keyed by the baked tuple's identity);
+  a 160-float tuple through PyOpenGL twice a frame cost about 340 Python calls.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:
