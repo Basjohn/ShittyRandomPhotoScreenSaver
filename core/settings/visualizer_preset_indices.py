@@ -145,6 +145,13 @@ def resolve_preset_index_from_mapping(
                         "%s preset %r moved from slot %d to slot %d after the preset catalogue changed",
                         mode, identity, idx + 1, found + 1)
                 return found
+            from core.settings.visualizer_preset_compat import retired_successor
+            listed, successor = retired_successor(mode, identity)
+            if listed and successor in identities:
+                found = identities.index(successor)
+                _report(mode, f"{idx}:{identity}", current,
+                        "%s preset %r was retired; its successor %r selected", mode, identity, successor)
+                return found
             _report(mode, f"{idx}:{identity}", current,
                     "%s preset %r no longer exists; %r selected instead",
                     mode, identity, identities[fallback])
