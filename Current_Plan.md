@@ -1654,41 +1654,60 @@ stays a separate hard gate.
 
 ## 8. Accepted Bubble: bounded performance gate and deferred control audit
 
-The operator has **accepted the improved original Bubble normal-drift musical authority**. That task is closed;
-do not reopen it as unfinished work or restore the pre-experiment drift response. The durable approved motion,
-ambient, direction and occlusion rules are in `Docs/Guardrails/Bubble_Temporal_Fidelity.md` §23. The following
-performance gate is **explicitly admitted now** as a short exception to the §7 mode sequence. The separate
-scalar-to-range audit remains deferred until explicitly reprioritized.
+The operator has **accepted the improved original Bubble normal-drift musical authority**: that task is closed, do not
+reopen it as unfinished work or restore the pre-experiment drift response (approved motion, ambient, direction and
+occlusion rules: `Docs/Guardrails/Bubble_Temporal_Fidelity.md` section 23). The performance gate below is
+**explicitly admitted now** as a short exception to the section 7 mode sequence. The separate scalar-to-range audit
+remains deferred until explicitly reprioritized (it is folded into section 9's adapters).
 
-- [ ] **Bubble post-ambient performance / exact-output check (short and bounded):** inspect hidden costs from the
-  shared hero big-over-small shader loop (including decoration OFF), opt-in 2048-capped ambient FBO, large glow
-  sprite fill, and up-to-110-circle masking. Compare the **original handoff** to the **accepted Slice 13** under
-  matched configuration for resource/performance attribution, then freeze **Slice 13 itself** as the behavioral and
-  rendered-output oracle for any proposed optimization: original-vs-Slice-13 pixel bytes are *not* expected to match
-  where the operator intentionally changed layering, motion or glow.
-  - [ ] Measure decoration OFF, representative decoration ON, and high-density/high-glow decoration ON, using matched
-    real-music replay and canonical plus extreme-wide/tall/expanded sizes, with multiple repetitions on the operator's
-    native Qt Quick/OpenGL runtime. Report Bubble GPU/render p50/p95, CPU logical work, FPS/frame-pacing gaps,
-    resource allocation/release and other-display contention. Check that OFF really avoids the extra FBO, sprite
-    and mask draws; the modified shared hero shader still warrants timing even with decorations OFF.
-  - [ ] For any **actual optimization**, compare deterministic logical packets/bit patterns exactly, and compare
-    final captured RGBA bytes frame-by-frame on the **same GPU, driver, dimensions and fixed replay** when that
-    capture path is deterministic. Where bit identity is unavailable, disclose why and use exact geometry/response
-    checks plus recorded pixel-diff and temporal parity evidence. Do not claim byte-identical *performance*:
-    throughput, GPU timing and latency require measurements.
-  - [ ] If cost is material, optimize only the measured offender and repeat the parity + native performance gate;
-    preserve visual quality, all approved sinking/reversed-flow presets, reactivity/latency, BTF and mutable presets.
-    If no material cost is measured, **close the item without redesigning Bubble**. No generic "lean out" campaign.
-  - [ ] Include the R-170 density growth: a card larger than the canonical one now draws up to 72 live heroes
-    (up to 110 with draining trails) instead of its authored ~31-68, and the hero loops are per fragment.
-- [~] **R-170 operator eyes-on:**Bubble on a tall, a wide and the TV card should move and size like the canonical
-  card, denser on large cards. Evidence: `Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md`.
-- [ ] **Side defect (found during R-170, not fixed):** `_apply_bubble_collision_response` smooth mode multiplies
-  `max_disp *= 0.72` inside the per-bubble loop, so the in-view correction cap compounds down the list (order-dependent).
-  Fixing it changes canonical Bubble output, so it needs an explicit BTF behaviour-change decision first.
-- [~] **Particle glow (merged 059e8ccb) — awaiting operator eyes:** emitted linear light with a hot core and a
-  monotonic halo (no dark moat), no twinkle on drifting sub-pixel cores, cheaper ambient CPU pass. Evidence
-  `.artifacts/evidence/visualizers/bubble/particle_glow/20261107_particle_glow/` (`before/` vs `after/` 4x crops, flicker strips).
+**Bubble post-ambient performance / exact-output check (short and bounded)**
+
+Inspect hidden costs from the shared hero big-over-small shader loop (including decoration OFF), the opt-in
+2048-capped ambient FBO, large glow sprite fill, and up-to-110-circle masking.
+
+- [ ] Compare the **original handoff** to the **accepted Slice 13** under matched configuration for
+  resource/performance attribution, then freeze **Slice 13 itself** as the behavioral and rendered-output oracle for
+  any proposed optimization: original-vs-Slice-13 pixel bytes are *not* expected to match where the operator
+  intentionally changed layering, motion or glow.
+- [ ] Measure decoration OFF, representative decoration ON, and high-density/high-glow decoration ON, using matched
+  real-music replay and canonical plus extreme-wide/tall/expanded sizes, with multiple repetitions on the operator's
+  native Qt Quick/OpenGL runtime.
+  - [ ] Report Bubble GPU/render p50/p95, CPU logical work, FPS/frame-pacing gaps, resource allocation/release and
+    other-display contention.
+  - [ ] Check that OFF really avoids the extra FBO, sprite and mask draws; the modified shared hero shader still
+    warrants timing even with decorations OFF.
+- [ ] Include the R-170 density growth: a card larger than the canonical one now draws up to 72 live heroes (up to 110
+  with draining trails) instead of its authored ~31-68, and the hero loops are per fragment.
+- [ ] For any **actual optimization**, compare deterministic logical packets/bit patterns exactly, and compare final
+  captured RGBA bytes frame-by-frame on the **same GPU, driver, dimensions and fixed replay** when that capture path is
+  deterministic.
+  - [ ] Where bit identity is unavailable, disclose why and use exact geometry/response checks plus recorded
+    pixel-diff and temporal parity evidence.
+  - [ ] Do not claim byte-identical *performance*: throughput, GPU timing and latency require measurements.
+- [ ] If cost is material, optimize only the measured offender and repeat the parity + native performance gate;
+  preserve visual quality, all approved sinking/reversed-flow presets, reactivity/latency, BTF and mutable presets.
+- [ ] If no material cost is measured, **close the item without redesigning Bubble**. No generic "lean out" campaign.
+
+**R-170 operator eyes-on**
+
+Evidence: `Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md`.
+
+- [~] Bubble on a tall card, a wide card and the TV card moves and sizes like the canonical card, and is denser on
+  large cards.
+
+**Side defect (found during R-170, not fixed)**
+
+- [ ] `_apply_bubble_collision_response` smooth mode multiplies `max_disp *= 0.72` inside the per-bubble loop, so the
+  in-view correction cap compounds down the list (order-dependent). Fixing it changes canonical Bubble output, so it
+  needs an explicit BTF behaviour-change decision first.
+
+**Particle glow (merged; awaiting operator eyes)**
+
+Emitted linear light with a hot core and a monotonic halo (no dark moat), no twinkle on drifting sub-pixel cores,
+cheaper ambient CPU pass. Evidence `.artifacts/evidence/visualizers/bubble/particle_glow/20261107_particle_glow/`
+(`before/` vs `after/` 4x crops, flicker strips).
+
+- [~] Operator eyes on the particle glow.
 
 ## 9. Studio for every visualizer (replaces the builders)
 
