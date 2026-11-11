@@ -252,6 +252,8 @@ class StudioBridge(QObject):
                        notify=headerChanged)
     canSaveCamera = Property(bool, lambda self: callable(getattr(self._c.store, "save_camera", None)),
                              notify=headerChanged)
+    # How this mode's orbit is saved (its capabilities: the preset's camera choice, Save Camera, or neither).
+    orbitSaveHint = Property(str, lambda self: self._c.orbit_save_hint(), notify=headerChanged)
 
     @Slot()
     def saveCurrent(self) -> None:
@@ -2501,8 +2503,18 @@ class StudioController(QObject):
         if self.bridge is not None:
             kept = ", ".join(sorted(k.rsplit("_", 1)[-1] for k in saving)) or "nothing"
             rest = "; dolly/pan stay preview views" if self._pose else ""
-            policy = "" if allowed else " (orbit saves only with the preset's camera checkbox)"
+            policy = "" if allowed else f" ({self.orbit_save_hint()})"
             self.bridge.notify(f"Kept: {kept}{rest}{policy}")
+
+    def orbit_save_route(self) -> str:
+        """How this mode's orbit is saved outside the gesture (``framed.orbit_save_route``: its capabilities)."""
+        from ui.studio.framed import orbit_save_route
+        return orbit_save_route(self.adapter.mode_id,
+                                can_save_camera=callable(getattr(self.store, "save_camera", None)))
+
+    def orbit_save_hint(self) -> str:
+        from ui.studio.framed import orbit_save_hint
+        return orbit_save_hint(self.orbit_save_route())
 
     def set_pose(self, key: str, value: float) -> None:
         """A live view-pose value (navigation): rendered at once, never an ordinary committed edit."""
@@ -2531,8 +2543,7 @@ class StudioController(QObject):
                 self.session.preview((key,), value)
             self.session.end_gesture()
         if self._pose and self.bridge is not None and not allowed:
-            self.bridge.notify("Preview view: Keep View saves the lens; the orbit saves only with the "
-                               "preset's camera checkbox")
+            self.bridge.notify(f"Preview view: Keep View saves the lens; {self.orbit_save_hint()}")
 
     def reset_camera(self) -> None:
         self._navigation_keys.clear()

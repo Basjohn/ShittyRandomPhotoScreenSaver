@@ -2947,8 +2947,8 @@ Rectangle {
                             }
                             StudioButton { icon: "check"; iconSize: 20; width: 36; enabledState: studio.viewModified
                                            objectName: "keepViewButton"; visible: shell.caps.camera === true
-                                           tip: "Keep View: save the previewed lens (FOV); the orbit saves only when the "
-                                                + "preset's camera checkbox is on; dolly and pan stay previews"
+                                           tip: "Keep View: save the previewed lens (FOV); " + studio.orbitSaveHint
+                                                + "; dolly and pan stay previews"
                                            onClicked: studio.keepView() }
                             StudioButton { icon: "rotate-content"; iconSize: 20; width: 36
                                            objectName: "rotateContentButton"; visible: studio.canRotateContent
@@ -3888,7 +3888,7 @@ Rectangle {
         readonly property var gestures: {
             var out = []
             if (shell.caps.camera === true) {
-                out.push(["view", "Drag the preview", "Orbit the camera (saved only with the preset's camera checkbox)"])
+                out.push(["view", "Drag the preview", "Orbit the camera (" + studio.orbitSaveHint + ")"])
                 out.push(["lens", "Mouse wheel", "Zoom the lens; Shift+wheel moves the camera closer or further"])
                 out.push(["flow", "Middle or right drag", "Pan the view (a preview only)"])
                 out.push(["reset", "Double-click the preview", "Back to the saved camera; the tick button keeps the view"])
