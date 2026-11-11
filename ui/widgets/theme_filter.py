@@ -41,8 +41,9 @@ def _clear_icon() -> QIcon:
     return icon
 
 
-class _ThemeFilterPopup(QListView):
-    """The completer popup: the shared combo popup skin, its outline painted as one continuous path."""
+class ThemedCompleterPopup(QListView):
+    """A completer's popup in the theme: the shared combo popup skin, its outline painted as one continuous path.
+    The one autocomplete popup of Settings (the theme filter, the Weather location)."""
 
     BORDER_WIDTH = 2.0
     RADIUS = 14.0
@@ -126,7 +127,7 @@ class ThemeFilterField(QLineEdit):
         completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         completer.setModelSorting(QCompleter.ModelSorting.UnsortedModel)
         completer.setMaxVisibleItems(8)
-        completer.setPopup(_ThemeFilterPopup())
+        completer.setPopup(ThemedCompleterPopup())
         self.setCompleter(completer)
         self._completer = completer
 

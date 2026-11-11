@@ -154,7 +154,9 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Info label
     info_label = QLabel("\u2713 Uses Open-Meteo API (Free, No API Key Required)")
-    info_label.setStyleSheet("color: #4CAF50; font-size: 11px; font-family: 'Jost'; font-weight: 600;")
+    info_label.setObjectName("weatherServiceNote")
+    from ui.tabs import shared_styles
+    shared_styles.bind_shared_styles(info_label, "STATUS_SUCCESS_LABEL_STYLE", base_style="")
     source_layout.addWidget(info_label)
 
     # Location with live geocode autocomplete
