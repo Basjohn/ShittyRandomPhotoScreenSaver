@@ -478,9 +478,9 @@ Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us afte
 
 - [~] Operator feel check on the real display: pan direction and scale against the Studios; a quick right
   click on the card still opens the menu; double-right still enters Edit.
-- [~] Operator decision: the two pans go opposite ways horizontally. Alt+right drag increases pan X when
-  dragged right (`engine/display_manager.py` `_move_quick_visualizer`); the Studios and held-right decrease it.
-  Pick one convention; the lead's recommendation is the Studio's for all three.
+- [ ] One pan direction, the Studio's (operator, 11 Nov): Alt+right drag follows the Studio's rule on both axes
+  through one shared pan-delta function with held-right (today Alt+right increases pan X when dragged right,
+  `engine/display_manager.py` `_move_quick_visualizer`); in flight with the side-defect batch.
 - [ ] Native pointer capture on a real foreground window is unproven (tests use a stand-in capture): add the
   pan to the opt-in native harness pattern of R-183 or verify with the operator's check above.
 
