@@ -392,25 +392,35 @@ corrects the ink and keeps the surface at its calibrated density (about .63-.72)
 - [ ] i. Docs: `Docs/Architecture/Card_Surface_Materials.md`; closes 1.7a's density question (update it there).
 - [~] Operator look on the three light themes.
 
-### 1B.9 Settings and Studio window corners bleed (boxes a-d in flight, Opus Medium; continues 1.9)
+### 1B.9 Settings and Studio window corners bleed (measured; transparent corner filler in flight, Opus Medium)
 
-Both windows are rectangular layered HWNDs with Accent blur over the whole rectangle; `paint_forged_window_edge`
-forges the rounded look (radius 6.5, 4 px border). Model estimate: +2 px leaves about 1 px at 150% and 3 of 8 at
-200% by squaring the corner. A small native window is unavoidable here: Settings-sized, brief, never fullscreen.
+Measured natively at 150% (Settings, four theme/background cases, same counts in all): the outer corner is
+already nearly square and the visible "bleed" is the opaque filler colour left in the corner wedge (a near-white
+speck on light themes). Thicker borders only shrink the wedge by squaring the corner (5 / 3 / 1 px per corner at
+today / +1 / +2 px; zero only at 100%, with a square corner): rejected. A region applied before Accent clips to a
+jagged staircase and the blur still covers the rectangle: rejected. A transparent filler gives a rounded outer
+corner with no speck; what remains is a few pixels of blurred wallpaper outside the arc (worst 58 levels on a
+light wallpaper), which no layered window can remove.
 
-- [ ] a. `tools/settings_native_corners.py` gains a Studio case and a border-width argument.
-- [ ] b. Measure today, +1 px and +2 px at 100/150/200%, four theme/background cases each; crops kept.
-- [ ] c. Tell the operator plainly whether thicker borders solve it; adopt a width only if it removes the
-  escape rather than squaring the corner.
-- [ ] d. If not: a region applied before the Accent call.
-- [ ] e. If not: the Windows 11 DWM corner preference on a non-layered variant (cost check: shadow ownership,
-  translucency, the layered-window repaint path of §9's freeze fix).
-- [ ] f. If not: a composition-host clip.
-- [ ] g. Whichever clips: input, resize, snap/maximise, DPI change, activation and Studio-over-Settings
-  modality proven on the real `SettingsDialog` and Studio window.
-- [ ] h. Window border material: the forged border ring takes 1.7b's border-material treatment (one rule for
-  cards and windows), inside the +2 px budget.
-- [ ] i. Docs: `Docs/Architecture/Settings_Theme_Architecture.md`; close or rewrite 1.9.
+- [ ] Transparent corner filler as product behaviour at `paint_forged_window_edge` (Settings and Studio share it);
+  the painter test fails on today's code (corner pixels outside the rounded border fully transparent, the ring
+  continuous at 100/150/200% device pixel ratios).
+- [ ] The near-white inner line on light themes: kept as a themed, clipped highlight or dropped as backing, with
+  the reason and a crop of both.
+- [ ] Corner hit-testing, resize grips and the shadow unchanged (test).
+- [ ] Studio edge proven off-screen (its native capture came out blank; no more native Studio windows).
+- [ ] Native confirmation, Settings only: one dark and one light theme over both wallpapers at 150%.
+- [ ] Lead pixel review of today-against-new 4x corner crops; merge; `Settings_Theme_Architecture.md` updated;
+  close or rewrite 1.9 (section 1A).
+- [ ] Side defect: the Studio window shows only blur (no title bar or content) in native captures by
+  `tools/settings_native_corners.py --window studio`; find whether it is the capture setup or the Studio.
+- [ ] If the operator still sees escape after the transparent filler: the Windows 11 DWM corner preference on a
+  non-layered variant (Microsoft's guidance excludes layered windows and windows with a region from system
+  rounding; cost check: shadow ownership, translucency, the layered-window repaint path of section 9's freeze
+  fix), then a composition-host clip. Whichever clips needs input, resize, snap/maximise, DPI change, activation
+  and Studio-over-Settings modality proven on the real `SettingsDialog` and Studio window.
+- [ ] Window border material: the forged border ring takes 1.7b's border-material treatment (one rule for cards
+  and windows), inside the +2 px budget (the budget is unused: the border stays 4 px).
 - [~] Operator look at Settings and Studio corners on both wallpapers.
 
 ### 1B.10 Presets (only after 1B.3-1B.6 land; one Fable 5.2 Medium agent above the roster cap, this task only)
