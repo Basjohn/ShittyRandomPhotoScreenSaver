@@ -208,7 +208,8 @@ wallpaper (surviving wallpaper swing 0). The rule now, light ink (dark themes) u
 - *Text-local plate, only where ink cannot.* A run faded by its own item opacity (Media's PLAYING at 62 %) can stay
   short even as black; only then its `ShadowedText` loads one `TextLegibilityPlate` hugging the painted text (a pill),
   which lifts only where the surface under it misses the floor (`ownOpacity` keeps the run's fade off the plate).
-  No whole-card lift, no plate on any run that reads, none on Normal or light ink. Since M2 the plate fades in over
+  No whole-card lift, no plate on any run that reads or sits at opacity 0, none on Normal (since M2b light ink takes
+  the same rule). Since M2 the plate fades in over
   5 px from its edge (`edgeSoftness`; rows keep their 1.5 px antialiasing) and extends that far past the painted run,
   so it reads as a soft glow under the run rather than a sticker (lead review, 11 Nov).
 
@@ -307,13 +308,24 @@ hairline inside the light-tinted mute button and volume level) and the ink plate
 interiors are unchanged (at most 1 level). Steady GPU over Normal (two themes, control-relative, bimodal with the
 GPU clock state): within each clock state after is no higher than before (`gpu_cost.json`).
 
-**Known dark-theme shortfalls (measured 11 Nov; M1 and M2 leave them unchanged).** Dark (light-ink) themes are outside
-the dark-ink rule above and kept their pixels through M1, and M2 changes only their rim, so these stand as before:
-Default Dark [Single] on the bright wallpaper has 8-10 small runs per frame at 3.89-4.27 (p5) on every material and on
-Normal (the faint Media/Weather runs); `tools/theme_legibility.py --card-materials` finds `widget.accent` under 4.5:1
-over a white wallpaper pole on 46 of the 98 material mirrors, all dark (Midnight Cobalt 3.42, worst Royal Orchard
-1.44; no light theme fails). The panel's reference ink is `card.text`, not the accent; extending the corrected-ink
-rule to light ink would change dark-theme pixels and is a separate decision (`theme_legibility_card_materials_all_themes.json`).
+**One ink rule on every theme (1B.8 M2b, 11-12 Nov).** The corrected-ink rule above now runs on dark (light-ink)
+themes too: a run that misses its ratio over the composed panel's black and white poles corrects its own ink (authored
+where it reads, else more alpha, else toward white keeping its hue); the dark panel gets no denser, and a run that reads
+keeps its authored colour byte for byte (`OverlayCard.surfaceInkSolution` returns null). Text runs only
+(`ShadowedText`); bars, dividers, fills and icons keep the authored accent. The light-ink white pole takes the face's
+sheen before the legibility guard and the grain after it, as the shader does. A run solves its ink at its steady
+opacity (`ShadowedText.inkOpacity`, the resting value for RefreshStateGlyph's crossfade twins) and loads no plate at
+opacity 0. Before, `tools/theme_legibility.py --card-materials` found `widget.accent` under 4.5:1 over a white
+wallpaper pole on 46 of the 98 material mirrors, all dark (worst Royal Orchard 1.44); after, no card role of any
+material mirror is under 4.5:1 (58 dark mirrors' accent changes; light mirrors unchanged). In rendered pixels (six worst
+dark mirrors plus Default Dark and Midnight Cobalt, main and list cards, both wallpapers) small runs under 4.5:1 on the
+material go from 3-10 per frame to 0, and no pixel changes outside the changed runs. Runs between 4.5 and the solver's
+4.8 headroom get a few percent more alpha; System Stats labels on their own metric fill are judged against the card
+panel, not the fill (Midnight Cobalt's move lighter although they read at 4.95 on the fill). The accents of Royal
+Orchard and Smoke Quartz lose most of their hue toward the card text (Royal Orchard keeps 48 % of its chroma).
+Evidence `.artifacts/evidence/materials/20261111_m2b/ink_rule/` (`OPEN_FIRST_*`, `accent_collapse_candidates_3x.png`,
+`tables/`). Default Dark [Single] on Normal keeps its 8-10 faint small runs at 3.89-4.27 on the bright wallpaper:
+Normal is outside the material rule.
 
 **Style sweep fixes outside the materials (6 Nov evening; they change Normal pixels on purpose, nowhere else):**
 
