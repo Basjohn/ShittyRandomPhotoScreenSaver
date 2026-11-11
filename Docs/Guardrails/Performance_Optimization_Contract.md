@@ -394,6 +394,44 @@ recordings and presets), and keep the straightforward forms in tests as the orac
 - A skip is exact only when the skipped branch provably has no effect: EB's contact loop skips pairs beyond the
   1.03 re-contact reach before any other work because every response needs an overlap first.
 
+**Extruded Bubble tick cut, measured (6 Nov 2026, moved from the plan).** Cuts: contact discovery and far-pair skip,
+cluster motion and layout, cached phase terms, steer with no closure, the wake fast path, snapshot records, controls
+re-resolved only on a read value's change, a strict-equality memo for the renderer parameters, struct-packed wake
+floats, presentation attrs resolved once per spec. Every published frame matched main on 4 recordings x 6 cases (24
+replays, 130,926 frames, per-frame digests). Offline P1 tick (`tools/eb_logical_cost_probe.py`, paired with main)
+2.50 -> 2.13 ms median (p90 3.25 -> 2.78); the tick is now spread thin (contacts 0.38, wakes 0.42 with NumPy flow 0.2,
+rest of the simulation 0.62, capture 0.45). Live under game60, quiet machine, alternated rounds (before -> after,
+round 1 / round 2): P1 fps 44.9 -> 45.5 / 57.3 -> 63.8, late frames 32 -> 24.5% / 6.0 -> 2.0%; P5 fps 42.3 -> 52.9 /
+62.9 -> 69.2, late frames 36 -> 8.2% / 2.3 -> 1.5%. Better in every pair, yet the live tick is only 2-4% lower
+(5.3-5.6 ms, GIL ~0.5): most of it lies outside the simulation. Evidence
+`.artifacts/evidence/performance/live_check/20261106_live/`,
+`.artifacts/evidence/visualizers/extruded_bubble/logical_tick/20261106_logical_tick/`.
+
+**Waveform Ribbon (`waveform_ribbon`) tick cuts (7 Nov 2026, moved from the plan; both byte-identical, merged).**
+Profile of the tick: ~1.8 ms of many small NumPy/Python calls (snapshot ~1.0, surge ~0.37, pulse transport ~0.2, scene
+~0.1, burst admission 2-4 ms on admitting ticks only); no steady GIL-held C call above ~2.5 ms. First cut: shared
+spring terms, cached source Gaussians and shifted grid, direct surge gathers, one float32 fade column,
+`uniform_gradient` for Group Wave, scene and capture reads resolved once per configuration/spec, RibbonMaterial's
+check without `astuple`; identity on 31 recorded replays (169,136 frames, every preset and Reaction Mode) against
+main, `tests/test_waveform_logical_tick_exactness.py` against the pre-cut forms with an fp64-fade negative control;
+offline P4 min-of-3 median 3.01 -> 2.94 ms on a loaded machine. Second cut (per-line `sys.monitoring` profile: snapshot
+~0.7 ms, capture ~0.3 ms, burst admission ~2.3 ms per admitting tick because the emitter's cloth evaluation continued
+an empty side on every in-anchor call, routing clamped every source per target): packet-only terms and surge windows
+once per packet (~6 Hz), crest/weight and HSV columns once per card set, exact remainder forms (`unit_remainder`,
+`sector_remainder`), take/put surge gathers, no empty-side continuation, sources clamped once, a camera-admission
+memo and `FrozenFieldsMemo` on the runtime, the frame's imports resolved once; identity on 24 recorded replays
+(8 recordings with native capture history x P1/P4/P7, 130,944 frames); offline tick median -13..-16% in the cleanest
+pair (P1 1.70 -> 1.45, P4 1.75 -> 1.48, P7 1.74 -> 1.50 ms; p90 -6..-9%), calls per tick 3,137 -> 2,848;
+`overhead_baseline` (preview render path) branch = main (gl 182, py 7010). The other 11 recordings cannot be replayed by
+the Waveform tick on either tree. Evidence
+`.artifacts/evidence/visualizers/waveform_ribbon/logical_tick/20261107_logical_tick/` and
+`.../20261107_tick_cut2/` (main checkout, local, git-ignored).
+
+**Optional worker start (6 Nov 2026, moved from the plan).** The engine init thread no longer waits up to 10 s for the
+OPTIONAL image_prefetch child's ready signal: `_start_optional_worker` queues that start on a ThreadManager IO worker
+(the required IMAGE worker keeps its inline ready wait; supervisor `shutdown()` aborts the wait and the engine stops the
+supervisor before the ThreadManager; `tests/test_optional_worker_startup.py`).
+
 **GL state reads are not free on the render thread.** Every `glGet*`, `glIsEnabled*` and `glGetUniformLocation` is a
 round trip to the driver thread: ~20-25 us quiet, up to milliseconds when the CPU is saturated (a game, parallel work),
 and the GPU idles until the frame's next commands arrive. Waveform Ribbon (`waveform_ribbon`) made ~170 per frame (uniforms by name, per-pass

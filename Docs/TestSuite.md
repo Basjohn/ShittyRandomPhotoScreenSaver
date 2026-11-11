@@ -1443,6 +1443,16 @@ The deterministic replay uses committed synthetic feature clips under `tests/fix
 
 When a current Windows replay test is RED, report the exact measured mode output, floor and case, then inspect the actual fixture, frozen input, reference provenance and current mode-owned consumer before classifying it as a stale floor or behavioral regression. For unshaped modes, zero **Spectrum bars** can be correct while the independent mode output remains active; Spline Curve (`devcurve`) `output_flux` measures its curve output, not the unused Spectrum bar shaper. Do not silently lower/reseed floors, update historic artistic snapshots or restore phantom Spectrum shaping to make the gate pass. A reviewed recalibration must demonstrate the intended behavior with test-owned inputs and retain meaningful negative controls.
 
+### 4x MSAA repeat-render noise (driver, 5 Nov 2026; was "Floor Give run-to-run noise")
+
+The same frame rendered again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform
+Ribbon (more often with Floor Give and mist) and on ~0.7% of pixels in Neon Lake. It is not renderer state: packet,
+uniforms, every vertex position, fields, fog volumes, reflection and all four depth samples are bit-identical,
+single-sample renders are exact (`test_floor_give_repeat_renders_are_renderer_deterministic`), and no
+barrier/finish/stream pinning changes it; the multisampled colour itself flips up to 3/255 per sample. Per-sample
+Waveform floor shading removes it there but costs +1.2 ms (Floor Give off) / +2.0 ms (on) at 1080p, so it was not
+taken. Tests compare such renders with `tests/_msaa_render_noise.py`.
+
 ### Static source assertions
 
 Static tests are appropriate for:

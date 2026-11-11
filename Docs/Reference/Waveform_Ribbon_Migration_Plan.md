@@ -649,3 +649,80 @@ this a good direction, with remaining lumps; it does not approve full shape, mus
   spreads, and all new visual editing must drive the same production renderer.
 - [ ] Inspect slow motion for world anchoring, smooth density, floor detail/reflections and persistent strands. No
   screen-space fringe fibre test survives as a requirement to retain the rejected effect.
+
+## 8. Recorded measurements and rejected mechanisms (moved from `Current_Plan.md` section 7.1, 11 Nov 2026)
+
+Landed results of the reactivity work, kept so the plan holds only open steps. Evidence trees are under
+`.artifacts/evidence/visualizers/waveform_ribbon/`.
+
+- **Fixed-scale rework v7, lead review on whole recordings against main (6 Nov).** Crests clipped by the card's top:
+  P7 Anything 66% (v4) -> 5.8% raw (main 2.9%); the residual is sparks drifting into the top rows, not crests (crest
+  clipping <= main in 8 of 10 recordings). Frame sheets of P4 and P7 show main's dynamics, slightly fuller;
+  music-vs-response at parity; no drift on a song replayed after 7 min; P4 roll identical. Every reaction mode (Centre
+  Out, both Travelling Pulse directions, Group Wave, Whole Swell, Frozen Past's newly born swell): correlation with
+  loudness/RMS/bass at or above main (+0..+.04), saturation +0..+1.9 points (Group Wave's born swell 5.1% against
+  3.2%); Breathing adds +.01..+.02 correlation. Evidence `reactivity_preset7/20261107_reactivity_preset7/` (PROGRESS.md,
+  `rangeaudit_*.txt`); the lead's scratch review was `tmp/waveform_review_20261106/` (gitignored).
+- **Music-vs-response on main, every preset and Reaction Mode (7 Nov, after the tick cut).** chain7 (7 recordings back
+  to back, continuous play), `waveform_music_response.py`, born swell for travelling/frozen modes; 16 runs (P1-7 as
+  authored; P1/P4/P7 forced to Frozen Past, Whole Swell, Group Wave/Travelling Pulse). Means over songs: correlation
+  with loudness/RMS/bass +.34..+.49, saturated 2.2-8.2%, dead 3.7-10.6%, spurious 2.0-4.4%, re-scale gap .11-.25
+  (P1 = the v7 numbers exactly). Mid-song kicks are not muted: the median born-swell rise per kick in every later 15 s
+  bin is 0.95-2.5x the first bin's. The floor lift sat at its 1.5 cap for whole loud songs (P2 song 0, P6 song 2):
+  fixed by Floor first below. Evidence `followups/20261107_followups/music/` (summary.txt, kicks.txt, report_*/).
+- **Floor first (7 Nov, operator: "rather it goes a bit higher when it has to than clips").** `TROUGH_LIFT_MAX` 1.5 -> 3;
+  `TOP_GIVE_BACK` swept .3/.6/1.0/1.5. Visible lower edge through the floor, chain7 continuous play, main -> now, at
+  1282x1005: P1 21.0 -> .9%, P3 16.7 -> .3%, P4 7.8 -> .1%, P5 49.3 -> 2.2%, P6 47.6 -> .2%, P7 7.3 -> 0%, no crest above
+  the top on any preset; at 640x560: P1 21.4 -> 3.9%, P3 16.4 -> 5.0%, P4 7.3 -> 1.6%, P7 2.2 -> .2%, with crests above
+  the top on .2-1.1% of ticks (main 0-.1%). Rendered 640x560 frames (crest-clipped share): P1/P3/P7 0-2.5% (main
+  0-.4%), P4 Anything 6.2% (main .4%), P4 Rag Doll 2.1% (.4%). P2 (Floor Give) unchanged (72% contact is its yielding
+  floor). Evidence `followups/20261107_followups/` (floor/table_main_vs_final.txt, floor/sweep_640.txt,
+  topclip_crest_640.txt, clipsheet_*.png, captures/). Earlier (6 Nov) residual lift-only contact on recorded continuous
+  play: P1 1.3%, P3 .75%, P4 .19%, P7 .13% of music ticks (main 27/16/7/7%); a faster attack clears more but moves
+  the lift harder (`TROUGH_ATTACK` .1: P1 .45%, lift acceleration p99 x1.3), so it was not adopted.
+- **Preset 7 / Group Wave (5 Nov operator log `logse7a84d332e.zip`, Rag Doll).** Group Wave's set envelope built from the
+  long-fade field with a peak-keeping blur sat at its soft bound over the visible span (median/max .98) and inflated
+  the whole body with Pulse Strength; the adaptive gain's 30 s memory re-normalised a quieter passage to loud reach.
+  Fixed (Group Wave follows the fresh field; the gain memory has since been retired with the adaptive response).
+  Sustained-loud visible amplitude 6.4 -> 5.4 once the uniform inflation was gone. Whole Swell (Preset 6) sits at its
+  soft bound in all music by design; de-saturating it barely changed the visible body, so it was left. The pulse-
+  visibility WIP branch `worktree-agent-a470c20ffe5fe8b02` stays parked (the operator accepted the pulse as is).
+  Evidence `reactivity_preset7/20261107_reactivity_preset7/`.
+- **Swells reach the Preset camera (Presets 1-3).** The card's camera shows about +-16 of the scene axis at 1282x1005
+  (+-5 at the canonical card); edge swells born at `PULSE_ORIGIN` 44 arrived ~2 s late at 5% strength (in-view swell
+  p50 .13-.30 against Preset 4's 1.39). With the view span passed in, Travelling Pulse edge swells are born just beyond
+  it and age only once seen (p50 .81-.99 at +-16; the peak visible swell after each kick is 1.7-5.6x main at every
+  time in song); Preset 4 and Presets 5-7 byte-identical. An edge swell publishes half its level for Pulse Rim (rims at
+  their ceiling over 43% of the view -> 0-1%; rim pixels at 255 4.3% -> 3.6% P1, 3.2% -> 2.5% P3); the floor lift reads
+  the card's visible span plus 5 envelope sigmas within +-32. Evidence `visibility_tag_vs_final.txt`,
+  `kicks4_table.txt`, `sheets/*_p1..3_*` in the preset7 tree.
+- **Reaction modes (5 Nov).** R1/R2 elastic motion was rejected (sideways bursts from the retired axial stretch;
+  standing bends). Dense music probe (ragdoll loud end): the light reads as one coherent front at the authored speed
+  with no standing glow at the emitter; a packetised release was measured (emitter share .41 -> .40) and rejected as
+  machinery without a visible gain. 8 s strips (`studio_20261105/modes_long/`): Frozen Past distinct (held crests stay
+  raised when the passage quiets); Group Wave was indistinguishable, so a swell now arrives as a SET (envelope 3.5
+  carrier wavelengths, light across the set, stronger forward lean).
+- **Particles (5 Nov).** Crest-weighted, distributed births in each ribbon's colour, visible >=1 px cores with soft
+  halos, gentle fade; hot passages hold ~3.4x quiet; Pulse births only fill the cohort headroom left after the
+  authored Spark Count.
+- **Colour, floor and mist (5 Nov vs `Preset3Goal1`).** Lattice sheets (V3); wet concrete with stable soft coloured
+  reflection mass (operator prefers smeared colour to streaks); one bounded night medium with a slight local ribbon
+  tint (strong Local Light can no longer wash the frame). The grey base was the far concrete level and surface
+  brightness, and Reflection Colour was not the hue drift. All presets darker far surface (.2) and brightness (1.2); P3
+  stronger, wider-smeared reflection masses (lit saturation .60 vs reference .59, current .54). Consecutive frames
+  smooth (flicker .0068 -> .0105, from brighter moving masses, no column popping); evidence `studio_20261105/floor4/`.
+  Floor collision (operator, 5 Nov): a ribbon whose lower edge nears the floor lifts as a WHOLE (shape-exact,
+  two-stage eased); per-knot trough limits were rejected as boxy.
+- **Unified atmosphere (5 Nov).** Replacement medium in place (old banks/fringe/floor haze removed); darker bounded
+  haze with capped local tint; P3 density 0.06-0.09, P1/P2 0.055-0.075.
+- **Fixed response (6 Nov, operator: "when it went suddenly quiet everything become more reactive ... Adaptive is a
+  very problematic approach"; "many sustained kicks ignored").** Geometry drives are a fixed function of the real-music
+  scale. Preset 4 differs from the tag only through it, Kick Accent and the floor lift.
+- **Logical tick and GPU, Waveform (5 Nov).** The reaction work took the tick to 2.2-3.2 ms median offline (live ~1.4x,
+  budget 2.5 ms); the along-curve surge and per-card colouring now run as rows (byte-identical packets proven per tick
+  on real replays; paired -0.33 and -0.18 ms), quiet-machine median 1.32-1.35 ms on all presets. The no-twitch/pulse
+  work added no tick cost against 5b69d6d8 (human_heavy advance median 2.45 ms both); the closed-form flow-rule share
+  took it to 2.30 ms. A loaded fog-OFF run once rendered fog because preset activation overwrote its CLI values: it
+  is a failed fog-ON run, not an A/B.
+- **Studio.** Opens on the live card's world (Fill framing) with the mock's viewport toolbar, ribbon arrows and curve
+  tiles; the old builder buckets are retired (Custom shows only the preset row and the Studio launcher).
