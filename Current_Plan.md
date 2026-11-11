@@ -766,7 +766,7 @@ significant work". Opus and Sonnet agents resume as the lead sees fit.
   the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
   a Medium slot is free after 1C.1 and 1C.4.
 
-### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; when a relevant agent is free)
+### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; step b of round 3, 1C.10)
 
 Operator: "an option or slider for neon lake to allow the WATER edge/face lines to be completely hidden ... this
 shouldn't be very difficult". Mode id `shockwave_grid`. Today the water draws ripple/face lines (`Water Colour`,
@@ -793,6 +793,96 @@ enough (operator, same message: it "has improved quite a bit already"); see 1B.6
 - [ ] Evidence: a sheet of Presets 1 to 3 at 1, 0.5 and 0, at rest and driven; lead pixel review; one showcase
   WebP at 0 on the preset where it looks best; `Docs/Reference/Neon_Lake_Basin.md` and the Visualizer Reference
   updated.
+
+### 1C.10 Neon Lake round 3 (operator, 11 Nov evening; one Opus High agent when a slot is free, in this order)
+
+One agent, one mode (`shockwave_grid`), four features and two repairs, each its own reviewed checkpoint. Every
+new control is a canonical spec entry in `core/settings/visualizer_mode_settings.py`, off or neutral by default,
+authored neutral into every Neon Lake preset by the repair fill, shown in Settings and the Studio through the
+spec, identical pixels and zero cost when off (a skipped branch, not a multiply by zero), Settings/Studio and
+engine-worker parity rerun, `Docs/Reference/Neon_Lake_Basin.md` and the Visualizer Reference updated. Everything
+ramps and fades; nothing pins at its ceiling on loud music and nothing mutes mid-song kicks in continuous play
+(judge on whole songs with `tools/visualizer_replay/neon_lake_music_response.py --continuous`).
+
+**a. Repairs first (they change what the rest is measured against)**
+
+- [ ] 1B.5's dormancy fault: an ungrown grid with React To Music off pays for the terrain-overlay path; skip it
+  (identical pixels, the pre-1B.5 cost), re-measured alternated in one session; the five unattributed GL calls.
+- [ ] 1B.6's paused Studio preview: a paused seek shows the reaction the fixture has at that time.
+
+**b. Water lines can be hidden: plan 1C.8, as written there.**
+
+**c. Spire glow on hits (operator: "spires should glow an editible colour on hits. Completely optional in the
+Studio. If you want a test colour just pick one of the dominant colours.")**
+
+- [ ] The hit part of the Growth drive exposed on its own (today it is mixed into the drive): a frame-field
+  value and one uniform, memoryless on the fixed scale like the other drives; nothing per frame when off.
+- [ ] Growth's share of a vertex's height passed to the fragment shader; emission added into the bloom target
+  in proportion to that share and the hit value, so only what grew glows, tallest most; mounds glow less than
+  spires by the same rule (Growth Shape decides), no separate switch.
+- [ ] Two spec controls in the Studio's Reaction workspace beside Growth: "Spire Glow" (amount, 0 = off and
+  identical to today) and "Spire Glow Colour" (an editable colour). No test colour is shipped in presets: the
+  presets are authored at 0; for evidence use each preset's dominant accent (Preset 1 its magenta ridge colour,
+  Preset 3 its gold).
+- [ ] The glow rises with the hit and decays over a few hundred milliseconds (a ramp, never a flash that
+  strobes); on sustained loud passages it settles below its ceiling so the next hit still reads.
+- [ ] Evidence: a staged sheet (hit value 0, 0.5, 1 on Presets 1 and 3), one driven WebP on `heavy1`, the
+  music-response trace with the glow term beside the song's envelope; lead pixel review.
+
+**d. Vertex trace (operator: "would a vertex trace reaction also be viable? When on and a colour is chosen
+vertexes react to music by changing colour to the chosen colour and you could select 'Random', 'Left to Right',
+'Back To Front', 'Front To Back' and 'Center Out' as their starting points. Their speed and colour deepness
+effected by intensity, making sure not to pin.")** Viable and cheap: the land's vertex points are already drawn
+by a vertex shader that knows each point's position, and the mode already carries a small ring of travelling
+wave fronts from the tick to the shader.
+
+- [ ] Design note first (half a page in `Neon_Lake_Basin.md`, seen by the lead before code): each vertex gets an
+  order key in 0..1 from its position by the chosen start: Left To Right (basin x), Back To Front and Front To
+  Back (depth from the saved camera's forward axis, so it reads the same from the default view), Center Out
+  (distance from the lake's centre), Random (a stable hash of the cell, so it never shimmers frame to frame). A
+  trace is a front that travels along the key; a vertex's colour moves toward the chosen colour as the front
+  passes and relaxes back behind it over a set tail length.
+- [ ] Fronts are launched by the music in the tick (a hit above the passage's own level launches one), kept in
+  a small fixed ring (as the wave ring is), advanced on the logical tick, sent as one uniform array; the vertex
+  shader does a few operations per vertex per live front and nothing when the ring is empty.
+- [ ] Intensity drives two things, both through soft knees so neither pins: the front's speed (faster on
+  louder passages, bounded so a front is always seen to travel) and the colour's depth (how far a vertex moves
+  toward the chosen colour; never fully replacing the land's own colour unless the control asks for it).
+- [ ] Spec controls in the Reaction workspace: "Vertex Trace" (amount, 0 = off), "Trace Colour" (editable),
+  "Trace Start" (Random, Left To Right, Back To Front, Front To Back, Center Out; Title Case as written here),
+  "Trace Length" (the tail). Whether land vertices only or the water's vertices too: the agent renders both
+  and the lead picks.
+- [ ] It composes with Growth, Indents and Spire Glow without double-brightening (the trace recolours the
+  vertex; glow adds emission; together they stay under the bloom ceiling on `heavy1`).
+- [ ] Evidence: one WebP per Trace Start on Preset 1 with a test colour from its dominant accents, the
+  music-response trace showing launches against the song, a continuous-play run over three songs (launch
+  counts per third, no starvation after loud passages), cost per frame against the overhead baseline; lead
+  pixel review.
+
+**e. Islands (operator: "land can grow out of water but only in exceptional music circumstances"; optional,
+last because it touches the water's edge)**
+
+- [ ] The standing rule changes for this one feature only, and the docs say so: the authored shoreline never
+  moves; islands are extra land that may rise inside the lake while the feature is on.
+- [ ] "Exceptional" defined on the music's own scale and proved on whole songs: an island rises only when the
+  passage level has stayed in the top few percent of the session's own recent loudness for some seconds *and*
+  a strong hit lands; a cooldown follows; a quiet or even song raises none. Calibrate by presence on the
+  recorded songs (0 on `quiet_intro` until its loud end; 1 to 3 across `heavy1`), never by absolute levels.
+- [ ] A few fixed island sites per preset (seeded from the terrain record, in open water away from the shore and
+  the celestial reflection path), each a smooth mound; an island rises over seconds and sinks over seconds
+  (fade, never vanish), and never breaches the camera floor's clearance.
+- [ ] The island gets a real water's edge without recomputing the precomputed bank distance: its shoreline
+  distance is analytic (distance to the island's current waterline circle), and the shore glow, wet fringe,
+  wave taper and reflections read the smaller of the bank distance and the island distance. With no island up
+  the term is skipped and the frame is identical to today.
+- [ ] The camera floor's ripple allowance and the water reaction account for an island that is up; Growth,
+  Indents, Spire Glow and Vertex Trace treat island land as land.
+- [ ] One spec control, "Islands" (off by default), with at most one more for how rare; in the Studio the
+  Peak fixture can force one for authoring.
+- [ ] Evidence: rise and sink WebP on Presets 1 and 3 with 4x crops of the island's waterline (glow and fringe
+  wrap it, no hard ring), the whole-song launch table, GPU cost with an island up and with none, alternated in
+  one session; lead pixel review. If the analytic edge cannot be made to look right, stop and report with the
+  renders rather than shipping rocks without a shoreline.
 
 ### 1C.9 Sources: RSS Pools shows which pools are active and valid (operator, 11 Nov; small, Opus Medium)
 
@@ -1026,15 +1116,6 @@ Watchlist entry (operator, 11 Nov).
     opposite pole so it reads on its pill (2.48, 3.79, 2.86 to about 5.1); the other 197 state inks are
     unchanged.
   - Spectrum presets 2 to 15 of 7 Nov are replaced (1B.10); the five you rejected are being redone.
-- **Decision, Neon Lake spire glow on hits (write-up from the refinement round):** Growth's share of the height
-  would add emission into the bloom on hits. It needs the hit part of the drive exposed on its own and one spec
-  control (amount and colour, 0 = identical to today); cost one varying and a few operations per fragment.
-  Product choices: its own colour or the ridge colour; spires only or mounds too; hits only or the whole passage.
-- **Decision, Neon Lake islands rising from the lake:** this breaks today's rule that the water's edge never
-  moves. Cheap form: islands drawn as land over the static water (no shoreline glow or wet fringe round them, so
-  they read as rocks). Full form: the water's edge follows the music (bank distance, wave taper, shore glow, wet
-  fringe, reflections and the camera floor all change, plus a reaction evaluation on every water fragment). May
-  the music move the water's edge, and should islands get the full shoreline treatment?
 
 ## 3. Lead and agents: active, paused and queued work
 
