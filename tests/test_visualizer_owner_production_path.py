@@ -12,13 +12,13 @@ cadence).
   at the mode's bar count (the binding's construction): so the engine-worker identity gates, which compare against the
   offline replay, compare against the product's frames. The same replay at ``32f28d4f^`` (before the configure
   refactor) gave identical digests for every mode (A6-L5 record in ``Docs/Future_Work/Native_Core_P2_Engine_Design.md``).
-- **The default (the engine worker on Windows):** the same binding path with no path stated builds an owner on a real
+- **The default (the engine worker):** the same binding path with no path stated builds an owner on a real
   ``WorkerType.VISUALIZER`` process (no fallback), and its frames equal the same owner's in process (stated), frame for
   frame through ``owner_worker_gate``'s identity script (play, a warm pause, a park, a mode switch); the worker side's
-  capture is the shipped clip's PCM through the link's test control, never a device.
+  capture is the shipped clip's PCM through the link's test control, never a device. The default is the worker on
+  every platform since the H3 source flip (12 Nov 2026), so this is not gated by platform any more: on Linux it is
+  the first test to run the default path there, and no such run has been recorded (``Linux_Plan.md``, Phase 4).
 """
-import sys
-
 import pytest
 
 
@@ -78,7 +78,6 @@ def default_path(monkeypatch):
 
 
 @pytest.mark.qt
-@pytest.mark.skipif(sys.platform != "win32", reason="the engine worker is the default on Windows only")
 @pytest.mark.parametrize("mode", _modes())
 def test_the_default_production_owner_runs_on_the_engine_worker_with_the_in_process_frames(
         qt_app, supervisor, default_path, mode):
