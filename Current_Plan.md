@@ -38,6 +38,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 **Now (in flight):**
 
+0. **Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below.**
 1. **Operator-reported defects first:**
    - Material density, composed-stack readability and Studio surfaces: active section 1A, item 1.7. Native
      Settings corners: open item 1.9. Keep their acceptance and reversible checkpoints separate.
@@ -231,6 +232,72 @@ after the operator's yes on a question card; agents never run load (invisible ch
    Moonscape, lab-first per §7.0) resume after Expanded Visualizer acceptance and its full-display measurements, under
    the port-readiness rules; if a trigger fires first, the native Vulkan core precedes them.
 
+## 1B. Operator defects and requests (11 Nov; run first, in this order)
+
+Order: the two Edit/exit defects that block ordinary use, then the Studio work (churn rule first, so new controls
+are born under it), then the fullscreen overlay contract, then window material and corners, then presets last
+(they need the finished Studio controls). Each fix reproduces its failure first; visual items are judged on
+rendered pixels by the lead. Roster (operator, 11 Nov): one Fable High (complex/architectural/visual), one Opus 5.5
+High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/research only); the lead audits all.
+
+- [ ] **1B.1 Edit reaches only the fullscreen Visualizer's display (very important).** With 2+ displays and the
+  Visualizer expanded on one (say D1), entering Edit from D0 or D1 opens only D1's Fullscreen Edit; D0 cannot be
+  edited at all. Edit entered on a display edits that display: ordinary Edit on D0 while D1 stays expanded and
+  running, Fullscreen Edit only where the expanded card is. One Edit session owner, no second path; cover both
+  entry displays, Save/Cancel on each, and the covered-display admission (M4) with a multi-display regression
+  that fails on today's code.
+- [ ] **1B.2 Cursor keeps its changed shape after exit until a click (never actually fixed; 3-4 rounds).** A hand
+  or other shape set by the saver survives exit and a single click on the desktop clears it. Reproduce on the real
+  exit paths first (key, click, mouse move, Settings, Edit, MC, each display count), find the owner that still
+  holds or last set the native cursor (override stack, per-window cursor, capture, Halo), and fix it there. The
+  earlier rounds (f20d772a / 33ce0e11 "retiring window releases the pointer and keeps the arrow", 3c1f67cf /
+  962bcf48 Halo lingering) and why each failed go into a new `Docs/Historical_Bugs/R-183` entry + index row
+  before this is reported done. Acceptance is the operator's exit on native Windows; an offscreen proof alone is
+  not a fix.
+- [ ] **1B.3 Studio slider save churn.** Audit every Studio slider/drag instrument (all modes, shared chrome,
+  response tuner, camera, brush) for a settings/preset/sidecar write or flush per move. A drag previews in memory
+  and commits once on release (the existing "Drags are batched" contract in `Docs/Reference/Visualizer_Studio.md`);
+  repair every violator at its shared owner and add one test that counts I/O across a drag for every registered
+  adapter.
+- [ ] **1B.4 Shape control for the music-visual shape (Spectrum and Neon Lake): design regression.** Both Studios
+  turned the shape editing control into sliders. Recover the original shape control from git before the Studios
+  existed, and build one thematic, Studio-matching, visually pleasing shape instrument on the Studio's shared
+  instrument layer (theme tokens, drag batching, undo, one commit on release, unchanged serialized keys).
+  - [ ] Spectrum uses it.
+  - [ ] Neon Lake uses it (the same instrument if its quality holds for both).
+- [ ] **1B.5 Neon Lake: all visible land is brush-editable.** The Studio brush stops at limits narrower than the
+  land the scene shows. The paintable domain is the visible terrain; move the bound to the terrain's own extent
+  owner (no second limit table), with a pick test at the visible edges through the production camera.
+- [ ] **1B.6 Neon Lake: land reactivity pass for smooth deformation.** No tearing or jagged edges at any
+  reactivity (continuous normals and silhouette under the production mesh density). Optional, default off and
+  preset-authored: growth of spires, mounds and land that is not visible at low reactivity, and indents of land
+  that is. Fixed scales (no learned levels), everything ramps and fades, continuous-play evidence on recorded
+  music, no second simulation owner.
+- [ ] **1B.7 Fullscreen Now Playing (media toast): one geometry contract with the Media widget.** Audit its
+  geometry contracts and Edit control against ordinary widget editing: reliable alignment, adjustment and detail
+  adjustment exactly as the Media widget has. Artwork, metadata and controls behave as the Media widget's do in
+  Edit, through the same child-editor contract rather than overlay exceptions. Add an optional seekbar (default
+  off) that inherits the Media widget seekbar's traits and style from one shared component. Retire each
+  exception the audit finds or record why it must stay.
+- [ ] **1B.8 Light themes are practically opaque in the application.** Dark themes transmit correctly; light
+  themes (Platinum Workstation, Polished Chrome, Plum for example) render nearly opaque in the saver even though
+  their Settings GUI variant shows the material correctly. Find where the runtime path diverges from the Settings
+  variant (the light-surface legibility guard of 1.7a is the first suspect), and make the application match it
+  while keeping text legible on composed pixels. Prove on off-screen wallpaper renders, light beside dark.
+- [ ] **1B.9 Settings and Studio window corners still bleed/escape.** Continues 1.9 with the operator's
+  allowance: the border may grow by at most 2 px if that covers the escape. Measure with
+  `tools/settings_native_corners.py` (four cases, 150% DPI) at +1 and +2 px, report to the operator whether
+  thicker borders solve it, and implement the smallest width that does; if neither does, say so with the pixels.
+  The window border should also take a material like the planned widget border (1.7b): one border-material
+  treatment, not a second system.
+- [ ] **1B.10 Presets (only after 1B.3-1B.6 land; one Fable 5.2 Medium agent, admitted above the roster cap for
+  this task only).** Supersedes the lead's Spectrum presets 2-15 of 7 Nov (§3).
+  - [ ] Spectrum: replace presets 2 and up with the best and most novel looks the mode can make.
+  - [ ] Extruded Bubble: one arctic-themed preset.
+  - [ ] Neon Lake: three unique presets.
+  Every preset reads as unique and visually impressive on rendered showcase WebP. The agent may ask the lead for
+  a feature or architecture it needs for a better look, as long as it is not wasteful.
+
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
 These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it.
@@ -306,7 +373,7 @@ Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.
 - [~] **1.8 Awaiting Validation:** operator-check Gmail and Reddit/Reddit2 column gestures: top grips reorder;
   solid-span endpoints change start/width and truncation. Retained-QML proof covers transformed opposite-edge
   stability, all-row updates, collision policy, Save/Cancel, Undo, slots and fresh-profile hydration.
-- [ ] **1.9 Settings native corner clipping:** find a composition treatment that actually clips Accent material
+- [ ] **1.9 Settings native corner clipping (next step is 1B.9: the operator's +2 px border allowance):** find a composition treatment that actually clips Accent material
   at the rounded silhouette. Both Qt and post-Accent native regions were rejected and reverted: all four native
   dark/light theme/background combinations retain outside-radius material pixels at 150% DPI. Keep a separate
   reversible fix and repeat the four-case corner/border/shadow gate before claiming improvement. Reproducer and
@@ -362,10 +429,12 @@ answers.
 
 ## 3. Lead and agents: active, paused and queued work
 
-**Agents (operator, 9 Nov):** Sol 6.1+ Extra High is orchestrator and final reviewer; all agent results pass that
-review before acceptance. Reuse loaded agents for useful independent slices, with Sol 6.1+ High admitted alongside
-the audit/native-worker work. Default focused auditor is Terra 6.1+ High. Wait for agent reports without status polling;
-new visual tests render off-screen whenever the tested boundary permits it.
+**Agents (operator, 11 Nov; replaces the 9 Nov roster):** the lead is orchestrator, auditor and final reviewer;
+all agent results pass that review before acceptance. At most one Fable High (complex/architectural/visual), one
+Opus 5.5 High (general high-quality work), one Opus 5.5 Medium (simpler/brute force) and one Sonnet Medium
+(documents and research only); reuse a loaded agent for related slices. Agents run only the tests related to what
+they changed, never `--isolated`, never take over a display (off-screen renders and captures), and record side
+defects here instead of ignoring them. Wait for agent reports without status polling.
 
 **Merged 7 Nov (lead fix audit: every regression bar fails on its pre-fix code for the reported reason):** R-174
 cross-mode preset write (fails closed and logs every preset-file write), the Studio controller leak, drag controls
@@ -444,7 +513,9 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   in the current display generation (`_configure_quick_auxiliary`), including the new global opacity override.
 - [ ] Extend actual faint-run pixel checks to light widget themes beyond the sampled Gmail/Media cards. Keep
   authoring-mirror failures separate from runtime material guards; contract: `Docs/Architecture/Card_Surface_Materials.md`.
-- [~] **Spectrum presets 2-15: re-authored by the lead (7 Nov), awaiting the operator's eyes.** The first agent
+- [~] **Spectrum presets 2-15: re-authored by the lead (7 Nov); to be replaced under 1B.10 (operator, 11 Nov).**
+  The features below (flag sheets, hue-preserving gradients, rim glow cap, Bar Fill ghosts) stay; the open ghost
+  softness/seam note at the end binds the replacement presets too. The first agent
   round failed the fidelity gate (operator: "awful"). Its looks were opaque clip-art blocks, its per-bar patterns
   turned to checkerboard and tartan, its ghost trails read as soot, and Union Jack read as tartan. That round is not
   merged; its evidence tool fix is.
