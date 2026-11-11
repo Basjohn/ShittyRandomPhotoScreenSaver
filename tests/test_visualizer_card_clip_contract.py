@@ -37,8 +37,10 @@ TOLERANCE = 2              # 8-bit levels per channel
 OUTSIDE_PX = 0.71          # a pixel whose centre lies this far out has no footprint inside the inner edge
 FRAMES = 150               # replayed frames before the first check (every mode has drawn by then)
 CARD = {
-    "border_width": 2.0, "corner_radius": 8.0, "content_inset": 0.0,
-    "background_color": (0, 0, 0, 255), "border_color": (0, 255, 0, 255),
+    # A non-default width and a half-transparent border: content drawn under the border band would show through
+    # it and count, not hide beneath an opaque frame.
+    "border_width": 5.0, "corner_radius": 8.0, "content_inset": 0.0,
+    "background_color": (0, 0, 0, 255), "border_color": (0, 255, 0, 128),
     "shadow_enabled": False, "shadow_color": (0, 0, 0, 0), "shadow_blur": 0.0,
     "shadow_offset": (0.0, 0.0), "shadow_spread": 0.0, "shadow_extensions": (0.0, 0.0, 0.0, 0.0),
 }
