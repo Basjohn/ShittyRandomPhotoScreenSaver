@@ -271,7 +271,9 @@ mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and th
   own outline is its only border.
 - The volume track carries no text: its tint takes 40 % of its fill's alpha and it has no darker panel
   (`legibilityPanel: false`), so the backdrop reads through ("deserves more transparency"); the outline sits on top
-  unchanged.
+  unchanged. Its drop shadow fades out on every material and on Normal: the accessory lane's paint boundary is grown
+  by the shadow's reach (`OverlayWidget.accessoryPaintOutset`), so an Edit-widened or moved track no longer has its
+  shadow cut square at the lane edge (1C.5, R-187; not a material effect).
 - The volume's level (the adjustable part inside the track) is material too (operator, 8 Nov: it "does not inherit
   surfaces"): its own `ChildMaterialSurface` tinted by the fill colour at full strength, no darker panel, so it reads
   above the track's 40 % tint; it drops its flat colour while the material is active and keeps it on Normal

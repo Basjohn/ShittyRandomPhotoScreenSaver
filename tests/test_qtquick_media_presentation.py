@@ -1459,6 +1459,117 @@ def test_media_external_volume_bounds_and_edit_rebase_follow_live_lane(qt_app) -
         qt_app.processEvents()
 
 
+def _walk_items(item: QQuickItem):
+    yield item
+    for child in item.childItems():
+        yield from _walk_items(child)
+
+
+def _shadow_reach_outside_clips(shadow: QQuickItem) -> list[tuple[str, float]]:
+    """How far a RectangularShadow's painted extent passes each clipping ancestor (empty: none).
+
+    The extent is derived from the shadow's own parameters: its item displaced by ``offset`` and
+    grown by ``blur + spread`` on every side (Qt's RectangularShadow paints that far)."""
+
+    from PySide6.QtCore import QRectF
+
+    reach = float(shadow.property("blur")) + max(0.0, float(shadow.property("spread")))
+    offset = shadow.property("offset")
+    extent = shadow.mapRectToScene(QRectF(
+        offset.x() - reach, offset.y() - reach,
+        shadow.width() + 2.0 * reach, shadow.height() + 2.0 * reach,
+    ))
+    misses = []
+    ancestor = shadow.parentItem()
+    while ancestor is not None:
+        if ancestor.clip():
+            bounds = ancestor.mapRectToScene(QRectF(0.0, 0.0, ancestor.width(), ancestor.height()))
+            worst = max(bounds.left() - extent.left(), bounds.top() - extent.top(),
+                        extent.right() - bounds.right(), extent.bottom() - bounds.bottom())
+            if worst > 0.01:
+                misses.append((ancestor.objectName() or type(ancestor).__name__, worst))
+        ancestor = ancestor.parentItem()
+    return misses
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("direction", ("SE", "NW"))
+def test_media_child_shadows_are_never_clipped_by_their_lane_or_card(qt_app, direction: str) -> None:
+    """A child control's drop shadow fades out; no clipping ancestor cuts it (Current_Plan 1C.5).
+
+    The volume track's shadow lies inside every clipping ancestor at its default geometry and
+    across the Edit range (widest, tallest that fits the lane, pushed to every lane edge), on
+    either side of the card; the transport bar's at its default geometry. Derived from the
+    shadows' own blur/spread/offset, no pixel values pinned."""
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=93, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    window.setWidth(1600)
+    window.setHeight(900)
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    volume_runtime = _FakeMediaVolumeRuntime()
+    artwork_provider = factory.media_artwork_provider
+    config = MediaPresentationConfig.from_mapping(_values())
+    model = MediaPresentationModel(
+        config, MediaPresentationStyle.project(config, _shadows(direction=direction)),
+        artwork_provider, runtime, volume_runtime_service=volume_runtime,
+    )
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(35.0, 40.0, 650.0, 300.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        controller.scene_root.setWidth(1600.0)
+        controller.scene_root.setHeight(900.0)
+        qt_app.processEvents()
+        assert model.appVolumeAvailable and model.surfaceShadowEnabled
+        track = item.findChild(QQuickItem, "mediaAppVolumeTrack")
+        lane = item.findChild(QQuickItem, "mediaAppVolumeSlider")
+        volume_shadow = item.findChild(QQuickItem, "mediaAppVolumeTrackShadow")
+        bar = item.findChild(QQuickItem, "mediaControlsRow")
+        assert track is not None and lane is not None and volume_shadow is not None and bar is not None
+        assert float(volume_shadow.property("blur")) > 0.0
+        bar_shadows = [child for child in bar.childItems()
+                       if "RectangularShadow" in child.metaObject().className()]
+        assert len(bar_shadows) == 1
+        assert _shadow_reach_outside_clips(bar_shadows[0]) == []
+
+        descriptor = get_widget_runtime_descriptor("media")
+        role = next(r for r in descriptor.custom_child_roles if r.role_id == "volume_bar")
+        widest = role.maximum_scale[0]
+        # The tallest track that still fits the lane (a taller one is a geometry question of its own).
+        tallest = min(role.maximum_scale[1], lane.height() / max(1.0, track.height()))
+        for left in (False, True):
+            item.setX(1600.0 - item.width() - 20.0 if left else 20.0)
+            qt_app.processEvents()
+            assert bool(item.property("appVolumeOnLeft")) is left
+            for width_scale, height_scale in ((1.0, 1.0), (widest, 1.0), (1.0, tallest), (widest, tallest)):
+                for offset in (-1.0, 0.0, 1.0):
+                    model.set_custom_child_geometry({"volume_bar": {
+                        "width_scale": width_scale, "height_scale": height_scale,
+                        "x_offset": offset, "y_offset": offset,
+                    }})
+                    qt_app.processEvents()
+                    assert volume_shadow.isVisible()
+                    misses = _shadow_reach_outside_clips(volume_shadow)
+                    assert misses == [], (left, width_scale, height_scale, offset, misses)
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
 @pytest.mark.qt
 def test_media_header_flip_swaps_artwork_and_metadata_rails_and_reset_is_identity(qt_app) -> None:
     """A semantic flip must not make metadata overlap the artwork or shift on reset."""
