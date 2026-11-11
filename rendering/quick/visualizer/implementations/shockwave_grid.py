@@ -7,6 +7,7 @@ card target. Optional sky and bloom retire with this activation.
 from __future__ import annotations
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
 
+import ctypes
 import math
 from contextlib import contextmanager
 from OpenGL import GL as gl
@@ -247,13 +248,17 @@ class QuickShockwaveGridRenderer:
         shaper's baked elevation tables, and Growth / Indents with their drives (strength 0 turns the
         shader's reaction off; an amount of 0 its landforms)."""
         reaction = _reaction_vector(parameters)
+        if not (mode_state.events or any(mode_state.terrain_bands) or any(mode_state.terrain_forms)):
+            # Nothing drives the land this frame (silence, no wave alive): every term is zero, so the shader is
+            # told the reaction is off and skips its work per vertex instead of computing zeros.
+            reaction = (0.0, *reaction[1:])
         gl.glUniform4f(uniforms["uReaction"], *reaction)
         gl.glUniform1fv(uniforms["uReactionBands"], len(mode_state.terrain_bands), mode_state.terrain_bands)
         gl.glUniform1f(uniforms["uReactionPhase"], float(mode_state.terrain_phase))
         gl.glUniform1f(uniforms["uReactionMaximum"], float(terrain["maximum"]))
-        tables = parameter(parameters, "shockwave_grid_terrain_shaper")
-        gl.glUniform1fv(uniforms["uReactionLanes"], 5 * REACTION_SAMPLES, tables["lanes"])
-        gl.glUniform1fv(uniforms["uReactionBias"], REACTION_SAMPLES, tables["bias"])
+        lanes, bias = _reaction_tables(parameter(parameters, "shockwave_grid_terrain_shaper"))
+        gl.glUniform1fv(uniforms["uReactionLanes"], 5 * REACTION_SAMPLES, lanes)
+        gl.glUniform1fv(uniforms["uReactionBias"], REACTION_SAMPLES, bias)
         gl.glUniform4f(uniforms["uReactionForms"],
                        reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_growth")),
                        float(parameter(parameters, "shockwave_grid_terrain_growth_shape")),
@@ -599,6 +604,19 @@ def _point_key(lattice) -> str:
 
 def _wire_display(parameters):
     return BASIN_SURFACE_STYLES[str(parameter(parameters,"shockwave_grid_wire_display"))]
+
+
+_REACTION_TABLES: list = [None, None]
+
+
+def _reaction_tables(tables):
+    """The baked shaper tables as float arrays GL takes without converting them element by element: packed once
+    per baked tables (their lane tuple's identity), not on each of a frame's two uploads."""
+    lanes = tables["lanes"]
+    if _REACTION_TABLES[0] is not lanes:
+        bias = tables["bias"]
+        _REACTION_TABLES[:] = [lanes, ((ctypes.c_float * len(lanes))(*lanes), (ctypes.c_float * len(bias))(*bias))]
+    return _REACTION_TABLES[1]
 
 
 def _reaction_vector(parameters) -> tuple[float, float, float, float]:

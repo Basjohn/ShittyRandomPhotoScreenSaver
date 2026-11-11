@@ -841,7 +841,8 @@ def test_vertex_density_and_tiers_keep_one_unique_active_mesh_and_glass_retires_
         assert len(keys) == 1
         assert columns >= (12+40*density)*1.5 and rows >= 12+40*density
         assert columns <= np.ceil(192*np.sqrt(1.10)) and rows <= np.ceil(128*np.sqrt(1.10))
-        assert renderer._points_cells == renderer._mesh_cells
+        # One lattice: the marks' is the triangles' (which add only the painted far-land bounds, none here).
+        assert renderer._points_cells == renderer._mesh_cells[:2] and renderer._mesh_cells[2] is None
         assert renderer._points_data[1] == len(basin_mesh_points((columns, rows)))//2
         packed = np.array(basin_mesh_points((columns, rows))).reshape(-1, 2)
         triangles = np.array(basin_mesh_vertices((columns, rows))).reshape(-1, 2)
