@@ -86,11 +86,9 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 - [ ] Bright-area text switch (operator's long-term item, plan 01 §G): overlay text white with a soft shadow should
   switch to black over a bright Visualizer area; cheap means no per-frame CPU readback (a `ShaderEffect` on the text
   sampling the already-rendered frame, or a tiny luminance probe only while an overlay shows). Not built.
-- [ ] Agent branch (plan 01 M3c "Now Playing's parts" and §G "Show On Hover"): lead audit and merge of (a) Show On
-  Hover (`now_playing.hover_reveal`; no timer or polling; nothing under Fullscreen Edit) and (b) Now Playing's parts
-  as the block's children in Fullscreen Edit (`now_playing.child_geometry`).
-- [~] Operator's live look at that branch: the feel of the child lock, a part drag and the hover re-fade on the real
-  display.
+- [~] Operator's live look at Show On Hover (`now_playing.hover_reveal`, on main since 0eda39c4) and Now Playing's
+  parts as the block's children in Fullscreen Edit (`now_playing.child_geometry`, 2100fdc2): the feel of the child
+  lock, a part drag and the hover re-fade on the real display.
 - [ ] Side defect (8 Nov): `tests/test_qtquick_system_audio_osd.py::test_osd_colour_inheritance_respects_active_widget_
   theme_and_authored_overrides` fails when run after `tests/test_visualizers_fullscreen_mode_pill.py` in one
   process (passes alone; reproduced on the base): Widget Theme state leaks between the files.
