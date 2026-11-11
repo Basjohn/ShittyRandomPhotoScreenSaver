@@ -192,6 +192,7 @@ class SourcesTab(QWidget):
         # Folder list
         self.folder_list = OutlinedListWidget()
         self.folder_list.setMinimumHeight(150)
+        shared_styles.apply_settings_list_style(self.folder_list)
         folder_layout.addWidget(self.folder_list)
 
         # Folder buttons
@@ -220,7 +221,8 @@ class SourcesTab(QWidget):
             "least as large as your displays are kept; smaller ones are skipped "
             "automatically."
         )
-        self.custom_feeds_label = QLabel("Custom Feeds")
+        # The list below holds the active pools and the custom feeds.
+        self.custom_feeds_label = QLabel("Pools and Custom Feeds")
         self.custom_feeds_label.setToolTip(custom_feed_hint)
         shared_styles.bind_shared_styles(
             self.custom_feeds_label,
@@ -231,7 +233,10 @@ class SourcesTab(QWidget):
 
         # Online sources: active Just Make It Work pools, then custom feeds, each with its status mark.
         self.rss_list = OutlinedListWidget()
-        self.rss_list.setMinimumHeight(150)
+        self.rss_list.setMinimumHeight(212)  # six rows of the shared list style without a scrollbar
+        # Long URLs elide in the middle inside the row (as theme names do), never scroll sideways.
+        self.rss_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        shared_styles.apply_settings_list_style(self.rss_list)
         self.rss_list.setItemDelegate(OnlineSourceRowDelegate(self.rss_list))
         rss_layout.addWidget(self.rss_list)
 

@@ -484,6 +484,21 @@ inspect exact current source
 
 Do not fix a native-material problem by perturbing stylesheet order, and do not fix a QSS-role problem by changing the native compositor.
 
+## Shared content-list style
+
+Settings' content lists (both theme catalogues, Sources' Folders and online lists) are `OutlinedListWidget`s bound to
+one style, `shared_styles.SETTINGS_LIST_STYLE` (`apply_settings_list_style`): the list typography (Jost family, one
+size, projected through `settings_typography_qss` like every shared style, so light palettes get the readability
+face) and the row height (`SETTINGS_LIST_ROW_HEIGHT`). Surface, text, hover, selection, padding and radius stay with
+the root `QListWidget` rule in `ui/settings_theme.py`; the frame is painted seam-free. Row delegates draw their text
+with the list's own font (the style's), set no font and synthesise no face; distinctions are semantic (a short ALL
+CAPS tag in `control.list.selected_accent`, as Sources' `JMIT POOL` rows), never a slant. Painted row glyphs (the
+theme star, Sources' status marks) share one stroke width (`theme_list.LIST_GLYPH_STROKE`). Bar:
+`tests/test_settings_list_style_real_dialog.py`.
+
+The Settings size grip (`settings_dialog.CornerSizeGrip`) paints three solid antialiased strokes in
+`chrome.size_grip` (a dotted aliased pen read as the native Windows grip on light themes).
+
 ## Catalogue palette previews and favourites
 
 Both product theme lists use `ThemeListWidget`: one delegate paints each row's right-aligned 2×2 palette and star,
