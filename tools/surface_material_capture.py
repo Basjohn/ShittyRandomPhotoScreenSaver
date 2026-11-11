@@ -801,7 +801,11 @@ def main(argv: list[str] | None = None) -> int:
     from tools import onboarding_preview_foundry as foundry
 
     args.output.mkdir(parents=True, exist_ok=True)
-    art = foundry._gradient_art(args.output / "_media_art.png", (480, 480), ("#27336e", "#e7678a"), 1)
+    # The preview builders write their fixture images (avatars, stories) beside the art: keep them
+    # all in one folder that the run removes.
+    fixtures = args.output / "_fixtures"
+    fixtures.mkdir(exist_ok=True)
+    art = foundry._gradient_art(fixtures / "_media_art.png", (480, 480), ("#27336e", "#e7678a"), 1)
     scene = MaterialScene(*SCENE, dpr=args.dpr)
     report ={"scene": list(SCENE), "wallpapers": [p.name for p in args.wallpapers]}
     try:
@@ -833,7 +837,9 @@ def main(argv: list[str] | None = None) -> int:
                                             themes=tuple(args.themes) if args.themes else (None, None))
     finally:
         scene.close()
-        (args.output / "_media_art.png").unlink(missing_ok=True)
+        import shutil
+
+        shutil.rmtree(fixtures, ignore_errors=True)
     (args.output / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2)[:2000])
     return 0

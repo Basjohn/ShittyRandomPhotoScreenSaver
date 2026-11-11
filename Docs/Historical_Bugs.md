@@ -1,6 +1,6 @@
 # Historical Bugs — single archive index
 
-**Updated:** 2026-11-09. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
+**Updated:** 2026-11-11. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
 
 **Admission bar:** retain costly, elusive, multi-tool investigations and architectural, resource, timing, scheduling or performance failures. A quickly fixed one-off UI/test/routing defect is not archival merely because it happened. Historical data records what was true *then*, never an instruction to revive retired QWidget/GL infrastructure. Current behavior is in `Spec.md`, `Docs/Contracts.md`, current reference/guardrail documents and tests. `Current_Plan.md` owns actual remaining work.
 
@@ -112,6 +112,7 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-183 / The cursor kept its changed shape after exit until a click (three "fixes" proved only a Qt property)](Historical_Bugs/R-183_Cursor_Kept_Its_Shape_After_Exit_Until_A_Click.md) | Source repair (input/lifecycle, native cursor at retirement); operator native acceptance open | **STRONG** |
 | [R-184 / On the engine worker, a mode switch that changes the layout profile kept drawing the outgoing frame after its fade-out](Historical_Bugs/R-184_Engine_Worker_Mode_Switch_Kept_Drawing_The_Outgoing_Frame_After_Its_Fade_Out.md) | Source repair (render retention, engine-worker path; found by the first rendered parity gate) | Standard |
 | [R-185 / A worker being torn down still read as running, so a crashed engine worker turned the worker off for the run](Historical_Bugs/R-185_A_Worker_Being_Torn_Down_Read_As_Running_So_Its_Crash_Turned_The_Engine_Worker_Off.md) | Source repair (process supervision, engine-worker recovery) | Standard |
+| [R-186 / The Settings ink guard kept checked mode-button ink on the same side as its fill (three themes at 2.5-3.8:1)](Historical_Bugs/R-186_Settings_Checked_Mode_Ink_Could_Not_Cross_To_A_Dark_State_Fill.md) | Source repair (Settings state ink; red test on main 9-11 Nov) | Standard |
 | [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](Historical_Bugs/A-01_Settings_Dialog_Placeholder_Investigation.md) | Archived investigation | Standard |
 | [U-02 — 2026-04-10 / 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](Historical_Bugs/U-02_Bubble_Blob_Signal_Contract.md) | Archived investigation | Standard |
 | [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md) | Archived investigation | **STRONG** |

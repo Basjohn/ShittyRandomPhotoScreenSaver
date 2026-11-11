@@ -30,8 +30,8 @@ Loader {
         opacityAdjust: child.card.cardSurfaceOpacityAdjust
         cornerRadius: child.cornerRadius
         contentInset: 0.0
-        // Negative: the panel spans the whole face, so there is no inner rim (the shaders'
-        // plateInset); the control's own outline is the border.
+        // Negative: the control's own outline is its border (the panel spans the whole face
+        // of every surface since 1B.8 M2; the value is kept for the ring shading to read).
         borderWidth: -1.0
         legibilityPanel: child.legibilityPanel
         normalColor: child.fillColor

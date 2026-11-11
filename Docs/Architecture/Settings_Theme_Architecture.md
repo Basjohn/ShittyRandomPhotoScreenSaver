@@ -193,6 +193,8 @@ calibration of the card's own surface; `SurfaceContrast.legibleInk`, `Card_Surfa
 the surface keeps its density and the ink is corrected.
 Encoded ink brightness alone does not choose polarity; the actual composed locations do.
 Mode buttons resolve checked and hover ink separately against those states, including styled subsection parents;
+a state ink alone may cross to the opposite pole, and only when its own pole cannot read and the result lies beyond
+every location (R-186: a dark checked fill under dark mode text);
 the lock icon consumes the same checked/hover ink, with checked precedence. State inks are cached derivatives, never extra authored tokens. Faint 10–11px tertiary/helper ink reserves
 0.3 contrast headroom above 4.5 for actual antialiasing; mode-state ink reserves 5.1 for its small geometric icon/text. No extra panel density is invented when a very
 transparent stack cannot meet a conservative desktop bound. Native pixel evidence remains necessary for actual ink,

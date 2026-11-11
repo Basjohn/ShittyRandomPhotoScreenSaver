@@ -100,10 +100,11 @@ def test_media_panel_runs_from_above_the_header_to_below_the_seek_track(material
     # One even panel: the text block is not darker than the gaps above and below it.
     assert abs(in_text_block - above_header) <= 6, (above_header, in_text_block, below_track)
     assert abs(in_text_block - below_track) <= 6, (above_header, in_text_block, below_track)
-    # ...and it is the darker panel, not the bare material: the rim just inside the border is lighter.
+    # ...up to the real border: no lighter rim of bare material just inside it (12 Nov, M2); at
+    # most Glass's own edge highlight, which fades within a few pixels of the border.
     card = _rect(media.item)
     rim = _tone(frame, x, card.top() + 1.5 + float(media.item.property("cardBorderWidth") or 0.0))
-    assert rim - above_header > 20
+    assert -6 <= rim - above_header <= 12, (rim, above_header)
 
 
 def test_media_volume_and_mute_children_take_the_card_material(material_scene, tmp_path) -> None:

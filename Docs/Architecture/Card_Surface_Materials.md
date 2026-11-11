@@ -144,7 +144,7 @@ luminosity pull and the legibility floor; lowering only the card colour alpha ca
 panel. The shared surface shader evaluates its floor in linear-light luminance, matching WCAG measurement,
 then applies the least polarity-preserving adjustment that meets it. Acrylic/Frosted card tint and Acrylic's
 textless children are calibrated separately; the accepted Glass/Frosted volume treatment stays independent of
-the text-bearing card panel. Glass's panel inset is 3 px and its refraction is reduced, with concentric corners.
+the text-bearing card panel. Glass's refraction is reduced; its edge highlight sits at the real border (M2 below).
 
 `Widgets -> General -> Style Overrides` adds `Settings Opacity Adjust` and `Widget Opacity Adjust`, each -1..1.
 Zero leaves the calibrated theme/material recipe in control. Negative values remove that fraction of a surface's
@@ -170,11 +170,10 @@ as boxes hugging the text at arbitrary heights; the per-run plates as chips.
 Inside the card the material draws the card's one legibility panel (`surfaceAt` in the shaders' shared `SURFACE`
 block):
 
-- it covers the whole interior 2.5 px inside the border (border width + 2.5 px from the card edge), so it runs from
-  above the header to below the last element on every card, with the same inset everywhere; its edge is a 2 px soft
-  step, so it reads as a deliberate panel with a thin rim of the bare material;
-- its corners are concentric with the card: the card's own configured corner radius (the Widget Settings value the
-  card uses) minus that inset, never under 2 px, so a square or small-radius card still gets a rounded panel;
+- **since 12 Nov (1B.8 M2) it is the card's whole face**, up to and under the real border, on every theme and material
+  (`plate = 1`). The 7 Nov geometry (a panel 2.5-3 px inside the border with concentric corners and a 2 px soft step)
+  left a contrasting rim of bare material inside the border that read as a second, inset rectangle; the operator
+  asked for it gone ("removing the inset while keeping the material on all themes"). Content padding is unchanged;
 - it composes a polarity-matched density anchor with material relief (Glass/Frosted 20%, Acrylic/Mica/Smoked 30%),
   then a separate linear-light contrast guard applies the minimum further correction required by its steady ink.
   `SurfaceContrast.js` derives that guard at ink/style edges, with 4.5:1 small-text acceptance checked in rendered pixels.
@@ -209,7 +208,16 @@ wallpaper (surviving wallpaper swing 0). The rule now, light ink (dark themes) u
 - *Text-local plate, only where ink cannot.* A run faded by its own item opacity (Media's PLAYING at 62 %) can stay
   short even as black; only then its `ShadowedText` loads one `TextLegibilityPlate` hugging the painted text (a pill),
   which lifts only where the surface under it misses the floor (`ownOpacity` keeps the run's fade off the plate).
-  No whole-card lift, no plate on any run that reads, none on Normal or light ink.
+  No whole-card lift, no plate on any run that reads, none on Normal or light ink. Since M2 the plate fades in over
+  5 px from its edge (`edgeSoftness`; rows keep their 1.5 px antialiasing) and extends that far past the painted run,
+  so it reads as a soft glow under the run rather than a sticker (lead review, 11 Nov).
+
+*Why the bound sits above the real Settings window (lead decision, 11 Nov).* For the named light themes the card bound
+is about 0.73-0.76 (Polished Chrome and Pearl Blush 0.73, Platinum Workstation 0.76), the real Settings window's shell
+0.63-0.72. The window's density comes from its Settings theme's native tint and `window.dialog_glass`; the card's
+comes from the mirror's authored card alpha (232-242, the light mirrors' high runtime floor) under the same
+calibration. Reading the linked Settings theme at runtime would make cards depend on Settings window state, so the
+card keeps its own authored alpha as the input; the difference is the mirrors' deliberately denser runtime card.
 
 Evidence (`.artifacts/evidence/materials/20261112_m1/`, PERSONALSET `Usu_Underwater_Lab_1440p.png` dark and
 `uwyTD.jpg` bright; Weather, Media, Reddit, System Stats, Clock and Gmail, Feed, Friend Pulse, System Stats): the
@@ -258,8 +266,9 @@ material surfaced", "the media controls would have the material on them"): each 
 own rounded shape, tinted by its own fill, while the card's material is active; the control drops its own fill (the
 mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and the control is unchanged.
 
-- No inner rim ("the mute button shouldn't have an extra inside border"): a child passes a negative border width, so
-  the shaders' panel covers its whole face (`plateInset` is -1 there); its own outline is its only border.
+- No inner rim ("the mute button shouldn't have an extra inside border"): the panel covers its whole face (as every
+  surface's has since M2); a child passes a negative border width, so its edge highlight stays under its face and its
+  own outline is its only border.
 - The volume track carries no text: its tint takes 40 % of its fill's alpha and it has no darker panel
   (`legibilityPanel: false`), so the backdrop reads through ("deserves more transparency"); the outline sits on top
   unchanged.
@@ -276,9 +285,33 @@ mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and th
 On a material the light-theme soft text halo (a blurred `MultiEffect` silhouette) is not drawn: over a colourful blur it
 reads as haze around the glyphs, and the plate now carries the contrast. Hard (dark-theme) shadows are unchanged.
 
-**Edges (light themes).** Inside the border the surface draws a dark hairline and, below it, a soft highlight, so the
-pale light-theme border reads as an edge over busy wallpaper. It scales with the tint's luminance and is exactly zero
-on dark tints. The outer card shadow (the shared shadow lane, R-74) is unchanged.
+**Edges (superseded 12 Nov, M2).** The light-theme dark hairline and soft highlight drawn just inside the border
+(and inside light-tinted children such as the mute button) were a second line inside the border; they are gone with
+the inset. The border's own clarity against the face is the ring's job (1B.8 M3, 3.2.1). The outer card shadow (the
+shared shadow lane, R-74) is unchanged.
+
+**No inset on any theme (12 Nov 2026, `Current_Plan.md` 1B.8 M2).** The shader's legibility layer is the whole face
+(no `plateInset`, no 2 px soft step, one rounded box fewer per fragment). Glass's edge highlight (and Frosted's and
+Smoked's faint one) is added after the legibility layer, so the panel no longer flattens it at the real border; the
+diagonal sheen and the refraction stay in the face, unchanged. A child control (negative border width) keeps its
+highlight under its face exactly as before. Evidence `.artifacts/evidence/materials/20261111_m2/` (same wallpapers
+and cards as M1): `OPEN_FIRST_overview_{main,lists}.png`, `card_edge_zooms_3x.png` (every material, dark and light
+themes, both wallpapers), `ink_plate_*`, `media_children_before_after_3x.png`. Legibility on the composed pixels is
+unchanged on every theme, material and wallpaper (the per-run tables before and after are identical, small runs below
+4.5:1 on the light themes still 0). Change by zone (`identity_zones_{main,lists}.json`): Normal frames are unchanged
+(renderer jitter only); on every material the changed pixels lie in the band from the card's outer edge to border +
+5 px (the former rim) and its antialiased edge, plus, on the main cards only, the Media child controls (the former
+hairline inside the light-tinted mute button and volume level) and the ink plate's softer edge. The list cards'
+interiors are unchanged (at most 1 level). Steady GPU over Normal (two themes, control-relative, bimodal with the
+GPU clock state): within each clock state after is no higher than before (`gpu_cost.json`).
+
+**Known dark-theme shortfalls (measured 11 Nov; M1 and M2 leave them unchanged).** Dark (light-ink) themes are outside
+the dark-ink rule above and kept their pixels through M1, and M2 changes only their rim, so these stand as before:
+Default Dark [Single] on the bright wallpaper has 8-10 small runs per frame at 3.89-4.27 (p5) on every material and on
+Normal (the faint Media/Weather runs); `tools/theme_legibility.py --card-materials` finds `widget.accent` under 4.5:1
+over a white wallpaper pole on 46 of the 98 material mirrors, all dark (Midnight Cobalt 3.42, worst Royal Orchard
+1.44; no light theme fails). The panel's reference ink is `card.text`, not the accent; extending the corrected-ink
+rule to light ink would change dark-theme pixels and is a separate decision (`theme_legibility_card_materials_all_themes.json`).
 
 **Style sweep fixes outside the materials (6 Nov evening; they change Normal pixels on purpose, nowhere else):**
 

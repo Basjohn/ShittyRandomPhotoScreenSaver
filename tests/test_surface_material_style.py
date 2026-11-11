@@ -1,9 +1,9 @@
 """Card surface materials, the 6 Nov style pass (Docs/Architecture/Card_Surface_Materials.md 3.3).
 
 What these bars protect:
-- the legibility layer is one card-wide inner panel 2-3 px inside the border whose corners
-  follow the card's configured radius, concentric, never sharp (7 Nov: not a block stopping
-  ~8 px in, not a box hugging the text);
+- the legibility layer is the card's whole face, up to and under the real border, with no inset
+  panel or inner rim (12 Nov, 1B.8 M2; superseded the 7 Nov panel 2-3 px inside the border);
+  Glass keeps its edge highlight at the real border;
 - that panel is the card's only darkening: no per-line rows or per-run chips on the card
   itself; a row remains only inside a control's own filled panel (tile, capsule, stats panel);
 - every shadowed run follows the light-palette soft shadow (no doubled hard glyphs);
@@ -52,39 +52,53 @@ def _card(scene, **style):
 
 
 @pytest.mark.parametrize("radius", [12.0, 20.0])
-def test_legibility_layer_reaches_within_three_px_of_the_border_with_concentric_corners(material_scene,
-                                                                                         radius) -> None:
+@pytest.mark.parametrize("border", [0.0, 3.0])
+def test_the_face_reaches_the_border_with_no_inner_rim(material_scene, radius, border) -> None:
     import numpy
+    from PySide6.QtGui import QColor
 
     scene = material_scene
     scene.set_wallpaper(_flat_image(640, 360, (200, 200, 200, 255), "grey"))
-    _card(scene, border_width=0.0, corner_radius=radius)
-    scene.set_material("frosted")
+    # A transparent ring shows what the material draws under the border: the same face.
+    _card(scene, border_width=border, corner_radius=radius, border_color=QColor(0, 0, 0, 0))
+    # Acrylic: no edge highlight, so any step near the border would be an inset panel.
+    scene.set_material("acrylic")
     scene.render(4)
     frame = numpy.asarray(scene.read(), numpy.float64).sum(axis=2)
     # Columns averaged over 40 rows (the material's static grain is per pixel).
     column = frame[160:200].mean(axis=0)
     centre = column[320]
-    assert abs(column[170 + 3] - centre) <= 4                     # 3.5 px in: inside the panel
-    assert column[170 + 1] - centre > 8                           # 1.5 px in: the rim is lighter
-    # Concentric corner (this card's own radius): 4 px inward along the corner's diagonal is
-    # already inside the panel.
-    along = int(round(radius - radius / 2 ** 0.5 + 4 / 2 ** 0.5 + 1))
+    for inward in (1, 2, 3, 6):                                    # 1.5 .. 6.5 px in: one even face
+        assert abs(column[170 + inward] - centre) <= 4, (inward, column[168:180].round())
+    # The corner is the same face up to the arc: 1.5 px inward along the corner's diagonal.
+    along = int(round(radius - radius / 2 ** 0.5 + 1.5 / 2 ** 0.5 + 1))
     patch = frame[100 + along - 1:100 + along + 2, 170 + along - 1:170 + along + 2].mean()
     assert abs(patch - centre) <= 10
 
 
-def test_legibility_panel_inset_is_two_to_three_px_and_its_corners_are_never_sharp() -> None:
+def test_glass_keeps_its_edge_highlight_at_the_real_border(material_scene) -> None:
+    import numpy
+
+    scene = material_scene
+    scene.set_wallpaper(_flat_image(640, 360, (60, 60, 60, 255), "dark grey"))
+    _card(scene, border_width=0.0, corner_radius=12.0)
+    scene.set_material("glass")
+    scene.render(4)
+    frame = numpy.asarray(scene.read(), numpy.float64).sum(axis=2)
+    row = frame[100:140].mean(axis=0)                              # the upper-left (lit) edge
+    column = frame[100:104, 200:440].mean(axis=0).mean()
+    assert row[170 + 1] > row[170 + 8] + 6                         # brighter right at the border
+    assert abs(row[170 + 8] - row[320]) <= 6                       # gone by 8 px: the face
+    assert column > frame[150:200, 200:440].mean() + 6             # the top edge too
+
+
+def test_the_legibility_layer_is_the_whole_face_in_every_surface_shader() -> None:
     for name in ("surface_material.frag", "text_legibility.frag", "text_legibility.vert"):
         shader = (QML / "shaders" / name).read_text(encoding="utf-8")
-        inset = re.search(r"float plateInset = borderWidth < 0\.0 \? -?[0-9.]+ : borderWidth \+ (.*);", shader)
-        assert inset is not None, name
-        # Both branches stay inside the established 2-3 px geometry contract.
-        offsets = re.findall(r"[0-9]+\.[0-9]+", inset.group(1))
-        assert offsets and all(2.0 <= float(value) <= 3.0 for value in offsets if float(value) > 0), name
-        # The panel radius is the card's configured radius less the inset, floored above 0.
-        floor = re.search(r"roundedBox\(p, plateHalf, max\(([0-9.]+), r - plateInset\), plateNormal\)", shader)
-        assert floor is not None and float(floor.group(1)) >= 1.0, name
+        block = shader[shader.index("// SURFACE BEGIN"):shader.index("// SURFACE END")]
+        assert "plateInset" not in block and "float plate = 1.0;" in block, name
+        # The edge highlight is added after the legibility layer, so the panel never flattens it.
+        assert block.index("c += vec3(edgeHighlight);") > block.index("panelCeiling * plate"), name
 
 
 def test_a_list_line_gets_one_even_row_that_holds_the_floor_for_every_run(material_scene) -> None:

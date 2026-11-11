@@ -3,7 +3,7 @@ import QtQuick
 // One rounded legibility row inside a control's own filled panel on a card surface material
 // (Docs/Architecture/Card_Surface_Materials.md, 3.3): Feed grid tiles, Friend Pulse rows and
 // tiles, Games You Follow story tiles, System Stats metric panels, Achievement capsules. The
-// card itself has one legibility panel (the material's, 2.5 px inside the border); a row is
+// card itself has one legibility panel (the material's whole face, up to the border); a row is
 // only for text that sits on a further fill, which the site passes as `underlayColor`, with
 // that panel's inner radius. It holds the contrast floor for the line's run colours
 // (`primaryColor`, `secondaryColor`, `tertiaryColor`). On Normal (or before the card's
