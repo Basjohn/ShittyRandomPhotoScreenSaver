@@ -1684,7 +1684,6 @@ change.
 - [ ] Finish Waveform Studio acceptance first (section 7.1), then extract any remaining Waveform-shaped assumptions.
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and Neon
   Lake (`shockwave_grid`) built, Spline Curve (`devcurve`) and Oscilloscope built below):
-  - [ ] Voxel Sphere adapter (in progress).
   - [~] Neon Lake awaits operator acceptance (evidence
     `.artifacts/evidence/visualizers/shockwave_grid/studio/20261107_studio/`, Presets 1 and 3): recorded engine
     answers like Spectrum, the shared framed camera, no wallpaper; its terrain is painted with the Studio's shared
