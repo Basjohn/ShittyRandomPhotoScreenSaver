@@ -76,6 +76,35 @@ def test_existing_target_rigidly_rotates_non_square_pixels_without_changing_came
         resources.release_resources()
 
 
+@pytest.mark.qt
+def test_only_a_turned_scene_builds_an_output_frame(capture, monkeypatch):
+    """Rotation is opt-in on the shared target: a transition's frame (no orientation fields) and an unturned
+    Visualizer frame never build the output frame (an every-frame call on all 14 Scene3D transitions, 11 Nov)."""
+    from rendering.quick.scene3d import target as target_module
+
+    built = []
+    original = target_module.scene_output_frame
+
+    def counted(frame):
+        built.append(frame)
+        return original(frame)
+    monkeypatch.setattr(target_module, "scene_output_frame", counted)
+    resources, target = MeshResources("orientation opt-in"), SceneTarget("orientation opt-in")
+    try:
+        for frame in (_card_frame(capture, 42, 20, 120, 80), _frame(capture, 42, 20, 120, 80, 0)):
+            assert not hasattr(frame, "scene_output_rotation") or frame.scene_output_rotation == 0
+            with target.scope(frame, 4, resources, overlay=1.0):
+                resources.draw_image(frame, capture.textures[0])
+        assert built == []
+        turned = orient_visualizer_scene_frame(_frame(capture, 42, 20, 120, 80, 1))
+        with target.scope(turned, 4, resources, overlay=1.0):
+            resources.draw_image(turned, capture.textures[0])
+        assert built == [turned]
+    finally:
+        target.release()
+        resources.release_resources()
+
+
 def test_an_oriented_scene_exception_restores_the_physical_window_state(capture):
     resources, target = MeshResources("orientation unwind"), SceneTarget("orientation unwind")
     physical = _frame(capture, 42, 20, 120, 80, 1, dpr=1.5, viewport=(7, 5, 240, 128))

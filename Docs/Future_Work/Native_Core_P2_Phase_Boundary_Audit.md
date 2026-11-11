@@ -615,6 +615,17 @@ first-lap high-water in the rendering process, on both paths, with no lap-to-lap
   alternate data streams (`memory_map_switchN:mode.json`, empty on disk); fixed.
 - Tests: `tests/test_live_check_resources.py`. Evidence:
   `.artifacts/evidence/architecture/native_core_p2/20261111_m5_*`.
+- *The `heap_large` block at the first Neon Lake, attributed (later 11 Nov):* the Python tuple of the basin's triangle
+  coordinates, `basin_mesh_vertices` (`rendering/gl_programs/neon_lake_basin_mesh.py`), which its `@lru_cache(maxsize=8)`
+  (since `aec1fa40`, 14 Oct) keeps after the renderer has uploaded it: 22.57 MB for the Guided Setup preview's 189 x 126
+  cells (2,958,732 floats; one default-heap block), plus `basin_mesh_points`' 1.90 MB tuple in the same cache (M5's 26.6
+  MB is the same entry at that run's cells). Offscreen production render host, 1920x1080: it appears at the first draw,
+  stays when Neon Lake leaves and after `release_resources()`, and a second visit adds nothing (a cache hit). New with
+  `33912e5a` (1B.5): the key carries the painted `reach`, so each distinct reach caches another, larger entry (23.69 MB
+  at -0.3..1.3, 30.29 MB at -0.6..1.6), up to eight kept; the plain entry is unchanged by it. The renderer already holds
+  the uploaded mesh by key (`_mesh_cells`), so the cache saves nothing per frame; dropping it (or keeping one entry, or
+  building a float32 array the upload takes directly) is Neon Lake terrain work, left to its owner. Evidence:
+  `.artifacts/evidence/native_core/20261111_attribution/neon_main_memory_traced.json`.
 - *Open:* the Studios' in-process cycle and the fallback after a worker failure were not measured separately; they use
   the same render path and the same in-process tick that the offscreen cycle showed flat.
 
@@ -659,8 +670,18 @@ writer's slot choice is stated as the code has it, gate 2 has its record, and ga
 - *Gate 4's worker memory, re-read 11 Nov with R-179 fixed (source, private bytes at each switch):* 63.5 MB with
   Spectrum, 65 to 70 MB through the first Extruded Bubble, 103.9 MB at the first Waveform Ribbon, then 101.5 to 104.7
   MB across the whole second lap (RSS 79 -> 89 to 92 MB). So the 8 Nov row's shape (a step, then flat) was not the
-  codec sawtooth, and it is not growth. The step at the first Waveform Ribbon is not attributed. Frozen check 2's 46
-  to 59 MB is USS, a different measure.
+  codec sawtooth, and it is not growth. Frozen check 2's 46 to 59 MB is USS, a different measure.
+- *The step at the first Waveform Ribbon, attributed (later 11 Nov):* the worker's tick host (`EngineSession`, live
+  inputs, production order) in a fresh QtCore-only process with the product's one-thread OpenBLAS policy reproduces it:
+  private 89.5 MB with Spectrum, 90.8 after Extruded Bubble, 126.4 at the first Waveform Ribbon (+35.6), then 126.4 to
+  127.1 over a second lap; RSS +4.9 MB, tracemalloc +1.3 MB. The memory map names it: one new 32.0 MB `private_other`
+  allocation, committed and not resident, plus numpy.random's extension images (+2.0 MB, imported by the Waveform
+  runtime) and +2 MB of arenas. The 32 MB is OpenBLAS's work buffer, committed by the process's first level-3 BLAS call
+  and never released (measured alone: `ddot` and `dgemv` commit nothing, the first 4x4 `@` 4x4 commits 32 MB); the first
+  such call in the worker is Waveform's logical view (`core/waveform_ribbon_view.py`, `projection@view`). It is a
+  one-time library buffer, not a cache and not geometry: P3's D3 should not size against it. Avoiding it would mean no
+  float64 matrix-matrix product in the worker's ticks (a 4x4 product written out); not done, the commit is non-resident.
+  Evidence: `.artifacts/evidence/native_core/20261111_attribution/worker_memory_by_mode.json`.
 - *The frozen wording:* frozen check 2 already shows the engine worker on `qt6core.dll` only, flat USS and a Settings
   retirement and respawn. What still awaits the operator is the next product frozen build's ordinary acceptance (the
   build log and audit lines), not a new worker proof.
@@ -694,6 +715,12 @@ measured path (`rendering/quick/visualizer/item.py`: two attribute reads in `upd
 imported, no worker runs). The rises entered between 7 Nov and this branch's base (`630a5729`) and are not attributed
 to a commit here: that needs a baseline at the base, which was not taken. Evidence:
 `.artifacts/evidence/native_core/20261111_overhead_baseline/`.
+*Attributed later on 11 Nov* (per-function call counts at chosen commits; `4bb2b775` is `81959727`'s tree on the
+rewritten history): `f6328336` (Scene3D content rotation: +4 on every Scene3D transition from the target's output
+frame, +5 to +7 on the Scene3D modes), `0afc19cb` via `f23dcab1` (Extruded Bubble's per-frame optical height: +26,
+with a function-level import) and `50a43e0d` (Waveform Preset 1's Left To Right travel engages the mirror path: +16,
+authored content). The first two and the mirror's per-frame `np.diag` are fixed with call-counting tests; the re-recorded
+baseline is `tools/baselines/overhead/2026-11-11_4658981b.json` (`Docs/Reference/Benchmarks.md`, "Recorded sessions").
 
 ### H3: the Linux worker-default source flip
 
