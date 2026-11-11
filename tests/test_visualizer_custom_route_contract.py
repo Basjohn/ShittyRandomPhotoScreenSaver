@@ -63,24 +63,17 @@ def _live_unit(
 ) -> QuickDisplayUnit:
     """Build a live production-unit shell without depending on CI screen count."""
 
-    scene_controller = SimpleNamespace(
-        visualizer_contains_scene_position=lambda _position: True,
-        set_visualizer_double_click_admission=lambda _admission: None,
-        set_visualizer_middle_click_admission=lambda _admission: None,
-        set_visualizer_volume_wheel_handler=lambda _handler: None,
-        set_visualizer_camera_reset_available=lambda _enabled: None,
-        set_visualizer_control_hints_available=lambda _enabled: None,
-    )
+    from tests._display_manager_doubles import input_controller_double, scene_controller_double
+
+    # The real controllers' setters as no-ops (a setter DisplayManager starts calling never breaks this shell).
+    scene_controller = scene_controller_double(visualizer_contains_scene_position=lambda _position: True)
     return QuickDisplayUnit(
         runtime=SimpleNamespace(
             screen_index=screen_index,
             runtime_generation=805,  # same active generation as the manager fixture
             binding_loss=binding_loss,
             scene_controller=scene_controller,
-            input_controller=SimpleNamespace(
-                set_view_orbit_enabled=lambda _enabled: None,
-                set_framed_flight_enabled=lambda _enabled: None,
-                set_scene_transform_enabled=lambda _enabled, **_kwargs: None),
+            input_controller=input_controller_double(),
             window=SimpleNamespace(screen=lambda: object()),
             # display_bounds() reads display_identity.geometry; give each screen
             # a distinct non-overlapping rect like a real dual-display topology.
@@ -95,7 +88,9 @@ def _live_unit(
 
 
 def _manager(position: str) -> DisplayManager:
-    manager = DisplayManager.__new__(DisplayManager)
+    from tests._display_manager_doubles import bare_display_manager
+
+    manager = bare_display_manager()      # every plain __init__ default, then this test's own state
     manager._runtime_generation = 805
     manager._quick_visualizer_owner = None
     manager._quick_visualizer_unit = None
@@ -162,8 +157,11 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
             # Absorb the current owner's construction kwargs (engine_factory,
             # presentation_resolver, card_shadow_kwargs, transition_clock, ...).
             del runtime, bar_count
+            from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+
             self.controller = SimpleNamespace(
                 mode_id=initial_mode,
+                presentation_policy=get_visualizer_presentation_policy(initial_mode),   # the real controller's
                 presentation_state=SimpleNamespace(),
                 engine=_Engine(),
                 settings_model=None,
@@ -172,6 +170,7 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
             )
             self.playing = []
             self.is_retired = False
+            self.is_started = False                  # the real owner's read surface: started by start()
             owners.append(self)
 
         def configure(self, **_kwargs) -> None:
@@ -194,7 +193,7 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
             self.playing.append(bool(playing))
 
         def start(self) -> None:
-            return None
+            self.is_started = True
 
         def retire(self) -> None:
             self.is_retired = True

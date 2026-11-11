@@ -636,7 +636,6 @@ def test_runtime_edit_save_touches_only_active_profile_and_preserves_all_sibling
 @pytest.mark.qt
 def test_hidden_mode_cycles_restore_each_independent_profile_on_one_retained_owner(qt_app, monkeypatch):
     from core.settings.visualizer_mode_registry import build_visualizer_mode_activation, get_visualizer_layout_profile
-    from engine.display_manager import DisplayManager
     from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
     from rendering.quick.display_unit import create_quick_display_unit
     from rendering.quick.scene_controller import QuickSceneFactory
@@ -666,7 +665,8 @@ def test_hidden_mode_cycles_restore_each_independent_profile_on_one_retained_own
     unit = create_quick_display_unit(screen=screen, screen_index=0, runtime_generation=963,
         scene_factory=factory, window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
         ctrl_coordinator=SharedCtrlCoordinator(), adapters=())
-    manager = DisplayManager.__new__(DisplayManager); manager._widgets_config_snapshot = deepcopy(widgets)
+    from tests._display_manager_doubles import bare_display_manager
+    manager = bare_display_manager(displays=[unit]); manager._widgets_config_snapshot = deepcopy(widgets)
     manager.settings_manager = _Settings(widgets); manager._quick_visualizer_unit = unit
     manager._quick_custom_layout_owner = SimpleNamespace(is_editing=False, is_direct=False, is_active=False)
     manager._quick_visualizer_media_model = None   # the Expanded Visualizer overlays' Media source (M3b) reads it

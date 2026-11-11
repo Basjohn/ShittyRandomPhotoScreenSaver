@@ -41,8 +41,18 @@ class FakeUnit:
     def __init__(self):
         self.screen_index = 3
         self.is_retired = False
-        self.runtime = SimpleNamespace()
+        from tests._display_manager_doubles import input_controller_double, scene_controller_double
+        # The real controllers' setters (no-ops), so a setter DisplayManager starts calling never breaks this unit.
+        self.runtime = SimpleNamespace(scene_controller=scene_controller_double(),
+                                       input_controller=input_controller_double())
         runtime = self.runtime
+        # Every signal the real runtime declares (DisplayManager also connects some in loops, which the source scan
+        # below cannot see: 2983f64f's held-right pan), then the nested owners' signals it connects directly.
+        from PySide6.QtCore import Signal
+        from rendering.quick.runtime import QuickDisplayRuntime
+        for name in dir(QuickDisplayRuntime):
+            if not name.startswith("_") and isinstance(getattr(QuickDisplayRuntime, name, None), Signal):
+                setattr(runtime, name, FakeSignal())
         tree = ast.parse((ROOT / 'engine/display_manager.py').read_text(encoding='utf-8'))
         cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'DisplayManager')
         node = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == '_connect_quick_runtime')
@@ -63,10 +73,6 @@ class FakeUnit:
                     obj = SimpleNamespace()
                     setattr(runtime, owner.attr, obj)
                 setattr(obj, signal.attr, FakeSignal())
-        runtime.input_controller = SimpleNamespace(
-            set_view_orbit_enabled=lambda _admitted: None,
-            set_scene_transform_enabled=lambda _admitted, **_kwargs: None,
-        )
         runtime.scene_readiness = 'ready'
 
     def reanchor_for_current_bounds(self):
