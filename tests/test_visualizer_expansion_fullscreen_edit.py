@@ -1660,6 +1660,46 @@ def test_a_move_snaps_to_the_safe_area_and_draws_its_guide_on_the_edit_layer(dis
     edit.owner.cancel()
 
 
+@pytest.mark.qt
+def test_a_saved_profile_with_the_retired_artwork_factors_loads_to_the_same_geometry(display, tmp_path):
+    """Plan 1B.7f: the persisted key stays; a profile saved before the one artwork carrier (block factors
+    ``artwork_scale`` / ``artwork_width`` / ``artwork_height`` beside an artwork record) reloads from disk through the
+    one normaliser's bridge without loss: its offsets, scale, text extents and other records are kept, its records are
+    ordinary Edit's (the shared normaliser's output), and the artwork draws the size the factors gave it."""
+    from core.settings.fullscreen_overlays import FULLSCREEN_OVERLAYS_KEY, NOW_PLAYING_CHILD_ROLES
+    from core.settings.settings_manager import SettingsManager
+    from rendering.custom_child_geometry import normalize_child_geometry
+
+    application = f"TestApp_{uuid.uuid4().hex}"
+    settings = SettingsManager(organization="TestOrg", application=application, storage_base_dir=tmp_path)
+    raw = {"offset_x": 0.08, "offset_y": -0.06, "scale": 1.2, "text_width": 9.5, "always_show": True,
+           "artwork_scale": 1.5, "artwork_width": 1.2, "artwork_height": 0.8,
+           "child_geometry": {"artwork": {"width_scale": 1.1, "height_scale": 1.0, "x_offset": 0.0, "y_offset": 0.0},
+                              "title": {"width_scale": 1.2, "height_scale": 1.2, "x_offset": 0.05, "y_offset": 0.02}}}
+    _seed(settings, now_playing=raw)
+    # (The settings model normalises the section on write too, so the bridge already ran; the keys are gone.)
+    assert "artwork_scale" not in settings.get(FULLSCREEN_OVERLAYS_KEY)["now_playing"]
+    # A fresh manager reads the profile from disk, as a restart does.
+    reloaded = SettingsManager(organization="TestOrg", application=application, storage_base_dir=tmp_path)
+    loaded = _value(reloaded)["now_playing"]
+    assert {key: loaded[key] for key in ("offset_x", "offset_y", "scale", "text_width", "always_show")} == {
+        key: raw[key] for key in ("offset_x", "offset_y", "scale", "text_width", "always_show")}
+    records = loaded["child_geometry"]
+    assert records["title"] == raw["child_geometry"]["title"] | records["title"]
+    assert records == {role: size.to_mapping() for role, size in
+                       normalize_child_geometry(records, NOW_PLAYING_CHILD_ROLES).items()}
+    _draw(display, media=_Media(), config=_projection(_value(reloaded)))
+    _open(display)
+    _run(display, 120)
+    stage = _root(display)
+    slot = stage.findChild(QQuickItem, "expandedOverlayNowPlaying")
+    art = stage.findChild(QQuickItem, "expandedOverlayArtwork")
+    base = float(slot.property("artBase"))
+    # What the factors drew: the block factors times the record's (rounded at each step then), within a pixel.
+    assert abs(art.width() - round(round(base * 1.5 * 1.2) * 1.1)) <= 1
+    assert abs(art.height() - round(base * 1.5 * 0.8)) <= 1
+
+
 # --------------------------------------------------------------------------------------- the pure geometry
 
 
