@@ -357,6 +357,7 @@ These focused gates supplement rather than replace the maintained destination pr
 | Media compact-height and independent-axis reflow | `tests/test_qtquick_media_presentation.py::test_compact_media_essential_rows_survive_flip_and_transient_capability_loss`, `tests/test_qtquick_media_presentation.py::test_media_child_axis_edits_keep_live_band_flow_at_compact_y`, `tests/test_media_content_extent_contract.py::test_media_nested_seek_and_transport_keep_axis_independent_band_reflow` | Compact active tracks, saved offsets and flipped right-rail metadata reproject coherently. Model/source gates do not substitute for a changed real-owner physical sequence. |
 | Outer-only child containment and dense requirement retirement | `tests/test_custom_layout_guides_contract.py`, `tests/test_qml_reflow_loop_contract.py`, `tests/test_qtquick_child_edit_off_dependency_contract.py`, `tests/test_quick_child_paint_containment_contract.py`, `tests/test_qtquick_child_persist_floor_regression.py`, `tests/test_qtquick_custom_layout_owner.py` | Children remain inside their legal parent/accessory surface and cannot resurrect the retired child-driven parent-growth owner. Dynamic Qt/pointer feel still requires native evidence when this path changes. |
 | Clock paint/Edit alignment and compact intrinsic fit | `tests/test_qtquick_clock_presentation.py::test_clock_selected_edit_proxies_follow_actual_applied_transforms_in_both_faces`, `tests/test_clock_applied_edit_transform_contract.py` | Digital/analogue targets follow applied transforms; compact digital paint fits without adding a second cadence/observer. |
+| Media seek bar is the one shared component (plan 1B.7a) | `tests/test_qtquick_media_presentation.py::test_media_seek_bar_is_the_shared_component_with_the_models_look_and_seek_route` | The card draws `MediaSeekBar.qml`; its look equals the model's progress traits and `seekBarLook` (the plain-value carrier for a second drawing); its own seek request reaches the card's seek owner. Red on the inline seek bar (no component, no carrier). |
 | Media external-volume proxy and automatic side relocation | `tests/test_qtquick_media_presentation.py::test_media_volume_opposite_axis_reflow_updates_live_edit_proxy` | The Edit proxy follows the actual painted external-volume track while family logic remains free to choose left/right placement. |
 | Reddit Restore Size loading/ready invariant | `tests/test_qtquick_reddit_presentation.py::test_reddit_loading_and_ready_state_use_the_same_authored_height`, `tests/test_qtquick_custom_layout_owner.py::test_flip_wheel_restore_repeatedly_returns_authored_shape_and_clears_stale_extent` | Authored preferred height remains stable across loading/ready and Restore clears stale extent without deleting valid CUSTOM placement. |
 
@@ -999,6 +1000,39 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   the view stays expanded without Edit chrome (red on the pre-fix entry); no expansion binds both displays from
   either; Save/Cancel on each; an unsaved Fullscreen draft against a request from the other display and the reverse;
   a shared widget's X keeps the expanded display's copy; the view's holds under the Edit beside it.
+- Plan 1B.7b (the overlays' parent geometry through ordinary Edit's handlers):
+  `tests/test_visualizer_expansion_fullscreen_edit.py::test_the_overlay_blocks_parent_gestures_are_the_ordinary_edit_handlers`
+  — no parallel solver on the overlay editor; Now Playing's corner grows about its top centre (red on the former
+  opposite-corner solver), its side handle reflows the text box and leaves the artwork factors (red on the former
+  artwork-border rule), Restore Size returns the canonical size and keeps the top left; the frame is what is drawn.
+  The parity map and the Volume OSD's corner now expect the ordinary rules.
+- Plan 1B.7g (the optional Seek Bar):
+  `tests/test_visualizer_expansion_fullscreen_edit.py::test_the_optional_seek_bar_is_the_media_cards_one_with_its_seek_route_and_a_child_part[False/True]`
+  (off by default; the shared component under the metadata and above the controls; its look and fill from the
+  model, a progress event moves it; double-click ownership; the scene's seek signal; a child part whose move Saves),
+  `tests/test_visualizer_expansion_overlays.py::test_the_display_manager_sends_a_seek_to_the_one_media_seek_owner`
+  (admission and owner order), the Fullscreen Mode page's checkbox in `tests/test_visualizers_fullscreen_mode_pill.py`.
+  Saved-profile load (1B.7f):
+  `tests/test_visualizer_expansion_fullscreen_edit.py::test_a_saved_profile_with_the_retired_artwork_factors_loads_to_the_same_geometry`.
+- Plan 1B.7e (snap and guides through the ordinary owner), same file:
+  `test_a_move_snaps_to_the_safe_area_and_draws_its_guide_on_the_edit_layer` (safe-area centre and edge, and the
+  other overlay as an ordinary peer with its guide in the Edit layer's coordinates); the one-step undo of a child
+  move ending in a corner pin (`test_now_playings_parts_move_and_size_inside_the_block_through_the_child_editor`; red
+  on the shared owner's former second step). `tests/test_custom_layout_guides_contract.py`'s containment assertion
+  follows the current two-line `containmentTarget` expression (the guarded rule is unchanged).
+- Plan 1B.7d (one artwork size carrier, Media's artwork look), same file:
+  `test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size` and
+  `test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box[False/True]` (the d1 rewrites of the
+  retired artwork-border tests: the side handles reflow the text box, the artwork keeps its size, its radius and
+  stroke follow the Media model's `artworkLook`, Rounded Artwork off squares it); the load bridge in
+  `test_visualizer_expansion_overlay_settings.py::test_a_value_stored_with_the_retired_artwork_factors_loads_them_into_the_artwork_record`.
+- Plan 1B.7c (alignment as declared roles), same file:
+  `test_now_playings_alignment_is_declared_and_stable_across_the_display_midpoint` (corner side, flipped only by the
+  title's record; red on the former position-based mirroring) and
+  `test_the_title_flip_glyph_flips_now_playings_orientation_through_ordinary_edit` (flip/anchor capabilities, the
+  owner's flip handler, undo, Cancel; red without the declared roles and the bound handler).
+  `test_edit_geometry_reads_never_invalidate_another_holders_overlay_wrappers` (a held slot wrapper survives Edit's
+  geometry reads; red on the Loader `item` lookup, the cause of the refade test's red on main).
 - `tests/test_visualizer_expansion_fullscreen_edit.py` — Expanded Visualizer Fullscreen Edit (plan 01 M3c) on the
   hidden production scene with the real Edit owner, model and gestures: the parity map (one gesture script, moves,
   wheel, corners, side handles and a two-axis diagonal included, through a draft; Cancel restores exactly, Save

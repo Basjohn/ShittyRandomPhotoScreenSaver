@@ -1027,6 +1027,54 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
 
 
 @pytest.mark.qt
+def test_media_seek_bar_is_the_shared_component_with_the_models_look_and_seek_route(qt_app) -> None:
+    """Plan 1B.7a: the card draws the one MediaSeekBar; its look is the model's progress traits (also carried as
+    plain values by ``seekBarLook`` for a second drawing) and its own seek request reaches the card's seek owner."""
+    import json
+
+    screen = qt_app.primaryScreen()
+    window = QuickDisplayWindow(screen_index=0, runtime_generation=93, screen=screen,
+                                policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, _provider = _model(factory.media_artwork_provider, runtime, _FakeMediaVolumeRuntime(),
+                                 _FakeSystemMuteRuntime())
+    try:
+        presentation = RetainedMediaPresentation(host=controller.ordinary_widget_host, model=model,
+                                                 geometry=OverlayWidgetGeometry(35.0, 40.0, 620.0, 330.0))
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        assert controller.apply_input_state(QuickInputState(screen_index=0, runtime_generation=93,
+                                                            ctrl_held=True)) is True
+
+        seek = item.findChild(QQuickItem, "mediaProgressTrack")
+        assert seek is not None
+        assert seek.metaObject().className().startswith("MediaSeekBar")
+        look = json.loads(model.seekBarLook)
+        for prop, key in (("trackColor", "trackColor"), ("fillColor", "fillColor"),
+                          ("shadowColor", "shadowColor"), ("glowColor", "glowColor")):
+            assert QColor(seek.property(prop)).name(QColor.NameFormat.HexArgb) == look[key]
+        assert seek.property("shadowEnabled") is look["shadowEnabled"]
+        assert seek.property("glowEnabled") is look["glowEnabled"]
+        assert seek.property("glowBaseHeight") == pytest.approx(look["height"])
+        assert seek.property("fraction") == pytest.approx(model.progressFraction)
+        assert model.canSeek is True and model.interactionEnabled is True
+        assert seek.property("seekEnabled") is True
+
+        seek.seekRequested.emit(0.3)
+        assert runtime.seek_calls == [pytest.approx(0.3)]
+        assert seek.fractionAt(150.0, 100.0) == pytest.approx(1.0)
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_media_authored_xy_reflow_and_empty_custom_roundtrip(qt_app) -> None:
     """The old card rails reflow; child editing cannot freeze them at 600 px."""
     screen = qt_app.primaryScreen()
@@ -1249,8 +1297,7 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
         "mediaModel.appVolumeLevel",
         "mediaModel.systemMuted",
         "mediaModel.canSeek",
-        'objectName: "mediaProgressGlow"',
-        'objectName: "mediaProgressSeekArea"',
+        "MediaSeekBar {",
         "cached: true",
         "layer.enabled: mediaRoot.mediaModel.roundedArtwork",
         "maskSource: artworkMask",

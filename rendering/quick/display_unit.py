@@ -252,6 +252,13 @@ class QuickDisplayUnit:
         request = getattr(presentation, "request_transport", None)
         return bool(callable(request) and request(normalized))
 
+    def request_media_seek(self, fraction: float) -> bool:
+        """Dispatch one admitted seek (a fraction of the track) to this unit's Media owner."""
+
+        presentation = self._presenter.presentation_for_widget_id("media")
+        request = getattr(presentation, "request_seek", None)
+        return bool(callable(request) and request(max(0.0, min(1.0, float(fraction)))))
+
     def request_app_volume_step(self, direction: int) -> bool:
         """Dispatch one admitted app-volume step to this unit's Media owner."""
 

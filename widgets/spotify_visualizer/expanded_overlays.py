@@ -46,13 +46,12 @@ def resolve_expanded_overlay_config(section: Mapping[str, Any] | None, *, card_t
         if "media_controls" in options:
             projected["mediaControls"] = bool(options["media_controls"])
             projected["mediaControlsStyle"] = str(options["media_controls_style"])
+        if "seek_bar" in options:
+            # Seek Bar (plan 1B.7g, default off): the Media card's seek bar (MediaSeekBar.qml) as a Now Playing part.
+            projected["seekBar"] = bool(options["seek_bar"])
         if "hover_reveal" in options:
             # Show On Hover: the pointer resting where Now Playing is placed fades it back in (QML HoverHandler edges).
             projected["hoverReveal"] = bool(options["hover_reveal"])
-        if "artwork_scale" in options:
-            projected["artworkScale"] = float(options["artwork_scale"])
-            projected["artworkWidth"] = float(options["artwork_width"])
-            projected["artworkHeight"] = float(options["artwork_height"])
         if "child_geometry" in options:
             # Fullscreen Edit's per-part geometry (ordinary Edit's child records, plain values; {} = today's layout).
             projected["childGeometry"] = {role: dict(record) for role, record in options["child_geometry"].items()}

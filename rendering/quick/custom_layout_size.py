@@ -157,6 +157,9 @@ def quick_custom_payload_minimum_scale(
 
 
 def quick_custom_minimum_size(item: CustomLayoutSessionItem) -> QSize:
+    declared = getattr(item, "layout_minimum_size", None)
+    if declared is not None:
+        return QSize(max(1, int(round(float(declared[0])))), max(1, int(round(float(declared[1])))))
     if item.model_identity == "spotify_visualizer":
         return QSize(48, 32)
     return QSize(CUSTOM_LAYOUT_MIN_WIDGET_SIZE)

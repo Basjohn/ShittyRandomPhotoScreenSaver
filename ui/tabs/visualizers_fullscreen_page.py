@@ -105,10 +105,14 @@ class FullscreenModePage(QWidget):
                                           str(self.now_playing_controls_style.currentData())))
         controls_row.addWidget(self.now_playing_controls_style)
         controls_row.addStretch()
+        self.now_playing_seek_bar = self._check(
+            now_playing_layout, "Seek Bar", "now_playing", "seek_bar",
+            "The Media widget's seek bar under the track, in its colours. Click it to seek; like Media Controls it "
+            "needs Interaction Mode (or Ctrl held).")
         self.now_playing_card = self._check(
             now_playing_layout, "Card", "now_playing", "card",
             "Show the track on a card with the theme's border and surface, like the widgets. The artwork keeps "
-            "its themed border either way.")
+            "the Media widget's artwork border either way.")
 
         _host, text_layout = build_collapsible_bucket(
             tab, group_layout, mode_key=FULLSCREEN_BUCKET_SCOPE, bucket_key="text", title="Text",
@@ -203,6 +207,7 @@ class FullscreenModePage(QWidget):
                 (self.now_playing_always_show, "now_playing", "always_show"),
                 (self.now_playing_hover_reveal, "now_playing", "hover_reveal"),
                 (self.now_playing_media_controls, "now_playing", "media_controls"),
+                (self.now_playing_seek_bar, "now_playing", "seek_bar"),
                 (self.now_playing_card, "now_playing", "card"),
             ):
                 with QSignalBlocker(check):

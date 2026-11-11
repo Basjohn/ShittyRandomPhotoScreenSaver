@@ -1598,6 +1598,37 @@ class MediaPresentationModel(QObject):
             "fontSize": float(self.fontSize),
         }, sort_keys=True)
 
+    @Property(str, notify=stateChanged)
+    def seekBarLook(self) -> str:
+        """The Media card's seek bar look (the progress traits MediaPresentation.qml binds on its MediaSeekBar) as one
+        JSON object of plain values, for the one seek bar's second drawing: the Expanded Visualizer's Now Playing seek
+        bar. A string for the reason ``transportBarLook`` gives. ``height`` is the Settings-authored seek height."""
+
+        def name(color) -> str:
+            return QColor(color).name(QColor.NameFormat.HexArgb)
+
+        return json.dumps({
+            "trackColor": name(self.progressTrackColor),
+            "fillColor": name(self.progressFillColor),
+            "shadowEnabled": bool(self.progressShadowEnabled),
+            "shadowColor": name(self.progressShadowColor),
+            "glowEnabled": bool(self.progressGlowEnabled),
+            "glowColor": name(self.progressGlowColor),
+            "height": float(self.progressHeight),
+        }, sort_keys=True)
+
+    @Property(str, notify=stateChanged)
+    def artworkLook(self) -> str:
+        """The Media card's artwork frame look (its border colour and stroke, the Rounded Artwork option) as one JSON
+        object of plain values, for the artwork's second drawing: the Expanded Visualizer's Now Playing artwork (plan
+        1B.7d). A string for the reason ``transportBarLook`` gives."""
+
+        return json.dumps({
+            "borderColor": QColor(self.artworkBorderColor).name(QColor.NameFormat.HexArgb),
+            "borderWidth": float(self.artworkBorderWidth),
+            "rounded": bool(self.roundedArtwork),
+        }, sort_keys=True)
+
 
 class RetainedMediaPresentation:
     def __init__(
@@ -1747,6 +1778,12 @@ class RetainedMediaPresentation:
         """Route an already-admitted keyboard transport action."""
 
         return self._model.request_transport(key)
+
+    def request_seek(self, fraction: float) -> bool:
+        """Route an already-admitted seek (the Expanded Visualizer's Now Playing seek bar, plan 1B.7g) to the card's
+        own seek owner, as ``request_transport`` routes its Media Controls."""
+
+        return self._model.request_seek(fraction)
 
     def request_system_mute_toggle(self) -> bool:
         """Route an already-admitted keyboard system-mute action."""

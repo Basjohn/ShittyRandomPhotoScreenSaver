@@ -70,6 +70,27 @@ Item {
         const value = mediaBarLook[name]
         return value === undefined || value === null ? fallback : value
     }
+    // The Seek Bar's seeks (plan 1B.7g): Python routes them to the Media card's own seek owner.
+    signal seekRequested(real fraction)
+    // The Media card's seek bar look (MediaPresentationModel.seekBarLook: its progress colours, shadow, glow, height).
+    readonly property var mediaSeekLook: {
+        const text = mediaModel ? mediaModel.seekBarLook : undefined
+        return typeof text === "string" && text.length > 0 ? JSON.parse(text) : ({})
+    }
+    function seekLook(name, fallback) {
+        const value = mediaSeekLook[name]
+        return value === undefined || value === null ? fallback : value
+    }
+    // The Media card's artwork frame look (MediaPresentationModel.artworkLook: border colour and stroke, Rounded
+    // Artwork; plan 1B.7d): Now Playing's artwork follows the Media widget's artwork settings, not the card chrome.
+    readonly property var mediaArtLook: {
+        const text = mediaModel ? mediaModel.artworkLook : undefined
+        return typeof text === "string" && text.length > 0 ? JSON.parse(text) : ({})
+    }
+    function artLook(name, fallback) {
+        const value = mediaArtLook[name]
+        return value === undefined || value === null ? fallback : value
+    }
     // Fullscreen Edit: an overlay's (or a part's) geometry changed; only emitted while editing.
     signal editGeometryChanged()
     // The Volume OSD's placement over the expanded card (``volume_osd``) depends on the safe area and on the OSD being
@@ -280,12 +301,24 @@ Item {
         naturalWidth: artWidth + gap + textBlock.width
         naturalHeight: Math.max(artHeight, textBlock.height)
 
-        // The corner determines the default *anchor*, but Fullscreen Edit may move this block across the
-        // display without changing that corner. Mirror the artwork, metadata and controls according to where
-        // the block actually lies, so the group always grows into the available screen space. The frame's
-        // overall width is side-independent, avoiding a placement/alignment binding loop.
-        readonly property bool contentRightSide: stage && stage.width > 0.0
-            ? x + width * 0.5 > stage.width * 0.5 : rightSide
+        // Alignment as declared roles (plan 1B.7c, as the Media card's): the block has ONE orientation, chosen and
+        // stable. Its authored side is the anchor corner's (Settings' Corner: a right corner puts the artwork on the
+        // right and the text on its rails); the title's alignment record (its flip glyph in Fullscreen Edit, the
+        // ``alignment_flip`` role that, like Media's header, also carries ``semantic_corner_anchor``) flips it. The
+        // artist and album lines flip their own text alignment on top of it (Media's orientedChildAlignment). Where the
+        // block lies on the display never changes it.
+        function childAlignment(roleId) {
+            const record = childGeometry[roleId]
+            return record && record.alignment !== undefined ? String(record.alignment) : "left"
+        }
+        function childAnchor(roleId) {
+            const record = childGeometry[roleId]
+            return record && record.anchor !== undefined && record.anchor !== null ? String(record.anchor) : ""
+        }
+        readonly property bool contentRightSide: rightSide !== (childAlignment("title") === "right")
+        function textRight(roleId) {
+            return roleId === "title" ? contentRightSide : (childAlignment(roleId) === "right") !== contentRightSide
+        }
         readonly property bool controlsShown: options.mediaControls === true
         // Media Controls: the Media card's transport bar, small. The card's bar is 2.15 x its font size tall under a
         // title of 1.12 x that size in points (1.12 x 4/3 px): bar / title = 2.15 / 1.4933 = 1.44. Here the bar keeps
@@ -297,34 +330,31 @@ Item {
         // The bar's size against the Media card's own bar (its outline, radius and shadow scale by this).
         readonly property real controlsFactor: controlsHeight / Math.max(
             38.0, overlays.mediaLook("fontSize", 17.0) * 2.15)
-        function factor(raw) {
-            const value = Number(raw)
-            return isFinite(value) && value > 0 ? Math.max(0.5, Math.min(3.0, value)) : 1.0
-        }
-        // The Now Playing parent's X/Y handles resize its actual artwork border, not the text box.
-        // Individual child handles can still override the artwork and every metadata part independently.
-        // The corner chooses which side has room for the text; no edit writes that default placement.
-        readonly property real artworkScale: factor(options.artworkScale)
-        readonly property real artworkWidthFactor: factor(options.artworkWidth)
-        readonly property real artworkHeightFactor: factor(options.artworkHeight)
+        // The artwork's size has one carrier, its ``artwork`` child record (plan 1B.7d, as the Media card's): the block's
+        // parent handles reflow the text box (ordinary Edit's content box), never the artwork.
         // The one-line text stack supplies a stable artwork baseline independent of wrapping, track changes or
         // authored text-box height. A parent's resize must not make its artwork jump as metadata reflows.
         readonly property real titleLineHeight: Math.max(1.0, Math.ceil(titleMetrics.height))
         readonly property real naturalTextHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistMetrics.height)
             + (albumShown ? textColumn.spacing + Math.ceil(albumMetrics.height) : 0.0)
+            + (seekShown ? 2.0 * textColumn.spacing + seekHeight : 0.0)
             + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controlsHeight : 0.0)
+        // Seek Bar (plan 1B.7g, default off): the Media card's seek bar (MediaSeekBar.qml, its look from the Media
+        // model) under the metadata, the card's seek height in proportion to Now Playing's controls.
+        readonly property bool seekShown: options.seekBar === true
+        readonly property real seekHeight: Math.max(2.0, Math.round(Number(overlays.seekLook("height", 6.0))
+                                                                     * controlsFactor))
         readonly property real artBase: Math.max(Math.round(fontSize * 3.1), Math.ceil(naturalTextHeight))
-        readonly property real artWidth: Math.round(artBase * artworkScale * artworkWidthFactor)
-        readonly property real artHeight: Math.round(artBase * artworkScale * artworkHeightFactor)
+        readonly property real artWidth: Math.round(artBase)
+        readonly property real artHeight: Math.round(artBase)
         readonly property real gap: Math.round(fontSize * 0.55)
-        // Keep the natural metadata width stable as the artwork's X extent changes. The half-screen cap still
-        // applies to the *unedited* layout, while a deliberate artwork resize may grow the whole block inward.
-        // Actual screen capacity remains the final constraint, so long titles fit instead of crossing the edge.
+        // The natural metadata width: the half-screen cap applies to the unedited layout; the screen's capacity is the
+        // final constraint, so long titles fit instead of crossing the edge.
         readonly property real textWidthLimit: Math.max(48.0,
-            Math.min(maxBoxWidth - artWidth - gap, maxContentWidth - artBase * artworkScale - gap))
-        // Legacy authored text-box dimensions remain supported, but parent geometry handles change the artwork
-        // border instead. Extra text-box height must never manufacture gaps between existing metadata rows; it
-        // can give a genuinely wrapping title/artist more lines, otherwise the stack stays naturally grouped.
+            Math.min(maxBoxWidth - artWidth - gap, maxContentWidth - artWidth - gap))
+        // The parent's side handles set the text box (ordinary Edit's content box, as the Media card's). Extra box
+        // height never manufactures gaps between the metadata rows; it gives a genuinely wrapping title/artist more
+        // lines, otherwise the stack stays naturally grouped and centred.
         readonly property real naturalTextWidth: Math.min(textWidthLimit,
             Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth,
                               albumShown ? albumText.implicitWidth : 0.0, controlsShown ? controlsWidth : 0.0)))
@@ -384,6 +414,8 @@ Item {
             {"roleId": "album", "target": albumText, "normalizationTarget": nowPlayingSlot,
              "geometryDependencies": [textBlock, textColumn]},
             {"roleId": "controls", "target": controls, "normalizationTarget": nowPlayingSlot,
+             "geometryDependencies": [textBlock, textColumn]},
+            {"roleId": "seek_bar", "target": seekBar, "normalizationTarget": nowPlayingSlot,
              "geometryDependencies": [textBlock, textColumn]}
         ]
         readonly property var customEditableChildRequirementTarget: null
@@ -417,7 +449,17 @@ Item {
             height: Math.round(nowPlayingSlot.artHeight * nowPlayingSlot.childHeightScale("artwork"))
             x: nowPlayingSlot.containX(authoredX + nowPlayingSlot.childOffsetX("artwork"), width)
             y: nowPlayingSlot.containY(authoredY + nowPlayingSlot.childOffsetY("artwork"), height)
-            readonly property real imageInset: Math.max(0.75, overlays.borderWidth * 0.65)
+            // The Media card's artwork frame (MediaPresentation.qml's artworkFrame): its border colour, its stroke (a
+            // painted stroke never below 1.5 px), Rounded Artwork's radius of an eighth of the short side, the image
+            // inset concentric with the stroke.
+            readonly property bool rounded: overlays.artLook("rounded", true) === true
+            readonly property real strokeWidth: {
+                const width = Number(overlays.artLook("borderWidth", 2.75))
+                return isFinite(width) && width > 0.0 ? Math.max(1.5, width) : 0.0
+            }
+            readonly property color strokeColor: overlays.artLook("borderColor", "#ffffffff")
+            readonly property real radius: rounded ? Math.min(width, height) / 8.0 : 0.0
+            readonly property real imageInset: Math.max(0.75, strokeWidth * 0.65)
             onXChanged: overlays.noteEditGeometry()
             onYChanged: overlays.noteEditGeometry()
             onWidthChanged: overlays.noteEditGeometry()
@@ -425,7 +467,7 @@ Item {
 
             RectangularShadow {
                 anchors.fill: parent
-                radius: overlays.cornerRadius
+                radius: artFrame.radius
                 color: "#73000000"
                 blur: 14.0
                 offset: Qt.vector2d(0.0, 3.0)
@@ -436,7 +478,7 @@ Item {
             Rectangle {
                 objectName: "expandedOverlayArtworkFallback"
                 anchors.fill: parent
-                radius: overlays.cornerRadius
+                radius: artFrame.radius
                 color: overlays.cardColor
             }
             Canvas {
@@ -444,8 +486,8 @@ Item {
                 anchors.centerIn: parent
                 width: Math.round(Math.min(parent.width, parent.height) * 0.42)
                 height: width
-                readonly property color ink: Qt.rgba(overlays.borderColor.r, overlays.borderColor.g,
-                                                     overlays.borderColor.b, 0.55)
+                readonly property color ink: Qt.rgba(artFrame.strokeColor.r, artFrame.strokeColor.g,
+                                                     artFrame.strokeColor.b, 0.55)
                 onInkChanged: requestPaint()
                 onWidthChanged: requestPaint()
                 onPaint: {
@@ -479,7 +521,7 @@ Item {
                 asynchronous: true
                 cache: true
                 // Rounded containment (Contracts: rounded artwork frames): a concentric mask, the outline on top.
-                layer.enabled: overlays.cornerRadius > 0.0
+                layer.enabled: artFrame.rounded
                 layer.effect: MultiEffect {
                     maskEnabled: true
                     maskSource: artworkMask
@@ -488,18 +530,18 @@ Item {
             Rectangle {
                 id: artworkMask
                 anchors.fill: artwork
-                radius: Math.max(0.0, overlays.cornerRadius - artFrame.imageInset)
+                radius: Math.max(0.0, artFrame.radius - artFrame.imageInset)
                 visible: false
                 layer.enabled: true
             }
-            // The themed card border: colour, the shared Card Border Width and the card radius.
+            // The Media card's artwork border: its colour and stroke, Rounded Artwork's radius.
             Rectangle {
                 objectName: "expandedOverlayArtworkBorder"
                 anchors.fill: parent
-                radius: overlays.cornerRadius
+                radius: artFrame.radius
                 color: "transparent"
-                border.width: overlays.borderWidth
-                border.color: overlays.borderColor
+                border.width: artFrame.strokeWidth
+                border.color: artFrame.strokeColor
             }
         }
 
@@ -533,8 +575,16 @@ Item {
                 readonly property real spacing: Math.round(nowPlayingSlot.fontSize * 0.12)
                 readonly property real naturalHeight: titleText.height + spacing + artistText.height
                     + (nowPlayingSlot.albumShown ? spacing + albumText.height : 0.0)
+                    + (nowPlayingSlot.seekShown ? 2.0 * spacing + nowPlayingSlot.seekHeight : 0.0)
                     + (nowPlayingSlot.controlsShown ? 2.0 * spacing + controlsSpacer.height + nowPlayingSlot.controlsHeight
                        : 0.0)
+                // The metadata rows' bottom, and below them the Seek Bar's row (the Media card's order: metadata, seek,
+                // transport).
+                readonly property real metadataBottom: nowPlayingSlot.albumShown ? albumText.y + albumText.height
+                                                                                : artistText.y + artistText.height
+                readonly property real seekRowY: metadataBottom + 2.0 * spacing
+                readonly property real rowsBottom: nowPlayingSlot.seekShown ? seekRowY + nowPlayingSlot.seekHeight
+                                                                            : metadataBottom
                 height: naturalHeight
 
                 MediaMetadataText {
@@ -543,15 +593,40 @@ Item {
                     // A part of the block (``title``): scaled whole (its layout keeps today's size) and moved, kept
                     // inside the block.
                     readonly property real partScale: nowPlayingSlot.childWidthScale("title")
+                    // The title's semantic corner anchor (``semantic_corner_anchor``, as the Media card's header): a
+                    // move that ends snapped into one of the block's corners pins it there, so the block's resizes
+                    // keep it in that corner; a free move detaches it (the child editor clears the anchor).
+                    readonly property string customAnchor: nowPlayingSlot.childAnchor("title")
+                    readonly property real drawnWidth: titleText.width * titleText.partScale
+                    readonly property real drawnHeight: titleText.height * titleText.partScale
+                    // Where its offset alone puts it; a pinned title's difference is folded into the offset once when
+                    // a move detaches it (the child editor's placement compensation), so it never jumps.
+                    readonly property real offsetShiftX: nowPlayingSlot.containX(
+                        nowPlayingSlot.columnX + titleText.x + nowPlayingSlot.childOffsetX("title"), drawnWidth)
+                        - nowPlayingSlot.columnX - titleText.x
+                    readonly property real offsetShiftY: nowPlayingSlot.containY(
+                        nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("title"), drawnHeight)
+                        - nowPlayingSlot.columnY
+                    readonly property real customEditPlacementCompensationX:
+                        customAnchor.length > 0 ? titleShift.x - offsetShiftX : 0.0
+                    readonly property real customEditPlacementCompensationY:
+                        customAnchor.length > 0 ? titleShift.y - offsetShiftY : 0.0
                     transform: [
                         Scale { id: titleScale; xScale: titleText.partScale; yScale: titleText.partScale },
                         Translate {
                             id: titleShift
-                            x: nowPlayingSlot.containX(
-                                   nowPlayingSlot.columnX + titleText.x + nowPlayingSlot.childOffsetX("title"),
-                                   titleText.width * titleText.partScale) - nowPlayingSlot.columnX - titleText.x
-                            y: nowPlayingSlot.containY(nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("title"),
-                                                       titleText.height * titleText.partScale) - nowPlayingSlot.columnY
+                            // Pinned: the containment's own corner (the block's frame, its card padding included).
+                            x: nowPlayingSlot.containX(titleText.customAnchor.endsWith("right") ? Infinity
+                                                       : titleText.customAnchor.endsWith("left") ? -Infinity
+                                                       : nowPlayingSlot.columnX + titleText.x
+                                                         + nowPlayingSlot.childOffsetX("title"),
+                                                       titleText.drawnWidth)
+                               - nowPlayingSlot.columnX - titleText.x
+                            y: nowPlayingSlot.containY(titleText.customAnchor.startsWith("bottom") ? Infinity
+                                                       : titleText.customAnchor.startsWith("top") ? -Infinity
+                                                       : nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("title"),
+                                                       titleText.drawnHeight)
+                               - nowPlayingSlot.columnY
                         }
                     ]
                     // The child editor maps through these applied transform values (never the transform list).
@@ -593,7 +668,7 @@ Item {
                     ]
                     readonly property string customEditMappingDependency: [artistScale.xScale, artistScale.yScale,
                                                                           artistShift.x, artistShift.y].join(",")
-                    x: nowPlayingSlot.contentRightSide ? textColumn.width - width : 0.0
+                    x: nowPlayingSlot.textRight("artist") ? textColumn.width - width : 0.0
                     width: Math.min(Math.ceil(implicitWidth), textColumn.width)
                     text: nowPlayingSlot.contentArtist
                     maximumLineCount: nowPlayingSlot.metadataLines
@@ -602,7 +677,7 @@ Item {
                     color: nowPlayingSlot.textColor
                     opacity: 0.88
                     elide: Text.ElideRight
-                    horizontalAlignment: nowPlayingSlot.contentRightSide ? Text.AlignRight : Text.AlignLeft
+                    horizontalAlignment: nowPlayingSlot.textRight("artist") ? Text.AlignRight : Text.AlignLeft
                     shadowSoft: true
                     shadowColor: overlays.textShadowColor
                     shadowOffsetX: 0.0
@@ -627,7 +702,7 @@ Item {
                     ]
                     readonly property string customEditMappingDependency: [albumScale.xScale, albumScale.yScale,
                                                                           albumShift.x, albumShift.y].join(",")
-                    x: nowPlayingSlot.contentRightSide ? textColumn.width - width : 0.0
+                    x: nowPlayingSlot.textRight("album") ? textColumn.width - width : 0.0
                     y: artistText.y + artistText.height + textColumn.spacing
                     width: Math.min(Math.ceil(implicitWidth), textColumn.width)
                     height: visible ? implicitHeight : 0.0
@@ -638,18 +713,49 @@ Item {
                     maximumLineCount: nowPlayingSlot.metadataLines
                     color: nowPlayingSlot.textColor
                     opacity: 0.75
-                    horizontalAlignment: nowPlayingSlot.contentRightSide ? Text.AlignRight : Text.AlignLeft
+                    horizontalAlignment: nowPlayingSlot.textRight("album") ? Text.AlignRight : Text.AlignLeft
                     shadowSoft: true
                     shadowColor: overlays.textShadowColor
                     shadowOffsetX: 0.0
                     shadowOffsetY: overlays.textShadowOffset
                 }
+                // Seek Bar (plan 1B.7g, default off): the Media card's one seek bar (MediaSeekBar.qml), its look the
+                // Media model's (seekBarLook), its position the model's own timeline events (no timer here), its seeks
+                // the Media card's seek owner. A part of the block (``seek_bar``, the Media card's role): the text box's
+                // width by default, sized on each axis and moved by its child record, kept inside the block. Over the
+                // Visualizer, whose double-click cycles its mode, it holds its own presses (exclusivePress).
+                MediaSeekBar {
+                    id: seekBar
+                    objectName: "expandedOverlaySeekBar"
+                    readonly property var model: overlays.mediaModel
+                    visible: nowPlayingSlot.seekShown
+                    x: nowPlayingSlot.containX(nowPlayingSlot.columnX + nowPlayingSlot.childOffsetX("seek_bar"), width)
+                       - nowPlayingSlot.columnX
+                    y: nowPlayingSlot.containY(nowPlayingSlot.columnY + textColumn.seekRowY
+                                               + nowPlayingSlot.childOffsetY("seek_bar"), height) - nowPlayingSlot.columnY
+                    width: Math.max(1.0, Math.round(textColumn.width * nowPlayingSlot.childWidthScale("seek_bar")))
+                    height: Math.max(1.0, Math.round(nowPlayingSlot.seekHeight * nowPlayingSlot.childHeightScale("seek_bar")))
+                    fraction: !!model && isFinite(Number(model.progressFraction)) ? Number(model.progressFraction) : 0.0
+                    seekEnabled: nowPlayingSlot.interactive && !!model && model.canSeek === true
+                    trackColor: overlays.seekLook("trackColor", "#4dffffff")
+                    fillColor: overlays.seekLook("fillColor", "#ffffffff")
+                    shadowEnabled: overlays.seekLook("shadowEnabled", false) === true
+                    shadowColor: overlays.seekLook("shadowColor", "#00000000")
+                    glowEnabled: overlays.seekLook("glowEnabled", false) === true
+                    glowColor: overlays.seekLook("glowColor", "#00000000")
+                    glowBaseHeight: nowPlayingSlot.seekHeight
+                    exclusivePress: true
+                    hoverWashObjectName: "expandedOverlaySeekHoverWash"
+                    glowObjectName: "expandedOverlaySeekGlow"
+                    fillObjectName: "expandedOverlaySeekFill"
+                    seekAreaObjectName: "expandedOverlaySeekArea"
+                    onSeekRequested: function(value) { overlays.seekRequested(value) }
+                }
                 // Media Controls (default off): a small version of the Media card's own transport bar (the one
                 // MediaTransportBar, its look from the Media model), on the Media card's own transport owner.
                 Item {
                     id: controlsSpacer
-                    y: (nowPlayingSlot.albumShown ? albumText.y + albumText.height : artistText.y + artistText.height)
-                        + textColumn.spacing
+                    y: textColumn.rowsBottom + textColumn.spacing
                     width: textColumn.width
                     height: Math.round(nowPlayingSlot.fontSize * 0.25)
                     visible: nowPlayingSlot.controlsShown

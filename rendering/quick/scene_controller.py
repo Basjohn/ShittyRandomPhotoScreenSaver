@@ -414,6 +414,8 @@ class QuickSceneController(QObject):
     visualizer_preset_step_requested = Signal(int)
     # Expanded Visualizer overlays (plan 01 §G, M3b): a Media Controls press ("previous", "play" or "next").
     visualizer_overlay_transport_requested = Signal(str)
+    # The full-display Now Playing's seek bar (plan 1B.7g): a fraction of the track, for the Media card's seek owner.
+    visualizer_overlay_seek_requested = Signal(float)
     custom_layout_save_requested = Signal()
     # Semantic Edit-only routes.  The native input block remains intact while
     # the retained overlay forwards these to DisplayManager's existing orbit
@@ -1348,6 +1350,8 @@ class QuickSceneController(QObject):
         child_gesture_cancel_handler: ChildGestureCancelHandler | None = None,
         child_content_extent_handler: ChildContentExtentHandler | None = None,
         child_content_extent_clear_handler: ChildContentExtentClearHandler | None = None,
+        child_alignment_flip_handler: ChildAlignmentFlipHandler | None = None,
+        child_semantic_anchor_handler: ChildSemanticAnchorHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind Fullscreen Edit (Expanded Visualizer M3c): the one Edit overlay over this display's full-display
         overlays.
@@ -1402,6 +1406,8 @@ class QuickSceneController(QObject):
             child_gesture_cancel_handler=child_gesture_cancel_handler,
             child_content_extent_handler=child_content_extent_handler,
             child_content_extent_clear_handler=child_content_extent_clear_handler,
+            child_alignment_flip_handler=child_alignment_flip_handler,
+            child_semantic_anchor_handler=child_semantic_anchor_handler,
         )
         model.save_requested.connect(self.custom_layout_save_requested.emit)
         model.selection_changed.connect(self.custom_layout_selection_changed.emit)
@@ -1444,9 +1450,8 @@ class QuickSceneController(QObject):
         overlay = self._custom_layout_overlay
         if root is None or overlay is None or not _qobject_is_alive(root):
             return None
-        loader = root.findChild(QQuickItem, "visualizerExpandedOverlays")
-        stage = loader.property("item") if loader is not None else None
-        if not isinstance(stage, QQuickItem) or not _qobject_is_alive(stage):
+        stage = self._expanded_overlay_stage()
+        if stage is None:
             return None
         target = overlay.item
 
@@ -2669,8 +2674,10 @@ class QuickSceneController(QObject):
         root = self._visualizer_root
         if root is None or not _qobject_is_alive(root):
             return None
-        loader = root.findChild(QQuickItem, "visualizerExpandedOverlays")
-        stage = loader.property("item") if loader is not None else None
+        # Found from the retained root, never through the Loader's ``item`` property: a wrapper reached through that
+        # temporary one is invalidated with it, and with it every other holder's wrapper of the stage's children (the
+        # Edit layer's Now Playing presentation included; plan 1B.7 d1).
+        stage = root.findChild(QQuickItem, "expandedVisualizerOverlays")
         return stage if isinstance(stage, QQuickItem) and _qobject_is_alive(stage) else None
 
     def _volume_osd_widget(self):
@@ -2998,6 +3005,9 @@ class QuickSceneController(QObject):
         overlay_transport = getattr(root, "expandedOverlayTransportRequested", None)
         if overlay_transport is not None and hasattr(overlay_transport, "connect"):
             overlay_transport.connect(self.visualizer_overlay_transport_requested.emit)
+        overlay_seek = getattr(root, "expandedOverlaySeekRequested", None)
+        if overlay_seek is not None and hasattr(overlay_seek, "connect"):
+            overlay_seek.connect(self.visualizer_overlay_seek_requested.emit)
         overlay_geometry = getattr(root, "expandedOverlayEditGeometryChanged", None)
         if overlay_geometry is not None and hasattr(overlay_geometry, "connect"):
             overlay_geometry.connect(self._on_expanded_overlay_edit_geometry_changed)

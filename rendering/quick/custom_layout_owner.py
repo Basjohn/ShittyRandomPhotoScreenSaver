@@ -276,6 +276,8 @@ class QuickCustomLayoutOwner:
         # Fullscreen Edit (M3c): the overlays' part of the session while it is open (None otherwise), and who hears
         # its unsaved-draft state flip (the display manager's menus).
         self._fullscreen: FullscreenOverlayEdit | None = None
+        # (item, its recorded undo step) of the child move just released; read once by its semantic corner pin.
+        self._child_move_release: tuple[CustomLayoutSessionItem, Any] | None = None
         self._fullscreen_draft_listener = fullscreen_draft_listener
         self._fullscreen_pending = False
         self._retired = False
@@ -325,6 +327,15 @@ class QuickCustomLayoutOwner:
         editor = self._fullscreen
         return bool(self._active and editor is not None and editor.pending())
 
+    def _publish_fullscreen_change(self, editor: FullscreenOverlayEdit,
+                                   item: CustomLayoutSessionItem | None = None) -> None:
+        """Fullscreen Edit's session change publisher: the item's edited geometry becomes the overlays' draft
+        (``FullscreenOverlayEdit.project``), then the draft's pending state is announced."""
+
+        editor.project(item)
+        if self._fullscreen is editor:
+            self._note_fullscreen_draft()
+
     def _note_fullscreen_draft(self) -> None:
         pending = self.fullscreen_draft_pending
         if pending == self._fullscreen_pending:
@@ -370,6 +381,7 @@ class QuickCustomLayoutOwner:
         pending = self._undo_pending
         if pending is not None and pending[0] == kind and pending[1].item is item:
             return
+        self._child_move_release = None
         self._finish_undo_gesture()
         self._undo_pending = (kind, self._capture_undo(item))
 
@@ -390,6 +402,7 @@ class QuickCustomLayoutOwner:
         self._record_undo(before)
 
     def _commit_discrete_undo(self, before: _EditUndoSnapshot) -> None:
+        self._child_move_release = None
         self._finish_undo_gesture()
         self._record_undo(before)
 
@@ -691,7 +704,7 @@ class QuickCustomLayoutOwner:
                 size_reset_handler=self.restore_item_size,
                 close_item_handler=self.close_item,
                 content_rotation_handler=self.rotate_visualizer_content,
-                item_change_publisher=editor.project,
+                item_change_publisher=lambda changed=None: self._publish_fullscreen_change(editor, changed),
                 geometry_listener=editor.geometry_changed,
                 # Now Playing's parts: ordinary Edit's child editor, the same owner methods as every widget's children.
                 child_resize_begin_handler=self.begin_child_resize,
@@ -702,6 +715,9 @@ class QuickCustomLayoutOwner:
                 child_gesture_cancel_handler=self.cancel_child_gesture,
                 child_content_extent_handler=self.ensure_child_content_extent,
                 child_content_extent_clear_handler=self.clear_child_content_extent,
+                # Alignment as declared roles (plan 1B.7c): the same flip glyph and semantic corner anchor.
+                child_alignment_flip_handler=self.flip_child_alignment,
+                child_semantic_anchor_handler=self.set_child_semantic_anchor,
             )
         except Exception:
             try:
@@ -1242,12 +1258,6 @@ class QuickCustomLayoutOwner:
         proposed: QRect,
         cursor: QPoint,
     ) -> QRect:
-        if self._fullscreen is not None:
-            # A Fullscreen part moves its overlay (the artwork moves Now Playing): that item's undo step.
-            self._begin_undo_gesture(self._fullscreen.position_item(item), "parent_move")
-            resolved = self._fullscreen.resolve_move(item, proposed)
-            self._note_fullscreen_draft()
-            return resolved
         self._begin_undo_gesture(item, "parent_move")
         binding = self._bindings[item.current_display_identity]
         target = binding
@@ -1273,20 +1283,21 @@ class QuickCustomLayoutOwner:
                         for entry in self._bindings.values()
                         if entry.screen is candidate
                     )
+        frame = self._edit_frame(item, target)
         local = QRect(
-            proposed.x() - target.geometry.x(),
-            proposed.y() - target.geometry.y(),
+            proposed.x() - frame.x(),
+            proposed.y() - frame.y(),
             proposed.width(),
             proposed.height(),
         )
         peers = self._peer_local_rects(item, target)
         resolution = resolve_snap_local_rect_for_edit(
             local,
-            target.geometry.size(),
+            frame.size(),
             peer_rects=peers,
             min_size=quick_custom_minimum_size(item),
         )
-        self._publish_move_guides(target.identity, resolution)
+        self._publish_move_guides(target.identity, resolution, frame.topLeft() - target.geometry.topLeft())
         resolved = resolution.rect
         if target.identity != item.current_display_identity:
             if item.model_identity == "spotify_visualizer":
@@ -1299,8 +1310,8 @@ class QuickCustomLayoutOwner:
                 monitor_route=target.monitor_route,
             )
         return QRect(
-            target.geometry.x() + resolved.x(),
-            target.geometry.y() + resolved.y(),
+            frame.x() + resolved.x(),
+            frame.y() + resolved.y(),
             resolved.width(),
             resolved.height(),
         )
@@ -1342,25 +1353,27 @@ class QuickCustomLayoutOwner:
         Guides are the same peer/centre lines the move gesture renders.
         """
 
+        frame = self._edit_frame(item, binding)
         local = QRect(
-            rect.x() - binding.geometry.x(),
-            rect.y() - binding.geometry.y(),
+            rect.x() - frame.x(),
+            rect.y() - frame.y(),
             rect.width(),
             rect.height(),
         )
         resolution = resolve_resize_edge_snap(
             local,
-            binding.geometry.size(),
+            frame.size(),
             horizontal_edge=horizontal_edge,
             vertical_edge=vertical_edge,
             peer_rects=self._peer_local_rects(item, binding),
             min_size=min_size,
         )
-        self._publish_move_guides(item.current_display_identity, resolution)
+        self._publish_move_guides(item.current_display_identity, resolution,
+                                  frame.topLeft() - binding.geometry.topLeft())
         snapped = resolution.rect
         return QRect(
-            binding.geometry.x() + snapped.x(),
-            binding.geometry.y() + snapped.y(),
+            frame.x() + snapped.x(),
+            frame.y() + snapped.y(),
             snapped.width(),
             snapped.height(),
         )
@@ -1547,22 +1560,33 @@ class QuickCustomLayoutOwner:
             local.height(),
         )
 
-    def _publish_move_guides(self, display_identity: str, resolution: Any) -> None:
-        """Publish only peer-edge/centering assists for the active move sample."""
+    def _publish_move_guides(
+        self,
+        display_identity: str,
+        resolution: Any,
+        frame_offset: QPoint | None = None,
+    ) -> None:
+        """Publish only peer-edge/centering assists for the active move sample.
+
+        ``frame_offset`` is the item's edit frame's origin on its display (``_edit_frame``): the resolution is local
+        to that frame, the Edit layer to the display.
+        """
 
         if self._direct:
             return
 
         allowed_kinds = {"peer", "peer_center", "display_center"}
+        shift_x = int(frame_offset.x()) if frame_offset is not None else 0
+        shift_y = int(frame_offset.y()) if frame_offset is not None else 0
 
-        def _collect(primary: object, assists: object) -> tuple[tuple[int, str], ...]:
+        def _collect(primary: object, assists: object, shift: int) -> tuple[tuple[int, str], ...]:
             result: list[tuple[int, str]] = []
             seen: set[tuple[int, str]] = set()
             for guide in tuple(primary or ()) + tuple(assists or ()):
                 kind = str(getattr(guide, "kind", "") or "")
                 if kind not in allowed_kinds:
                     continue
-                entry = (int(getattr(guide, "position", 0)), kind)
+                entry = (int(getattr(guide, "position", 0)) + shift, kind)
                 if entry in seen:
                     continue
                 seen.add(entry)
@@ -1572,10 +1596,12 @@ class QuickCustomLayoutOwner:
         vertical = _collect(
             getattr(resolution, "vertical_guides", ()),
             getattr(resolution, "vertical_assists", ()),
+            shift_x,
         )
         horizontal = _collect(
             getattr(resolution, "horizontal_guides", ()),
             getattr(resolution, "horizontal_assists", ()),
+            shift_y,
         )
         target_identity = str(display_identity or "")
         for identity, binding in tuple(self._bindings.items()):
@@ -1604,11 +1630,6 @@ class QuickCustomLayoutOwner:
         handle: str,
         cursor: QPoint,
     ) -> bool:
-        if self._fullscreen is not None:
-            if not self._fullscreen.begin_resize(item, handle, cursor):
-                return False
-            self._begin_undo_gesture(item, "parent_resize")
-            return True
         handle_id = str(handle or "")
         viewport_handles = {
             "left", "right", "top", "bottom",
@@ -1720,12 +1741,6 @@ class QuickCustomLayoutOwner:
         cursor: QPoint,
         finalize: bool,
     ) -> bool:
-        if self._fullscreen is not None:
-            changed = self._fullscreen.update_resize(item, handle, cursor, bool(finalize))
-            if finalize:
-                self._finish_undo_gesture("parent_resize")
-            self._note_fullscreen_draft()
-            return changed
         origin = self._resize_origins.get(item.source_key)
         if origin is None:
             return False
@@ -2013,7 +2028,12 @@ class QuickCustomLayoutOwner:
         self._note_fullscreen_draft()       # Fullscreen Edit: Now Playing's parts are its draft too
         if finalize:
             self._child_move_origins.pop(item.source_key, None)
+            last = self._undo_history[-1] if self._undo_history else None
             self._finish_undo_gesture("child_move")
+            recorded = self._undo_history[-1] if self._undo_history else None
+            # The release's semantic corner pin (``set_child_semantic_anchor``, sent by the child layer right after
+            # this) belongs to the same gesture: one undo step restores both.
+            self._child_move_release = (item, recorded) if recorded is not None and recorded is not last else None
             if is_geometry_logging_enabled():
                 logger.info(
                     "[CUSTOM_LAYOUT] [GEO_CHILD] end widget=%s role=%s "
@@ -2097,8 +2117,14 @@ class QuickCustomLayoutOwner:
         """Commit one descriptor-admitted semantic corner anchor."""
 
         role = item.child_role(role_id)
+        release = self._child_move_release
+        self._child_move_release = None
         if role is None or not role.semantic_corner_anchor:
             return False
+        # The pin a child move's release sets is part of that move: its recorded step (still the latest) already
+        # holds the state before the move, so undo restores both at once (one gesture, one step).
+        folded = (release is not None and release[0] is item and bool(self._undo_history)
+                  and self._undo_history[-1] is release[1] and self._undo_pending is None)
         before_undo = self._capture_undo(item)
         next_geometry = set_child_semantic_anchor(
             role, item.child_size(role.role_id), anchor
@@ -2110,7 +2136,8 @@ class QuickCustomLayoutOwner:
                 item.custom_child_roles,
                 item.current_child_sizes,
             )
-            self._commit_discrete_undo(before_undo)
+            if not folded:
+                self._commit_discrete_undo(before_undo)
         return changed
 
     def cancel_child_gesture(self, item: CustomLayoutSessionItem) -> None:
@@ -2151,12 +2178,6 @@ class QuickCustomLayoutOwner:
     ) -> bool:
         if not item.resize_capable:
             return False
-        if self._fullscreen is not None:
-            before_undo = self._capture_undo(item)
-            changed = self._fullscreen.resize_wheel(item, int(angle_delta_y))
-            self._commit_discrete_undo(before_undo)
-            self._note_fullscreen_draft()
-            return changed
         before_undo = self._capture_undo(item)
         changed = self._apply_uniform_scale(
             item,
@@ -2179,16 +2200,17 @@ class QuickCustomLayoutOwner:
             self._clear_all_guides()
             return
         rect = QRect(item.current_global_rect)
+        frame = self._edit_frame(item, binding)
         snap = resolve_uniform_scale_snap(
             float(item.resize_scale),
             center_x=(
                 float(rect.x()) + float(rect.width()) / 2.0
-                - float(binding.geometry.x())
+                - float(frame.x())
             ),
-            top=float(rect.y()) - float(binding.geometry.y()),
+            top=float(rect.y()) - float(frame.y()),
             free_width=float(rect.width()),
             free_height=float(rect.height()),
-            display_size=binding.geometry.size(),
+            display_size=frame.size(),
             peer_rects=self._peer_local_rects(item, binding),
         )
         self._publish_move_guides(
@@ -2198,6 +2220,7 @@ class QuickCustomLayoutOwner:
                 vertical_guides=snap.vertical_guides,
                 horizontal_guides=snap.horizontal_guides,
             ),
+            frame.topLeft() - binding.geometry.topLeft(),
         )
 
     def _live_display_bindings(self) -> dict[str, _DisplayBinding]:
@@ -2821,12 +2844,6 @@ class QuickCustomLayoutOwner:
         owning display is a uniform emergency reduction admitted.
         """
 
-        if self._fullscreen is not None and self._active:
-            before_undo = self._capture_undo(item)
-            restored = self._fullscreen.restore_size(item)
-            self._commit_discrete_undo(before_undo)
-            self._note_fullscreen_draft()
-            return restored
         if (
             not self._active
             or self._session is None
@@ -2841,10 +2858,11 @@ class QuickCustomLayoutOwner:
         self.cancel_child_gesture(item)
         self._resize_origins.pop(item.source_key, None)
         binding = self._bindings[item.current_display_identity]
+        frame = self._edit_frame(item, binding)
         authored_width = max(1.0, float(item.authored_reference_size[0]))
         authored_height = max(1.0, float(item.authored_reference_size[1]))
-        display_width = max(1.0, float(binding.geometry.width()))
-        display_height = max(1.0, float(binding.geometry.height()))
+        display_width = max(1.0, float(frame.width()))
+        display_height = max(1.0, float(frame.height()))
         fit_scale = min(
             1.0,
             display_width / authored_width,
@@ -2855,11 +2873,19 @@ class QuickCustomLayoutOwner:
         current = item.current_global_rect
         rect = QRect(current.x(), current.y(), width, height)
         descriptor = self._descriptors.get(item.source_key)
-        if descriptor is None:
+        if descriptor is None and not item.authored_size_payload:
             return False
         before_undo = self._capture_undo(item)
 
-        if descriptor.custom_layout_resize_mode == "visualizer_rect":
+        if descriptor is None:
+            # A descriptor-less item (a Fullscreen Edit overlay part) declares its authored payload itself: its
+            # canonical size members; the shared reset drops the extent and its children's records the same way.
+            payload = dict(item.authored_size_payload)
+            payload.pop("content_extent", None)
+            if item.child_geometry_capable:
+                payload = item.restore_authored_child_geometry(payload)
+            item.restore_authored_size(rect, size_payload=payload, resize_scale=fit_scale)
+        elif descriptor.custom_layout_resize_mode == "visualizer_rect":
             viewport = (
                 item.authored_viewport_extent
                 or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
@@ -2947,7 +2973,7 @@ class QuickCustomLayoutOwner:
             return self._apply_content_extent_uniform_scale(
                 item, requested_scale, anchor_rect, binding
             )
-        descriptor = self._descriptors[item.source_key]
+        descriptor = self._descriptors.get(item.source_key)
         admitted_scale = max(1.0e-6, float(item.baseline_resize_scale))
         viewport_extent = item.current_viewport_extent
         visualizer_world = item.viewport_resize_capable and viewport_extent is not None
@@ -2958,7 +2984,7 @@ class QuickCustomLayoutOwner:
             descriptor,
             requested_scale,
             anchor_rect,
-            binding.geometry,
+            self._edit_frame(item, binding),
             pixels_per_world=(
                 self._visualizer_pixels_per_world.get(item.source_key)
                 if visualizer_world
@@ -2969,6 +2995,16 @@ class QuickCustomLayoutOwner:
             return False
         scale = resolved.scale
         geometry = QRect(resolved.rect)
+        if descriptor is None:
+            # A descriptor-less item (a Fullscreen Edit overlay part) carries no scaled size payload: its scale is the
+            # session's ``resize_scale`` itself, which its change publisher projects into its own value.
+            payload = dict(item.current_size_payload)
+            if item.child_geometry_capable:
+                payload = update_child_geometry_payload(
+                    payload, item.custom_child_roles, item.current_child_sizes
+                )
+            item.set_geometry(geometry, size_payload=payload, resize_scale=scale)
+            return True
         # Legacy payload-based families scale from their admitted payload by
         # the *delta* from the persisted absolute scale. Uniform-transform
         # families carry no authored size payload, but use the same arithmetic.
@@ -3058,20 +3094,21 @@ class QuickCustomLayoutOwner:
         """
 
         binding = self._bindings[item.current_display_identity]
+        frame = self._edit_frame(item, binding)
         free_rect = item.current_global_rect
         center_x_local = (
             float(origin.rect.x())
             + float(origin.rect.width()) / 2.0
-            - float(binding.geometry.x())
+            - float(frame.x())
         )
-        top_local = float(origin.rect.y()) - float(binding.geometry.y())
+        top_local = float(origin.rect.y()) - float(frame.y())
         snap = resolve_uniform_scale_snap(
             float(item.resize_scale),
             center_x=center_x_local,
             top=top_local,
             free_width=float(free_rect.width()),
             free_height=float(free_rect.height()),
-            display_size=binding.geometry.size(),
+            display_size=frame.size(),
             peer_rects=self._peer_local_rects(item, binding),
         )
         changed = False
@@ -3084,6 +3121,7 @@ class QuickCustomLayoutOwner:
                 vertical_guides=snap.vertical_guides,
                 horizontal_guides=snap.horizontal_guides,
             ),
+            frame.topLeft() - binding.geometry.topLeft(),
         )
         return changed
 
@@ -3092,7 +3130,7 @@ class QuickCustomLayoutOwner:
     @staticmethod
     def _viewport_resize_rect(
         origin: _ResizeOrigin,
-        binding: _DisplayBinding,
+        bounds: QRect,
         minimum: Any,
         cursor: QPoint,
         *,
@@ -3102,14 +3140,15 @@ class QuickCustomLayoutOwner:
         """Resize selected viewport edges while anchoring the opposite edges.
 
         The cursor delta is measured from gesture start so grabbing anywhere in
-        the visible handle never produces a jump. Bounds are applied to the edge
-        being moved rather than by a later generic clamp, which preserves the
-        opposite-corner anchor for the new two-axis Visualizer corner gesture.
+        the visible handle never produces a jump. Bounds (the item's edit frame)
+        are applied to the edge being moved rather than by a later generic clamp,
+        which preserves the opposite-corner anchor for the new two-axis
+        Visualizer corner gesture.
         """
 
         return edge_resize_rect(
             origin.rect,
-            binding.geometry,
+            bounds,
             minimum,
             int(cursor.x() - origin.cursor.x()),
             int(cursor.y() - origin.cursor.y()),
@@ -3168,7 +3207,7 @@ class QuickCustomLayoutOwner:
         minimum = quick_custom_minimum_size(item)
         rect = self._viewport_resize_rect(
             origin,
-            binding,
+            self._edit_frame(item, binding),
             minimum,
             cursor,
             horizontal_edge=edge if edge in {"left", "right"} else None,
@@ -3203,7 +3242,7 @@ class QuickCustomLayoutOwner:
         vertical_edge = "top" if str(corner).startswith("top_") else "bottom"
         rect = self._viewport_resize_rect(
             origin,
-            binding,
+            self._edit_frame(item, binding),
             minimum,
             cursor,
             horizontal_edge=horizontal_edge,
@@ -3276,7 +3315,7 @@ class QuickCustomLayoutOwner:
         minimum = quick_custom_content_extent_minimum_size(item)
         rect = self._viewport_resize_rect(
             origin,
-            binding,
+            self._edit_frame(item, binding),
             minimum,
             cursor,
             horizontal_edge=edge if edge in {"left", "right"} else None,
@@ -3320,7 +3359,7 @@ class QuickCustomLayoutOwner:
         minimum = quick_custom_content_extent_minimum_size(item)
         rect = self._viewport_resize_rect(
             origin,
-            binding,
+            self._edit_frame(item, binding),
             minimum,
             cursor,
             horizontal_edge=horizontal_edge,
@@ -3365,7 +3404,7 @@ class QuickCustomLayoutOwner:
             self._descriptors.get(item.source_key),
             requested_scale,
             anchor_rect,
-            binding.geometry,
+            self._edit_frame(item, binding),
         )
         if resolved is None:
             return False
@@ -3384,17 +3423,38 @@ class QuickCustomLayoutOwner:
         )
         return True
 
+    def _edit_frame(
+        self,
+        item: CustomLayoutSessionItem,
+        binding: _DisplayBinding,
+    ) -> QRect:
+        """The global rectangle an item's parent geometry is edited inside: its display, or for a Fullscreen Edit
+        overlay part the expanded card's safe area (the overlays' own bounds). Every parent gesture (move, corner,
+        wheel, side and diagonal handles, Restore Size) bounds, snaps and publishes its guides against this one frame,
+        so the overlays use the ordinary handlers rather than a parallel solver."""
+
+        editor = self._fullscreen
+        if editor is not None:
+            frame = editor.edit_frame(item)
+            if frame is not None:
+                return QRect(frame)
+        return QRect(binding.geometry)
+
     def _peer_local_rects(
         self,
         item: CustomLayoutSessionItem,
         binding: _DisplayBinding,
     ) -> list[QRect]:
+        """The other items' frames, local to ``item``'s edit frame. A peer enclosing the whole frame (the expanded
+        card's own item in Fullscreen Edit) offers no alignment line inside it and is left out."""
+
         if self._session is None:
             return []
+        frame = self._edit_frame(item, binding)
         return [
             QRect(
-                peer.current_global_rect.x() - binding.geometry.x(),
-                peer.current_global_rect.y() - binding.geometry.y(),
+                peer.current_global_rect.x() - frame.x(),
+                peer.current_global_rect.y() - frame.y(),
                 peer.current_global_rect.width(),
                 peer.current_global_rect.height(),
             )
@@ -3402,6 +3462,7 @@ class QuickCustomLayoutOwner:
             if peer is not item
             and peer.current_display_identity == binding.identity
             and peer.current_enabled
+            and not peer.current_global_rect.contains(frame)
         ]
 
     def _live_commit_topology_reason(self) -> str | None:

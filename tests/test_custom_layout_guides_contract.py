@@ -33,7 +33,8 @@ def test_custom_move_publishes_existing_snap_metadata_without_new_cadence() -> N
     overlay_qml = _text("rendering/quick/qml/CustomLayoutOverlay.qml")
 
     assert "resolution = resolve_snap_local_rect_for_edit(" in owner
-    assert "self._publish_move_guides(target.identity, resolution)" in owner
+    # Published in the item's edit frame (its display; a Fullscreen Edit overlay part's safe area, plan 1B.7b).
+    assert "self._publish_move_guides(target.identity, resolution, frame.topLeft()" in owner
     assert 'allowed_kinds = {"peer", "peer_center", "display_center"}' in owner
     assert 'getattr(resolution, "vertical_assists", ())' in owner
     assert 'getattr(resolution, "horizontal_assists", ())' in owner
@@ -828,8 +829,11 @@ def test_selected_edit_role_containment_and_mapped_transform_contract() -> None:
     # A physical role's true surface, not the whole root, owns clipping.
     assert "function childContainmentRect(frame)" in editor
     assert "const bounds = childContainmentRect(frame)" in editor
-    assert "modelData.containmentTarget || null" in editor
-    assert "modelData.containmentTarget || null" in editor
+    # The role's declared surface (else a horizontal rail's own, else none: the frame) is the containment source; the
+    # expression gained the rail fallback over two lines, which this source assertion now follows (plan 1B.7e).
+    containment = editor.split("readonly property var containmentTarget:", 1)[1].split("readonly property", 1)[0]
+    assert "modelData.containmentTarget" in containment
+    assert "targetItem.customEditContainmentTarget : null" in containment
     assert "admitted = containChildResize(frame, handle, gesture, admitted)" in editor
     assert "if (frame.allowParentGrowth)" not in editor
     assert "ensureImmediateChildOverflow" not in editor

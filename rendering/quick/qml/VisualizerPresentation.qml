@@ -50,6 +50,7 @@ Item {
     property var expandedOverlayMediaModel: null
     property Item expandedOverlayOsdHost: null
     signal expandedOverlayTransportRequested(string key)
+    signal expandedOverlaySeekRequested(real fraction)
     // Fullscreen Edit (M3c): the Edit session is open on the overlays; they show to be grabbed and report geometry.
     property bool expandedOverlayEditing: false
     signal expandedOverlayEditGeometryChanged()
@@ -366,6 +367,9 @@ Item {
                 - Math.min(cameraResetTooltip.y, expandTooltip.y) + 10.0
             rightControlsLeft: visualizerPresentationRoot.expandedOverlayControlsLeft
             editing: visualizerPresentationRoot.expandedOverlayEditing
+            onSeekRequested: function(fraction) {
+                visualizerPresentationRoot.expandedOverlaySeekRequested(fraction)
+            }
             onTransportRequested: function(key) {
                 visualizerPresentationRoot.expandedOverlayTransportRequested(key)
             }

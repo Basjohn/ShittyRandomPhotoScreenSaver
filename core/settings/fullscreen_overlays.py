@@ -8,18 +8,15 @@ application or the runtime preset transaction never touches it. Settings' Visual
 
 Each overlay's placement is its anchor corner plus an offset and a scale relative to the expanded display's safe area
 (``offset_x``/``offset_y`` are fractions of the safe area's width/height in screen axes, ``scale`` multiplies the
-overlay's size; zero offset and unit scale are the defaults). Now Playing's artwork has its own size factor
-(``now_playing.artwork_scale``, on top of the overlay's scale; the artwork stays beside its text). Fullscreen Edit (M3c)
+overlay's size; zero offset and unit scale are the defaults). Now Playing's artwork size has one carrier, its ``artwork``
+child record (plan 1B.7d; the retired ``artwork_scale`` / ``artwork_width`` / ``artwork_height`` load into it). Fullscreen Edit (M3c)
 edits exactly these placement values: the offsets, the scales and the single-axis extents below. The corner is Settings'
 (the anchor); changing it rebases the offset (:func:`rebase_offset_for_corner`).
 
-Single-axis sizing (Fullscreen Edit's side handles): the Preset toast parent edits ``text_width`` /
-``text_height`` in ems of its font size. Now Playing's **parent handles resize the artwork border** through
-``artwork_width`` / ``artwork_height``, independent factors of the default square art size (``1`` = square).
-The existing ``text_width`` / ``text_height`` members on Now Playing remain readable for previously authored
-values and for the text box itself; they are not rewritten by parent size handles. Metadata remains a naturally
-grouped stack and reflows only when its available width/height requires it. Individual artwork, metadata and
-control child geometry remains separately editable. No resize changes a curated Visualizer preset.
+Single-axis sizing (Fullscreen Edit's side handles, ordinary Edit's content box; plan 1B.7b): each overlay's parent
+edits its text box, ``text_width`` / ``text_height`` in ems of its font size (``0`` = natural), as the Media card's
+content extent reflows its content; the artwork's size is its child record's alone. Individual artwork, metadata and control child geometry remains separately editable. No resize changes a curated
+Visualizer preset.
 
 Now Playing's parts (Fullscreen Edit's child editing, operator 8 Nov: "I should be able to move every element around in
 that block and change it"): ``now_playing.child_geometry`` is ordinary Edit's CUSTOM ``child_geometry`` carrier for the
@@ -62,10 +59,12 @@ MEDIA_CONTROLS_STYLES = ("bar", "floating")
 FONT_SIZE_MIN, FONT_SIZE_MAX = 12, 72
 OFFSET_MIN, OFFSET_MAX = -1.0, 1.0
 SCALE_MIN, SCALE_MAX = 0.5, 3.0
-#: The size factors (each clamped to SCALE_MIN..SCALE_MAX): the uniform scales and the artwork's width/height factors.
-SCALE_KEYS = ("scale", "artwork_scale", "artwork_width", "artwork_height")
-#: Legacy text extents in ems (0 = natural). Preset toast's parent edits them; Now Playing parent edits
-#: artwork_width/artwork_height instead, retaining these stored fields for existing authoring.
+#: The size factors (each clamped to SCALE_MIN..SCALE_MAX): the overlays' uniform scales.
+SCALE_KEYS = ("scale",)
+#: Retired Now Playing members (plan 1B.7d: one artwork size carrier, its ``artwork`` child record). A stored value
+#: that still has them loads through :func:`_bridge_artwork_factors` (Docs/Architecture/Persisted_Input_Compatibility.md).
+LEGACY_ARTWORK_FACTOR_KEYS = ("artwork_scale", "artwork_width", "artwork_height")
+#: Text-box extents in ems (0 = natural): each overlay's parent side handles edit them (ordinary Edit's content box).
 TEXT_EXTENT_KEYS = ("text_width", "text_height")
 TEXT_EXTENT_MAX = 60.0
 #: Now Playing's per-part geometry member (ordinary Edit's CUSTOM ``child_geometry`` carrier).
@@ -73,25 +72,33 @@ CHILD_GEOMETRY_KEY = CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY
 #: Now Playing's children in Fullscreen Edit (ordinary Edit's child-role descriptors, mirroring the Media card's): the
 #: artwork is ordinary Edit's freeform artwork frame (free X/Y, the image cropped); the title and the artist line scale
 #: uniformly (their text keeps its shape, as the Media card's metadata and artist do); the Media Controls bar sizes
-#: freely on each axis (as the Media card's transport controls). Every one moves.
+#: freely on each axis (as the Media card's transport controls). Every one moves. Alignment is declared as on the Media
+#: card (plan 1B.7c): the title, like Media's header, carries the block's one orientation (``alignment_flip``: its record's
+#: ``alignment`` flips the corner's authored side) and its ``semantic_corner_anchor``; the artist and album lines flip
+#: their own text alignment on top of that orientation (Media's metadata and artist).
 NOW_PLAYING_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     freeform_artwork_child_role("artwork", minimum_scale=(0.40, 0.40), maximum_scale=(3.00, 3.00), movable=True),
     CustomChildRoleDescriptor("title", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
+                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
+                              authored_alignment="left", semantic_corner_anchor=True),
     CustomChildRoleDescriptor("artist", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
+                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
+                              authored_alignment="left"),
     CustomChildRoleDescriptor("album", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
+                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
+                              authored_alignment="left"),
     CustomChildRoleDescriptor("controls", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
                               maximum_scale=(2.50, 2.50), uniform_scale=False, movable=True),
+    # The optional Seek Bar (plan 1B.7g): the Media card's ``seek_bar`` role, its limits included.
+    CustomChildRoleDescriptor("seek_bar", axes=("horizontal", "vertical"), minimum_scale=(0.35, 0.50),
+                              maximum_scale=(2.00, 3.00), uniform_scale=False, movable=True),
 )
 #: The children's offsets are fractions of a square of this many ems of the overlay's (scaled) font: they move with the
 #: block's scale and the font size, and never with a track's text length.
 CHILD_NORMALIZATION_EMS = 10.0
 #: The placement members Fullscreen Edit writes, per overlay (the corner is Settings').
 PLACEMENT_KEYS = {"preset": ("offset_x", "offset_y", "scale", "text_width", "text_height"),
-                  "now_playing": ("offset_x", "offset_y", "scale", "text_width", "text_height",
-                                  "artwork_scale", "artwork_width", "artwork_height", CHILD_GEOMETRY_KEY),
+                  "now_playing": ("offset_x", "offset_y", "scale", "text_width", "text_height", CHILD_GEOMETRY_KEY),
                   VOLUME_OSD_ID: ("offset_x", "offset_y", "scale")}
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
@@ -174,7 +181,31 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
                 target[key] = _number(item, float(default), SCALE_MIN, SCALE_MAX)
             elif key in TEXT_EXTENT_KEYS:
                 target[key] = _number(item, float(default), 0.0, TEXT_EXTENT_MAX)
+        if overlay == "now_playing":
+            _bridge_artwork_factors(raw, target)
     return result
+
+
+def _bridge_artwork_factors(raw: Mapping[str, Any], target: dict[str, Any]) -> None:
+    """Load bridge (plan 1B.7d): a value stored with the retired block factors ``artwork_scale`` /
+    ``artwork_width`` / ``artwork_height`` folds them into the ``artwork`` child record, the one artwork size carrier,
+    so the artwork keeps its drawn size (the record's factors multiply; the role's limits clamp them)."""
+
+    def factor(key: str) -> float:
+        return _number(raw.get(key), 1.0, SCALE_MIN, SCALE_MAX)
+
+    uniform = factor("artwork_scale")
+    width, height = uniform * factor("artwork_width"), uniform * factor("artwork_height")
+    if abs(width - 1.0) < 1e-9 and abs(height - 1.0) < 1e-9:
+        return
+    children = dict(target.get(CHILD_GEOMETRY_KEY) or {})
+    record = dict(children.get("artwork") or {})
+    record["width_scale"] = float(record.get("width_scale", 1.0)) * width
+    record["height_scale"] = float(record.get("height_scale", 1.0)) * height
+    record.setdefault("x_offset", 0.0)
+    record.setdefault("y_offset", 0.0)
+    children["artwork"] = record
+    target[CHILD_GEOMETRY_KEY] = normalize_now_playing_children(children)
 
 
 def normalize_now_playing_children(raw: Any) -> dict[str, dict[str, Any]]:
@@ -251,6 +282,7 @@ __all__ = [
     "FONT_SIZE_MAX",
     "FONT_SIZE_MIN",
     "FULLSCREEN_OVERLAYS_KEY",
+    "LEGACY_ARTWORK_FACTOR_KEYS",
     "OFFSET_MAX",
     "OFFSET_MIN",
     "OVERLAY_IDS",

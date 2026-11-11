@@ -852,8 +852,81 @@ can most geometry normally."
   drawn. Moves snap with the ordinary rule (`resolve_snap_local_rect_for_edit`) inside the safe area (its edges, so
   its corners, and its centre) and to the other overlay (edges, centre, the 30 px gutter); every guide is drawn on
   the Edit layer (the guide underlay lies under the expanded card). Stored offsets are the ones the overlay really
-  took (clamps included). Corner drags scale by the dragged corner's distance from the opposite one and keep that
-  corner; the wheel (5 % per notch) and Restore Size (the canonical scale) keep the frame's top centre.
+  took (clamps included). **Superseded by plan 1B.7b (11 Nov, Media parity):** the parent gestures (move, corner
+  drag, wheel, side and diagonal handles, Restore Size) are the `QuickCustomLayoutOwner`'s ordinary handlers on these
+  items, bounded by and snapped within the safe area (the owner's `_edit_frame`; the overlay editor's `edit_frame`)
+  with the other items as peers (a peer enclosing the frame, the expanded card's item, offers no line). They change
+  only the session's generic state (frame, `resize_scale`, content box); `FullscreenOverlayEdit.project` turns it
+  into the placement members (scale = `resize_scale`; a changed content-box axis = that axis's text-box extent; the
+  offset that draws the frame where the handler put it, keeping the edges it kept). So a corner drag grows the frame
+  about its top centre and Restore Size keeps its top left, as on every widget; the overlay's own corner solver,
+  edge solver, wheel and Restore Size were deleted. Each item declares `layout_minimum_size` (1 x 1 px: a frame may
+  be one line of text), Restore Size's `authored_size_payload` (the canonical size members) and its scale as
+  `baseline_resize_scale`.
+- **Superseded by the operator's 11 Nov Media-parity request (plan 1B.7; the operator: "its artwork and metadata and
+  controls should all behave the same as the media widget's edits do ... inherits traits/style"):**
+  - *10 Nov accepted "parent side handles resize the artwork border"* -> **new rule:** Now Playing's parent X/Y
+    handles are ordinary Edit's content box (as the Media card's): they reflow the text box (`text_width` /
+    `text_height`); the artwork's size has one carrier, its `artwork` child record (1B.7b, 1B.7d).
+  - *10 Nov accepted "position-based inward left/right layout"* -> **new rule:** one chosen, stable orientation: the
+    anchor corner's side, flipped by the title's flip glyph (1B.7c).
+  - *8 Nov "the themed card border" on the artwork* -> **new rule:** the artwork's border and shape are the Media
+    widget's artwork settings (its border colour and stroke, Rounded Artwork: radius an eighth of the short side),
+    carried by `MediaPresentationModel.artworkLook`, not the Visualizer card chrome (1B.7d). Guardrail h is narrowed
+    to geometry and storage: a saved profile keeps its position, size and child geometry and loads without loss; the
+    artwork border's look may change to Media's.
+  - Storage (1B.7d): `now_playing.artwork_scale` / `artwork_width` / `artwork_height` are retired; a stored value
+    with them loads through the one normaliser's bridge into the `artwork` record
+    (`Docs/Architecture/Persisted_Input_Compatibility.md`).
+- *What stays overlay-specific (plan 1B.7i audit, grep of `fullscreen_overlay_edit.py`, the owner's
+  `_fullscreen` branches and the overlays' QML).* No parallel gesture solver remains (no corner, edge, wheel, Restore
+  Size, artwork-factor or position-mirroring maths). Kept, each for its reason: (1) the storage adapter
+  (`FullscreenOverlayEdit._apply_edit` / `_place`, `offsets_for_position`, `extent_value`, `_extents_for`,
+  `_drawn_extents`, `_kept_edge`): the overlays' value is resolution-independent (offsets in fractions of the safe
+  area from a corner anchor, extents in ems) and separate from CUSTOM by design, so ordinary geometry is translated
+  into it, with what-is-drawn readback; (2) `edit_frame` (the safe area as the items' edit frame, a declared seam of
+  the owner's `_edit_frame`); (3) the owner's `_fullscreen` branches that are not geometry: the draft's pending state,
+  no close (no enabled state), the Save target (the one overlays value), no Reset to authored, the card item's Rotate
+  Widget Content; (4) `ExpandedOverlaySlot.qml`'s placement (corner anchor, stacking, the card's control reserves)
+  and the QML's `containX`/`containY`: a part's record is in ems while the block's size follows its text, so a stored
+  record can exceed the block and is drawn at its edge (8 Nov decision; the child editor contains live gestures as on
+  every widget).
+- *Saved profiles (plan 1B.7h, geometry and storage).* Three profile fixtures (the canonical value with Settings
+  options only, right corners, a pre-1B.7 Fullscreen Edit profile with offsets, scale, extents and child records)
+  rendered off-screen at 100 % and 150 % with main (06cf12d7) and with 1B.7: every overlay and part rectangle is
+  identical (largest difference 0.00 px); the pixels differ only where the artwork border now takes the Media
+  widget's artwork look (the lead's narrowing of h). Evidence:
+  `.artifacts/evidence/visualizers/expanded/20261111_now_playing_contract/h_saved_profiles/` (geometry.json and
+  PNGs before/after). The Media card after every slice: within the harness's own 1-level text-crossfade noise of its
+  pre-1B.7 render, never in the seek band (`a_seekbar_extract/after_all_slices`).
+- *Seek Bar (plan 1B.7g, default off).* `now_playing.seek_bar` (Settings: Fullscreen Mode -> Now Playing -> Seek
+  Bar). Now Playing draws the Media card's one seek bar (`MediaSeekBar.qml`, extracted in 1B.7a) under the metadata
+  (the card's order: metadata, seek, transport), its look from `MediaPresentationModel.seekBarLook`, its fill from the
+  model's `progressFraction` (the Media timeline's own events, no timer), the text box's width and the card's seek
+  height in proportion to the controls. A seek leaves as `seekRequested` -> `expandedOverlaySeekRequested` ->
+  `QuickSceneController.visualizer_overlay_seek_requested` -> `DisplayManager._route_expanded_overlay_seek` (the Media
+  Controls' admission and owner order) -> `QuickDisplayUnit.request_media_seek` -> the Media presentation's
+  `request_seek`. Over the Visualizer it holds its own presses, a double-click's second included
+  (`exclusivePress` -> `consumesDoubleClick`). In Fullscreen Edit it is the child part `seek_bar` (the Media card's
+  role and limits).
+- *Snap and guides (plan 1B.7e).* The overlays snap through the ordinary guide owner inside the safe area: its
+  edges bound them (no edge guide is drawn, as in ordinary Edit; the 8 Nov "edge" guide kind is retired), its centre
+  and the other items (the other overlay, the Volume OSD) are guides, published in the Edit layer's coordinates.
+  Shared owner fix: a child move whose release pins it to a corner (`semantic_corner_anchor`, Media's header too) is
+  one undo step, not two.
+- *Alignment as declared roles (plan 1B.7c, 11 Nov; supersedes the 8 Nov position-based mirroring).* Now Playing has
+  one orientation, chosen and stable as the Media card's: its authored side is the anchor corner's (a right corner
+  puts the artwork on the right, the text on its right rails); the `title` role, like Media's header, declares
+  `alignment_flip` and `semantic_corner_anchor`, so its flip glyph (the owner's ordinary `flip_child_alignment`)
+  mirrors the whole block and a move ending in one of the block's corners pins it there (placement compensation
+  folds the pin into its offset when a move detaches it); `artist` and `album` declare `alignment_flip` for their
+  own text alignment on top (Media's `orientedChildAlignment`). Where the block lies on the display never changes it
+  (decided for Media parity: a block moved across the midpoint keeps its side; the flip glyph mirrors it). Shared
+  chrome fix: on a thin role (its 20 px move grip centred) the 30 px flip glyph sits just right of the grip instead
+  of covering it. Also fixed (a product defect behind the d1 "refade" red): the scene controller found the overlays'
+  stage through the Loader's `item` property, a temporary wrapper whose collection invalidated every other holder's
+  wrapper of the stage's children (the Edit layer's Now Playing presentation); it is now found from the retained
+  root.
 - *Artwork (decided; superseded 8 Nov by "Now Playing's parts" below: the artwork is the block's child and has no
   Edit item of its own; `artwork_scale` / `artwork_width` / `artwork_height` still draw as stored and Restore Size
   returns them to canonical).* Now Playing's artwork has its own size factor, `now_playing.artwork_scale` (canonical default,
@@ -867,7 +940,9 @@ can most geometry normally."
   by the safe area) and resize-edge snap (`resolve_resize_edge_snap`: the safe area's centre, the other overlay's
   edges and centre), changes one member and keeps the other exactly (ordinary `content_extent_resize_payload`):
   `text_width` / `text_height` for the toast and the Now Playing text block, `artwork_width` / `artwork_height` for
-  the artwork, all new members of the one value (canonical default = today's look: text `0` = natural, artwork `1`
+  the artwork (plan 1B.7b: Now Playing's parent axes are the ordinary content box again, its text box, as Media's
+  card reflows its content; the 8 Nov "parent axes resize the artwork border" rule is retired and the artwork's size
+  is its child's alone), all new members of the one value (canonical default = today's look: text `0` = natural, artwork `1`
   = square; a value stored before them reads them so, no bridge). Mirrored semantics: the text box is ordinary
   Edit's content box (Media's card elides in a set width and reflows into a set height): a set width elides, a set
   height adds lines (the toast's name and Now Playing's title wrap, then elide; the toast's name is centred in its

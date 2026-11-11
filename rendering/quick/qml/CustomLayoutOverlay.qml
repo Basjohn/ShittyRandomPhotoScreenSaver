@@ -3640,7 +3640,11 @@ Item {
                                     // move and narrow-child resize affordances.
                                     width: 30
                                     height: 30
-                                    x: (childRoleFrame.width - width) / 2.0
+                                    // A thin role's centre is its 20 px move grip: the flip
+                                    // glyph sits just right of it there, never over it.
+                                    x: childRoleFrame.thinMoveTarget
+                                        ? (childRoleFrame.width + thinChildMoveGrip.width) / 2.0 + 2.0
+                                        : (childRoleFrame.width - width) / 2.0
                                     y: (childRoleFrame.height - height) / 2.0
                                     z: 6
                                     color: "transparent"

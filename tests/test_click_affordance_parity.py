@@ -111,8 +111,11 @@ def test_steam_artwork_click_hover_uses_one_full_stroke_language():
 def test_media_seek_and_transport_use_pointer_and_gesture_feedback_without_hover_borders():
     media = _text("MediaPresentation.qml")
 
-    assert 'objectName: "mediaProgressHoverWash"' in media
-    seek = media.split('id: progressSeekArea', 1)[1].split('}', 1)[0]
+    # The seek bar is the shared one (MediaSeekBar.qml), which the card draws.
+    assert "MediaSeekBar {" in media
+    seek_bar = _text("MediaSeekBar.qml")
+    assert 'objectName: "mediaProgressHoverWash"' in seek_bar
+    seek = seek_bar.split('id: seekArea', 1)[1].split('}', 1)[0]
     assert "hoverEnabled: enabled" in seek
     assert "cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor" in seek
     assert "border." not in seek
@@ -130,8 +133,10 @@ def test_media_seek_and_transport_use_pointer_and_gesture_feedback_without_hover
 
     assert "id: systemMuteHover" in media
     assert 'objectName: "mediaAppVolumeInputArea"' in media
-    assert media.count("cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor") >= 2
+    # The volume input area here; the seek area's is the shared seek bar's (above).
+    assert media.count("cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor") >= 1
     assert "Timer {" not in media
+    assert "Timer {" not in seek_bar
 
 
 def test_refresh_glyphs_share_one_hover_and_one_bounded_state_component():

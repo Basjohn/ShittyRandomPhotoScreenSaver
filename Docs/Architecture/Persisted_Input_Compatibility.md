@@ -206,6 +206,20 @@ without the safe path below.
   *Blocked:* copying instead of moving (two live copies), touching per-profile
   files, or keeping per-profile Feeds caches to avoid the bridge.
 
+- **Now Playing's retired artwork block factors** (`core/settings/fullscreen_overlays.py`,
+  `_bridge_artwork_factors`, inside the one normaliser `normalize_fullscreen_overlays`; plan 1B.7d, 2026-11-11).
+  `widgets.spotify_visualizer.fullscreen_overlays.now_playing` once carried `artwork_scale`, `artwork_width` and
+  `artwork_height` (block factors written by Fullscreen Edit's 8 Nov parent handles). The artwork's size now has one
+  carrier, its `artwork` child record; a stored value with those keys multiplies `artwork_scale x artwork_width` into
+  the record's `width_scale` and `artwork_scale x artwork_height` into its `height_scale` (an existing record
+  composes; the role's limits clamp; unit factors add nothing; a malformed factor reads as 1), so the artwork keeps
+  its drawn size. The keys are dropped; the persisted key itself is unchanged. Tests:
+  `tests/test_visualizer_expansion_overlay_settings.py::test_a_value_stored_with_the_retired_artwork_factors_loads_them_into_the_artwork_record`
+  and the saved-profile load test in `tests/test_visualizer_expansion_fullscreen_edit.py` (plan 1B.7f/h).
+  *Horizon:* until the operator closes it (the factors exist only in profiles that used Fullscreen Edit's parent
+  handles between 8 and 11 Nov 2026).
+  *Blocked:* reading the factors in QML again (a second artwork size carrier), or renaming the persisted key.
+
 ### Not debt — current input contracts (do not "simplify")
 
 - **Content-sized CUSTOM placement.** The current v2 entry's existing `size_payload` may carry

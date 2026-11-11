@@ -316,9 +316,7 @@ OverlayWidget {
     }
 
     function seekFractionAt(x, width) {
-        if (width <= 0.0)
-            return 0.0
-        return Math.max(0.0, Math.min(1.0, x / width))
+        return progressTrack.fractionAt(x, width)
     }
 
     readonly property int visibleSectionCount: 1
@@ -724,7 +722,9 @@ OverlayWidget {
             // always-on card-containment contracts, not a second flow owner.
             height: visible ? mediaRoot.canonicalProgressBandHeight : 0.0
 
-            Rectangle {
+            // The one Media seek bar (MediaSeekBar.qml, shared with the Expanded Visualizer's Now Playing), placed and
+            // sized by the card's seek_bar role; the child editor reads the hooks declared here on the host item.
+            MediaSeekBar {
                 id: progressTrack
                 objectName: "mediaProgressTrack"
                 property string customEditMappingDependency: [
@@ -750,71 +750,19 @@ OverlayWidget {
                     * mediaRoot.mediaModel.customSeekWidthScale
                 height: mediaRoot.canonicalProgressTrackHeight
                     * mediaRoot.mediaModel.customSeekHeightScale
-                radius: height / 2.0
-                color: mediaRoot.mediaModel.progressTrackColor
 
-                Rectangle {
-                    objectName: "mediaProgressHoverWash"
-                    anchors.fill: parent
-                    radius: parent.radius
-                    color: progressSeekArea.containsMouse && progressSeekArea.enabled
-                        ? Qt.rgba(mediaRoot.mediaModel.progressFillColor.r,
-                                  mediaRoot.mediaModel.progressFillColor.g,
-                                  mediaRoot.mediaModel.progressFillColor.b, 0.18)
-                        : "transparent"
-                    z: 2
-                }
-
-                Rectangle {
-                    visible: mediaRoot.mediaModel.progressShadowEnabled
-                    x: 0.0
-                    y: 2.0
-                    width: parent.width
-                    height: parent.height
-                    radius: parent.radius
-                    color: mediaRoot.mediaModel.progressShadowColor
-                    z: -2
-                }
-
-                RectangularShadow {
-                    objectName: "mediaProgressGlow"
-                    visible: mediaRoot.mediaModel.progressGlowEnabled
-                        && progressFill.width > 0.0
-                    anchors.fill: progressFill
-                    blur: Math.max(9.0, mediaRoot.mediaModel.progressHeight * 2.0)
-                    spread: Math.max(1.0, mediaRoot.mediaModel.progressHeight * 0.35)
-                    radius: progressFill.radius
-                    color: mediaRoot.mediaModel.progressGlowColor
-                    offset: Qt.vector2d(0.0, 0.0)
-                    cached: true
-                    z: -1
-                }
-
-                Rectangle {
-                    id: progressFill
-                    objectName: "mediaProgressFill"
-                    width: parent.width * Math.max(
-                        0.0, Math.min(1.0, mediaRoot.mediaModel.progressFraction)
-                    )
-                    height: parent.height
-                    radius: Math.min(width, height) / 2.0
-                    color: mediaRoot.mediaModel.progressFillColor
-                }
-
-                MouseArea {
-                    id: progressSeekArea
-                    objectName: "mediaProgressSeekArea"
-                    anchors.fill: parent
-                    enabled: mediaRoot.mediaModel.interactionEnabled
-                        && mediaRoot.mediaModel.canSeek
-                    hoverEnabled: enabled
-                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    acceptedButtons: Qt.LeftButton
-                    onReleased: function(mouse) {
-                        mediaRoot.seekFractionRequested(
-                            mediaRoot.seekFractionAt(mouse.x, width)
-                        )
-                    }
+                fraction: mediaRoot.mediaModel.progressFraction
+                seekEnabled: mediaRoot.mediaModel.interactionEnabled
+                    && mediaRoot.mediaModel.canSeek
+                trackColor: mediaRoot.mediaModel.progressTrackColor
+                fillColor: mediaRoot.mediaModel.progressFillColor
+                shadowEnabled: mediaRoot.mediaModel.progressShadowEnabled
+                shadowColor: mediaRoot.mediaModel.progressShadowColor
+                glowEnabled: mediaRoot.mediaModel.progressGlowEnabled
+                glowColor: mediaRoot.mediaModel.progressGlowColor
+                glowBaseHeight: mediaRoot.mediaModel.progressHeight
+                onSeekRequested: function(fraction) {
+                    mediaRoot.seekFractionRequested(fraction)
                 }
             }
         }
