@@ -440,7 +440,7 @@ a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels
 - [ ] Window border material: the border ring takes 1.7b's border-material treatment (one rule for cards and
   windows), inside the +2 px budget (unused: the border stays 4 px).
 
-### 1B.10 Presets (in flight: one Fable Medium agent, the operator's exception to the Opus roster)
+### 1B.10 Presets (Spectrum round 2 interrupted, merge in 1C.7; no Fable agent any more: Opus Medium, low priority)
 
 Supersedes the lead's Spectrum presets 2-15 of 7 Nov (section 3). Every preset must read as unique and visually
 impressive; the agent may ask the lead for a feature or architecture a better look needs, if it is not wasteful.
@@ -560,6 +560,167 @@ closed and always tears down. Queued for the next free Opus High slot.
 - [ ] Extruded Bubble evidence root: move `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
   referenced by `Investigation.md`) to `.artifacts/evidence/visualizers/extruded_bubble/20261020/` and repoint the
   references; nothing deleted.
+
+## 1C. Operator's diagnostic run (11 Nov, evening; ahead of everything in 1B that is not already in flight)
+
+The operator ran the product themselves and reported five defects ("do not rely on me for future runs"). Rule
+for this section and from now on (operator, 11 Nov): the plan holds every task in detail before it is dispatched;
+an agent's brief is its plan item, and its report is checked against the boxes, never taken on trust or kept only
+in the lead's memory. Each item below starts with a root-cause box: the cause is established on the real product
+path (an off-screen reproduction or a Display 1 run), with a negative control, before anything is changed.
+
+### 1C.1 "Spectrum presets did not exist" on first open; the second open worked (owner: Opus Medium)
+
+Likely cause to prove or refute: Spectrum's curated presets were replaced today (slots 2-15 of 7 Nov became 2-10,
+then round 2 renumbers again), so a stored slot or path in the operator's profile no longer resolves; the first
+open raises, something then rewrites the stored slot, and the second open succeeds.
+
+- [ ] Root cause: reproduce off-screen with the real `SettingsDialog` and the real Studio (never a stub host) on a
+  profile copy whose stored Spectrum preset is each of: a retired slot (11-15), a slot whose file was renamed, a
+  user-authored preset, Preset 1. Record the exact message, who raises it and who shows it.
+- [ ] Check the registry too: the test-order fault fixed in batch 3 (`missing authored preset path: spectrum:1`
+  after a save-over-curated round trip) may be the same owner failing in the product after a Save To Preset.
+- [ ] Contract (write it in `Docs/Architecture/Persisted_Input_Compatibility.md`): a stored preset reference that
+  no longer resolves falls back at the owner (the same name if a preset of that name exists, else Preset 1),
+  logs one line, shows no error, and repairs the stored reference once; never a dialog, never a failed open.
+- [ ] The same rule checked for every mode with curated presets (one parametrised test over the mode registry,
+  derived from the canonical preset tree; no preset values or wording pinned).
+- [ ] Removing or renumbering curated presets gets a guard: the preset tree's own test fails when a curated slot
+  disappears without a compatibility entry (so round 2's renumbering cannot repeat this).
+- [ ] Negative control: the reproduction fails on the pre-fix code with the operator's message.
+- [ ] R-NNN entry if the fault predates today (it would then have been silent for every past preset removal).
+
+### 1C.2 Diagonal fullscreen glyphs tear the Visualizer down and rebuild it (owner: Opus High, Expanded Visualizer)
+
+Operator: the move works, "but have a teardown and rebuild, we do not want teardowns and rebuilds unless
+absolutely needed. They are a last resort." This is a standing rule, not only for the glyphs.
+
+- [ ] Root cause: trace one diagonal move (expanded on display A to expanded on display B, and ordinary card on A
+  to expanded on B) through `core/expanded_visualizer_takeover.py`, the DisplayManager and the Visualizer owner;
+  list exactly what is stopped, destroyed and recreated today (engine worker session, mode runtime and its
+  history, GPU resources, QML items, the card), with the log lines that show each.
+- [ ] Decide the minimum per layer and write it into plan 01 (M3c): the engine worker session and the mode's
+  logical state (simulation, history, adaptive levels) survive every display move; GPU resources are rebuilt only
+  where the target window's context cannot share them, and are warmed in the target before the swap; the
+  outgoing view fades and the incoming one fades in (fade, never vanish), with no black or empty frame between.
+- [ ] Implement the move as a retarget of the live owner (the request stays `expand_on_display`), not a
+  stop/start; a teardown remains only for the cases the decision lists, each with its reason.
+- [ ] Proof: a focused test that the engine worker's session id, the runtime object and its revision counter are
+  the same before and after a move in both directions; negative control on the pre-fix code.
+- [ ] Proof on the real product: a D1 run (1B.14 harness) of the move toward Display 1, frames grabbed across
+  the move and reviewed by the lead (no blank frame, the music response continuous); what needs both displays
+  visible is stated, not assumed.
+- [ ] The same audit for the other paths that move or re-admit a Visualizer (Edit's display hop, the hover
+  transfer arrows, a display arrangement change): each either retargets or names why it cannot.
+- [ ] `Docs/Guardrails/` gets the rule ("retarget before rebuild") where presentation changes are preflighted.
+
+### 1C.3 Fullscreen Now Playing: artwork no longer follows the block's size, no side flip, no text group (Opus High)
+
+Operator: the album artwork's size and shape no longer adjust as dimensions are given to or taken from the
+overlay ("X/Y artwork should adjust, media does this well"); moving the block to the other sides of the display
+"did not flip orientation/alignment at all"; and the text metadata needs one group box with an easy-to-reach
+handle so all text moves and adjusts at once. Two of these are behaviours accepted on 10 Nov that the lead's
+1B.7 slice d changed (side handles were made to reflow the text; the flip was moved from screen side to anchor
+corner). Those changes are withdrawn: the Media widget's behaviour is the contract, as the operator first asked.
+
+- [ ] Root cause, on the real product path (off-screen Fullscreen Edit harness and a D1 run): what the Media
+  widget's Edit does to its artwork for an X-only, a Y-only and a corner resize, and what Now Playing does today
+  for the same three gestures; a side-by-side sheet (this is also 1B.7's open evidence gap).
+- [ ] Artwork follows the block: giving or taking width or height changes the artwork's size and shape exactly as
+  the Media widget's artwork does (same owner, same rule, no overlay-only factor); Rounded Artwork and the
+  Media artwork border settings still apply.
+- [ ] Side flip restored: moving the block to the other side of the display flips its orientation and text
+  alignment (left side: artwork left, text left-aligned; right side: mirrored), as accepted on 10 Nov; the
+  title's flip glyph stays as the explicit override, and the rule for top/bottom is stated.
+- [ ] Text group: title, artist, album and the status line sit in one group box that moves and resizes as one,
+  with one handle that is easy to reach (large enough, never under the artwork or off-screen at any anchor);
+  the group's alignment follows the side flip; individual lines keep no separate handles unless Media has them.
+- [ ] The seek bar option keeps its place and width rule with the new group (it follows the group's width).
+- [ ] Persistence: the group's geometry and the artwork's are stored through the existing Now Playing record;
+  old profiles (including today's 1B.7 shape) load through a bridge with a fixture file
+  (`Persisted_Input_Compatibility.md`).
+- [ ] Edit/Arrange parity: the same gestures through Fullscreen Edit and through the ordinary owner give the
+  same stored record (the parity harness pattern).
+- [ ] Proof: before/after sheets for the three gestures and the four sides; a D1 run with a real player session;
+  section 2's "Changed on 11 Nov" entry for Now Playing corrected to what ships.
+
+### 1C.4 Spline Curve's lines escape the card border (owner: Opus Medium, lead pixel review)
+
+Operator: "Lines from Spline Curve slightly escape our borders, nothing from any visualizer should be capable of
+that. Most seen in full but its there in small/normal mode too. No other visualizer mode shows this weakness."
+The mode id is `devcurve`. The operator's crop shows a magenta band crossing the left border near its foot.
+
+- [ ] Root cause: render `devcurve` off-screen on a card with a contrasting border at 1x and at display size,
+  drive it hard (recorded music, its widest line and glow settings), and find which pass writes outside the
+  card's inner edge: line width or glow expanding past the scissor, a pass drawn without the shared clip, a
+  multisample resolve, or the rounded-corner mask.
+- [ ] Fix at the shared owner, not in the mode: whatever clip every Visualizer is given must bound every pass of
+  every mode (so no mode can escape), without retuning the protected QSG/clip optimisations (ce07b991,
+  07486d83, 985b9d53); if the shared clip is already correct and only `devcurve` bypasses it, the bypass goes.
+- [ ] A structural guard: one parametrised off-screen test over every registered mode that no pixel outside the
+  card's inner edge differs from the same frame with the Visualizer hidden (tolerance stated; rounded corners
+  included); negative control: the pre-fix `devcurve` fails it.
+- [ ] The same check at display size (Expanded Visualizer) and with Glass card material on.
+- [ ] Before/after 4x crops of the left and bottom border for `devcurve`; lead pixel review.
+- [ ] R-NNN entry (a contract every mode relied on was not enforced).
+
+### 1C.5 Volume child control: its drop shadow is cut off sharply (owner: the material agent, before M2b's review)
+
+Operator's crop: the Media widget's volume bar (a child material surface) has its drop shadow ending in a hard
+edge instead of fading. First suspect: M2 (63e22431), which changed `ChildMaterialSurface.qml` and the child
+branch of the surface shader; the shadow's extent or the child item's clip may no longer include the blur.
+
+- [ ] Root cause: off-screen 4x crops of the volume bar, the transport bar and the mute button on Glass and on
+  Normal, at main before M1 (533dc7f1), after M1 (4674e801) and after M2 (63e22431); name the commit and the line.
+- [ ] Fix at the owner of the child's shadow (its extent or the clip of its parent), not by removing the shadow;
+  every child control with a shadow is checked, on dark and light themes, both wallpapers.
+- [ ] A structural guard so a child surface's shadow cannot be clipped again: the shadow's painted extent lies
+  inside its item's unclipped bounds (derived from the shadow parameters, no pixel values pinned).
+- [ ] Before/after crops in the M2b evidence folder; lead pixel review.
+
+### 1C.6 SMP full-player mock restored (operator, 11 Nov; `references/` is ignored by git)
+
+Files: `references/ShittyMusicPlayer-Miami-Afterdark-Mock-DETAILS.png` (the annotated full-size player, the
+long-range goal) and `references/SMP Material Surfaces And Vibrancy ONLY Example.png` (a material/vibrancy
+example; operator: "we can do better"). The lead may adjust the mock's UX and the plans.
+
+- [ ] Transcribe the mock and every annotation into a tracked document
+  (`Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_2026-11-11.md`), since the images are not in the
+  repository: layout regions, each annotation as a requirement, and where each lands in plan 02's sections.
+- [ ] Reconcile plan 02 with it: the "Proposal basis" line (it still says the concept image is not in the tree),
+  the tab set (Podcasts becomes Audiobooks as a Library special group with bookmarks and chapters, long term),
+  SMP Edit mode (every element but the title bar movable, sizeable and swappable), the Visualizer / Lyrics /
+  Artist Collage pane with glyph parity, the favourites and library filters, the track menu, alignment rules.
+- [ ] The lead's UX adjustments, each stated with its reason, kept apart from the operator's requirements.
+- [ ] Material direction for SMP noted against today's material track (what the example shows, what ours
+  should do better: real backdrop materials, legible ink by the one ink rule, no inset panels).
+
+### 1C.7 Handover state after the usage limit (11 Nov evening) and the roster change
+
+Roster (operator, 11 Nov evening): the lead is the only Fable "until I say otherwise"; the preset agent is
+dropped from the group and the cap. Its Spectrum work merges as it stands ("still better than what we have
+now"); flaws the lead sees are noted in 1B.10 for an Opus Medium agent "at a point where we do not have more
+significant work". Opus and Sonnet agents resume as the lead sees fit.
+
+- [ ] Neon Lake refinement round (`worktree-agent-a849151c5ede86920`, complete, nine commits): lead pixel review
+  of `indents_staged_drives_sheet.png`, the Growth Density/Region sheet and the two Studio sheets; focused tests
+  on the merge; merge; then 1B.5/1B.6 boxes updated, its three side defects recorded (paused Studio preview
+  shows no reaction; the trace drops clips without PCM silently; the cost probe misses aliased modules), and
+  its two operator write-ups (spire glow on hits, islands) moved to section 2.
+- [ ] Spectrum presets round 2 (`worktree-agent-a6bf350be60bea91b`, interrupted; WIP commits e3249136 and
+  70bd1bc2: Bar Gap control, the five rejected presets removed, Prism to slot 5, Dusk / Voltage / Mood Ring
+  added, the last two mid-tuning): completeness and preset tests on the merge, the lead renders the contact
+  sheets and notes flaws in 1B.10, merge. The removed slots feed 1C.1's guard.
+- [ ] Material M2b (`worktree-agent-a93bb05376d4941fc`, commit a8761c8c, interrupted before its report): the
+  agent resumes (Opus), takes 1C.5 first, then reports M2b against 1B.8's boxes, then M3.
+- [ ] Small boxes batch 3 (`worktree-agent-a6ba0b17824677702`; three commits done: per-frame imports, the
+  release-media default, the preset-registry fixture; WIP 860ee38b: the preset author tool's shape keys, half
+  done; not started: rollback recovery copies, the Extruded Bubble evidence root): the agent resumes.
+- [ ] Small boxes batch 4 (`worktree-agent-a4e50f79894c549ec`; WIP edf2100a: six sibling test files moved onto
+  the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
+  a Medium slot is free after 1C.1 and 1C.4.
+- [ ] Load session: run 11 Nov evening at the gap (no agent running; CPU about 12 %, GPU 4 % before the
+  start); results and what the ten minutes did not cover go to item 7 and the Watchlist.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
@@ -772,9 +933,12 @@ Watchlist entry (operator, 11 Nov).
 reviewer; all agent results pass that review before acceptance, and the lead's audits (pixel review, regressions
 re-run against the pre-change code, tests on the merge) are what keep the hand-overs sound. The other slots are
 Opus 5.5: two Opus High (complex, architectural and visual work), two Opus Medium (simpler and brute-force
-work), and one Sonnet 5.5 Medium for documents and research when needed. No Fable agents: the native-core
-sequence (section 1 item 8b) and the material track (1B.8) run in these slots; presets (1B.10) alone go to one
-Fable Medium agent (operator, 11 Nov: Opus does not handle preset visuals well). Agents run
+work), and one Sonnet 5.5 Medium for documents and research when needed. No Fable agents at all (operator, 11
+Nov evening: the lead is the only Fable "until I say otherwise"; the preset agent is dropped from the group and
+the cap): the native-core sequence (section 1 item 8b), the material track (1B.8) and what is left of the presets
+(1B.10, Opus Medium, when nothing more significant is waiting; the lead judges their pixels) run in these slots.
+The plan holds every task in detail before dispatch: a brief is its plan item, and a report is checked against
+the item's boxes (operator, 11 Nov evening). Agents run
 only the tests related to what they changed, never `--isolated`, never take over a display (off-screen renders
 and captures), and record side defects here instead of ignoring them. Wait for agent reports without status
 polling. An interrupted agent's uncommitted work is preserved as a "WIP (handover)" commit on its branch and the
