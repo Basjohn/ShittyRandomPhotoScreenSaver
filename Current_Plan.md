@@ -510,8 +510,9 @@ Focused proof exists for renderer pixels at non-square extents, prepared Scene3D
 all Studio frame builders; the physical stage and camera remain fixed. Extruded Spectrum retains its frameless
 overflow policy.
 
-- [~] Operator: check Rotate in every mode except Sphere, in ordinary and in fullscreen Edit.
-- [~] Operator: check the rectangle/quarter-turn glyph against Reset Camera.
+- [ ] Lead review of rendered frames (off-screen for ordinary Edit, D1 run of 1B.14 for fullscreen Edit): Rotate in
+  every mode except Sphere, in ordinary and in fullscreen Edit.
+- [ ] Lead review of zoomed glyph crops: the rectangle/quarter-turn glyph against Reset Camera.
 
 ### 1.0b Studio Rotate control
 
@@ -519,9 +520,10 @@ Off-screen proofs cover non-square production pixels, input transforms, preparat
 Preview orientation is per-open state, separate from camera/artwork and desktop CUSTOM orientation; Copy Frame
 captures it.
 
-- [~] Operator: check Studio's Rotate control in every mode except Sphere.
-- [~] Operator: check upright handle labels.
-- [~] Operator: check rotated brush/drag feel.
+- [ ] Studio run (D1, 1B.14 harness), lead review of grabbed frames: Studio's Rotate control in every mode except
+  Sphere.
+- [ ] Same run: upright handle labels.
+- [ ] Same run, drags posted by messages: rotated brush/drag feel (the drag lands where the pointer is).
 
 ### 1.1 Mode switch with no direct cause (Awaiting Logs)
 
@@ -529,31 +531,21 @@ captures it.
   mode, selected preset and runtime generation with the existing mode-transition owner and frame trace.
 - [ ] Distinguish explicit selection, enabled-mode normalization and Settings restoration first.
 
-### 1.2-1.3 Frozen-install validation only
-
-Durable behaviour: `Docs/Reference/Visualizer_Studio.md`; evidence:
-`Docs/Audits/Studio_Camera_And_Fullscreen_Overlay_Self_Audit_2026-11-09.md` and
-`Docs/Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md`.
-
-- [~] On freshly installed Standard and MC builds as an ordinary Windows user: confirm the installer grants Modify
-  on the shared ProgramData Visualizer preset tree **and its existing files**.
-- [~] Save and Save Camera over a shipped preset.
-- [~] Save As and reopen. Source-level file/Qt checks do not establish installed ACLs.
-
 ### 1.4-1.5 Remaining fullscreen visual acceptance
 
 Existing Settings/input/text-layout/Edit checks are green; actual Windows full-layout acceptance is still owed.
 
-- [~] Operator: Media Bar and Floating Glyphs styles.
-- [~] Operator: long metadata fitting.
-- [~] Operator: multiline Edit boxes and optional album, including Save/Cancel.
+- [ ] Fullscreen run on D1 (1B.14 harness), lead review of grabbed frames: Media Bar and Floating Glyphs styles.
+- [ ] Same run: long metadata fitting.
+- [ ] Same run: multiline Edit boxes and optional album, including Save/Cancel.
 
 ### 1.6 Achievement Pulse child placement
 
 The enabled-row regression is green; other families' extent floors are static.
 
-- [~] Check child placement after Settings/fullscreen return with `--geo` (replaying the saved payload on Edit
-  entry must not change the canvas; disabled provider fields must not count as painted capsule rows).
+- [ ] D1 run (1B.14 harness) with `--geo`: check child placement after Settings/fullscreen return (replaying the
+  saved payload on Edit entry must not change the canvas; disabled provider fields must not count as painted capsule
+  rows).
 
 ### 1.7a Studio legibility follow-up
 
@@ -570,10 +562,12 @@ checks use both exact operator wallpapers under `C:\Users\Basjohn\Documents\[4] 
 Studio renders are never-shown alpha compositions, without native DWM proof. Native rounded corners remain open at
 1.9; material transmission is not a clipping fix.
 
-- [~] Operator: compare the supplied widget material screenshots with current cards, especially the good
-  Glass/Frosted volume surfaces, Glass inset/distortion, and Studio panels/tabs/headers/wells.
-- [~] Operator: exercise Settings Opacity Adjust and Widget Opacity Adjust in Style Overrides (-1..1, neutral 0).
-- [~] Operator: live Studio material switching, snap and resize.
+- [ ] Lead review of side-by-side renders (the supplied widget material screenshots beside current cards, both
+  operator wallpapers): especially the good Glass/Frosted volume surfaces, Glass inset/distortion, and Studio
+  panels/tabs/headers/wells.
+- [ ] D1 run (1B.14 harness), lead review of grabbed frames: exercise Settings Opacity Adjust and Widget Opacity
+  Adjust in Style Overrides (-1..1, neutral 0).
+- [ ] Studio run on D1 (1B.14 harness): live Studio material switching, snap and resize, driven by messages.
 - [ ] The remaining unsampled control/delegate inks.
 - [ ] Small isolated GPU checks show an active increase (largest raw whole-frame rise about 0.020 ms for Glass):
   that is not performance neutrality or load acceptance; the load measurement is §1 item 7 (card materials).
@@ -615,8 +609,8 @@ Contract: `Docs/Architecture/Card_Surface_Materials.md` §3.2.1.
 Retained-QML proof covers transformed opposite-edge stability, all-row updates, collision policy, Save/Cancel, Undo,
 slots and fresh-profile hydration.
 
-- [~] Operator: top grips reorder.
-- [~] Operator: solid-span endpoints change start/width and truncation.
+- [ ] D1 run (1B.14 harness), gestures posted by messages: top grips reorder.
+- [ ] Same run: solid-span endpoints change start/width and truncation.
 
 ### 1.9 Settings native corner clipping (next step is 1B.9: the operator's +2 px border allowance)
 
@@ -641,11 +635,11 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 
 ### Awaiting Validation after the focused proofs
 
-- [~] Operator: the changed glyphs.
-- [~] Operator: saves in the frozen build.
-- [~] Operator: camera/child placement round trips.
-- [~] Operator: long fullscreen metadata and controls.
-- [~] Operator: material comparisons on native pixels.
+- [ ] Lead review of zoomed glyph crops (D1 grabbed frames): the changed glyphs.
+- [ ] Frozen run (1B.14): saves in the frozen build.
+- [ ] D1 run (1B.14 harness): camera/child placement round trips.
+- [ ] D1 run (1B.14 harness), lead review of grabbed frames: long fullscreen metadata and controls.
+- [ ] D1 run (1B.14 harness), native frames grabbed: material comparisons on native pixels.
 
 ## 2. Awaiting the operator (eyes, ears, hardware, decisions; details stay at the item)
 
@@ -1203,6 +1197,17 @@ rendering.
 
 - [ ] Inspect the helper/log-path authority before relying on that diagnostic route; do not hide it behind a silent
   local fallback.
+
+**Installed builds as an ordinary Windows user (no such account or fresh install exists to test on; moved from 1.2-1.3)**
+
+Durable behaviour: `Docs/Reference/Visualizer_Studio.md`; evidence:
+`Docs/Audits/Studio_Camera_And_Fullscreen_Overlay_Self_Audit_2026-11-09.md` and
+`Docs/Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md`. Source-level file/Qt checks do
+not establish installed ACLs; the frozen run of 1B.14 covers the artifact, not an installed ProgramData tree.
+
+- [ ] On a freshly installed Standard or MC build as an ordinary Windows user (when one is available): the
+  installer grants Modify on the shared ProgramData Visualizer preset tree **and its existing files**; Save and Save
+  Camera over a shipped preset work; Save As and reopen work. If one fails, fix the installer's ACL grant (R-182).
 
 **Frozen release gate (operator scheduled)**
 
