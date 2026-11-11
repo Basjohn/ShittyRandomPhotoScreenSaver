@@ -432,7 +432,7 @@ a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels
 - [ ] Window border material: the border ring takes 1.7b's border-material treatment (one rule for cards and
   windows), inside the +2 px budget (unused: the border stays 4 px).
 
-### 1B.10 Presets (in flight: one Opus slot; the lead reviews every preset on pixels)
+### 1B.10 Presets (in flight: one Fable Medium agent, the operator's exception to the Opus roster)
 
 Supersedes the lead's Spectrum presets 2-15 of 7 Nov (section 3). Every preset must read as unique and visually
 impressive; the agent may ask the lead for a feature or architecture a better look needs, if it is not wasteful.
@@ -703,7 +703,8 @@ reviewer; all agent results pass that review before acceptance, and the lead's a
 re-run against the pre-change code, tests on the merge) are what keep the hand-overs sound. The other slots are
 Opus 5.5: two Opus High (complex, architectural and visual work), two Opus Medium (simpler and brute-force
 work), and one Sonnet 5.5 Medium for documents and research when needed. No Fable agents: the native-core
-sequence (section 1 item 8b), the material track (1B.8) and the presets (1B.10) run in these slots. Agents run
+sequence (section 1 item 8b) and the material track (1B.8) run in these slots; presets (1B.10) alone go to one
+Fable Medium agent (operator, 12 Nov: Opus does not handle preset visuals well). Agents run
 only the tests related to what they changed, never `--isolated`, never take over a display (off-screen renders
 and captures), and record side defects here instead of ignoring them. Wait for agent reports without status
 polling. An interrupted agent's uncommitted work is preserved as a "WIP (handover)" commit on its branch and the
