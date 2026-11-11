@@ -69,7 +69,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools import artifact_paths  # noqa: E402
+from tools import artifact_paths, evidence_media  # noqa: E402
 
 #: The rig's display (``owner_production_replay._Host``'s bounds), logical pixels.
 DISPLAY = (1920, 1080)
@@ -488,6 +488,9 @@ def main(argv=None) -> int:
     parser.add_argument("--seconds", type=float, default=5.5)
     parser.add_argument("--skip-controls", action="store_true")
     args = parser.parse_args(argv)
+    # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
+    # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
+    evidence_media.redirect_output(args, "out", "owner_render_parity")
     try:
         import psutil
         psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
@@ -499,9 +502,15 @@ def main(argv=None) -> int:
     from PySide6.QtWidgets import QApplication
 
     app = QApplication(["owner-render-parity"])
-    report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
-                 seconds=args.seconds, controls=not args.skip_controls)
+    try:
+        report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
+                     seconds=args.seconds, controls=not args.skip_controls)
+    except BaseException:
+        evidence_media.finish(1)                # a run that broke: its scratch is kept and its path printed
+        raise
     del app
+    # A run that finished is published whatever its verdict: the frames of a difference are the evidence.
+    evidence_media.finish(0)
     return 0 if report["identical"] else 1
 
 
