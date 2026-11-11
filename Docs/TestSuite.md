@@ -931,6 +931,15 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   one preview (latest wins) for every drag slot (value, colour, gradient); only the dragged key re-shows during the
   gesture; release commits once with one undo entry; Escape restores and drops the held value; keyboard steps commit
   per step; an engine-owned key analyses once, on release. Each with a negative control on the per-move path.
+- `tests/test_studio_drag_io_churn.py` — every registered Studio from a real Settings body on a temporary profile:
+  every drag-capable schema property, the camera (orbit, pan, zoom, dolly), the transport scrub and the terrain brush
+  write nothing while they move (store revision, `SettingsManager` writes/saves/flushes, files written or replaced,
+  INFO+ log lines per move, engine analyses) and commit at most once on release through the tab's one save; an orbit
+  drag rebuilds the inspector once per frame. Negative controls: a save, a file and a log line per move; a rebuild per
+  orbit move.
+- `tests/test_neon_lake_brush_reach.py` — Neon Lake's brush over the presented frame of every shipped preset: all land
+  on the authored grid is paintable; land drawn past the grid (continuation / far hills) is refused today (strict
+  xfail on "every visible land point paintable", 1B.5 open).
 - `tests/test_studio_background_sources.py` — a landing background load never takes the user's source choice;
   failed analyses are shown with Retry.
 - `tests/test_studio_worker_lifetime.py` — Studio clip workers: every worker module exits non-zero within a bound on
