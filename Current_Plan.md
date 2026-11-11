@@ -118,8 +118,12 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 7. One measurement session of at most 10 minutes under game60, only after the operator's yes
 
-Pick the most valuable runs that fit; baselines and evidence paths are in section 3, "Lead, the quiet machine".
+Approved by the operator on 11 Nov ("The machine will not get quieter"). The lead runs it at the first gap in
+which no agent is running tests (a measured run beside agents' GL tests is void by its own conditions), with a
+fixed run list, no reruns, the conditions recorded. Baselines and evidence paths: section 3, "Lead, the quiet
+machine".
 
+- [ ] First reveal on the engine worker against in process under load (closes the Watchlist's latency entry).
 - [ ] A second clean Waveform tick-cut round.
 - [ ] A clean Waveform P4 GC run, and the long run with Settings round trips.
 - [ ] A Settings round-trip run.
@@ -208,8 +212,16 @@ design and closeout docs.
    - [ ] D2: a single consumer and a non-consuming head read for the Python owner; a reader that retains a frame
      needs an explicit drop edge (R-184).
    - [ ] D3: EB geometry once per revision, not per frame (after the worker's Waveform Ribbon step is measured).
-   - [ ] D4: EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check
-     scans a fixed module list and cannot see it).
+   - [ ] D4: EB's fp64 drift solver on Vulkan, at equal quality (operator, 11 Nov: Vulkan is the front, strong,
+     stable face of the product, never the fallback; OpenGL is the fallback). Direction to prove, not yet decided:
+     (a) keep 64-bit floats where the device has them: `shaderFloat64` is a queryable Vulkan device feature
+     through the native handles a C++ core holds (QRhi's own API has no query, which is why the Python path could
+     not ask); (b) for devices and backends without it, the same solver in double-single arithmetic (two 32-bit
+     floats per value, error-free sums and products) or a camera-relative reformulation that keeps the error
+     below the fp64 oracle's visible threshold, judged against the fp64 result on recorded drift; (c) or the
+     drift integrated in the worker in float64 and sent once per revision, if D3's geometry rule makes that
+     natural. Pick by measured error and cost; the shader-readiness check must discover compute sources instead
+     of a fixed module list.
    - [ ] Transport rule for the substrate: nothing through the resource sharer; a name on POSIX, an exact-process
      handle on Windows.
 
@@ -461,14 +473,19 @@ Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us afte
 ### 1B.14 Lead verification harnesses (operator, 11 Nov: "why can you not make tests that exercise these?")
 
 The lead's lapse: these were filed as operator checks. They are testable: a frozen build through GitHub, the
-real product run on Display 1 (the second monitor) for diagnostics, and real audio endpoints. Lead-run only
-(agents build the harnesses and prove them hidden; the lead runs the visible part). Display 0 is never taken;
-each visible run is short, bounded, fails closed and always tears down. Queued for the next free Opus High slot.
+real product run on Display 1 (the second monitor) for diagnostics, and real audio endpoints. **Permissions
+(operator, 11 Nov):** bounded runs on Display 1 are permitted; Display 0 is never taken without permission;
+builds run only through GitHub's workflows, never on this machine's resources. Lead-run only (agents build the
+harnesses and prove them hidden; the lead runs the visible part); each visible run is short, bounded, fails
+closed and always tears down. Queued for the next free Opus High slot.
 
-- [ ] D1 run harness: start the real saver from source on Display 1 only, with diagnostic flags and recorded
-  music, for a bounded time; drive it by messages posted to the saver's own windows (never global input);
-  collect its logs, frame trace and grabbed frames; a watchdog ends it. A tool under `tools/`, opt-in, zero
-  product cost.
+- [ ] A CLI flag that tells the saver which display to use (operator: better than editing diagnostics settings),
+  RUN-only like the existing `--exit-after <seconds>` self-exit flag, which bounds every run. One owner for the
+  display choice; with the flag absent nothing changes; a Linux path or an explicit inert one.
+- [ ] D1 run harness: start the real saver from source on Display 1 only (that flag), with diagnostic flags,
+  recorded music and `--exit-after`, driven by messages posted to the saver's own windows (never global input);
+  collect its logs, frame trace and grabbed frames; a watchdog ends it if the self-exit does not. A tool under
+  `tools/`, opt-in, zero product cost.
 - [ ] Cursor after exit (R-183) on D1 with `tools/cursor_exit_observer.py`: key, click, mouse-move, link click
   (browser launch stubbed), Settings and Media Center exits, the pointer placed over the saver on D1 for the
   run and put back after; a verdict per path. Then R-183 is accepted, or the failing path is fixed at the
