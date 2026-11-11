@@ -44,10 +44,10 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
 - [ ] Native Settings corners: section 1A, item 1.9. Keep their acceptance and reversible checkpoints separate.
-- [~] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
-  test runs on a never-shown window), operator checks:
-  - [~] Edit Reaction Mode while Waveform plays.
-  - [~] Pick Human once.
+- [ ] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
+  test runs on a never-shown window), D1 run (1B.14 harness) with the lead's checks:
+  - [ ] Edit Reaction Mode while Waveform plays (the Studio keeps responding; the sidecar log shows the replay).
+  - [ ] Pick Human once (the clip selection lands once, with its sidecar log line).
 
 ### Item 2. §7.1 Waveform Ribbon reactivity (operator, 7 Nov night: "Adaptivity is the enemy")
 
@@ -55,8 +55,9 @@ Contract: `Docs/Guides/Visualizer_Reactivity_Authoring.md` (§2B, §2C, §13D). 
 `.artifacts/evidence/visualizers/waveform_ribbon/memoryless_reactivity/` (`20261107_lead/`, `20261107_bands/`) and
 `.artifacts/webp/visualizers/waveform_ribbon/memoryless_reactivity/`.
 
-- [~] Frozen Past (Preset 5) live.
-- [~] Pulse Count, Pulse Falloff and Freeze Deflate in the Studio.
+- [ ] Lead review on a rendered showcase WebP on recorded music: Frozen Past (Preset 5), live.
+- [ ] Lead review on rendered Studio frames (D1 run, 1B.14 harness): Pulse Count, Pulse Falloff and Freeze Deflate in
+  the Studio.
 - [ ] Vocals first, remainder: a kick inside sustained bass raises the swell 21% less (median .058 -> .046; those
   kicks also reach Kick Accent now); check it on the operator's look before tuning Pulse Strength's mid-led routing
   further.
@@ -79,22 +80,24 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
   rule is built (`widgets/spotify_visualizer/spectrum_display_bar_count.py`, round(1.2 x) bars, cap 64, resampled
   by the renderer); the width-ratio DSP recompute of plan 01 M2b stays open and needs the hidden activation
   transaction (an engine bar-count change bumps its generation). Spectrum's own edge fade is part of it.
-- [~] Operator's physical look at the expanded card's inset (operator, 7 Nov night: "Don't reach nearly close enough
-  to the screen borders") and at the ordinary widgets and their shadows fading out with it (operator: "Don't really
-  hide/disable the widgets underneath"; 14 logical px at 2560 x 1440 was 30). Complex transitions under the takeover
-  are M4.
+- [ ] Expanded Visualizer on D1 (1B.14 harness), lead review of grabbed frames: the expanded card's inset (operator,
+  7 Nov night: "Don't reach nearly close enough to the screen borders") and the ordinary widgets and their shadows
+  fading out with it (operator: "Don't really hide/disable the widgets underneath"; 14 logical px at 2560 x 1440
+  was 30). Complex transitions under the takeover are M4.
 - [ ] Bright-area text switch (operator's long-term item, plan 01 §G): overlay text white with a soft shadow should
   switch to black over a bright Visualizer area; cheap means no per-frame CPU readback (a `ShaderEffect` on the text
   sampling the already-rendered frame, or a tiny luminance probe only while an overlay shows). Not built.
-- [~] Operator's live look at Show On Hover (`now_playing.hover_reveal`, on main since 0eda39c4) and Now Playing's
-  parts as the block's children in Fullscreen Edit (`now_playing.child_geometry`, 2100fdc2): the feel of the child
-  lock, a part drag and the hover re-fade on the real display.
+- [ ] Now Playing on D1 (1B.14 harness), drag and hover driven by messages, lead review of the frame trace and
+  grabbed frames: Show On Hover (`now_playing.hover_reveal`, on main since 0eda39c4) and Now Playing's parts as the
+  block's children in Fullscreen Edit (`now_playing.child_geometry`, 2100fdc2): the child lock, a part drag and the
+  hover re-fade on the real display.
 - [ ] Side defect (8 Nov): `tests/test_qtquick_system_audio_osd.py::test_osd_colour_inheritance_respects_active_widget_
   theme_and_authored_overrides` fails when run after `tests/test_visualizers_fullscreen_mode_pill.py` in one
   process (passes alone; reproduced on the base): Widget Theme state leaks between the files.
 - [ ] M4 (plan 01 `02_E0_Covered_Display_Admission.md`): the GPU/render-thread measurement with photo changes on the
   other display.
-- [~] M4: the operator's two-monitor look.
+- [ ] M4: the two-monitor look, as a D1 run (1B.14 harness, Expanded Visualizer on D1 with a hidden D0-side owner);
+  what truly needs both displays visible is listed in that report, not assumed.
 
 **Next (admitted, in this order):**
 
@@ -186,8 +189,8 @@ design and closeout docs.
   processes, was taken with the displays asleep and the Visualizer parked).
 - [ ] L4 residual: a blocked cadence thread now fails its session closed at the worker's heartbeat, but the
   blocked thread itself stays in the worker until it returns.
-- [~] Operator: a mode switch on the engine worker no longer leaves a faint ghost of the outgoing mode after its
-  fade-out (R-184: Sphere, Extruded Spectrum, Waveform Ribbon switches).
+- [ ] D1 run (1B.14 harness), lead review of grabbed frames: a mode switch on the engine worker no longer leaves a
+  faint ghost of the outgoing mode after its fade-out (R-184: Sphere, Extruded Spectrum, Waveform Ribbon switches).
 
 3. H3, the Linux worker default: the source flip merged 11 Nov (6c2039b3; `visualizer_engine_worker_platform_
    default` returns the worker on every platform; `--viz-in-process` still chooses in process; a worker that
