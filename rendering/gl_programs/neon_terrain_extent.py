@@ -30,8 +30,6 @@ MAX_GRID_SIZE = HEIGHTFIELD_MAX_SIZE
 GROW_STEP = 16
 # Cells kept between a brush footprint and a grown edge: the cubic surface's support.
 GROW_MARGIN = 2
-_SEED_PASSES = 80           # Richardson passes of the seed solve (error falls by 0.8 a pass)
-_LAND_FLOOR = 1e-6          # seeded land never becomes authored water (exactly zero)
 
 
 def _smoothstep(low: float, high: float, x: float) -> float:
@@ -124,14 +122,12 @@ def extend_heightfield(data: Mapping, left: int, right: int, front: int, back: i
 
 def grow_heightfield(data: Mapping, left: int, right: int, front: int, back: int) -> dict:
     """The grid grown by whole cells on each side without changing what the scene draws: every existing cell is kept
-    exactly, the authored origin stays where it was, and the new cells are seeded so the grid's smooth (cubic) surface
-    over them is the generated landscape that was drawn there (water where it was water).
-
-    The cubic surface smooths its samples, so the seeds are not the drawn heights themselves but the samples whose
-    surface passes through them: a short fixed-point solve over the new cells only.
+    exactly, the authored origin stays where it was, and each new cell stores the height the scene already draws at
+    its point (zero where it has water). The scene adds only a cell's departure from the generated landscape
+    (``neon_terrain_surface.terrain_delta``), which is nothing for these cells until the brush paints them.
     """
     import numpy as np
-    from rendering.gl_programs.neon_terrain_surface import scene_heights
+    from rendering.gl_programs.neon_terrain_surface import scene_heights, seed_heights
 
     record = normalize_heightfield(data)
     size = _checked(record, left, right, front, back)
@@ -144,25 +140,44 @@ def grow_heightfield(data: Mapping, left: int, right: int, front: int, back: int
     columns, rows = (np.arange(size) - left) / (n - 1), (np.arange(size) - front) / (n - 1)
     gu, gv = np.meshgrid(columns, rows)
     base, curve, _outside = scene_heights(old, (x0, y0, cells), gu, gv, (ox, oy, span))
-    water = base == 0.0
-    target = np.where(water, 0.0, curve)
-    values = target.copy()
+    values = seed_heights(base, curve)
     values[front:front + n, left:left + n] = old
-    free = ~water
-    free[front:front + n, left:left + n] = False
-
-    def surface(v):
-        # The cubic surface at the samples themselves: (1, 4, 1) / 6 along each axis, edges repeated.
-        padded = np.pad(v, 1, mode="edge")
-        across = (padded[:, :-2] + 4.0 * padded[:, 1:-1] + padded[:, 2:]) / 6.0
-        return (across[:-2] + 4.0 * across[1:-1] + across[2:]) / 6.0
-
-    for _ in range(_SEED_PASSES):
-        values[free] = np.clip(values[free] + 1.8 * (target - surface(values))[free], _LAND_FLOOR, 1.0)
     heights = values.ravel().tolist()
     return normalize_heightfield({"version": 1, "size": size, "heights": heights,
                                   "basin": [x0 + left, y0 + front, cells],
                                   "origin": [ox + left, oy + front, span]})
+
+
+def overlay_fields(data: Mapping) -> dict:
+    """What the renderer needs of a grown grid besides its cells: ``delta`` (float32 texels, each cell's stored height
+    minus the generated landscape's; zero where unpainted), ``painted`` (the painted cells' bounds in basin uv,
+    left / front / right / back, stepped out to whole ``GROW_STEP`` cells so strokes rarely move it; None while
+    nothing is painted) and ``maximum`` (the authored summit: the origin's and the painted cells' highest, so an
+    unpainted growth leaves it where it was). Empty for a grid that never grew."""
+    if _whole_origin(data):
+        return {}
+    import numpy as np
+    from rendering.gl_programs.neon_terrain_surface import terrain_delta
+
+    n = int(data["size"])
+    x0, y0, cells = heightfield_basin(data)
+    ox, oy, span = heightfield_origin(data)
+    grid = np.asarray(data["heights"], dtype=np.float64).reshape(n, n)
+    delta = terrain_delta(grid, (x0, y0, cells), (ox, oy, span))
+    touched = delta != 0.0
+    maximum = float(grid[oy:oy + span + 1, ox:ox + span + 1].max())
+    painted = None
+    if touched.any():
+        maximum = max(maximum, float(grid[touched].max()))
+        rows, columns = np.flatnonzero(touched.any(axis=1)), np.flatnonzero(touched.any(axis=0))
+
+        def stepped(low: int, high: int) -> tuple[int, int]:
+            low, high = low - GROW_MARGIN, high + GROW_MARGIN
+            return (max(0, GROW_STEP * (low // GROW_STEP)), min(n - 1, GROW_STEP * -(-high // GROW_STEP)))
+
+        (c0, c1), (r0, r1) = stepped(int(columns[0]), int(columns[-1])), stepped(int(rows[0]), int(rows[-1]))
+        painted = [(c0 - x0) / cells, (r0 - y0) / cells, (c1 - x0) / cells, (r1 - y0) / cells]
+    return {"delta": delta.astype("<f4").tobytes(), "painted": painted, "maximum": maximum}
 
 
 def growth_cells(data: Mapping, u: float, v: float, reach: float) -> tuple[int, int, int, int] | None:

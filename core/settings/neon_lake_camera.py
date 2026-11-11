@@ -66,19 +66,35 @@ def terrain_floor(terrain: Mapping, terrain_height: float, half_width: float = N
 
     ``reaction`` is the music's largest lift in lane units (strength x (peaks + pulses + swell)).
     """
-    from rendering.gl_programs.heightfield import heightfield_grid_transform
+    from rendering.gl_programs.heightfield import heightfield_grid_transform, heightfield_origin_rect
     size, heights = _heights(terrain)
     # The render record carries its precomputed transform; a settings record derives it from its basin.
-    grid_left, grid_front, grid_scale = (tuple(terrain["grid"]) if "grid" in terrain
-                                         else heightfield_grid_transform(terrain))
+    if "grid" in terrain:
+        grid_left, grid_front, grid_scale = tuple(terrain["grid"])
+        origin = tuple(terrain.get("origin_rect", (0.0, 0.0, 1.0, 1.0)))
+    else:
+        grid_left, grid_front, grid_scale = heightfield_grid_transform(terrain)
+        origin = heightfield_origin_rect(terrain)
+    grown = origin != (0.0, 0.0, 1.0, 1.0)
+    # The authored origin's own cells: the generated landscape past it reads no others.
+    low_col, low_row, high_col, high_row = (round(value * (size - 1)) for value in origin)
     scale = max(0.0, float(terrain_height))
     lift = _REACTION_HEIGHT * max(0.0, float(reaction))
 
-    def cell_max(u: float, v: float) -> float:
+    def cell_max(u: float, v: float, bounds=(0, 0, size - 1, size - 1)) -> float:
         # The highest of the cell's four samples bounds its smooth surface.
+        c_low, r_low, c_high, r_high = bounds
         col, row = max(0.0, min(1.0, u)) * (size - 1), max(0.0, min(1.0, v)) * (size - 1)
-        c0, r0 = int(col), int(row)
-        return max(heights[r * size + c] for r in (r0, min(size - 1, r0 + 1)) for c in (c0, min(size - 1, c0 + 1)))
+        c0, r0 = max(c_low, min(c_high, int(col))), max(r_low, min(r_high, int(row)))
+        return max(heights[r * size + c] for r in (r0, min(r_high, r0 + 1)) for c in (c0, min(c_high, c0 + 1)))
+
+    def continued(local: float, outside: float) -> float:
+        # The shader's continuation: from the nearest edge down to low rolling ground (water at the
+        # edge instead flows on to the horizon and stays at the ripple floor).
+        if outside > 0.0 and local > 0.0:
+            descent = _smoothstep(*_DESCENT, outside)
+            local = max(_CONTINUATION, local * (1.0 - descent) + _CONTINUATION * descent)
+        return local
 
     def floor(x: float, z: float) -> float:
         r = _COLLISION_RADIUS
@@ -87,13 +103,18 @@ def terrain_floor(terrain: Mapping, terrain_height: float, half_width: float = N
     def floor_at(x: float, z: float) -> float:
         # Basin uv, then the authored grid's uv (it may reach past the basin toward the horizon).
         u, v = ((x / half_width + 1.0) * 0.5 + grid_left) * grid_scale, (-z / DEPTH + grid_front) * grid_scale
-        local = cell_max(u, v)
-        outside = math.hypot(u - max(0.0, min(1.0, u)), v - max(0.0, min(1.0, v))) / grid_scale
-        if outside > 0.0 and local > 0.0:
-            # The shader's continuation: from the nearest edge down to low rolling ground (water at the
-            # grid's edge instead flows on to the horizon and stays at the ripple floor).
-            descent = _smoothstep(*_DESCENT, outside)
-            local = max(_CONTINUATION, local * (1.0 - descent) + _CONTINUATION * descent)
+        if not grown:
+            past = math.hypot(u - max(0.0, min(1.0, u)), v - max(0.0, min(1.0, v))) / grid_scale
+            local = continued(cell_max(u, v), past)
+        else:
+            # The generated land from the origin's edge, as before the grid grew (so growing it never moves the
+            # eye); stored cells past the origin and their carry past the grid's edge can only raise the floor.
+            eu, ev = max(origin[0], min(origin[2], u)), max(origin[1], min(origin[3], v))
+            local = continued(cell_max(eu, ev, (low_col, low_row, high_col, high_row)),
+                              math.hypot(u - eu, v - ev) / grid_scale)
+            if (eu, ev) != (u, v):
+                past = math.hypot(u - max(0.0, min(1.0, u)), v - max(0.0, min(1.0, v))) / grid_scale
+                local = max(local, continued(cell_max(u, v), past))
         land = scale * (local * _DETAIL + (lift if local > 0.0 else 0.0))
         return max(_RIPPLE, land)
 

@@ -214,6 +214,7 @@ _SHORE_HEIGHT_GLSL = """
 
 _TERRAIN = _SHORE_HEIGHT_GLSL + REACTION_GLSL + """
 uniform sampler2D uTerrain;
+uniform sampler2D uTerrainDelta; // a grown grid's overlay (read only while basinGrown())
 uniform int uTerrainSize;
 uniform vec2 uLand; // height, static detail
 uniform float uTime;
@@ -293,31 +294,40 @@ float basinGeneratedCurve(vec2 uv) {
     float continued=max(0.0,boundary+basinContinuation(uv)-base);
     return mix(continued,basinFarHills(uv),smoothstep(1.1,2.2,basinOutside(uv)));
 }
-// Where a grown grid ends, whatever the brush made of its edge eases back into the generated land over the
-// continuation's descent: nothing at all for an unpainted growth, never a wall at a painted one.
-float basinEdgeCarry(vec2 uv,out vec2 edge,out vec2 edgeUv) {
+// A grown grid's cells past the origin are an overlay on the generated land: the scene adds each cell's delta
+// (stored minus generated, uTerrainDelta: zero wherever the brush never painted), smoothed by the land's own cubic.
+// Past the grid's edge the edge's delta eases out over the continuation's descent, so paint never ends in a wall.
+// Returns how much of the delta applies at uv (0: none can) and the grid uv to read it at.
+float basinOverlay(vec2 uv,out vec2 edge) {
     vec2 grid=basinGrid(uv);
     edge=clamp(grid,vec2(0.0),vec2(1.0));
-    edgeUv=edge/uTerrainGrid.z-uTerrainGrid.xy;
+    // Well inside the origin no grown cell is within the cubic's reach.
+    vec2 inner=min(grid-uTerrainOrigin.xy,uTerrainOrigin.zw-grid)*float(uTerrainSize-1);
+    if (min(inner.x,inner.y)>=2.0) return 0.0;
     return 1.0-smoothstep(CONTINUATION_DESCENT.x,CONTINUATION_DESCENT.y,length(grid-edge)/uTerrainGrid.z);
 }
 float basinBase(vec2 uv) {
-    if (basinPastGrid(uv)<1e-6) return sceneHeightfield(uTerrain,uTerrainSize,basinGrid(uv));
+    // On the origin: its stored cells. Past it: the generated land, under the grown cells' overlay.
+    if (basinOutside(uv)<1e-6) return sceneHeightfield(uTerrain,uTerrainSize,basinGrid(uv));
     float generated=basinContinuation(uv);
-    if (!basinGrown() || sceneHeightfieldWater(generated)) return generated;
-    vec2 edge,edgeUv;
-    float carry=basinEdgeCarry(uv,edge,edgeUv);
-    if (carry<=0.0) return generated;
-    return max(1e-6,generated+carry*(sceneHeightfield(uTerrain,uTerrainSize,edge)-basinContinuation(edgeUv)));
+    if (!basinGrown()) return generated;
+    // Water is the stored cells' own (bilinear zero) on the grid and the generated land's past it.
+    if (basinPastGrid(uv)<1e-6) {
+        if (sceneHeightfieldWater(sceneHeightfield(uTerrain,uTerrainSize,basinGrid(uv)))) return 0.0;
+    } else if (sceneHeightfieldWater(generated)) return 0.0;
+    vec2 edge;
+    float overlay=basinOverlay(uv,edge);
+    if (overlay<=0.0) return max(generated,1e-6);
+    return max(1e-6,generated+overlay*sceneHeightfield(uTerrainDelta,uTerrainSize,edge));
 }
 float basinCurve(vec2 uv) {
-    if (basinPastGrid(uv)<1e-6) return sceneHeightfieldCurve(uTerrain,uTerrainSize,basinGrid(uv));
     float generated=basinGeneratedCurve(uv);
-    if (!basinGrown() || sceneHeightfieldWater(basinContinuation(uv))) return generated;
-    vec2 edge,edgeUv;
-    float carry=basinEdgeCarry(uv,edge,edgeUv);
-    if (carry<=0.0) return generated;
-    return max(0.0,generated+carry*(sceneHeightfieldCurve(uTerrain,uTerrainSize,edge)-basinGeneratedCurve(edgeUv)));
+    if (!basinGrown()) return generated;
+    vec2 edge;
+    float overlay=basinOverlay(uv,edge);
+    if (overlay<=0.0) return generated;
+    if (basinPastGrid(uv)>=1e-6 && sceneHeightfieldWater(basinContinuation(uv))) return generated;
+    return max(0.0,generated+overlay*sceneHeightfieldCurve(uTerrainDelta,uTerrainSize,edge));
 }
 float basinDetailFade(vec2 uv) {
     // Detail and glow carry well out over the land toward the horizon before settling into its haze.

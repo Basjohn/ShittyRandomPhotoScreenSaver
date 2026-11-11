@@ -71,18 +71,40 @@ def _subdivided(axis: tuple[float, ...], parts: int) -> tuple[float, ...]:
     return tuple(out)
 
 
+def _reach_parts(axis: tuple[float, ...], cells: int, lead: float, trail: float, low: float, high: float
+                 ) -> tuple[list[int], list[bool], list[bool]]:
+    """Per lattice interval along one axis: how many equal steps bring it to the tier's own cell width (an even
+    count past the origin, so it nests with the camera-side band's halves; 1 on the origin, already that fine),
+    whether the painted bounds (``low`` .. ``high``, basin uv) reach it, and whether it lies past the origin."""
+    inner_low, inner_high = -lead, 1.0 + trail
+    steps, reached, past = [], [], []
+    for a, b in zip(axis, axis[1:]):
+        outside = a < inner_low - 1e-9 or b > inner_high + 1e-9
+        steps.append(max(2, 2 * math.ceil((b - a) * cells / 2.0 - 1e-9)) if outside else 1)
+        reached.append(b > low + 1e-9 and a < high - 1e-9)
+        past.append(outside)
+    return steps, reached, past
+
+
 @lru_cache(maxsize=8)
 def basin_mesh_vertices(cells: tuple[int, int], extent: tuple[float, float, float, float] = NO_EXTENT,
-                        subdivide: int = 1, fine_rows: tuple[float, float] = (-math.inf, math.inf)
-                        ) -> tuple[float, ...]:
+                        subdivide: int = 1, fine_rows: tuple[float, float] = (-math.inf, math.inf),
+                        reach: tuple[float, float, float, float] | None = None) -> tuple[float, ...]:
     """Triangles over the mark lattice. Rows inside ``fine_rows`` (basin v from, to; the camera's side of the basin)
     split every lattice cell ``subdivide`` times along both axes, so the surface (and the ridge lines drawn from its
     silhouette) follows the smooth land between marks there instead of straight segments from mark to mark, where
     the cells are largest on screen. The coarse rows either side fan to the fine rows' extra vertices, so the two
-    never leave a crack; every mark stays exactly a triangle vertex."""
+    never leave a crack; every mark stays exactly a triangle vertex.
+
+    ``extent`` is the authored origin's reach past the basin (the mark lattice's fine part). ``reach`` is the bounds
+    of what the terrain brush has painted past the origin (left, front, right, back in basin uv; None while nothing
+    is): the overscan cells it covers are split to the tier's own cell width, so land painted there has triangles
+    to stand on, while the marks and every triangle outside it stay exactly as they were."""
     parts = int(subdivide)
     if parts < 1:
         raise ValueError('invalid basin mesh subdivision')
+    if reach is not None:
+        return _grown_mesh_vertices(cells, extent, parts, fine_rows, tuple(reach))
     xs, ys = basin_lattice(cells, extent)
     fine_xs = _subdivided(xs, parts)
     points = []
@@ -116,6 +138,68 @@ def basin_mesh_vertices(cells: tuple[int, int], extent: tuple[float, float, floa
             fan(v1, v0)
         else:
             quads(xs, v0, v1)
+    return tuple(points)
+
+
+def _grown_mesh_vertices(cells, extent, parts: int, fine_rows, reach) -> tuple[float, ...]:
+    """The same triangles with the overscan cells under painted far land split finer (``basin_mesh_vertices``).
+
+    Each lattice cell takes whole equal steps per axis: the camera-side band's ``parts``, the grown region's
+    ``_reach_parts`` (even, so the two nest), their product where both apply. A cell whose four edges carry
+    exactly its own steps is a regular patch (an unsplit one is the ordinary two triangles, a band cell the ordinary
+    split); a cell beside a finer neighbour keeps its own triangles where the ordinary fan fits and otherwise fans
+    from its centre to every vertex on its border, so no edge is ever left with a vertex only one side uses."""
+    columns, rows = cells
+    xs, ys = basin_lattice(cells, extent)
+    lead_x, trail_x, lead_y, trail_y = extent
+    steps_x, reached_x, past_x = _reach_parts(xs, columns, lead_x, trail_x, reach[0], reach[2])
+    steps_y, reached_y, past_y = _reach_parts(ys, rows, lead_y, trail_y, reach[1], reach[3])
+    half = parts // 2
+
+    def band(j: int) -> bool:
+        return parts > 1 and fine_rows[0] <= ys[j] and ys[j + 1] <= fine_rows[1]
+
+    def steps(i: int, j: int) -> tuple[int, int]:
+        if not (0 <= i < len(xs) - 1 and 0 <= j < len(ys) - 1):
+            return 1, 1
+        # Under the stored grid and past the origin (on either axis): the grown ring.
+        grown = reached_x[i] and reached_y[j] and (past_x[i] or past_y[j])
+        scale = parts if band(j) else 1
+        return (steps_x[i] if grown else 1) * scale, (steps_y[j] if grown else 1) * scale
+
+    points: list[float] = []
+
+    def split(a: float, b: float, count: int) -> list[float]:
+        return [a + (b - a) * k / count for k in range(count)] + [b]
+
+    for j in range(len(ys) - 1):
+        v0, v1 = ys[j], ys[j + 1]
+        for i in range(len(xs) - 1):
+            u0, u1 = xs[i], xs[i + 1]
+            sx, sy = steps(i, j)
+            below, above = max(sx, steps(i, j - 1)[0]), max(sx, steps(i, j + 1)[0])
+            left, right = max(sy, steps(i - 1, j)[1]), max(sy, steps(i + 1, j)[1])
+            if below == above == sx and left == right == sy:
+                us, vs = split(u0, u1, sx), split(v0, v1, sy)
+                for a, b in zip(vs, vs[1:]):
+                    for c, d in zip(us, us[1:]):
+                        points.extend((c, a, c, b, d, b, c, a, d, b, d, a))
+                continue
+            if sx == sy == 1 and left == right == 1 and sorted((below, above)) == [1, parts] and parts > 1:
+                # The ordinary fan of a coarse cell beside the camera-side band.
+                fine_v, coarse_v = (v0, v1) if below == parts else (v1, v0)
+                edge = split(u0, u1, parts)
+                for k in range(parts):
+                    apex = u0 if k < half else u1
+                    points.extend((edge[k], fine_v, apex, coarse_v, edge[k + 1], fine_v))
+                points.extend((edge[half], fine_v, u0, coarse_v, u1, coarse_v))
+                continue
+            border = ([(u, v0) for u in split(u0, u1, below)[:-1]] + [(u1, v) for v in split(v0, v1, right)[:-1]]
+                      + [(u, v1) for u in reversed(split(u0, u1, above)[1:])]
+                      + [(u0, v) for v in reversed(split(v0, v1, left)[1:])])
+            centre = (0.5 * (u0 + u1), 0.5 * (v0 + v1))
+            for a, b in zip(border, border[1:] + border[:1]):
+                points.extend((*centre, *b, *a))
     return tuple(points)
 
 
