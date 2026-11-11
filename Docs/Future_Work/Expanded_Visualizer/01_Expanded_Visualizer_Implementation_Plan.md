@@ -96,7 +96,9 @@ Prove, not assert, each of these at M1 and again at M6:
 - Edit: entering Edit from the ordinary scene edits the ordinary layout as today. **Entering Edit while expanded
   (operator, 8 Nov; supersedes "entering Edit collapses") stays expanded and edits the full-display overlays' geometry**
   (M3c, built 8 Nov); an active draft is resolved by the session's own Save/Cancel path (§D5); the CUSTOM working
-  override and the ordinary committed geometry are untouched by expansion.
+  override and the ordinary committed geometry are untouched by expansion. **Edit edits the display it was entered on
+  (operator, 11 Nov; plan 1B.1):** entered on another display while expanded, it is an ordinary Edit of every display
+  but the expanded one, which stays expanded and running outside the session (M3c "Edit beside the view").
 - Terminal exit: HUD animations, leases and GL resources retire under the existing render-thread owner; no new
   release path.
 
@@ -169,8 +171,9 @@ alternated against the card size, system conditions recorded (`Docs/Reference/Be
 Expansion is not a layout. It writes no geometry, moves no widget, and collapses to the exact committed layout. The
 Visualizer's resting place is decided by its placement policy (AC-02: `docked_to: media | none`), so a user who has
 arranged the Visualizer away from Media gets it back there. Arrange never shows an expanded state. Edit entered from
-the ordinary scene edits the ordinary layout; Edit entered while expanded edits only the full-display overlays (M3c),
-whose geometry is its own, never the ordinary layout's.
+the ordinary scene edits the ordinary layout; Edit entered on the expanded display edits only the full-display overlays
+(M3c), whose geometry is its own, never the ordinary layout's; Edit entered on another display edits that display's
+ordinary layout (with every other non-expanded display) while the view stays expanded (plan 1B.1).
 
 ### 0.9 Risks
 
@@ -330,7 +333,8 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 - [ ] Initial scene admission resolves mode and monitor **first**, then expanded intent; reveal coordinator gates all new retained roots before exposure. A persisted expanded intent must never cause a cold ordinary-card flash.
 - [ ] Settings opens using current `on_settings_requested`, complete teardown and destruction barrier. The *intent* persists in profile settings. On return, only the new generation may re-admit expanded state; no callbacks from prior QML objects.
 - [ ] Edit entry from expanded stays expanded and opens Fullscreen Edit (M3c; operator 8 Nov, superseding the
-  collapse-on-Edit rule M1 implemented). **If Edit has an active unsaved draft when expansion is requested, prompt/resolve with the current session policy; no implicit discard.** Returning from Edit restores expanded intent only after editor exit and correct readiness, not during drag.
+  collapse-on-Edit rule M1 implemented) on the expanded display; Edit entered on another display edits that display
+  while the view stays expanded (plan 1B.1, M3c "Edit beside the view"). **If Edit has an active unsaved draft when expansion is requested, prompt/resolve with the current session policy; no implicit discard.** Returning from Edit restores expanded intent only after editor exit and correct readiness, not during drag.
 - [ ] Terminal exit releases HUD animations, every local lease, visualizer and GL resources with existing exact retirement; preserve settings but not runtime references.
 - [ ] Restoration on startup/Settings and topology change is idempotent, bounded and has a documented safe state if eligible mode is no longer available.
 
@@ -944,8 +948,50 @@ can most geometry normally."
   corner, above a bottom one), so the overlay stays in bounds the same distance in from the new anchor's edge; an axis
   that would push the overlay out past the new anchor's edge resets to zero. The Fullscreen Mode page uses it.
 - *Other displays (decided).* They keep running as they are, without Edit chrome: Fullscreen Edit edits only the
-  overlays (§0.8); their ordinary layout is edited from an ordinary Edit after collapsing. One Save/Cancel therefore
-  never touches them, which makes the byte-identity structural rather than a check.
+  overlays (§0.8). One Save/Cancel therefore never touches them, which makes the byte-identity structural rather
+  than a check. ~~Their ordinary layout is edited from an ordinary Edit after collapsing.~~ Superseded 11 Nov
+  (operator, plan 1B.1, "D0 becomes impossible to edit"): Edit entered on another display edits it while the view
+  stays expanded (next item).
+- *Edit beside the view (operator, 11 Nov; plan 1B.1, decided).* **Edit edits the display it was entered on.** The
+  operator's report: with two displays and the Visualizer expanded on D1, Edit entered on D0 or D1 opened only D1's
+  Fullscreen Edit, so D0 could not be edited. Cause: the display manager's one Edit entry
+  (`_start_quick_custom_layout_session`) took no entry display and asked the coordinator only whether a takeover was
+  resting expanded (`EditEntered` on EXPANDED always set `edit_fullscreen`), so every entry (menu, double-right, hover
+  glyph) went to the expanded display. Ordinary Edit (no expansion) is one global session: entered from any display
+  it binds every display, and a second entry from another display is the same session. Semantics settled to match it:
+  - Every entry names its display (the context menu's and the double-right shortcut's unit, the hover glyph's
+    source; none named means the view's display). On the expanded display: Fullscreen Edit, unchanged. On any other
+    display: an ordinary Edit of **every display but the expanded one** (the global Edit minus the display it cannot
+    edit), through the same owner and session: `QuickCustomLayoutOwner.start(excluded_units=...)` binds no scene there
+    (no Edit chrome, no item captured, no Visualizer item; transfers only between bound displays). The view stays
+    expanded and running (no collapse transaction, the intent untouched); the reducer marks it `edit_elsewhere`
+    (`EditEntered.on_view_display` False) with Fullscreen Edit's holds, because collapsing would put the view's
+    display back into a layout the session does not hold: the glyph is withdrawn as under every Edit and a stale
+    collapse press waits for the session's own Save/Cancel (declined), an incapable mode request and a transfer are
+    refused, a capable mode switch stays expanded (the Edit has no Visualizer profile to stage). An incapable
+    activation (no user path) collapses the view and the Edit goes on as an ordinary one (it never held the view).
+    Edit begun while an enter, exit or transfer runs is still an ordinary global Edit that collapses at its commit
+    edge. Save/Cancel/Undo/Enter/Esc and the authored-layout quiesce are the ordinary Edit's own (CUSTOM is global).
+  - Shared widgets: the expanded display's copies of a widget on every display (`ALL`) are outside the session but
+    counted (`CustomLayoutSession.hold_copies`, `commit_custom_session(..., held=...)`), so the X on the session copy
+    removes only that copy and Save narrows the route to the held copy's display, exactly as the same edit in a
+    global Edit; the held display's saved geometry is never written.
+  - Menus are per display: Save/Cancel only where the open session edits; a display it does not edit offers Edit
+    Layout. A request from a display the open session does not edit (Fullscreen Edit open and Edit asked on another
+    display, or the reverse) moves Edit there through the session's own Cancel when it holds nothing to lose
+    (`QuickCustomLayoutOwner.unsaved_changes`: Fullscreen Edit's draft, or any item changed since it started);
+    otherwise it waits for that session's Save or Cancel (never discarded or saved implicitly). Settings keeps its
+    rules: held by an unsaved Fullscreen draft from either display; an ordinary Edit is cancelled by it as always.
+  - Reset To Saved Layout in an Edit beside the view resets the families in its session (not the Visualizer's) and
+    rebuilds the generation as every reset does; the replacement re-applies the expansion intent at readiness.
+  Evidence: `tests/test_visualizer_expansion_two_display_edit.py` (the real entry, Save, Cancel, Settings and menu
+  routes, the real coordinator and owner, a real clock display beside the hidden production scene drawn expanded:
+  entry from either display by menu and shortcut with the view on display 0 or 1, red on the pre-fix entry; ordinary
+  Edit with no expansion binds both from either; Save/Cancel on each; a Fullscreen draft against a request from the
+  other display, and the reverse; a shared widget's X; the view's holds), `tests/test_visualizer_expansion_reducer.py`
+  (traces and the invariant walk with the new entry), `tests/test_custom_layout_session.py`,
+  `tests/test_custom_layout_contract.py` (held copies against the global Edit's result). Owed: the operator's
+  physical two-monitor check.
 - *Exits (decided).* An unsaved draft is never discarded or saved implicitly; nothing ends it but the user's own Save
   or Cancel (there is no runtime prompt to reuse: the session's user-choice path is Enter/Esc, the background
   double-click and the menu). The collapse glyph is withdrawn under Edit, as in every Edit, and a stale press is
