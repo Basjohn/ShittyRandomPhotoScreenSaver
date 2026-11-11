@@ -132,8 +132,8 @@ def _pump(rig, seconds: float, until=None) -> None:
 
 
 def test_the_path_follows_the_platform_unless_argv_chooses_it():
-    # No token: the platform default (the engine worker on Windows: tests/test_platform_selection.py; in process on
-    # Linux: tests/test_linux_runtime_branches.py). --viz-engine-worker / --viz-in-process choose; in process wins.
+    # No token: the platform default (the engine worker on every platform: tests/test_platform_selection.py, and
+    # tests/test_linux_runtime_branches.py on Linux). --viz-engine-worker / --viz-in-process choose; in process wins.
     from core.diagnostics import experiment_flags as ef
 
     assert ef.parse_experiment_flags(["main.py", "/s"]).visualizer_engine_worker is None

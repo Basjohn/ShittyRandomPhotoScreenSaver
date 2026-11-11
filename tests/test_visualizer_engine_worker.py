@@ -271,17 +271,20 @@ def test_a_free_running_writer_never_strands_or_tears_a_frame():
 
 @pytest.mark.qt
 def test_a_worker_frame_wakes_the_owner_across_processes(qt_app):
-    import multiprocessing
     import threading
 
     import tools.expanded_visualizer_evidence as evidence
+    from core.visualizer_engine.wake_channel import open_wake_channel
 
     frames = evidence.shipped_clip(0.3).frames
     supervisor = ProcessSupervisor()
     supervisor.register_worker_factory(WorkerType.VISUALIZER, visualizer_worker_main)
     assert supervisor.start(WorkerType.VISUALIZER)
     reader = PacketMailbox(role="reader")
-    receiver, sender = multiprocessing.Pipe(duplex=False)
+    # The wake pipe as the product sends it through the ordered control channel: its writer end on Windows, its name
+    # on POSIX (a raw pipe end is refused there: it could only cross through the resource sharer).
+    channel = open_wake_channel()
+    receiver = channel.receiver
     taken, woke = [], threading.Event()
 
     def on_wake():                                        # what the owner's GUI wake does: take the newest frame
@@ -295,10 +298,11 @@ def test_a_worker_frame_wakes_the_owner_across_processes(qt_app):
     try:
         configured = supervisor.send_request_and_await_response(
             WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE,
-            {"mapping": reader.mapping_name, "mode": "spectrum", "runtime_generation": GENERATION, "wake": sender},
+            {"mapping": reader.mapping_name, "mode": "spectrum", "runtime_generation": GENERATION,
+             "wake": channel.transfer},
             timeout_ms=60_000)
         assert configured is not None and configured.success, configured and configured.error
-        sender.close()                                    # the worker holds its own end now
+        channel.release_sender()                          # the worker holds its own end now
         for index in range(3):
             woke.clear()
             response = supervisor.send_request_and_await_response(
@@ -307,6 +311,7 @@ def test_a_worker_frame_wakes_the_owner_across_processes(qt_app):
             assert woke.wait(10.0), index                 # the frame arrived by a wake, never a poll
         assert taken == [1, 2, 3]
     finally:
+        channel.release_sender()
         supervisor.shutdown()
         reader.close()
 
