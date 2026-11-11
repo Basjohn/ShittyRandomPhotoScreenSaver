@@ -164,7 +164,7 @@ def test_transport_style_survives_save_reload_and_keeps_edit_placement(manager):
         page = tab._fullscreen_page
         value = canonical_fullscreen_overlays()
         value["now_playing"].update(media_controls=True, media_controls_style="bar", offset_x=0.125,
-                                    child_geometry={"title": {"x_offset": 0.04}})
+                                    child_geometry={"metadata": {"x_offset": 0.04}})
         manager.set(FULLSCREEN_OVERLAYS_KEY, value)
         tab.load_from_settings()
         before = deepcopy(page.values())

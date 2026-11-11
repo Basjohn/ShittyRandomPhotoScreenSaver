@@ -1034,6 +1034,9 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   `test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box[False/True]` (the side handles give or
   take the block, the artwork is what `MediaArtworkRule.js` gives it, evaluated as written; the text column is the
   rest; Media's artwork look still applies; red with the artwork height held at its natural size);
+  `test_the_artwork_is_the_same_for_a_short_and_a_very_long_track[corner-box]` (one stored record, a short and a very
+  long track, album present or not: the same artwork rectangle, natural and with a stored box; red on the
+  text-relative share);
   `test_now_playings_orientation_follows_the_side_of_the_display_it_lies_on[...]` and
   `test_moving_now_playing_to_the_other_side_in_fullscreen_edit_flips_it_and_top_or_bottom_does_not` (red on the
   corner-side rule); `test_the_text_group_moves_and_scales_every_line_as_one_with_a_reachable_handle[corner]` (one

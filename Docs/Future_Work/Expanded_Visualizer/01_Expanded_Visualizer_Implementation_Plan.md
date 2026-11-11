@@ -888,18 +888,24 @@ can most geometry normally."
   contract:**
   - *Parent side handles* give or take the **block's** width and height (ordinary Edit's content box, as Media's
     content extent), and the artwork and the text reflow inside it by the Media card's one artwork rule
-    (`rendering/quick/qml/MediaArtworkRule.js`, which `MediaPresentation.qml` now draws through too): the artwork is
-    as tall as the block; its width is its natural width plus 0.35 of the width given (or taken), never under 0.4 of
-    its natural size (the artwork role's own minimum), always leaving the text its room, and never wider than tall;
-    the text group takes the rest of the width. A corner or the wheel scales the whole block. The artwork child record
-    multiplies on top, as on Media. Stored in the same members: `text_height` is the block's height and `text_width`
-    its width beyond the natural artwork column (the artwork's natural side and the gap), so a 1B.7 value (which set
-    the text box beside a natural artwork) draws the same block width. Measured (off-screen sheets, default font):
-    natural 93 x 93; width taken 50 px -> 76 x 93; height given 90 px -> 93 x 183; height taken 24 px -> 69 x 69; width
-    given alone from the square natural artwork leaves it square (Media's "never wider than tall"; Media's own artwork
-    starts portrait, 130 x 147, so its width has room before that bound; with height given first, width given widens it).
-    Consequence of measuring the share against the natural width (which follows the track's text): with a set width, a
-    longer title takes width from the artwork down to its floor and a shorter one gives it back.
+    (`rendering/quick/qml/MediaArtworkRule.js`, which `MediaPresentation.qml` now draws through too), each widget
+    supplying its own spec: the artwork is as tall as the block; its width is its natural width plus 0.35 of the width
+    given (or minus it, taken) beyond the widget's reference width, never under 0.4 of its natural size (the artwork
+    role's own minimum), always leaving the text its room, and at most the spec's widest shape (`maxAspect`: the Media
+    card 1, never wider than tall, its render unchanged; Now Playing 16:9, lead 12 Nov). Now Playing's reference is its
+    natural artwork, the gap and the text's minimum room (2.5 ems, or the Media Controls bar's width): geometry only,
+    so the artwork never changes from one track to the next (lead, 12 Nov); the text group takes the rest of the width
+    and elides. An unset width is the natural block: the artwork keeps its natural width and the block hugs the text.
+    The album row is reserved in the artwork's height whenever the Media widget shows albums (its option, not the
+    track). A corner or the wheel scales the whole block. The artwork child record multiplies on top, as on Media.
+    Stored in the same members: `text_height` is the block's height and `text_width` its width beyond the natural
+    artwork column (the artwork's natural side and the gap), so a 1B.7 value (which set the text box beside a natural
+    artwork) draws the same block width (its artwork now reshaped by the rule). Measured (off-screen sheets, default
+    font, title "Midnight City", from the natural block): natural 93 x 93; width given 160 px -> 165 x 93 (16:9);
+    width taken 50 px -> 120 x 93; height given 90 px -> 93 x 183; height taken 24 px -> 93 x 69; corner 142 x 142.
+    The first touch of a width handle steps the artwork from its natural width to the rule's width for that block
+    (the natural block hugs the track's text, the rule's reference does not): for this title +27 px even when width is
+    taken; within a set block, taking width narrows it and giving width widens it.
   - *Orientation* is the side of the display the block's centre lies on (left half: artwork left, text left-aligned;
     right half: mirrored; exactly at the midpoint: left), as accepted on 10 Nov; top and bottom never change it (the
     text sits beside the artwork, centred on it). The block's width does not depend on its side (no binding loop). The

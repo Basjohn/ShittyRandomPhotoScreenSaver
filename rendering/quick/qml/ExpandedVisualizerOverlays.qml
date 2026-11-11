@@ -344,13 +344,20 @@ Item {
             + (albumShown ? textColumn.spacing + Math.ceil(albumMetrics.height) : 0.0)
             + (seekShown ? 2.0 * textColumn.spacing + seekHeight : 0.0)
             + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controlsHeight : 0.0)
+        // The same stack with the album row reserved whenever the Media widget shows albums (its option, never the
+        // current track's text): the artwork's and the block's geometry never change from one track to the next.
+        readonly property bool albumRowReserved: !!overlays.mediaModel && overlays.mediaModel.showAlbum === true
+        readonly property real stackHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistMetrics.height)
+            + (albumRowReserved ? textColumn.spacing + Math.ceil(albumMetrics.height) : 0.0)
+            + (seekShown ? 2.0 * textColumn.spacing + seekHeight : 0.0)
+            + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controlsHeight : 0.0)
         // Seek Bar (plan 1B.7g, default off): the Media card's seek bar (MediaSeekBar.qml, its look from the Media
         // model) under the metadata, the card's seek height in proportion to Now Playing's controls.
         readonly property bool seekShown: options.seekBar === true
         readonly property real seekHeight: Math.max(2.0, Math.round(Number(overlays.seekLook("height", 6.0))
                                                                      * controlsFactor))
         // The natural artwork: a square as tall as the natural block (at least 3.1 ems, at least the text stack).
-        readonly property real artBase: Math.max(Math.round(fontSize * 3.1), Math.ceil(naturalTextHeight))
+        readonly property real artBase: Math.max(Math.round(fontSize * 3.1), Math.ceil(stackHeight))
         readonly property real gap: Math.round(fontSize * 0.55)
         // The natural metadata width: the half-screen cap applies to the unedited layout; the screen's capacity is the
         // final constraint, so long titles fit instead of crossing the edge.
@@ -359,38 +366,45 @@ Item {
         readonly property real naturalTextWidth: Math.min(textWidthLimit,
             Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth,
                               albumShown ? albumText.implicitWidth : 0.0, controlsShown ? controlsWidth : 0.0)))
-        readonly property real naturalBlockWidth: artBase + gap + naturalTextWidth
         // ---- The block's content box (plan 1C.3; the operator: "X/Y artwork should adjust, media does this well").
         // Its side handles are ordinary Edit's content box, as the Media card's content extent: they give or take the
-        // block's width and height, and the artwork and the text group reflow inside it by the Media card's one
-        // artwork rule (MediaArtworkRule.js): the artwork is as tall as the block, its width its natural width plus a
-        // share of the width given (or taken), never under the artwork role's own minimum (0.4 of its natural size),
-        // leaving the text its room and never wider than tall; the text group takes the rest of the width. A corner or
-        // the wheel scales the whole block (``scale``). The artwork child record multiplies on top, as on Media.
+        // block's width and height, and the artwork reflows inside it by the Media card's one artwork rule
+        // (MediaArtworkRule.js) with Now Playing's own spec: the artwork is as tall as the block; its width is its
+        // natural width plus the rule's share of the width given beyond a reference block (the natural artwork, the
+        // gap and the text's minimum room: geometry only), or minus it when width is taken, never under the artwork
+        // role's own minimum (0.4 of its natural size), leaving the text its room, and at most 16:9 (Now Playing may
+        // go landscape; the Media card's spec keeps its artwork never wider than tall). The text group takes the rest
+        // of the width and elides in it. The artwork's size therefore comes only from the stored block geometry, the
+        // font and the shown rows, never from a track's text (lead, 12 Nov). A corner or the wheel scales the whole
+        // block (``scale``). The artwork child record multiplies on top, as on Media.
         // Stored in ems of the block's font (``text_width`` / ``text_height``, 0 = natural): the width as the block's
-        // width beyond its natural artwork column (the artwork's natural side and the gap: so a value written before
-        // 1C.3, when it set the text box beside a natural artwork, draws the same block width), the height as the
-        // block's height (at least the text stack).
+        // width beyond its natural artwork column (the artwork's natural side and the gap: a value written before 1C.3,
+        // when it set the text box beside a natural artwork, draws the same block width), the height as the block's
+        // height (at least the text stack). An unset width is the natural block: the artwork keeps its natural width
+        // and the block hugs the text beside it.
+        readonly property real artMaxAspect: 16.0 / 9.0
         readonly property real artFloor: Math.round(artBase * 0.4)
-        readonly property real textRoom: Math.min(naturalTextWidth,
-                                                  Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0))
+        readonly property real textRoom: Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0)
+        readonly property real artReferenceWidth: artBase + gap + textRoom
         readonly property real boxWidth: setTextWidth > 0.0
             ? Math.round(Math.min(maxBoxWidth, Math.max(artFloor + gap + textRoom, setTextWidth + artBase + gap)))
             : 0.0
         readonly property real boxHeight: setTextHeight > 0.0
-            ? Math.round(Math.min(maxBoxHeight, Math.max(naturalTextHeight, setTextHeight))) : 0.0
-        readonly property real blockWidth: boxWidth > 0.0 ? boxWidth : naturalBlockWidth
+            ? Math.round(Math.min(maxBoxHeight, Math.max(stackHeight, setTextHeight))) : 0.0
         readonly property real blockHeight: boxHeight > 0.0 ? boxHeight : artBase
         readonly property real artWidth: Math.round(ArtworkRule.authoredWidth(
-            ArtworkRule.provisionalWidth(artBase, blockWidth - naturalBlockWidth, blockWidth - gap, textRoom, artFloor),
-            blockHeight))
+            ArtworkRule.provisionalWidth(artBase, boxWidth > 0.0 ? boxWidth - artReferenceWidth : 0.0,
+                                         (boxWidth > 0.0 ? boxWidth : artReferenceWidth) - gap, textRoom, artFloor),
+            blockHeight, artMaxAspect))
         readonly property real artHeight: Math.round(blockHeight)
+        readonly property real naturalBlockWidth: artWidth + gap + naturalTextWidth
+        readonly property real blockWidth: boxWidth > 0.0 ? boxWidth : naturalBlockWidth
         // The text group's column: the block's width beside the artwork.
         readonly property real textColumnWidth: Math.max(1.0, blockWidth - artWidth - gap)
         // Extra block height never manufactures gaps between the metadata rows; it gives a genuinely wrapping
         // title/artist more lines, otherwise the group stays naturally grouped and centred on the artwork.
         readonly property int metadataLines: boxHeight > 0.0
-            ? 1 + Math.max(0, Math.floor((boxHeight - naturalTextHeight + 0.5)
+            ? 1 + Math.max(0, Math.floor((boxHeight - stackHeight + 0.5)
                                        / (titleLineHeight + artistMetrics.height + (albumShown ? albumMetrics.height : 0)))) : 1
         readonly property int titleLines: metadataLines
         readonly property bool albumShown: !!overlays.mediaModel && overlays.mediaModel.showAlbum === true

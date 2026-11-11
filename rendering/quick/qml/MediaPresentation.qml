@@ -617,8 +617,9 @@ OverlayWidget {
                 readonly property real referenceHeight: Math.max(
                     1.0, bottomInColumn - topInColumn
                 )
+                // The Media card's spec: its artwork is never wider than tall.
                 readonly property real authoredArtworkWidth: ArtworkRule.authoredWidth(
-                    provisionalArtworkWidth, referenceHeight
+                    provisionalArtworkWidth, referenceHeight, 1.0
                 )
                 readonly property real artworkStrokeWidth: mediaRoot.scaleAwareStrokeWidth(
                     mediaRoot.mediaModel.artworkBorderWidth

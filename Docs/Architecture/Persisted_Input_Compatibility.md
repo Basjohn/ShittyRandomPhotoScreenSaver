@@ -232,7 +232,7 @@ without the safe path below.
   moves with the group); every other record and member is kept; a value without them is unchanged, so a second load
   does nothing. Not bridged (unchanged members, compatible by construction): `text_width` now measures the block's
   width beyond its natural artwork column, which is exactly the text box a 1B.7 value set beside a natural artwork,
-  so the block draws the same width; `text_height` is now the block's height (a 1B.7 value at or above the natural
+  so the block draws the same width (the artwork inside it is now reshaped by the Media artwork rule); `text_height` is now the block's height (a 1B.7 value at or above the natural
   artwork height draws the same block; one below it, which drew nothing under 1B.7, now shrinks the block and its
   artwork). Tests:
   `tests/test_visualizer_expansion_overlay_settings.py::test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_group`

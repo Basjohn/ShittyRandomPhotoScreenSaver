@@ -840,10 +840,13 @@ def _media_rule_artwork(slot) -> tuple[float, float]:
     def value(name: str) -> float:
         return float(slot.property(name))
 
+    # Now Playing's spec: the share is measured against its reference block (geometry only), up to its widest shape.
+    box = value("boxWidth")
+    extra = box - value("artReferenceWidth") if box > 0.0 else 0.0
+    content = (box if box > 0.0 else value("artReferenceWidth")) - value("gap")
     width = engine.evaluate(
-        f"Math.round(authoredWidth(provisionalWidth({value('artBase')}, "
-        f"{value('blockWidth') - value('naturalBlockWidth')}, {value('blockWidth') - value('gap')}, "
-        f"{value('textRoom')}, {value('artFloor')}), {value('blockHeight')}))").toNumber()
+        f"Math.round(authoredWidth(provisionalWidth({value('artBase')}, {extra}, {content}, "
+        f"{value('textRoom')}, {value('artFloor')}), {value('blockHeight')}, {value('artMaxAspect')}))").toNumber()
     return float(width), float(round(value("blockHeight")))
 
 
@@ -851,8 +854,10 @@ def _media_rule_artwork(slot) -> tuple[float, float]:
 def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_path):
     """Plan 1C.3 (operator, 11 Nov: "X/Y artwork should adjust, media does this well"; withdraws 1B.7d's "the parent
     axes never size the artwork"): Now Playing's parent X/Y handles give or take the block's width and height, and the
-    artwork reflows inside it by the Media card's one artwork rule: as tall as the block, its width its natural width
-    plus a share of the width given or taken, never wider than tall; the text group takes the rest of the width. The
+    artwork reflows inside it by the Media card's one artwork rule with Now Playing's spec: as tall as the block, its
+    width its natural width plus a share of the width given or taken beyond a reference block (geometry only), up to
+    16:9 (the Media card's spec stays "never wider than tall"); the text group takes the rest of the width. Each of
+    the three gestures (width given, width taken, height given) changes the artwork's shape. The
     artwork child record is untouched (it multiplies on top, as on Media). Its border and shape are the Media card's
     artwork look (colour, stroke, Rounded Artwork), not the card chrome. The preset toast's extents keep their own text
     semantics."""
@@ -862,7 +867,9 @@ def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_pat
 
     settings = _manager(tmp_path)
     media = _Media(title="A Considerably Longer Track Title That Wraps")
-    _draw(display, media=media, preset="A Longer Preset Name", config=_projection(_seed(settings)))
+    # A stored block width (test-owned), so every measured gesture below changes an already set box.
+    _draw(display, media=media, preset="A Longer Preset Name",
+          config=_projection(_seed(settings, now_playing={"text_width": 4.0})))
     _open(display)
     edit = _Fullscreen(display, settings)
     assert edit.start()
@@ -892,7 +899,7 @@ def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_pat
     assert float(art_item.property("strokeWidth")) == max(1.5, look["borderWidth"])
     slot = _slot(display, "expandedOverlayNowPlaying")
     before_art = (art_item.width(), art_item.height())
-    assert before_art == _media_rule_artwork(slot) and before_art[0] == before_art[1]     # natural: square
+    assert before_art == _media_rule_artwork(slot)
     before_text = text_block.width()
 
     def follows_the_rule(label: str) -> None:
@@ -903,24 +910,26 @@ def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_pat
         assert abs(text_block.width() - (float(slot.property("blockWidth")) - drawn[0] - gap)) < 1.0, label
         assert edit.frames() == edit.drawn(), label
 
+    follows_the_rule("stored width")
     # Width taken: the artwork narrows (the shape changes), the text column too; the height stays.
-    edit.side("now_playing", "right", -120)
+    edit.side("now_playing", "right", -30)
     _run(display, 60)
     follows_the_rule("width taken")
     assert art_item.width() < before_art[0] and art_item.height() == before_art[1]
     assert text_block.width() < before_text
     assert title.property("truncated") or int(title.property("lineCount")) >= 1
     narrowed = (art_item.width(), art_item.height())
-    # Height given: the artwork grows taller (it is the block's height) and may widen up to square.
+    # Height given: the artwork grows taller (it is the block's height); its width is the width rule's.
     edit.side("now_playing", "bottom", 90)
     _run(display, 60)
     follows_the_rule("height given")
-    assert art_item.height() > narrowed[1] and art_item.width() >= narrowed[0]
-    # Width given back: with the height there to take it, the artwork widens.
+    assert art_item.height() > narrowed[1] and art_item.width() == narrowed[0]
+    # Width given: the artwork widens (landscape allowed, up to 16:9).
     edit.side("now_playing", "right", 160)
     _run(display, 60)
     follows_the_rule("width given")
-    assert art_item.width() > narrowed[0]
+    assert art_item.width() > before_art[0]
+    assert art_item.width() <= art_item.height() * 16.0 / 9.0 + 1.0
     # The block's extra height goes to the title's lines (it wraps or fits into them), never to gaps between rows.
     assert int(layer.findChild(QQuickItem, "expandedOverlayTitle").property("maximumLineCount")) >= 2
     payload = edit.item("now_playing").current_size_payload
@@ -941,6 +950,37 @@ def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_pat
     _run(display, 30)
     assert float(border.property("radius")) == 0.0
     edit.owner.cancel()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("box", [{}, {"text_width": 5.0}, {"text_width": 9.0, "text_height": 5.5}],
+                         ids=["natural", "width", "width_and_height"])
+@pytest.mark.parametrize("corner", ["bottom_left", "top_right"])
+def test_the_artwork_is_the_same_for_a_short_and_a_very_long_track(display, corner, box):
+    """Plan 1C.3 (lead, 12 Nov: "the artwork must not change size from one track to the next"): the artwork's size
+    comes only from the stored block geometry and the rule, never from the current track's text. The same stored
+    record draws the same artwork rectangle for a short track and a very long one (title, artist and album), with the
+    Media widget showing albums, whether the track has an album or not; the text takes what is left and elides."""
+    from tests.test_visualizer_expansion_overlays import _config
+
+    media = _Media(title="Go", artist="X", album="", showAlbum=True)
+    _draw(display, media=media, config=_config(now_playing={"corner": corner, "always_show": True, **box}))
+    _open(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    root = _root(display)
+    art = root.findChild(QQuickItem, "expandedOverlayArtwork")
+    _settle(display, lambda: float(slot.property("presence")) >= 1.0 and slot.property("contentTitle") == "Go")
+    _run(display, 60)
+    short = _rect(art, root)
+    long_title = "An Extraordinarily Long Track Title That Runs On And On Well Past Any Reasonable Width " * 2
+    media.update(title=long_title, artist="A Very Long Artist Credit Featuring Many Others " * 2,
+                 album="A Long Album Name As Well " * 3)
+    _settle(display, lambda: slot.property("contentTitle") == long_title and float(slot.property("contentOpacity")) >= 1.0)
+    _run(display, 60)
+    long = _rect(art, root)
+    assert long == short, (short, long)
+    title = root.findChild(QQuickItem, "expandedOverlayTitle").findChild(QQuickItem, "shadowedTextMain")
+    assert title.property("truncated") or int(title.property("lineCount")) > 1      # the text takes what is left
 
 
 @pytest.mark.qt
@@ -2003,8 +2043,11 @@ def test_a_saved_profile_with_the_retired_artwork_factors_loads_to_the_same_geom
     slot = stage.findChild(QQuickItem, "expandedOverlayNowPlaying")
     art = stage.findChild(QQuickItem, "expandedOverlayArtwork")
     base = float(slot.property("artBase"))
-    # What the factors drew: the block factors times the record's (rounded at each step then), within a pixel.
-    assert abs(art.width() - round(round(base * 1.5 * 1.2) * 1.1)) <= 1
+    # The factors live on in the artwork record, multiplying the size the block gives the artwork. Its height: the
+    # block's (natural here), so exactly what the factors drew. Its width: since plan 1C.3 the stored block width
+    # (``text_width``) also reshapes the artwork by the Media rule, so the record multiplies the rule's width.
+    rule_width, _rule_height = _media_rule_artwork(slot)
+    assert abs(art.width() - round(rule_width * records["artwork"]["width_scale"])) <= 1
     assert abs(art.height() - round(base * 1.5 * 0.8)) <= 1
 
 
