@@ -345,6 +345,47 @@ needed for a steady-state GUI-wake stall; that companion is separately admitted 
 dedicated observer thread is created/retired through the central affinity-lane threading infrastructure so the sampler remains
 independent of product work queues without owning a raw ad-hoc thread or a second product cadence.
 
+### Display 1 run harness (`tools/d1_run.py`, the lead's; 1B.14)
+
+The real saver from source on one named display, bounded, with frames, logs and the frame trace brought back. Lead-run
+for visible runs (operator, 11 Nov: bounded runs on Display 1 are permitted, Display 0 is never taken); agents run it
+only with `--hidden`. `--help` prints the ready recipes (the first: Spline Curve's bar border at the card edge).
+
+```powershell
+.venv\Scripts\python.exe tools\d1_run.py --list-displays
+.venv\Scripts\python.exe tools\d1_run.py --display 1 --profile <copy of %APPDATA%> --mode devcurve --seconds 30 `
+    --step 12:grab:steady_a --crop left-mid --crop bottom-left --zoom 4 --label devcurve_card_edge
+```
+
+- **Launch:** `main_mc.py` (default) or `main.py` with `--only-display <index> --exit-after <seconds> --frame-trace
+  --noupdates` (`--updates` lets it fetch), `--diag NAME` flags (`run_matrix`'s safe set), `--app-arg` experiment tokens,
+  an optional recorded-music `--clip`, from a copy of `--profile` (a folder holding `SRPSS` and `SRPSS_MC`; default
+  `%APPDATA%`, copied): `--mode`/`--preset`/`--viz-set` edit the copy's Visualizer (`visualizer_live_check._prepare_profile`),
+  `--setting DOTTED.KEY=JSON` goes through the copy's real `SettingsManager` and is read back. The runner reuses
+  `visualizer_live_check.isolate_profile_paths` / `install_recorded_music` / `install_invisible_windows`.
+- **Steps** `AT:KIND:ARG`, AT seconds after the first reveal: `grab:LABEL` (the next frame the window renders, read back
+  from its back buffer on its render thread inside `afterRendering`, at the window's device pixels; `QQuickWindow.grabWindow`
+  deadlocks against the saver's Python render nodes), `screen:LABEL` (the composited desktop of that display; refused
+  with `--hidden`), `key:NAME`, `move|click|rclick|dblclick:X,Y` (device-pixel client coordinates) or `:@objectName`
+  (that item's centre), all posted with `PostMessageW` to the saver's own window on that display; the system cursor
+  never moves. An event filter on the window counts what arrived (`d1_state.json` `received`); posted input that never
+  arrived fails a visible run. `--crop` points (`left-mid`, `bottom-left`, ...) of `--item` (default
+  `visualizerCardFrame`) are cut `--crop-size` device pixels square and zoomed `--zoom` times nearest-neighbour.
+- **Fail closed:** refused (exit 2) off Windows, with fewer than two displays, for a missing index, for the primary
+  (Qt's or Windows') without `--allow-primary`, for an unmatched Windows monitor, a step less than 3 s before the
+  self-exit, an unknown setting. A guard (4 Hz) kills the tree when a visible saver window lies on another monitor
+  (exit 5; `--hidden`: when one could show a pixel at all); a watchdog kills it `--startup-grace` + `--teardown-grace`
+  after the deadline (exit 4); a missing reveal, a failed step, no `--exit-after` stop, a non-zero exit, a native
+  fault line or no frame trace is exit 3. The profile copy is deleted on every path (its settings kept beside the results).
+- **Output:** owner scratch, published to `.artifacts/evidence/display/d1_run/<YYYYMMDD>_<label>/` on success (a failed
+  run's scratch is kept and printed): `frames/<label>.png`, `frames/<label>__<crop>_x<zoom>.png`, `d1_state.json` (each
+  step, the window's client size, DPR, screen, the item's logical and device rectangle, the Visualizer's mode and
+  display-wide state), `summary.json`, `plan.json`, `runner.txt`, `logs/` (the frame trace included).
+- **Hidden proof only:** a `--hidden` run proves launch, `--only-display`, the reveal, the steps, the readback (the
+  invisible window still renders: its frames are real), crops, logs, the self-exit and teardown. It cannot prove what the
+  panel shows through DWM, nor posted pointer delivery (Qt drops a posted pointer whose position lies over another
+  window, and the hidden window has an empty region). Tests: `tests/test_d1_run.py`, `tests/test_only_display_cli.py`.
+
 
 `tests/run_chunked.py` is the maintained test-runner entrypoint. Do not add a secondary test-runner facade or bypass the runner's profile-isolation policy.
 

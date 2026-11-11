@@ -504,6 +504,74 @@ def analyse_display_power(trace: Path, edges: list[dict], samples: list[dict]) -
 
 
 # -- the invisible runner (child process) -------------------------------------------------------------------------
+# The three runner-side pieces below are shared with ``tools/d1_run.py`` (the lead's Display 1 run harness).
+
+def isolate_profile_paths(out: Path) -> None:
+    """Runner side: the saver reads and writes ``<out>/profile`` and logs to ``<out>/logs``.
+
+    Explicit path injection, no process environment edits; both resolvers are installed before application imports
+    can retain their path functions.
+    """
+    from core.settings import storage_paths, json_store
+    profile_root=(out/'profile').resolve()
+    storage_paths._appdata_root=lambda:profile_root
+    json_store._default_appdata_dir=lambda:profile_root
+    from core.logging import logger
+    logger._FORCED_LOG_DIR=(out/'logs').resolve()
+
+
+def install_invisible_windows() -> None:
+    """Runner side: every saver display window is presented, yet shows no pixel and takes no click.
+
+    Invisible but presented like a visible window: an empty window region clips every pixel and every click, while
+    the window stays an ordinary (non-layered) one, so its swap is paced by its own display. Opacity 0 or
+    WindowTransparentForInput would make it layered, and a layered window's swap is not vsync-paced (it ran at the
+    90 Hz publication rate on a 60 Hz panel).
+    """
+    from PySide6.QtCore import Qt
+    from rendering.quick import state, window
+
+    flags = state.QuickWindowPolicy.flags
+
+    def invisible_flags(self):
+        return ((flags(self) & ~Qt.WindowType.WindowStaysOnTopHint) | Qt.WindowType.Tool
+                | Qt.WindowType.WindowDoesNotAcceptFocus)
+
+    show_on_screen = window.QuickDisplayWindow.show_on_screen
+    gdi32 = ctypes.WinDLL("gdi32")
+
+    def invisible_show(self):
+        # Placement is committed and the show is only queued: create the native window now, on its screen
+        # (earlier, in __init__, it is created before its screen and the display reads as displaced).
+        show_on_screen(self)
+        _user32.SetWindowRgn(int(self.winId()), gdi32.CreateRectRgn(0, 0, 0, 0), False)
+
+    state.QuickWindowPolicy.flags = invisible_flags
+    window.QuickDisplayWindow.show_on_screen = invisible_show
+
+
+def install_recorded_music(stack, clip: Path, *, clip_start: float, seconds: float, app_args) -> None:
+    """Runner side: recorded music where the loopback would deliver it, and playback truth to match.
+
+    The whole live audio path runs (capture callback, mono mix, DSP, analysis lane) whatever the machine is playing.
+    """
+    from tools.visualizer_replay.live_audio import RecordedLoopback, recorded_pcm
+    from widgets.spotify_visualizer import audio_worker
+    from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
+
+    pcm, rate = recorded_pcm(clip, start=clip_start, seconds=seconds + 60.0)
+    audio_worker.create_audio_capture = lambda config=None: RecordedLoopback(config, pcm, rate)
+    set_playing = QuickDisplayVisualizerOwner.set_playing
+    QuickDisplayVisualizerOwner.set_playing = (
+        lambda self, _playing, *, observed_ts=None: set_playing(self, True, observed_ts=observed_ts))
+    if engine_worker_path(app_args):
+        # The engine worker captures in its own process: every session it hosts plays the same recording on the
+        # worker's audio clock and refuses the device (the link's recorded-capture control, as its gates use it).
+        from widgets.spotify_visualizer import engine_worker_link
+
+        stack.enter_context(engine_worker_link.recorded_capture_for_testing(
+            pcm=pcm[: int(rate * WORKER_PCM_LOOP_S)], pcm_rate=int(rate)))
+
 
 def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float, mode: str,
             display_off: list[tuple[float, float]] | None = None,
@@ -520,64 +588,16 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
         RoundTripMemoryProbe.start_tracing(roundtrip_memory)     # before the application's imports
     from tools import eb_live_phases as phases
 
-    # Isolate the copied profile through explicit runner-side path injection, without process environment edits.
-    # Both resolvers are installed before application imports can retain their path functions.
-    from core.settings import storage_paths, json_store
-    profile_root=(out/'profile').resolve()
-    storage_paths._appdata_root=lambda:profile_root
-    json_store._default_appdata_dir=lambda:profile_root
-    from core.logging import logger
-    logger._FORCED_LOG_DIR=(out/'logs').resolve()
-
+    isolate_profile_paths(out)
     # --usage as the operator always runs: its sampler is part of the live shape (a 15 s GIL-held hitch, 2026-10-31).
     sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)),
                 *app_args, "/s"]
     phases.production_startup()
     if not visible:
-        # Invisible but presented like a visible window: an empty window region clips every pixel and every click,
-        # while the window stays an ordinary (non-layered) one, so its swap is paced by its own display. Opacity 0 or
-        # WindowTransparentForInput would make it layered, and a layered window's swap is not vsync-paced (it ran at
-        # the 90 Hz publication rate on a 60 Hz panel).
-        from PySide6.QtCore import Qt
-        from rendering.quick import state, window
-
-        flags = state.QuickWindowPolicy.flags
-
-        def invisible_flags(self):
-            return ((flags(self) & ~Qt.WindowType.WindowStaysOnTopHint) | Qt.WindowType.Tool
-                    | Qt.WindowType.WindowDoesNotAcceptFocus)
-
-        show_on_screen = window.QuickDisplayWindow.show_on_screen
-        gdi32 = ctypes.WinDLL("gdi32")
-
-        def invisible_show(self):
-            # Placement is committed and the show is only queued: create the native window now, on its screen
-            # (earlier, in __init__, it is created before its screen and the display reads as displaced).
-            show_on_screen(self)
-            _user32.SetWindowRgn(int(self.winId()), gdi32.CreateRectRgn(0, 0, 0, 0), False)
-
-        state.QuickWindowPolicy.flags = invisible_flags
-        window.QuickDisplayWindow.show_on_screen = invisible_show
+        install_invisible_windows()
     stack = contextlib.ExitStack()
     if clip is not None:
-        # Recorded music where the loopback would deliver it, and playback truth to match: the whole live audio
-        # path runs (capture callback, mono mix, DSP, analysis lane) whatever the machine is playing.
-        from tools.visualizer_replay.live_audio import RecordedLoopback, recorded_pcm
-        from widgets.spotify_visualizer import audio_worker
-        from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
-
-        pcm, rate = recorded_pcm(clip, start=clip_start, seconds=seconds + 60.0)
-        audio_worker.create_audio_capture = lambda config=None: RecordedLoopback(config, pcm, rate)
-        set_playing = QuickDisplayVisualizerOwner.set_playing
-        QuickDisplayVisualizerOwner.set_playing = (
-            lambda self, _playing, *, observed_ts=None: set_playing(self, True, observed_ts=observed_ts))
-        if engine_worker_path(app_args):
-            # The engine worker captures in its own process: every session it hosts plays the same recording on the
-            # worker's audio clock and refuses the device (the link's recorded-capture control, as its gates use it).
-            from widgets.spotify_visualizer import engine_worker_link
-
-            stack.enter_context(engine_worker_link.recorded_capture_for_testing(
-                pcm=pcm[: int(rate * WORKER_PCM_LOOP_S)], pcm_rate=int(rate)))
+        install_recorded_music(stack, clip, clip_start=clip_start, seconds=seconds, app_args=app_args)
     phases._install()
     if engine_worker_path(app_args):
         phases._install_frame_take()          # main's per-frame cost on the worker path (the tick runs in the worker)
@@ -693,12 +713,19 @@ def _kill_tree(pid: int) -> None:
     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
 
 
-def _prepare_profile(out: Path, mode: str, preset: int | None, overrides: dict, *, appdata_root=None) -> Path:
-    """Copy MC's settings profile (``SRPSS_MC``) and the shared data root (``SRPSS``); edit only the copy."""
+def _prepare_profile(out: Path, mode: str | None, preset: int | None, overrides: dict, *, appdata_root=None,
+                     settings_folder: str = "SRPSS_MC") -> Path:
+    """Copy MC's settings profile (``SRPSS_MC``) and the shared data root (``SRPSS``); edit only the copy.
+
+    ``settings_folder`` is the profile whose Visualizer is set (``SRPSS`` for the ordinary saver, ``tools/d1_run.py``
+    ``--entry main``); ``mode=None`` copies without touching the Visualizer.
+    """
     appdata = Path(os.environ["APPDATA"]) if appdata_root is None else Path(appdata_root)
     for name in ("SRPSS", "SRPSS_MC"):
         shutil.copytree(appdata / name, out / "profile" / name)
-    path = out / "profile" / "SRPSS_MC" / "settings_v2.json"
+    if mode is None:
+        return out / "profile"
+    path = out / "profile" / settings_folder / "settings_v2.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     visualizer = data["snapshot"]["widgets"]["spotify_visualizer"]
     visualizer["mode"] = mode
@@ -810,11 +837,12 @@ def build_parser() -> argparse.ArgumentParser:
 def parse_app_arg(text: str) -> str:
     """An experiment admission for the saver's argv (``core.diagnostics.experiment_flags``); nothing else reaches it
     (a mode, display or log-root token could make the run visible or move its logs away from the report)."""
-    from core.diagnostics.experiment_flags import experiment_flag_tokens
+    from core.diagnostics.experiment_flags import ONLY_DISPLAY_FLAG, experiment_flag_tokens
 
     token = str(text)
     needs_value = ("--abc-drive", "--abc-layout-slot", "--abc-exclude-seconds")      # only their "=" form is one token
-    if experiment_flag_tokens([token]) != (token,) or token.startswith("--log-dir=") or token in needs_value:
+    if (experiment_flag_tokens([token]) != (token,) or token.startswith(("--log-dir=", ONLY_DISPLAY_FLAG))
+            or token in needs_value):
         raise ValueError(f"--app-arg takes one experiment-flag token (e.g. --viz-in-process), got {token!r}")
     return token
 
