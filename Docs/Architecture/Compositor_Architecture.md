@@ -356,6 +356,13 @@ its button that stays enumerated is not observable and keeps running. Evidence a
 `tools/visualizer_live_check.py --display-off AT:FOR` (`.artifacts/evidence/display/display_power/20261105_display_power/`); tests
 `tests/test_display_power.py`, `tests/test_linux_display_power.py`.
 
+**Hardware findings (6 Nov 2026, moved from the plan).** Diagnostic log 15:06-17:14 with both screens switched off at
+their own buttons showed no console display-off event in any SRPSS log on the operator's machine. The MSI
+(DisplayPort) left the topology while off and was handled; the LG TV (HDMI) stayed enumerated, so screen 0 rendered at
+90 fps with transitions and the Visualizer for ~2 h (32-37% of a core). The TV rejects DDC/CI power queries even while
+on, so there is no signal to read: the overnight check must let Windows' screen timeout turn the displays off.
+Operator decision: no Screens Off command (it would put the burden on the user).
+
 ## 11. Transition model
 
 Transition request/run semantics are display-local, immutable, monotonic, and exactly-once for

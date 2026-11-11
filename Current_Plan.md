@@ -961,131 +961,123 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
-- [~] **Slow startup (operator, 6 Nov 10:30; owners found and fixed, awaiting the operator's cold start):**the 7 s
-  GUI "Feeds delivery" and the sampler's 7.2 s first sample were one `ProcessSupervisor` state lock held across a
-  stuck optional child's stop/start; fixed (lock for dictionary work only, per-role lifecycle lock, a role mid-transition
-  reports "not available"; `tests/test_process_supervisor_availability.py`). The engine init thread no longer waits up
-  to 10 s for the OPTIONAL image_prefetch child's ready signal (10:30:10 to :20): `_start_optional_worker` queues that
-  start on a ThreadManager IO worker (the required IMAGE worker keeps its inline ready wait; supervisor `shutdown()`
-  aborts the wait and the engine stops the supervisor before the ThreadManager; `tests/test_optional_worker_startup.py`).
-  Offline, Feeds cache delivery including the NEWS card model is 0.1-15 ms per source at 18 publishers x 40 stories, so
-  the 166-240 ms `FEED_GUI_DELIVERY` lines at 10:30:40-42 are not reproduced (`_complete` excludes QML) and are treated
-  as the post-block backlog on a 97-100% CPU machine. Open: confirm on the operator's next cold start with `--usage`
-  that no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame and the first `collect_ms` is small; a prefetch
-  batch asked for before the child is ready fails as "not running" (a logged `[PREFETCH]` error; no retry of that batch). Evidence
-  `.artifacts/evidence/lifecycle/slow_startup/20261106_slow_startup/`.
-- [~] **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's physical
-  overnight check):** `core.display_power` pauses rotation, transitions, the Visualizer (parked, capture released) and
-  the clock while the console displays are off (`Docs/Architecture/Compositor_Architecture.md` → Display power).
-  Injected through the real window procedure, a heavy preset went from ~142% of a core / ~10% GPU / 51 swaps/s to ~4% /
-  ~0% / ~0.6 swaps/s while off, and resumed with no publish or swap hole (`.artifacts/evidence/display/display_power/20261105_display_power/`). Still
-  needs real hardware: leave a heavy preset (Waveform Ribbon (`waveform_ribbon`) Preset 1 or Neon Lake (`shockwave_grid`)) overnight with both displays turned off
-  by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
-  the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
-  not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
-  Confirmed on the operator's hardware 6 Nov (diagnostic log 15:06-17:14, both screens switched off at their buttons):
-  no console display-off event in any SRPSS log on this machine. The MSI (DisplayPort) left the topology while off
-  and was handled; the LG TV (HDMI) stayed enumerated, so screen 0 rendered at 90 fps with transitions and the
-  Visualizer for ~2 h (32-37% of a core). The TV rejects DDC/CI power queries even while on, so there is no signal to
-  read; the overnight check must let Windows' screen timeout turn the displays off. Operator decision 6 Nov: no
-  Screens Off command (it would put the burden on the user); they enabled the power plan's display timeout and will
-  report how SRPSS handles it.
-- [~] **Spline Curve (`devcurve`) "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then operator eyes):**
-  loud body owns most of the drawn ceiling (big, smooth: carrier blends to its broad component instead of limiter
-  triangles), kicks ride linear headroom, quiet passages take the band share's rise, swell inside the body's share,
-  tick vectorised (guide §13D → DevCurve). Evidence and before/after WebPs (loud end and a quiet passage, P1/P6) in
-  `.artifacts/evidence/visualizers/devcurve/reactivity/20261105_reactivity/` (`PROGRESS.md`). Open: the strongest preset's bass (Deep Blue)
-  stays ~18% below pre-work main's loud RMS (a smooth wave cannot match a slope-limited triangle at the same slope);
-  the quiet-passage evidence is one recording's cold start (9 kicks); a capped layer shows the swell less (it lives
-  inside the body's share).
-- [ ] **Waveform logical tick starves the render thread under game load (quiet-machine game60, 6 Nov):** Waveform
-  P1/P4 logical tick median 8.5/8.3 ms (p90 14.4/14.0) holding the GIL 73-75% of the time, so render-mode time is
-  16-17 ms and frames drop to 41-44 fps (Neon Lake 89 fps, Spectrum 90, Bubble 63 under the same load; Extruded Bubble
-  5.9 ms / GIL 0.53 / 55 fps is the second case). Offline the Waveform dynamics alone are ~1.3 ms, so the live tick's
-  cost is mostly elsewhere (capture, packet build, field/strand/spark work): profile the LIVE logical tick, then cut
-  it with byte-identical output (Preset 4 bit-exact with the tag). This is the Graphics Backend Decision's "optimise
-  the logical tick first" step before trigger 2 can be judged. Evidence `.artifacts/evidence/performance/live_check/20261106_quiet/`.
-  - **Extruded Bubble part (built 6 Nov; offline proven, live re-measure open):** byte-identical cuts at the owners.
-    These are the contact discovery and far-pair skip, the cluster motion and layout, the cached phase terms, steer
-    with no closure, the wake fast path, the snapshot records, controls re-resolved only on a read value's change,
-    a strict-equality memo for the renderer parameters, struct-packed wake floats and presentation attrs resolved
-    once per spec. Every published frame matches main on 4 recordings x 6 cases (24 replays, 130,926 frames, per-frame
-    digests). `tests/test_extruded_bubble_logical_tick_exactness.py` compares the output against the straightforward
-    forms. The offline P1 tick (`tools/eb_logical_cost_probe.py`, paired with main) went from 2.50 to 2.13 ms median
-    (p90 3.25 to 2.78), about 15%. The tick is now spread thin: contacts 0.38, wakes 0.42 (NumPy flow 0.2), the
-    rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped.
-    **Live, confirmed (lead, quiet machine, game60, before/after alternated, 2 rounds, 6 Nov 14:00):**
-    | Preset | fps (r1 / r2) | late frames (r1 / r2) |
-    |---|---|---|
-    | P1 | 44.9 -> 45.5 / 57.3 -> 63.8 | 32 -> 24.5% / 6.0 -> 2.0% |
-    | P5 | 42.3 -> 52.9 / 62.9 -> 69.2 | 36 -> 8.2% / 2.3 -> 1.5% |
+Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its `[~]`
+validation steps and open side defects.
 
-    Better in every pair. The live tick is only 2-4% lower (5.3-5.6 ms, GIL ~0.5): most of it lies outside the
-    simulation. Evidence `.artifacts/evidence/performance/live_check/20261106_live/` and `.artifacts/evidence/visualizers/extruded_bubble/logical_tick/20261106_logical_tick/`.
-  - **Waveform, same session (main):** P1 / P4 / P7 run at 43.5 / 42.7 / 37.6 fps, tick 8.5-8.7 ms (p90 14-16), GIL
-    0.75, P7 64% late frames. Waveform is now the slowest live mode.
-    **Tick cut (7 Nov, 946e14b3, byte-identical; live re-measure owed).** Profile: the tick is ~1.8 ms of many small
-    NumPy/Python calls (snapshot ~1.0, surge ~0.37, pulse transport ~0.2, scene ~0.1, burst admission 2-4 ms on
-    admitting ticks only); no steady GIL-held C call above ~2.5 ms. Cuts: shared spring terms, cached source Gaussians
-    and shifted grid, direct surge gathers, one float32 fade column, uniform_gradient for Group Wave, scene and capture
-    reads resolved once per configuration/spec, RibbonMaterial's check without astuple. Identity: 31 recorded replays
-    (169,136 frames, every preset and Reaction Mode, P4 included) match main frame by frame;
-    `tests/test_waveform_logical_tick_exactness.py` compares against the pre-cut forms with an fp64-fade negative
-    control. Offline the gain is small (P4 min-of-3 median 3.01 -> 2.94 ms on a loaded machine; quiet-machine phase
-    savings ~0.1-0.2 ms). Every tick above ~16 ms offline, in both builds, is one gen2 GC (86-161 ms, about one per
-    5,500 ticks): the remaining live spikes are GC, not Waveform work. Merged 7 Nov after the lead's mutation audit
-    (§3). Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/logical_tick/20261107_logical_tick/` in the main checkout (local, git-ignored).
-    **Second tick cut (7 Nov, c31350eb, byte-identical; on its branch for the lead's audit).** Profile (sys.monitoring
-    per-line, P4 replay): snapshot ~0.7 ms (packet-only terms rebuilt every tick, the HSV `%` remainders ~0.08 ms,
-    the surge's broadcast gathers ~0.1 ms), capture ~0.3 ms (scene ~0.1, camera re-admission ~0.05, camera refreeze
-    ~0.04, per-tick validation imports ~0.025), burst admission ~2.3 ms per admitting tick (the emitter's cloth
-    evaluation continued an empty side on every in-anchor call), routing clamped every source per target. Cuts: the
-    packet-only terms and surge windows once per packet (~6 Hz), crest/weight and HSV columns once per card set, exact
-    remainder forms (`unit_remainder`, `sector_remainder`), take/put surge gathers, no empty-side continuation,
-    sources clamped once, a camera-admission memo and FrozenFieldsMemo on the runtime, the frame's imports resolved
-    once. Identity: 24 recorded replays (8 recordings with native capture history x P1/P4/P7, 130,944 frames) match
-    main frame by frame; the other 11 recordings cannot be replayed by the Waveform tick on either tree. Offline
-    (alternated pairs, anything_mixed2): tick median -13..-16% in the cleanest pair (P1 1.70 -> 1.45, P4 1.75 -> 1.48,
-    P7 1.74 -> 1.50 ms; p90 -6..-9%), every pair faster; calls per tick 3,137 -> 2,848. overhead_baseline (preview
-    render path, not the tick): branch = main (gl 182, py 7010). **Live, the tick is not its own cost:** one invisible
-    no-load P4 run (branch, 120 s, other processes' CPU 26%) measured a 7.49 ms tick median (duty/GIL share 0.67,
-    51.7 fps, render-mode 10.9 ms) for a tick that replays offline in ~1.5 ms. About 6 ms of each live tick is spent
-    waiting, most likely for the GIL held by the render/GUI threads' Python (each wait can last a 5 ms switch
-    interval). Next step (measure, not tune): record the logical thread's own CPU time (`time.thread_time`) beside the
-    tick's wall time in the live check, so the wait share is a number; switch-interval tuning stays banned by the
-    Performance Optimization Contract. Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/logical_tick/20261107_tick_cut2/`
-    and `.artifacts/evidence/visualizers/waveform_ribbon/live_check/20261107_tick_cut2_p4_noload/` (main checkout).
-- [~] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
-  in source (6058dc7b), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
-  the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
-  closure and prunes only the other Controls styles. `test_every_shipped_qml_import_survives_the_frozen_prune` walks
-  every shipped import's module and DLL closure against the prune. Open: open a Studio from a fresh build.
-- [~] **Widget/Settings material appearance: Awaiting Validation.** The active density/composition work and native
-  evidence are routed through section 1A, items 1.7/1.9. Durable owners: `Docs/Architecture/Card_Surface_Materials.md`
-  and `Docs/Architecture/Settings_Theme_Architecture.md`. Operator-check the inner rim, transport/mute/volume,
-  dark/light palettes and linked material choice in the running app.
-- [~] **Awaiting Validation, material cost under load:** a lead-scheduled transition-heavy material/Normal pair,
-  only within the separately approved measurement session. Small off-screen GPU timings do not replace it.
+**Slow startup (operator, 6 Nov 10:30; owners fixed, awaiting the operator's cold start)**
+
+Evidence `.artifacts/evidence/lifecycle/slow_startup/20261106_slow_startup/`; the held-lock rule is in
+`Docs/Guardrails/Performance_Optimization_Contract.md` section 5, the optional-worker start in its appendix.
+
+- [~] Operator: cold start with `--usage`, then read the log:
+  - [~] No `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame. The 166-240 ms `FEED_GUI_DELIVERY` lines at
+    10:30:40-42 were not reproduced offline (Feeds cache delivery including the NEWS card model is 0.1-15 ms per
+    source at 18 publishers x 40 stories; `_complete` excludes QML) and are treated as the post-block backlog on a
+    97-100% CPU machine.
+  - [~] The first `collect_ms` is small.
+- [ ] Side defect: a prefetch batch asked for before the optional image_prefetch child is ready fails as "not
+  running" (a logged `[PREFETCH]` error); that batch is not retried.
+
+**Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's overnight check)**
+
+Contract: `Docs/Architecture/Compositor_Architecture.md` -> Display power (hardware findings 6 Nov are recorded
+there). Evidence `.artifacts/evidence/display/display_power/20261105_display_power/`.
+
+- [~] Operator: leave a heavy preset (Waveform Ribbon (`waveform_ribbon`) Preset 1 or Neon Lake (`shockwave_grid`))
+  overnight and let Windows' screen timeout turn both displays off (not the panels' own buttons: an HDMI panel that
+  stays enumerated gives no signal and the TV rejects DDC/CI queries; operator decision 6 Nov: no Screens Off
+  command, the burden stays off the user; they enabled the power plan's display timeout and will report how SRPSS
+  handles it). Run with `--frame-trace --usage`, then check:
+  - [~] Task Manager CPU/GPU for the saver while dark.
+  - [~] Wake input reaches the saver.
+  - [~] The first seconds after wake: no stale frame, jump or hitch.
+
+**Spline Curve (`devcurve`) "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then
+operator eyes)**
+
+Contract: guide section 13D -> DevCurve. Evidence and before/after WebPs (loud end and a quiet passage, P1/P6):
+`.artifacts/evidence/visualizers/devcurve/reactivity/20261105_reactivity/` (`PROGRESS.md`).
+
+- [ ] Lead review of the second cut.
+- [~] Operator eyes on the second cut.
+- [ ] Open: the strongest preset's bass (Deep Blue) stays ~18% below pre-work main's loud RMS (a smooth wave cannot
+  match a slope-limited triangle at the same slope).
+- [ ] Open: the quiet-passage evidence is one recording's cold start (9 kicks).
+- [ ] Open: a capped layer shows the swell less (it lives inside the body's share).
+
+**Waveform logical tick starves the render thread under game load (quiet-machine game60, 6 Nov)**
+
+This is the Graphics Backend Decision's "optimise the logical tick first" step before trigger 2 can be judged.
+Evidence `.artifacts/evidence/performance/live_check/20261106_quiet/`. Baseline to beat (main, game60): Waveform
+P1/P4 tick median 8.5/8.3 ms (p90 14.4/14.0), GIL held 73-75%, render-mode 16-17 ms, 41-44 fps; same session
+P1/P4/P7 43.5/42.7/37.6 fps, tick 8.5-8.7 ms (p90 14-16), GIL 0.75, P7 64% late frames; under the same load Neon
+Lake runs 89 fps, Spectrum 90, Bubble 63, Extruded Bubble 5.9 ms / GIL 0.53 / 55 fps.
+
+- [ ] Profile the LIVE logical tick (offline the Waveform dynamics are ~1.3 ms and the whole tick replays in ~1.5 ms;
+  the live cost is elsewhere: capture, packet build, field/strand/spark work). Offline ticks above ~16 ms are gen2
+  GC (86-161 ms, about one per 5,500 ticks), not Waveform work.
+- [ ] Record the logical thread's own CPU time (`time.thread_time`) beside the tick's wall time in the live check,
+  so the wait share is a number. One invisible no-load P4 run (120 s, other processes' CPU 26%) measured a 7.49 ms
+  tick median (duty/GIL share 0.67, 51.7 fps, render-mode 10.9 ms); about 6 ms of each live tick is spent waiting,
+  most likely for the GIL held by the render/GUI threads' Python (each wait can last a 5 ms switch interval).
+  Switch-interval tuning stays banned by the Performance Optimization Contract.
+  Evidence `.artifacts/evidence/visualizers/waveform_ribbon/live_check/20261107_tick_cut2_p4_noload/` (main checkout).
+- [ ] Cut what the profile names, with byte-identical output (Preset 4 bit-exact with tag
+  `waveform-baseline-2026-11-05`).
+- [ ] Live re-measure of Waveform after the two merged tick cuts (lead only, game60 after the operator's yes card).
+
+**Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"); fixed
+in source, confirm on the next build**
+
+Contract: `Spec.md` (frozen QML package contract); `test_every_shipped_qml_import_survives_the_frozen_prune`.
+
+- [~] Operator: open a Studio from a fresh build.
+
+**Widget/Settings material appearance: Awaiting Validation**
+
+Active density/composition work and native evidence: section 1A, items 1.7/1.9. Durable owners:
+`Docs/Architecture/Card_Surface_Materials.md` and `Docs/Architecture/Settings_Theme_Architecture.md`.
+
+- [~] Operator, in the running app:
+  - [~] The inner rim.
+  - [~] Transport, mute and volume.
+  - [~] Dark and light palettes.
+  - [~] Linked material choice.
+
+**Awaiting Validation, material cost under load**
+
+- [~] A lead-scheduled transition-heavy material/Normal pair, only within the separately approved measurement
+  session. Small off-screen GPU timings do not replace it.
+
+**Widget theme legibility (open)**
+
 - [ ] Theme the Weather detail asset icons: they remain white and become faint on pale cards.
 - [ ] Re-author raw linked Widget Theme roles that fail `tools/theme_legibility.py`, especially widget.accent on
   widget.panel/header surfaces; do not equate runtime ink correction with a corrected raw mirror export.
 - [ ] Fix light-theme widget shadows, then inspect actual faint text over the resulting cards; analytic panel
   contrast alone does not account for the shadow's effect.
-- [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
-  pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
-  Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,
-  **Ember Band** (Water), **Lit Glass** (Glass), **Stream Lanes**, **Wake Tint** (Bubbles), **Hero Shell** with Hero
-  Across/Height (Lens). Shells now read as lit glass, micro-bubbles as glass beads in lanes, the band runs where the
-  mock's does and the top-middle is dark. Still short: shells paler and smoother inside than the mock's copper,
-  busy-interior glass, and too many crowded together; embers partly along-stream strokes rather than torn debris; the
-  lower right far too busy (the mock's band fades out there); the shaft corner lacks its bright glittering core; the
-  Hero Shell reads as a soft ring rather than a shell full of bokeh discs; faint surface ripples at the top. Details,
-  numbers, reactivity and cost: Extruded_Bubble/Investigation.md §72-73; evidence
-  `.artifacts/evidence/visualizers/extruded_bubble/deep_red_ocean_pass2/20261106_deep_red_ocean_pass2/`.
-- [ ] **Side defects found in the deep red ocean pass (6 Nov):** the near (defocus) layer stair-steps the rim of a
-  large near shell on some frames (seen with Lit Glass off as well). Also `tools/release_media.py` cannot render
-  Waveform Ribbon showcases: the replay raises "Raw musical replay requires current PCM reanalysis" because
-  `replay_clip` never drives `tools/visualizer_replay/pcm_reanalysis.py`.
+
+**Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent); second pass
+done, awaiting operator eyes**
+
+The mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`. Preset 9 (Deep Red Ocean) only;
+Presets 1-8 stay pixel-identical. Shared controls, each dormant at 0: Ember Grain, Ember Band (Water), Lit Glass
+(Glass), Stream Lanes, Wake Tint (Bubbles), Hero Shell with Hero Across/Height (Lens). Details, numbers,
+reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 72-73; evidence
+`.artifacts/evidence/visualizers/extruded_bubble/deep_red_ocean_pass2/20261106_deep_red_ocean_pass2/`.
+
+- [~] Operator eyes on Preset 9 against the mock.
+- [ ] Shells are paler and smoother inside than the mock's copper, busy-interior glass, and too many crowd together.
+- [ ] Embers are partly along-stream strokes rather than torn debris.
+- [ ] The lower right is far too busy (the mock's band fades out there).
+- [ ] The shaft corner lacks its bright glittering core.
+- [ ] The Hero Shell reads as a soft ring rather than a shell full of bokeh discs.
+- [ ] Faint surface ripples at the top.
+- [ ] Side defect: the near (defocus) layer stair-steps the rim of a large near shell on some frames (seen with Lit
+  Glass off as well).
+- [ ] Side defect: `tools/release_media.py` cannot render Waveform Ribbon showcases: the replay raises "Raw musical
+  replay requires current PCM reanalysis" because `replay_clip` never drives
+  `tools/visualizer_replay/pcm_reanalysis.py`.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
