@@ -302,6 +302,16 @@ OverlayWidget {
             && (mediaRoot.x + mediaRoot.width / 2.0) > mediaRoot.parent.width / 2.0
     accessorySide: appVolumeOnLeft ? "left" : "right"
     accessoryExtent: volumeAccessoryExtent
+    // The volume track's drop shadow (its blur plus its displacement, spread 0) may reach this
+    // far past the lane; the lane's paint boundary takes it in so the shadow fades instead of
+    // ending at the lane edge when the track is edited up against it (Current_Plan.md 1C.5).
+    readonly property real volumeShadowOffsetScale: 1.05
+    readonly property real volumeShadowReach: mediaModel.surfaceShadowEnabled
+        ? Math.max(0.0, mediaModel.surfaceShadowBlur)
+            + Math.max(Math.abs(mediaModel.surfaceShadowOffsetX), Math.abs(mediaModel.surfaceShadowOffsetY))
+                * volumeShadowOffsetScale
+        : 0.0
+    accessoryPaintOutset: mediaModel.appVolumeAvailable ? Math.ceil(volumeShadowReach) + 1.0 : 0.0
     preferredContentWidth: effectivePreferredWidth
     preferredContentHeight: effectivePreferredHeight
 
@@ -1014,10 +1024,14 @@ OverlayWidget {
                 id: appVolumeSlider
                 objectName: "mediaAppVolumeSlider"
                 visible: mediaRoot.mediaModel.appVolumeAvailable
+                // The lane itself: the accessory layer is the lane grown by the
+                // track shadow's reach, and that layer is the external
+                // accessory's paint containment (it clips); card children never
+                // use this lane for geometry or clipping. Clipping again here
+                // would cut the track's shadow square at the lane edge.
                 anchors.fill: parent
-                // The external accessory has its own paint containment; card
-                // children never use this lane for geometry or clipping.
-                clip: true
+                anchors.margins: mediaRoot.accessoryPaintOutset
+                clip: false
 
             Rectangle {
                 id: appVolumeTrack
@@ -1071,6 +1085,7 @@ OverlayWidget {
                 // Volume track keeps the same global direction with a subtle 5%
                 // extra displacement and the same small cached blur.
                 RectangularShadow {
+                    objectName: "mediaAppVolumeTrackShadow"
                     anchors.fill: parent
                     visible: mediaRoot.mediaModel.surfaceShadowEnabled
                     color: mediaRoot.mediaModel.surfaceShadowColor
@@ -1078,8 +1093,8 @@ OverlayWidget {
                     radius: parent.radius
                     spread: 0.0
                     offset: Qt.vector2d(
-                        mediaRoot.mediaModel.surfaceShadowOffsetX * 1.05,
-                        mediaRoot.mediaModel.surfaceShadowOffsetY * 1.05
+                        mediaRoot.mediaModel.surfaceShadowOffsetX * mediaRoot.volumeShadowOffsetScale,
+                        mediaRoot.mediaModel.surfaceShadowOffsetY * mediaRoot.volumeShadowOffsetScale
                     )
                     cached: true
                     z: -1

@@ -91,11 +91,15 @@ function materialTransmission(params, tint, adjustment) {
         * (1 - _term(params[1].w, adjustment)) * (1 - adjustedDensity(tintOpacity, adjustment))
 }
 
-// The panel interior over a uniform grey backdrop: surfaceAt's colour terms (no rim, no
-// Glass sheen, which only lightens), with the grain at its darkest for dark ink.
+// The panel interior over a uniform grey backdrop: surfaceAt's colour terms (no rim), each at
+// its worst for the card's ink, in the shader's order: for dark ink the grain at its darkest
+// (the Glass sheen only lightens, so it is left out); for light ink the face's sheen at its
+// brightest before the legibility layer (whose guard then bounds it, as in the shader) and the
+// grain at its lightest after it.
 function _panelOver(grey, params, tint, panelLimits, ceiling, adjustment, applyPanel) {
     var t = [tint.r, tint.g, tint.b]
     var c = [grey, grey, grey]
+    var lightInk = panelLimits[1] > 0.5
     var pull = _term(params[1].x, adjustment)
     var shift = (_encodedLuma(t) - grey) * pull
     c = [c[0] + shift, c[1] + shift, c[2] + shift]
@@ -106,9 +110,12 @@ function _panelOver(grey, params, tint, panelLimits, ceiling, adjustment, applyP
     c = _mix(c, t, adjustedDensity(tintOpacity, adjustment))
     if (!applyPanel)
         return c
+    if (lightInk && params[2].x > 0) {
+        var sheen = params[2].x * 0.10
+        c = [c[0] + sheen, c[1] + sheen, c[2] + sheen]
+    }
     var unplated = c
     var anchor = panelLimits[0]
-    var lightInk = panelLimits[1] > 0.5
     var currentL = _encodedLuma(c)
     var dense = c
     if (lightInk && currentL > anchor && currentL > 0)
@@ -132,11 +139,13 @@ function _panelOver(grey, params, tint, panelLimits, ceiling, adjustment, applyP
             c = [_encoded(lin[0]), _encoded(lin[1]), _encoded(lin[2])]
         }
     }
+    var grain = 0.5 * params[1].y
     if (!lightInk) {
         var bound = _mix(unplated, [1, 1, 1], ceiling)
         c = [Math.min(c[0], bound[0]), Math.min(c[1], bound[1]), Math.min(c[2], bound[2])]
-        var grain = 0.5 * params[1].y
         c = [c[0] - grain, c[1] - grain, c[2] - grain]
+    } else {
+        c = [c[0] + grain, c[1] + grain, c[2] + grain]
     }
     return [Math.max(0, Math.min(1, c[0])), Math.max(0, Math.min(1, c[1])), Math.max(0, Math.min(1, c[2]))]
 }
@@ -180,15 +189,16 @@ function _contrast(a, b) {
     return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
 }
 
-// Dark ink on its card's bounded surface, corrected the way the Settings variant corrects
-// semantic ink (ui/settings_surface_composition.py _correct_ink): judged at its real alpha
-// (colour alpha x the run's opacity) over both poles; kept when it reads, else its alpha
-// rises, else it darkens toward black keeping its hue. Returns [r, g, b, a, reachable]
-// (straight alpha, colour only: the run's own opacity stays). When even black at the run's
-// own opacity cannot read over the black pole (an item-opacity fade), the result is black
-// and reachable is false: the run then takes a text-local plate (ShadowedText).
-// small: 4.8:1 (4.5 plus the solver's headroom), else 3.2:1.
-function legibleInk(ink, opacity, poles, small) {
+// A text run's ink on its card's composed panel, corrected the way the Settings variant
+// corrects semantic ink (ui/settings_surface_composition.py _correct_ink), on every theme:
+// judged at its real alpha (colour alpha x the run's opacity) over both poles; kept when it
+// reads, else its alpha rises, else it moves toward the card's ink pole keeping its hue
+// (darker toward black on a light panel, lighter toward white on a dark one). Returns
+// [r, g, b, a, reachable] (straight alpha, colour only: the run's own opacity stays). When
+// even the pole at the run's own opacity cannot read (an item-opacity fade), the result is
+// the pole and reachable is false: the run then takes a text-local plate (ShadowedText).
+// small: 4.8:1 (4.5 plus the solver's headroom), else 3.2:1. lightInk: the card's ink pole.
+function legibleInk(ink, opacity, poles, small, lightInk) {
     var ratio = small ? 4.8 : 3.2
     opacity = Math.max(0, Math.min(1, opacity))
     function quality(rgb, alpha) {
@@ -210,12 +220,14 @@ function legibleInk(ink, opacity, poles, small) {
         }
         return [ink.r, ink.g, ink.b, high, true]
     }
-    if (quality([0, 0, 0], opacity) < 1)
-        return [0, 0, 0, 1, false]
-    var lowKeep = 0, highKeep = 1      // fraction of the authored channels kept (1 = authored)
+    var pole = lightInk ? [1, 1, 1] : [0, 0, 0]
+    if (quality(pole, opacity) < 1)
+        return [pole[0], pole[1], pole[2], 1, false]
+    var low = 0, high = 1              // how far the authored channels move toward the pole
     for (var i = 0; i < 12; ++i) {
-        var keep = (lowKeep + highKeep) / 2
-        if (quality([ink.r * keep, ink.g * keep, ink.b * keep], opacity) >= 1) lowKeep = keep; else highKeep = keep
+        var amount = (low + high) / 2
+        if (quality(_mix(rgb, pole, amount), opacity) >= 1) high = amount; else low = amount
     }
-    return [ink.r * lowKeep, ink.g * lowKeep, ink.b * lowKeep, 1, true]
+    var moved = _mix(rgb, pole, high)
+    return [moved[0], moved[1], moved[2], 1, true]
 }

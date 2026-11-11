@@ -103,7 +103,16 @@ def test_media_volume_is_bounded_by_accessory_not_by_card_or_canonical_height() 
     assert 'readonly property real requestedTrackY:' in track
     assert 'height: mediaRoot.customVolumeTrackHeight' in track
     slider = media.split('id: appVolumeSlider', 1)[1].split('id: appVolumeTrack', 1)[0]
-    assert 'clip: true' in slider
+    # The lane is the accessory layer's paint boundary (it clips), grown by the track shadow's
+    # reach; the slider sits back on the lane and does not clip again (1C.5: that cut the
+    # track's shadow square at the lane edge).
+    assert 'anchors.margins: mediaRoot.accessoryPaintOutset' in slider
+    assert 'clip: false' in slider and 'clip: true' not in slider
+    assert 'accessoryPaintOutset: mediaModel.appVolumeAvailable ? Math.ceil(volumeShadowReach)' in media
+    widget = _text(QML / 'OverlayWidget.qml')
+    accessory = widget.split('id: accessoryLayer', 1)[1]
+    assert 'clip: true' in accessory
+    assert 'width: laneWidth + 2.0 * paintOutset' in accessory
     assert 'accessoryContent:' in media and 'accessoryExtent: volumeAccessoryExtent' in media
 
 

@@ -14,8 +14,8 @@ those two (or 1:1 when the text's own luminance lies between them). A heavy blur
 * Widget cards on their material (``--card-materials``): ``widget_material_legibility`` -- each card text role
   over the card's composed legibility panel over a black and a white wallpaper, as the production solver
   (``rendering/quick/qml/MaterialSurface.qml`` / ``SurfaceContrast.js``, evaluated in a QML engine, no window)
-  composes it: dark ink gets the bounded panel and its own corrected ink (Docs/Architecture/
-  Card_Surface_Materials.md 3.3), light ink the floor-holding panel. Pixels:
+  composes it (dark ink on the bounded panel, light ink on the floor-holding panel), each role with its own
+  corrected ink as a text run on that card gets it (Docs/Architecture/Card_Surface_Materials.md 3.3). Pixels:
   ``tools/surface_material_capture.py --legibility``.
 
 Bars: 4.5:1 for small text, 3:1 for large text (WCAG AA). Disabled roles are exempt (inactive controls).
@@ -165,12 +165,9 @@ class _CardMaterialModel:
             item.deleteLater()
         corrected = {}
         for role, ink in inks.items():
-            if light_ink:
-                corrected[role] = ink
-                continue
             value = self._js.evaluate(
                 f"legibleInk({{r: {ink.r / 255}, g: {ink.g / 255}, b: {ink.b / 255}, a: {ink.a / 255}}}, 1.0, "
-                f"{json.dumps(poles)}, true)").toVariant()
+                f"{json.dumps(poles)}, true, {'true' if light_ink else 'false'})").toVariant()
             corrected[role] = Rgba(*(round(255 * channel) for channel in value[:4]))
         return [Rgba(*(round(255 * c) for c in pole)) for pole in poles], light_ink, corrected
 
