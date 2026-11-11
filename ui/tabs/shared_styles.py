@@ -1450,6 +1450,39 @@ def _build_theme_link_button_style() -> str:
 THEME_LINK_BUTTON_STYLE = _build_theme_link_button_style()
 
 
+def _build_theme_filter_input_style() -> str:
+    """The Themes tab's type-in filter: the shared input roles at the Linked button's compact size.
+
+    The stylesheet border stays transparent at the painted width; ``ThemeFilterField`` strokes the
+    ``control.input.border`` outline itself as one continuous path (no seams on translucent borders).
+    """
+
+    return _theme_qss("""
+    QLineEdit#themeFilterInput {
+        color: @@color:control.input.text@@;
+        background-color: @@color:control.input.surface@@;
+        border: 2px solid transparent;
+        border-radius: 14px;
+        padding: 0px 8px 0px 14px;
+        font-family: 'Jost';
+        font-weight: 600;
+        font-size: 14px;
+    }
+    QLineEdit#themeFilterInput:hover {
+        background-color: @@color:control.input.hover_surface@@;
+    }
+    QLineEdit#themeFilterInput:focus {
+        background-color: @@color:control.input.focus_surface@@;
+    }
+    QLineEdit#themeFilterInput:disabled {
+        color: @@rgba:control.input.disabled_text@@;
+    }
+    """)
+
+
+THEME_FILTER_INPUT_STYLE = _build_theme_filter_input_style()
+
+
 def _build_text_secondary_color_style() -> str:
     return f"color: {_theme_qss_color('text.secondary')};"
 
@@ -1696,6 +1729,7 @@ _THEME_STYLE_BUILDERS = {
     "SHADOW_DIRECTION_CELL_STYLE": _build_shadow_direction_cell_style,
     "MODE_TOGGLE_BUTTON_STYLE": _build_mode_toggle_button_style,
     "THEME_LINK_BUTTON_STYLE": _build_theme_link_button_style,
+    "THEME_FILTER_INPUT_STYLE": _build_theme_filter_input_style,
     "TEXT_SECONDARY_COLOR_STYLE": _build_text_secondary_color_style,
     "SLIDER_STYLE": _build_slider_style,
     "CIRCLE_CHECKBOX_STYLE": _build_circle_checkbox_style,
