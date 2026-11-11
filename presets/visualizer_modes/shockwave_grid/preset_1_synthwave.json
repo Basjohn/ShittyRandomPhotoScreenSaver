@@ -275,7 +275,7 @@
         "shockwave_grid_wave_amplitude": 0.85,
         "shockwave_grid_profile_floor": 0.1,
         "shockwave_grid_drop_speed": 1.25,
-        "shockwave_grid_camera_fov": 24,
+        "shockwave_grid_camera_fov": 25,
         "shockwave_grid_auto_rotate": false,
         "shockwave_grid_auto_rotate_after": 20,
         "shockwave_grid_auto_rotate_speed": 4,
@@ -13137,8 +13137,8 @@
     "shockwave_grid_turn": 0.08222222222222247,
     "shockwave_grid_tilt": 0.203,
     "shockwave_grid_scene_scale": 1.2,
-    "shockwave_grid_scene_pan_x": 0.1,
-    "shockwave_grid_scene_pan_y": 0.0
+    "shockwave_grid_scene_pan_x": 0.035949481281010436,
+    "shockwave_grid_scene_pan_y": 0.5616973757677275
   },
   "description": "Saved from current Settings state."
 }
