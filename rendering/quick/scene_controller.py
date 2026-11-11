@@ -409,6 +409,8 @@ class QuickSceneController(QObject):
     visualizer_camera_reset_requested = Signal()
     # Expanded Visualizer glyph (plan 01 M2): True = expand to the display, False = collapse.
     visualizer_expand_requested = Signal(bool)
+    #: A display glyph (plan 1B.12): full display on that display (its screen index).
+    visualizer_expand_on_display_requested = Signal(int)
     visualizer_preset_step_requested = Signal(int)
     # Expanded Visualizer overlays (plan 01 §G, M3b): a Media Controls press ("previous", "play" or "next").
     visualizer_overlay_transport_requested = Signal(str)
@@ -467,6 +469,7 @@ class QuickSceneController(QObject):
         self._visualizer_content_rotate_glyph_available = False
         self._visualizer_display_transfer_available = (False, False)
         self._visualizer_expand_glyph = (False, False)
+        self._visualizer_expand_targets = (False, -1)
         # The full-display overlays (M3b), retained for a lazily created root: whether the display-wide card is drawn
         # (the owner's edge), their resolved options, the active preset's name and announcement serial, and the
         # Media model the Visualizer already binds (never a second Media query).
@@ -2568,18 +2571,26 @@ class QuickSceneController(QObject):
             self._visualizer_root.setProperty("displayTransferLeftAvailable", value[0])
             self._visualizer_root.setProperty("displayTransferRightAvailable", value[1])
 
-    def set_visualizer_expand_glyph(self, available: bool, expanded: bool) -> None:
+    def set_visualizer_expand_glyph(self, available: bool, expanded: bool, *,
+                                    display_targets: bool = False, display: int = -1) -> None:
         """Project the Expanded Visualizer glyph (offered, and which direction), including for lazy roots.
 
-        Published by the takeover coordinator at its event edges only; the QML glyph draws and reports presses.
+        ``display_targets`` (plan 1B.12): more than one display is live, so the row offers one glyph per target
+        display (up-left Display 0, up-right Display 1); ``display`` is the card's own display (its glyph is the
+        collapse while expanded). Published by the takeover coordinator at its event edges only; the QML glyph draws
+        and reports presses.
         """
         value = bool(available), bool(expanded)
-        if value == self._visualizer_expand_glyph:
+        targets = bool(display_targets), int(display)
+        if value == self._visualizer_expand_glyph and targets == self._visualizer_expand_targets:
             return
         self._visualizer_expand_glyph = value
+        self._visualizer_expand_targets = targets
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("expandGlyphAvailable", value[0])
             self._visualizer_root.setProperty("expandedDisplay", value[1])
+            self._visualizer_root.setProperty("expandTargetsAvailable", targets[0])
+            self._visualizer_root.setProperty("expandGlyphDisplay", targets[1])
 
     @property
     def visualizer_expand_glyph(self) -> tuple[bool, bool]:
@@ -2956,6 +2967,8 @@ class QuickSceneController(QObject):
         root.setProperty("displayTransferRightAvailable", self._visualizer_display_transfer_available[1])
         root.setProperty("expandGlyphAvailable", self._visualizer_expand_glyph[0])
         root.setProperty("expandedDisplay", self._visualizer_expand_glyph[1])
+        root.setProperty("expandTargetsAvailable", self._visualizer_expand_targets[0])
+        root.setProperty("expandGlyphDisplay", self._visualizer_expand_targets[1])
         root.setProperty("controlHintsAvailable", self._visualizer_control_hints_available)
         root.setProperty("expandedOverlayConfig", self._visualizer_overlay_config)
         root.setProperty("expandedOverlayPresetName", self._visualizer_overlay_preset[0])
@@ -2979,6 +2992,9 @@ class QuickSceneController(QObject):
         expand_glyph = getattr(root, "expandGlyphRequested", None)
         if expand_glyph is not None and hasattr(expand_glyph, "connect"):
             expand_glyph.connect(self.visualizer_expand_requested.emit)
+        expand_on = getattr(root, "expandOnDisplayRequested", None)
+        if expand_on is not None and hasattr(expand_on, "connect"):
+            expand_on.connect(self.visualizer_expand_on_display_requested.emit)
         overlay_transport = getattr(root, "expandedOverlayTransportRequested", None)
         if overlay_transport is not None and hasattr(overlay_transport, "connect"):
             overlay_transport.connect(self.visualizer_overlay_transport_requested.emit)

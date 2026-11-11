@@ -211,6 +211,32 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
      [*EXPAND_BY_USER, EditEntered(GEN), SettingsOpened(GEN), ready(requested=True, gen=2)],
      [*EXPANDED_TRACE, "applied expanded", "applied retiring Retire[settings]",
       "applied enter_pending BeginEnter[restore,still]"]),
+    # Display glyphs (operator, 11 Nov; plan 1B.12): "full display on that display" is one transfer transaction.
+    ("a display glyph from a collapsed view moves it, then expands there; the expand persists as the glyph's",
+     [ready(), TransferRequested(GEN, ACT, 5, B, True, True), moved, prepared, committed],
+     ["applied ordinary", "applied transfer_pending BeginTransfer[display-B,ordinary]",
+      "applied enter_pending BeginEnter[user,anim]", "applied entering RunEnter", "applied expanded Persist[True]"]),
+    ("a failed display move stays collapsed on the source and expands nowhere",
+     [ready(), TransferRequested(GEN, ACT, 5, B, True, True), move_failed],
+     ["applied ordinary", "applied transfer_pending BeginTransfer[display-B,ordinary]",
+      "applied ordinary RollbackTransfer"]),
+    ("a display glyph from an expanded view moves it expanded (one collapse + move + expand transaction)",
+     [*EXPAND_BY_USER, TransferRequested(GEN, ACT, 5, B, True, True), moved],
+     [*EXPANDED_TRACE, "applied transfer_pending BeginTransfer[display-B,expanded]", "applied expanded"]),
+    ("a failed expanded move rolls back expanded on the source, the intent untouched",
+     [*EXPAND_BY_USER, TransferRequested(GEN, ACT, 5, B, True, True), move_failed],
+     [*EXPANDED_TRACE, "applied transfer_pending BeginTransfer[display-B,expanded]",
+      "applied expanded RollbackTransfer"]),
+    ("a display glyph for an incapable mode is refused before any change",
+     [ready(capable=False), TransferRequested(GEN, ACT, 5, B, True, True)],
+     ["applied dormant", "rejected dormant RejectTransfer"]),
+    ("a display glyph under Edit is refused (the glyph is withdrawn there; a stale press changes nothing)",
+     [ready(), EditEntered(GEN), TransferRequested(GEN, ACT, 5, B, True, True)],
+     ["applied ordinary", "applied ordinary", "rejected ordinary RejectTransfer"]),
+    ("the move's display lost mid-transfer rolls back, nothing expands",
+     [ready(), TransferRequested(GEN, ACT, 5, B, True, True), DisplayLost(GEN, B)],
+     ["applied ordinary", "applied transfer_pending BeginTransfer[display-B,ordinary]",
+      "applied ordinary RollbackTransfer"]),
     # Edit beside the view (operator, 11 Nov; plan 1B.1): Edit edits the display it was entered on.
     ("Edit entered on another display keeps the view expanded, with no collapse transaction and no write",
      [*EXPAND_BY_USER, EditEntered(GEN, False)], [*EXPANDED_TRACE, "applied expanded"]),
@@ -481,6 +507,7 @@ def _alphabet(s: tk.TakeoverState) -> list[tk.Event]:
         ModeCycleRequested(g, 11, ((INCAPABLE, False), ("capable-2", True))),
         ModeCycleRequested(g, 12, ((INCAPABLE, False),)), ModeCycleRequested(g, 13, ()),
         TransferRequested(g, act, 9, other, True), TransferRequested(g, act, 9, other, False),
+        TransferRequested(g, act, 10, other, True, True),
         TransferCommitted(g, s.txn), TransferFailed(g, s.txn),
         DisplayLost(g, disp), DisplayLost(g, other),
         EditEntered(g), EditEntered(g, False), EditExited(g, False), EditResolutionDeclined(g), SettingsOpened(g),
@@ -617,6 +644,7 @@ _STARTS = {
     "edit-beside-view": _run([*EXPAND_BY_USER, EditEntered(GEN, False)])[0],
     "edit-beside-view-collapse-held": _run([*EXPAND_BY_USER, EditEntered(GEN, False), glyph(2, False)])[0],
     "transfer": _run([*EXPAND_BY_USER, TransferRequested(GEN, ACT, 5, B, True)])[0],
+    "display-glyph-move": _run([ready(), TransferRequested(GEN, ACT, 5, B, True, True)])[0],
     "held-mode": _run([*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False)])[0],
 }
 
@@ -727,6 +755,7 @@ _FLOWS = {
     "capable->incapable": (True, [ModeRequested(GEN, 7, INCAPABLE, False)]),
     "capable->capable": (True, [ModeRequested(GEN, 8, "capable-2", True)]),
     "transfer": (True, [TransferRequested(GEN, ACT, 9, B, True)]),
+    "display-glyph": (False, [TransferRequested(GEN, ACT, 9, B, True, True)]),
 }
 
 
@@ -741,7 +770,7 @@ def test_accept_reject_permutations_always_settle_coherently(flow, disturbance, 
     for at in range(0, 6) if disturb is not None else (-1,):
         # Begin expanded where the flow needs it (immediate accepts), then run the flow under the script.
         start = _drive(tk.initial_state(), [ready(requested=requested)], _Coordinator())
-        if flow == "user-expand":
+        if flow in ("user-expand", "display-glyph"):
             assert start.phase is Phase.ORDINARY
         else:
             assert start.phase is Phase.EXPANDED

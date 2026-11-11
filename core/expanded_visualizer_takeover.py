@@ -198,6 +198,10 @@ class TransferRequested:
     request_id: int
     target_display: str
     target_ready: bool         # the target participates and preflights (D4); False is refused before any change
+    #: The user's "full display on that display" (plan 1B.12): a collapsed view moves, then expands there as one user
+    #: action (the expand persists the intent at its commit as the glyph's own does). Ignored while expanded (an
+    #: expanded transfer always resumes expanded).
+    expand: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -415,6 +419,8 @@ class TakeoverState:
     edit_collapse_press: int | None = None
     transfer_target: str | None = None
     transfer_resume_expanded: bool = False
+    #: A collapsed view's transfer the user asked to end display-wide (plan 1B.12): the enter begins at its commit.
+    transfer_then_expand: bool = False
     #: An incapable mode activated while the view was still expanded (or entering, exiting, transferring): the intent
     #: is cleared at the edge where nothing is drawn expanded any more.
     clear_intent_at_rest: bool = False
@@ -464,7 +470,7 @@ def _resting_phase(state: TakeoverState) -> Phase:
 def _rest(state: TakeoverState) -> TakeoverState:
     """Settle to DORMANT/ORDINARY with nothing in flight."""
     return replace(state, phase=_resting_phase(state), txn_origin=None, deferred_expand=None,
-                   transfer_target=None, transfer_resume_expanded=False)
+                   transfer_target=None, transfer_resume_expanded=False, transfer_then_expand=False)
 
 
 def _begin_enter(state: TakeoverState, origin: Origin, animate: bool) -> tuple[TakeoverState, BeginEnter]:
@@ -787,10 +793,16 @@ def _transfer_requested(state: TakeoverState, event: TransferRequested) -> Step:
         return Step(state, (RejectTransfer(event.request_id, "target not ready"),), Outcome.REJECTED,
                     "target not ready")
     expanded = state.phase is Phase.EXPANDED
+    then_expand = bool(event.expand) and not expanded
+    if then_expand and (not state.mode_capable or state.edit_active):
+        # The display glyph is offered only for a capable mode outside Edit: a stale press changes nothing.
+        reason = "mode not capable" if not state.mode_capable else "Edit open"
+        return Step(state, (RejectTransfer(event.request_id, reason),), Outcome.REJECTED, reason)
     txn = state.txn + 1
     source = state.display
     state = replace(state, phase=Phase.TRANSFER_PENDING, txn=txn, txn_origin=None,
-                    transfer_target=event.target_display, transfer_resume_expanded=expanded)
+                    transfer_target=event.target_display, transfer_resume_expanded=expanded,
+                    transfer_then_expand=then_expand)
     return _applied(state, BeginTransfer(txn, event.request_id, str(source), event.target_display, expanded))
 
 
@@ -811,6 +823,12 @@ def _transfer_committed(state: TakeoverState, event: TransferCommitted) -> Step:
     if state.transfer_resume_expanded:
         return _after_expanded(replace(moved, phase=Phase.EXPANDED, transfer_resume_expanded=False))
     moved, writes = _flush_cleared_intent(moved)
+    if state.transfer_then_expand:
+        # The user's "full display there": the enter is the glyph's own (its commit persists the intent).
+        rested = _rest(moved)
+        if rested.phase is Phase.ORDINARY and rested.eligible:
+            rested, begin = _begin_enter(rested, Origin.USER, True)
+            return _applied(rested, *writes, begin)
     step = _settle_resting(moved, animate=True)
     return _applied(step.state, *writes, *step.actions)
 

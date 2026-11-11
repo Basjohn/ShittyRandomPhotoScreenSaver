@@ -1576,6 +1576,98 @@ def test_custom_layout_visualizer_display_transaction_rolls_scene_back_on_lifecy
     assert target_scene.transfers == [source_scene]
 
 
+class _MoveScene:
+    """A display scene as the display move reads and calls it (nothing is bound to it: no Edit chrome)."""
+
+    def __init__(self, presentation=None) -> None:
+        self.transfers: list[object] = []
+        self.binds = 0
+        self.clears = 0
+        self.visualizer_item = SimpleNamespace(presentation=presentation) if presentation is not None else None
+
+    @property
+    def visualizer_render_identity(self):
+        return object() if self.visualizer_item is not None else None
+
+    def transfer_visualizer_to(self, target) -> None:
+        self.transfers.append(target)
+        target.visualizer_item, self.visualizer_item = self.visualizer_item, None
+
+    def bind_custom_layout_session(self, *_args, **_kwargs) -> None:
+        self.binds += 1
+
+    bind_direct_custom_layout_session = bind_custom_layout_session
+
+    def clear_custom_layout_session(self) -> tuple[str, ...]:
+        self.clears += 1
+        return ()
+
+
+def _move_rig(*, refuse_transfer: bool = False):
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+
+    presentation = SimpleNamespace(outer_rect=(100.0, 120.0, 360.0, 240.0), viewport_extent=(360.0, 240.0),
+                                   uniform_visual_scale=1.0)
+    scenes = (_MoveScene(presentation), _MoveScene())
+    screens = tuple(SimpleNamespace(geometry=lambda rect=QRect(x, 0, 1280, 720): QRect(rect), name=lambda n=name: n,
+                                    serialNumber=lambda n=name: n, manufacturer=lambda: "", model=lambda: "")
+                    for name, x in (("move-a", 0), ("move-b", 1280)))
+    visualizer = SimpleNamespace(
+        controller=SimpleNamespace(mode_id="spectrum", committed_content_rotations={},
+                                   presentation_policy=get_visualizer_presentation_policy("spectrum")),
+        _mode_transition_phase="idle", promoted=[])
+    visualizer.commit_live_custom_layout = lambda **kwargs: visualizer.promoted.append(kwargs)
+    units = tuple(SimpleNamespace(screen_index=index, is_retired=False, presenter=SimpleNamespace(bound_widget_ids=()),
+                                  visualizer_owner=visualizer if index == 0 else None,
+                                  runtime=SimpleNamespace(scene_controller=scene,
+                                                          window=SimpleNamespace(screen=lambda s=screen: s)))
+                  for index, (scene, screen) in enumerate(zip(scenes, screens)))
+    current = {"unit": units[0]}
+
+    def transfer(unit) -> bool:
+        if refuse_transfer:
+            return False
+        current["unit"].visualizer_owner, unit.visualizer_owner = None, visualizer
+        current["unit"] = unit
+        return True
+
+    settings = _Settings({"spotify_visualizer": {"enabled": True, "mode": "spectrum", "monitor": "1"}})
+    layout = QuickCustomLayoutOwner(
+        settings_manager=settings, participants_provider=lambda: units,
+        visualizer_provider=lambda: (visualizer, current["unit"]), reload_request=lambda _kind: None,
+        visualizer_unit_transfer=transfer, live_config_commit=lambda _widgets: None)
+    return layout, units, scenes, settings, visualizer, current
+
+
+def test_the_display_move_is_edits_hop_and_save_without_edit_chrome() -> None:
+    """Plan 1B.12: a display glyph moves the collapsed Visualizer through Edit's own hop + Save transaction (the
+    scene coordinator's retained transfer, the commit, the live promotion), with no scene bound to the session."""
+    layout, units, scenes, settings, visualizer, current = _move_rig()
+    assert layout.move_visualizer_to_display(units[1]) is True
+    assert scenes[0].transfers == [scenes[1]] and current["unit"] is units[1]
+    assert scenes[0].binds == scenes[1].binds == 0                       # no Edit chrome anywhere
+    assert not layout.is_active and not layout.is_editing
+    assert settings.widgets["spotify_visualizer"]["monitor"] == "2"      # committed where Edit's Save commits it
+    assert len(visualizer.promoted) == 1                                  # promoted live, no generation rebuild
+    local = visualizer.promoted[0]["local_rect"]
+    assert 0.0 <= local[0] and local[0] + local[2] <= 1280.0              # on the target display, inside it
+    # Already there, or another session open: refused, nothing changes.
+    assert layout.move_visualizer_to_display(units[1]) is False
+    assert layout.start() is True
+    assert layout.move_visualizer_to_display(units[0]) is False and current["unit"] is units[1]
+    layout.cancel()
+
+
+def test_a_refused_display_move_leaves_the_source_exactly_and_writes_nothing() -> None:
+    layout, units, scenes, settings, visualizer, current = _move_rig(refuse_transfer=True)
+    before = deepcopy(settings.widgets)
+    assert layout.move_visualizer_to_display(units[1]) is False
+    assert current["unit"] is units[0] and scenes[0].visualizer_item is not None   # the retained scene came back
+    assert scenes[1].transfers == [scenes[0]]
+    assert settings.widgets == before and visualizer.promoted == []
+    assert not layout.is_active
+
+
 def test_content_extent_side_drag_and_uniform_scale_math() -> None:
     owner = QuickCustomLayoutOwner(
         settings_manager=_Settings({}),

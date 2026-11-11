@@ -262,10 +262,15 @@ def _takeover_edit_exited(manager: Any, *, saved: bool) -> None:
         coordinator.edit_exited(saved=saved)
 
 
-def _publish_expand_glyph(unit: Any, available: bool, expanded: bool) -> None:
+def _publish_expand_glyph(unit: Any, available: bool, expanded: bool, *, display_targets: bool = False) -> None:
+    """``display_targets`` (plan 1B.12): more than one display is live, so the card offers a glyph per target
+    display (up-left Display 0, up-right Display 1); with one display the single glyph stays as it was."""
     setter = getattr(unit.runtime.scene_controller, "set_visualizer_expand_glyph", None)
     if callable(setter):
-        setter(available, expanded)
+        if display_targets:
+            setter(available, expanded, display_targets=True, display=int(unit.screen_index))
+        else:
+            setter(available, expanded)
 
 
 def _cover_ordinary_widgets(unit: Any, covered: bool, fade_s: float) -> None:
@@ -2394,6 +2399,13 @@ class DisplayManager(QObject):
                 bool(expand),
             )
         )
+        runtime.scene_controller.visualizer_expand_on_display_requested.connect(
+            lambda target: live_unit_route(
+                lambda display, value: self._route_quick_visualizer_input(
+                    display, self._route_quick_visualizer_expand_on_display, display, value),
+                int(target),
+            )
+        )
         runtime.visualizer_expand_toggle_requested.connect(
             lambda: live_unit_route(
                 lambda display: self._route_quick_visualizer_input(
@@ -3468,9 +3480,12 @@ class DisplayManager(QObject):
             persist_requested=lambda value: _call("_persist_expanded_display_requested", value),
             mode_capable=lambda mode_id: bool(_call("_expanded_display_mode_capable", mode_id, default=False)),
             edit_active=lambda: bool(_call("_quick_custom_layout_session_active", default=False)),
-            publish_glyph=_publish_expand_glyph,
+            publish_glyph=lambda unit, available, expanded: _publish_expand_glyph(
+                unit, available, expanded,
+                display_targets=bool(_call("_expand_display_targets_offered", default=False))),
             cover_widgets=_cover_ordinary_widgets,
             end_fullscreen_edit=lambda: _call("_end_fullscreen_overlay_edit"),
+            move_to_display=lambda display: bool(_call("_move_quick_visualizer_to_display", display, default=False)),
         ))
         self._expanded_display_coordinator = coordinator
         # The full-display overlays' inputs exist only where a takeover can draw them (M3b).
@@ -3508,6 +3523,43 @@ class DisplayManager(QObject):
         if isinstance(section, dict):
             section["expanded_display_requested"] = bool(requested)
         logger.info("[EXPANDED_VIS] Persisted expanded_display_requested=%s", bool(requested))
+
+    def _live_quick_units(self) -> tuple[QuickDisplayUnit, ...]:
+        return tuple(display for display in self.displays
+                     if isinstance(display, QuickDisplayUnit) and not display.is_retired)
+
+    def _expand_display_targets_offered(self) -> bool:
+        """More than one display is live: the card offers one full-display glyph per target display (plan 1B.12)."""
+        return len(self._live_quick_units()) > 1
+
+    def _route_quick_visualizer_expand_on_display(self, unit: QuickDisplayUnit, display: int) -> bool:
+        """A display glyph on ``unit`` (the card's): full display on screen ``display`` (plan 1B.12).
+
+        The request is "expand on display N" at the takeover owner: on the card's own display it is that display's
+        glyph press; on another it is one transfer transaction (move, then expand there; an expanded view moves
+        expanded). Refused like the glyph (no admission, a menu open, a display that is not live)."""
+        if unit is not self._quick_visualizer_unit or unit.is_retired:
+            return False
+        state = unit.runtime.input_controller.input_state
+        if not state.admission_open or state.context_menu_active:
+            return False
+        target = next((live for live in self._live_quick_units() if int(live.screen_index) == int(display)), None)
+        coordinator = _takeover_coordinator(self)
+        if coordinator is None or target is None:
+            return False
+        return coordinator.expand_on_display(unit, target)
+
+    def _move_quick_visualizer_to_display(self, display: str) -> bool:
+        """The takeover's display move (plan 1B.12): the Edit owner's chrome-less hop and Save onto that display."""
+        from widgets.spotify_visualizer.expanded_display_coordinator import display_key
+
+        target = next((live for live in self._live_quick_units() if display_key(live) == display), None)
+        if target is None:
+            return False
+        moved = self._quick_custom_layout_owner.move_visualizer_to_display(target)
+        if moved:
+            self._refresh_all_quick_context_menus()
+        return moved
 
     def _quick_custom_layout_session_active(self) -> bool:
         layout = getattr(self, "_quick_custom_layout_owner", None)
@@ -3804,13 +3856,16 @@ class DisplayManager(QObject):
     def _transfer_quick_visualizer_unit(self, target: QuickDisplayUnit) -> bool:
         """Move the single visualizer to ``target`` through the host binding's transaction."""
 
-        if _takeover_blocks_layout(self):
-            # An expanded transfer is one collapse + transfer + expand transaction (plan 01 M5): not yet.
+        coordinator = _takeover_coordinator(self)
+        # The takeover's own transfer (a display glyph, plan 1B.12) is the one move admitted while layout waits: it
+        # runs inside the reducer's transfer transaction, so it is not reported back to it.
+        own = coordinator is not None and coordinator.transfer_in_flight
+        if _takeover_blocks_layout(self) and not own:
             raise RuntimeError("visualizer display transfer refused while the view is display-wide")
         moved = _visualizer_host_binding(self).transfer(target)
-        coordinator = _takeover_coordinator(self)
         if moved and coordinator is not None:
-            coordinator.display_transferred()
+            if not own:
+                coordinator.display_transferred()
             self._publish_expanded_overlays()
         return moved
 

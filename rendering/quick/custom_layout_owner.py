@@ -1434,6 +1434,77 @@ class QuickCustomLayoutOwner:
         if target is None or source is None:
             return False
         before_undo = self._capture_undo(item)
+        projected = self._project_onto_display(item, source, target)
+        self._visualizer_move_transfer_latch.clear()
+        item.set_current_display(target.identity, monitor_route=target.monitor_route)
+        item.set_geometry(projected)
+        self._commit_discrete_undo(before_undo)
+        logger.info(
+            "[CUSTOM_LAYOUT] Visualizer display hop direction=%s source=%s target=%s rect=%s",
+            direction,
+            source.identity,
+            target.identity,
+            projected.getRect(),
+        )
+        return True
+
+    def move_visualizer_to_display(self, target_unit: Any) -> bool:
+        """Move the Visualizer onto ``target_unit``'s display and commit it, with no Edit chrome (plan 1B.12).
+
+        The display-glyph route of the Expanded Visualizer's takeover: the same transaction as Edit's display hop
+        followed by Save (one session holding only the Visualizer, its working rect projected onto the target as the
+        hop projects it, the cross-display scene coordinator's retained transfer, then the ordinary Save: commit, live
+        promotion, release). Nothing of Edit shows: no scene is bound to the session (the live promotion places the
+        card at its committed rect on the target). Refused (False, nothing changed) while any session is open, or when
+        the Visualizer is not admitted or already on that display; a failed transfer leaves the source exactly as it
+        was (the coordinator's own rollback) and the session is cancelled.
+        """
+        if self._retired or self._settings_manager is None or self._active:
+            return False
+        bindings = self._live_display_bindings()
+        target = next((binding for binding in bindings.values() if binding.unit is target_unit), None)
+        if target is None:
+            return False
+        session = CustomLayoutSession()
+        descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
+        self._visualizer_pixels_per_world.clear()
+        self._admit_visualizer_item(session, descriptors, bindings, self._settings_manager.get_widgets_map())
+        item = next(iter(session.items()), None)
+        source = None if item is None else bindings.get(item.current_display_identity)
+        if item is None or source is None or source.identity == target.identity:
+            self._visualizer_pixels_per_world.clear()
+            return False
+        coordinator = QuickCustomLayoutSceneCoordinator(
+            session, visualizer_transfer_handler=self._transfer_visualizer_display_transaction)
+        for binding in bindings.values():
+            coordinator.register_scene(binding.identity, binding.unit.runtime.scene_controller)
+        self._bindings = bindings
+        self._descriptors = descriptors
+        self._session = session
+        self._coordinator = coordinator
+        # A chrome-less session, as a direct gesture's: no Edit, no Edit keys, no close-time pointer guard.
+        self._direct = True
+        self._direct_origin = QRect(item.current_global_rect)
+        self._direct_offset = QPoint()
+        self._active = True
+        try:
+            projected = self._project_onto_display(item, source, target)
+            item.set_current_display(target.identity, monitor_route=target.monitor_route)
+            item.set_geometry(projected)
+            session.notify_item_changed(item)
+        except Exception:
+            logger.exception("[CUSTOM_LAYOUT] Visualizer display move failed; the source stays")
+            self.cancel()
+            return False
+        logger.info("[CUSTOM_LAYOUT] Visualizer display move source=%s target=%s rect=%s",
+                    source.identity, target.identity, projected.getRect())
+        return self.save()
+
+    @staticmethod
+    def _project_onto_display(
+        item: CustomLayoutSessionItem, source: _DisplayBinding, target: _DisplayBinding,
+    ) -> QRect:
+        """The item's rect on ``target``: the same shape (scaled down only to fit) at the same relative position."""
         rect = QRect(item.current_global_rect)
         source_width = max(1.0, float(source.geometry.width()))
         source_height = max(1.0, float(source.geometry.height()))
@@ -1469,24 +1540,12 @@ class QuickCustomLayoutOwner:
             target.geometry.size(),
             min_size=quick_custom_minimum_size(item),
         )
-        projected = QRect(
+        return QRect(
             target.geometry.x() + local.x(),
             target.geometry.y() + local.y(),
             local.width(),
             local.height(),
         )
-        self._visualizer_move_transfer_latch.clear()
-        item.set_current_display(target.identity, monitor_route=target.monitor_route)
-        item.set_geometry(projected)
-        self._commit_discrete_undo(before_undo)
-        logger.info(
-            "[CUSTOM_LAYOUT] Visualizer display hop direction=%s source=%s target=%s rect=%s",
-            direction,
-            source.identity,
-            target.identity,
-            projected.getRect(),
-        )
-        return True
 
     def _publish_move_guides(self, display_identity: str, resolution: Any) -> None:
         """Publish only peer-edge/centering assists for the active move sample."""
