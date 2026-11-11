@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import bisect
 import math
+from array import array
 from functools import lru_cache
 
 from core.constants.neon_lake_world import FAR_OVERSCAN
@@ -93,10 +94,9 @@ def _reached(axis: tuple[float, ...], low: float, high: float) -> range:
     return range(max(0, first), min(len(axis) - 1, last))
 
 
-@lru_cache(maxsize=8)
 def basin_mesh_vertices(cells: tuple[int, int], extent: tuple[float, float, float, float] = NO_EXTENT,
                         subdivide: int = 1, fine_rows: tuple[float, float] = (-math.inf, math.inf),
-                        reach: tuple[tuple[float, float, float, float], ...] | None = None) -> tuple[float, ...]:
+                        reach: tuple[tuple[float, float, float, float], ...] | None = None) -> array:
     """Triangles over the mark lattice. Rows inside ``fine_rows`` (basin v from, to; the camera's side of the basin)
     split every lattice cell ``subdivide`` times along both axes, so the surface (and the ridge lines drawn from its
     silhouette) follows the smooth land between marks there instead of straight segments from mark to mark, where
@@ -106,7 +106,13 @@ def basin_mesh_vertices(cells: tuple[int, int], extent: tuple[float, float, floa
     ``extent`` is the authored origin's reach past the basin (the mark lattice's fine part). ``reach`` is the tiles
     the terrain brush has painted past the origin (each left, front, right, back in basin uv; None while nothing
     is): the overscan cells under them are split to the tier's own cell width, so land painted there has triangles
-    to stand on, while the marks and every triangle outside them stay exactly as they were."""
+    to stand on, while the marks and every triangle outside them stay exactly as they were.
+
+    Returned as a compact ``array('d')`` (exact coordinates; ``upload_bytes`` turns it into the float32 bytes the
+    upload takes) and built per call, never cached: the renderer keeps the uploaded mesh by its key and holds no
+    copy. (It was an eight-entry cache of Python float tuples keyed by the painted reach: 22-30 MB each, kept after
+    upload and after the mode left.) Shared edges compute the very same coordinates on both sides, so they round
+    to the same float32 and stay crack-free."""
     parts = int(subdivide)
     if parts < 1:
         raise ValueError('invalid basin mesh subdivision')
@@ -114,7 +120,7 @@ def basin_mesh_vertices(cells: tuple[int, int], extent: tuple[float, float, floa
         return _grown_mesh_vertices(cells, extent, parts, fine_rows, tuple(tuple(tile) for tile in reach))
     xs, ys = basin_lattice(cells, extent)
     fine_xs = _subdivided(xs, parts)
-    points = []
+    points = array("d")
 
     def quads(us, v0, v1):
         for u0, u1 in zip(us, us[1:]):
@@ -145,10 +151,10 @@ def basin_mesh_vertices(cells: tuple[int, int], extent: tuple[float, float, floa
             fan(v1, v0)
         else:
             quads(xs, v0, v1)
-    return tuple(points)
+    return points
 
 
-def _grown_mesh_vertices(cells, extent, parts: int, fine_rows, reach) -> tuple[float, ...]:
+def _grown_mesh_vertices(cells, extent, parts: int, fine_rows, reach) -> array:
     """The same triangles with the overscan cells under painted far land split finer (``basin_mesh_vertices``).
 
     Each lattice cell takes whole equal steps per axis: the camera-side band's ``parts``, the grown region's
@@ -179,7 +185,7 @@ def _grown_mesh_vertices(cells, extent, parts: int, fine_rows, reach) -> tuple[f
         scale = parts if band(j) else 1
         return (steps_x[i] if grown else 1) * scale, (steps_y[j] if grown else 1) * scale
 
-    points: list[float] = []
+    points = array("d")
 
     def split(a: float, b: float, count: int) -> list[float]:
         # The share first: k / count is the same number however a finer neighbour counts the same point (2/8, 1/4),
@@ -221,11 +227,15 @@ def _grown_mesh_vertices(cells, extent, parts: int, fine_rows, reach) -> tuple[f
                           edges["right"][b * right:(b + 1) * right + 1] if a == sx - 1 else vs[b:b + 2],
                           edges["above"][a * above:(a + 1) * above + 1] if b == sy - 1 else us[a:a + 2],
                           edges["left"][b * left:(b + 1) * left + 1] if a == 0 else vs[b:b + 2])
-    return tuple(points)
+    return points
 
 
-@lru_cache(maxsize=8)
-def basin_mesh_points(cells: tuple[int, int], extent: tuple[float, float, float, float] = NO_EXTENT
-                      ) -> tuple[float, ...]:
+def basin_mesh_points(cells: tuple[int, int], extent: tuple[float, float, float, float] = NO_EXTENT) -> array:
+    """The marks (every lattice point), built per call like ``basin_mesh_vertices`` and never cached."""
     xs, ys = basin_lattice(cells, extent)
-    return tuple(value for v in ys for u in xs for value in (u, v))
+    return array("d", (value for v in ys for u in xs for value in (u, v)))
+
+
+def upload_bytes(values: array) -> bytes:
+    """Coordinates as the float32 bytes a mesh upload takes (the GPU's own precision); the caller drops both."""
+    return array("f", values).tobytes()

@@ -15,7 +15,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices
 from rendering.gl_programs.neon_lake_basin_mesh import (
-    BASIN_MESH_FINE_ROWS, BASIN_MESH_SUBDIVISION, NO_EXTENT, basin_mesh_vertices, basin_mesh_points,
+    BASIN_MESH_FINE_ROWS, BASIN_MESH_SUBDIVISION, NO_EXTENT, basin_mesh_vertices, basin_mesh_points, upload_bytes,
 )
 from rendering.gl_programs.neon_starscape import starscape_beat_cells
 from rendering.quick import gl_query
@@ -113,9 +113,10 @@ class QuickShockwaveGridRenderer:
         if cells != self._mesh_cells:
             if self._mesh_cells is not None:
                 self._resources.drop_mesh(_mesh_key(self._mesh_cells))
+            # Built for this upload alone (float32 bytes): the uploaded mesh is the only copy kept.
             self._mesh_data = self._resources.mesh(
-                _mesh_key(cells), basin_mesh_vertices(*cells[:2], BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS,
-                                                      cells[2]), (2,))
+                _mesh_key(cells), upload_bytes(basin_mesh_vertices(*cells[:2], BASIN_MESH_SUBDIVISION,
+                                                                   BASIN_MESH_FINE_ROWS, cells[2])), (2,))
             self._mesh_cells = cells
         return self._mesh_data
 
@@ -123,7 +124,7 @@ class QuickShockwaveGridRenderer:
         cells = (tuple(cells), self._lattice_extent)        # the marks stay on the origin's lattice
         if cells != self._points_cells:
             self._drop_points()
-            self._points_data=self._resources.mesh(_point_key(cells),basin_mesh_points(*cells),(2,))
+            self._points_data=self._resources.mesh(_point_key(cells),upload_bytes(basin_mesh_points(*cells)),(2,))
             self._points_cells=cells
         return self._points_data
 
