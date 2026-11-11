@@ -223,6 +223,24 @@ without the safe path below.
   handles between 8 and 11 Nov 2026).
   *Blocked:* reading the factors in QML again (a second artwork size carrier), or renaming the persisted key.
 
+- **Visualizer preset references** (`core/settings/visualizer_preset_indices.py`, `preset_references` beside
+  the `preset_<mode>` indices; plan 1C.1, 12 Nov 2026; R-189). A stored preset is the slot index plus the preset's
+  identity (its authored name without the slot number) and a signature of the catalogue it was chosen from. While
+  the catalogue is unchanged the index is the user's choice; when it changed (presets removed, renamed or
+  renumbered by an install or round of authoring), the identity decides: the same preset wherever it now sits,
+  Custom as Custom, a retired preset's recorded successor (`core/settings/visualizer_preset_compat.py`), else the
+  mode's Preset 1. One log line per repair, never a dialog, never a failed open; the settings load stores the
+  resolved reference once (`repair_preset_references`; a second load changes nothing). **Bridge:** a profile
+  written before 12 Nov 2026 has indices only: an index the catalogue still has keeps its slot, one past it falls
+  back to Preset 1, and the load writes the reference. Fixture:
+  `tests/fixtures/visualizer_preset_reference_old_profile.json`; tests:
+  `tests/test_visualizer_preset_references.py` (every curated mode; the real Settings dialog and Studio),
+  `tests/test_visualizer_preset_compat.py` (the tree and the compatibility record agree: removing, renaming or
+  adding a curated preset needs its line). *Horizon:* the index-only bridge stays while shipped profiles may
+  predate references. *Blocked:* resolving by index alone after a catalogue change (a stored Custom silently
+  became a curated preset, a removed slot silently became its neighbour), or pinning the shipped preset names in
+  a test instead of the compatibility record.
+
 ### Not debt — current input contracts (do not "simplify")
 
 - **Content-sized CUSTOM placement.** The current v2 entry's existing `size_payload` may carry
