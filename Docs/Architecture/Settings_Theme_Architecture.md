@@ -333,6 +333,47 @@ logical-mask and post-Accent physical-region evidence is under `.artifacts/evide
 `20261109_physical_region_diagnostic`). [Microsoft's rounded-corner guidance](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-rounded-corners)
 also excludes per-pixel alpha layering and window regions from system rounding, including the opt-in API.
 
+### Native corner measurements (11 Nov 2026, plan 1B.9)
+
+`tools/settings_native_corners.py` now measures the real Settings dialog or the real Studio window (`--window`),
+captures several forged-border widths from one short showing (`--extra-border-device-px`, device pixels, applied
+through `paint_forged_window_edge`'s measurement-only `extra_border_device_px` / `border_growth` parameters; no
+product caller passes them), and can run two clip experiments (`--region-before-accent`, `--cap-alpha 0`) and a Qt
+DPR emulation (`--qt-scale-factor`: Qt rasterises at the emulated DPR on the real 150% monitor; DWM shadow and blur
+stay at 150%). Besides the nominal-arc count it reports the **escape**: changed pixels beyond the painted border's
+outer edge, and that edge's "leg" (how far from the corner it leaves the window edge: the nominal arc's leg is its
+radius, a square corner's is 0). Evidence: `.artifacts/evidence/settings/native_corners/20261111_*`
+(summary table `20261111_summary/corner_table.json`); real wallpapers (`uwyTD.jpg`, `Usu_Underwater_Lab_1440p.png`),
+Alpine Observatory (Mica, dark) and Pearl Blush (Frosted, light).
+
+What the pixels say (per corner, all four theme/background cases alike):
+
+| DPR | width | escape px (all forged camouflage) | painted-edge leg | nominal-arc changed px |
+|---|---|---|---|---|
+| 150% (real) | today / +1 / +2 device px | 5 / 3 / 1 | 3.27 / 2.42 / 1.62 px (nominal 9.75) | 21 / 21 / 21 |
+| 100% (emulated) | today / +1 / +2 | 3 / 1 / **0** | 2.18 / 1.34 / **0.58** px (nominal 6.5) | 8 / 8 / 8 |
+| 200% (emulated) | today / +1 / +2 | 8 / 6 / 3 | 4.36 / 3.50 / 2.69 px (nominal 13) | 34 / 34 / 34 |
+
+The worst escape difference stays 224-251 on light themes and 62-72 on dark themes until the last pixel goes.
+The forged edge's outer silhouette is already nearly square today: the rounded look exists only on the border's
+inner edge, and the "escape" is the opaque camouflage colour (alpha forced to 255) left in a small wedge between the
+border's outer arc and the window corner (a near-white speck on light themes). A thicker border (within the
+operator's +2 px) shrinks the wedge by squaring the outer corner further; it removes it only at 100%, where the
+corner is then square (leg 0.58 px). **Thicker borders are therefore rejected as the corner fix**; the product width
+stays 4 px.
+
+Rejected clip, measured: **a native rounded region set before the AccentPolicy call** (`CreateRoundRectRgn` at
+the nominal radius, `SetWindowRgn`, then Accent on the regioned HWND; `GetWindowRgn` reports COMPLEXREGION). Windows
+clips Qt's painting to the region (aliased staircase, no antialiasing) but still composes the Accent material across
+the whole rectangle: outside the region the corner shows the blurred material (worst difference 57-58 on the light
+wallpaper, 12-13 on the dark one). Same result as the region applied after Accent (9 Nov). Diagnostic only, not a
+fix: transparent camouflage (`--cap-alpha 0`) leaves exactly the same material residue (worst 58) with the border's
+own antialiased round arc and no staircase; any corner treatment on this HWND keeps that residue.
+
+Not tried here: the Windows 11 DWM corner preference on a non-layered variant and a composition-host clip
+(plan 1B.9 e/f). The Studio's native capture did not show the Quick scene: its window rectangle composited only the
+material (no title bar or content) in every attempt, so its corner numbers above count material, not the forged edge.
+
 Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies their semantic visual parameters. Runtime screensaver widget shadow authority is separate.
 
 Rounded borders on action buttons (every `OutlinedButton` role: compact, standard and the Sources look, each keeping

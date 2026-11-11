@@ -315,10 +315,7 @@ def window_placement(available, cursor, size, dpr):
 
 def _configure_qt(qt_scale_factor):
     """Qt's public OpenGL selection (as the product's Quick bootstrap) before the application exists."""
-    from PySide6.QtCore import QCoreApplication, Qt
-    from PySide6.QtGui import QSurfaceFormat
-    from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
-    from rendering.quick.bootstrap import QUICK_OPENGL_VERSION
+    from PySide6.QtCore import QCoreApplication
 
     if QCoreApplication.instance() is not None:
         if qt_scale_factor:
@@ -327,14 +324,9 @@ def _configure_qt(qt_scale_factor):
     if qt_scale_factor:
         # Qt's own high-DPI scale (read once at application start): Qt then rasterises at screen DPR x factor.
         os.environ["QT_SCALE_FACTOR"] = repr(float(qt_scale_factor))
-    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
-    fmt = QSurfaceFormat()
-    fmt.setRenderableType(QSurfaceFormat.RenderableType.OpenGL)
-    fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
-    fmt.setVersion(*QUICK_OPENGL_VERSION)
-    fmt.setDepthBufferSize(24)
-    QSurfaceFormat.setDefaultFormat(fmt)
-    QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
+    # The product's own Quick bootstrap: render loop, OpenGL, surface format (the Studio window needs all three).
+    from rendering.quick.bootstrap import configure_quick_graphics
+    configure_quick_graphics(reason="native-corner-evidence")
 
 
 class _StudioStore:
@@ -359,10 +351,10 @@ class _StudioStore:
 class _NoSettingsPresence:
     concealed = False
 
-    def conceal(self):
+    def conceal(self, **_kwargs):
         pass
 
-    def reveal(self):
+    def reveal(self, **_kwargs):
         pass
 
 
@@ -561,9 +553,10 @@ def capture(label, material, dark_theme=None, light_theme=None, text_evidence=Fa
                     surfaces = []
 
                     def factory(controller):
+                        # Topmost only (above the topmost background); never QQuickWindow.grabWindow() here: with
+                        # the threaded render loop it deadlocks against the GIL (as hide() does, surface.py retire).
                         surface = studio_surface.StudioWindowSurface(controller)
-                        surface.window.setFlags(surface.window.flags() | Qt.WindowType.WindowStaysOnTopHint
-                                                | Qt.WindowType.WindowDoesNotAcceptFocus)
+                        surface.window.setFlags(surface.window.flags() | Qt.WindowType.WindowStaysOnTopHint)
                         # The controller shows the real window at the end of open(); the tool runs that very
                         # show once the controlled background is up.
                         deferred_show.append(surface.show)
@@ -601,7 +594,13 @@ def capture(label, material, dark_theme=None, light_theme=None, text_evidence=Fa
                     repaint = measured._forged_edge.update
                     backdrop_mode = measured._native_backdrop_mode
                 else:
-                    _pump(app, 0.8)
+                    presented = []
+                    surfaces[0].window.frameSwapped.connect(lambda: presented.append(time.monotonic()))
+                    until = time.monotonic() + 1.8
+                    while len(presented) < 3 and time.monotonic() < until:
+                        _pump(app, 0.05)
+                    _pump(app, 0.2)
+                    report.setdefault("studio_frames_swapped_before_capture", []).append(len(presented))
                     hwnd = int(surfaces[0].window.winId())
                     dpr = float(surfaces[0].window.effectiveDevicePixelRatio())
                     from PySide6.QtQuick import QQuickItem
@@ -645,7 +644,11 @@ def capture(label, material, dark_theme=None, light_theme=None, text_evidence=Fa
                         raise RuntimeError("a capture window exceeded its on-screen budget")
                     image = ImageGrab.grab(bbox=capture_rect, all_screens=True).convert("RGB")
                     report["window_captures"] += 1
-                    late = [item for item in occluders(hwnd, capture_rect) if not item["click_through"]]
+                    late = [item for item in occluders(hwnd, capture_rect) + occluders(int(background.winId()),
+                                                                                        capture_rect)
+                            if not item["click_through"]]
+                    if late:
+                        raise RuntimeError(f"another process's window covered the capture: {late}")
                     grabbed.append((extra, image, late, list(edge_state["forged"] or []),
                                     _native_region(hwnd, width, height)))
                 if text_evidence:
@@ -679,6 +682,13 @@ def capture(label, material, dark_theme=None, light_theme=None, text_evidence=Fa
                 if animations is not None:
                     animations.stop()
                 settings.flush(timeout=5.0)
+                if late_background:
+                    # Something of another process covered the background: its pixels are not ours to keep.
+                    report["invalid_attempts"].append({"case": base_name, "reference_occluders": late_background})
+                    print(f"{base_name}: reference occluded; retrying later", flush=True)
+                    pending.append((tone, theme_path, background_tone, rgb))
+                    time.sleep(retry_wait_s)
+                    continue
                 background_pixels.save(work / f"{base_name}_desktop_reference.png")
                 reference = matching_wallpaper_reference(background_pixels, capture_rect, desktop_rect)
                 reference.save(work / f"{base_name}_background_reference.png")
@@ -715,6 +725,12 @@ def capture(label, material, dark_theme=None, light_theme=None, text_evidence=Fa
                                                   "native_request_mode": request_mode,
                                                   "native_request_tint_rgba": request_tint.as_tuple() if request_tint else None}
                     case["native_region"] = region_info
+                    # Content sanity: a window that never presented its own pixels shows only material here.
+                    border_band = delta[pad:pad+height, pad:pad+width].copy()
+                    border_band[12:-12, 12:-12] = 0
+                    case["edge_band_changed_fraction"] = round(float((border_band > 24).sum())
+                                                               / max(1, int((border_band >= 0).sum())
+                                                                     - (height-24)*(width-24)), 4)
                     report["cases"].append(case)
                     variants.append(case)
                     print(json.dumps({key: case[key] for key in ("case", "dpr", "corners")}), flush=True)
