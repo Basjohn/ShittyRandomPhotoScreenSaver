@@ -99,6 +99,10 @@ entry point and explicit CLI admissions:
 & '.\.venv\Scripts\python.exe' main_mc.py /s --debug --verbose --perf --usage --handle-attribution --viz --geo --set --life --cache --steam --feeds --frame-trace --gui-stall-stacks --viz-switch-telemetry --exit-after 40
 ```
 
+`--only-display <index>` (RUN only) puts the saver's windows on that one screen, numbered as the logs number them
+(`screen 0`, `screen 1`); an index no screen has refuses RUN startup with exit code 2 (`Docs/Reference/Harness_Index.md`
+→ Bounded self-terminating RUN sessions).
+
 `--exit-after` arms normal terminal shutdown after RUN startup, including closure of an
 active Settings dialog. It does not request Settings or drive an interaction sequence;
 record any separate manual or disposable-driver stimulus with the capture. The source

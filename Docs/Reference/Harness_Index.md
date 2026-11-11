@@ -220,6 +220,19 @@ python main_mc.py --exit-after=60 /s
 
 The value is seconds. The countdown is armed only after `ScreensaverEngine.start()` succeeds and immediately before the RUN Qt event loop begins. It owns one `QTimer.singleShot` callback and no recurring cadence, worker or ThreadManager task. The callback requests the existing terminal authority with `engine.stop(reason="cli_exit_after")`; Quick retirement, worker/service shutdown, persistence durability and `QApplication.quit()` therefore follow the normal product path. Without `--exit-after`, no timer/callback is created. The switch is ignored outside RUN mode. Invalid, non-finite or non-positive values fail RUN startup with exit code 2 rather than leaving an unattended test running forever.
 
+**One display: `--only-display <index>`** (RUN only, composes with `--exit-after`): the saver's display windows go on
+exactly that screen, numbered as the logs number them (`screen 0`, `screen 1`; 0 is the first screen Qt lists, normally
+the primary; Display 1 is the second monitor). It replaces the profile's physical selection for that run only (nothing
+is persisted); `DisplayManager._get_allowed_screen_indices` is its one consumer. A malformed value or an index no
+screen has refuses RUN startup with exit code 2 and a message on stderr and in `screensaver.log`; a display that goes
+away mid-run leaves the selection empty, never another display. Admission: `core/diagnostics/experiment_flags.py`.
+
+```powershell
+python main_mc.py --only-display 1 --exit-after 30 /s
+```
+
+`tools/d1_run.py` (below, "Display 1 run harness") is the lead's bounded, fail-closed wrapper around it.
+
 For declarative sequential matrices over the same product-owned terminal path, use `tools/run_matrix.py`:
 
 ```powershell
