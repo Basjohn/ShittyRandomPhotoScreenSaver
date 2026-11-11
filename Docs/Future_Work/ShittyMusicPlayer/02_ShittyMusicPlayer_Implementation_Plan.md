@@ -422,12 +422,25 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
 - [ ] All pane arrangements are bounded and DPI-aware; restore by semantic slots and normalized geometric intent rather than only last pixel rectangle. Handle 125/150/200% DPR, maximized/compact modes, missing monitor and small window; clip safely instead of placing a child offscreen.
 - [ ] **Compact player** is a normal desktop window using the existing Media widget semantic model/style; **Full desktop** is Library/Playlist/Visualizer composition; **Immersive** uses the admitted expanded visualizer/media concepts within SMP's own host. Compact↔full↔immersive must not reset audio, queue, SMTC or visualizer logical clock.
 - [ ] Theme and preset controls reuse canonical sources, and Settings is reorganized by the later presentation descriptor without hiding important visualizer detail. No second renderer or separate mode preset implementation.
-- [ ] **SMP Edit mode (full-player mock R3, long-range; sits beside the splitter and docking bullet above and does not
-  replace it):** the mock's grid glyph in the navigation row enters SMP Edit mode, in which every element except the
-  title bar is movable, sizeable and swappable when the space calculations can handle it. The mock asks for this to
-  run through the existing Edit owner and its handlers, not a second layout system (§16 holds the layout model). The
-  bullet above says the desktop user does not use the global SRPSS CUSTOM Edit; the two statements are reconciled
-  when the operator admits the SMP host, and neither is changed here.
+- [ ] **SMP Edit mode (full-player mock R3; operator's clarification of 11 Nov 2026, evening; contract route in
+  `04_Full_Player_Mock_2026-11-11.md` sections 7 and 8, which settle the two statements that stood side by side
+  here):** the mock's grid glyph enters SMP Edit, in which every section of Full mode except the title bar can be
+  moved, resized (X, Y and XY) and swapped. SMP Edit is its own owner over its own record (the section tree of §16A),
+  beside the existing Edit modes and never inside them: it is not the global SRPSS CUSTOM Edit (so the bullet above
+  stands), and it is built from the same handles, guides, snapping, lock glyph and commit / cancel transaction (so
+  the mock's "existing Edit handlers" stands too). Existing Edit modes must not break: in the screensaver and MC
+  builds, which carry the compositor and full SMP functionality together, the two live side by side, one edit
+  session per window, neither record touched by the other's session.
+- [ ] **Small mode and Full mode (operator, 11 Nov 2026):** Small mode is the Media widget as it is now, on the
+  live desktop, with proper snapping, its outer geometry adjustable at all times and its children adjustable behind
+  the lock glyph (the "Compact player" above). Its Up arrow switches to Full mode, the mock's layout (the
+  "Full desktop" above). Full mode defaults to full screen but can be adjusted like a normal window, and its
+  sections scale their spacing and sizing with it: §16A's section tree is the layout at every window size, not
+  only in full screen.
+- [ ] **Three builds from profiles (operator, 11 Nov 2026):** the screensaver build, the MC build and the SMP build
+  come from profiles as the first two do today. The screensaver and MC builds have full SMP functionality together
+  with the compositor; only the SMP profile build has no compositor (no transitions, no image presenter, no widgets
+  that are not the Visualizer or media related), as §8.1 already requires of its runtime imports.
 - [ ] **Left pane edges (full-player mock R4):** the left pane's edges are adjustable in X, Y and XY (a corner moves
   both), within the per-content minimums of §16A.
 - [ ] **Backgrounds and colours (full-player mock R15, R16):** every pane and bar background inherits the surface
@@ -616,6 +629,11 @@ decoded-PCM adapter.
   user-ordered insert slot, volume with a dither stage at the output bit depth, optional high-quality resampler
   (SoXR-class, VHQ) only when the device cannot follow the source. **Evidence:** at neutral settings the output is
   bit-identical to the decoder output; each stage's cost is ≤ 2% of a core at 192 kHz.
+- [ ] **Upmixing and downmixing (operator, 11 Nov 2026: "everything from upmixing, downmixing to replay gain,
+  device select and so on, audio crossfade too"):** explicit channel-layout handling as a stage of the DSP chain:
+  stereo to multichannel and multichannel to stereo with stated coefficients, selectable per output device, and
+  bit-transparent when the source and device layouts match. The equalizer above is a first-class feature with
+  presets and per-device memory, not only a stage in a list.
 - [ ] **Transport quality:** sample-accurate seek with a short fade to avoid clicks, play/pause fades (configurable
   0-500 ms), stop fades, no pops on device switch, resume-at-position after restart, A-B repeat optional.
 - [ ] **Adjustability exposed in the SMP Settings tab (§14) Playback and Audio pills:** output device and mode,
@@ -712,12 +730,16 @@ every widget anywhere on any display with saved slots. SMP gets both, with one l
   popped out always-on-top; panels remember a per-layout size and a per-monitor position; a layout can hide the
   transport and run from media keys; a layout switch never resets audio, queue, SMTC or the visualizer clock
   (§8.2); Edit-style keyboard nudging for floating panels; theme-aware chrome on every panel.
-- [ ] **SMP Edit mode and the mock (full-player mock R3, R4, R11):** the full-player mock wants every element except
-  the title bar to be movable, sizeable and swappable when space allows, through the existing Edit owner and its
-  handlers, with the left pane's edges adjustable in X, Y and XY and Track Information's alignment swappable. §16A
-  below already offers choose, swap, resize and split or remove over a tiling tree; whether the mock's freedom is that
-  vocabulary reached through the existing Edit owner or something wider is for the operator. The lead's proposals for
-  the mock are in `04_Full_Player_Mock_2026-11-11.md` section 4 and are not part of this plan until accepted.
+- [ ] **SMP Edit mode and the mock (full-player mock R3, R4, R11; settled 11 Nov 2026):** the operator left the
+  contract route to the lead (`04_Full_Player_Mock_2026-11-11.md` section 8). Full mode's layout is §16A's section
+  tree at every window size; SMP Edit is its own owner over that tree, built from the existing Edit modes' parts;
+  §16A's four operations gain "move to an edge" (re-split at the top, bottom, left or right, which is how the
+  controls go on top or at the side and the Visualizer becomes a thin wide strip along the bottom) and XY resize
+  at a corner where two splits meet; each content declares its minimums, the orientations it supports and its fold
+  priority in one registry, and presents itself from the rectangle it is given. The dock model in the "In the SMP
+  host" box above (tabbed stacks, floating panels) is wider than the operator's description needs and stays
+  unadmitted unless asked for; nothing floats in Full mode except the Visualizer's Pop Out (§8.3). The lead's
+  remaining proposals for the mock are in document 04 section 4 and are not part of this plan until accepted.
 - [ ] **One model, not two:** pane identities, visibility and rects are the same canonical values whether MC's
   CUSTOM or the SMP host edits them (profile-scoped geometry, shared identities); the dock model is a different
   editor over the same per-pane intent, not a second persistence authority.

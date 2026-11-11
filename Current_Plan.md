@@ -728,8 +728,25 @@ plan 02's "Proposal basis" and `Index.md` point to it.
   8.3 (the Visualizer / Lyrics / Artist Collage pane with glyph parity), 3 and 5.1 (the favourites and library
   filters as one filter owner), 5.2 (the track menu; Track Information alignment swap), 4 (existing sliders and
   seek bar, the alignment rule). Each change cites its requirement number; nothing is promoted into this plan.
+Operator's clarification, 11 Nov evening, written into document 04 sections 7 to 9 and plan 02 (8.2, 13, 16):
+three builds from profiles (the screensaver and MC builds carry full SMP beside the compositor; only the SMP
+profile build has none); Small mode is the Media widget on the live desktop (snapping, outer geometry always
+adjustable, children behind the lock glyph); its Up arrow enters Full mode (the mock), which defaults to full
+screen and resizes like a normal window with its sections scaling; SMP Edit rearranges sections (swap, X/Y/XY,
+move to an edge) and must not break the existing Edit modes; long term an equalizer, upmix and downmix, ReplayGain,
+device select, crossfade and a well indexed growable library. SMP stays behind the native core, the open defects
+and the fullscreen Visualizer. The route the lead chose: SMP Edit is its own owner over a section tree, built from
+the existing Edit modes' parts, one edit session per window (document 04 section 8).
+
+- [ ] Rules that keep SMP's doors open, to check at every audit until SMP starts (document 04 section 8, last
+  list): the Media widget, Now Playing and the seek bar stay host-agnostic; the Visualizer stays one owner that can
+  be retargeted between hosts and rendered at any aspect, strips included; Edit's handles, guides and snapping
+  stay reusable components; the native core renders into whatever surface its host gives it.
+- [ ] Add those four rules to `Docs/Guardrails/Presentation_Change_Preflight.md` as a short "SMP readiness"
+  section (Sonnet, when free), so they bind without anyone remembering this plan item.
 - [ ] The operator's answers to the mock document's section 6 (what "CS" is; whether Lyrics and Artist Collage
-  are in the first full-player milestone; proposal A7) are recorded there when given. Nothing waits on them.
+  are in the first full-player milestone; whether the wider dock model is wanted) are recorded there when given.
+  Nothing waits on them.
 
 ### 1C.7 Handover state after the usage limit (11 Nov evening) and the roster change
 
