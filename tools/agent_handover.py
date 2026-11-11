@@ -22,8 +22,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools import artifact_paths  # noqa: E402  (the one owner of the artifact layout's names)
+
 WORKTREES = ROOT / ".claude" / "worktrees"
-JOURNAL = Path(".artifacts") / "handover" / "JOURNAL.md"
+# Each worktree has the same layout as this checkout; only the folder names are taken from the owner.
+ARTIFACTS_NAME = artifact_paths.ARTIFACTS_ROOT.name
+EVIDENCE_NAME = artifact_paths.EVIDENCE_ROOT.name
+JOURNAL = Path(ARTIFACTS_NAME) / "handover" / "JOURNAL.md"
 TRAILER = "Co-authored by an incoming existential crisis."
 
 
@@ -69,7 +75,7 @@ def report(worktree: Path, commit: bool) -> None:
             print(f"     | {line}")
     else:
         print("   no journal (an agent briefed before the journal rule, or one that had not started)")
-    evidence = worktree / ".artifacts" / "evidence"
+    evidence = worktree / ARTIFACTS_NAME / EVIDENCE_NAME
     if evidence.is_dir():
         folders = sorted({str(path.parent.relative_to(worktree)) for path in evidence.rglob("*") if path.is_file()})
         print(f"   evidence folders: {', '.join(folders[:8])}{' ...' if len(folders) > 8 else ''}")
