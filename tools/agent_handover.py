@@ -44,7 +44,7 @@ def running_from(worktree: Path) -> list[str]:
     if sys.platform != "win32":
         return []
     script = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('"
-              + worktree.name + "') -and $_.Name -ne 'powershell.exe' -and $_.Name -ne 'pwsh.exe' } | "
+              + worktree.name + "') -and $_.Name -ne 'powershell.exe' -and $_.Name -ne 'pwsh.exe' -and -not $_.CommandLine.Contains('agent_handover') } | "
               "ForEach-Object { \"$($_.ProcessId) $($_.Name) $($_.CommandLine.Substring(0, "
               "[Math]::Min(120, $_.CommandLine.Length)))\" }")
     done = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True)
