@@ -223,6 +223,26 @@ without the safe path below.
   handles between 8 and 11 Nov 2026).
   *Blocked:* reading the factors in QML again (a second artwork size carrier), or renaming the persisted key.
 
+- **Now Playing's retired text-line parts** (`core/settings/fullscreen_overlays.py`, `_bridge_text_group`, inside
+  `normalize_now_playing_children`, which the one normaliser `normalize_fullscreen_overlays` calls; plan 1C.3,
+  2026-11-12). `widgets.spotify_visualizer.fullscreen_overlays.now_playing.child_geometry` once held records for the
+  `title` and `album` lines as parts of their own. They are now one text group part, `metadata` (the Media card's
+  role). A stored `title` record (offset, scale, alignment, anchor) becomes the `metadata` record when the value has
+  none (the title led the text and carried the block's flip and corner pin); an `album` record is dropped (the album
+  moves with the group); every other record and member is kept; a value without them is unchanged, so a second load
+  does nothing. Not bridged (unchanged members, compatible by construction): `text_width` now measures the block's
+  width beyond its natural artwork column, which is exactly the text box a 1B.7 value set beside a natural artwork,
+  so the block draws the same width; `text_height` is now the block's height (a 1B.7 value at or above the natural
+  artwork height draws the same block; one below it, which drew nothing under 1B.7, now shrinks the block and its
+  artwork). Tests:
+  `tests/test_visualizer_expansion_overlay_settings.py::test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_group`
+  with the raw old file `tests/fixtures/fullscreen_overlays_now_playing_text_lines_profile.json` (remove both with
+  the bridge), and the saved-profile load test in `tests/test_visualizer_expansion_fullscreen_edit.py`.
+  *Horizon:* until the operator closes it (the records exist only in profiles that used Fullscreen Edit's child
+  editing between 8 and 12 Nov 2026).
+  *Blocked:* re-adding `title` / `album` as roles beside the group (two owners of one line's place), or renaming the
+  persisted key or the `metadata` role.
+
 ### Not debt — current input contracts (do not "simplify")
 
 - **Content-sized CUSTOM placement.** The current v2 entry's existing `size_payload` may carry
