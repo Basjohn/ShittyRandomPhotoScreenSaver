@@ -267,20 +267,27 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   target is a display, not "the Visualizer's display", so SMP can later hold one display fullscreen while the
   Visualizer holds the other. Displays beyond the first two are reached with V. Glyph drawn in the existing
   glyph row's style (painted, no seams), Title Case tooltips, fades in and out with the display count.
-- [ ] **1B.2 Cursor keeps its changed shape after exit until a click (never actually fixed; 3-4 rounds).** A hand
-  or other shape set by the saver survives exit and a single click on the desktop clears it. Reproduce on the real
-  exit paths first (key, click, mouse move, Settings, Edit, MC, each display count), find the owner that still
-  holds or last set the native cursor (override stack, per-window cursor, capture, Halo), and fix it there. The
-  earlier rounds (f20d772a / 33ce0e11 "retiring window releases the pointer and keeps the arrow", 3c1f67cf /
-  962bcf48 Halo lingering) and why each failed go into a new `Docs/Historical_Bugs/R-183` entry + index row
-  before this is reported done. Acceptance is the operator's exit on native Windows; an offscreen proof alone is
-  not a fix.
-  Research (11 Nov, read from source): every earlier test asserted only `QWindow.cursor().shape()` on a never-shown
-  window, never what Windows displays; 3c1f67cf holds no cursor code; production calls no Win32 cursor function.
-  Leading hypothesis: Windows is never told the arrow before the window under the pointer disappears, so nothing
-  re-queries the cursor until the next pointer message; next, capture ordering in the exit click and the
-  link-click + browser-launch exit. Decide with one external observer polling `GetCursorInfo` / `GetCapture` /
-  `GetClipCursor` across the exit paths, then fix.
+- [~] **1B.2 Awaiting Validation (merged 11 Nov, 0f8f4836; R-183): the cursor keeps its changed shape after exit
+  until a click.** Cause as far as it is proven on what Windows displays: Qt hands a window's cursor to Windows only
+  while Qt believes the pointer is over that window, and Windows never re-queries a still pointer when the window
+  under it hides or its process ends; every earlier "arrow" was only the Qt property. Fix: the retire owner
+  (`QuickDisplayWindow._relinquish_pointer`) gives Windows the arrow itself, once, while the HWND exists
+  (`show_native_arrow_for_retiring_window`, `rendering/quick/pointer_capture.py`). **Not accepted:** the
+  small-window native harness reproduced the stuck shape only with Qt's pointer tracking cleared artificially;
+  which real event clears it in the operator's exits is not proven (likely exits where the saver is not the
+  foreground window when it hides: a link click, a second display). Operator: run
+  `.venv\Scripts\python.exe tools\cursor_exit_observer.py --label <name>`, start the saver, exit by each path
+  (key, click, mouse move, link click, Settings, MC), keep the mouse still two seconds each time; each exit
+  prints `cursor after exit: <name>, changed to arrow after <ms>` or `only after click`, logged under
+  `.artifacts/evidence/input/cursor_exit/`. If any path still says "only after click", that log names the path
+  to fix next. Opt-in native harness: `tools/cursor_exit_native_harness.py`.
+  - [ ] Side defect: in the saver, when a hovered QML item is destroyed or left, the window can keep the hand
+    or arrow instead of the Halo until the Halo next re-applies it.
+  - [ ] Side defect: `tests/test_artifact_paths_contract.py` also fails on literal `evidence_chest` paths in
+    `tools/godzip_foundry.py` (2579, 2632, 3386) and `tools/godzip_logzip_retention.py` (22, 38), PNG writes
+    outside `tools/evidence_media.py` in `tools/settings_native_corners.py`, `srpss_border_core.py` and
+    `srpss_border_studio.py`, and a `delete=False` temp file at `tools/visualizer_capture_core.py:215` (same
+    class as the "Tool-output contract reds" item in section 3; fix together).
 - [ ] **1B.3 side defects (the churn audit itself landed 11 Nov, f5693c6d: no Studio drag writes while it moves;
   `tests/test_studio_drag_io_churn.py` holds every registered adapter to it; camera navigation now rebuilds the
   inspector once per frame, 1-4 ms a move before).** Found by that audit, not fixed there:
