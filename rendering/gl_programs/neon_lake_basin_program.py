@@ -374,12 +374,16 @@ float basinLandHeight(vec2 uv,float base,float curved) {
         // Zero at the water and easing in up the bank over the smooth land's own rise: on the cells' height alone
         // it came in within a quarter of a cell, and a strong reshaping stood as a wall along the shore.
         float land=smoothstep(0.0,0.08,base)*smoothstep(BASIN_SHORE_HEIGHT,0.10,curved)*basinDetailFade(uv);
-        // Its patterns and Growth lift (or lower) the land; Indents press it toward its floor share.
-        float room=(1.0-REACTION_FLOOR)*height;
-        float change=uLand.x*(basinReaction(uv,curved,p,land)+land*basinGrowth(p))-room*land*basinIndent(p);
+        // Its patterns and Growth lift (or lower) the land.
+        float authored=height;
+        float room=(1.0-REACTION_FLOOR)*authored;
+        float change=uLand.x*(basinReaction(uv,curved,p,land)+land*basinGrowth(p));
         // Downward, the change eases onto the floor share instead of stopping at it: a hard stop creased the
         // land along the line where it was reached.
         height+=change<0.0 ? -room*tanh(-change/max(room,1e-6)) : change;
+        // Indents carve bowls into what stands there, onto their own lower floor.
+        float press=land*basinIndent(p);
+        if (press>0.0) height-=basinIndentDepth(press,height,authored,uLand.x);
     }
     // A shallow convex distant world produces a real terrain/sky tangency,
     // rather than an exposed remote mesh edge or an infinitely flat plane.
