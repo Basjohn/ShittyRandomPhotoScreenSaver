@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
 import time
 from types import SimpleNamespace
+
+import pytest
 
 from core.performance.usage_sampler import (
     GpuUsageSnapshot,
@@ -720,3 +724,151 @@ def test_usage_service_logs_the_engine_workers_labelled_breakdown(caplog):
         assert all(field in sample for field in expected), sample
         assert process.expected == ([(pid,)] if pid is not None else [])
         service.stop()
+
+
+# -- per-process USS without the GIL-held working-set walk (native core P2, phase-boundary audit L3) ------------------
+
+
+def test_an_injected_unique_set_size_provider_replaces_psutils_walk_and_fails_over_per_process(caplog):
+    calls = []
+
+    class _Proc(_CountingProc):
+        full_info_calls = 0
+
+        def memory_full_info(self):
+            type(self).full_info_calls += 1
+            return super().memory_full_info()
+
+    proc = _Proc()
+    collector = ProcessUsageCollector(proc, unique_set_size_provider=lambda pid: calls.append(pid) or 64 * 1024 * 1024)
+    snapshot = collector.collect()
+    assert calls == [proc.pid] and _Proc.full_info_calls == 0
+    assert snapshot.uss_main_mb == snapshot.uss_app_mb == 64.0
+
+    # This process only (it went between the refresh and the read): psutil's read answers for it, the provider stays.
+    def gone(pid):
+        raise ProcessLookupError(pid)
+
+    collector = ProcessUsageCollector(proc, unique_set_size_provider=gone)
+    assert collector.collect().uss_main_mb == 80.0 and _Proc.full_info_calls == 1
+    assert collector.collect().uss_main_mb == 80.0 and _Proc.full_info_calls == 2
+    assert collector._unique_set_size_provider is gone
+
+    # Anything else is a broken reader: said once, then psutil's walk for the rest of the run.
+    def broken(pid):
+        raise ValueError("bad buffer")
+
+    collector = ProcessUsageCollector(proc, unique_set_size_provider=broken)
+    with caplog.at_level(logging.WARNING, logger="core.performance.usage_sampler"):
+        assert collector.collect().uss_main_mb == 80.0
+        assert collector.collect().uss_main_mb == 80.0
+    assert collector._unique_set_size_provider is None
+    assert sum("Native unique-set-size read failed" in record.message for record in caplog.records) == 1
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the working-set reader is Windows-only")
+def test_the_real_collector_never_runs_psutils_gil_held_working_set_walk(monkeypatch):
+    """The regression bar: every sample used to call ``memory_full_info()`` for every process of the tree, a walk of
+    the whole working set with the GIL held (3-4 ms for a 670 MB process on an idle machine; the engine worker's own
+    added ~13 ms a sample under load)."""
+    import psutil
+
+    expected = psutil.Process().memory_full_info().uss
+
+    def gil_held_walk(self):
+        raise AssertionError("psutil's GIL-held working-set walk ran in a usage sample")
+
+    monkeypatch.setattr(psutil.Process, "memory_full_info", gil_held_walk)
+    collector = ProcessUsageCollector()
+    try:
+        for _ in range(2):
+            snapshot = collector.collect()
+            assert snapshot.uss_main_mb is not None and snapshot.uss_app_mb >= snapshot.uss_main_mb
+            # The same definition as psutil's (a page is unique unless shared and mapped elsewhere); the set moves
+            # a little between the two reads.
+            assert abs(snapshot.uss_main_mb * 1024 * 1024 - expected) < 0.1 * expected
+    finally:
+        collector.close()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the working-set reader is Windows-only")
+def test_the_working_set_reader_keeps_one_handle_per_process_and_gives_them_back():
+    import subprocess
+
+    import psutil
+
+    from core.performance.windows_working_set import WorkingSetReader
+
+    reader = WorkingSetReader()
+    child = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"], stdin=subprocess.PIPE)
+    process = psutil.Process()
+    try:
+        before = process.num_handles()
+        own, other = reader.unique_set_size(os.getpid()), reader.unique_set_size(child.pid)
+        assert own > 0 and other > 0 and reader.open_handles == 2
+        for _ in range(5):                                  # later samples reuse them: one foreign call a process
+            reader.unique_set_size(os.getpid())
+            reader.unique_set_size(child.pid)
+        assert reader.open_handles == 2 and process.num_handles() - before <= 3
+        reader.retain([os.getpid()])                        # the child left the sampled tree
+        assert reader.open_handles == 1
+        reader.unique_set_size(child.pid)
+        child.stdin.close()
+        child.wait(10)
+        with pytest.raises(OSError):                        # gone: its handle is dropped, not kept for a reused PID
+            reader.unique_set_size(child.pid)
+        assert reader.open_handles == 1
+    finally:
+        if child.poll() is None:
+            child.kill()
+        reader.close()
+    assert reader.open_handles == 0
+    with pytest.raises(OSError):
+        reader.unique_set_size(0x7FFFFFF0)                  # no such process
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the working-set reader is Windows-only")
+def test_a_python_thread_keeps_running_while_the_working_set_is_walked():
+    """What the fix is for: during psutil's walk no other Python thread runs; during the reader's, one does."""
+    import threading
+
+    import psutil
+
+    from core.performance.windows_working_set import WorkingSetReader
+
+    ballast = bytearray(b"x") * (256 * 1024 * 1024)          # a working set large enough to take milliseconds
+    counter, stop = [0], threading.Event()
+
+    def spin():
+        while not stop.is_set():
+            counter[0] += 1
+
+    thread = threading.Thread(target=spin, daemon=True)
+    thread.start()
+    process, reader = psutil.Process(), WorkingSetReader()
+    try:
+        reader.unique_set_size(os.getpid())                 # sizes the buffer and opens the handle once
+        time.sleep(0.05)
+        before, started = counter[0], time.perf_counter()
+        time.sleep(0.3)                                     # this thread asleep: what the spinner makes unopposed
+        free_rate = (counter[0] - before) / (time.perf_counter() - started)
+
+        def share(call, repeats=9):
+            """The spinner's progress during ``call`` against its unopposed rate, the median of ``repeats``: about 0
+            when the call held the GIL throughout, towards 1 when it gave it up (a switch interval may fall inside
+            one call's Python wrapper: the median is not moved by it)."""
+            shares = []
+            for _ in range(repeats):
+                before, started = counter[0], time.perf_counter()
+                call()
+                shares.append((counter[0] - before) / max(free_rate * (time.perf_counter() - started), 1e-9))
+            return sorted(shares)[len(shares) // 2]
+
+        held = share(process.memory_full_info)
+        released = share(lambda: reader.unique_set_size(os.getpid()))
+    finally:
+        stop.set()
+        thread.join(5)
+        reader.close()
+        del ballast
+    assert held < 0.15 and released > 0.3, (held, released)

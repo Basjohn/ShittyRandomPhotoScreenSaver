@@ -120,7 +120,9 @@ _FLAGS = (
     ("steady_late_pct", 10.0, "over 10% of steady frames later than 25 ms"),
     ("post_startup_late_pct", 20.0, "over 20% of the first 2 s after startup later than 25 ms"),
     ("hitches_per_min", 0.5, "steady frames over 50 ms: a visible hitch (periodic ones point at a timer-driven GIL holder)"),
-    ("usage_collect_ms", 40.0, "a usage sample takes over 40 ms of a worker thread, much of it GIL-held: it stalls every thread"),
+    ("usage_collect_ms", 40.0, "a usage sample takes over 40 ms of its worker thread (wall time; the per-process "
+                               "working-set walk no longer holds the GIL, the rest of the sample can): check the "
+                               "hitches at the sample's 15 s phase before blaming it"),
 )
 
 
