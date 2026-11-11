@@ -182,10 +182,24 @@ def _fullscreen_display(settings, media, value):
     from tests.test_visualizer_expansion_overlays import _draw, _open
     from tools.expanded_visualizer_evidence import HiddenDisplayHost
 
+    from PySide6.QtCore import QElapsedTimer
+
+    from tests.test_visualizer_expansion_overlays import _named, _render, _slot
+
     display = HiddenDisplayHost(WIDTH, HEIGHT, dpr=1.0)
     _draw(display, media=media, config=_projection(value))
     _open(display)
     _shown_and_settled(display)
+    # The artwork decodes asynchronously: wait (bounded) until its image is ready, so no panel shows the placeholder.
+    image = _named(_slot(display, "expandedOverlayNowPlaying"), "expandedOverlayArtworkImage")
+    clock = QElapsedTimer()
+    clock.start()
+    while media.values.get("artworkSource") and clock.elapsed() < 5000:
+        sources = [child for child in [image, *image.childItems()]
+                   if child.property("progress") is not None and str(child.property("source") or "")]
+        if sources and all(float(child.property("progress")) >= 1.0 for child in sources):
+            break
+        _render(display)
     return display
 
 
