@@ -679,6 +679,18 @@ the owner's recovery landed in that window, and since L1's synchronous handle tr
 raised instead of being queued and resent: one worker death turned the worker off for the run. The existing
 real-process test for it was red. Fixed in the supervisor (`process_has_exited`).
 
+**Dormancy after these changes (`tools/overhead_baseline.py`, 1920x1080, against `2026-11-07_4bb2b775.json`).**
+Conditions: other processes' CPU 22% median (the reference: 3.4%), GPU busy 24%, 109 of 125 passes admitted, so only
+the deterministic counts are read. GL calls: no rise in any case. Python calls: 20 rows rise, +4 in each Scene3D
+transition (Blinds 3D Slats 668 -> 672 and thirteen like it) and +5 to +32 in six Visualizer modes (Waveform Ribbon
+6987 -> 7010, Extruded Bubble 6395 -> 6427); the node path (1216) and the 2D transitions are unchanged. **None of it
+is this work's:** of the product modules these commits change, the baseline loads three, and none adds a call on a
+measured path (`rendering/quick/visualizer/item.py`: two attribute reads in `updatePaintNode`;
+`widgets/spotify_visualizer/logical_runtime.py`: a property nothing here calls; `core/process/supervisor.py`:
+imported, no worker runs). The rises entered between 7 Nov and this branch's base (`630a5729`) and are not attributed
+to a commit here: that needs a baseline at the base, which was not taken. Evidence:
+`.artifacts/evidence/native_core/20261111_overhead_baseline/`.
+
 ## P3 readiness
 
 What ABI 2 already gives the native core:
