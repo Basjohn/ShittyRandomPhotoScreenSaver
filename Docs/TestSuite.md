@@ -1281,6 +1281,34 @@ High-value permanent guards include:
   limit test holds A11-M1: a session that fails again after every completed recovery recovers (each resetting the
   count) up to `MAX_RECOVERIES_PER_RUN`, and the failure after that is in process for the run (reason "recovery
   limit", revealed and presenting); without the limit it recovers on the worker again;
+- the phase-boundary audit's 11 Nov items (`Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md`, "11 Nov"):
+  `tests/test_visualizer_owner_render_parity.py` (M4 / gate 2: per mode, the production owner's drawn pixels on a real
+  worker equal the in-process path's at settings moved off every default, scene targets single-sampled, exact; about
+  30 s a mode; fails for Sphere, Extruded Spectrum and Waveform Ribbon without R-184's fix; the settings generator
+  must move every ranged control and differ between its variants). The tool behind it,
+  `tools/visualizer_replay/owner_render_parity.py`, also reports the product's sampling beside a same-path repeat and
+  is never in the suite. `tests/test_qtquick_visualizer_item.py` holds R-184's edge (a retained-frame drop clears the
+  node at the next sync and keeps the source). `tests/test_live_check_resources.py` (M5: memory over mode switches is
+  judged per mode from the second visit; a memory-map file never names an NTFS alternate data stream).
+  `tests/test_visualizer_live_check.py` (L2: wall and CPU shares under their own names, the waiting count None on the
+  worker path). `tests/test_usage_sampler.py` (L3: the collector never runs psutil's GIL-held working-set walk, the
+  native reader keeps one handle per process and gives them back, and a Python thread keeps running through a read).
+  `tests/test_visualizer_engine_worker_cadence_liveness.py` (L4: a cadence blocked inside a step fails its session
+  closed after spaced heartbeats only; heartbeats handled together count once; a stepping, parked, stopped or
+  input-paced session is never failed; a park that waits behind the blocked step is still watched; and the real owner
+  recovers onto a second session with the reason in the main log, negative control: the heartbeat answered as every
+  worker answers it leaves the owner on a session that publishes nothing).
+  `tests/test_visualizer_owner_engine_worker_inputs.py` (L4: a Qt colour is forwarded as plain data, any other Qt
+  value is refused with one error and never sent; negative control: dropped silently, and a nested one sent).
+  `tests/test_visualizer_ordered_control_delivery.py` (the ordered channel refuses a sharer-backed Connection or
+  socket before anything is registered, negative control: the stock reducer leaves a registration nobody collects;
+  R-185: a worker being torn down is not running and a send to it never raises).
+  `tests/test_visualizer_wake_channel.py` (the POSIX wake pipe's ordering, rollback at every step and release, with
+  its system calls injected; the Windows channel for real; the real owner and session over a named transfer; a
+  configure never decoded leaves the link holding nothing after its close). **No test runs a FIFO, forkserver or a
+  Linux worker: the POSIX runtime is unverified.** `tests/test_visualizer_engine_import_weight.py` (listed here since
+  audit L5): the logical runtime, tick pipeline, render state, ABI, codec and every mode's frame runtime import QtCore
+  at most;
 - real-GL visualizer clip/render tests where driver/context behavior matters.
 
 The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.

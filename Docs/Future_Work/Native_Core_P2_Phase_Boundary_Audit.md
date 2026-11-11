@@ -565,6 +565,120 @@ In-memory negative controls restore baseline send (both ordered/refusal checks f
 four changed/new Python files and scoped whitespace checks pass. No build, load, device, render or Linux runtime
 proof was run.
 
+### 11 Nov: M4 remainder, M5, L2-L5, the POSIX transfer lifetime (and R-184, R-185 found on the way)
+
+Branch `worktree-agent-aa1e054152572db80`. No load, device, build, installer or Linux run was made for any of it;
+every live reading is the invisible saver without load on recorded music, three minutes at most. Records with the
+tables: `Native_Core_P2_Engine_Design.md`, "11 Nov reconciliation".
+
+**M4 (rendered parity on the production owner, non-default settings; gate 2's record).** `af133dee`, `791b17ab`.
+`tools/visualizer_replay/owner_render_parity.py` runs the real owner (the host binding's, on an unshown runtime) on
+both paths over the same recorded inputs, mirrors each presentation into the production `DisplayScene.qml` drawn into
+a hidden texture, and compares the card's pixels of every drawn frame. Settings: every Slider, Range, Choice, Toggle
+and colour of the mode and of its switch partner moved off the shipped defaults, in two different variants, with the
+custom preset. The script: play, a warm pause, a park and resume, a mode switch through the owner's crossfade to the
+mode's partner and, where the mode has them, a reflected photograph and a held-key orbit. A same-mode preset
+activation is not in it (the logical gate `identity_script_view` has one; its pixels were not drawn).
+- *Logical frames:* identical on both paths for all nine modes in both variants; every run stayed on the worker.
+- *Pixels, scene targets single-sampled:* exact for all nine modes in both variants (549 drawn frames each; 0 frames,
+  0 pixels, 0 levels differ). Controls in the same run: the in-process run repeated is exact, and a 20% nudge of the
+  mode's non-integer Sliders changes 296 to 542 of the 549 frames, so the comparison sees a drift.
+- *Pixels at the product's sampling:* reported beside the in-process run repeated, not judged. A multisampled scene
+  target is not reproducible draw to draw on this GPU (the same retained snapshot redrawn differs by one 8-bit level on
+  about 1,200 of 390,931 pixels in Neon Lake; unchanged with bloom off, shafts off and a `glFinish`; zero with one
+  sample), so the two paths differ from each other by as much as one path differs from itself. Frames / largest pixel
+  count / largest level, paths against repeat: Spectrum 1/1/1 against 0; Oscilloscope, Bubble, Extruded Spectrum 0
+  against 0; Spline Curve 52/1543/2 against 52/1645/2; Sphere 45/20/1 against 39/35/1; Neon Lake 359/3318/2 against
+  359/2571/1; Waveform Ribbon 15/55/1 against 22/49/1; Extruded Bubble 7/2/1 against 9/2/1. The stage that varies is
+  the mode's own passes into the multisampled attachment; the GPU-side cause below that is not attributed.
+- *The defect it found:* **R-184** (`4380d73e`), the first time the two paths' pixels were compared. Fixed; the
+  per-mode test fails without the fix for the three modes whose switch changes the layout profile.
+- Tests: `tests/test_visualizer_owner_render_parity.py` (per mode, single-sampled, exact),
+  `tests/test_qtquick_visualizer_item.py`. Evidence: `.artifacts/evidence/native_core/20261111_m4_rendered_parity/`
+  (in the agent's worktree until merged).
+- *Not covered:* BTF checks were not rerun (the gate compares the same drawn frames on both paths instead); Expanded,
+  full-display and mixed-DPR extents; load.
+
+**M5 (memory over mode switches).** `dd49377a`. The premise does not hold on current source: the growth is a
+first-lap high-water in the rendering process, on both paths, with no lap-to-lap trend.
+- *Reading (invisible saver, nine-mode cycle, memory maps at each switch):* in process over three laps, the same
+  mode's private bytes from lap 1 to lap 2: +177, +141, +144, +137, +137, +108, +61, -46, -5.5 MB; from lap 2 to lap 3:
+  -5.4, +2.8, -9.5, -9.9, -9.2, -6.9, +11.0, +31.6, +3.7 MB. On the worker path main shows the same first-lap step
+  (+186, +166, +160, +139, +132, +116, +25, -2, 0 MB).
+- *What it is:* `private_other` (the GPU driver's VirtualAlloc, largely not resident) +90 to +117 MB, heaps +15 to
+  +20 MB, arenas +14 MB, and one `heap_large` block of 26.6 MB at the first Neon Lake that stays for the run (not
+  attributed, not growing). Each mode's GPU resources are created at its first visit and kept; the second visit adds
+  none. An offscreen in-process cycle with no drawing is flat after its first lap, so the logical side holds nothing.
+- *What was wrong:* the instrument. The series verdict judged the whole run's slope, which the first lap dominates,
+  and the 8 Nov control compared only two laps. `tools/live_check_resources.py` now judges each mode from its second
+  visit (`growth_by_mode`: the first step is reported, never judged). The map files were also being written to NTFS
+  alternate data streams (`memory_map_switchN:mode.json`, empty on disk); fixed.
+- Tests: `tests/test_live_check_resources.py`. Evidence:
+  `.artifacts/evidence/architecture/native_core_p2/20261111_m5_*`.
+- *Open:* the Studios' in-process cycle and the fallback after a worker failure were not measured separately; they use
+  the same render path and the same in-process tick that the offscreen cycle showed flat.
+
+**L2 (gate 3's labels).** `091b9eea`. `tools/visualizer_live_check.py`'s fields say what they measure:
+`tick_wall_share`, `main_wall_share`, `worker_tick_wall_share`, `logical_tick_wall_share` (wall time per tick times
+the rate), beside `main_cpu_share` from the step's own thread CPU time (`time.thread_time()`), which waits do not
+inflate. `revisions_waiting_at_sync` is None on the worker path with a note (untaken frames are never recorded there),
+and `audio_delivery` names how the audio reached the tick (the worker's paced recorded blocks against the in-process
+loopback thread). The 8 Nov records keep their numbers; read "GIL share" there as wall share. No new measurement.
+
+**L3 (`--usage` cost with the worker).** `2fbf83e3`. Cause: `psutil.Process.memory_full_info()` (USS) walks the
+process's working set with the GIL held, 3.0 to 4.4 ms for the main process's ~670 MB working set, once per process per
+sample; a spinning Python thread made no progress during it. `core/performance/windows_working_set.py` reads the same
+value through `K32QueryWorkingSet` (the GIL released for the call, one kept buffer, cached process handles); the
+values equal psutil's and a spinning thread keeps 0.69 to 0.96 of its free rate. Tests: `tests/test_usage_sampler.py`
+(the collector never runs psutil's walk; a thread keeps running through the read). *Not verified:* `collect_ms` under
+load, and with the displays on: the one live reading after the fix was taken with the operator's displays asleep
+(13.5 to 21 ms for four processes, the Visualizer parked).
+
+**L4.** `8117d0e6`.
+- *Wake listener:* measured, no change. 18.7 us median (p90 31.8, p99 108) per publish at 90 Hz with an idle GUI, 2.9
+  us with a wake already pending; about 0.2% of main's time.
+- *Qt-typed presentation inputs:* a colour is forwarded as the `(r, g, b, a)` the in-process capture freezes it to;
+  any other Qt value, top level or nested, is refused with one error per attribute, never pickled to the worker and not
+  retried each presentation. No shipped control holds one today (the presentation config stores plain tuples).
+- *Frame-stream liveness:* the worker's heartbeat handler asks the session; two heartbeats at least a second apart with
+  the cadence running, not parked and not one step further fail the session closed (the existing path: wake pipe end,
+  the owner's recovery, the reason in the stop's reply and so in the main log). The session's delivery watch could not
+  host this: it runs on the cadence step, which is the thing that is blocked. No timer, thread or polling was added.
+  *Residual:* the blocked thread itself stays in the worker process until it returns; a replacement session that
+  blocks the same way is the second strike (in process for the run), and a message loop that blocks with it is the
+  heartbeat's existing retirement.
+- Tests: `tests/test_visualizer_engine_worker_cadence_liveness.py`,
+  `tests/test_visualizer_owner_engine_worker_inputs.py`.
+
+**L5 (records against evidence).** In the design doc: the gate 4 worker row now says what was re-read (below), the
+writer's slot choice is stated as the code has it, gate 2 has its record, and gate 3's field names carry the L2 note.
+`tests/test_visualizer_engine_import_weight.py` is listed in `Docs/TestSuite.md`.
+- *Gate 4's worker memory, re-read 11 Nov with R-179 fixed (source, private bytes at each switch):* 63.5 MB with
+  Spectrum, 65 to 70 MB through the first Extruded Bubble, 103.9 MB at the first Waveform Ribbon, then 101.5 to 104.7
+  MB across the whole second lap (RSS 79 -> 89 to 92 MB). So the 8 Nov row's shape (a step, then flat) was not the
+  codec sawtooth, and it is not growth. The step at the first Waveform Ribbon is not attributed. Frozen check 2's 46
+  to 59 MB is USS, a different measure.
+- *The frozen wording:* frozen check 2 already shows the engine worker on `qt6core.dll` only, flat USS and a Settings
+  retirement and respawn. What still awaits the operator is the next product frozen build's ordinary acceptance (the
+  build log and audit lines), not a new worker proof.
+
+**The POSIX transfer lifetime (L1's inherited finding).** `8c7ffa09`. No ordered control creates a resource-sharer
+registration any more: a sharer-backed `Connection` or socket is refused before anything is registered, and the
+session's wake pipe on POSIX is a named pipe whose name crosses and which the session opens itself
+(`core/visualizer_engine/wake_channel.py`). The link holds its reader, its own writer end and the name until the
+configure's reply; its `close` gives back whatever it still holds. A worker that dies before decoding its configure
+therefore leaves nothing: there is no accepted registration to cancel, no service to ask and nothing to wait for. The
+CPython 3.14 private-cache rollback adapter is removed with the registrations it rolled back; Windows' child-owned
+`DuplicateHandle` path is unchanged and keeps its tests. Tests: `tests/test_visualizer_wake_channel.py`,
+`tests/test_visualizer_ordered_control_delivery.py`. **Linux runtime is unverified:** the POSIX branch is proved only
+for ordering, rollback and ownership with its system calls injected; no FIFO, forkserver, POSIX wake or Linux worker
+has run, and the listener's end-of-file behaviour on a FIFO is taken from the POSIX specification, not from a run.
+
+**R-185 (found while running L4's focused files).** `cb9ee76a`. A killed worker still read as running for 5 to 34 ms,
+the owner's recovery landed in that window, and since L1's synchronous handle transfer the replacement's configure
+raised instead of being queued and resent: one worker death turned the worker off for the run. The existing
+real-process test for it was red. Fixed in the supervisor (`process_has_exited`).
+
 ## P3 readiness
 
 What ABI 2 already gives the native core:

@@ -30,6 +30,16 @@ Evidence already in design/audit: 160 replayable (recording,mode) pairs, 291,024
 
 ## 2. Ordered remaining P2 work: fix debt before making native consumers
 
+**11 Nov status (source and focused tests landed on the native-core branch; the boxes below stay open until the lead's
+audit accepts them).** P2-C1's rendered parity and gate-2 record, P2-C2's memory reading, P2-C3's L2-L5 and P2-C4's
+POSIX transfer lifetime each have their record, tests, negative controls and what remains unverified in
+`Native_Core_P2_Phase_Boundary_Audit.md`, "11 Nov". Two defects were found and fixed on the way: R-184 (the worker
+path kept drawing the outgoing frame after a profile-changing fade-out; found by the first rendered comparison) and
+R-185 (a worker being torn down still read as running, so one worker death turned the worker off for the run). Still
+open from this section after that work: P2-C1's load admission check; P2-C2's lease/hold exactly-once sweep and the
+Studio/fallback memory readings; P2-C3's last bullet (a target that never reveals, the framed-view control, Random
+Group Drift); H3 itself. No load, device, frozen or Linux run was made.
+
 ### P2-C1. M4, actual non-default identity and rendered parity
 
 - [ ] Extend the **real production owner worker-versus-in-process** gates to at least independently altered Settings/presets in Spectrum, Waveform Ribbon, Extruded Bubble and each remaining supported mode, including switch/reconfigure, park/resume and the same live PCM. Retain existing schema-max capacity tests; do not rewrite them as if missing.
@@ -64,6 +74,26 @@ Evidence already in design/audit: 160 replayable (recording,mode) pairs, 291,024
 - [ ] **D2. One consuming reader:** the native render core alone acknowledges presented frames/edges; the GUI/main owner reads only a non-consuming slot head/identity for fades/recovery/availability. Never add a second reader that consumes, decodes whole payloads, or steals edges. Define exactly when the protected-edge state is acknowledged.
 - [ ] **D3. Extruded Bubble geometry revisions:** send immutable render geometry once per `(worker namespace, engine generation, activation, geometry revision, capacity)` and small mutable per-frame state separately. Do not use bare revision as a global identity; prove retention/release on geometry changes, failed swaps, GPU upload failures and native teardown. Keep CPU-only oracle data off the wire.
 - [ ] **D4. Backend capability and shader inventory:** `shaderFloat64` / D3D double precision is not universally available and Qt QRhi has no universal FP64 feature query; decide a typed capability/fallback for Extruded Bubble's FP64 drift solver before porting it. Have `tools/vulkan_shader_readiness.py` discover new compute sources instead of accepting a fixed import list. Add fixed-layout per-mode native schemas; reserve the tagged Python codec namespace and make unsupported payloads fail explicitly.
+
+**Inputs to these decisions from the 11 Nov P2 work:**
+- *D1/D2, a retained frame needs its own drop edge.* R-184: the Python render node kept drawing a frame the owner had
+  discarded, because the discard reached the bridge and not the node's retained copy, and the identity had not changed
+  yet. A native reader that holds its last frame (a copy, a texture, uploaded geometry) needs an explicit "drop what
+  you hold" edge beside the mapping's contents and lifetime, and the non-consuming head read must not be able to
+  resurrect it.
+- *Parity oracles for the native substrate must be single-sampled or repeat-relative.* A multisampled scene target is
+  not reproducible draw to draw on the development GPU (one 8-bit level on roughly 0.3% of a Neon Lake card's pixels
+  between two draws of the same snapshot). `tools/visualizer_replay/owner_render_parity.py` is exact with one sample
+  and is the ready oracle for Spectrum-first parity: point its mirror at the native item. Waveform Ribbon asks for 4
+  samples whatever the tier (`rendering/quick/scene3d/waveform.py`), so a tier table alone does not single-sample it.
+- *D1, liveness is per stream, not per process.* A worker whose message loop answered heartbeats while its cadence was
+  blocked froze the Visualizer unseen (L4). The native reader's quiescence barrier needs the same distinction: "the
+  render thread answered" is not "the reader finished its copy".
+- *D3, the worker's memory steps once at the first Waveform Ribbon* (private 65-70 -> 104 MB, then flat; not
+  attributed). Measure it before sizing revision-scoped geometry buffers against it.
+- *Transport:* nothing may cross the ordered control channel through the stdlib resource sharer; a native core that
+  needs another descriptor in the worker passes a name the worker opens (POSIX) or a handle duplicated into the exact
+  process (Windows), as the wake pipe does.
 
 ### P3 rollout once these decisions are resolved
 

@@ -23,7 +23,7 @@ timer involved.
 
 POSIX status: source-level only. It is covered by unit tests of the ordering and the rollback (the system calls
 injected) and has never run on Linux; forkserver, the FIFO's open and end-of-file behaviour and the listener are
-unverified there (``Docs/Linux_Plan.md``).
+unverified there (``Linux_Plan.md``, Phase 4).
 """
 from __future__ import annotations
 
