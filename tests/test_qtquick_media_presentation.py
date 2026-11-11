@@ -425,9 +425,13 @@ def test_media_config_and_style_project_canonical_settings_and_direction() -> No
     assert config.playback_progress_fill_color == (45, 190, 250, 230)
     assert config.playback_progress_shadow_enabled is True
     assert config.playback_progress_glow_enabled is True
-    assert config.app_volume_enabled is True
-    assert config.app_volume_fill_color == (79, 79, 79, 150)
-    assert config.system_mute_enabled is False
+    # Unset members come from the canonical Media default (derived, never a pinned value), under the default Widget
+    # Theme every test starts on (conftest ``_forget_active_widget_theme``: a real Settings build, e.g. the Visualizer
+    # real-dialog tests, activates a mirrored theme whose accent the volume fill resolves through).
+    media_default = require_canonical_default("widgets.media")
+    assert config.app_volume_enabled is bool(media_default["spotify_volume_enabled"])
+    assert config.app_volume_fill_color == tuple(media_default["spotify_volume_fill_color"])
+    assert config.system_mute_enabled is bool(media_default["mute_button_enabled"])
     assert style.card_style.background_color.alpha() == 128
     assert style.card_style.shadow_offset_x == pytest.approx(-4.0)
     assert style.card_style.shadow_offset_y == pytest.approx(-4.0)

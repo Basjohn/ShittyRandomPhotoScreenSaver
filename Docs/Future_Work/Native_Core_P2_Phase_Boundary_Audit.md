@@ -831,5 +831,7 @@ Traps to decide before P3's first slice:
   code path, not by a running worker.
 - Renderer-side caches keyed on (engine generation, activation id) when a recovered session reuses `0/0`.
   `_bind_replacement` closes admission; no renderer cache was audited.
-- The in-flight default change itself (not on `main`).
+- The default change has merged (the Windows default on 9 Nov, `9362fa42`; the Linux source flip on 11 Nov,
+  `6c2039b3`). Its Windows runs are the gates and frozen checks above; the Linux flip has never run (see "Linux in
+  any form" above).
 - The liveness and inputs owner suites and the whole-clip gates were not re-run here (timing and load).

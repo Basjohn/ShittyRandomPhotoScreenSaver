@@ -1402,31 +1402,27 @@ class QuickCustomLayoutOwner:
 
     @staticmethod
     def _adjacent_binding_for_identity(display_identity, direction, available):
-        """One identity/topology selector; neither hover nor QML derives neighbours."""
+        """One identity/topology selector; neither hover nor QML derives neighbours.
+
+        Left and right are the fullscreen glyphs' rule (``core.display_neighbours``): a display that overlaps the
+        source horizontally (a vertical stack, of any widths) is on neither side."""
+        from core.display_neighbours import neighbour_on_side
+
         direction = str(direction or "").strip().lower()
         if direction not in {"left", "right"}:
             return None
         source = available.get(display_identity)
         if source is None:
             return None
-        source_center_x = source.geometry.x() + source.geometry.width() / 2.0
-        source_center_y = source.geometry.y() + source.geometry.height() / 2.0
-        candidates: list[tuple[float, float, _DisplayBinding]] = []
-        for candidate in available.values():
-            if candidate.identity == source.identity:
-                continue
-            center_x = candidate.geometry.x() + candidate.geometry.width() / 2.0
-            delta_x = center_x - source_center_x
-            if direction == "left" and delta_x >= 0.0:
-                continue
-            if direction == "right" and delta_x <= 0.0:
-                continue
-            center_y = candidate.geometry.y() + candidate.geometry.height() / 2.0
-            candidates.append((abs(delta_x), abs(center_y - source_center_y), candidate))
-        if not candidates:
-            return None
-        candidates.sort(key=lambda entry: (entry[0], entry[1], entry[2].identity))
-        return candidates[0][2]
+
+        def rect(binding: _DisplayBinding) -> tuple[float, float, float, float]:
+            geometry = binding.geometry
+            return float(geometry.x()), float(geometry.y()), float(geometry.width()), float(geometry.height())
+
+        others = {candidate.identity: rect(candidate) for candidate in available.values()
+                  if candidate.identity != source.identity}
+        key = neighbour_on_side(rect(source), others, -1 if direction == "left" else 1)
+        return None if key is None else available.get(key)
 
     def transfer_display(
         self,

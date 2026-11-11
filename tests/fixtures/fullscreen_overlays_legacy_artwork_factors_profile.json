@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "profile": "legacy-fullscreen-overlays-artwork-factors",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "fullscreen_overlays": {
+          "font_family": "Fixture Sans",
+          "font_size": 28,
+          "preset": {
+            "corner": "top_right",
+            "always_show": true,
+            "card": false,
+            "offset_x": -0.04,
+            "offset_y": 0.03,
+            "scale": 1.1
+          },
+          "now_playing": {
+            "corner": "bottom_left",
+            "always_show": true,
+            "card": true,
+            "media_controls": true,
+            "offset_x": 0.08,
+            "offset_y": -0.06,
+            "scale": 1.2,
+            "text_width": 9.5,
+            "artwork_scale": 1.5,
+            "artwork_width": 1.2,
+            "artwork_height": 0.8,
+            "child_geometry": {
+              "artwork": {"width_scale": 1.1, "height_scale": 1.0, "x_offset": 0.0, "y_offset": 0.0},
+              "title": {"width_scale": 1.2, "height_scale": 1.2, "x_offset": 0.05, "y_offset": 0.02}
+            }
+          }
+        }
+      }
+    }
+  },
+  "metadata": {
+    "fixture": "fullscreen_overlays_now_playing_artwork_factors_before_1B.7d"
+  }
+}

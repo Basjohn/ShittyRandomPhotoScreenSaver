@@ -3321,6 +3321,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         metavar="PATH",
         help="Inno Setup's ISCC.exe, when it is not in the Inno Setup 7/6 install folders or on PATH",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print the window's DPI awareness mode when the Build Foundry window opens",
+    )
     return parser.parse_args(argv)
 
 
@@ -3353,7 +3358,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         root.tk.call("tk", "scaling", max(1.0, root.winfo_fpixels("1i") / 72.0))
     except (tk.TclError, ValueError, TypeError):
         pass
-    if os.environ.get("SRPSS_BUILD_RUNNER_DEBUG"):
+    if args.debug:
         print(f"Build Foundry DPI mode: {dpi_mode}")
     BuildRunnerApp(root, initial_mode=mode, iscc_override=args.iscc)
     root.mainloop()

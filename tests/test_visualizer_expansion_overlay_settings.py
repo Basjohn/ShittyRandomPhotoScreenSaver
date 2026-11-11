@@ -195,6 +195,64 @@ def test_a_value_stored_with_the_retired_artwork_factors_loads_them_into_the_art
     assert huge["now_playing"]["child_geometry"]["artwork"]["width_scale"] == pytest.approx(artwork.maximum_scale[0])
 
 
+LEGACY_PROFILE = Path(__file__).resolve().parent / "fixtures" / "fullscreen_overlays_legacy_artwork_factors_profile.json"
+
+
+def test_a_raw_profile_file_with_the_retired_artwork_factors_loads_through_the_bridge(tmp_path):
+    """A settings file as an older build wrote it (``now_playing`` carrying ``artwork_scale`` / ``artwork_width`` /
+    ``artwork_height`` beside an artwork record; never normalised by today's write path) loads, through a fresh
+    manager reading the file, to the Now Playing geometry the load bridge gives that raw value: the factors fold into
+    the artwork record once, every other stored member is kept, and a save + reload changes nothing."""
+    import json
+    import shutil
+
+    from core.settings.fullscreen_overlays import NOW_PLAYING_CHILD_ROLES
+    from core.settings.json_store import determine_storage_path
+    from widgets.spotify_visualizer.expanded_overlays import resolve_expanded_overlay_config
+
+    raw = json.loads(LEGACY_PROFILE.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"][KEY]
+    raw_now = raw["now_playing"]
+    # The fixture is the old shape (distinguishing: non-unit factors beside a record).
+    assert set(LEGACY_ARTWORK_FACTOR_KEYS) <= set(raw_now)
+    assert any(raw_now[key] != 1.0 for key in LEGACY_ARTWORK_FACTOR_KEYS)
+
+    application = f"TestApp_{uuid.uuid4().hex}"
+    path = determine_storage_path(application, base_dir=tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(LEGACY_PROFILE, path)
+
+    settings = _manager_for(tmp_path, application)
+    loaded = normalize_fullscreen_overlays(settings.get(FULLSCREEN_OVERLAYS_KEY))
+    expected = normalize_fullscreen_overlays(raw)
+    assert loaded == expected
+
+    now = loaded["now_playing"]
+    assert not set(LEGACY_ARTWORK_FACTOR_KEYS) & set(now)
+    for key, item in raw_now.items():
+        if key not in LEGACY_ARTWORK_FACTOR_KEYS and key != "child_geometry":
+            assert now[key] == item, key
+    assert now["child_geometry"]["title"] == raw_now["child_geometry"]["title"]
+    artwork_role = next(role for role in NOW_PLAYING_CHILD_ROLES if role.role_id == "artwork")
+    record, stored = now["child_geometry"]["artwork"], raw_now["child_geometry"]["artwork"]
+    assert record["width_scale"] == pytest.approx(min(artwork_role.maximum_scale[0], stored["width_scale"]
+                                                      * raw_now["artwork_scale"] * raw_now["artwork_width"]))
+    assert record["height_scale"] == pytest.approx(min(artwork_role.maximum_scale[1], stored["height_scale"]
+                                                       * raw_now["artwork_scale"] * raw_now["artwork_height"]))
+    # The runtime's projection (what the expanded overlay draws) reads the same geometry.
+    section = settings.get("widgets.spotify_visualizer")
+    assert resolve_expanded_overlay_config(section)["nowPlaying"] == resolve_expanded_overlay_config(
+        {KEY: expected})["nowPlaying"]
+
+    # Saved and read again (a restart after the bridge ran): the factors are not applied a second time.
+    settings.set(FULLSCREEN_OVERLAYS_KEY, loaded)
+    settings.save()
+    assert normalize_fullscreen_overlays(_manager_for(tmp_path, application).get(FULLSCREEN_OVERLAYS_KEY)) == expected
+
+
+def _manager_for(root: Path, application: str) -> SettingsManager:
+    return SettingsManager(organization="TestOrg", application=application, storage_base_dir=root)
+
+
 def test_a_value_stored_before_the_single_axis_extents_reads_them_as_the_natural_look():
     """Persisted input: a value from before the extents existed (every member but them) normalises with each extent at
     its canonical (natural) value and everything stored kept; a second normalisation changes nothing. No bridge: the

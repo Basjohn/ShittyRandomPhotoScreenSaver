@@ -3,7 +3,8 @@
 The Visualizer card's full-display glyphs (plan 1B.12, relative form) offer "full display on the display to the left"
 and "... to the right" of the display the Visualizer is on. Left and right come from where the displays sit on the
 virtual desktop, never from their index. The rule is pure (rectangles in, keys out) so the glyph row's publication and
-the press resolve through the same function.
+the press resolve through the same function. Edit's display-hop arrows (and the hover transfer options that project
+them, ``QuickCustomLayoutOwner._adjacent_binding_for_identity``) use the same rule: one left/right for displays.
 
 Rectangles are ``(x, y, width, height)`` in the virtual desktop's device-independent coordinates (``QScreen.geometry``
 as each display unit's ``display_identity.geometry`` carries it). With mixed scaling Qt keeps every display's native
