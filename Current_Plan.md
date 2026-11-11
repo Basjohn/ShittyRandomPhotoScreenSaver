@@ -279,15 +279,14 @@ Qt's pointer tracking cleared artificially, so the operator's real exit path is 
   and a `delete=False` temp file (`tools/visualizer_capture_core.py:215`). Fix with section 3's "Tool-output
   contract reds".
 
-### 1B.3 Studio slider save churn (audit landed f5693c6d: no drag writes while it moves)
+### 1B.3 Studio slider save churn (audit and its two camera side defects landed; contract: Visualizer_Studio.md)
 
-- [ ] Sphere Studio: View Turn / View Tilt snap back to 0 after a drag (in flight, Opus Medium; fix committed
-  on its branch d542d355, unaudited).
-- [ ] Waveform Studio: Camera Position Y dragged to its maximum saves 0.0; fix the range or the eye limit at
-  the canonical spec (in flight, same agent).
-- [ ] One registry-wide test: every framed mode's camera position/target row has the range its spec admits.
-- [ ] Lead audit: both regressions fail on the pre-fix code; merge; re-run `tests/test_studio_drag_io_churn.py`
-  for the touched modes.
+- [ ] The Studio's orbit notice says the orbit "saves only with the preset's camera checkbox"; Sphere and
+  Extruded Spectrum have no checkbox and save through Save Camera. Make the notice follow the mode's policy.
+- [~] Operator: Sphere Studio, drag View Turn / View Tilt (holds for the session), Save Camera, reopen.
+- [~] Operator: Waveform Studio has Camera X and Z only (its grounded orbit fixes the eye height, so Camera Y
+  never did anything); say if a real eye-height control is wanted.
+- [~] Operator: Extruded Bubble Studio Camera X/Y/Z now span -2..2 (the eye's whole admitted box), was -1..1.
 
 ### 1B.4 Shape instrument for Spectrum and Neon Lake (design regression: sliders replaced the shape control)
 
