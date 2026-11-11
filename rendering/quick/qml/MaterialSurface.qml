@@ -51,6 +51,15 @@ ShaderEffect {
     })
     readonly property var resolvedParameters: parameters[material] || parameters["acrylic"]
 
+    // Dark ink (light themes): the panel's furthest lift toward its anchor, the card's
+    // Settings-variant shell density (never less than the reference ink needs over black),
+    // and the composed panel over a black and a white backdrop, against which each text run
+    // corrects its own ink (OverlayCard.surfaceInk). Style edges only; unused for light ink.
+    readonly property real panelCeiling: SurfaceContrast.panelCeiling(material, resolvedParameters,
+                                                                      tintColor, contrastLimits, opacityAdjust)
+    readonly property var inkPoles: SurfaceContrast.inkPoles(resolvedParameters, tintColor, contrastLimits,
+                                                            panelCeiling, opacityAdjust)
+
     // Shader inputs (names match surface_material.frag's uniform block).
     readonly property var source: backdrop
     readonly property vector2d itemSize: Qt.vector2d(width, height)

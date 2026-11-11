@@ -47,11 +47,17 @@ def project_settings_opacity_adjust(value: object) -> bool:
     return True
 
 
+# Per-material calibration of combined surface density (Smoked applies to dark surfaces only).
+# Runtime cards bound their dark-ink legibility panel with the same calibration
+# (rendering/quick/qml/SurfaceContrast.js keeps an equal table; tests check the two).
+SETTINGS_DENSITY_BASELINE: dict[str, float] = {"acrylic": -.10, "frosted": -.20, "mica": -.20,
+                                               "glass": .10, "smoked": -.10}
+
+
 def settings_surface_density(mode: str, density: float, *, dark_surface: bool = True,
                              adjustment: float | None = None) -> float:
     """Calibrate combined density; callers decide the actual composition boundary."""
-    baseline = {"acrylic": -.10, "frosted": -.20, "mica": -.20, "glass": .10,
-                "smoked": -.10 if dark_surface else 0.0}.get(mode, 0.0)
+    baseline = 0.0 if mode == "smoked" and not dark_surface else SETTINGS_DENSITY_BASELINE.get(mode, 0.0)
     calibrated = adjusted_surface_density(density, baseline)
     return adjusted_surface_density(calibrated, _settings_adjustment if adjustment is None else adjustment)
 

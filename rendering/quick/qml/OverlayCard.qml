@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import "SurfaceContrast.js" as SurfaceContrast
 
 // Presentation-only card shell: background, border, corner radius, padding and
 // a signed-offset-safe rectangular drop shadow. This is a shared E3 primitive:
@@ -34,6 +35,19 @@ Item {
         ? surfaceMaterialLoader.item.resolvedParameters : null
     readonly property var surfaceMaterialLimits: surfaceMaterialLoader.item
         ? surfaceMaterialLoader.item.panelLimits : Qt.vector4d(0, 1, 1, 1)
+    readonly property real surfaceMaterialCeiling: surfaceMaterialLoader.item
+        ? surfaceMaterialLoader.item.panelCeiling : 1.0
+    // A text run's ink on this card (ShadowedText): null (the authored colour stands) unless
+    // the material is active with dark ink, where the panel is bounded and the run's own ink
+    // is corrected against the composed panel over black and white backdrops:
+    // [r, g, b, a, reachable] (SurfaceContrast.legibleInk). Style edges only.
+    function surfaceInkSolution(color, opacity, small) {
+        var surface = surfaceMaterialLoader.item
+        if (!card.surfaceMaterialActive || !surface || surface.panelLimits.y > 0.5
+                || surface.glassLegibility.w <= 1.0)
+            return null
+        return SurfaceContrast.legibleInk(color, opacity, surface.inkPoles, small)
+    }
     // Card CONTENT paints only within the card at every point in its lifecycle.
     // Background, border and the external shadow remain separate/unclipped.
 

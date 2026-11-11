@@ -65,6 +65,7 @@ class MaterialScene:
         self.owner = None
         self.presentations: list = []
         self.run_id = 0
+        self.art: Path | None = None
 
     @property
     def host(self):
@@ -193,6 +194,7 @@ def build_cards(material_scene: MaterialScene, art: Path) -> None:
     from rendering.quick.widgets.host import OverlayWidgetGeometry
 
     scene = material_scene.scene
+    material_scene.art = art
     width, height = SCENE
     built = []
     if CARD_SET == "lists":
@@ -283,19 +285,18 @@ def capture_sheets(scene: MaterialScene, wallpapers: list[Path], output: Path) -
     return rows
 
 
-def rebuild_styles(scene: MaterialScene) -> None:
-    """Re-project each card's colours from the newly active Widget Theme."""
+def rebuild_styles(scene: MaterialScene, art: Path | None = None) -> None:
+    """Re-project each card's colours from the newly active Widget Theme.
 
-    from tools import onboarding_preview_foundry as foundry
+    ``art`` is the Media artwork file ``main`` wrote into the output folder (it is removed with
+    the run); nothing is written to ``%TEMP%``."""
 
     for presentation in list(scene.presentations):
         presentation.retire()
     scene.presentations = []
     scene.drop_owner()
     scene.render(2)
-    art = foundry._gradient_art(Path(os.environ.get("TEMP", ".")) / "surface_material_art.png",
-                                (480, 480), ("#27336e", "#e7678a"), 1)
-    build_cards(scene, art)
+    build_cards(scene, art if art is not None else scene.art)
     settle_animations(scene)
 
 
