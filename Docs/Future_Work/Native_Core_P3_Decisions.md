@@ -88,6 +88,26 @@ The bar is the float64 CPU reference (`MaterialDriftReference`), the same judge 
 The pair arithmetic is first proved without a GPU: a NumPy float32 model of the shader's exact operation order
 (with `math.fma`) against the reference over the long horizons. Only then is the shader changed.
 
+### First numeric check of (3) (lead, 12 Nov 2026; not yet the D4.1 test)
+
+A NumPy model of the pair arithmetic for 218,500 motes (float32 span 2 to 54, the two carries, random seed and
+phase offset), against the float64 value, beside a shader that would simply use float32. Error in fractions of a
+span, largest over all motes:
+
+| Horizon | Largest quotient | Plain float32 | Float pairs |
+|---|---|---|---|
+| 1 hour at the default speed (travel 5,200) | 2,305 | 2.2e-4 | 2.4e-7 |
+| 1 hour at the fastest speed (32,400) | 14,364 | 1.3e-3 | 2.4e-7 |
+| 8 hours at the fastest speed (259,200) | 114,909 | 8.6e-3 | 2.1e-7 |
+| 24 hours at the fastest speed (777,600) | 344,728 | 3.2e-2 | 2.1e-7 |
+
+The pairs hold a constant error of a few float32 steps (the result itself resolves 6e-8) however long the saver
+runs, where plain float32 degrades with time to a visible 3 % of a span after a day. 2.4e-7 of the longest span
+is about 1.3e-5 world units, far inside the 1e-4 the solver's tests allow, and it comes from the last three
+float32 additions, not from the product; D4.1 models the whole solver and may tighten the final sum. The check
+used an exact two-product (what `fma` returns); it says nothing yet about real shader compilers, which is what
+D4.7's self-check is for.
+
 ### Consequences
 
 - The solver stops being a Vulkan blocker and can be ported by the native core like any other compute pass.
