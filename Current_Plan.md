@@ -734,9 +734,12 @@ profile build has none); Small mode is the Media widget on the live desktop (sna
 adjustable, children behind the lock glyph); its Up arrow enters Full mode (the mock), which defaults to full
 screen and resizes like a normal window with its sections scaling; SMP Edit rearranges sections (swap, X/Y/XY,
 move to an edge) and must not break the existing Edit modes; long term an equalizer, upmix and downmix, ReplayGain,
-device select, crossfade and a well indexed growable library. SMP stays behind the native core, the open defects
-and the fullscreen Visualizer. The route the lead chose: SMP Edit is its own owner over a section tree, built from
-the existing Edit modes' parts, one edit session per window (document 04 section 8).
+device select, crossfade and a well indexed growable library; Arrange gets an SMP section (the main one on SMP
+builds); on the screensaver and MC builds Small and Full mode stay inside the compositor (Full mode as a
+display-wide presentation, as the fullscreen Visualizer is), and only the SMP build uses desktop windows. SMP
+stays behind the native core, the open defects and the fullscreen Visualizer. The route the lead chose: SMP Edit is its own owner over a section tree, built from
+the existing Edit modes' parts, one edit session per surface, written once against a small host interface with
+two hosts, a compositor display and a desktop window (document 04 section 8).
 
 - [ ] Rules that keep SMP's doors open, to check at every audit until SMP starts (document 04 section 8, last
   list): the Media widget, Now Playing and the seek bar stay host-agnostic; the Visualizer stays one owner that can

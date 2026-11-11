@@ -168,6 +168,10 @@ fullscreen Visualizer come first. It is written down now so that work done befor
   adjustable 'section'."
 - P5. **Existing Edit modes must not break**, and in the screensaver and MC builds SMP Edit lives side by side
   with them.
+- P7. **SMP has its own section in Arrange**, "where this can be more easily carried out"; on SMP builds it is
+  the main section of Arrange.
+- P8. **On the screensaver and MC builds, Full mode and Small mode do not need to leave the compositor.** Only
+  the SMP profile build puts them on the desktop as windows.
 - P6. **Audio and library, eventually:** an equalizer; high-end audio support ("everything from upmixing,
   downmixing to replay gain, device select and so on, audio crossfade too"); "a well indexed growable library
   database"; "full modern music player parity without sacrificing our unique features".
@@ -182,19 +186,22 @@ owners, never a teardown and rebuild: audio, queue position, the system media se
 and history carry across (plan 02 section 8.2 already requires this; Current_Plan 1C.2 makes "retarget before
 rebuild" a standing rule).
 
-**8.2 Small mode is the Media widget's own contract on a desktop window.** Its outer geometry is always live (edge
-and corner drags, snapping to screen edges, to the work area and to its own last positions), with no Edit mode to
-enter. Its children (artwork, text group, transport, volume, seek bar) keep the Media widget's Edit rules and are
-adjustable only while the lock glyph is open, so an ordinary drag can never disturb them. In the screensaver and MC
-builds the Media widget on the compositor stays exactly what it is today; the desktop Small mode is the same
-component in a different host.
+**8.2 Small mode is the Media widget's own contract; the host differs by build (P8).** On the screensaver and MC
+builds Small mode *is* the Media widget on the compositor, exactly as today, and never leaves it. On the SMP
+profile build the same component sits in a desktop window, where its outer geometry is always live (edge and
+corner drags, snapping to screen edges, to the work area and to its own last positions) with no Edit mode to
+enter. In both hosts its children (artwork, text group, transport, volume, seek bar) keep the Media widget's Edit
+rules and are adjustable only while the lock glyph is open, so an ordinary drag can never disturb them.
 
 **8.3 Full mode is one tree of sections at every window size.** Plan 02 section 16A's tiling tree (the operator's
 "no dead/empty sections and sections must connect", 7 Nov) is the layout model for Full mode whether the window is
 full screen, maximised or dragged to any size: an internal node is a horizontal or vertical split with a normalised
 ratio; a leaf is a section holding one content. Because the tree stores ratios and never pixels, resizing the
 window scales every section's size and spacing with no reauthoring (P4). Full screen is the default window state
-and is remembered; it is a state of the window, not a different layout system.
+and is remembered; it is a state of the window, not a different layout system. On the screensaver and MC builds
+Full mode stays inside the compositor (P8): it is a display-wide presentation on one display, the same kind of
+takeover the fullscreen Visualizer is (plan 01), and its rectangle is that display; the tree, the sections and
+every rule below are the same. Only the host of the rectangle differs.
 
 **8.4 A section is the unit, and it adapts to its shape.** Every "child" of Full mode is a section: Navigation,
 Library (Tracks), Queue (Playing Tracks), Track Information, Artwork, Visualizer (or Lyrics or Artist Collage in
@@ -234,21 +241,35 @@ P5 true.
   commit / cancel transaction and the "one undo per gesture" rule are the components and helpers the existing
   Edit modes already use (the route Fullscreen Visualizer Edit took: its own surface, ordinary Edit's handlers).
   So the three feel the same in the hand, and a fix to a handle fixes all three.
-- *One edit session per window.* A window is in at most one edit mode. In the screensaver and MC builds the
-  compositor's displays and the SMP Full mode window are different windows, so ordinary Edit on a display and SMP
-  Edit in the player can both exist in the product, and entering one never changes the other.
+- *One edit session per surface.* A surface (a compositor display, or the SMP build's window) is in at most
+  one edit mode at a time. On the screensaver and MC builds Full mode is a display-wide presentation inside the
+  compositor, so SMP Edit stands to it exactly as Fullscreen Visualizer Edit stands to the expanded Visualizer:
+  entered from that presentation, editing only that presentation's record, with ordinary Edit unavailable on
+  that display until the presentation collapses and available as ever on the other displays. Entering either
+  never changes the other's record.
+- *Arrange has an SMP section (P7).* Arrange gains one section for SMP that shows the Full mode section tree
+  (and Small mode's children) and offers the same operations with the precision Arrange gives the widget layout
+  today. It edits the same record through the same owner as SMP Edit, never a copy: the Edit / Arrange parity
+  rule applies, so the same gesture made in SMP Edit and in Arrange's SMP section leaves the same stored tree
+  (the parity harness pattern, extended). Arrange's existing sections are unchanged. On the SMP profile build,
+  where the compositor's sections have nothing to show, the SMP section is Arrange's main section.
 - *Inside a section, the section's own rules.* The Visualizer section keeps its glyph row and its own view
   gestures; Track Information keeps its alignment swap. SMP Edit moves and sizes sections; it does not reach
   inside them.
 - *Proof owed when built:* the existing Edit suites (ordinary Edit, Arrange parity, Fullscreen Edit) run unchanged
   and green with SMP present and with SMP Edit entered; the widget layout record is byte-identical before and
-  after any SMP Edit session, and the section tree is byte-identical after any ordinary Edit session.
+  after any SMP Edit or SMP Arrange session, the section tree is byte-identical after any ordinary Edit or
+  Arrange session, and SMP Edit and Arrange's SMP section agree gesture for gesture.
 
-**8.7 Profiles decide what is built in, by capability.** The SMP profile build has no compositor capability: the
-image presenter, transitions, image sources and the non-media widget families are absent, and the SMP runtime
-never imports them (plan 02 section 8.1 already has this; an import-closure test like the engine worker's proves
-it). The screensaver and MC builds have the compositor capability and the SMP capability together. SMP code
-therefore never assumes a compositor exists, and compositor code never assumes SMP is absent.
+**8.7 Profiles decide what is built in, by capability, and so which host SMP uses.** The SMP profile build has no
+compositor capability: the image presenter, transitions, image sources and the non-media widget families are
+absent, and the SMP runtime never imports them (plan 02 section 8.1 already has this; an import-closure test like
+the engine worker's proves it); there Small and Full mode are desktop windows. The screensaver and MC builds have
+the compositor capability and the SMP capability together; there Small and Full mode are presentations inside the
+compositor and need no desktop window (P8). The section tree, the section registry, SMP Edit and Arrange's SMP
+section are written once against a small host interface ("give me a rectangle, tell me when it changes, take
+focus, leave"), with two hosts: a compositor display and a desktop window. SMP code never assumes which one it
+has.
 
 **What must not be closed off before SMP starts** (rules for work done now):
 

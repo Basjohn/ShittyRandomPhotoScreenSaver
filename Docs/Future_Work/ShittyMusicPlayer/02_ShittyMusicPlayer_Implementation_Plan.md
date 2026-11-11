@@ -431,12 +431,18 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
   the mock's "existing Edit handlers" stands too). Existing Edit modes must not break: in the screensaver and MC
   builds, which carry the compositor and full SMP functionality together, the two live side by side, one edit
   session per window, neither record touched by the other's session.
-- [ ] **Small mode and Full mode (operator, 11 Nov 2026):** Small mode is the Media widget as it is now, on the
-  live desktop, with proper snapping, its outer geometry adjustable at all times and its children adjustable behind
-  the lock glyph (the "Compact player" above). Its Up arrow switches to Full mode, the mock's layout (the
-  "Full desktop" above). Full mode defaults to full screen but can be adjusted like a normal window, and its
-  sections scale their spacing and sizing with it: §16A's section tree is the layout at every window size, not
-  only in full screen.
+- [ ] **Small mode and Full mode (operator, 11 Nov 2026):** Small mode is the Media widget as it is now; on the
+  SMP profile build it sits on the live desktop, with proper snapping, its outer geometry adjustable at all times
+  and its children adjustable behind the lock glyph (the "Compact player" above). Its Up arrow switches to Full
+  mode, the mock's layout (the "Full desktop" above). Full mode defaults to full screen but can be adjusted like a
+  normal window, and its sections scale their spacing and sizing with it: §16A's section tree is the layout at
+  every window size, not only in full screen. On the screensaver and MC builds neither mode needs to leave the
+  compositor: Small mode is the Media widget where it is today and Full mode is a display-wide presentation on one
+  display, as the fullscreen Visualizer is (document 04 sections 8.2, 8.3 and 8.7: one implementation, two hosts).
+- [ ] **Arrange's SMP section (operator, 11 Nov 2026):** Arrange gains a section for SMP in which the Full mode
+  section tree is rearranged with Arrange's precision; it is the main section of Arrange on the SMP profile build.
+  It edits the same record through the same owner as SMP Edit, under the Edit / Arrange parity rule (document 04
+  section 8.6); Arrange's existing sections are unchanged.
 - [ ] **Three builds from profiles (operator, 11 Nov 2026):** the screensaver build, the MC build and the SMP build
   come from profiles as the first two do today. The screensaver and MC builds have full SMP functionality together
   with the compositor; only the SMP profile build has no compositor (no transitions, no image presenter, no widgets
