@@ -216,14 +216,15 @@ def run_in_worker(supervisor, script, mode: str, *, order: str = "production") -
 
 def stress_in_worker(supervisor, frames, mode: str) -> dict:
     """``free`` order in the worker (commits race the tick) with the reader taking frames on its own wake thread."""
-    import multiprocessing
     import threading
 
     from core.process.types import MessageType, WorkerType
     from core.visualizer_engine.packet_mailbox import PacketMailbox
+    from core.visualizer_engine.wake_channel import open_wake_channel
 
     reader = PacketMailbox(role="reader")
-    receiver, sender = multiprocessing.Pipe(duplex=False)
+    channel = open_wake_channel()                 # what the product sends: a pipe end (Windows) or a name (POSIX)
+    receiver = channel.receiver
     taken, errors, lock = [], [], threading.Lock()
 
     def on_wake() -> None:
@@ -239,8 +240,8 @@ def stress_in_worker(supervisor, frames, mode: str) -> dict:
     reader.set_wake_callback(on_wake)
     reader.listen_for_wakes(receiver)
     try:
-        configure_worker(supervisor, reader, mode, order="free", wake=sender)
-        sender.close()
+        configure_worker(supervisor, reader, mode, order="free", wake=channel.transfer)
+        channel.release_sender()
         last = 0
         for feature in frames:
             response = supervisor.send_request_and_await_response(WorkerType.VISUALIZER, MessageType.VIS_INPUT,
@@ -261,6 +262,7 @@ def stress_in_worker(supervisor, frames, mode: str) -> dict:
                 "stranded": stranded, "torn_reads": reader._reader.torn_reads, "errors": errors,
                 "ok": advancing and not stranded and not errors}
     finally:
+        channel.release_sender()
         reader.close()
 
 
@@ -280,13 +282,16 @@ class PacedReader:
     wake and then stalls ``stall_s`` (a slow GUI). Never a poll: the consumer blocks on the wake event."""
 
     def __init__(self, stall_s: float = PACED_STALL_S) -> None:
-        import multiprocessing
         import threading
 
         from core.visualizer_engine.packet_mailbox import PacketMailbox
+        from core.visualizer_engine.wake_channel import open_wake_channel
 
         self.mailbox = PacketMailbox(role="reader")
-        self.receiver, self.sender = multiprocessing.Pipe(duplex=False)
+        # The session's wake pipe as the product opens it; ``wake`` is what a configure carries (a pipe end on
+        # Windows, the pipe's name on POSIX: the session opens its own end by it, in this process or the worker's).
+        self.channel = open_wake_channel()
+        self.receiver, self.wake = self.channel.receiver, self.channel.transfer
         self._woke, self._done, self._reached = threading.Event(), threading.Event(), threading.Event()
         self._lock = threading.Lock()
         self._target: int | None = None
@@ -348,6 +353,7 @@ class PacedReader:
         self._done.set()
         self._woke.set()
         self._thread.join(5.0)
+        self.channel.release_sender()
         self.mailbox.close()
 
 
@@ -412,7 +418,7 @@ def paced_in_process(pcm, rate: int, mode: str, *, seconds: float, stall_s: floa
     try:
         session = EngineSession(mapping=reader.mailbox.mapping_name, mode=mode, runtime_generation=GENERATION,
                                 inputs="live", order="free", cadence="worker", pcm=pcm, pcm_rate=rate,
-                                wake=reader.sender)
+                                wake=reader.wake)
         run = threading.Event()
         started = time.perf_counter()
         session.start(True)
@@ -442,8 +448,8 @@ def paced_in_worker(supervisor, pcm, rate: int, mode: str, *, seconds: float,
     reader = PacedReader(stall_s)
     try:
         configure_worker(supervisor, reader.mailbox, mode, order="free", cadence="worker", pcm=pcm, pcm_rate=rate,
-                         wake=reader.sender, seed=None)
-        reader.sender.close()                         # the worker holds its own end now
+                         wake=reader.wake, seed=None)
+        reader.channel.release_sender()               # the worker holds its own end now
         started = time.perf_counter()
         response = supervisor.send_request_and_await_response(WorkerType.VISUALIZER, MessageType.VIS_START,
                                                               {"playing": True}, timeout_ms=30_000)

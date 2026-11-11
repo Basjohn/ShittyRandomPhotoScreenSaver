@@ -354,75 +354,128 @@ def test_a_send_whose_target_dies_during_the_handle_transfer_is_not_running_not_
         _close(supervisor)
 
 
-@pytest.mark.parametrize('refusal', ('serialize', 'enqueue'))
-def test_never_submitted_sharer_registration_is_locally_reclaimed(refusal):
-    """Exercise the stdlib registration path on Windows sockets and POSIX FDs."""
+def _socket_connections():
+    """A sharer-backed pair: ``multiprocessing.connection.Connection`` over a socket (the class every POSIX pipe end
+    has; on Windows, where pipes are ``PipeConnection``, the socket-backed one)."""
     import socket
-    from multiprocessing import connection, resource_sharer
-    from core.process.control_messages import _registration_service
+    from multiprocessing import connection
     first, second = socket.socketpair()
-    sender, receiver = connection.Connection(first.detach()), connection.Connection(second.detach())
-    service = _registration_service()
-    # This unrelated, unpublished registration must remain entirely untouched.
-    closed = []
-    unrelated = service.register(lambda *_: None, lambda: closed.append(True))
-    class Refused(queue.Queue):
-        def put_nowait(self, value):
-            raise queue.Full
-    supervisor = _supervisor(Refused() if refusal == 'enqueue' else queue.Queue())
-    try:
-        before = set(service._cache)
-        for _ in range(8):
-            payload = {'wake': sender}
-            if refusal == 'serialize':
-                payload['bad'] = lambda: None
-                with pytest.raises((pickle.PicklingError, AttributeError, TypeError)):
-                    supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_SET_VIEW, payload)
+    return connection.Connection(first.detach()), connection.Connection(second.detach())
+
+
+class _SharerSpy:
+    """Counts the resource sharer's registrations through its public wrappers (``DupFd`` / ``DupSocket``): each
+    construction registers one sender-side duplicate. The wrappers stay real, so a registration made under the spy can
+    be collected again through the supported ``detach``."""
+
+    def __init__(self, monkeypatch):
+        from multiprocessing import resource_sharer
+        self.made: list = []
+        for name in ('DupFd', 'DupSocket'):
+            wrapper_type = getattr(resource_sharer, name, None)
+            if wrapper_type is None:
+                continue
+
+            def recording(wrapper, *args, _init=wrapper_type.__init__, **kwargs):
+                _init(wrapper, *args, **kwargs)
+                self.made.append(wrapper)
+
+            monkeypatch.setattr(wrapper_type, '__init__', recording)   # the class stays itself (it is pickled)
+
+    def collect(self) -> None:
+        """Take back every registration made (the sender asks its own service, as a receiver would)."""
+        made, self.made = self.made, []
+        for wrapper in made:
+            taken = wrapper.detach()
+            close = getattr(taken, 'close', None)
+            if callable(close):
+                close()
             else:
-                assert supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_SET_VIEW, payload) is None
-            assert set(service._cache) == before and closed == []
+                os.close(taken)
+
+
+@pytest.mark.parametrize('pre_fix', (False, True))
+def test_a_sharer_backed_connection_is_refused_before_anything_is_registered(monkeypatch, pre_fix):
+    # The POSIX transfer-lifetime repair: a Connection that only the resource sharer could hand over is never
+    # serialised for the ordered channel, so no sender-side duplicate exists for a worker to leave uncollected by
+    # dying before it decodes the message. Refused synchronously, nothing registered, nothing queued, the caller's
+    # Connection untouched. Negative control (the stock reducer, as before the repair): the send is accepted and one
+    # registration sits in the sharer with no receiver that will ever ask for it.
+    from multiprocessing import connection, reduction
+    from core.process import control_messages
+    from core.process.control_messages import SharerBackedTransferRefused
+
+    spy = _SharerSpy(monkeypatch)
+    if pre_fix:
+        monkeypatch.setattr(control_messages, '_refuse_sharer_backed',
+                            reduction.ForkingPickler._extra_reducers[connection.Connection])
+    sender, receiver = _socket_connections()
+    channel = queue.Queue()
+    supervisor = _supervisor(channel)
+    try:
+        if pre_fix:
+            assert supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {'wake': sender})
+            assert len(spy.made) == 1 and not channel.empty()      # accepted: a registration nobody will collect
+            return
+        for _ in range(8):
+            with pytest.raises(SharerBackedTransferRefused, match='wake_channel'):
+                supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {'wake': sender})
+        assert spy.made == [] and channel.empty()
         sender.send_bytes(b'original remains usable')
         assert receiver.recv_bytes() == b'original remains usable'
     finally:
-        with service._lock:
-            _send, close = service._cache.pop(unrelated[1])
-        close()
+        spy.collect()
         sender.close()
         receiver.close()
         _close(supervisor)
 
 
-def test_unsupported_sharer_shape_fails_before_registration(monkeypatch):
+def test_a_socket_is_refused_like_a_sharer_backed_connection(monkeypatch):
     import socket
-    from multiprocessing import connection
-    from core.process import control_messages
+    from core.process.control_messages import SharerBackedTransferRefused
+
+    spy = _SharerSpy(monkeypatch)
     first, second = socket.socketpair()
-    sender = connection.Connection(first.detach())
     channel = queue.Queue()
     supervisor = _supervisor(channel)
-    monkeypatch.setattr(control_messages.resource_sharer, '_resource_sharer', SimpleNamespace(_cache=None))
     try:
-        with pytest.raises(RuntimeError, match='audited CPython 3.14'):
-            supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_SET_VIEW, {'wake': sender})
-        assert channel.empty()
+        with pytest.raises(SharerBackedTransferRefused):
+            supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_CONFIGURE, {'socket': first})
+        assert spy.made == [] and channel.empty()
     finally:
-        sender.close()
+        spy.collect()
+        first.close()
         second.close()
         _close(supervisor)
 
 
-def test_unpublished_posix_adapter_claims_only_its_own_registration_once():
-    """Pure adapter proof; Windows execution does not establish Linux IPC."""
-    import threading
-    from core.process.control_messages import _UnsubmittedRegistration
-    closed = []
-    service = SimpleNamespace(_lock=threading.Lock(), _address='service', _cache={
-        7: (lambda *_: None, lambda: closed.append('ours')),
-        8: (lambda *_: None, lambda: closed.append('unrelated')),
-    })
-    rollback = _UnsubmittedRegistration(service, ('service', 7))
-    rollback.cancel()
-    rollback.cancel()
-    assert closed == ['ours'] and set(service._cache) == {8}
-    _UnsubmittedRegistration(service, ('another-service', 8)).cancel()
-    assert closed == ['ours'] and set(service._cache) == {8}
+def test_a_refused_transfer_reaches_the_links_failure_event_and_frees_what_came_before_it(qapp, monkeypatch):
+    # A refused Connection behind an accepted pipe end in one payload (Windows: the pipe end was already duplicated
+    # into the target): the duplicate is taken back, the link's request fails as an event, nothing is registered.
+    from widgets.spotify_visualizer.engine_worker_link import EngineWorkerLink
+
+    spy = _SharerSpy(monkeypatch)
+    refused, other = _socket_connections()
+    receiver, pipe_end = multiprocessing.Pipe(duplex=False)
+    channel = queue.Queue()
+    supervisor = _supervisor(channel)
+    supervisor._response_queues[WorkerType.VISUALIZER] = queue.Queue()
+    link = EngineWorkerLink(supervisor, on_lost=lambda *_: None)
+    failed = []
+    try:
+        link._send(MessageType.VIS_SET_PLAYING, {'bad': lambda: None}, on_failed=lambda _failure: None)
+        qapp.processEvents()                     # the first failure event (its one-time handles are not the subject)
+        before = _windows_handles() if os.name == 'nt' else None
+        link._send(MessageType.VIS_SET_PLAYING, {'first': pipe_end, 'second': refused}, on_failed=failed.append)
+        assert failed == []
+        qapp.processEvents()
+        assert len(failed) == 1 and 'could not be sent' in str(failed[0])
+        assert spy.made == [] and channel.empty() and not link.busy
+        if before is not None:
+            assert _windows_handles() == before
+    finally:
+        spy.collect()
+        link.close()
+        for end in (refused, other, receiver, pipe_end):
+            end.close()
+        _close(supervisor)

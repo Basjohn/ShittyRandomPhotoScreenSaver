@@ -1,44 +1,39 @@
 """Ordered controls: one serialization and rollback before queue admission.
 
-Accepted POSIX descriptors keep stdlib resource-sharer ownership, including its
-unread-transfer retention limitation. Only unpublished IDs can be rolled back
-locally: no receiver can request them, so no service handshake/barrier is needed.
+A control may carry a pipe end only where its ownership is exact, and that is Windows alone: the pipe handle is
+duplicated straight into the supervised process, so the duplicate belongs to that process even if the message is
+never decoded, and the process's exit reclaims it.
+
+Everywhere else a ``multiprocessing.Connection`` crosses a queue through the stdlib resource sharer: pickling it
+registers a duplicate descriptor on the sender's side, which the sharer keeps until the receiver asks for it. A worker
+that dies before decoding the message never asks, and the supported API has no cancellation for an accepted
+registration (its service pops entries without the registration lock, so popping one from outside races it). The
+ordered channel therefore creates no such registration at all: a sharer-backed ``Connection`` is refused before
+anything is registered (``SharerBackedTransferRefused``), on every platform, and the one descriptor the Visualizer
+needs across this channel on POSIX, the session's wake pipe, travels as a name instead
+(``core.visualizer_engine.wake_channel``). No private resource-sharer state is read or written here.
 """
 from __future__ import annotations
 
 from io import BytesIO
-from multiprocessing import connection, reduction, resource_sharer
+from multiprocessing import connection, reduction
 import os
-import sys
+import socket
 
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-def _registration_service():
-    service = resource_sharer._resource_sharer
-    if (sys.implementation.name != 'cpython' or sys.version_info[:2] != (3, 14)
-            or not isinstance(getattr(service, '_cache', None), dict)
-            or not hasattr(getattr(service, '_lock', None), '__enter__')
-            or not hasattr(service, '_address') or not callable(getattr(service, 'register', None))):
-        raise RuntimeError('Ordered FD transfer requires the audited CPython 3.14 resource-sharer contract')
-    return service
+class SharerBackedTransferRefused(TypeError):
+    """An ordered control carried a ``Connection`` that only the resource sharer could hand over."""
 
 
-class _UnsubmittedRegistration:
-    """Pinned CPython 3.14 local rollback for IDs which have never escaped."""
-
-    def __init__(self, service, identifier):
-        self.service, self.identifier = service, identifier
-
-    def cancel(self) -> None:
-        address, key = self.identifier
-        with self.service._lock:
-            owned = (self.service._cache.pop(key, None) if self.service._address == address else None)
-        if owned is not None:
-            _send, close = owned
-            close()
+def _refuse_sharer_backed(value):
+    raise SharerBackedTransferRefused(
+        f"an ordered control cannot carry a {type(value).__name__}: the resource sharer would keep a sender-side "
+        "duplicate that a worker dying before it decodes the message never collects; send a name the receiver opens "
+        "(core.visualizer_engine.wake_channel)")
 
 
 class _TargetPipeTransfer:
@@ -73,12 +68,10 @@ class EncodedControl:
         self._transfers = []
         buffer = BytesIO()
         pickler = reduction.ForkingPickler(buffer)
-        def registered(value, reducer=pickler.dispatch_table[connection.Connection]):
-            service = _registration_service()  # validate before creating a registration
-            rebuilt = reducer(value)
-            self._transfers.append(_UnsubmittedRegistration(service, rebuilt[1][0]._id))
-            return rebuilt
-        pickler.dispatch_table[connection.Connection] = registered
+        # POSIX: every Connection. Windows: the socket-backed class (pipes are ``PipeConnection``, below). A socket
+        # crosses through the sharer the same way.
+        pickler.dispatch_table[connection.Connection] = _refuse_sharer_backed
+        pickler.dispatch_table[socket.socket] = _refuse_sharer_backed
         if os.name == 'nt':
             import _winapi
             def target_pipe(value):
@@ -98,8 +91,7 @@ class EncodedControl:
             raise
 
     def submitted(self) -> None:
-        # From this edge on, native pipes are target-owned; other Connection
-        # transfers use the same supported ownership as ordinary mp.Queue sends.
+        # From this edge on, native pipes are target-owned (Windows). Nothing else was transferred.
         self._transfers.clear()
 
     def close_unsubmitted(self) -> None:

@@ -173,11 +173,21 @@ class EngineSession:
         # revisions start at ``namespace << 32`` (the main process's own counter stays far below). Namespace 0 numbers
         # from 1, as a fresh in-process replay does (the identity gates).
         extruded_bubble_drift_log._REVISIONS = itertools.count((int(label_namespace) << 32) + 1)
-        # ``wake``: the writer end of the owner's wake pipe (one byte per publish; the owner's emitter coalesces).
+        # ``wake``: the writer end of the owner's wake pipe (one byte per publish; the owner's emitter coalesces), or
+        # on POSIX the pipe's name, which the session opens itself (``wake_channel``: no descriptor crosses the
+        # control channel there, so none can be left behind by a worker that dies before decoding its configure).
         # ``publish_stamps``: the owner's ``--frame-trace`` is admitted, so every slot carries its publish time (the
         # main side's trace records the publish from it; gate 3). Off: the slot carries 0 and no clock is read.
-        self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake,
-                                     publish_stamps=bool(publish_stamps))
+        from core.visualizer_engine.wake_channel import open_wake_sender
+
+        wake_sender = open_wake_sender(wake)
+        try:
+            self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake_sender,
+                                         publish_stamps=bool(publish_stamps))
+        except BaseException:
+            if wake_sender is not None and wake_sender is not wake:
+                wake_sender.close()               # opened here by name, and the mailbox never took it
+            raise
         self._stack.callback(self.mailbox.close)
         self._live = inputs == "live"
         if self._live:

@@ -95,7 +95,7 @@ class _InProcessSupervisor:
         from core.process.types import WorkerMessage
 
         payload = dict(payload)
-        if "wake" in payload:
+        if hasattr(payload.get("wake"), "fileno"):       # a pipe end; a wake name (POSIX) is plain data
             payload["wake"] = self._duplicate(payload["wake"])
         self.sent.append((msg_type, payload))
         self._serial += 1
