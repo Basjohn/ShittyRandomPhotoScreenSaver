@@ -1006,6 +1006,13 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   opposite-corner solver), its side handle reflows the text box and leaves the artwork factors (red on the former
   artwork-border rule), Restore Size returns the canonical size and keeps the top left; the frame is what is drawn.
   The parity map and the Volume OSD's corner now expect the ordinary rules.
+- Plan 1B.7c (alignment as declared roles), same file:
+  `test_now_playings_alignment_is_declared_and_stable_across_the_display_midpoint` (corner side, flipped only by the
+  title's record; red on the former position-based mirroring) and
+  `test_the_title_flip_glyph_flips_now_playings_orientation_through_ordinary_edit` (flip/anchor capabilities, the
+  owner's flip handler, undo, Cancel; red without the declared roles and the bound handler).
+  `test_edit_geometry_reads_never_invalidate_another_holders_overlay_wrappers` (a held slot wrapper survives Edit's
+  geometry reads; red on the Loader `item` lookup, the cause of the refade test's red on main).
 - `tests/test_visualizer_expansion_fullscreen_edit.py` — Expanded Visualizer Fullscreen Edit (plan 01 M3c) on the
   hidden production scene with the real Edit owner, model and gestures: the parity map (one gesture script, moves,
   wheel, corners, side handles and a two-axis diagonal included, through a draft; Cancel restores exactly, Save

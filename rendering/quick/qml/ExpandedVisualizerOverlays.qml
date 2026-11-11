@@ -280,12 +280,24 @@ Item {
         naturalWidth: artWidth + gap + textBlock.width
         naturalHeight: Math.max(artHeight, textBlock.height)
 
-        // The corner determines the default *anchor*, but Fullscreen Edit may move this block across the
-        // display without changing that corner. Mirror the artwork, metadata and controls according to where
-        // the block actually lies, so the group always grows into the available screen space. The frame's
-        // overall width is side-independent, avoiding a placement/alignment binding loop.
-        readonly property bool contentRightSide: stage && stage.width > 0.0
-            ? x + width * 0.5 > stage.width * 0.5 : rightSide
+        // Alignment as declared roles (plan 1B.7c, as the Media card's): the block has ONE orientation, chosen and
+        // stable. Its authored side is the anchor corner's (Settings' Corner: a right corner puts the artwork on the
+        // right and the text on its rails); the title's alignment record (its flip glyph in Fullscreen Edit, the
+        // ``alignment_flip`` role that, like Media's header, also carries ``semantic_corner_anchor``) flips it. The
+        // artist and album lines flip their own text alignment on top of it (Media's orientedChildAlignment). Where the
+        // block lies on the display never changes it.
+        function childAlignment(roleId) {
+            const record = childGeometry[roleId]
+            return record && record.alignment !== undefined ? String(record.alignment) : "left"
+        }
+        function childAnchor(roleId) {
+            const record = childGeometry[roleId]
+            return record && record.anchor !== undefined && record.anchor !== null ? String(record.anchor) : ""
+        }
+        readonly property bool contentRightSide: rightSide !== (childAlignment("title") === "right")
+        function textRight(roleId) {
+            return roleId === "title" ? contentRightSide : (childAlignment(roleId) === "right") !== contentRightSide
+        }
         readonly property bool controlsShown: options.mediaControls === true
         // Media Controls: the Media card's transport bar, small. The card's bar is 2.15 x its font size tall under a
         // title of 1.12 x that size in points (1.12 x 4/3 px): bar / title = 2.15 / 1.4933 = 1.44. Here the bar keeps
@@ -543,15 +555,40 @@ Item {
                     // A part of the block (``title``): scaled whole (its layout keeps today's size) and moved, kept
                     // inside the block.
                     readonly property real partScale: nowPlayingSlot.childWidthScale("title")
+                    // The title's semantic corner anchor (``semantic_corner_anchor``, as the Media card's header): a
+                    // move that ends snapped into one of the block's corners pins it there, so the block's resizes
+                    // keep it in that corner; a free move detaches it (the child editor clears the anchor).
+                    readonly property string customAnchor: nowPlayingSlot.childAnchor("title")
+                    readonly property real drawnWidth: titleText.width * titleText.partScale
+                    readonly property real drawnHeight: titleText.height * titleText.partScale
+                    // Where its offset alone puts it; a pinned title's difference is folded into the offset once when
+                    // a move detaches it (the child editor's placement compensation), so it never jumps.
+                    readonly property real offsetShiftX: nowPlayingSlot.containX(
+                        nowPlayingSlot.columnX + titleText.x + nowPlayingSlot.childOffsetX("title"), drawnWidth)
+                        - nowPlayingSlot.columnX - titleText.x
+                    readonly property real offsetShiftY: nowPlayingSlot.containY(
+                        nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("title"), drawnHeight)
+                        - nowPlayingSlot.columnY
+                    readonly property real customEditPlacementCompensationX:
+                        customAnchor.length > 0 ? titleShift.x - offsetShiftX : 0.0
+                    readonly property real customEditPlacementCompensationY:
+                        customAnchor.length > 0 ? titleShift.y - offsetShiftY : 0.0
                     transform: [
                         Scale { id: titleScale; xScale: titleText.partScale; yScale: titleText.partScale },
                         Translate {
                             id: titleShift
-                            x: nowPlayingSlot.containX(
-                                   nowPlayingSlot.columnX + titleText.x + nowPlayingSlot.childOffsetX("title"),
-                                   titleText.width * titleText.partScale) - nowPlayingSlot.columnX - titleText.x
-                            y: nowPlayingSlot.containY(nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("title"),
-                                                       titleText.height * titleText.partScale) - nowPlayingSlot.columnY
+                            // Pinned: the containment's own corner (the block's frame, its card padding included).
+                            x: nowPlayingSlot.containX(titleText.customAnchor.endsWith("right") ? Infinity
+                                                       : titleText.customAnchor.endsWith("left") ? -Infinity
+                                                       : nowPlayingSlot.columnX + titleText.x
+                                                         + nowPlayingSlot.childOffsetX("title"),
+                                                       titleText.drawnWidth)
+                               - nowPlayingSlot.columnX - titleText.x
+                            y: nowPlayingSlot.containY(titleText.customAnchor.startsWith("bottom") ? Infinity
+                                                       : titleText.customAnchor.startsWith("top") ? -Infinity
+                                                       : nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("title"),
+                                                       titleText.drawnHeight)
+                               - nowPlayingSlot.columnY
                         }
                     ]
                     // The child editor maps through these applied transform values (never the transform list).
@@ -593,7 +630,7 @@ Item {
                     ]
                     readonly property string customEditMappingDependency: [artistScale.xScale, artistScale.yScale,
                                                                           artistShift.x, artistShift.y].join(",")
-                    x: nowPlayingSlot.contentRightSide ? textColumn.width - width : 0.0
+                    x: nowPlayingSlot.textRight("artist") ? textColumn.width - width : 0.0
                     width: Math.min(Math.ceil(implicitWidth), textColumn.width)
                     text: nowPlayingSlot.contentArtist
                     maximumLineCount: nowPlayingSlot.metadataLines
@@ -602,7 +639,7 @@ Item {
                     color: nowPlayingSlot.textColor
                     opacity: 0.88
                     elide: Text.ElideRight
-                    horizontalAlignment: nowPlayingSlot.contentRightSide ? Text.AlignRight : Text.AlignLeft
+                    horizontalAlignment: nowPlayingSlot.textRight("artist") ? Text.AlignRight : Text.AlignLeft
                     shadowSoft: true
                     shadowColor: overlays.textShadowColor
                     shadowOffsetX: 0.0
@@ -627,7 +664,7 @@ Item {
                     ]
                     readonly property string customEditMappingDependency: [albumScale.xScale, albumScale.yScale,
                                                                           albumShift.x, albumShift.y].join(",")
-                    x: nowPlayingSlot.contentRightSide ? textColumn.width - width : 0.0
+                    x: nowPlayingSlot.textRight("album") ? textColumn.width - width : 0.0
                     y: artistText.y + artistText.height + textColumn.spacing
                     width: Math.min(Math.ceil(implicitWidth), textColumn.width)
                     height: visible ? implicitHeight : 0.0
@@ -638,7 +675,7 @@ Item {
                     maximumLineCount: nowPlayingSlot.metadataLines
                     color: nowPlayingSlot.textColor
                     opacity: 0.75
-                    horizontalAlignment: nowPlayingSlot.contentRightSide ? Text.AlignRight : Text.AlignLeft
+                    horizontalAlignment: nowPlayingSlot.textRight("album") ? Text.AlignRight : Text.AlignLeft
                     shadowSoft: true
                     shadowColor: overlays.textShadowColor
                     shadowOffsetX: 0.0

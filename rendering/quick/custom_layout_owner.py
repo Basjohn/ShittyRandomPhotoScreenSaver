@@ -711,6 +711,9 @@ class QuickCustomLayoutOwner:
                 child_gesture_cancel_handler=self.cancel_child_gesture,
                 child_content_extent_handler=self.ensure_child_content_extent,
                 child_content_extent_clear_handler=self.clear_child_content_extent,
+                # Alignment as declared roles (plan 1B.7c): the same flip glyph and semantic corner anchor.
+                child_alignment_flip_handler=self.flip_child_alignment,
+                child_semantic_anchor_handler=self.set_child_semantic_anchor,
             )
         except Exception:
             try:

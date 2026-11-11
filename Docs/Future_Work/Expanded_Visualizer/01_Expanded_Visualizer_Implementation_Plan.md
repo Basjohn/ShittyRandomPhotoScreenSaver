@@ -863,6 +863,19 @@ can most geometry normally."
   edge solver, wheel and Restore Size were deleted. Each item declares `layout_minimum_size` (1 x 1 px: a frame may
   be one line of text), Restore Size's `authored_size_payload` (the canonical size members) and its scale as
   `baseline_resize_scale`.
+- *Alignment as declared roles (plan 1B.7c, 11 Nov; supersedes the 8 Nov position-based mirroring).* Now Playing has
+  one orientation, chosen and stable as the Media card's: its authored side is the anchor corner's (a right corner
+  puts the artwork on the right, the text on its right rails); the `title` role, like Media's header, declares
+  `alignment_flip` and `semantic_corner_anchor`, so its flip glyph (the owner's ordinary `flip_child_alignment`)
+  mirrors the whole block and a move ending in one of the block's corners pins it there (placement compensation
+  folds the pin into its offset when a move detaches it); `artist` and `album` declare `alignment_flip` for their
+  own text alignment on top (Media's `orientedChildAlignment`). Where the block lies on the display never changes it
+  (decided for Media parity: a block moved across the midpoint keeps its side; the flip glyph mirrors it). Shared
+  chrome fix: on a thin role (its 20 px move grip centred) the 30 px flip glyph sits just right of the grip instead
+  of covering it. Also fixed (a product defect behind the d1 "refade" red): the scene controller found the overlays'
+  stage through the Loader's `item` property, a temporary wrapper whose collection invalidated every other holder's
+  wrapper of the stage's children (the Edit layer's Now Playing presentation); it is now found from the retained
+  root.
 - *Artwork (decided; superseded 8 Nov by "Now Playing's parts" below: the artwork is the block's child and has no
   Edit item of its own; `artwork_scale` / `artwork_width` / `artwork_height` still draw as stored and Restore Size
   returns them to canonical).* Now Playing's artwork has its own size factor, `now_playing.artwork_scale` (canonical default,

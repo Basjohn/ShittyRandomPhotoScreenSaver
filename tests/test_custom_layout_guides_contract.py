@@ -33,7 +33,8 @@ def test_custom_move_publishes_existing_snap_metadata_without_new_cadence() -> N
     overlay_qml = _text("rendering/quick/qml/CustomLayoutOverlay.qml")
 
     assert "resolution = resolve_snap_local_rect_for_edit(" in owner
-    assert "self._publish_move_guides(target.identity, resolution)" in owner
+    # Published in the item's edit frame (its display; a Fullscreen Edit overlay part's safe area, plan 1B.7b).
+    assert "self._publish_move_guides(target.identity, resolution, frame.topLeft()" in owner
     assert 'allowed_kinds = {"peer", "peer_center", "display_center"}' in owner
     assert 'getattr(resolution, "vertical_assists", ())' in owner
     assert 'getattr(resolution, "horizontal_assists", ())' in owner

@@ -1348,6 +1348,8 @@ class QuickSceneController(QObject):
         child_gesture_cancel_handler: ChildGestureCancelHandler | None = None,
         child_content_extent_handler: ChildContentExtentHandler | None = None,
         child_content_extent_clear_handler: ChildContentExtentClearHandler | None = None,
+        child_alignment_flip_handler: ChildAlignmentFlipHandler | None = None,
+        child_semantic_anchor_handler: ChildSemanticAnchorHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind Fullscreen Edit (Expanded Visualizer M3c): the one Edit overlay over this display's full-display
         overlays.
@@ -1402,6 +1404,8 @@ class QuickSceneController(QObject):
             child_gesture_cancel_handler=child_gesture_cancel_handler,
             child_content_extent_handler=child_content_extent_handler,
             child_content_extent_clear_handler=child_content_extent_clear_handler,
+            child_alignment_flip_handler=child_alignment_flip_handler,
+            child_semantic_anchor_handler=child_semantic_anchor_handler,
         )
         model.save_requested.connect(self.custom_layout_save_requested.emit)
         model.selection_changed.connect(self.custom_layout_selection_changed.emit)
@@ -1444,9 +1448,8 @@ class QuickSceneController(QObject):
         overlay = self._custom_layout_overlay
         if root is None or overlay is None or not _qobject_is_alive(root):
             return None
-        loader = root.findChild(QQuickItem, "visualizerExpandedOverlays")
-        stage = loader.property("item") if loader is not None else None
-        if not isinstance(stage, QQuickItem) or not _qobject_is_alive(stage):
+        stage = self._expanded_overlay_stage()
+        if stage is None:
             return None
         target = overlay.item
 
@@ -2669,8 +2672,10 @@ class QuickSceneController(QObject):
         root = self._visualizer_root
         if root is None or not _qobject_is_alive(root):
             return None
-        loader = root.findChild(QQuickItem, "visualizerExpandedOverlays")
-        stage = loader.property("item") if loader is not None else None
+        # Found from the retained root, never through the Loader's ``item`` property: a wrapper reached through that
+        # temporary one is invalidated with it, and with it every other holder's wrapper of the stage's children (the
+        # Edit layer's Now Playing presentation included; plan 1B.7 d1).
+        stage = root.findChild(QQuickItem, "expandedVisualizerOverlays")
         return stage if isinstance(stage, QQuickItem) and _qobject_is_alive(stage) else None
 
     def _volume_osd_widget(self):

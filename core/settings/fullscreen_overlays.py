@@ -71,15 +71,21 @@ CHILD_GEOMETRY_KEY = CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY
 #: Now Playing's children in Fullscreen Edit (ordinary Edit's child-role descriptors, mirroring the Media card's): the
 #: artwork is ordinary Edit's freeform artwork frame (free X/Y, the image cropped); the title and the artist line scale
 #: uniformly (their text keeps its shape, as the Media card's metadata and artist do); the Media Controls bar sizes
-#: freely on each axis (as the Media card's transport controls). Every one moves.
+#: freely on each axis (as the Media card's transport controls). Every one moves. Alignment is declared as on the Media
+#: card (plan 1B.7c): the title, like Media's header, carries the block's one orientation (``alignment_flip``: its record's
+#: ``alignment`` flips the corner's authored side) and its ``semantic_corner_anchor``; the artist and album lines flip
+#: their own text alignment on top of that orientation (Media's metadata and artist).
 NOW_PLAYING_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     freeform_artwork_child_role("artwork", minimum_scale=(0.40, 0.40), maximum_scale=(3.00, 3.00), movable=True),
     CustomChildRoleDescriptor("title", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
+                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
+                              authored_alignment="left", semantic_corner_anchor=True),
     CustomChildRoleDescriptor("artist", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
+                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
+                              authored_alignment="left"),
     CustomChildRoleDescriptor("album", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True),
+                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
+                              authored_alignment="left"),
     CustomChildRoleDescriptor("controls", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
                               maximum_scale=(2.50, 2.50), uniform_scale=False, movable=True),
 )

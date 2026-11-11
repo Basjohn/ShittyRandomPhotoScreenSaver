@@ -1438,7 +1438,9 @@ def test_now_playings_parts_move_and_size_inside_the_block_through_the_child_edi
     def moved(role: str, dx: int, dy: int) -> None:
         area = edit.layer_item(f"customLayoutChildMoveArea-{BLOCK}-{role}")
         before = _np_parts(display)
-        taker = _real_drag(display, _scene_point(area), dx, dy)
+        # Pressed beside the frame's centre: a text role's centre holds its alignment flip glyph (plan 1B.7c), as the
+        # Media card's metadata roles do.
+        taker = _real_drag(display, _scene_point(area, min(0.5, 6.0 / max(1.0, area.width())), 0.5), dx, dy)
         assert taker == f"customLayoutChildMoveArea-{BLOCK}-{role}", taker
         after = _np_parts(display)
         shift = after[role].topLeft() - before[role].topLeft()
@@ -1465,14 +1467,20 @@ def test_now_playings_parts_move_and_size_inside_the_block_through_the_child_edi
     assert edit.owner.fullscreen_draft_pending and edit.flips[-1] is True
     # A part never leaves the block (ordinary Edit's containment), card padding included.
     area = edit.layer_item(f"customLayoutChildMoveArea-{BLOCK}-title")
-    _real_drag(display, _scene_point(area), 3 * WIDTH, 3 * HEIGHT)
+    _real_drag(display, _scene_point(area, min(0.5, 6.0 / max(1.0, area.width())), 0.5), 3 * WIDTH, 3 * HEIGHT)
     title = _np_parts(display)["title"]
     slot = _rect(_slot(display, "expandedOverlayNowPlaying"), _root(display)).toRect()
     assert slot.adjusted(-1, -1, 1, 1).contains(title), (slot, title)
-    # One undo step per gesture: the containment drag comes back exactly.
+    # Undo brings the containment drag back. The drag ends in the block's corner, which pins the title there (its
+    # semantic corner anchor, plan 1B.7c, as the Media header's): ordinary Edit records that pin as its own step after
+    # the move's, so it can take two (recorded as a shared side defect, not an overlay rule).
     contained = _np_parts(display)
+    anchored = bool(edit.item("now_playing").current_size_payload["child_geometry"]["title"].get("anchor"))
     assert edit.owner.undo_last_change()
     _run(display, 60)
+    if anchored:
+        assert edit.owner.undo_last_change()
+        _run(display, 60)
     undone = _np_parts(display)
     assert undone != contained and undone["title"] != contained["title"]
     draft_parts, draft_value = _np_parts(display), edit.owner._fullscreen.draft_value()
@@ -1736,17 +1744,21 @@ def test_parent_artwork_axes_do_not_overwrite_authored_child_geometry(display, t
     assert _value(settings)["now_playing"]["child_geometry"] == committed["now_playing"]["child_geometry"]
 
 @pytest.mark.qt
-@pytest.mark.parametrize("corner,offset,expected_right", [
-    ("bottom_left", 0.70, True),
-    ("top_left", 0.70, True),
-    ("bottom_right", -0.70, False),
-    ("top_right", -0.70, False),
+@pytest.mark.parametrize("flipped", [False, True])
+@pytest.mark.parametrize("corner,offset", [
+    ("bottom_left", 0.70),
+    ("top_left", 0.70),
+    ("bottom_right", -0.70),
+    ("top_right", -0.70),
 ])
-def test_now_playing_mirrors_after_crossing_the_display_midpoint_not_just_on_corner_selection(
-        display, tmp_path, corner, offset, expected_right):
-    """Fullscreen Edit's placement offset can cross the screen without changing the saved anchor corner."""
+def test_now_playings_alignment_is_declared_and_stable_across_the_display_midpoint(
+        display, tmp_path, corner, offset, flipped):
+    """Plan 1B.7c (the Media card's alignment contract): the block's one orientation is its corner's side, flipped
+    only by the title's alignment record (its flip glyph); where the block lies never mirrors it (the former
+    position-based mirroring flipped it past the display midpoint)."""
     settings = _manager(tmp_path)
-    config = _seed(settings, now_playing={"corner": corner, "offset_x": offset,
+    children = {"title": {"alignment": "right"}} if flipped else {}
+    config = _seed(settings, now_playing={"corner": corner, "offset_x": offset, "child_geometry": children,
                                           "always_show": True, "media_controls": True})
     _draw(display, media=_Media(), config=_projection(config))
     _open(display)
@@ -1755,7 +1767,9 @@ def test_now_playing_mirrors_after_crossing_the_display_midpoint_not_just_on_cor
     slot = _slot(display, "expandedOverlayNowPlaying")
     art = _rect(root.findChild(QQuickItem, "expandedOverlayArtwork"), root)
     text = _rect(root.findChild(QQuickItem, "expandedOverlayNowPlayingText"), root)
-    assert (slot.x() + slot.width() / 2.0 > WIDTH / 2.0) is expected_right
+    corner_right = corner.endswith("right")
+    expected_right = corner_right is not flipped
+    assert (slot.x() + slot.width() / 2.0 > WIDTH / 2.0) is not corner_right   # it lies across the midpoint
     assert bool(slot.property("contentRightSide")) is expected_right
     if expected_right:
         assert text.right() < art.left(), (art, text)
@@ -1763,6 +1777,39 @@ def test_now_playing_mirrors_after_crossing_the_display_midpoint_not_just_on_cor
         assert art.right() < text.left(), (art, text)
     assert abs(art.center().y() - text.center().y()) < 1.5
     assert _value(settings)["now_playing"]["corner"] == corner  # presentation never rewrites the anchor
+
+
+@pytest.mark.qt
+def test_the_title_flip_glyph_flips_now_playings_orientation_through_ordinary_edit(display, tmp_path):
+    """Plan 1B.7c: the title, artist and album declare ``alignment_flip`` (the title also ``semantic_corner_anchor``),
+    so Fullscreen Edit's child layer shows their flip glyphs and the owner's ordinary flip handler writes the title's
+    alignment record: the whole block mirrors, one undo step, Cancel restores. The artwork declares neither."""
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"media_controls": True})
+    _draw(display, media=_Media(), config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    edit.open_children()
+    row = edit.row("now_playing")
+    flippable = {role: edit.model.childAlignmentFlippable(row, role) for role in NP_PARTS}
+    assert flippable["title"] and flippable["artist"] and not flippable["artwork"] and not flippable["controls"]
+    assert edit.model.childSemanticCornerAnchorCapable(row, "title")
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    assert slot.property("contentRightSide") is False                     # bottom_left's authored side
+    assert edit.model.flipChildAlignment(row, "title")
+    _run(display, 60)
+    assert slot.property("contentRightSide") is True
+    assert edit.owner._fullscreen.draft_value()["now_playing"]["child_geometry"]["title"]["alignment"] == "right"
+    assert edit.frames() == edit.drawn()
+    assert edit.owner.undo_last_change()
+    _run(display, 60)
+    assert slot.property("contentRightSide") is False
+    assert edit.model.flipChildAlignment(row, "title")
+    assert edit.owner.cancel()
+    _run(display, 60)
+    assert slot.property("contentRightSide") is False and _value(settings) == seeded
 
 
 @pytest.mark.qt
@@ -1782,4 +1829,25 @@ def test_entering_fullscreen_edit_does_not_refade_already_visible_now_playing_co
     _run(display, 100, lambda: samples.append(float(slot.property("contentOpacity"))))
     assert samples and min(samples) >= 0.999, samples
     assert float(slot.property("presence")) >= 0.999
+    assert edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_edit_geometry_reads_never_invalidate_another_holders_overlay_wrappers(display, tmp_path):
+    """Plan 1B.7 d1: Fullscreen Edit's geometry reads found the overlays' stage through the Loader's ``item`` property, a
+    temporary wrapper; its collection invalidated every other holder's wrapper of the stage's children (the Edit
+    layer's Now Playing presentation, a test's slot: "Internal C++ object already deleted"), which made the refade
+    test red on main. The stage is found from the retained root, so a held wrapper survives Edit."""
+    settings = _manager(tmp_path)
+    config = _seed(settings, now_playing={"always_show": True})
+    _draw(display, media=_Media(), config=_projection(config))
+    _open(display)
+    _run(display, 60)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    edit = _Fullscreen(display, settings)
+    assert edit.owner.start_fullscreen(edit.unit, _value(edit.settings))
+    for _ in range(3):
+        assert display.scene.expanded_overlay_edit_geometry() is not None
+    _run(display, 30)
+    assert slot.objectName() == "expandedOverlayNowPlaying"
     assert edit.owner.cancel()
