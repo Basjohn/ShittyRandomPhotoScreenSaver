@@ -430,23 +430,19 @@ impressive; the agent may ask the lead for a feature or architecture a better lo
 - [ ] Feature requests from the agent recorded here as their own boxes when admitted.
 - [~] Operator look.
 
-### 1B.11 Theme filter in the Linked row (operator request; built on an agent branch, in its refinement round)
+### 1B.11 Theme filter in the Linked row (merged d401b3c2; contract: Settings_Theme_Architecture.md "Theme filter")
 
-Built: the shared term derivation, the filter on both pages, autocomplete, hidden-row rules, view-state only,
-real-dialog tests. The lead's pixel review sent three things back (in flight, Opus Medium):
-
-- [ ] Colour terms discriminate: the accent always counts, the surface only when clearly coloured ("Blue" listed
-  almost every dark theme); a per-term distribution table for both catalogs, no family above about a third.
-- [ ] Names match by word start, not any substring ("Red" found "Weathered Iron").
-- [ ] The autocomplete popup is opaque (the list behind bled through its text in light themes), with a pixel test.
-- [ ] Lead pixel review of the re-rendered set, audit (tests fail on pre-change code), merge.
+- [~] Operator look on a real display: the filter on both theme pages, the autocomplete popup's placement, and
+  whether the colour families feel right ("Blue" lists 20 of 100 Settings themes; a theme named for a colour its
+  accent is not, such as Cobalt Peach, is found by name words only).
+- [ ] The theme list's and the popup's scrollbars render as the native black/white bar in off-screen captures;
+  confirm on a real display and theme them through `shared_styles` if they are native there too.
 - [ ] Side defect (red on main): `tests/test_surface_opacity_adjust.py::test_real_link_button_uses_state_ink_for_
   checked_text_and_lock_icon_offscreen` fails (worst contrast 1.58 against 4.5): the Linked button's checked
   text/lock ink. Fix with 1B.8's ink correction or at the link button's style owner.
 - [ ] Side defect: the Weather location autocomplete (`ui/widgets/geocode_completer.py:52-69`) uses Qt's default
   popup (unthemed); give it the theme filter's popup.
 - [ ] Side defect: `ui/tabs/widgets_tab_weather.py:157` hard-codes `#4CAF50` instead of a theme role.
-- [~] Operator look on a real display (popup placement, scrollbar).
 
 ### 1B.12 Two fullscreen glyphs, one per display (operator; in flight, Opus High)
 
