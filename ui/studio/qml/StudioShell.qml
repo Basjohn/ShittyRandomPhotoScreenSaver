@@ -1399,19 +1399,30 @@ Rectangle {
                                ? Qt.ArrowCursor : Qt.SizeHorCursor
                     return shp.hoverPart === "add" && shp.shown.canAdd === true ? Qt.CrossCursor : Qt.ArrowCursor
                 }
+                // The press goes to the nearer of the nearest node and the nearest strength marker. Where the two
+                // overlap (within a pixel of the same distance, as a diamond exactly under a node), the pointer's half
+                // decides, stable and visible in the hover cursor: more than 1.5 px below the marker's centre takes
+                // the strength marker (a vertical drag), otherwise the node (a press on its centre stays the node's);
+                // so both stay reachable.
                 function hit(mx, my) {
-                    var best = -1, reach = 13 * 13, i, dx, dy, d
+                    var node = -1, nodeD = 13 * 13, lane = -1, laneD = 11 * 11, i, dx, dy, d
                     for (i = 0; i < shp.nodes.length; ++i) {
                         dx = mx - shp.px(shp.nodes[i][0]); dy = my - shp.py(shp.nodes[i][1]); d = dx * dx + dy * dy
-                        if (d <= reach) { reach = d; best = i }
+                        if (d <= nodeD) { nodeD = d; node = i }
                     }
-                    if (best >= 0) return {"part": "node", "index": best}
-                    reach = 11 * 11
                     for (i = 0; i < shp.lanes.length; ++i) {
                         dx = mx - shp.px(shp.lanes[i].x); dy = my - shp.py(shp.lanes[i].strength); d = dx * dx + dy * dy
-                        if (d <= reach) { reach = d; best = i }
+                        if (d <= laneD) { laneD = d; lane = i }
                     }
-                    if (best >= 0) return {"part": "strength", "index": best}
+                    if (node >= 0 && lane >= 0) {
+                        var toNode = Math.sqrt(nodeD), toLane = Math.sqrt(laneD)
+                        if (Math.abs(toNode - toLane) < 1.0)
+                            return my > shp.py(shp.lanes[lane].strength) + 1.5 ? {"part": "strength", "index": lane}
+                                                                                : {"part": "node", "index": node}
+                        return toNode < toLane ? {"part": "node", "index": node} : {"part": "strength", "index": lane}
+                    }
+                    if (node >= 0) return {"part": "node", "index": node}
+                    if (lane >= 0) return {"part": "strength", "index": lane}
                     if (my >= shp.tagT - 2 && my <= shp.tagT + shp.tagH + 2)
                         for (i = 0; i < shp.lanes.length; ++i)
                             if (mx >= shp.tagX[i] && mx <= shp.tagX[i] + shp.tagWidth(i))

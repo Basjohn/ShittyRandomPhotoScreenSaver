@@ -647,6 +647,48 @@ def test_the_pointer_drags_adds_and_removes_nodes_on_the_real_canvas(studio, mod
     assert len(_nodes(controller, prop_id)) == low and store.commits == commits
 
 
+@pytest.mark.parametrize("mode,prop_id", INSTRUMENTS)
+def test_a_strength_diamond_exactly_under_a_node_and_the_node_both_take_a_press(studio, mode, prop_id):
+    """1B.4 side defect: nodes were hit first, so a lane's strength diamond under a curve node could not be grabbed.
+    The nearer element takes the press; where they overlap the pointer's half decides (below the diamond's centre:
+    the strength marker; above or on it: the node)."""
+    from tools.studio_shape_capture import Pointer, _named, node_point, settle
+    controller, surface, _store = studio(mode)
+    bridge = controller.bridge
+    row, well = _row(surface, controller, prop_id)
+    lanes = row.property("lanes")
+    lane = next(i for i in range(len(lanes) - 1, -1, -1) if not lanes[i].get("pinned"))
+    target = (float(lanes[lane]["x"]), float(lanes[lane]["strength"]))
+    nodes = _nodes(controller, prop_id)
+    nearest = min(range(len(nodes)), key=lambda i: abs(nodes[i][0] - target[0]))
+    bridge.shapeCommitText(prop_id, "node", nearest, 0, f"{target[0]:.6f}")
+    moved = min(range(len(_nodes(controller, prop_id))),
+                key=lambda i: abs(_nodes(controller, prop_id)[i][0] - target[0]))
+    bridge.shapeCommitText(prop_id, "node", moved, 1, f"{target[1]:.6f}")
+    settle(surface, 0.3)
+    marker = _named(row, "shapeLaneMarker")[lane]
+    centre = (marker.x() + marker.width() / 2.0, marker.y() + marker.height() / 2.0)
+    under = [i for i in range(len(_nodes(controller, prop_id)))
+             if abs(node_point(row, i)[0] - centre[0]) < 0.5 and abs(node_point(row, i)[1] - centre[1]) < 0.5]
+    assert under, "the test could not place a node over the diamond"
+    pointer = Pointer(surface, well)
+    for offset, part in ((3.0, "strength"), (-3.0, "node"), (0.0, "node")):
+        pointer.press(centre[0], centre[1] + offset)
+        assert row.property("dragPart") == part, (offset, row.property("dragPart"))
+        pointer.release(centre[0], centre[1] + offset)
+        surface.pump()
+    # Apart, the nearer element wins: just beside the diamond on the side away from the node, the diamond.
+    bridge.shapeCommitText(prop_id, "node", under[0], 1, f"{min(1.0, target[1] + 0.25):.6f}"
+                           if target[1] < 0.75 else f"{target[1] - 0.25:.6f}")
+    settle(surface, 0.3)
+    node_y = node_point(row, under[0])[1]
+    away = centre[1] + (4.0 if node_y < centre[1] else -4.0)
+    pointer.press(centre[0], away)
+    assert row.property("dragPart") == "strength"
+    pointer.release(centre[0], away)
+    surface.pump()
+
+
 def test_nothing_pops_a_layout_change_fades_through_and_nodes_fade_in_and_out(studio):
     """Fade, never vanish: on the frame after a layout change the canvas is not yet showing the new layout at full
     strength; a node added by the button eases in and a removed one leaves a fading mark where it was."""
