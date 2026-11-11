@@ -35,46 +35,69 @@ def forged_edge_colours(theme) -> tuple[QColor, QColor]:
     return border, QColor(edge.r, edge.g, edge.b, 255)
 
 
+BORDER_GROWTH_MODES = ("centre", "outward")
+
+
+def forged_edge_geometry(dpr: float, extra_border_device_px: float = 0.0,
+                         border_growth: str = "centre") -> tuple[float, float, float, float]:
+    """``(path inset, path radius, border width, backing width)`` in logical px.
+
+    ``extra_border_device_px`` widens the border and its backing by that many DEVICE pixels (divided by ``dpr``);
+    ``centre`` grows the stroke on both sides of the unchanged path, ``outward`` moves the path out by half the
+    extra (concentric, the inner edge stays put). Both are measurement parameters of
+    ``tools/settings_native_corners.py`` only: no product caller passes them (Settings_Theme_Architecture.md,
+    "Native corner measurements")."""
+    if border_growth not in BORDER_GROWTH_MODES:
+        raise ValueError(f"unknown border growth {border_growth!r}")
+    extra = max(0.0, float(extra_border_device_px)) / max(1.0, float(dpr))
+    shift = extra * 0.5 if border_growth == "outward" else 0.0
+    return (0.5 - shift, SETTINGS_OUTER_CORNER_RADIUS + shift, SETTINGS_OUTER_BORDER_WIDTH + extra,
+            SETTINGS_OUTER_BORDER_BACKING_WIDTH + extra)
+
+
 def paint_forged_window_edge(painter: QPainter, outer_rect: QRectF, dpr: float, *, maximized: bool,
-                             outer_border: QColor, forged_edge: QColor, underlay: QColor | None = None) -> None:
+                             outer_border: QColor, forged_edge: QColor, underlay: QColor | None = None,
+                             extra_border_device_px: float = 0.0, border_growth: str = "centre") -> None:
     """Paint the window's edge into ``outer_rect`` (the whole window). ``underlay``: an opaque material substitute
-    painted inside the rounded outline first (non-Windows Glass/Acrylic)."""
+    painted inside the rounded outline first (non-Windows Glass/Acrylic). ``extra_border_device_px`` /
+    ``border_growth``: measurement-only (``forged_edge_geometry``); product callers leave the defaults."""
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    border_rect = QRectF(outer_rect).adjusted(0.5, 0.5, -0.5, -0.5)
+    inset, radius, border_width, backing_width = forged_edge_geometry(dpr, extra_border_device_px, border_growth)
+    border_rect = QRectF(outer_rect).adjusted(inset, inset, -inset, -inset)
     if underlay is not None:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(underlay)
         if maximized:
             painter.drawRect(outer_rect)
         else:
-            painter.drawRoundedRect(border_rect, SETTINGS_OUTER_CORNER_RADIUS, SETTINGS_OUTER_CORNER_RADIUS)
+            painter.drawRoundedRect(border_rect, radius, radius)
     if not maximized:
-        _paint_outer_corner_caps(painter, outer_rect, border_rect, dpr, forged_edge)
-        backing_pen = QPen(forged_edge, SETTINGS_OUTER_BORDER_BACKING_WIDTH)
+        _paint_outer_corner_caps(painter, outer_rect, border_rect, dpr, forged_edge, radius)
+        backing_pen = QPen(forged_edge, backing_width)
         backing_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(backing_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(border_rect, SETTINGS_OUTER_CORNER_RADIUS, SETTINGS_OUTER_CORNER_RADIUS)
+        painter.drawRoundedRect(border_rect, radius, radius)
 
-    border_pen = QPen(outer_border, SETTINGS_OUTER_BORDER_WIDTH)
+    border_pen = QPen(outer_border, border_width)
     border_pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin if maximized else Qt.PenJoinStyle.RoundJoin)
     painter.setPen(border_pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
     if maximized:
         painter.drawRect(border_rect)
     else:
-        painter.drawRoundedRect(border_rect, SETTINGS_OUTER_CORNER_RADIUS, SETTINGS_OUTER_CORNER_RADIUS)
+        painter.drawRoundedRect(border_rect, radius, radius)
 
 
 def _paint_outer_corner_caps(painter: QPainter, outer_rect: QRectF, border_rect: QRectF, dpr: float,
-                             colour: QColor) -> None:
+                             colour: QColor, radius: float = SETTINGS_OUTER_CORNER_RADIUS) -> None:
     """Forge rounded corner fills without altering the real (rectangular) window edge."""
     dpr = max(1.0, float(dpr))
     cover_overlap = max(
         1.75,
         ((SETTINGS_OUTER_BORDER_BACKING_WIDTH - SETTINGS_OUTER_BORDER_WIDTH) * 0.5) + (1.25 / dpr),
     )
-    cover_radius = SETTINGS_OUTER_CORNER_RADIUS + (SETTINGS_OUTER_BORDER_BACKING_WIDTH * 0.25) + cover_overlap
+    cover_radius = radius + (SETTINGS_OUTER_BORDER_BACKING_WIDTH * 0.25) + cover_overlap
     outer_path = QPainterPath()
     outer_path.addRect(outer_rect)
     rounded_path = QPainterPath()
@@ -142,11 +165,13 @@ def paint_material_underlay(painter: QPainter, outer_rect: QRectF, *, maximized:
 
 
 __all__ = [
+    "BORDER_GROWTH_MODES",
     "ForgedWindowEdgeOverlay",
     "SETTINGS_OUTER_BORDER_BACKING_WIDTH",
     "SETTINGS_OUTER_BORDER_WIDTH",
     "SETTINGS_OUTER_CORNER_RADIUS",
     "forged_edge_colours",
+    "forged_edge_geometry",
     "paint_forged_window_edge",
     "paint_material_underlay",
 ]
