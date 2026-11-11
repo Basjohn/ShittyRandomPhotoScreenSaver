@@ -392,36 +392,34 @@ corrects the ink and keeps the surface at its calibrated density (about .63-.72)
 - [ ] i. Docs: `Docs/Architecture/Card_Surface_Materials.md`; closes 1.7a's density question (update it there).
 - [~] Operator look on the three light themes.
 
-### 1B.9 Settings and Studio window corners bleed (measured; transparent corner filler in flight, Opus Medium)
+### 1B.9 Settings and Studio window corners bleed (see-through corners merged a89ce123; continues 1.9)
 
-Measured natively at 150% (Settings, four theme/background cases, same counts in all): the outer corner is
-already nearly square and the visible "bleed" is the opaque filler colour left in the corner wedge (a near-white
-speck on light themes). Thicker borders only shrink the wedge by squaring the corner (5 / 3 / 1 px per corner at
-today / +1 / +2 px; zero only at 100%, with a square corner): rejected. A region applied before Accent clips to a
-jagged staircase and the blur still covers the rectangle: rejected. A transparent filler gives a rounded outer
-corner with no speck; what remains is a few pixels of blurred wallpaper outside the arc (worst 58 levels on a
-light wallpaper), which no layered window can remove.
+Both windows now end at their rounded border: nothing is painted outside it (alpha 1/255 there, so a layered
+window keeps those pixels for drag and resize), and the opaque corner caps, the backing stroke and its near-white
+inner line are gone. Thicker borders (they square the corner) and a pre-Accent region (staircase) are rejected;
+measurements and rules: `Docs/Architecture/Settings_Theme_Architecture.md`. Residue no layered window can remove:
+a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels, was 72-251).
 
-- [ ] Transparent corner filler as product behaviour at `paint_forged_window_edge` (Settings and Studio share it);
-  the painter test fails on today's code (corner pixels outside the rounded border fully transparent, the ring
-  continuous at 100/150/200% device pixel ratios).
-- [ ] The near-white inner line on light themes: kept as a themed, clipped highlight or dropped as backing, with
-  the reason and a crop of both.
-- [ ] Corner hit-testing, resize grips and the shadow unchanged (test).
-- [ ] Studio edge proven off-screen (its native capture came out blank; no more native Studio windows).
-- [ ] Native confirmation, Settings only: one dark and one light theme over both wallpapers at 150%.
-- [ ] Lead pixel review of today-against-new 4x corner crops; merge; `Settings_Theme_Architecture.md` updated;
-  close or rewrite 1.9 (section 1A).
+- [~] Operator look at Settings corners on both wallpapers, a dark and a light theme; say if the inner
+  near-white line on light themes is missed (it was backing showing through, not a themed highlight).
+- [~] Operator look at the Studio's corners on a real screen (proven off-screen only).
+- [~] Operator: drag and resize Settings from each corner (the alpha-1 corner pixels keeping input is reasoned,
+  not exercised on a real window).
+- [ ] Studio resize areas have no test for their geometry; add one beside `tests/test_studio_chrome.py`.
+- [ ] Close or rewrite 1.9 (section 1A) to point here.
 - [ ] Side defect: the Studio window shows only blur (no title bar or content) in native captures by
   `tools/settings_native_corners.py --window studio`; find whether it is the capture setup or the Studio.
-- [ ] If the operator still sees escape after the transparent filler: the Windows 11 DWM corner preference on a
-  non-layered variant (Microsoft's guidance excludes layered windows and windows with a region from system
-  rounding; cost check: shadow ownership, translucency, the layered-window repaint path of section 9's freeze
-  fix), then a composition-host clip. Whichever clips needs input, resize, snap/maximise, DPI change, activation
-  and Studio-over-Settings modality proven on the real `SettingsDialog` and Studio window.
-- [ ] Window border material: the forged border ring takes 1.7b's border-material treatment (one rule for cards
-  and windows), inside the +2 px budget (the budget is unused: the border stays 4 px).
-- [~] Operator look at Settings and Studio corners on both wallpapers.
+- [ ] Side defect (red on main before this work): `tests/test_waveform_studio_theme.py::
+  test_every_theme_yields_readable_studio_chrome[Matte Graphite [Single]]`, accent-text contrast 2.12 against 4.5.
+- [ ] `tools/settings_native_corners.py --qt-scale-factor` sets Qt's `QT_SCALE_FACTOR` inside the tool process to
+  emulate 100% and 200%: decide whether that tool-only use stands under the no-environment-variables rule.
+- [ ] If the operator still sees escape: the Windows 11 DWM corner preference on a non-layered variant
+  (Microsoft's guidance excludes layered windows and windows with a region from system rounding; cost check:
+  shadow ownership, translucency, the layered-window repaint path of section 9's freeze fix), then a
+  composition-host clip. Whichever clips needs input, resize, snap/maximise, DPI change, activation and
+  Studio-over-Settings modality proven on the real `SettingsDialog` and Studio window.
+- [ ] Window border material: the border ring takes 1.7b's border-material treatment (one rule for cards and
+  windows), inside the +2 px budget (unused: the border stays 4 px).
 
 ### 1B.10 Presets (only after 1B.3-1B.6 land; one Fable 5.2 Medium agent above the roster cap, this task only)
 
