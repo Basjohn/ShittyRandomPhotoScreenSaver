@@ -171,7 +171,7 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
             and getattr(getattr(host, "runtime_controller", None), "mode_id", None) == "shockwave_grid"):
         from rendering.gl_programs.heightfield import (
             heightfield_basin, heightfield_grid_transform, heightfield_origin, heightfield_origin_extent,
-            heightfield_origin_rect, heightfield_surface_bytes, normalize_heightfield,
+            heightfield_surface_bytes, normalize_heightfield,
         )
         from rendering.gl_programs.neon_terrain_extent import overlay_fields
 
@@ -185,12 +185,12 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
                 # Where the basin sits in a grid reaching toward the horizon (identity when unextended).
                 "basin": list(heightfield_basin(terrain)),
                 "grid": list(heightfield_grid_transform(terrain)),
-                # The authored origin (the whole grid unless the brush grew it): its reach past the basin is the
-                # mark lattice's and its rect in grid uv is where the generated landscape starts.
+                # The authored origin's reach past the basin (the whole grid's unless the brush grew it): the mark
+                # lattice's fine part.
                 "extent": list(heightfield_origin_extent(terrain)),
-                "origin_rect": list(heightfield_origin_rect(terrain)),
-                # A grown grid only: its cells' overlay on the generated land, the painted bounds (the triangles'
-                # fine region) and the summit without the unpainted cells.
+                # A grown grid only: where its origin sits (the generated landscape's start), its cells' overlay
+                # on the generated land, the painted bounds (the triangles' fine region) and the summit without
+                # the unpainted cells.
                 **overlay_fields(terrain),
             })
             host._shockwave_grid_terrain_signature = signature

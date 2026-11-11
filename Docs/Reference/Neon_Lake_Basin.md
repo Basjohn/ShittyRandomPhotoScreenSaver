@@ -479,11 +479,42 @@ framed camera: the ray from the eye meets the CPU mirror of the drawn land (`ren
 neon_terrain_surface.py: scene_surface`, the mirror of `basinCurve` / `basinLandHeight`: the smooth cubic land at the
 scene's Terrain Height, without the music's reaction or fine detail), so a hill hides what is behind it. During a
 stroke points are picked on the ground as it was when the stroke began, or a raised ridge would catch every next
-point on its face and climb toward the camera. Only the authored grid is paintable. Land the scene draws past the
-grid (the continuation and far hills) is visible but refused: on preset 1/2 dollied back about 13-20% of the land on
-screen, on an unextended grid (preset 3) about 26% at the default view, reaching basin uv about -1.1..2.5 across and
--1.7..1.9 deep (`tests/test_neon_lake_brush_reach.py`; strict xfail until the paintable domain is decided, 1B.5).
-Every point on the grid is paintable (no narrower clamp).
+point on its face and climb toward the camera.
+
+**All visible land is paintable (2026-11-11, 1B.5).** Land the scene draws past the stored grid (the continuation and
+far hills: on presets 1/2 dollied back 13-20% of the land on screen, on preset 3 26% at its start view and 87% dollied
+back) had no cells to paint. A stroke there grows the grid under it through the extend owner
+(`neon_terrain_extent.grow_heightfield`; whole `GROW_STEP` = 16 cells, square, toward the brush, the axis that needs
+less padded toward the horizon; `MAX_GRID_SIZE` 257). On the shipped presets every land point on screen at those
+views is within the cap's reach (at most 89 of 192 / 144 spare cells). The growth is **invisible**:
+
+- The record keeps its **authored origin** (`origin: [column, row, cells]`, `heightfield.heightfield_origin`; the
+  whole grid by default, so every shipped terrain loads exactly as stored). The generated landscape belongs to the
+  origin: the continuation, far hills, distant curvature (`basinDistantDrop`), the fade of detail and glow, the
+  waves' and ridge energy's reach, the shoreline's domain and the mark lattice are all measured from the origin's
+  edge and read only the origin's own cells (`uTerrainOrigin`, `basinOriginHeight` / `basinOriginCurve`).
+- Cells past the origin are an **overlay** on that landscape. A grown cell stores the height the scene drew at its
+  point (zero where it drew water); the scene adds only the cell's delta (stored minus generated,
+  `neon_terrain_surface.terrain_delta`, a second R32F texture `uTerrainDelta` that exists only for a grown grid),
+  smoothed by the land's own cubic. An unpainted growth therefore draws the generated landscape itself. A cubic
+  through seeded samples cannot: the generated land has creases along every edge cell's extrusion, and a first
+  attempt that stored seeds and drew their cubic softened them visibly (12-38% of pixels changed).
+- Past the grid's edge the edge's delta eases out over `CONTINUATION_DESCENT`, so paint never ends in a wall.
+- The triangles split finer (to the tier's own cell) only under the **painted bounds** (`overlay_fields`'
+  `painted`, stepped out to 16 cells): a finer mesh draws the generated land's creases more exactly, which is a
+  visible change, so an unpainted growth keeps the very same mesh. The split is crack-free (shared edges take the
+  finer side's steps; `neon_lake_basin_mesh._grown_mesh_vertices`) and the marks never move.
+- The camera floor is the generated bound exactly as before; only painted cells can raise it. The authored summit
+  (`maximum`, the Reaction shaper's right edge) ignores unpainted cells.
+
+Measured (RTX 4090, 1300x750, every preset grown to 257 with nothing painted, four views each): against a
+run-to-run floor of 0.2-0.6% of pixels differing by 1/255, the growth leaves 0.3-0.6% differing, 4-113 pixels by
+more than 2/255 and 2-20 by more than 8 (single pixels inside the basin: the filtered read of a larger texture
+rounds its 8-bit weights differently); the authored Extend by the same cells changes 12-38%
+(`tests/test_neon_terrain_growth.py`). Land painted past the origin is far land: it keeps the continuation's
+simpler look (no shoreline line or wet fringe, detail and glow fading with distance); **Extend Toward Horizon**
+still turns the whole grid into ordinary authored land (and so moves the generated landscape's start). Past the
+largest grid's reach the brush refuses out loud (`Visualizer_Studio.md`, Brush).
 
 ## Layered water (2026-10-24)
 

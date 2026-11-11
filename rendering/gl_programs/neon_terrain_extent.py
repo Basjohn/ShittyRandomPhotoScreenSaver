@@ -20,8 +20,8 @@ from collections.abc import Mapping
 
 from core.constants.neon_lake_world import CONTINUATION_DESCENT, FAR_HILLS
 from rendering.gl_programs.heightfield import (
-    HEIGHTFIELD_MAX_SIZE, heightfield_basin, heightfield_grid_transform, heightfield_origin, normalize_heightfield,
-    sample_heightfield,
+    HEIGHTFIELD_MAX_SIZE, heightfield_basin, heightfield_grid_transform, heightfield_origin, heightfield_origin_rect,
+    normalize_heightfield, sample_heightfield,
 )
 
 # One Extend step: half the basin's depth further back, a quarter of its width on each side (square cells).
@@ -100,23 +100,22 @@ def _checked(record: Mapping, left: int, right: int, front: int, back: int) -> i
 def extend_heightfield(data: Mapping, left: int, right: int, front: int, back: int) -> dict:
     """The grid grown by whole cells on each side (left + right == front + back, keeping cells square), as ordinary
     authored land: the generated landscape then starts at the new edge."""
+    import numpy as np
+    from rendering.gl_programs.neon_terrain_surface import scene_heights
+
     record = normalize_heightfield(data)
     size = _checked(record, left, right, front, back)
     n = record["size"]
     x0, y0, cells = heightfield_basin(record)
-    heights = record["heights"]
-    new_left, new_front = (x0 + left) / cells, (y0 + front) / cells
-    out = []
-    for row in range(size):
-        for col in range(size):
-            source_col, source_row = col - left, row - front
-            if 0 <= source_col < n and 0 <= source_row < n:
-                out.append(heights[source_row * n + source_col])
-                continue
-            u, v = col / cells - new_left, row / cells - new_front
-            value = _clamp01(basin_continuation(record, u, v))
-            out.append(0.0 if value == 0.0 else max(value, 1e-6))
-    return normalize_heightfield({"version": 1, "size": size, "heights": out,
+    old = np.asarray(record["heights"], dtype=np.float64).reshape(n, n)
+    columns, rows = (np.arange(size) - left) / (n - 1), (np.arange(size) - front) / (n - 1)
+    gu, gv = np.meshgrid(columns, rows)
+    # The continuation's own heights (``basinBase``), every new cell at once: the Studio asks for this record on
+    # every inspector rebuild to know whether Extend is on offer.
+    base, _curve, _outside = scene_heights(old, (x0, y0, cells), gu, gv, heightfield_origin(record))
+    values = np.where(base == 0.0, 0.0, np.clip(base, 1e-6, 1.0))
+    values[front:front + n, left:left + n] = old
+    return normalize_heightfield({"version": 1, "size": size, "heights": values.ravel().tolist(),
                                   "basin": [x0 + left, y0 + front, cells]})
 
 
@@ -149,7 +148,8 @@ def grow_heightfield(data: Mapping, left: int, right: int, front: int, back: int
 
 
 def overlay_fields(data: Mapping) -> dict:
-    """What the renderer needs of a grown grid besides its cells: ``delta`` (float32 texels, each cell's stored height
+    """What the renderer needs of a grown grid besides its cells: ``origin_rect`` (the authored origin in grid uv:
+    left, front, right, back), ``delta`` (float32 texels, each cell's stored height
     minus the generated landscape's; zero where unpainted), ``painted`` (the painted cells' bounds in basin uv,
     left / front / right / back, stepped out to whole ``GROW_STEP`` cells so strokes rarely move it; None while
     nothing is painted) and ``maximum`` (the authored summit: the origin's and the painted cells' highest, so an
@@ -177,7 +177,8 @@ def overlay_fields(data: Mapping) -> dict:
 
         (c0, c1), (r0, r1) = stepped(int(columns[0]), int(columns[-1])), stepped(int(rows[0]), int(rows[-1]))
         painted = [(c0 - x0) / cells, (r0 - y0) / cells, (c1 - x0) / cells, (r1 - y0) / cells]
-    return {"delta": delta.astype("<f4").tobytes(), "painted": painted, "maximum": maximum}
+    return {"origin_rect": list(heightfield_origin_rect(data)), "delta": delta.astype("<f4").tobytes(),
+            "painted": painted, "maximum": maximum}
 
 
 def growth_cells(data: Mapping, u: float, v: float, reach: float) -> tuple[int, int, int, int] | None:

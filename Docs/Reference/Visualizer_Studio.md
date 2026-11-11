@@ -337,6 +337,20 @@ when both toolbar groups cannot fit side by side.
   proves the pick against the production camera, the coalesced stroke, its save through Settings' owners, reload and
   Undo; `tools/waveform_studio_capture.py --brush` renders a stroke (evidence
   `.artifacts/evidence/studio/completion/20261106_completion/brush/`).
+  **Radius** is a size on the ground, a share of the basin's side (`heightfield_brush.RADIUS_RANGE`), the same
+  wherever the brush paints and however far the grid reaches (until 11 Nov it was a share of the grid, so an extended
+  grid had a larger brush).
+  **Land past the stored grid (11 Nov, 1B.5).** A target may give `BrushTarget.grow` / `reachable` / `refusal`
+  (Neon Lake: all the land the scene draws). `pick` then returns the ground point anywhere (outside 0..1 past the
+  grid); when the brush would reach past the record's edge `StudioBrush._placed` asks the target for the record grown
+  under it (`neon_terrain_extent.grow_heightfield`, whole `GROW_STEP` cells, square), carries the stroke on over it
+  (`HeightfieldStroke.regrid`) and re-maps every later point picked on the stroke's first record, so the path stays
+  where it was on the ground. Still one preview a frame and one commit: the growth and the paint are one undo step.
+  A growth changes nothing on screen until paint lands (`Neon_Lake_Basin.md` "Terrain brush"). Past the largest
+  grid's reach the brush refuses out loud: `brushState.refused` while the pointer is over such land (the footprint is
+  drawn struck through in the danger colour under a forbidden pointer) and the target's one-line notice when a press
+  or a stroke lands there; nothing is painted or saved. At the cap a footprint that pokes past the edge is clipped,
+  not refused. `tests/test_neon_lake_brush_reach.py` drives all of it through the bridge.
 - **Conditions.** A property's `when` terms must all hold, its `when_any` terms at least one (Settings' former OR
   rules, e.g. Bubble's particle rows while any population is on); `ui/studio/schema.condition_hidden` is the one
   evaluation the bridge's `conditionHidden` uses.
