@@ -24,7 +24,7 @@ and must not be copied per mode.
 | `ui/studio/registry.py` | `mode_id -> "module:Factory"` registrations; `has_studio`, `studio_modes`, `create_adapter`. Adapters import lazily, so an unopened Studio loads no mode code. The registry is the membership authority: docs and tests say "every registered Studio adapter", never a count. |
 | `ui/studio/adapter.py` | The adapter contract: `StudioModeAdapter`, `StudioEvaluator` / `StudioRenderer` protocols, `StudioCapabilities`, `StudioFixture` (kinds `REFERENCE`, `SYNTHETIC`, `RECORDED`), `StudioFraming` + `fill_extent`, `StudioNavigation` / `NavAxis`, `StudioPreview`, `RenderCard`, and `control_condition` (a registry control's `when` as Studio terms). |
 | `ui/studio/technical.py` | A mode's technical (audio-analysis) controls as Studio properties with Settings' own keys, ranges, choices, labels and coercion; adapters call it instead of copying them. |
-| `ui/studio/schema.py` | Typed, mode-supplied property schema: instruments (`SCALAR`, `COUNT`, `SWITCH`, `CHOICE`, `QUIET_PEAK`, `COLOUR`, `GRADIENT`), workspaces/columns, scene objects, response tuner, starting-point presets, lifecycle timelines and rendered cards. `admit` is the mode's canonical validator; the framework stores no defaults. |
+| `ui/studio/schema.py` | Typed, mode-supplied property schema: instruments (`SCALAR`, `COUNT`, `SWITCH`, `CHOICE`, `QUIET_PEAK`, `COLOUR`, `GRADIENT`, `SHAPE` with its `ShapeSpec`), workspaces/columns, scene objects, response tuner, starting-point presets, lifecycle timelines and rendered cards. `admit` is the mode's canonical validator; the framework stores no defaults. |
 | `ui/studio/session.py` | `StudioEditSession`: hydrate from the canonical store, preview vs committed values, one commit per gesture, undo/redo/dirty. The store answers each commit with its canonical post-save snapshot. No Qt, no mode knowledge. |
 | `ui/studio/controller.py` | `StudioController` (single active instance, open → present → retire lifecycle) and `StudioBridge`, the only object QML sees. Bridge slots are plain methods (no `result=`), per the QML signal → result-slot crash rule. The bridge's `values` is a `StudioValueMap` (`QQmlPropertyMap`): each property id notifies on its own, so a changed value re-evaluates only the bindings that read it. |
 | `ui/studio/viewport.py` | Inline `QSGRenderNode` that draws the adapter's renderer straight into the window framebuffer on the render thread (no readback, no per-frame texture copy). Before drawing it clears the scene's region (the slot's scissor) to `SCENE_BACKING`, the opaque backing snapshots also use, so nothing the chrome paints under the viewport composites into a mode's transparent background or translucent edges. It applies the viewport slot's scene-graph clip (scissor), so a frameless mode that overflows its card in production (Extruded Spectrum, Sphere: up to the window) reaches the slot's edge, never the Studio chrome. Renderer created lazily and released on the render thread on `sceneGraphInvalidated` / node release. Snapshots (tiles, rendered cards, Copy Frame) use a second renderer instance, at most one per frame and only on request. |
@@ -38,7 +38,8 @@ and must not be copied per mode.
 | `ui/studio/clip_loop.py` | Seamless Studio clips: the loop period a compact clip names, `Anchor` (the transport's unrolled time -> the history an evaluator replays; a rewind re-anchors to the pass the instant is in), `Cycles` (the endless tick sequence of a looped input: later passes shifted whole periods, onset serials kept increasing), the per-family tick shifts and `primed` (an analysis worker replays the loop's last 2 s before the clip). See §3 "Studio clips". |
 | `ui/studio/exact_replay.py` | `ExactReplay`, the shared exact-history mechanism of the replaying evaluators (the engine-answer modes and Waveform): checkpoints per values signature, rewinds, the frame budget (`converging`) and the live-gesture path. An evaluator supplies only its step, its state capture and its restyle. The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
 | `ui/studio/brush.py` | The shared heightfield brush instrument: `BrushTarget` (the record's key, `pick` and `footprint` through the mode's production camera, from `adapter.brush_target()` when `capabilities().brush`) and `StudioBrush` (tool settings, held pointer points, the stroke; flushed at frame start). Strokes are painted by `rendering/gl_programs/heightfield_brush.py`. |
-| `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
+| `ui/studio/shape.py` | The shared shape instrument, mode-neutral: `ShapeInstrument` (the display model of one `SHAPE` row: stored nodes and lanes, the curve sampled by `utils.curve_nodes.interpolate_nodes`, the mode's `ShapeSpec.profile`) and `StudioShapes` (the one live gesture: press, the held pointer applied once per frame, release). See §3 "Shape instrument". |
+| `ui/studio/spectrum_shape.py` | The Spectrum family's shape by key prefix (`ShapeKeys`): admission of each stored value, the structural edits (add / remove node, lane swap), the family's `ShapeSpec` (`shape_properties`) and its preview (`profile`, the engine's own bar shaping). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
 | `ui/studio/chrome.py` | The painted chrome items (`StudioFrame`, `StudioWindowEdge`, QML module `SRPSS.StudioChrome`), painting with Settings' own owners (below). |
 
@@ -315,12 +316,13 @@ when both toolbar groups cannot fit side by side.
 - **Structural edits.** A schema `StudioAction` on a row (`StudioProperty.actions`) or under a group
   (`StudioSchema.group_actions`) is answered by the adapter's `structure_edit(action_id, values)` as one undoable,
   admitted change set, or None while not admissible (the button is disabled). `StudioSchema.row_label` titles a row
-  from the current values (an element whose meaning moves with it). Spectrum: Add Node (widest gap, on the current
-  silhouette), Remove Node per node row, and lane swaps per boundary row, under Settings' shape-editor rules; the
-  Studio reaches every state Settings' shape editor saves (`tests/test_spectrum_studio_shape_editor.py`). Neon Lake:
-  the same for its Frequency Response shape and for Terrain Reaction's shaper (one record: nodes two to five, the
-  first lane boundary pinned at the shoreline by `normalize_terrain_shaper`), and the terrain editor's whole-record
-  edits (Extend Toward Horizon, Reset Terrain) on the authored heightfield. The heightfield's cells are painted with
+  from the current values (an element whose meaning moves with it). Spectrum family: Add Node (widest gap, on the
+  current silhouette), Remove Node and lane swaps, under Settings' shape-editor rules; the shape instrument runs
+  them (its Add Node button, right-click / Delete, its lane swap buttons), so there is one rule owner
+  (`tests/test_spectrum_studio_shape_editor.py`). Neon Lake: the same for its Frequency Response shape and for
+  Terrain Reaction's shaper (one record: nodes two to five, the first lane boundary pinned at the shoreline by
+  `normalize_terrain_shaper`), and the terrain editor's whole-record edits (Extend Toward Horizon, Reset Terrain)
+  on the authored heightfield. The heightfield's cells are painted with
   the shared brush (below); the session carries the record (undo, save, Save To <Preset>) through an
   `instrument_only` schema marker.
 - **Brush (`capabilities().brush`, Neon Lake's terrain).** The viewport toolbar's brush button (or B) turns the
@@ -338,8 +340,65 @@ when both toolbar groups cannot fit side by side.
 - **Conditions.** A property's `when` terms must all hold, its `when_any` terms at least one (Settings' former OR
   rules, e.g. Bubble's particle rows while any population is on); `ui/studio/schema.condition_hidden` is the one
   evaluation the bridge's `conditionHidden` uses.
+- **Shape instrument (`SHAPE`, 11 Nov; operator: "converted music visual shape editing controls into sliders.
+  That is a design regression").** A node curve with frequency lanes is edited on one canvas, never as rows of
+  sliders. One instrument serves every such shape: Spectrum's and Extruded Spectrum's silhouette, Neon Lake's
+  Frequency Response shape and its Terrain Reaction shaper.
+  - *Schema.* A `SHAPE` property is the row; its path holds the nodes. `StudioSchema.shapes` gives its `ShapeSpec`:
+    the lane layouts (`ShapeLayout`: where the lane positions and strengths are stored, the layout's name and the
+    words for its axis ends, whether it is drawn mirrored), the stored boolean choosing between two layouts
+    (`layout_switch`), the node limits, the lane mode (`blend`: a lane is a point and strengths interpolate between
+    lanes, Spectrum; `bands`: a lane owns the axis up to the next one, the shaper), pinned lanes, the `StudioAction`
+    ids for add / remove node and lane swaps, and `profile`, the mode's preview. Every value it edits besides the
+    nodes (lanes, strengths, the layout switch) is carried by an `instrument_only` property, so the session saves,
+    undoes and hydrates it like any other; no inspector row addresses any of them (`StudioSchema.edits`). A `SHAPE`
+    row without its spec, or a spec naming a value no property carries, is refused when the schema is built.
+  - *One rule owner.* The framework owns the canvas and the gestures only. Every candidate passes the schema's
+    `admit` through the edit session (`spectrum_shape.admit_*`, Neon Lake's `admit_shaper`: ranges, node counts,
+    the lane set, the pinned boundary), so the canvas always shows the admitted value. A dragged node or lane goes
+    where the pointer is and the list is handed over in order (Settings' shape editor re-sorted the same way), so it
+    passes its neighbours; the gesture follows it by index (nodes) or by name (lanes). Add at the widest gap, remove
+    and lane swaps are the adapter's `structure_edit` actions.
+  - *What is drawn comes from Python, from production.* The curve is `utils.curve_nodes.interpolate_nodes` at 161
+    points (the function the engine and the terrain baker sample); the shell draws that polyline and interpolates
+    nothing. Under the curve, per bar or sample: the silhouette (faint) and that height at its lane's strength.
+    Spectrum family: `bar_computation.shape_bar_profile`, `lane_sample_positions` and `lane_strength_profile`, the
+    helpers `fft_to_bars` itself shapes the bars with (extracted for this, same arithmetic; the bar count and the
+    profile floor are the Studio's current values). The shaper: `bake_terrain_shaper`'s tables. A lane's strength
+    shares the plot's one 0..1 axis with the curve (a bar is the one times the other): the strength line with a
+    diamond per lane, discs for the curve's nodes. A mirrored layout shows the editable half (centre at its right)
+    and, behind a veil of the well, a ghost of its mirror image.
+  - *Gestures.* Drag a node; click empty space to add one there and keep holding it; right-click a node, Delete, or
+    the strip's Remove Node to remove it; drag a lane's tag along the axis (a pinned lane's tag stays) and its
+    diamond up and down; the header's two layout chips choose the layout (the one boolean that is not a
+    `SwitchRow`: both layouts are named, beside the canvas they change). While an element is selected a strip under
+    the canvas holds its exact Position and Height / Strength fields, Remove Node or the lane swaps; arrow keys
+    step it (Shift: ten steps), Esc drops a held drag, then the selection. Hovering says in the header what the
+    pointer would do there.
+  - *Batching.* `shapePress` starts the session gesture and changes nothing; `shapeDrag` holds the newest pointer
+    position (axis position and value, 0..1) and the controller applies it at the next frame start through the same
+    queue as every drag (`_queue_preview`, kind `shape`); `shapeRelease` applies the last one and commits once (one
+    save, one undo entry); `shapeCancel` restores. Exact entry and keyboard steps commit per step. Nothing is
+    written to settings, presets or files while the pointer is held.
+  - *Look.* On the instrument well with the well inks (`wellTrace1` the curve and nodes, `wellTrace3` the lanes,
+    `wellDim` the grid), so it follows every Studio theme; hover, held and selected states ease over 120 ms; a
+    node that is added or removed fades in or out where it is, a layout change fades the canvas through, the strip
+    eases open: nothing pops. Keyboard focus shows on the well's own border (a ring outside it would be cut by the
+    scrolling panel). The plot is sized so header, canvas and lane tags fit a dashboard panel of the default window
+    (1500 × 864 logical on a 1440p / 150% screen) without scrolling; where the panel is too short for the strip, the
+    panel scrolls with the strip as it opens, so the selected element's fields are never left under its edge. A
+    marker that sits exactly under a node is reached through its lane's tag (select, then the Strength field or
+    the Up / Down keys).
+  - *Proof.* `tests/test_studio_shape_instrument.py`: every instrument of every registered Studio through the real
+    controller, bridge and adapter (curve and preview against the production functions, with the engine's own
+    `fft_to_bars` shown to take its shape from the shared helper; one preview per frame and one commit per drag,
+    add within the limit, removal stopping at the minimum, lanes passing each other with the lane set kept, the
+    pinned lane, each layout keeping its own lanes, exact entry and steps, undo / redo), real mouse events on the
+    hidden shell (drag with a wobble, click to add, right-click to remove), the fades (a layout change, an added
+    and a removed node), and the canvas repainting in a changed theme ink; negative controls throughout. Evidence: `tools/studio_shape_capture.py` (§5).
 - **Switch rows.** Every boolean control is the shell's one `SwitchRow` (an `Item`: a `Row` ignores the `x` of its
-  children, which once pushed the click area past the label and made every switch unclickable, 6 Nov). A row whose
+  children, which once pushed the click area past the label and made every switch unclickable, 6 Nov), except a
+  shape instrument's layout choice (above). A row whose
   `when` condition fails is hidden (`conditionHidden`). `tests/test_studio_switch_rows_click.py` clicks the rendered rows
   through real window events on the hidden offscreen surface and reads the canonical store.
 - **Capabilities.** `StudioCapabilities(viewport, camera, handles, objects)`; the default is a plain 2D live preview
@@ -374,8 +433,8 @@ current values do not hold (an unused optional element, such as a curve-node slo
 ### Drags are batched
 
 Every drag instrument (value sliders, Quiet/Peak lanes, lifecycle grips, response curves, XY handles, colour pickers,
-gradient nodes) goes through `previewValue` / `previewColour` / `previewGradient`, which only hold the newest value
-per target. The controller applies the held values at the next frame start (`on_frame`, the surface's existing
+gradient nodes, the shape instrument) goes through `previewValue` / `previewColour` / `previewGradient` /
+`shapeDrag`, which only hold the newest value per target. The controller applies the held values at the next frame start (`on_frame`, the surface's existing
 `afterAnimating` edge; no timer), latest wins, so the session previews at most once per rendered frame however fast
 the pointer moves. An applied preview re-shows only the properties stored under the gesture's keys; the whole values
 map, the starting-point state and the condition map are rebuilt when the gesture ends (or at once when a changed key
@@ -390,7 +449,7 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
 `.artifacts/evidence/studio/followups/20261107_followups/drag_profile/`.
 
 A drag holds until release. Drag instruments that sit in a scrolling panel set `preventStealing: true`: the value
-slider, the colour picker's field and hue bar, gradient nodes, and the response curve in the scrolling dock (it
+slider, the colour picker's field and hue bar, gradient nodes, the shape instrument's canvas, and the response curve in the scrolling dock (it
 scrolls sideways when narrow and down when short, its vertical bar in the dock's right margin beside the fields; at
 the default window on a 1440p / 150% screen its Range row was otherwise cut off). Without it, a vertical wobble past the drag threshold handed the press to the panel's scroll view, and the
 slider let go mid-drag (operator, 6 Nov: "sliders snap out of being dragged in mid motion"; it reproduced on every
@@ -565,6 +624,11 @@ each worker's time).
 `tools/waveform_studio_capture.py` renders any registered Studio (`--mode`, Waveform by default) through the hidden
 `OffscreenStudioSurface` against an in-memory store (nothing is saved), writing one PNG per workspace plus frame and
 evaluation timings. It never shows a window. Command examples live in `Docs/Reference/Harness_Index.md`.
+`tools/studio_shape_capture.py` renders a mode's shape instruments the same hidden way, driven by real mouse events:
+the instrument alone and at twice its pixels, at rest, hovered, held mid-drag (before release), selected, a lane's
+strength held and the add hint, and the whole Studio at rest and mid-drag, under any `.srtheme` and device pixel
+ratio (a material theme is laid over Settings' own material stand-in, since a hidden surface has no desktop behind
+it).
 
 ## 6. Adding an adapter
 

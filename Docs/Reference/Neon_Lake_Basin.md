@@ -179,10 +179,11 @@ Its own **Terrain Reaction** bucket: **React to Music** (off by default; presets
 Terrain Height), three amounts — **Pulses** (each admitted onset sends a broad ground roll through the land from its
 origin, heave then softer sink, `tanh`-bounded when hits overlap), **Peaks** (landforms answer their lane of the
 spectrum with signed patterns, so some places rise and others sink and the land changes shape) and **Swell** (a broad
-slow rise and fall) — the **shaper**, **Motion Speed**, **Rise** and **Settle**. The shaper is the shared shape editor
+slow rise and fall) — the **shaper**, **Motion Speed**, **Rise** and **Settle**. The shaper is the Studio's shared
+shape instrument (**Reaction Shaper**, `Docs/Reference/Visualizer_Studio.md` §3 "Shape instrument")
 laid along the land's height, shoreline (left) to the authored summit (right): its curve is how strongly each
-elevation deforms (it biases all three amounts), its notches split that axis into five frequency lanes (Bass ..
-Treble: which part of the spectrum moves which elevation) and its arrows weight each lane. It is stored as one record
+elevation deforms (it biases all three amounts), its lane boundaries split that axis into five frequency lanes (Bass ..
+Treble: which part of the spectrum moves which elevation) and each lane's strength marker weights it. It is stored as one record
 (`shockwave_grid_terrain_shaper`: nodes, notches, lanes; admitted part by part in
 `rendering/gl_programs/neon_terrain_reaction.py`) and baked once per change into 32-sample elevation tables.
 

@@ -910,8 +910,17 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   row's Open Studio, Custom rows and families saved through Settings' own editors, every exit restoring it, the
   framed camera's navigation saved only under the camera policy, identical production-renderer pixels, theme; on the
   real SettingsDialog, Save To <Preset> into a tmp copy of a curated Neon Lake preset.
-- `tests/test_spectrum_studio_shape_editor.py` — each capability of Settings' shape editor driven on the real widget
-  and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
+- `tests/test_spectrum_studio_shape_editor.py` — the Spectrum shape's structural edits (add / remove node within the
+  limits, lane swap) as single undoable, admitted edits; the shape instrument's canvas follows them.
+- `tests/test_studio_shape_instrument.py` — the shared shape instrument, for every instrument of every registered
+  Studio (Spectrum, Extruded Spectrum, Neon Lake's Frequency Response shape and terrain shaper) through the real
+  controller, bridge and adapter: the canvas is given the production curve and the engine's own bar shaping
+  (`fft_to_bars` proven to take its shape from the shared helper), the shaper's baked tables; a drag previews once
+  per frame and commits once on release (undo / redo), a dragged node passes its neighbour, click adds within the
+  limit, removal stops at the minimum, lanes pass each other with the lane set kept, the pinned lane, each layout's
+  own lanes, exact entry and keyboard steps; real mouse events on the hidden shell (drag with a wobble, click to
+  add, right-click to remove), the fades (layout change, node added / removed) and the canvas repainting in a
+  changed theme ink. Negative controls throughout.
 - `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of
   re-configuring, equal production for every Spectrum-owned key, and spread over frames under the Studio's budget.
 - `tests/test_spectrum_studio_drag_model.py` — a drag of every Spectrum-owned slider builds the production settings
