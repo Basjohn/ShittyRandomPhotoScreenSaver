@@ -10,16 +10,19 @@ those two (or 1:1 when the text's own luminance lies between them). A heavy blur
   (``SETTINGS_TEXT_STACKS``), over ``window.dialog_glass``, over the theme's material
   (``SettingsThemeSpec.native_tint``: Glass and Off show the desktop itself; the tinted materials lay their
   derived tint over it), over a black and a white desktop.
-* Widget cards: ``widget_theme_legibility`` -- each card text role over the card's own surfaces. On a material the
-  wallpaper side is carried by the card's legibility panel, whose floor holds ``card.text`` at 7:1 against the
-  blurred backdrop (Docs/Architecture/Card_Surface_Materials.md 3.3); it is measured in pixels by
+* Widget cards: ``widget_theme_legibility`` -- each card text role over the card's own surfaces.
+* Widget cards on their material (``--card-materials``): ``widget_material_legibility`` -- each card text role
+  over the card's composed legibility panel over a black and a white wallpaper, as the production solver
+  (``rendering/quick/qml/MaterialSurface.qml`` / ``SurfaceContrast.js``, evaluated in a QML engine, no window)
+  composes it: dark ink gets the bounded panel and its own corrected ink (Docs/Architecture/
+  Card_Surface_Materials.md 3.3), light ink the floor-holding panel. Pixels:
   ``tools/surface_material_capture.py --legibility``.
 
 Bars: 4.5:1 for small text, 3:1 for large text (WCAG AA). Disabled roles are exempt (inactive controls).
 The contrast function is the canonical ``ui.theme_semantics.contrast_ratio``.
 
 Usage:
-  python tools/theme_legibility.py [--themes NAME ...] [--light] [--json OUT]
+  python tools/theme_legibility.py [--themes NAME ...] [--light] [--card-materials] [--json OUT]
 """
 from __future__ import annotations
 
@@ -123,6 +126,78 @@ def widget_theme_legibility(theme) -> dict[str, RoleResult]:
     return results
 
 
+class _CardMaterialModel:
+    """The production card material solver in a QML engine (never shown, nothing rendered)."""
+
+    def __init__(self) -> None:
+        from PySide6.QtGui import QGuiApplication
+        from PySide6.QtQml import QJSEngine, QQmlEngine
+
+        self._app = QGuiApplication.instance() or QGuiApplication(["theme-legibility"])
+        self._qml_dir = _PROJECT_ROOT / "rendering" / "quick" / "qml"
+        self._engine = QQmlEngine()
+        self._js = QJSEngine()
+        source = (self._qml_dir / "SurfaceContrast.js").read_text(encoding="utf-8").replace(".pragma library", "")
+        assert not self._js.evaluate(source).isError()
+
+    def poles_and_inks(self, material: str, tint: Rgba, text: Rgba, inks: dict[str, Rgba]):
+        """(poles as 0-255 Rgba over black/white wallpapers, light_ink, corrected ink per role)."""
+        from PySide6.QtCore import QUrl
+        from PySide6.QtQml import QQmlComponent
+
+        def qml(color: Rgba) -> str:
+            return f'Qt.rgba({color.r / 255}, {color.g / 255}, {color.b / 255}, {color.a / 255})'
+
+        component = QQmlComponent(self._engine)
+        component.setData((f'import QtQuick\nMaterialSurface {{ material: "{material}"; '
+                           f'tintColor: {qml(tint)}; normalColor: {qml(tint)}; textColor: {qml(text)} }}').encode(),
+                          QUrl.fromLocalFile(str(self._qml_dir / "_theme_legibility_probe.qml")))
+        item = component.create()
+        if item is None:
+            raise RuntimeError(component.errorString())
+        try:
+            raw = item.property("inkPoles")
+            raw = raw.toVariant() if hasattr(raw, "toVariant") else raw
+            poles = [[float(channel) for channel in pole] for pole in raw]
+            limits = item.property("panelLimits")
+            light_ink = limits.y() > 0.5
+        finally:
+            item.deleteLater()
+        corrected = {}
+        for role, ink in inks.items():
+            if light_ink:
+                corrected[role] = ink
+                continue
+            value = self._js.evaluate(
+                f"legibleInk({{r: {ink.r / 255}, g: {ink.g / 255}, b: {ink.b / 255}, a: {ink.a / 255}}}, 1.0, "
+                f"{json.dumps(poles)}, true)").toVariant()
+            corrected[role] = Rgba(*(round(255 * channel) for channel in value[:4]))
+        return [Rgba(*(round(255 * c) for c in pole)) for pole in poles], light_ink, corrected
+
+
+_card_model: _CardMaterialModel | None = None
+
+
+def widget_material_legibility(theme, material: str) -> dict[str, RoleResult]:
+    """Worst contrast per card text role over the card's composed panel on ``material``."""
+    global _card_model
+    if _card_model is None:
+        _card_model = _CardMaterialModel()
+    roles = {role: theme.color(role) for role, _surfaces in WIDGET_TEXT_SURFACES}
+    poles, light_ink, inks = _card_model.poles_and_inks(material, theme.color("card.background"),
+                                                         theme.color("card.text"), roles)
+    results: dict[str, RoleResult] = {}
+    for role, ink in inks.items():
+        for name, pole in zip(DESKTOPS, poles):
+            ratio = contrast_ratio(composite_over(ink, pole), pole)
+            previous = results.get(role)
+            if previous is None or ratio < previous.worst:
+                results[role] = RoleResult(role, round(ratio, 2), SMALL_TEXT,
+                                           f"{material} panel / {name} wallpaper"
+                                           + ("" if ink == roles[role] else " (corrected ink)"))
+    return results
+
+
 def worst(results: dict[str, RoleResult]) -> RoleResult:
     return min(results.values(), key=lambda result: result.worst / result.bar)
 
@@ -140,7 +215,7 @@ def _pairs(themes_root: Path):
         yield path, load_settings_theme_file(path), mirrors.get(f"file:{path.name}")
 
 
-def report(themes_root: Path, *, names=None, light_only=False) -> list[dict]:
+def report(themes_root: Path, *, names=None, light_only=False, card_materials=False) -> list[dict]:
     from ui.theme_semantics import settings_theme_is_light
 
     rows = []
@@ -151,6 +226,9 @@ def report(themes_root: Path, *, names=None, light_only=False) -> list[dict]:
             continue
         s = settings_theme_legibility(settings)
         w = widget_theme_legibility(mirror) if mirror is not None else {}
+        if card_materials and mirror is not None and mirror.surface_material not in (None, "normal"):
+            for role, result in widget_material_legibility(mirror, mirror.surface_material).items():
+                w[f"{role} @material"] = result
         rows.append({
             "theme": settings.name,
             "light": settings_theme_is_light(settings),
@@ -169,10 +247,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--themes-root", type=Path, default=_PROJECT_ROOT / "themes")
     parser.add_argument("--themes", nargs="+", metavar="NAME")
     parser.add_argument("--light", action="store_true", help="only light Settings themes (settings_theme_is_light)")
+    parser.add_argument("--card-materials", action="store_true",
+                        help="also each mirror's card text over its composed material panel (QML solver, no window)")
     parser.add_argument("--json", type=artifact_paths.evidence_arg,
                         help="write the full per-role report here (inside the evidence layout, tools/artifact_paths.py)")
     args = parser.parse_args(argv)
-    rows = report(args.themes_root, names=args.themes, light_only=args.light)
+    rows = report(args.themes_root, names=args.themes, light_only=args.light, card_materials=args.card_materials)
     for row in rows:
         s_worst = min(row["settings"].items(), key=lambda item: item[1][0] / item[1][1])
         c_worst = min(row["cards"].items(), key=lambda item: item[1][0] / item[1][1]) if row["cards"] else None

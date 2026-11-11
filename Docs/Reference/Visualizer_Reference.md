@@ -175,9 +175,12 @@ Rules:
 - Curated ghosts (operator, 8 Nov 2026, twice: caps alone "only draw the line, not the ghost effect"; then flat
   ghosts under caps had "a solid top edge line" and "no blend"). Every curated preset ghosts the way Preset 1 does:
   a trail continuing the bar's own colours, fading out, with no cap line. Preset 1 does it with Rainbow Ghost over
-  its rainbow borders, Holo Foil likewise, Glass Player with its cyan Bar Colour, and the rest with Bar Fill. Peak
-  Caps are off on all fifteen. Opacities sit near Preset 1's (about 0.6). This supersedes both the 7 Nov caps-only
-  rule and the first 8 Nov flat light colours.
+  its rainbow borders; of the presets authored on 12 Nov 2026 (1B.10), Quicksilver uses Rainbow Ghost, Dot Matrix
+  its teal Bar Colour, Afterglow a Custom coral with a Ghost Gradient, and the rest Bar Fill. Peak Caps are off on
+  every curated preset. Opacities sit near Preset 1's (about 0.6). This supersedes both the 7 Nov caps-only
+  rule and the first 8 Nov flat light colours. Authoring notes from that round: a rounded bar (Border Radius above
+  about 2) wants a Bar Fill ghost (the others float above it as a lens); a Bar Fill ghost of a dark or grey fill
+  reads as soot; a pattern narrower than the bar pitch turns into bricks against the 2 px bar gaps.
 - Toggling fades (`SpectrumDecorFade`, `FADE_SECONDS`): one envelope per option on the presentation owner, advanced
   only on the capture timestamp (no timer, thread or second clock); a pattern switched to another dips through zero.
   A fresh owner starts settled, so exact Studio replays and new activations show the settings directly.

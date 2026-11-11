@@ -138,7 +138,8 @@ def _echo_worker(requests, responses):
             return WorkerType.VISUALIZER
 
         def handle_message(self, message):
-            wake = message.payload['wake']
+            from core.visualizer_engine.wake_channel import open_wake_sender
+            wake = open_wake_sender(message.payload['wake'])   # the writer end (Windows) or the pipe's name (POSIX)
             try:
                 wake.send_bytes(b'accepted')
             finally:
@@ -149,22 +150,29 @@ def _echo_worker(requests, responses):
 
 
 def test_accepted_control_bytes_cross_real_worker_loop_with_live_wake_transfer():
+    # The wake pipe as the product sends it (``wake_channel``): its writer end on Windows, duplicated into the worker;
+    # its name on POSIX, where a raw pipe end is refused and the worker opens its own end.
     from core.process.supervisor import ProcessSupervisor
+    from core.visualizer_engine.wake_channel import open_wake_channel
     supervisor = ProcessSupervisor()
     supervisor.register_worker_factory(WorkerType.VISUALIZER, _echo_worker)
-    receiver, sender = multiprocessing.Pipe(duplex=False)
+    channel = open_wake_channel()
+    receiver = channel.receiver
     try:
         assert supervisor.start(WorkerType.VISUALIZER)
         correlation = supervisor.send_message(WorkerType.VISUALIZER, MessageType.VIS_SET_VIEW,
-                                             {'value': 'once', 'wake': sender})
+                                             {'value': 'once', 'wake': channel.transfer})
         assert correlation is not None
-        # The submitted snapshot owns its transfer even after the caller closes its original.
-        sender.close()
+        if os.name == 'nt':
+            # The submitted snapshot owns its transfer (a handle already in the worker) even after the caller closes
+            # its original. On POSIX the name must outlive the worker's open: the caller holds it until the answer,
+            # as the link does until the configure's reply.
+            channel.release_sender()
         assert receiver.poll(5) and receiver.recv_bytes() == b'accepted'
         reply = supervisor.await_response(WorkerType.VISUALIZER, correlation, timeout_ms=5000)
         assert reply is not None and reply.success and reply.payload == {'value': 'once'}
     finally:
-        sender.close()
+        channel.release_sender()
         receiver.close()
         supervisor.shutdown()
 

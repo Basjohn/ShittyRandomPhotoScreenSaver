@@ -25,7 +25,8 @@ runner job), `tools/build_runner.py` (the tab). Normal and Repo Venv are unchang
 ## Running a remote build
 
 1. Commit and **push** what you want built. GitHub builds the pushed commit, never your working tree.
-2. Open Build Runner (`python tools/build_runner.py`, or `--mode github`) and choose **GITHUB REMOTE**.
+2. Open Build Runner (`python tools/build_runner.py`, or `--mode github`) and choose **GITHUB REMOTE**. (`--debug`
+   prints the window's DPI awareness mode as it opens; Build Runner reads no environment variable flags.)
 3. Read the pre-flight line. It names exactly what GitHub will build: `GitHub builds origin/main @ 1a2b3c4d: <subject>`.
    It warns when your local HEAD is not that commit (unpushed commits) or when you have uncommitted changes, which
    are not part of the remote build.

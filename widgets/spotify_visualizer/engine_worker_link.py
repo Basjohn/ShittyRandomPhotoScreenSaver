@@ -1,9 +1,9 @@
 """The production Visualizer owner on the engine worker, main-process side (native core P2b, work order 5 slices 5.2 and
 5.5).
 
-The default path on Windows (``core.diagnostics.experiment_flags.visualizer_engine_worker_admitted``, read once per
-owner construction; ``--viz-in-process`` and Linux run in process). In process, nothing here is imported and no worker
-process exists. On the worker path, the owner
+The default path (``core.diagnostics.experiment_flags.visualizer_engine_worker_admitted``, read once per owner
+construction; ``--viz-in-process`` runs in process; Linux's default is source-level only and has never run:
+``Linux_Plan.md``). In process, nothing here is imported and no worker process exists. On the worker path, the owner
 (``quick_display_visualizer_owner.QuickDisplayVisualizerOwner``) keeps no beat engine and runs no tick: one
 ``EngineWorkerLink`` per session sends the ``logical_edges`` control edges to the ``WorkerType.VISUALIZER`` process
 (``core.visualizer_engine.engine_worker``: ``VIS_CONFIGURE`` with the host binding's own resolved activation and

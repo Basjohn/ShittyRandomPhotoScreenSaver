@@ -346,9 +346,12 @@ def test_text_plate_evaluates_the_identical_surface_function() -> None:
 
 def test_text_runs_change_only_on_an_active_material() -> None:
     text = (QML / "ShadowedText.qml").read_text(encoding="utf-8")
-    # The card's legibility panel holds the floor: a run loads no plate of its own (no chips);
-    # the soft halo drops only on an active material.
-    assert "TextLegibilityPlate" not in text and "Loader" not in text
+    # The card's legibility panel holds the floor: a run loads a plate of its own only when its
+    # corrected dark ink still cannot read on the bounded panel (an item-opacity fade), never
+    # as a per-run chip on every run; the soft halo drops only on an active material.
+    assert text.count("Loader {") == 1 and text.count("TextLegibilityPlate {") == 1
+    assert "active: shadowedText.inkNeedsPlate &&" in text
+    assert "readonly property bool inkNeedsPlate: _inkSolution !== null && !_inkSolution[4]" in text
     assert "&& !(shadowedText.shadowSoft && shadowedText.onSurfaceMaterial)" in text
     assert "&& !shadowedText.onSurfaceMaterial" in text
 

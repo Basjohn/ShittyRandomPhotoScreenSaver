@@ -25,6 +25,9 @@ ShaderEffect {
     // this row: the floor is held against what the text actually sits on.
     property color underlayColor: "transparent"
     property real runPixelSize: 14.0
+    // A plate inside a faded run (ShadowedText's ink plate) passes the run's own opacity, which
+    // the overlay must not take; a row under a line leaves 1.
+    property real ownOpacity: 1.0
     // Below this a run is small text and needs 4.5:1 (WCAG AA body text).
     readonly property real smallTextPx: 18.0
 
@@ -46,6 +49,7 @@ ShaderEffect {
     readonly property var parameters: card ? card.surfaceMaterialParameters : null
     readonly property real opacityAdjust: card ? card.surfaceOpacityAdjust : 0.0
     readonly property vector4d panelLimits: card ? card.surfaceMaterialLimits : Qt.vector4d(0, 1, 1, 1)
+    readonly property real panelCeiling: card ? card.surfaceMaterialCeiling : 1.0
     readonly property vector4d blurTint: parameters ? parameters[0] : Qt.vector4d(0, 0, 0, 1)
     readonly property vector4d lightNoise: parameters ? parameters[1] : Qt.vector4d(0, 0, 0, 0)
     readonly property vector4d glassLegibility: parameters ? parameters[2] : Qt.vector4d(0, 0, 0, 1)

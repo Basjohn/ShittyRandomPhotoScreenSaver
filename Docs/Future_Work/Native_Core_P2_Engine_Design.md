@@ -1815,6 +1815,14 @@ are specified above.
         proving prerequisite; the later default change remains ordered in `Linux_Plan.md` Phase 4.
        Pinned: `tests/test_platform_selection.py` (Windows: the worker; the in-process token wins),
        `tests/test_linux_runtime_branches.py` (Linux: in process; `--viz-engine-worker` still chooses the worker).
+       *Superseded 11 Nov by H3 (the phase-boundary audit's order, the operator's 8 Nov waiver):*
+       `visualizer_engine_worker_platform_default()` answers the worker on every platform (no longer `IS_WINDOWS`);
+       `tests/test_platform_selection.py` pins it with the platform injected both ways and
+       `tests/test_linux_runtime_branches.py` on Linux. The Linux worker path has never run (no FIFO wake pipe,
+       forkserver spawn or Pulse capture in the worker); the in-process fallback is its safety net (`Linux_Plan.md`
+       Phase 4). The `[PLATFORM]` line above no longer fires on any platform; it is kept with the function, the one
+       seam for taking a platform off the worker, and pinned by driving that function patched to False
+       (`tests/test_visualizer_owner_engine_worker.py::test_a_platform_taken_off_the_worker_says_so_once`).
      - *Production wiring:* unchanged from 5.7: the engine creates the `ProcessSupervisor` in `_init_core_systems`
        and hands it to the display manager before the displays admit the Visualizer
        (`test_the_engine_wires_the_supervisor_before_the_displays_admit_the_visualizer`); the reload hold

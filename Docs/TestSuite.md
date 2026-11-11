@@ -1206,12 +1206,17 @@ High-value permanent guards include:
   replay's frames (`owner_replay(..., bar_count=)`) for every mode; dropping the logical, engine or presentation kwargs
   from the configure fails it (frame-neutral steps, the activation record and a cold engine's fence, are the parity
   and binding tests'). The same replay at `32f28d4f^` gave identical digests for all nine modes. The default path
-  (Windows; no path stated, the admission cleared) builds the owner through the same binding on a real
+  (no path stated, the admission cleared; not gated by platform since the H3 flip of 11 Nov, and never yet run on
+  Linux) builds the owner through the same binding on a real
   `WorkerType.VISUALIZER` process and, per mode, presents the same owner's in-process frames frame for frame through
   `owner_worker_gate`'s identity script, never falling back (the gate refuses a default that resolves in process). The
-  path selection itself: `tests/test_platform_selection.py` (the worker by default on Windows, `--viz-in-process` wins),
-  `tests/test_linux_runtime_branches.py` (Linux in process; `--viz-engine-worker` still chooses the worker),
-  `tests/test_live_check_resources.py` (the live check reads the path as the saver resolves it). Tests whose owner must
+  path selection itself: `tests/test_platform_selection.py` (the worker by default on both platform branches, `--viz-in-process`
+  wins; the non-Windows branch fails on the pre-H3 default),
+  `tests/test_linux_runtime_branches.py` (Linux-only, so not run on Windows: the same selection there),
+  `tests/test_live_check_resources.py` (the live check reads the path as the saver resolves it). The raw-pipe
+  senders that crossed a real supervisor in tests and gate tools go through `wake_channel.open_wake_channel`
+  (`tests/test_visualizer_engine_worker.py`, `tests/test_visualizer_ordered_control_delivery.py`,
+  `tools/visualizer_replay/live_engine_gate.py`): on POSIX the ordered channel refuses a raw pipe end. Tests whose owner must
   tick in this process state it with the `visualizer_in_process` fixture (`tests/conftest.py`). The fresh-spawn probe in
   `tests/test_visualizer_engine_worker.py` ticks one live input per mode and pins QtCore/QtGui only (it caught the
   Spectrum DSP importing the Settings shape editor); it also reports the worker's Qt modules at spawn (QtCore at most)
@@ -1234,7 +1239,8 @@ High-value permanent guards include:
   reentry / switch, `--order`, `--stress`; `--paced` for 5.1) and cost: `tools/visualizer_replay/live_engine_gate.py`,
   `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
   `tests/test_visualizer_owner_engine_worker.py` (work order 5 slice 5.2 and the core of 5.3: the production owner on
-  the engine worker, the default on Windows since 8 Nov; each rig states its path): the REAL owner built by the host
+  the engine worker, the default on Windows since 8 Nov and on every platform since H3 (Linux never run); each rig
+  states its path): the REAL owner built by the host
   binding's `construct` on an
   unshown runtime (`tools/visualizer_replay/owner_worker_gate.py`'s rig), the worker side a real
   `WorkerType.VISUALIZER` process on the shipped clip's PCM (`engine_worker_link.recorded_capture_for_testing`, the

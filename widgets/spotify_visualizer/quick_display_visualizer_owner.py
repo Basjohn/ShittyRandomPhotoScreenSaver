@@ -7,8 +7,9 @@ already owns mode/settings, the shared BeatEngine/source, the authored
 ``VisualizerLogicalRuntime`` and controller-owned logical tick state, viewport
 configuration and render-bridge publication.
 
-Native core P2b (work order 5): by default on Windows (``experiment_flags.visualizer_engine_worker_admitted``, read
-once per construction; ``--viz-in-process`` and Linux keep the in-process path), the owner runs its Visualizer on the
+Native core P2b (work order 5): by default (``experiment_flags.visualizer_engine_worker_admitted``, read once per
+construction; ``--viz-in-process`` keeps the in-process path; on Linux the default is source-level only, never run:
+``Linux_Plan.md``), the owner runs its Visualizer on the
 engine worker (``engine_worker_link``): the controller keeps no beat engine and runs no tick; each control edge below
 is sent to the ``WorkerType.VISUALIZER`` session, and the worker's frames reach the same presentation path through the
 controller's logical mailbox (the session's frame mapping, read side). A worker that cannot run (no process
@@ -111,8 +112,9 @@ _in_process_path_noted = False
 
 def _note_in_process_path() -> None:
     """Say once per process why the Visualizer runs in process when the engine worker is the product's default:
-    the current platform/audit stage (``[PLATFORM]``: Linux keeps it in process until the later H3 default change)
-    or the diagnostic ``--viz-in-process`` choice. The worker's own fallbacks log at their failure."""
+    the diagnostic ``--viz-in-process`` choice, or a platform whose default is in process (``[PLATFORM]``; none
+    today: ``experiment_flags.visualizer_engine_worker_platform_default``). The worker's own fallbacks log at their
+    failure."""
     global _in_process_path_noted
     if _in_process_path_noted:
         return
@@ -125,8 +127,7 @@ def _note_in_process_path() -> None:
     if active_experiment_flags().visualizer_engine_worker is False:
         logger.info("[SPOTIFY_VIS][ENGINE_WORKER] --viz-in-process: the Visualizer runs in process for this run")
     elif not visualizer_engine_worker_platform_default():
-        logger.info("[PLATFORM] Visualizer engine worker: Windows default at the current audit stage; "
-                    "this platform runs in process pending the later H3 default change")
+        logger.info("[PLATFORM] Visualizer engine worker: this platform's default is the in-process path")
 
 
 class QuickDisplayVisualizerOwner:
@@ -270,7 +271,7 @@ class QuickDisplayVisualizerOwner:
         # are on; the last value projected to the scene, so it is written at its edges only.
         self._expanded_overlays_drawn = False
         # Native core P2b: the process path, read once per construction (never an environment flag): the engine worker
-        # by default on Windows, in process on Linux or when ``--viz-in-process`` chose it. ``_worker`` is the live
+        # by default, in process when ``--viz-in-process`` chose it. ``_worker`` is the live
         # ``engine_worker_link.EngineWorkerLink`` while this owner runs on the worker (None: in process);
         # ``_worker_identity`` its engine's (generation, activation id); ``_activation_inputs`` the current
         # activation's resolved inputs (a reconfigure or the in-process fallback re-applies them).

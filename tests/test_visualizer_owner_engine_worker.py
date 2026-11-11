@@ -2,7 +2,7 @@
 
 The REAL owner, built by the host binding's own ``construct`` on an unshown runtime (``tools/visualizer_replay/
 owner_worker_gate.py``'s rig: no window is shown), admitted onto the engine worker by the code-level admission
-(``experiment_flags.visualizer_engine_worker_admitted``: the default on Windows; every rig states its path). No test
+(``experiment_flags.visualizer_engine_worker_admitted``: the default on every platform; every rig states its path). No test
 opens a device: worker sessions take the shipped
 clip's PCM through the link's test-only control (``engine_worker_link.recorded_capture_for_testing``; the session
 refuses the device for its life), and the device-path tests run the session in process with the device constructor
@@ -132,8 +132,8 @@ def _pump(rig, seconds: float, until=None) -> None:
 
 
 def test_the_path_follows_the_platform_unless_argv_chooses_it():
-    # No token: the platform default (the engine worker on Windows: tests/test_platform_selection.py; in process on
-    # Linux: tests/test_linux_runtime_branches.py). --viz-engine-worker / --viz-in-process choose; in process wins.
+    # No token: the platform default (the engine worker on every platform: tests/test_platform_selection.py, and
+    # tests/test_linux_runtime_branches.py on Linux). --viz-engine-worker / --viz-in-process choose; in process wins.
     from core.diagnostics import experiment_flags as ef
 
     assert ef.parse_experiment_flags(["main.py", "/s"]).visualizer_engine_worker is None
@@ -151,6 +151,40 @@ def test_the_path_follows_the_platform_unless_argv_chooses_it():
         assert ef.visualizer_engine_worker_admitted() is True
         ef.activate_experiment_flags(in_process)
         assert ef.visualizer_engine_worker_admitted() is False
+    finally:
+        ef.override_active_flags_for_testing(saved)
+
+
+@pytest.mark.parametrize("platform_default", [False, True])
+def test_a_platform_taken_off_the_worker_says_so_once(monkeypatch, caplog, platform_default):
+    """``visualizer_engine_worker_platform_default`` stays a function so a platform can be taken off the worker in one
+    place; the owner then says once, as ``[PLATFORM]``, that the Visualizer runs in process there. Driven through that
+    function patched (every platform answers the worker today). Negative control: with the worker default and no
+    token there is nothing to say, and the in-process token logs its own line, never ``[PLATFORM]``."""
+    import logging
+
+    from core.diagnostics import experiment_flags as ef
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    monkeypatch.setattr(ef, "visualizer_engine_worker_platform_default", lambda: platform_default)
+    monkeypatch.setattr(owner_module, "_in_process_path_noted", False)
+    saved = ef.active_experiment_flags()
+    try:
+        ef.override_active_flags_for_testing(None)
+        assert ef.visualizer_engine_worker_admitted() is platform_default
+        with caplog.at_level(logging.INFO, logger=owner_module.logger.name):
+            owner_module._note_in_process_path()
+            owner_module._note_in_process_path()
+        platform_lines = [record for record in caplog.records if "[PLATFORM]" in record.getMessage()]
+        assert len(platform_lines) == (0 if platform_default else 1)
+
+        caplog.clear()
+        monkeypatch.setattr(owner_module, "_in_process_path_noted", False)
+        ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", "--viz-in-process", "/s"]))
+        with caplog.at_level(logging.INFO, logger=owner_module.logger.name):
+            owner_module._note_in_process_path()
+        messages = [record.getMessage() for record in caplog.records]
+        assert len(messages) == 1 and "[PLATFORM]" not in messages[0]
     finally:
         ef.override_active_flags_for_testing(saved)
 
@@ -329,7 +363,12 @@ def test_the_park_clears_the_reader_after_the_park_reply_never_before(qt_app, pc
             with engine_worker_link.recorded_capture_for_testing(pcm=pcm[0], pcm_rate=pcm[1]):
                 owner = rig.build()
             # No presentation while the reply is awaited (it would take the frame and hide what each variant left).
-            owner.controller.logical_mailbox.set_wake_callback(None)
+            # Removing the mailbox's callback is not enough: the wake listener may already have queued a GUI wake for
+            # an earlier frame, and that event, run by ``settle``, presented (took) the forced frame, so a negative
+            # control read nothing about 1 run in 6. Here that wake is always queued, and closing the owner's wake
+            # drops it with any later one.
+            owner._publication_wake.request()
+            owner._publication_wake.close()
             assert owner.set_display_power(False)
             rig.settle()                                 # the park's reply (an event: the owner never waits)
             unread[name] = owner.controller.logical_mailbox.peek()

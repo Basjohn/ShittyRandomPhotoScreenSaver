@@ -153,6 +153,87 @@ def test_the_studio_window_is_frameless_with_the_settings_title_bar_and_edge(stu
         window_surface.host.release_engine()
 
 
+def _resize_area_problems(root):
+    """Every way the shell's resize areas fail to line the window edge (an empty list: they all do).
+
+    Each of the eight areas (four sides, four corners) must hug the edges it resizes; the side strips must run
+    between the corner areas so the perimeter has no gap; and each window corner pixel must belong to the corner area
+    that resizes both of its edges."""
+    areas = _named(root, "resizeEdge")
+    width, height = root.width(), root.height()
+    problems = []
+
+    def sides(area):
+        return tuple(bool(area.property(name)) for name in ("onLeft", "onRight", "onTop", "onBottom"))
+
+    def rect(area):
+        origin = area.mapToItem(root, QPointF(0, 0))
+        return QRectF(origin.x(), origin.y(), area.width(), area.height())
+
+    expected = {(True, False, False, False), (False, True, False, False), (False, False, True, False),
+                (False, False, False, True), (True, False, True, False), (False, True, False, True),
+                (False, True, True, False), (True, False, False, True)}
+    if sorted(sides(area) for area in areas) != sorted(expected):
+        problems.append(("areas", sorted(sides(area) for area in areas)))
+        return problems
+    for area in areas:
+        left, right, top, bottom = sides(area)
+        r = rect(area)
+        if r.width() <= 0 or r.height() <= 0:
+            problems.append(("empty", sides(area)))
+        if left and r.left() != 0:
+            problems.append(("left edge", sides(area), r))
+        if right and r.right() != width:
+            problems.append(("right edge", sides(area), r))
+        if top and r.top() != 0:
+            problems.append(("top edge", sides(area), r))
+        if bottom and r.bottom() != height:
+            problems.append(("bottom edge", sides(area), r))
+
+    def owner(x, y):
+        """The resize area under the point (topmost by z, then latest), as its sides."""
+        hits = [area for area in areas if rect(area).contains(QPointF(x, y))]
+        return sides(max(hits, key=lambda area: area.z())) if hits else None
+
+    # The window corner pixels belong to the corner areas.
+    for x, y, want in ((0.5, 0.5, (True, False, True, False)), (width - 0.5, 0.5, (False, True, True, False)),
+                       (0.5, height - 0.5, (True, False, False, True)),
+                       (width - 0.5, height - 0.5, (False, True, False, True))):
+        if owner(x, y) != want:
+            problems.append(("corner", (x, y), owner(x, y)))
+    # Walking along each edge one pixel in, every point is a resize area that resizes that edge.
+    for step in range(0, 101):
+        fx, fy = width * step / 100.0, height * step / 100.0
+        fx, fy = min(max(fx, 0.5), width - 0.5), min(max(fy, 0.5), height - 0.5)
+        for x, y, index in ((fx, 0.5, 2), (fx, height - 0.5, 3), (0.5, fy, 0), (width - 0.5, fy, 1)):
+            hit = owner(x, y)
+            if hit is None or not hit[index]:
+                problems.append(("gap", (x, y), hit))
+    return problems
+
+
+def test_the_resize_areas_line_every_window_edge_and_reach_the_corners(studio):
+    """The frameless shell resizes through eight areas (four sides, four corners) at the window's edge; they follow
+    the window when it resizes. Negative control: a corner area pulled in from its corner is caught."""
+    _controller, surface = studio("waveform_ribbon")
+    root = surface.host.root
+    surface.pump()
+    assert _resize_area_problems(root) == []
+
+    root.setWidth(1100)
+    root.setHeight(700)
+    surface.pump()
+    assert _resize_area_problems(root) == []
+
+    corner = next(area for area in _named(root, "resizeEdge")
+                  if area.property("onRight") and area.property("onBottom"))
+    corner.setX(corner.x() - 6)
+    corner.setY(corner.y() - 6)
+    problems = _resize_area_problems(root)
+    assert any(problem[0] == "right edge" for problem in problems)
+    assert any(problem[0] == "corner" for problem in problems)
+
+
 def _studio_corner_alphas(surface, dpr):
     """Alpha of every device pixel wholly outside the window border's outer arc, and of the stroke's middle round
     each corner arc, from the shell rendered off-screen over nothing (a transparent clear)."""

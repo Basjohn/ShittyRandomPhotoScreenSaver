@@ -55,6 +55,28 @@ Item {
     }
     readonly property Item surfaceCard: _findSurfaceCard(shadowedText.parent)
     readonly property bool onSurfaceMaterial: surfaceCard !== null && surfaceCard.surfaceMaterialActive
+    // On a material card with dark ink (light themes) the panel is bounded rather than
+    // whitened, and the run's own ink is corrected at its real alpha (the card's
+    // surfaceInkSolution); otherwise exactly the authored colour. A run whose own opacity
+    // keeps even black from reading over the bounded panel takes a text-local plate.
+    readonly property real _pixelSize: effectiveFont.pixelSize > 0 ? effectiveFont.pixelSize
+        : effectiveFont.pointSize * 96.0 / 72.0
+    readonly property var _inkSolution: onSurfaceMaterial
+        && typeof surfaceCard.surfaceInkSolution === "function"
+        ? surfaceCard.surfaceInkSolution(shadowedText.color, shadowedText.opacity, _pixelSize < 18.0) : null
+    readonly property color inkColor: _inkSolution === null ? shadowedText.color
+        : Qt.rgba(_inkSolution[0], _inkSolution[1], _inkSolution[2], _inkSolution[3])
+    readonly property bool inkNeedsPlate: _inkSolution !== null && !_inkSolution[4]
+
+    function _offsetInCard(card) {
+        var x = 0.0
+        var y = 0.0
+        for (var item = shadowedText; item && item !== card; item = item.parent) {
+            x += item.x
+            y += item.y
+        }
+        return Qt.point(x, y)
+    }
 
     clip: false
     implicitWidth: mainText.implicitWidth
@@ -103,6 +125,40 @@ Item {
         z: 0
     }
 
+    // Text-local plate (Card_Surface_Materials.md 3.3), only for a run whose ink correction
+    // cannot reach the floor (inkNeedsPlate: dark ink faded by its own opacity on a bounded
+    // light panel). It hugs the painted text and draws only where the surface under it
+    // misses the floor; never on Normal, light ink or a run that reads.
+    Loader {
+        id: inkPlate
+        objectName: "shadowedTextInkPlate"
+        readonly property real pad: 3.0
+        readonly property real paintedWidth: Math.min(mainText.contentWidth,
+            shadowedText.width > 0 ? shadowedText.width : mainText.contentWidth)
+        active: shadowedText.inkNeedsPlate && shadowedText.visible && paintedWidth > 0
+        visible: active
+        x: (shadowedText.horizontalAlignment === Text.AlignRight ? shadowedText.width - paintedWidth
+            : shadowedText.horizontalAlignment === Text.AlignHCenter ? (shadowedText.width - paintedWidth) / 2.0
+            : 0.0) - pad
+        y: -1.0
+        width: paintedWidth + 2.0 * pad
+        height: Math.min(mainText.contentHeight, shadowedText.height > 0 ? shadowedText.height
+                                                                         : mainText.contentHeight) + 2.0
+        z: -1
+        sourceComponent: TextLegibilityPlate {
+            card: shadowedText.surfaceCard
+            cardOrigin: {
+                var origin = shadowedText._offsetInCard(shadowedText.surfaceCard)
+                return Qt.point(origin.x + inkPlate.x, origin.y + inkPlate.y)
+            }
+            runColor: Qt.rgba(shadowedText.inkColor.r, shadowedText.inkColor.g, shadowedText.inkColor.b,
+                              shadowedText.inkColor.a * shadowedText.opacity)
+            runPixelSize: shadowedText._pixelSize
+            radiusOverride: inkPlate.height / 2.0
+            ownOpacity: shadowedText.opacity
+        }
+    }
+
     Text {
         id: mainText
         objectName: "shadowedTextMain"
@@ -111,7 +167,7 @@ Item {
         text: shadowedText.text
         textFormat: shadowedText.textFormat
         font: shadowedText.effectiveFont
-        color: shadowedText.color
+        color: shadowedText.inkColor
         horizontalAlignment: shadowedText.horizontalAlignment
         verticalAlignment: shadowedText.verticalAlignment
         wrapMode: !shadowedText.wrap ? Text.NoWrap

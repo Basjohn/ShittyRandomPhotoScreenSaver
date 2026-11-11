@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from tools import build_runner
 
 
@@ -233,6 +235,34 @@ def test_parse_args_uses_only_canonical_mode_spelling() -> None:
         assert exc.code == 2
     else:
         raise AssertionError("retired --venv alias unexpectedly remains accepted")
+
+@pytest.mark.parametrize("debug", [False, True])
+def test_the_dpi_debug_line_is_the_debug_argument_not_an_environment_variable(monkeypatch, capsys, debug) -> None:
+    """``--debug`` prints the window's DPI mode; nothing in the environment turns it on (no environment flags). The
+    window itself is replaced: no Tk window is created or shown."""
+
+    class _Root:
+        tk = type("_Tcl", (), {"call": staticmethod(lambda *a: None)})()
+
+        def withdraw(self):
+            pass
+
+        def winfo_fpixels(self, _spec):
+            return 96.0
+
+        def mainloop(self):
+            pass
+
+    monkeypatch.setattr(build_runner, "load_preferences", lambda: build_runner.Preferences())
+    monkeypatch.setattr(build_runner, "enable_windows_dpi_awareness", lambda: "probe-dpi-mode")
+    monkeypatch.setattr(build_runner, "set_windows_app_user_model_id", lambda: None)
+    monkeypatch.setattr(build_runner, "prune_build_runner_logs", lambda _dir: None)
+    monkeypatch.setattr(build_runner.tk, "Tk", _Root)
+    monkeypatch.setattr(build_runner, "BuildRunnerApp", lambda *a, **k: None)
+
+    assert build_runner.main(["--debug"] if debug else []) == 0
+    assert ("probe-dpi-mode" in capsys.readouterr().out) is debug
+
 
 def test_smoke_payload_uses_only_tools_runner_owner():
     payload = build_runner.smoke_payload("venv")

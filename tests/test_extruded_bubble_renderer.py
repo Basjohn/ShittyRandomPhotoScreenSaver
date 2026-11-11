@@ -544,3 +544,35 @@ def test_ember_grain_breaks_the_dust_into_grit_and_is_dormant_without_dust(targe
                            - change[1:-1, 2:]).mean()
         return laplacian / max(np.abs(change).mean(), 1e-6)
     assert roughness(grit, smooth) > 1.4 * roughness(smooth, at(0.6, 0.0))
+
+
+@pytest.mark.qt
+def test_the_near_field_reference_height_is_resolved_on_its_edges_never_per_frame_at_rest(target, monkeypatch):
+    """The optical height (the lens over the card's projected aperture) changed nothing per frame but cost ~26 Python
+    calls and a function-level import every frame (overhead baseline, 11 Nov): it is resolved once and again only when
+    the lens, the card size or its aperture changes."""
+    from rendering.quick.visualizer.implementations import extruded_bubble as module
+    from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
+
+    capture, host = target
+    renderer = module.QuickExtrudedBubbleRenderer()
+    host._implementations["extruded_bubble"] = renderer
+    calls = []
+    original = module._optical_height
+
+    def counted(*args):
+        calls.append(args)
+        return original(*args)
+    monkeypatch.setattr(module, "_optical_height", counted)
+    snapshot = _snapshot()
+    for _ in range(4):
+        capture.render(host, snapshot)
+    assert len(calls) == 1                                    # at rest: resolved once
+    wide = _snapshot(extruded_bubble_camera_fov=30)
+    capture.render(host, wide)
+    capture.render(host, wide)
+    assert len(calls) == 2                                    # the lens edge resolves it again, once
+    parameters, aperture, width, height = calls[-1]
+    assert aperture == framed_aperture_scale(wide.presentation)
+    assert float(module.parameter(parameters, "extruded_bubble_camera_fov")) == 30.0
+    assert renderer._optical_px == original(parameters, aperture, width, height)

@@ -44,10 +44,10 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
 - [ ] Native Settings corners: section 1A, item 1.9. Keep their acceptance and reversible checkpoints separate.
-- [~] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
-  test runs on a never-shown window), operator checks:
-  - [~] Edit Reaction Mode while Waveform plays.
-  - [~] Pick Human once.
+- [ ] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
+  test runs on a never-shown window), D1 run (1B.14 harness) with the lead's checks:
+  - [ ] Edit Reaction Mode while Waveform plays (the Studio keeps responding; the sidecar log shows the replay).
+  - [ ] Pick Human once (the clip selection lands once, with its sidecar log line).
 
 ### Item 2. §7.1 Waveform Ribbon reactivity (operator, 7 Nov night: "Adaptivity is the enemy")
 
@@ -55,8 +55,9 @@ Contract: `Docs/Guides/Visualizer_Reactivity_Authoring.md` (§2B, §2C, §13D). 
 `.artifacts/evidence/visualizers/waveform_ribbon/memoryless_reactivity/` (`20261107_lead/`, `20261107_bands/`) and
 `.artifacts/webp/visualizers/waveform_ribbon/memoryless_reactivity/`.
 
-- [~] Frozen Past (Preset 5) live.
-- [~] Pulse Count, Pulse Falloff and Freeze Deflate in the Studio.
+- [ ] Lead review on a rendered showcase WebP on recorded music: Frozen Past (Preset 5), live.
+- [ ] Lead review on rendered Studio frames (D1 run, 1B.14 harness): Pulse Count, Pulse Falloff and Freeze Deflate in
+  the Studio.
 - [ ] Vocals first, remainder: a kick inside sustained bass raises the swell 21% less (median .058 -> .046; those
   kicks also reach Kick Accent now); check it on the operator's look before tuning Pulse Strength's mid-led routing
   further.
@@ -79,22 +80,24 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
   rule is built (`widgets/spotify_visualizer/spectrum_display_bar_count.py`, round(1.2 x) bars, cap 64, resampled
   by the renderer); the width-ratio DSP recompute of plan 01 M2b stays open and needs the hidden activation
   transaction (an engine bar-count change bumps its generation). Spectrum's own edge fade is part of it.
-- [~] Operator's physical look at the expanded card's inset (operator, 7 Nov night: "Don't reach nearly close enough
-  to the screen borders") and at the ordinary widgets and their shadows fading out with it (operator: "Don't really
-  hide/disable the widgets underneath"; 14 logical px at 2560 x 1440 was 30). Complex transitions under the takeover
-  are M4.
+- [ ] Expanded Visualizer on D1 (1B.14 harness), lead review of grabbed frames: the expanded card's inset (operator,
+  7 Nov night: "Don't reach nearly close enough to the screen borders") and the ordinary widgets and their shadows
+  fading out with it (operator: "Don't really hide/disable the widgets underneath"; 14 logical px at 2560 x 1440
+  was 30). Complex transitions under the takeover are M4.
 - [ ] Bright-area text switch (operator's long-term item, plan 01 §G): overlay text white with a soft shadow should
   switch to black over a bright Visualizer area; cheap means no per-frame CPU readback (a `ShaderEffect` on the text
   sampling the already-rendered frame, or a tiny luminance probe only while an overlay shows). Not built.
-- [~] Operator's live look at Show On Hover (`now_playing.hover_reveal`, on main since 0eda39c4) and Now Playing's
-  parts as the block's children in Fullscreen Edit (`now_playing.child_geometry`, 2100fdc2): the feel of the child
-  lock, a part drag and the hover re-fade on the real display.
+- [ ] Now Playing on D1 (1B.14 harness), drag and hover driven by messages, lead review of the frame trace and
+  grabbed frames: Show On Hover (`now_playing.hover_reveal`, on main since 0eda39c4) and Now Playing's parts as the
+  block's children in Fullscreen Edit (`now_playing.child_geometry`, 2100fdc2): the child lock, a part drag and the
+  hover re-fade on the real display.
 - [ ] Side defect (8 Nov): `tests/test_qtquick_system_audio_osd.py::test_osd_colour_inheritance_respects_active_widget_
   theme_and_authored_overrides` fails when run after `tests/test_visualizers_fullscreen_mode_pill.py` in one
   process (passes alone; reproduced on the base): Widget Theme state leaks between the files.
 - [ ] M4 (plan 01 `02_E0_Covered_Display_Admission.md`): the GPU/render-thread measurement with photo changes on the
   other display.
-- [~] M4: the operator's two-monitor look.
+- [ ] M4: the two-monitor look, as a D1 run (1B.14 harness, Expanded Visualizer on D1 with a hidden D0-side owner);
+  what truly needs both displays visible is listed in that report, not assumed.
 
 **Next (admitted, in this order):**
 
@@ -118,8 +121,12 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 7. One measurement session of at most 10 minutes under game60, only after the operator's yes
 
-Pick the most valuable runs that fit; baselines and evidence paths are in section 3, "Lead, the quiet machine".
+Approved by the operator on 11 Nov ("The machine will not get quieter"). The lead runs it at the first gap in
+which no agent is running tests (a measured run beside agents' GL tests is void by its own conditions), with a
+fixed run list, no reruns, the conditions recorded. Baselines and evidence paths: section 3, "Lead, the quiet
+machine".
 
+- [ ] First reveal on the engine worker against in process under load (closes the Watchlist's latency entry).
 - [ ] A second clean Waveform tick-cut round.
 - [ ] A clean Waveform P4 GC run, and the long run with Settings round trips.
 - [ ] A Settings round-trip run.
@@ -144,16 +151,13 @@ P3 ports.
 
 **P2 remaining checks outside the ordered audit repairs:**
 
-- [~] Awaiting Validation, frozen: next requested build: QtCore-only engine workers, expected image-worker Qt
-  dependencies, flat worker memory, unchanged icons and one Settings round trip. First Neon Lake activation: logged
-  cold link with live progress or cache hit, never an activation-failure reload; second run: cache hit.
-- [~] Awaiting Validation, audio devices (design 5.3): default switch, pinned player, USB/Bluetooth or sole output
-  unplug, silent/remote playback and another player masking the old endpoint; include in-process control and time
-  capture reopen against cadence. No device/load run without the operator.
-- [~] Awaiting Validation, M2 latency: size first reveal against in process in a separately approved load session.
-  The cold configure bound remains six seconds; later owners skip it after a deadline miss this run.
-- [ ] After device checks, decide whether the in-process owner should use the existing worker delivery watch to
-  recover stale loopback streams; it currently waits for a later playback/activation edge.
+- [ ] Frozen check, the lead's at the next GitHub Remote build (`tools/github_remote_build.py`): from the built
+  artifact, the engine worker's import closure is QtCore only and the image worker's Qt dependencies are the
+  expected ones (the same oracle as `tests/test_visualizer_engine_import_weight.py`, run against the frozen
+  manifest), icons unchanged. What needs the frozen product running (flat worker memory over one Settings round
+  trip; the first Neon Lake activation logging a cold link or a cache hit) is 1B.14's frozen run.
+- The real-endpoint capture test and the no-load first-reveal comparison are 1B.14's; only latency under load
+  is a Watchlist entry. None of them holds P2 open.
 - [ ] Make the framed-view negative control independent of presentation timing
   (`test_visualizer_owner_engine_worker.py::test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`).
 - [ ] Decide bounded reconstruction for a target that never reveals, including stopping a failed owner's runtime on
@@ -163,58 +167,113 @@ P3 ports.
 
 **Remaining sequence (one Opus slot, in this order; it reports at each numbered boundary for the lead's
 audit; focused proof for each).** Steps 1 and 2 of the 10 Nov sequence (M4 rendered parity, M5, L2-L5, the POSIX
-transfer lifetime) merged 12 Nov with R-184 and R-185; records: the phase-boundary audit's "11 Nov" section, the
+transfer lifetime) merged 11 Nov with R-184 and R-185; records: the phase-boundary audit's "11 Nov" section, the
 design and closeout docs.
 
-- [ ] Attribute the Python-call rises since the 7 Nov overhead baseline (`2026-11-07_4bb2b775.json`): +4 in 14
-  Scene3D transitions and +5 to +32 in six modes, none from the native-core branch; find the commits, then
-  re-record the baseline (the Spectrum +2 of 1B.4 is part of it).
-- [ ] Attribute the worker's +34 MB step at the first Waveform Ribbon (63.5 MB to 103.9 MB, then flat) before P3
-  sizes geometry buffers.
-- [ ] Attribute the 26.6 MB `heap_large` block retained after the first Neon Lake.
+Attribution merged 11 Nov (382ae139; baseline `tools/baselines/overhead/2026-11-11_4658981b.json`; record in the
+phase-boundary audit and `Docs/Reference/Benchmarks.md`; evidence `.artifacts/evidence/native_core/20261111_attribution/`).
+What it left open:
+
+- [ ] Extruded Bubble still runs 4 imports inside per-frame functions (about 2.3 us each through PySide's import
+  hook; older than the 7 Nov baseline): move them to module level, then sweep the other modes' and transitions'
+  per-frame paths for the same pattern; proof by the overhead baseline's call counts.
+- [ ] Neon Lake's driver memory at its first draw (`private_other`, about +280 MB committed, mostly not
+  resident) is not attributed: read GPU allocations around the first draw before P3 sizes anything for it.
+- [ ] Neon Lake against the new baseline: GL calls 354 -> 361 and relative GPU time 1.14 -> 1.44 ms since the land
+  work (33912e5a); the refinement round reports which change accounts for it (1B.6).
 - [ ] Waveform Ribbon hard-codes 4 samples (`rendering/quick/scene3d/waveform.py:378`); route it through the
   scene's sampling owner.
-- [ ] `tools/artifact_paths.py` sends a worktree's evidence to the main checkout's `.artifacts`; give it the
-  running checkout's root so worktree agents need no redirect.
 - [ ] Multisampled scene targets are not reproducible draw to draw on this GPU (the parity gate judges
   single-sampled targets and reports product sampling beside the path's own repeat); attributed only as far as
   "the mode's own passes".
+- [ ] P2-C1 remainder (closeout doc section 2): a failed high-water admission preserves the last good frame
+  without silently changing the worker path; the load part only after the operator's yes.
+- [ ] P2-C2 remainder: leases and holds release exactly once across Settings, mode switches, worker death, a
+  failed reload and a Visualizer-off run; one worker/mapping at most and zero worker cost while disabled.
 - [ ] M5 remainder: the Studios and the post-failure fallback were not measured separately (the in-process and
   worker laps show a first-visit GPU high-water step, not growth).
 - [ ] L3 remainder: `collect_ms` with displays on and under load (the one live reading, 13.5-21 ms over four
   processes, was taken with the displays asleep and the Visualizer parked).
 - [ ] L4 residual: a blocked cadence thread now fails its session closed at the worker's heartbeat, but the
   blocked thread itself stays in the worker until it returns.
-- [~] Operator: a mode switch on the engine worker no longer leaves a faint ghost of the outgoing mode after its
-  fade-out (R-184: Sphere, Extruded Spectrum, Waveform Ribbon switches).
+- [ ] D1 run (1B.14 harness), lead review of grabbed frames: a mode switch on the engine worker no longer leaves a
+  faint ghost of the outgoing mode after its fade-out (R-184: Sphere, Extruded Spectrum, Waveform Ribbon switches).
 
-3. H3 Linux worker-default source flip and focused tests (the operator waived **physical** Linux validation, not
-   source correctness; do not claim Pulse/forkserver runtime was tested):
-   - [ ] Flip `visualizer_engine_worker_platform_default` for Linux; update the platform tests.
-   - [ ] Gate tools and tests that send a raw `Pipe` sender through a real supervisor switch to
-     `open_wake_channel` (they would be refused on Linux).
-   - [ ] `Linux_Plan.md`: at H3, "the POSIX wake pipe (a named pipe the session opens)"; state what is unverified
-     (no FIFO, forkserver, Pulse capture or Linux worker has run; on Linux the listener thread ends only when the
-     worker's writer closes; the in-process fallback on configure failure is the safety net).
+3. H3, the Linux worker default: the source flip merged 11 Nov (6c2039b3; `visualizer_engine_worker_platform_
+   default` returns the worker on every platform; `--viz-in-process` still chooses in process; a worker that
+   cannot start or configure falls back in process with a logged reason). Nothing of it has run on Linux
+   (`Linux_Plan.md` Phase 4 says exactly what is unverified):
+   Linux is best effort (operator, 11 Nov): no Linux environment exists, so the flip stands on code quality and
+   the tests that run on Windows, and H3 is closed. What a first Linux run would show is the Watchlist entry
+   "Linux engine worker".
 4. P3's four decisions and first native rendering substrate (order: D1/D2 with the drop edge, then D4, then D3;
    the substrate is built against the single-sample parity gate, `tools/visualizer_replay/owner_render_parity.py`):
    - [ ] D1: the native reader vs the GUI thread closing the mapping mid-copy; liveness is per stream, not per
      process.
    - [ ] D2: a single consumer and a non-consuming head read for the Python owner; a reader that retains a frame
      needs an explicit drop edge (R-184).
-   - [ ] D3: EB geometry once per revision, not per frame (after the worker's Waveform Ribbon step is measured).
-   - [ ] D4: EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check
-     scans a fixed module list and cannot see it).
+   - [ ] D3: EB geometry once per revision, not per frame. The worker's +34 MB at the first Waveform Ribbon is
+     not geometry: 32 MB is the buffer numpy's OpenBLAS reserves on the first matrix-matrix product in a process
+     (committed, not resident, never freed), so D3 sizes nothing against it.
+   - [ ] D4: EB's fp64 drift solver on Vulkan, at equal quality (operator, 11 Nov: Vulkan is the front, strong,
+     stable face of the product, never the fallback; OpenGL is the fallback). Direction to prove, not yet decided:
+     (a) keep 64-bit floats where the device has them: `shaderFloat64` is a queryable Vulkan device feature
+     through the native handles a C++ core holds (QRhi's own API has no query, which is why the Python path could
+     not ask); (b) for devices and backends without it, the same solver in double-single arithmetic (two 32-bit
+     floats per value, error-free sums and products) or a camera-relative reformulation that keeps the error
+     below the fp64 oracle's visible threshold, judged against the fp64 result on recorded drift; (c) or the
+     drift integrated in the worker in float64 and sent once per revision, if D3's geometry rule makes that
+     natural. Pick by measured error and cost; the shader-readiness check must discover compute sources instead
+     of a fixed module list.
+     Inventory (Sonnet, 11 Nov): `D:\Temp\Scratch\SRPSS\research\20261111\eb_fp64_drift_inventory.md`. Facts
+     the decision starts from: the doubles live only inside two compute programs (`CHAIN_COMPUTE`,
+     `CLOUD_COMPUTE`: step log, chain geometry, per-chain shift and phase; add, multiply, divide, `floor`, `mod`
+     only); every output the draw shaders read is already fp32; only chains carry exact fp64 state across frames
+     (the cloud's phase, span and seed are float32); the recorded reason is that a float32 span/carry moved a
+     chain's knot step one tick early against the CPU, plus 2 pi reduction of ever-growing phase; a complete
+     float64 CPU oracle exists (`MaterialDriftReference`, tests only, 1e-4, at most about 4 s of simulated time).
+   - [ ] D4 input: nothing detects fp64 today (OpenGL 4.6 Core implies it; a failed context raises "no renderer
+     fallback"); the native core needs an explicit capability read and a stated behaviour without it.
+   - [ ] D4 input: both drift shaders are on the `LEGACY_GL_ONLY` list because they fail `qsb` on loose uniforms,
+     so "qsb compiles fp64 SPIR-V" (phase-boundary audit) is not shown for them: restructure the uniforms into a
+     block and compile them, or correct the audit's claim.
+   - [ ] D4 input: the oracle comparison runs 150 to 240 ticks; extend it to a long horizon (hours of simulated
+     time, the saver's real session length) before any 32-bit formulation is judged, and state the visible
+     threshold of drift error.
+   - [ ] D4 input: option (c) would send about 3.99 MB per revision at full population (240 chains x 128 knots,
+     2500 snow, 216000 specks, 16 B each); measure the worker's CPU cost for it.
+   - [ ] The solver docstring says the CPU reference keeps positions in fp32; it keeps float64 and narrows only
+     when packing. Correct the docstring; the phase-boundary audit cites the doubles at `SOLVER:39-92`, they run
+     to line 210.
    - [ ] Transport rule for the substrate: nothing through the resource sharer; a name on POSIX, an exact-process
      handle on Windows.
 
-**P3 and P4:**
+**P3 and P4 (nothing built yet; decomposition and decision inputs:
+`Docs/Future_Work/Native_Core_P2_Closeout_and_P3_Entry_2026-11-09.md` section 3; backend decision:
+`Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`; SMP seam:
+`Docs/Future_Work/ShittyMusicPlayer/03_PCM_Source_and_Native_Core_Seams_2026-11-09.md`).** P3 is one C++/QRhi
+native core for all custom drawing, rolled out in this order; each stage retires its raw-Python GL renderer only
+after parity, never leaving a second permanent renderer:
 
-- [ ] P3: one C++/QRhi native core for all custom drawing, one staged ownership plan: substrate, Spectrum parity,
-  shared fullscreen transition passes, Waveform/Extruded Bubble, specialised transitions, the remaining
-  Visualizers and image/background/Scene3D ports. Switch the whole window to Vulkan only when raw-GL nodes have
-  retired; retain OpenGL through that same QRhi core.
-- [ ] P4: mixed-resolution soft layers in the core.
+- [ ] P3.0 The four decisions above (D1-D4) and the transport rule written as contracts, seen by the lead and the
+  operator, before any C++.
+- [ ] P3.1 Native QRhi substrate: exact Qt/PySide6 ABI, the frozen MSVC DLL guard, resource ownership, the native
+  packet reader with its quiescence barrier and drop edge, capture/clip parity. `native/spike_p1` stays evidence,
+  never a shipped renderer.
+- [ ] P3.2 Spectrum first: pixel parity against the single-sample gate
+  (`tools/visualizer_replay/owner_render_parity.py`), frame trace and CPU/GIL measurements, inside the same
+  scene (no second compositor).
+- [ ] P3.3 Transitions' shared fullscreen pass, then the specialised ones (Crumble, Particle, 3D Block Spins),
+  keeping timing, image ownership, covered-display admission, protected clipping, shader identity and GPU
+  resource accounting.
+- [ ] P3.4 Waveform Ribbon, Extruded Bubble, the remaining Visualizers, the image presenter/background and the
+  Scene3D nodes.
+- [ ] P3.5 Switch the whole Qt Quick window's backend once every raw-GL dependency has retired: Vulkan as the
+  default, OpenGL through the same core as the selectable fallback (D3D where supported); never a Python OpenGL
+  node inside a Vulkan window.
+- [ ] P4 Mixed-resolution soft layers in the same core; thin emissive lines, dots, rims, particles and UI stay
+  full resolution; no per-mode extra renderer or backend.
+- [ ] Expanded Visualizer M6 (4K acceptance) waits for the first P3 ports (plan 01); P2 holds nothing.
 
 ### Item 9. SMP & Full Display
 
@@ -242,54 +301,30 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 `[~]` validation steps and open side defects. Order: the Edit/exit defects, the Studio work, the fullscreen
 overlay contract, window material and corners, presets last. Every fix reproduces its failure first; the lead
 judges visual items on rendered pixels and audits each branch against the pre-fix code before merging.
+**Nothing in this section waits on the operator** (operator, 11 Nov: checks are the lead's work; a remaining
+question without a simple test is a Watchlist item, never an open phase). What needs the real product on real
+hardware is proven by the lead's harnesses in 1B.14, and behaviour that changed is listed once in section 2
+("Changed on 11 Nov").
 
 ### 1B.1 Edit edits the display it was entered on (merged 46129166; contract: plan 01 M3c "Edit beside the view")
 
-- [~] Operator, two physical monitors, Visualizer expanded on one:
-  - [~] Edit from the other display (context menu, then double-right): its widgets edit, the expanded view keeps
-    animating, no Edit chrome on the expanded display.
-  - [~] Edit from the expanded display: Fullscreen Edit of the overlays only.
-  - [~] Save and Cancel from each; a collapse press while Edit is open beside the view waits for Save/Cancel.
 - [ ] Side defect (unreproduced): in an ordinary global Edit, closing the Visualizer and then switching mode makes
   `activate_edit_visualizer_profile` return False (`rendering/quick/custom_layout_owner.py`, the `visible is None`
   branch), which looks like a forced runtime reload. Reproduce in a test or rule out.
 
-### 1B.2 Cursor keeps its changed shape after exit until a click (merged 0f8f4836; R-183; NOT accepted)
+### 1B.2 Cursor keeps its changed shape after exit until a click (merged 0f8f4836; R-183; proof owed in 1B.14)
 
 The retire owner now gives Windows the arrow natively. The native harness reproduced the stuck shape only with
 Qt's pointer tracking cleared artificially, so the operator's real exit path is unproven.
 
-- [~] Operator: run `.venv\Scripts\python.exe tools\cursor_exit_observer.py --label <name>`, start the saver, and
-  keep the mouse still two seconds after each exit:
-  - [~] key exit
-  - [~] click exit
-  - [~] mouse-move exit
-  - [~] link click (browser opens)
-  - [~] Settings opened from the saver
-  - [~] Media Center mode exit
-  - [~] exit with the pointer on the second display
-- [ ] Read the observer log (`.artifacts/evidence/input/cursor_exit/`): any path printing `only after click`
-  names the event that clears Qt's pointer tracking; reproduce that path in `tools/cursor_exit_native_harness.py`
-  and fix it at the retire owner.
-- [ ] Update R-183 with the operator's result (accepted, or the failing path and its fix).
 - [ ] Side defect: when a hovered QML item is destroyed or left, the saver window can keep the hand or arrow
   instead of the Halo until the Halo next re-applies it.
-
-### 1B.3 Studio slider save churn (audit and its camera side defects landed; contract: Visualizer_Studio.md)
-
-- [~] Operator: Sphere Studio, drag View Turn / View Tilt (holds for the session), Save Camera, reopen.
-- [~] Operator: Waveform Studio has Camera X and Z only (its grounded orbit fixes the eye height, so Camera Y
-  never did anything); say if a real eye-height control is wanted.
-- [~] Operator: Extruded Bubble Studio Camera X/Y/Z now span -2..2 (the eye's whole admitted box), was -1..1.
 
 ### 1B.4 Shape instrument for Spectrum and Neon Lake (merged; contract: Visualizer_Studio.md)
 
 One instrument in Spectrum, Extruded Spectrum, Neon Lake's Frequency Response and its Reaction Shaper; the old
 shape widget is retired; shape drags are in the churn guard; Studio tooltips wrap inside the window.
 
-- [~] Operator look at the instrument in the Spectrum and Neon Lake Studios: drag feel, cursor shapes and
-  tooltips on a real window; over a material theme on the real desktop; a strength diamond under a curve node
-  (a press just below the diamond's centre takes the diamond).
 - [ ] `fft_to_bars` gained two helper calls per tick (`shape_bar_profile`, `lane_sample_positions`); re-record
   the Spectrum overhead baseline so the +2 calls are attributed (with section 1 item 8b's attribution box).
 - [ ] Admitted later if wanted (operator's call): a pop-out larger canvas; Spline Curve's layer nodes and Voxel
@@ -308,9 +343,6 @@ one commit and one undo per stroke; a refused state at the 257 cap). Contract: `
 - [ ] Brush Radius is now a share of the basin (stable across growth): rescale its default and range so the
   default footprint on each shipped preset is about what it was (0.57x on Presets 1 and 2 today).
 - [ ] Off-screen PNG of the refused state at the cap (struck-through footprint and notice).
-- [~] Operator: paint far land in the Studio; paint past the old edge and undo; reach the cap.
-- [~] Operator: paint past the authored origin renders as far land (no shoreline line or wet fringe, detail
-  fading with distance); say if far paint should be able to make shore.
 
 ### 1B.6 Neon Lake: smooth land reaction, Growth and Indents (merged 33912e5ae; refinement round in flight)
 
@@ -331,9 +363,6 @@ change: the tears are gone and the reaction is a little weaker on banks and very
 - [ ] Growth Density (site cell size) and a Growth region bias (far land only / by elevation through the shaper):
   canonical spec entries with Studio rows, authored neutral into every preset, dormant when neutral.
 - [ ] Lead pixel review of the refinement round; merge; then tell the preset agent Neon Lake is ready.
-- [~] Operator decision: spire glow on hits; islands rising from the lake (needs the water-boundary contract
-  decision). Not admitted; the agent writes up what each needs.
-- [~] Operator look: the smooth reaction on the three existing presets under music; Growth and Indents.
 
 ### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (merged 189fbd36c; plan 01 M3c)
 
@@ -342,66 +371,44 @@ Now Playing and the toast are edited by ordinary Edit's handlers; the Media seek
 off). What stays overlay-specific, with its reason, is listed in plan 01. Old profiles' artwork factors load
 through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 
-- [~] Operator: Fullscreen Edit of Now Playing beside the Media widget's Edit: move, corner, side handles,
-  Restore Size, the child lock and each part.
-- [~] Operator: the seek bar on Now Playing against a real player (look, fill, seeking, a double-click on it
-  never changing the Visualizer's mode).
-- [~] Operator: three behaviours changed to the Media widget's rule; say if any should go back. (1) Now Playing's
-  side handles reflow the text box; they used to resize the artwork border (accepted 10 Nov). (2) The block no
-  longer flips by which side of the screen it is on (accepted 10 Nov as the inward left/right layout): its
-  orientation follows its anchor corner, chosen by the title's flip glyph or by ending a move in a corner.
-  (3) A corner drag grows about the top centre and Restore Size keeps the top left.
-- [~] Operator: Now Playing's artwork border now takes the Media widget's artwork colour, stroke and Rounded
-  Artwork option, not the Visualizer card's border (supersedes the 8 Nov "themed border").
-- [~] Operator: in ordinary Edit on thin Media rows the flip glyph sits just right of the move grip (it used to
-  cover the grip); a move that ends in a corner pin is now one undo step (Media's header too).
 - [ ] The safe-area edge guides are no longer drawn in Fullscreen Edit (as in ordinary Edit); confirm that is
   wanted or restore them through the ordinary guide owner.
 - [ ] Evidence gap: no side-by-side render of the Media widget's own Edit beside Fullscreen Edit (it needs an
   off-screen harness that drives ordinary Edit on a Media card); build it beside
   `tools/expanded_visualizer_evidence.py`.
-- [ ] A raw old profile file on disk with the retired artwork factors is covered only by the normaliser test
-  (the round-trip test writes through the settings manager, which normalises on write): add a fixture file.
-- [ ] Side defect: `tests/test_qtquick_media_presentation.py:429` pins a default colour
-  (`app_volume_fill_color`) and fails when run after the Visualizer test files in one process (passes alone).
 
-### 1B.8 Light themes are practically opaque in the saver (not started; cause found in research)
+### 1B.8 Light themes are practically opaque in the saver (M1 merged 4674e801; M2 in flight, Opus High)
 
 **Material track (operator, 11 Nov: proper transparency on light themes, no inset while keeping the material on
-all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint:**
+all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint.** Contract:
+`Docs/Architecture/Card_Surface_Materials.md` ("M1 dark-ink rule"); evidence
+`.artifacts/evidence/materials/20261111_m1/` (open `OPEN_FIRST_overview_main.png`).
 
-- [ ] M1. Light-theme transparency: boxes a to i below (dark themes pixel-identical at this step).
+M1 landed: dark ink's panel is bounded at the card's Settings-variant shell density (`SurfaceContrast.panelCeiling`,
+shader uniform `panelCeiling`), faint runs correct their own ink (`legibleInk`), and a run faded by item opacity
+takes a text-local plate. Wallpaper swing inside light cards went from 0.0 to 0.08-0.25; dark themes identical.
+
 - [ ] M2. No inset on any theme: the `plateInset` rim box of 1.7b (section 1A): the material face reaches the
   inside of the real border, dark and light, content padding unchanged; before/after renders of every material
   on one dark and one light theme, and text still passes on the composed pixels with M1's ink rule.
+- [ ] M2. The ink plate behind faded runs (the pill behind "PLAYING" on Polished Chrome, Mica) re-checked at 1x
+  and 3x on the three light themes once the inset is gone; softened or tightened if it reads as a sticker.
+- [ ] M2. Dark-identity comparison that separates "inset gone" from any other change on dark themes.
 - [ ] M3. Widget border material: the remaining boxes of 1.7b (ring shading from the same backdrop, Border
   Material and Border Opacity Adjust in Style Overrides, Normal/Flat pixel-identical).
 - [ ] M4. Window border material: 1B.9's box (the Settings/Studio border ring takes the same rule).
 - [ ] Each step: `.qsb` regenerated, the SURFACE block kept identical across its three shader files, one focused
   GPU before/after, lead pixel review on the operator's two wallpapers.
-
-Cause (arithmetic, not yet pixels): `SurfaceContrast.js` cannot reach its 4.8:1 target for dark ink at 55% alpha
-even on white, so it saturates and `surface_material.frag` fills the card interior white. The Settings variant
-corrects the ink and keeps the surface at its calibrated density (about .63-.72).
-
-- [ ] a. Before set: off-screen card renders of Platinum Workstation, Polished Chrome, Pearl Blush and two good
-  dark themes over one dark and one bright PERSONALSET wallpaper (`tools/surface_material_capture.py`), with
-  the surviving wallpaper swing inside the card measured per theme.
-- [ ] b. Bounded surface for dark ink: the panel moves toward the anchor only as far as the theme's
-  Settings-variant shell density; the solver's unreachable case resolves to "bounded surface + corrected ink",
-  never limit 1.0.
-- [ ] c. Correct the ink, not the panel: darken semantic ink toward its theme anchor where it misses the ratio
-  (the 1.7a runtime ink correction); judge faint ink at its real alpha, not a fixed 55%.
-- [ ] d. Text-local plate (`TextLegibilityPlate` / `text_legibility.frag`) only where a run still fails over a
-  busy backdrop; never a whole-card lift.
-- [ ] e. Dark themes pixel-identical before and after.
-- [ ] f. The SURFACE block identical across `surface_material.frag`, `text_legibility.frag`,
-  `text_legibility.vert` (`tests/test_surface_materials.py`); `.qsb` files regenerated with the Qt toolchain.
-- [ ] g. One focused GPU before/after on a busy card; no extra pass, capture or per-frame Python.
-- [ ] h. After set + lead pixel review, light beside dark; `tools/theme_legibility.py` rerun on the composed
-  surfaces.
-- [ ] i. Docs: `Docs/Architecture/Card_Surface_Materials.md`; closes 1.7a's density question (update it there).
-- [~] Operator look on the three light themes.
+- [ ] Known dark-theme shortfalls measured in M1, written into `Card_Surface_Materials.md` with their numbers
+  (Default Dark on the bright wallpaper 3.9-4.3; Midnight Cobalt accent 3.42), and whether M2 moves them.
+- [ ] Card shell bound (about 0.73-0.76) against the real Settings window (0.63-0.72): recorded in
+  `Card_Surface_Materials.md` with the reason cards do not read the linked Settings theme at runtime (lead, 11
+  Nov: a card must not depend on Settings window state).
+- [ ] Linked button red test (1B.11's side defect) fixed as its own commit before M2: a state ink may flip
+  polarity in `ui/settings_surface_composition.py` `_correct_ink` when neither more alpha nor its own pole can
+  reach the ratio; ordinary semantic inks keep their polarity; stills before and after; R-NNN entry if it was a
+  silent long-lived red.
+- [ ] Feature requests from the agent recorded here as their own boxes when admitted.
 
 ### 1B.9 Settings and Studio window corners bleed (see-through corners merged a89ce123; continues 1.9)
 
@@ -411,12 +418,6 @@ inner line are gone. Thicker borders (they square the corner) and a pre-Accent r
 measurements and rules: `Docs/Architecture/Settings_Theme_Architecture.md`. Residue no layered window can remove:
 a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels, was 72-251).
 
-- [~] Operator look at Settings corners on both wallpapers, a dark and a light theme; say if the inner
-  near-white line on light themes is missed (it was backing showing through, not a themed highlight).
-- [~] Operator look at the Studio's corners on a real screen (proven off-screen only).
-- [~] Operator: drag and resize Settings from each corner (the alpha-1 corner pixels keeping input is reasoned,
-  not exercised on a real window).
-- [ ] Studio resize areas have no test for their geometry; add one beside `tests/test_studio_chrome.py`.
 - [ ] Close or rewrite 1.9 (section 1A) to point here.
 - [ ] Side defect: the Studio window shows only blur (no title bar or content) in native captures by
   `tools/settings_native_corners.py --window studio`; find whether it is the capture setup or the Studio.
@@ -432,63 +433,67 @@ a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels
 - [ ] Window border material: the border ring takes 1.7b's border-material treatment (one rule for cards and
   windows), inside the +2 px budget (unused: the border stays 4 px).
 
-### 1B.10 Presets (in flight: one Opus slot; the lead reviews every preset on pixels)
+### 1B.10 Presets (in flight: one Fable Medium agent, the operator's exception to the Opus roster)
 
 Supersedes the lead's Spectrum presets 2-15 of 7 Nov (section 3). Every preset must read as unique and visually
 impressive; the agent may ask the lead for a feature or architecture a better look needs, if it is not wasteful.
 Order: Spectrum, then Extruded Bubble, then Neon Lake once 1B.6's refinement round has merged; the agent reports
 after each mode for the lead's pixel review.
 
-- [ ] Spectrum: presets 2 and up replaced with the best and most novel looks the mode can make (ghosts soft and
-  blurred like Preset 1's; no seam where a transparent-border bar meets its ghost).
+Spectrum round 1 merged 11 Nov (b9a9a4a3; evidence `.artifacts/evidence/visualizers/spectrum/presets/20261111/`).
+Operator, 11 Nov: presets 5 (Tube Lights), 6 (Quicksilver), 8 (Blueprint), 9 (Afterglow) and 10 (Frost) "are all
+ghastly ugly"; 2 Aurora, 3 Lanterns, 4 Dot Matrix and 7 Prism stand. Lead's reading: wide glossy, chrome, capsule,
+grid-on-block and dark-fill looks fail; fine luminous gradients pass. Fewer good presets beat a full slot count.
+
+- [ ] Spectrum round 2 (in flight): the five rejected presets replaced by new ideas, not re-skins; slots
+  contiguous; the whole set judged together on the peak and quiet sheets; lead pixel review before the operator
+  sees them.
+- [ ] Bar gap control (0 to about 4 px), admitted: one canonical spec entry, authored into every Spectrum preset at
+  2 px by the repair fill, shown through the spec in Settings and the Studio, a structural test, the Visualizer
+  Reference updated. Built in round 2 only if a new look needs it; otherwise it stays this open box.
+- [ ] `tools/visualizer_preset_author.py` refuses the shape keys (`spectrum_lane_strengths_linear has no Settings
+  control`): admit them through the spec's own admission and the Studio shape rules, as the agent's script did.
+- [ ] Side defect: Bar Count is admitted to 96 by the spec but `spectrum.py` clamps to 64 (`_MAX_BARS`, lines 28,
+  102, 199): a higher count would draw only the first 64 bars. One owner for the maximum; render one frame at 96.
+- [ ] Side defect: the segment border ring is lopsided (`spectrum.frag:914`: `<=` on one side, `>=` on the
+  other): two border rows at the bottom and left against one at the top and right at card scale, and the fill
+  share changes with scale. Make it symmetric; before/after at 1x and 3x on Dot Matrix.
+- [ ] Side defect: the kick lane in mirrored layouts boosts the first bars and their mirror, which are the edge
+  bars, wherever the Bass lane sits (`bar_computation.py:422-432`). It should follow the Bass lane's position.
+- [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
+  rounded tops.
+- [ ] Side defect: `tools/release_media.py:69` binds `load_scenes(paths=USU_SCENES)` at definition, so
+  `test_release_media.py::test_source_change_during_capture_discards_media` ignores its monkeypatch in a
+  worktree without the `assets/usu/scenes` originals; resolve the default at call time.
+- [ ] Side defect: seven `test_release_media.py` tests fail with `missing authored preset path: spectrum:1` when
+  run in one process after the preset and Studio preset tests (order pollution; the file passes alone and on
+  main after the merge): find the test that leaves the preset tree redirected and make it restore.
 - [ ] Extruded Bubble: one arctic-themed preset.
 - [ ] Neon Lake: three unique presets (using the shape instrument, far-land brush and the new land reactivity).
 - [ ] Every preset authored through the Studio's Save To path, complete for every control (completeness guard).
 - [ ] One showcase WebP per preset (`release_media.py`), reviewed by the lead before the operator sees them.
 - [ ] Feature requests from the agent recorded here as their own boxes when admitted.
-- [~] Operator look.
 
 ### 1B.11 Theme filter in the Linked row (merged d401b3c2; contract: Settings_Theme_Architecture.md "Theme filter")
 
-- [~] Operator look on a real display: the filter on both theme pages, the autocomplete popup's placement, and
-  whether the colour families feel right ("Blue" lists 20 of 100 Settings themes; a theme named for a colour its
-  accent is not, such as Cobalt Peach, is found by name words only).
 - [ ] The theme list's and the popup's scrollbars render as the native black/white bar in off-screen captures;
   confirm on a real display and theme them through `shared_styles` if they are native there too.
 - [ ] Side defect (red on main): `tests/test_surface_opacity_adjust.py::test_real_link_button_uses_state_ink_for_
   checked_text_and_lock_icon_offscreen` fails (worst contrast 1.58 against 4.5): the Linked button's checked
   text/lock ink. Fix with 1B.8's ink correction or at the link button's style owner.
-- [~] Operator look: the Weather location autocomplete now uses the themed popup, and the Weather and Widgets
-  status notes take the theme's success and warning roles.
 
-### 1B.12 Fullscreen glyphs per display (first form merged 21da6fbc; operator's relative form below is open)
+### 1B.12 Fullscreen glyphs relative to the Visualizer's display (merged 9bb4e806c; contract: plan 01 M3c)
 
-Merged form: up-left expands on the first display, up-right on the second (absolute), through the owner request
-"expand on display N" (`expand_on_display`, the shape SMP will reuse) and the expanded-to-expanded move.
+Up arrow: full display on the Visualizer's own display; diagonal up-left / up-right: on the display to its left or
+right by physical arrangement (`core/display_neighbours.py`: a display counts as beside only if it does not
+overlap horizontally, so a vertical stack offers no side arrows); only applicable arrows show; while expanded the
+current display's glyph is a Down arrow and the diagonals move the view. The owner request stays "expand on
+display N" (`expand_on_display`, the shape SMP will reuse).
 
-**Operator, 12 Nov: relative to the Visualizer's display, for consistency with 3+ monitors.** Queued for a fresh
-Opus High after 1B.7 merges (same QML and coordinator files).
-
-- [ ] Up arrow (same size and styling as the others): fullscreen on the display the Visualizer is on.
-- [ ] Diagonal up-left arrow: fullscreen on the display to the left of the Visualizer's display; diagonal
-  up-right arrow: fullscreen on the display to the right. Left and right come from the displays' physical
-  arrangement (the nearest display whose geometry lies on that side), never from the display index.
-- [ ] Only the applicable arrows show, so no space is wasted: no display on a side, no arrow for it; one
-  display shows the Up arrow alone (lead's reading: the single glyph becomes the Up arrow; confirm).
-- [ ] While expanded: the current display's glyph is the collapse (the Up arrow's mirror, a Down arrow); the
-  diagonals move the expanded view to the left or right neighbour; the 1B.1 Edit holds still refuse a move.
-- [ ] The request stays "expand on display N" at the owner: the relative choice is resolved to a display at the
-  press, in one place.
-- [ ] Glyphs appear and disappear with a fade when the arrangement changes; the row never jumps.
-- [ ] Tests: one, two and three displays (left only, right only, both), a vertical arrangement (no side
-  neighbours), expanded on the middle display; arrangement derived from geometry in the test, never pinned.
-- [ ] Off-screen PNG evidence at 100% and 150% with 2x crops for each case; lead pixel review; plan 01 updated.
-- [~] Operator, two monitors: the arrows from each display; the move while expanded (collapse, move, expand);
-  a move between displays of different size or DPI and its fades; V unchanged.
-- [~] Operator decision: the glyph tooltips are ALL CAPS to match the rest of the glyph row; Title Case is a
-  one-line change.
-- [ ] Record in the QML guide: a QML property named `left` on a `Text` (colliding with Item's built-in `left`)
-  hangs the hidden-scene load silently instead of raising.
+- [ ] A display arrangement changing while the saver runs is covered only by re-admission in tests; check it on
+  the topology-replacement path.
+- [ ] The Reset Camera glyph (a font character) shows coloured edge fringes in off-screen crops; confirm on a
+  real display and paint it as a path like the arrows if it does there too.
 
 ### 1B.13 Hold right-click to pan the live Visualizer (merged 21da6fbc; contract: Spec.md / Contracts.md input)
 
@@ -496,13 +501,61 @@ Over a pan-capable card a right press arms a pending pan; travel past the drag d
 press); a still release opens the menu at the release point; every other right press opens on press as before.
 Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us after (run-to-run noise 300-426).
 
-- [~] Operator feel check on the real display: pan direction and scale against the Studios; a quick right
-  click on the card still opens the menu; double-right still enters Edit.
-- [~] Operator: all three pans (Alt+right, held-right, the Studios) now share one rule, the Studio's
-  (`view_orbit.scene_pan_delta`). A right drag moves the scene against the pointer, a down drag moves it with the
-  pointer: say if that mix should be made one-way (a one-line change in that function).
 - [ ] Native pointer capture on a real foreground window is unproven (tests use a stand-in capture): add the
   pan to the opt-in native harness pattern of R-183 or verify with the operator's check above.
+
+### 1B.14 Lead verification harnesses (operator, 11 Nov: "why can you not make tests that exercise these?")
+
+The lead's lapse: these were filed as operator checks. They are testable: a frozen build through GitHub, the
+real product run on Display 1 (the second monitor) for diagnostics, and real audio endpoints. **Permissions
+(operator, 11 Nov):** bounded runs on Display 1 are permitted; Display 0 is never taken without permission;
+builds run only through GitHub's workflows, never on this machine's resources. Lead-run only (agents build the
+harnesses and prove them hidden; the lead runs the visible part); each visible run is short, bounded, fails
+closed and always tears down. Queued for the next free Opus High slot.
+
+- [ ] A CLI flag that tells the saver which display to use (operator: better than editing diagnostics settings),
+  RUN-only like the existing `--exit-after <seconds>` self-exit flag, which bounds every run. One owner for the
+  display choice; with the flag absent nothing changes; a Linux path or an explicit inert one.
+- [ ] D1 run harness: start the real saver from source on Display 1 only (that flag), with diagnostic flags,
+  recorded music and `--exit-after`, driven by messages posted to the saver's own windows (never global input);
+  collect its logs, frame trace and grabbed frames; a watchdog ends it if the self-exit does not. A tool under
+  `tools/`, opt-in, zero product cost.
+- [ ] Cursor after exit (R-183) on D1 with `tools/cursor_exit_observer.py`: key, click, mouse-move, link click
+  (browser launch stubbed), Settings and Media Center exits, the pointer placed over the saver on D1 for the
+  run and put back after; a verdict per path. Then R-183 is accepted, or the failing path is fixed at the
+  retire owner and re-run.
+- [ ] Held-right pan on D1: real pointer capture on a foreground window (press, drag, release; a click still
+  opens the menu on release; focus loss mid-pan releases the capture).
+- [ ] Expanded Visualizer on D1: expand, collapse, the fullscreen arrows offered for the real arrangement, the
+  move toward D1 from a hidden D0-side owner where that can be driven without showing anything on D0; frames
+  grabbed and reviewed by the lead. What truly needs both displays visible is listed in the report, not assumed.
+- [ ] Now Playing on D1: Fullscreen Edit handles and the seek bar against a real player session (fill follows
+  the timeline, a seek lands).
+- [ ] Settings and Studio windows on D1: corner drag and resize from each corner by messages (the alpha-1 corner
+  pixels keep input); the Studio's corners captured natively; the theme list and autocomplete scrollbars
+  captured (theme them through `shared_styles` if they are native bars there).
+- [ ] Frozen build: `tools/github_remote_build.py` on the pushed commit (the lead's standing permission); from
+  the artifact, the engine worker's import closure and the image worker's Qt dependencies; then the frozen
+  product run on D1 with diagnostic flags: worker memory flat across a Settings round trip, the first Neon Lake
+  activation logging a cold link or a cache hit and never an activation-failure reload, the second run a cache hit.
+- [ ] Real audio endpoints: a test that opens real WASAPI loopback in the engine worker and drives the product's
+  own device-change path with real endpoint ids: with two or more active render endpoints, a default-device
+  change to the other endpoint (the notification delivered with its real id; no system setting changed) and
+  capture resuming on it; with one, invalidate-and-reopen on the same endpoint; endpoint removal by its
+  notification. In-process path too. Skips cleanly with a stated reason where the machine has no second endpoint.
+- [ ] First reveal, worker against in process, without load on D1: the time from activation to the first drawn
+  frame for each mode on both paths.
+
+### 1B.15 Housekeeping the lead decided (11 Nov; engineering choices, not operator decisions)
+
+- [ ] Preset rollback recovery copies: `core/visualizer_preset_tree.py` writes the before-images of a failed
+  preset-replacement rollback to `tempfile.mkdtemp(prefix='srpss_preset_recovery_')` (`%TEMP%`, which Windows
+  Storage Sense may empty). Move them under the data root beside the preset tree (one owner for the path, the
+  folder named in the error as now, the newest few kept and older ones pruned on the next successful replace);
+  the test keeps redirecting to `tmp_path`.
+- [ ] Extruded Bubble evidence root: move `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
+  referenced by `Investigation.md`) to `.artifacts/evidence/visualizers/extruded_bubble/20261020/` and repoint the
+  references; nothing deleted.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
@@ -516,8 +569,9 @@ Focused proof exists for renderer pixels at non-square extents, prepared Scene3D
 all Studio frame builders; the physical stage and camera remain fixed. Extruded Spectrum retains its frameless
 overflow policy.
 
-- [~] Operator: check Rotate in every mode except Sphere, in ordinary and in fullscreen Edit.
-- [~] Operator: check the rectangle/quarter-turn glyph against Reset Camera.
+- [ ] Lead review of rendered frames (off-screen for ordinary Edit, D1 run of 1B.14 for fullscreen Edit): Rotate in
+  every mode except Sphere, in ordinary and in fullscreen Edit.
+- [ ] Lead review of zoomed glyph crops: the rectangle/quarter-turn glyph against Reset Camera.
 
 ### 1.0b Studio Rotate control
 
@@ -525,9 +579,10 @@ Off-screen proofs cover non-square production pixels, input transforms, preparat
 Preview orientation is per-open state, separate from camera/artwork and desktop CUSTOM orientation; Copy Frame
 captures it.
 
-- [~] Operator: check Studio's Rotate control in every mode except Sphere.
-- [~] Operator: check upright handle labels.
-- [~] Operator: check rotated brush/drag feel.
+- [ ] Studio run (D1, 1B.14 harness), lead review of grabbed frames: Studio's Rotate control in every mode except
+  Sphere.
+- [ ] Same run: upright handle labels.
+- [ ] Same run, drags posted by messages: rotated brush/drag feel (the drag lands where the pointer is).
 
 ### 1.1 Mode switch with no direct cause (Awaiting Logs)
 
@@ -535,31 +590,21 @@ captures it.
   mode, selected preset and runtime generation with the existing mode-transition owner and frame trace.
 - [ ] Distinguish explicit selection, enabled-mode normalization and Settings restoration first.
 
-### 1.2-1.3 Frozen-install validation only
-
-Durable behaviour: `Docs/Reference/Visualizer_Studio.md`; evidence:
-`Docs/Audits/Studio_Camera_And_Fullscreen_Overlay_Self_Audit_2026-11-09.md` and
-`Docs/Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md`.
-
-- [~] On freshly installed Standard and MC builds as an ordinary Windows user: confirm the installer grants Modify
-  on the shared ProgramData Visualizer preset tree **and its existing files**.
-- [~] Save and Save Camera over a shipped preset.
-- [~] Save As and reopen. Source-level file/Qt checks do not establish installed ACLs.
-
 ### 1.4-1.5 Remaining fullscreen visual acceptance
 
 Existing Settings/input/text-layout/Edit checks are green; actual Windows full-layout acceptance is still owed.
 
-- [~] Operator: Media Bar and Floating Glyphs styles.
-- [~] Operator: long metadata fitting.
-- [~] Operator: multiline Edit boxes and optional album, including Save/Cancel.
+- [ ] Fullscreen run on D1 (1B.14 harness), lead review of grabbed frames: Media Bar and Floating Glyphs styles.
+- [ ] Same run: long metadata fitting.
+- [ ] Same run: multiline Edit boxes and optional album, including Save/Cancel.
 
 ### 1.6 Achievement Pulse child placement
 
 The enabled-row regression is green; other families' extent floors are static.
 
-- [~] Check child placement after Settings/fullscreen return with `--geo` (replaying the saved payload on Edit
-  entry must not change the canvas; disabled provider fields must not count as painted capsule rows).
+- [ ] D1 run (1B.14 harness) with `--geo`: check child placement after Settings/fullscreen return (replaying the
+  saved payload on Edit entry must not change the canvas; disabled provider fields must not count as painted capsule
+  rows).
 
 ### 1.7a Studio legibility follow-up
 
@@ -576,10 +621,12 @@ checks use both exact operator wallpapers under `C:\Users\Basjohn\Documents\[4] 
 Studio renders are never-shown alpha compositions, without native DWM proof. Native rounded corners remain open at
 1.9; material transmission is not a clipping fix.
 
-- [~] Operator: compare the supplied widget material screenshots with current cards, especially the good
-  Glass/Frosted volume surfaces, Glass inset/distortion, and Studio panels/tabs/headers/wells.
-- [~] Operator: exercise Settings Opacity Adjust and Widget Opacity Adjust in Style Overrides (-1..1, neutral 0).
-- [~] Operator: live Studio material switching, snap and resize.
+- [ ] Lead review of side-by-side renders (the supplied widget material screenshots beside current cards, both
+  operator wallpapers): especially the good Glass/Frosted volume surfaces, Glass inset/distortion, and Studio
+  panels/tabs/headers/wells.
+- [ ] D1 run (1B.14 harness), lead review of grabbed frames: exercise Settings Opacity Adjust and Widget Opacity
+  Adjust in Style Overrides (-1..1, neutral 0).
+- [ ] Studio run on D1 (1B.14 harness): live Studio material switching, snap and resize, driven by messages.
 - [ ] The remaining unsampled control/delegate inks.
 - [ ] Small isolated GPU checks show an active increase (largest raw whole-frame rise about 0.020 ms for Glass):
   that is not performance neutrality or load acceptance; the load measurement is §1 item 7 (card materials).
@@ -621,8 +668,8 @@ Contract: `Docs/Architecture/Card_Surface_Materials.md` §3.2.1.
 Retained-QML proof covers transformed opposite-edge stability, all-row updates, collision policy, Save/Cancel, Undo,
 slots and fresh-profile hydration.
 
-- [~] Operator: top grips reorder.
-- [~] Operator: solid-span endpoints change start/width and truncation.
+- [ ] D1 run (1B.14 harness), gestures posted by messages: top grips reorder.
+- [ ] Same run: solid-span endpoints change start/width and truncation.
 
 ### 1.9 Settings native corner clipping (next step is 1B.9: the operator's +2 px border allowance)
 
@@ -637,48 +684,29 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 - [ ] Keep it a separate reversible fix.
 - [ ] Repeat the four-case corner/border/shadow gate before claiming improvement.
 
-### Side defect: Build Runner's environment variables
+### Side defect: nine reds from stale owner stubs (found 11 Nov; repair in flight, Opus Medium)
 
-- [ ] `tools/build_runner.py:3346` still reads `SRPSS_BUILD_RUNNER_DEBUG` (the Inno override is now `--iscc PATH`);
-  replace it with a CLI argument.
-- [ ] Two reds in `tests/test_github_remote_build.py`: `test_the_github_tab_offers_the_remote_products_and_local_
-  steps` (an extra `linux_mc` job) and `test_the_linux_dispatch_sends_inputs_only_for_a_pinned_commit`
-  (`scripts/linux/build_from_windows.ps1` no longer matches); not checked against the base commit.
-- [ ] `tests/test_visualizer_owner_engine_worker.py::test_the_park_clears_the_reader_after_the_park_reply_never_
-  before` is flaky (about 1 run in 6, before and after the native-core merge); with the native-core agent.
+- [ ] `test_visualizer_camera_contract.py` (2), `test_visualizer_control_hints.py` (5),
+  `test_visualizer_custom_route_contract.py` (1) and `test_visualizer_custom_geometry_profiles.py` (1) fail when
+  their files run alone: hand-built stubs lack `owner.is_started` and `set_visualizer_studio_rotate_glyphs`
+  (`engine/display_manager.py:1026-1027`, from dfceed38), and a `DisplayManager` without `displays` reaches
+  `_expand_glyph_neighbours` (`:3559`, from 32279216). Stubs brought up to the real owner's surface through one
+  shared double; a product fix only if `displays` can really be absent; sibling stubs swept.
 
 ### Awaiting Validation after the focused proofs
 
-- [~] Operator: the changed glyphs.
-- [~] Operator: saves in the frozen build.
-- [~] Operator: camera/child placement round trips.
-- [~] Operator: long fullscreen metadata and controls.
-- [~] Operator: material comparisons on native pixels.
+- [ ] Lead review of zoomed glyph crops (D1 grabbed frames): the changed glyphs.
+- [ ] Frozen run (1B.14): saves in the frozen build.
+- [ ] D1 run (1B.14 harness): camera/child placement round trips.
+- [ ] D1 run (1B.14 harness), lead review of grabbed frames: long fullscreen metadata and controls.
+- [ ] D1 run (1B.14 harness), native frames grabbed: material comparisons on native pixels.
 
-## 2. Awaiting the operator (eyes, ears, hardware, decisions; details stay at the item)
+## 2. Awaiting the operator (decisions only; details stay at the item)
 
-One line each; the detail and evidence live in the section named. Nothing here needs an agent until the operator
-answers.
+One line each; the detail and evidence live in the section named. Nothing here holds a phase open, and nothing here
+is an operator look: looks, listens and feels are the lead's proofs (1B.14), and what has no simple test is a
+Watchlist entry (operator, 11 Nov).
 
-- **GitHub Remote builds (8 Nov, proven end to end):** Build Runner's third tab and
-  `tools/github_remote_build.py` compile Standard/Media Center on GitHub runners, validate and publish them, and
-  compile opted-in installers locally (`Docs/Guides/GitHub_Remote_Build.md`). Lead's headless run from the Build
-  Runner CLI on e9bbd7a4: both remote builds downloaded, validated (manifest + PE version) and published, and both
-  installers compiled locally (`release/installers/Setup_SRPSS.exe`, `Setup_SRPSS_Media_Center.exe`). The run before
-  it showed the installer gate refusing a Standard installer whose presets had changed after the remote build.
-  Open: the operator installing a remote-built product. Since checkpoint audit 11 (8 Nov) the tab's Linux job runs
-  beside the Windows runs on its own process owner (never holding their retrieval) and a stop cancels its run even
-  before it was followed; tested with fakes only, so the next Remote run with Linux selected is its first real one.
-- **Read:** Bubble / Extruded Bubble "terrible performance" (6 Nov log 10:32-10:35) was our load (97-100% system CPU
-  from the agents' game60 checks), not the product: on the quiet machine Bubble P1 ran 65.9 fps, tick 1.47 ms, GIL
-  0.13, 3.9% late; Extruded Bubble 45-69 fps (`.artifacts/evidence/performance/live_check/20261106_live/`). Heavy load-generator runs are
-  scheduled by the lead only.
-- **§4 Slow startup:** a cold start with `--usage` (no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line over a frame).
-- **§4 Displays off:** the overnight check with the power plan's display timeout (`--frame-trace --usage`).
-- **§4 Spline Curve (`devcurve`) "more alive":** eyes after the lead's review.
-- **§4 Frozen builds:** open a Studio from a fresh build.
-- **Materials/Studio:** native operator comparison at section 1A, item 1.7; Settings corners remain open at item 1.9.
-- **§4 Extruded Bubble Deep Red Ocean (Preset 9):** eyes on the second pass.
 - **Framed aperture on the saver card (8 Nov, decision):** the writer is fixed (R-181: the Visualizer's uniform-scale
   minimum is absolute, and settings load lifts stored cards to it). That alone does not restore the saver card's 45°
   look: the repaired 592x592 card holds a 1480x1480 world (0.4 px per world unit, aperture 5.29), still at the 90° x
@@ -687,23 +715,56 @@ answers.
   vertical view) as well, or leave it to Edit (Restore Size, wheel up, side drag back to the wanted width).
 - **§1 8b P2:** decide whether to size the frame-age gain with a matched-GPU repeat game60 pair; gates 3/4 and their
   measurement limits are in the design record. The Windows default and H1/H2 repairs are already integrated.
-- **§7.1 Waveform:** Preset 4 trade-offs of the fixed-scale v7 (sign off or ask for the tag's exact dynamics);
-  Preset 7 and the Reaction Modes; Breathing; four-ribbon Preset 3; Particles; Strands; Colour/floor/mist; Fixed
-  response; Floor Give; Pulse Rim; swell visibility; Travel Direction; Unified atmosphere.
-- **§8 Bubble:** R-170 eyes-on (tall, wide and TV cards); Particle glow.
-- **§9 Studios:** Neon Lake (`shockwave_grid`), Extruded Spectrum, Spectrum, Spline Curve and Oscilloscope Studios; the migrated Settings
-  pages; Open Studio in the preset row and the Save To flow; the seamless clip loops; the chrome; the drag feel; the
-  terrain brush.
-- **§5 Frozen release gate:** operator-run builds and installer checks.
+- **Decision, Waveform Preset 4 (the reference):** sign off the fixed-scale v7 trade-offs against main and the
+  "floor first" lift (`TROUGH_LIFT_MAX` 1.5 -> 3: Preset 4's ribbon rides about .7 higher at p90 and stops dipping
+  into the floor, operator: "rather it goes a bit higher when it has to than clips"), or ask for the tag's exact
+  Preset 4 dynamics (numbers at 7.1, "Fixed-scale rework v7"; the lead accepted them on 6 Nov).
+- **Decision, Waveform on a small 640x560 card:** Presets 5 and 6 cannot fit it either way: crests now graze the top
+  on 14-47% of frames, against floor contact before (an authoring choice; no reaction was shrunk). Sign off, or ask
+  for taller-body authoring.
+- **Decision, expanded card's hover Edit lane (plan 01 M3c):** the lane (Restore Widget Size, the transfer arrows)
+  stays withdrawn on the display-wide card outside Edit since M2, because each edits the ordinary card's layout,
+  which that view does not draw (the rotate glyph is in Fullscreen Edit). Return it, and what should each do while
+  expanded?
+- **Decision, overlays on pause:** a pause does nothing to them (by the spec, not built): Now Playing is event-only
+  and has already faded after its window; with Always Show it stays up by definition. Add a fade-out on pause?
+- **Decision, Audio Analysis group in the Spline Curve and Oscilloscope Studios (section 9):** keep it or hide it?
+  Every offered control moves the frame (Spline Curve's; Oscilloscope's Flare and Drive, and Tone for Bar Count, Block
+  Size and Input Gain), though the Oscilloscope's trace itself is the raw capture.
+- **Decision, Studio clip loops (section 9):** the clips now start and end mid-song at the chosen loop points (Human
+  and Growing Pains on their groove) for a seamless wrap, not at the earlier quiet-to-hot windows. Keep the seam, or
+  restore the quiet-to-hot arc?
+
+- **Changed on 11 Nov (no action needed; say only if one should go back):**
+  - Now Playing follows the Media widget's Edit rules: its side handles reflow the text box (they resized the
+    artwork border, accepted 10 Nov); the block's orientation follows its anchor corner, set by the title's flip
+    glyph or by ending a move in a corner (it flipped by screen side, accepted 10 Nov); a corner drag grows about
+    the top centre and Restore Size keeps the top left; its artwork border takes the Media widget's artwork
+    colour, stroke and Rounded Artwork option; the safe-area edge guides are not drawn.
+  - Fullscreen glyphs: a single display shows the Up arrow (it showed up-right); tooltips are relative and
+    ALL CAPS like the rest of the glyph row.
+  - All three pans (Alt+right, held-right, the Studios) share the Studio's rule: a right drag moves the scene
+    against the pointer, a down drag moves it with the pointer.
+  - Studios: Waveform has Camera X and Z only (its camera fixes the eye height, so Camera Y never did anything);
+    Extruded Bubble's Camera X/Y/Z span -2..2 (was -1..1); Sphere's View Turn / Tilt hold for the session and
+    save through Save Camera.
+  - Settings and Studio windows end at their rounded border: the near-white inner line on light themes is gone
+    (it was backing showing through).
+  - Neon Lake under music: the land no longer tears; the reaction is a little weaker on banks and very low
+    land; paint past the old grid edge renders as far land (no shoreline line or wet fringe).
+  - Brush Radius in the Neon Lake Studio is a share of the basin (its default is being rescaled).
+- **Decisions the lead will put to the operator when their write-ups exist:** Neon Lake spire glow on hits;
+  islands rising from the lake (needs the water-boundary contract decision).
 
 ## 3. Lead and agents: active, paused and queued work
 
-**Agents (operator, 12 Nov; replaces the 11 Nov roster):** the lead (Fable) is orchestrator, auditor and final
+**Agents (operator, 11 Nov; replaces the 11 Nov roster):** the lead (Fable) is orchestrator, auditor and final
 reviewer; all agent results pass that review before acceptance, and the lead's audits (pixel review, regressions
 re-run against the pre-change code, tests on the merge) are what keep the hand-overs sound. The other slots are
 Opus 5.5: two Opus High (complex, architectural and visual work), two Opus Medium (simpler and brute-force
 work), and one Sonnet 5.5 Medium for documents and research when needed. No Fable agents: the native-core
-sequence (section 1 item 8b), the material track (1B.8) and the presets (1B.10) run in these slots. Agents run
+sequence (section 1 item 8b) and the material track (1B.8) run in these slots; presets (1B.10) alone go to one
+Fable Medium agent (operator, 11 Nov: Opus does not handle preset visuals well). Agents run
 only the tests related to what they changed, never `--isolated`, never take over a display (off-screen renders
 and captures), and record side defects here instead of ignoring them. Wait for agent reports without status
 polling. An interrupted agent's uncommitted work is preserved as a "WIP (handover)" commit on its branch and the
@@ -753,8 +814,9 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   while the card accepts total/latest/playtime/previous/source/selected. Existing fixtures can test impossible rows.
 - [ ] Isolate active Widget Theme state between scene/display tests: the combined 33-file run fails four tests that
   pass alone (Achievement Pulse config, Gmail actions, Media projection and baseline theme material).
-- [~] **Awaiting Validation:** live Style Overrides/theme changes must reach Visualizer and Context Menu material
-  in the current display generation (`_configure_quick_auxiliary`), including the new global opacity override.
+- [ ] **D1 run (1B.14 harness), lead review of grabbed frames:** live Style Overrides/theme changes must reach
+  Visualizer and Context Menu material in the current display generation (`_configure_quick_auxiliary`), including
+  the new global opacity override.
 - [ ] Extend actual faint-run pixel checks to light widget themes beyond the sampled Gmail/Media cards. Keep
   authoring-mirror failures separate from runtime material guards; contract:
   `Docs/Architecture/Card_Surface_Materials.md`.
@@ -764,17 +826,16 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   `.artifacts/evidence/visualizers/spectrum/presets/20261107_lead/` (contact sheets, motion strips, metrics, the
   authoring script) and `D:\Temp\Scratch\SRPSS\evidence\visualizers\spectrum\20261108_ghost_v2\` (`before/`,
   `after/`; falling instants beside Preset 1 with 2x ghost-top crops).
-  - [~] Operator's eyes on the re-authored presets (Silhouette is the plainest by concept).
-  - [~] Operator's eyes on the ghost fix for his 8 Nov verdict on v2: "Those ghosts are too solid and not blurred."
-    The Bar Fill ghost must read like Preset 1's: soft, blurred, translucent (no crisp stripes or stars inside it),
-    fading sooner, with no ~1 px dark seam where a transparent-border bar meets its ghost (merged as 092304dc;
-    evidence `20261108_ghost_seam`). The same bar binds the replacement presets under 1B.10.
-- [~] **Waveform agent (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch
-  `worktree-agent-af0eb2492e1e318d7`), operator decisions from the 7 Nov follow-ups** (evidence:
-  `.artifacts/evidence/visualizers/waveform_ribbon/followups/20261107_followups/`; raw captures not kept):
-  - [~] Preset 4 rides about .7 higher at p90 and stops dipping into the floor: sign off.
-  - [~] On a small 640x560 card, P5 and P6 cannot fit either way: crests now graze the top on 14-47% of frames,
-    against floor contact before. An authoring choice; no reaction was shrunk: sign off.
+  - [ ] Lead review on contact sheets and motion strips (rendered): the re-authored presets (Silhouette is the
+    plainest by concept).
+  - [ ] Lead review on rendered falling instants beside Preset 1 (2x ghost-top crops) for the operator's 8 Nov
+    verdict on v2: "Those ghosts are too solid and not blurred." The Bar Fill ghost must read like Preset 1's: soft,
+    blurred, translucent (no crisp stripes or stars inside it), fading sooner, with no ~1 px dark seam where a
+    transparent-border bar meets its ghost (merged as 092304dc; evidence `20261108_ghost_seam`). The same bar binds
+    the replacement presets under 1B.10.
+- [ ] **Waveform Ribbon, 7 Nov follow-ups** (evidence:
+  `.artifacts/evidence/visualizers/waveform_ribbon/followups/20261107_followups/`; raw captures not kept; the Preset 4
+  and 640x560 card sign-offs are decisions in section 2):
   - [ ] The game60 live check of the tick cut is owed on a quiet machine (see "Lead, the quiet machine").
 - [ ] **AC-02 remainder:** what stays in `DisplayManager` until a second host needs it: the request and gesture
   routing that acts on the owner (mode/preset requests, view orbit, camera reset, Edit move/scale gestures,
@@ -860,20 +921,12 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 
 **Found while centralizing tool output (7 Nov; record, not yet admitted):**
 
-- [~] Preset rollback recovery copies go to `%TEMP%`: `core/visualizer_preset_tree.py` writes the before-images of a
-  failed preset-replacement rollback to `tempfile.mkdtemp(prefix='srpss_preset_recovery_')` and names the folder in
-  the error. It is user-facing recovery data in a folder Windows Storage Sense may empty and nothing ever removes; a
-  location beside the preset tree (or the data root) may be intended. Product behaviour unchanged pending the
-  operator's call (the test redirects it to `tmp_path`).
 - [ ] Hidden cross-test dependency on an earlier test's `tmp_path` (lead, 7 Nov): with pytest's
   `tmp_path_retention_policy = failed`, `test_3d_curated_preset_ownership.py::...promotes_missing_owned_temporal_
   and_profile_keys...[shockwave_grid]` (0.7 vs 0.23) and two or three `test_settings_dialog.py` tab-restore tests
   fail; each passes with the default retention, so something process-scoped keeps a path into an earlier test's
   `tmp_path` (a cached preset tree or storage root). The setting was reverted. Find the cache and give each test its
   own root; this may also hide state leaking between tests.
-- [~] A third evidence root lives in `Docs/`: `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
-  referenced by `Docs/Reference/Extruded_Bubble/Investigation.md`). Not part of the 7 Nov migration mapping; move it
-  into the layout (`visualizers/extruded_bubble/...`) on the operator's word.
 - [ ] Dead evidence references (the folders no longer exist; `tools/artifact_migration.py refs` lists them):
   `logs/evidence_chest/08_*` in Historical_Bugs R-53/56/57/58/59/60/62, `.artifacts/evidence/{ribbon_path,
   ribbon_frames,ribbon_strip,expanded_visualizer,oscilloscope}` and several `waveform_ribbon/wr*` folders in
@@ -905,8 +958,9 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] A takeover fade completes on the publication edge only: like the activation fade it has no deadline, so with no
   logical publication (displays off, parked) an expand or collapse in flight waits and finishes when publications
   resume; the coordinator meanwhile refuses mode requests and transfers as busy. Watch for it at M5 (display power).
-- [~] Operator look: the expanded card shows the theme's surface material (the Visualizer card's
-  `visualizerCardSurfaceMaterial` exists since 0b4abe04, so it is no longer a plain rectangle).
+- [ ] Lead review of a rendered expanded-card frame (hidden host, then D1 grab): the expanded card shows the theme's
+  surface material (the Visualizer card's `visualizerCardSurfaceMaterial` exists since 0b4abe04, so it is no longer
+  a plain rectangle).
 
 **Found while building Expanded Visualizer M3 (7 Nov night; recorded, not yet admitted):**
 
@@ -924,13 +978,15 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 
 **Found while building Expanded Visualizer M3b (8 Nov; recorded, not yet admitted):**
 
-- [~] A Card on a material shows the wallpaper, not the Visualizer: the shared backdrop is the wallpaper layer only
+- [ ] A Card on a material shows the wallpaper, not the Visualizer: the shared backdrop is the wallpaper layer only
   (`Docs/Architecture/Card_Surface_Materials.md` §3), so on Glass over an opaque mode (Extruded Bubble) the card is a
   blurred wallpaper the Visualizer hides everywhere else. It reads as a tinted panel (evidence still
-  `extruded_bubble_06_card_glass.png`); the operator's look decides whether that is acceptable.
-- [~] Right-hand corners sit further in than left ones: they keep clear of the card's hover-revealed controls (about
+  `extruded_bubble_06_card_glass.png`). Lead review on rendered stills (Glass over Extruded Bubble, then other
+  modes): whether that is acceptable.
+- [ ] Right-hand corners sit further in than left ones: they keep clear of the card's hover-revealed controls (about
   80 px from the top edge for the collapse glyph, its tip and the 3D hint; the bottom for Reset Camera, the preset
-  steps and their tip). Fullscreen Edit (M3c) can move an overlay; revisit if the operator finds the gap odd.
+  steps and their tip). Fullscreen Edit (M3c) can move an overlay. Lead review on rendered expanded-card frames:
+  revisit if the gap reads odd.
 - [ ] Now Playing needs an admitted Media card somewhere: it reads the Media model the Visualizer already binds; with
   Media off on every display there is no source and nothing shows (by design: no second Media source).
 - [ ] The hidden render host never waits for the GPU: `tools/expanded_visualizer_evidence.HiddenDisplayHost.render`
@@ -944,14 +1000,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] `tests/test_visualizer_preset_glyphs.py` opens a real window (offscreen QPA hangs it), so the glyph-row agent
   could not run its updated assertion (Edit's glyphs match the card's 26 px). Port it to the hidden production host
   (QQuickRenderControl, as `tests/test_visualizer_glyph_row.py` does) and run it.
-- [~] The expanded card's hover Edit lane stays withdrawn (operator's call if wanted back). The rotate glyph the
-  operator missed is now on the expanded card in Fullscreen Edit (plan 01 M3c, "Rotate Widget Content"); the
-  ordinary Visualizer's hover lane never offered rotate. What the display-wide card still does not show outside Edit
-  is that lane (Restore Widget Size, the transfer arrows), withdrawn since M2 because each edits the ordinary card's
-  layout, which the display-wide view does not draw (Restore would resize a hidden card, transfers are M5).
-  Returning it needs a decision on what each does while expanded.
-- [~] A pause does nothing to the overlays (by the spec, not built): Now Playing is event-only and has already faded
-  after its window; with Always Show it stays up by definition. A fade-out on pause would need the operator's word.
 - [ ] `tests/test_qtquick_context_menu.py` fails after `tests/test_qtquick_custom_layout_owner.py` in one process
   (the 1B.1 side defect); the same pairing also turns three `tests/test_visualizer_direct_gestures.py` tests red
   (Alt-wheel / Alt-drag gestures never begin; reproduced on e9bbd7a4 without the M3c single-axis/rotate changes,
@@ -967,42 +1015,28 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
 Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its `[~]`
 validation steps and open side defects.
 
-**Slow startup (operator, 6 Nov 10:30; owners fixed, awaiting the operator's cold start)**
+**Slow startup (operator, 6 Nov 10:30; owners fixed, awaiting the lead's cold start)**
 
 Evidence `.artifacts/evidence/lifecycle/slow_startup/20261106_slow_startup/`; the held-lock rule is in
 `Docs/Guardrails/Performance_Optimization_Contract.md` section 5, the optional-worker start in its appendix.
 
-- [~] Operator: cold start with `--usage`, then read the log:
-  - [~] No `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame. The 166-240 ms `FEED_GUI_DELIVERY` lines at
+- [ ] D1 run (1B.14 harness): cold start with `--usage`, then the lead reads the log:
+  - [ ] No `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame. The 166-240 ms `FEED_GUI_DELIVERY` lines at
     10:30:40-42 were not reproduced offline (Feeds cache delivery including the NEWS card model is 0.1-15 ms per
     source at 18 publishers x 40 stories; `_complete` excludes QML) and are treated as the post-block backlog on a
     97-100% CPU machine.
-  - [~] The first `collect_ms` is small.
+  - [ ] The first `collect_ms` is small.
 - [ ] Side defect: a prefetch batch asked for before the optional image_prefetch child is ready fails as "not
   running" (a logged `[PREFETCH]` error); that batch is not retried.
 
-**Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's overnight check)**
-
-Contract: `Docs/Architecture/Compositor_Architecture.md` -> Display power (hardware findings 6 Nov are recorded
-there). Evidence `.artifacts/evidence/display/display_power/20261105_display_power/`.
-
-- [~] Operator: leave a heavy preset (Waveform Ribbon (`waveform_ribbon`) Preset 1 or Neon Lake (`shockwave_grid`))
-  overnight and let Windows' screen timeout turn both displays off (not the panels' own buttons: an HDMI panel that
-  stays enumerated gives no signal and the TV rejects DDC/CI queries; operator decision 6 Nov: no Screens Off
-  command, the burden stays off the user; they enabled the power plan's display timeout and will report how SRPSS
-  handles it). Run with `--frame-trace --usage`, then check:
-  - [~] Task Manager CPU/GPU for the saver while dark.
-  - [~] Wake input reaches the saver.
-  - [~] The first seconds after wake: no stale frame, jump or hitch.
-
-**Spline Curve (`devcurve`) "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then
-operator eyes)**
+**Spline Curve (`devcurve`) "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review)**
 
 Contract: guide section 13D -> DevCurve. Evidence and before/after WebPs (loud end and a quiet passage, P1/P6):
 `.artifacts/evidence/visualizers/devcurve/reactivity/20261105_reactivity/` (`PROGRESS.md`).
 
 - [ ] Lead review of the second cut.
-- [~] Operator eyes on the second cut.
+- [ ] Lead review on the rendered before/after WebPs (loud end and a quiet passage, P1/P6): the second cut reads
+  more alive while keeping the flow.
 - [ ] Open: the strongest preset's bass (Deep Blue) stays ~18% below pre-work main's loud RMS (a smooth wave cannot
   match a slope-limited triangle at the same slope).
 - [ ] Open: the quiet-passage evidence is one recording's cold start (9 kicks).
@@ -1034,23 +1068,18 @@ in source, confirm on the next build**
 
 Contract: `Spec.md` (frozen QML package contract); `test_every_shipped_qml_import_survives_the_frozen_prune`.
 
-- [~] Operator: open a Studio from a fresh build.
+- [ ] Frozen run (1B.14): open a Studio from the fresh frozen build (the GitHub Remote artifact), on D1.
 
 **Widget/Settings material appearance: Awaiting Validation**
 
 Active density/composition work and native evidence: section 1A, items 1.7/1.9. Durable owners:
 `Docs/Architecture/Card_Surface_Materials.md` and `Docs/Architecture/Settings_Theme_Architecture.md`.
 
-- [~] Operator, in the running app:
-  - [~] The inner rim.
-  - [~] Transport, mute and volume.
-  - [~] Dark and light palettes.
-  - [~] Linked material choice.
-
-**Awaiting Validation, material cost under load**
-
-- [~] A lead-scheduled transition-heavy material/Normal pair, only within the separately approved measurement
-  session. Small off-screen GPU timings do not replace it.
+- [ ] D1 run (1B.14 harness), lead review of grabbed frames, in the running app:
+  - [ ] The inner rim.
+  - [ ] Transport, mute and volume.
+  - [ ] Dark and light palettes.
+  - [ ] Linked material choice.
 
 **Widget theme legibility (open)**
 
@@ -1061,7 +1090,7 @@ Active density/composition work and native evidence: section 1A, items 1.7/1.9. 
   contrast alone does not account for the shadow's effect.
 
 **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent); second pass
-done, awaiting operator eyes**
+done, awaiting the lead's review**
 
 The mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`. Preset 9 (Deep Red Ocean) only;
 Presets 1-8 stay pixel-identical. Shared controls, each dormant at 0: Ember Grain, Ember Band (Water), Lit Glass
@@ -1069,7 +1098,7 @@ Presets 1-8 stay pixel-identical. Shared controls, each dormant at 0: Ember Grai
 reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 72-73; evidence
 `.artifacts/evidence/visualizers/extruded_bubble/deep_red_ocean_pass2/20261106_deep_red_ocean_pass2/`.
 
-- [~] Operator eyes on Preset 9 against the mock.
+- [ ] Lead review of side-by-side sheets (mock | ours, full resolution plus crops) of Preset 9 against the mock.
 - [ ] Shells are paler and smoother inside than the mock's copper, busy-interior glass, and too many crowd together.
 - [ ] Embers are partly along-stream strokes rather than torn debris.
 - [ ] The lower right is far too busy (the mock's band fades out there).
@@ -1085,6 +1114,17 @@ reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
 Live checklist: every box is an observation or a fix owed on evidence; delete an item when its evidence closes it.
+
+**Engine worker and platform (reopen only on evidence; no simple test exists)**
+
+- [ ] First-reveal latency under load: if the Visualizer's first appearance is noticeably later on the worker
+  than it was in process, size it in a load session (the no-load comparison is 1B.14's).
+- [ ] A hot-plugged audio device: nothing in use is hot-plugged until SMP/Library exists; the real-endpoint
+  reopen test of 1B.14 covers the capture path. Revisit with SMP.
+- [ ] Linux engine worker (best effort, never run): the named wake pipe (FIFO), the worker's spawn under
+  forkserver, the shared mapping's tracker, Pulse capture in the worker, the listener thread ending when the
+  worker's writer closes, and a broken worker showing as a logged in-process fallback. `--viz-in-process` is
+  the escape if a Linux user reports the Visualizer missing.
 
 **Neon Lake (`shockwave_grid`) camera step on real music (found 6 Nov, pass 7, pre-existing at 0776da08)**
 
@@ -1126,10 +1166,10 @@ noise").
 
 Many update entries lack images. A generic game cover existing is not proof an image is missing.
 
-- [~] Audit URLs, redirects/statuses, cache keys, game IDs, fallbacks, dedupe and selection order (including artwork
-  fetched but rejected downstream).
-- [~] Prefer image-bearing updates without suppressing legitimate no-image entries.
-- [~] Instrument attrition and compare natively with Feeds.
+- [ ] On a report of missing images: audit URLs, redirects/statuses, cache keys, game IDs, fallbacks, dedupe and
+  selection order (including artwork fetched but rejected downstream).
+- [ ] Then prefer image-bearing updates without suppressing legitimate no-image entries.
+- [ ] Instrument attrition and compare natively with Feeds (the lead's own comparison; no operator step).
 
 **Steam artwork 404**
 
@@ -1179,6 +1219,61 @@ rendering.
 
 - [ ] Inspect the helper/log-path authority before relying on that diagnostic route; do not hide it behind a silent
   local fallback.
+
+**GitHub Remote builds (8 Nov, proven end to end; moved from section 2)**
+
+Build Runner's third tab and `tools/github_remote_build.py` compile Standard/Media Center on GitHub runners, validate
+and publish them, and compile opted-in installers locally (`Docs/Guides/GitHub_Remote_Build.md`). Lead's headless run
+from the Build Runner CLI on e9bbd7a4: both remote builds downloaded, validated (manifest + PE version) and
+published, and both installers compiled locally (`release/installers/Setup_SRPSS.exe`,
+`Setup_SRPSS_Media_Center.exe`). The run before it showed the installer gate refusing a Standard installer whose
+presets had changed after the remote build. Installing a remote-built product on an ordinary user account is the
+"Installed builds" entry below; the frozen run of 1B.14 covers the artifact.
+
+- [ ] Since checkpoint audit 11 (8 Nov) the tab's Linux job runs beside the Windows runs on its own process owner
+  (never holding their retrieval) and a stop cancels its run even before it was followed; tested with fakes only, so
+  the next Remote run with Linux selected is its first real one: read its log and fix what it shows.
+
+**Bubble / Extruded Bubble "terrible performance" reports (6 Nov log 10:32-10:35; moved from section 2)**
+
+That log was our load (97-100% system CPU from the agents' game60 checks), not the product: on the quiet machine
+Bubble P1 ran 65.9 fps, tick 1.47 ms, GIL 0.13, 3.9% late; Extruded Bubble 45-69 fps
+(`.artifacts/evidence/performance/live_check/20261106_live/`). Heavy load-generator runs are scheduled by the lead
+only.
+
+- [ ] On a new report, read the log's system CPU first: a load-driven reading is not a product defect; otherwise
+  reproduce on the quiet machine against those numbers.
+
+**Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; needs the machine's own screen timeout)**
+
+Contract: `Docs/Architecture/Compositor_Architecture.md` -> Display power (hardware findings 6 Nov are recorded
+there). Evidence `.artifacts/evidence/display/display_power/20261105_display_power/`.
+
+- [ ] When a heavy preset (Waveform Ribbon (`waveform_ribbon`) Preset 1 or Neon Lake (`shockwave_grid`)) is left
+  overnight and Windows' screen timeout turns both displays off (not the panels' own buttons: an HDMI panel that
+  stays enumerated gives no signal and the TV rejects DDC/CI queries; operator decision 6 Nov: no Screens Off
+  command, the burden stays off the user; they enabled the power plan's display timeout), notice the saver's CPU/GPU
+  in Task Manager while dark, whether wake input reaches the saver, and the first seconds after wake (a stale frame,
+  a jump or a hitch). Run with `--frame-trace --usage`; when something shows, read that trace and reopen here.
+
+**Card materials under load**
+
+- [ ] A transition-heavy material/Normal pair needs the separately approved measurement session (load is the
+  operator's to approve; small off-screen GPU timings do not replace it). When a session is approved, the lead runs
+  it with item 7's card-materials pair.
+
+**Installed builds as an ordinary Windows user (no such account or fresh install exists to test on; moved from 1.2-1.3)**
+
+Durable behaviour: `Docs/Reference/Visualizer_Studio.md`; evidence:
+`Docs/Audits/Studio_Camera_And_Fullscreen_Overlay_Self_Audit_2026-11-09.md` and
+`Docs/Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md`. Source-level file/Qt checks do
+not establish installed ACLs; the frozen run of 1B.14 covers the artifact, not an installed ProgramData tree.
+
+- [ ] On a freshly installed Standard or MC build as an ordinary Windows user (when one is available): the
+  installer grants Modify on the shared ProgramData Visualizer preset tree **and its existing files**; Save and Save
+  Camera over a shipped preset work; Save As and reopen work; Save As New Preset's file dialog lands in the right
+  folder in an installed build (ProgramData's shared preset tree). If one fails, fix the installer's ACL grant
+  (R-182).
 
 **Frozen release gate (operator scheduled)**
 
@@ -1315,50 +1410,53 @@ No adaptive memory (the Adaptive Response toggle is retired), Kick Accent bounde
 ships 0), the floor lift bounded by the card's top edge. Lessons of the rejected v4:
 `Docs/Guides/Visualizer_Reactivity_Authoring.md`; measurements: Migration Plan section 8.
 
-- [~] Operator sign-off on the trade-offs against main, or ask for the tag's exact Preset 4 dynamics:
-  - [~] Preset 4 visible amplitude p10/p50/p90 -4/+4/+5% and 3 s contrast +4.5% against the tag (inside the +-10%
-    gate).
-  - [~] Preset 7 roll 1.12x; P7 saturation higher on two songs (10.2% / 6.8% against 3.4%).
-  - [~] Kick peaks 1.6-6.4% under main in 6 of 16 song-time bins (worst P7 0-15 s) and 6-11% over it in sustained
-    loud bins.
-  - [~] Quieter-after-loud kicks 8-27% under main by design (a quieter passage is no longer re-normalised up).
-  - [~] Top-row spark density up to about 2x main.
-- [~] Operator's eye on the music-vs-response findings (chain7, every preset and Reaction Mode; 7 Nov):
-  - [~] Group Wave registers single kicks least: P7 as authored born rise .03-.06 per kick, P7 forced to Travelling
-    Pulse .16-.30, and 46% of P7's kicks raise its born swell by under 1% of its range (Travelling Pulse 25%).
-  - [~] Whole Swell plateaus in flat loud songs (P6 song 2 saturated 20%, ws_P1 15%): the music's RMS is flat there and
-    beats ripple the plateau, so it reads as sustained, not pinned.
-  - [~] Song 1's sparse intro (big isolated kicks in the PCM) barely moves any preset while the carry-over from song 0
-    decays (re-scale gap .37-.50 on most presets).
-- [~] **Floor first (7 Nov, operator: "rather it goes a bit higher when it has to than clips"; supersedes top edge
+Trade-offs against main, for the operator's sign-off or a request for the tag's exact Preset 4 dynamics (the decision
+is in section 2; the lead accepted them on 6 Nov):
+
+- Preset 4 visible amplitude p10/p50/p90 -4/+4/+5% and 3 s contrast +4.5% against the tag (inside the +-10% gate).
+- Preset 7 roll 1.12x; P7 saturation higher on two songs (10.2% / 6.8% against 3.4%).
+- Kick peaks 1.6-6.4% under main in 6 of 16 song-time bins (worst P7 0-15 s) and 6-11% over it in sustained loud
+  bins.
+- Quieter-after-loud kicks 8-27% under main by design (a quieter passage is no longer re-normalised up).
+- Top-row spark density up to about 2x main.
+- **Floor first (7 Nov, operator: "rather it goes a bit higher when it has to than clips"; supersedes top edge
   first): Preset 4 change for sign-off.** `TROUGH_LIFT_MAX` 1.5 -> 3, `TOP_GIVE_BACK` 1.5; Floor Give (P2) and Static
   Height keep 1.5. Preset 4's lift p50/p90 .75/1.48 -> 1.01/2.19 at 1282x1005 (the ribbon rides ~.7 world units higher
   at p90, at most 1.5 higher, in loud passages) and no longer dips into the floor (7.8% -> .1%).
+
+- [ ] Lead review on the music-vs-response traces (`waveform_music_response.py`; chain7, every preset and Reaction
+  Mode; 7 Nov):
+  - [ ] Group Wave registers single kicks least: P7 as authored born rise .03-.06 per kick, P7 forced to Travelling
+    Pulse .16-.30, and 46% of P7's kicks raise its born swell by under 1% of its range (Travelling Pulse 25%).
+  - [ ] Whole Swell plateaus in flat loud songs (P6 song 2 saturated 20%, ws_P1 15%): the music's RMS is flat there and
+    beats ripple the plateau, so it reads as sustained, not pinned.
+  - [ ] Song 1's sparse intro (big isolated kicks in the PCM) barely moves any preset while the carry-over from song 0
+    decays (re-scale gap .37-.50 on most presets).
 - [ ] At the 640x560 card: P4 Anything's crest-clipped share is 6.2% against main's .4% (crests graze the top edge)
   and P4 Rag Doll 2.1% (.4%); crests above the top on .2-1.1% of ticks (main 0-.1%).
 - [ ] P5 and P6 do not fit a 640x560 card with any setting (floor 32-43% and crests above the top 16-36% of ticks;
   rendered crest clipping 14-47% against main's 2-16%): authoring, their bodies are taller than that card.
 
-**Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov; awaiting operator
-eyes)**
+**Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov; awaiting the lead's
+review)**
 
 Complaints: no decay/breathing in soft passages, sustained passages with changes read almost flat, a swell to full
 power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song 70-130 s).
-Evidence `reactivity_preset7/20261107_reactivity_preset7/`. The pulse-visibility WIP (branch
-`worktree-agent-a470c20ffe5fe8b02`) stays parked: the operator accepted the pulse as is.
+Evidence `reactivity_preset7/20261107_reactivity_preset7/`. The pulse-visibility WIP was dropped with its branch
+(11 Nov): the operator accepted the pulse as is.
 
-- [~] Operator review of Preset 7 (bodies are smaller in loud passages now that the uniform inflation is gone:
-  sustained-loud visible amplitude 6.4 -> 5.4).
-- [~] Whole Swell (Preset 6) sits at its soft bound in all music by design (one global level; de-saturating it barely
-  changed the visible body, so it was left).
+- [ ] Lead review on a rendered showcase WebP and the music-response trace of Preset 7 (bodies are smaller in loud
+  passages now that the uniform inflation is gone: sustained-loud visible amplitude 6.4 -> 5.4).
+- [ ] Lead review on rendered Whole Swell (Preset 6) strips: it sits at its soft bound in all music by design (one
+  global level; de-saturating it barely changed the visible body, so it was left).
 
-**Breathing + anchored history ends (merged; awaiting operator ears/eyes)**
+**Breathing + anchored history ends (merged; awaiting the lead's review)**
 
 Evidence `.artifacts/evidence/visualizers/waveform_ribbon/breathing/20261105_breathing/`.
 
-- [~] Soft passages let go between swells (0.7 in every preset but 4) and a quieter passage after a loud one stays
-  quieter.
-- [~] The tail no longer staggers at side angles.
+- [ ] Invisible run on recorded music and lead review of the animated WebP: soft passages let go between swells (0.7
+  in every preset but 4) and a quieter passage after a loud one stays quieter.
+- [ ] Lead review on a rendered side-angle WebP: the tail no longer staggers at side angles.
 
 **Four-ribbon maximum and Preset 3 (Awaiting Validation)**
 
@@ -1366,23 +1464,24 @@ The candidate admits FOUR cards across authoring/runtime/clearance/accent/range 
 active identities and old three-card state's values and count. The explicit operator maximum overrides the first
 board's decorative count label; use four for Preset 3's paired target.
 
-- [~] Validate Preset 3 against `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`:
-  - [~] Teal/orange contrast.
-  - [~] Readable lattice/twist/strands/particles.
-  - [~] Continuous wet textured floor.
-  - [~] The large quiet-to-peak geometric change shown.
+- [ ] Lead review on mock | ours sheets (full resolution plus crops): validate Preset 3 against
+  `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`:
+  - [ ] Teal/orange contrast.
+  - [ ] Readable lattice/twist/strands/particles.
+  - [ ] Continuous wet textured floor.
+  - [ ] The large quiet-to-peak geometric change shown.
 - [ ] Native low/high/recorded captures must reach that range without pinning or swapping scene/camera identity.
 - [ ] The recorded draft still needs visual correction: white/rope-like overlaps, repeated continuation, weak/dark
   atmosphere and a poor floor/contact strip remain rejected.
 - [ ] Do not equate source tests, particle/root counts or larger amplitude with reference fidelity.
 
-**Reaction: travelling energy pulse + four Reaction Modes (5 Nov; awaiting operator eyes/ears)**
+**Reaction: travelling energy pulse + four Reaction Modes (5 Nov; awaiting the lead's review)**
 
 Design: Migration Plan "Current reaction model"; decision record in the audit doc, decisions 7+; evidence
 `.artifacts/evidence/visualizers/waveform_ribbon/studio_20261105/modes/`.
 
-- [~] Travelling Pulse (default), Frozen Past, Whole Swell and Group Wave read right on recorded music (flow-rule and
-  twitch tests exist for every mode).
+- [ ] Lead review on rendered strips and music-response traces: Travelling Pulse (default), Frozen Past, Whole Swell
+  and Group Wave read right on recorded music (flow-rule and twitch tests exist for every mode).
 - [ ] Group Wave still reads close to Travelling Pulse on rendered strips (it keeps the summed travelling field; its
   sets need their own pass), and its Pulse Width is not yet the band core the other two modes use (operator: "a
   relatively small horizontal width and the full vertical width").
@@ -1391,41 +1490,44 @@ Design: Migration Plan "Current reaction model"; decision record in the audit do
 
 **Particles (5 Nov candidate)**
 
-- [~] Operator eyes: crest-weighted, distributed births in each ribbon's colour, visible >=1 px cores with soft halos,
-  gentle fade; swells gather particles (Pulse Particles).
+- [ ] Lead review on rendered crops and a WebP: crest-weighted, distributed births in each ribbon's colour, visible
+  >=1 px cores with soft halos, gentle fade; swells gather particles (Pulse Particles).
 - [ ] Open: still sparser than the high-react reference (admission-limited).
 
 **Strands: rare, 3-5 seconds TOTAL life**
 
 The latest operator correction supersedes the proposed 30-second fade.
 
-- [~] Preserve the approved non-flickering look and make appearances much rarer.
-- [~] Use most of a configurable 3-5 second lifetime for a gentle tip-first fade.
-- [~] Reactivation restores them smoothly, with glow and movement/growth (retain the approximate 20% repeat extension),
-  without abrupt respawn or pulse reset.
+- [ ] Lead review on a rendered strand WebP: preserve the approved non-flickering look and make appearances much
+  rarer.
+- [ ] Same review: use most of a configurable 3-5 second lifetime for a gentle tip-first fade.
+- [ ] Same review: reactivation restores them smoothly, with glow and movement/growth (retain the approximate 20%
+  repeat extension), without abrupt respawn or pulse reset.
 - [ ] Prove quiet/peak lifetime handles, tip/root fade ordering, slow decay, partial-fade reactivation and
   direct/reflected appearance.
 - [ ] Retain birth look during travel; finite history eviction must not cut off a visible unfinished fade.
 
-**Colour, floor and mist (5 Nov candidates; awaiting operator eyes)**
+**Colour, floor and mist (5 Nov candidates; awaiting the lead's review)**
 
 Evidence `studio_20261105/floor4/`; measurements in Migration Plan section 8.
 
-- [~] Lattice sheets (V3).
-- [~] Wet concrete with stable soft coloured reflection mass (no horizon line, no flicker-prone streaks; operator
-  prefers smeared colour to streaks).
-- [~] One bounded night medium with a slight local ribbon tint (strong Local Light can no longer wash the frame).
+- [ ] Lead review on rendered sheets: lattice sheets (V3).
+- [ ] Lead review on rendered strips: wet concrete with stable soft coloured reflection mass (no horizon line, no
+  flicker-prone streaks; operator prefers smeared colour to streaks).
+- [ ] Lead review on rendered sheets: one bounded night medium with a slight local ribbon tint (strong Local Light
+  can no longer wash the frame).
 - [ ] Wide sheets (P2) still graze the floor on ~60% of ticks: optional Floor Give (below) lets the wet floor dent
   under them instead.
 
 **Fixed response, break-proof Breathing, Kick Accent (operator, 6 Nov: "when it went suddenly quiet everything become
-more reactive ... Adaptive is a very problematic approach"; "many sustained kicks ignored"; awaiting operator eyes)**
+more reactive ... Adaptive is a very problematic approach"; "many sustained kicks ignored"; awaiting the lead's review)**
 
 Geometry drives are a fixed function of the real-music scale (the Adaptive Response toggle is retired). Preset 4
 differs from the tag only through it, Kick Accent and the floor lift: compare against the tag with Kick Accent 0.
 Range audit: `.artifacts/evidence/visualizers/waveform_ribbon/reactivity_preset7/20261107_reactivity_preset7/rangeaudit_*.txt`.
 
-- [~] Operator eyes on the fixed response, Breathing and Kick Accent.
+- [ ] Invisible run on recorded music and lead review of the music-response traces: the fixed response, Breathing
+  and Kick Accent.
 - [ ] Rotation's drive is never above .36 on any recording (its Peak handle is never reached).
 - [ ] Light/Colour/Sparkle/Highlights, Width and Lift never reach .8 on three or four of five songs: those
   calibrations (not the response gain) are the remaining Range losses.
@@ -1435,39 +1537,39 @@ Range audit: `.artifacts/evidence/visualizers/waveform_ribbon/reactivity_preset7
 - [ ] Soft passages swing less in absolute terms (3 s contrast .21 vs the adaptive gain's .30) and loud ones .11 vs
   .16.
 
-**Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests"; awaiting operator eyes)**
+**Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests"; awaiting the lead's review)**
 
 Opt-in Floor slider (default 0 = the rigid floor, pixel-identical); P2 authored 1.0. Perspective only. Evidence
 `.artifacts/evidence/visualizers/waveform_ribbon/floor_deform/20261107_floor_deform/`; design in the Migration Plan's
 Floor bucket.
 
-- [~] Where a lower edge comes down onto the floor the wet floor yields in a soft dent, so troughs stay round and dip
-  in instead of flattening: in the visible frame P2 reaches the floor only in the ragdoll loud end (about 49.5-52 s);
-  P3 never does, so it is unchanged there.
+- [ ] Lead review on rendered stills and a WebP: where a lower edge comes down onto the floor the wet floor yields in
+  a soft dent, so troughs stay round and dip in instead of flattening: in the visible frame P2 reaches the floor
+  only in the ragdoll loud end (about 49.5-52 s); P3 never does, so it is unchanged there.
 
 **Pulse Rim (operator, 5 Nov: "where the pulse is that section of the ribbon's rim can be even brighter with
-falloff"; awaiting operator eyes)**
+falloff"; awaiting the lead's review)**
 
 Reaction-bucket slider (0 = today's rims, pixel-identical). Evidence
 `.artifacts/evidence/visualizers/waveform_ribbon/pulse_rim/20261107_pulse_rim/`; design in the Migration Plan's
 Reaction bucket.
 
-- [~] The rims (line and rim glow) brighten on the pulse with the field's own smooth falloff, in every Reaction Mode
-  and both Travel Directions.
+- [ ] Lead review on rendered strips: the rims (line and rim glow) brighten on the pulse with the field's own smooth
+  falloff, in every Reaction Mode and both Travel Directions.
 
-**Swells reach the Preset camera already faded (Presets 1-3; awaiting operator eyes)**
+**Swells reach the Preset camera already faded (Presets 1-3; awaiting the lead's review)**
 
 Swells now born just beyond the camera's visible span and ageing only once seen; Preset 4 and Presets 5-7 byte-
 identical. Evidence `reactivity_preset7/20261107_reactivity_preset7/` (`visibility_tag_vs_final.txt`,
 `kicks4_table.txt`, `sheets/*_p1..3_*`).
 
-- [~] Operator eyes on Presets 1-3: edge swells arrive in view at strength.
+- [ ] Lead review on the rendered sheets of Presets 1-3: edge swells arrive in view at strength.
 - [ ] Open: on Presets 1/3 the rim's swell-to-elsewhere contrast (1.11/1.17) is still below Preset 4's (1.27).
 - [ ] Open: the no-twitch probe's .02/.01 bounds only held because its swells never reached the cloth (in-view
   .028/.012).
 
 **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need";
-awaiting operator eyes)**
+awaiting the lead's review)**
 
 Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image: history enters at the left;
 pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour grade stays put). Leads the
@@ -1475,8 +1577,10 @@ Studio's Composition / Flow group. Evidence
 `.artifacts/evidence/visualizers/waveform_ribbon/travel_direction/20261107_travel_direction/`; design in the Migration
 Plan's Flow bucket.
 
-- [~] A live change fades out, swaps while hidden and fades back (0.6 s each way).
-- [~] Left To Right mirrors history, pulses, held swells, Tilt Shift, sparks, strands and floor give.
+- [ ] Lead review on a rendered WebP of a live change: it fades out, swaps while hidden and fades back (0.6 s each
+  way).
+- [ ] Lead review on rendered strips: Left To Right mirrors history, pulses, held swells, Tilt Shift, sparks,
+  strands and floor give.
 
 **Dense highlights, moving colour and rim glow**
 
@@ -1521,9 +1625,9 @@ geometry and persistence tests alone cannot establish feel or beauty across movi
 
 **Floor coverage, collision, reflection and viewport changes**
 
-- [~] Awaiting native visual validation: the floor now intersects the same physical camera's pixel rays with the
-  infinite world plane, covering foreground/far ground while actor clipping remains unchanged. Finish the unified
-  atmosphere before visual judgment.
+- [ ] Lead review on rendered frames (D1 run, 1B.14 harness, for native pixels): the floor now intersects the same
+  physical camera's pixel rays with the infinite world plane, covering foreground/far ground while actor clipping
+  remains unchanged. Finish the unified atmosphere before visual judgment.
 - [ ] After the strand slice, draw ground all the way through the foreground and beyond the waveform into heavy dark
   mist that GENTLY thickens until no horizon line is visible. A strip of reflections over black is rejected.
 - [ ] Keep actors and physical floor contact correct, with smooth waveform collision rather than clipping.
@@ -1540,7 +1644,7 @@ geometry and persistence tests alone cannot establish feel or beauty across movi
 
 Replacement medium in place (old banks/fringe/floor haze removed); P3 density 0.06-0.09, P1/P2 0.055-0.075.
 
-- [~] Operator eyes on the darker bounded haze with capped local tint.
+- [ ] Lead review on rendered sheets: the darker bounded haze with capped local tint.
 - [ ] Open: the retained moving-body wake needs measurement.
 - [ ] Open: the loaded fog cost gate (P2/game60 render median was over budget) needs measurement.
 
@@ -1583,18 +1687,19 @@ The reaction is the travelling energy pulse with selectable modes (the C elastic
 sway/torsion); A's accumulated twist and the reactive axial roll stay, with musical vertical response applied after
 the roll (roll-invariant).
 
-- [~] Preserve constant history flow, no time-varying axial scaling, smooth curves, particles/free strands and fog
-  clearance by the actual body.
+- [ ] Lead review on rendered strips and a WebP: preserve constant history flow, no time-varying axial scaling,
+  smooth curves, particles/free strands and fog clearance by the actual body.
 
 **Full controls/editors, four-ribbon capacity and three presets: finish admission**
 
 Candidate Preset 1/2 with the selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom
 and Edit/Arrange feature set exist.
 
-- [~] Expose bend/torsion/stretch/twist/rotation and accent ranges, source/curve visual tuning, ribbon/gradient
-  editors, and floor reflectivity/tint/brightness.
-- [~] Every reactive range needs actual quiet/peak consumer proof for both handles.
-- [~] Retain mutable authored presets and prove Save/Cancel/Restore and runtime source reachability.
+- [ ] Lead review of rendered Studio frames: expose bend/torsion/stretch/twist/rotation and accent ranges,
+  source/curve visual tuning, ribbon/gradient editors, and floor reflectivity/tint/brightness.
+- [ ] Every reactive range needs actual quiet/peak consumer proof for both handles (the range audit, lead-run).
+- [ ] Retain mutable authored presets and prove Save/Cancel/Restore and runtime source reachability (focused tests
+  on the real SettingsDialog).
 
 **Framing, timing and acceptance**
 
@@ -1603,7 +1708,8 @@ and Edit/Arrange feature set exist.
   audit range headroom.
 - [ ] Close shared lifecycle/cost/dormancy gates and run `tools/visualizer_live_check.py --mode waveform_ribbon --load
   game60` before WR-09 acceptance.
-- [~] Operator visual/native judgement remains explicit where automation cannot close it.
+- [ ] Lead visual/native judgement at WR-09 acceptance: rendered showcase WebPs and a D1 run (1B.14 harness); what
+  neither can close, and has no simple test, becomes a Watchlist entry, never an open phase (operator, 11 Nov).
 - [ ] The new unified atmosphere supersedes all old fog layers. Floor-column polish is secondary to continuous ground
   and response.
 
@@ -1691,12 +1797,12 @@ Inspect hidden costs from the shared hero big-over-small shader loop (including 
   preserve visual quality, all approved sinking/reversed-flow presets, reactivity/latency, BTF and mutable presets.
 - [ ] If no material cost is measured, **close the item without redesigning Bubble**. No generic "lean out" campaign.
 
-**R-170 operator eyes-on**
+**R-170 lead review**
 
 Evidence: `Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md`.
 
-- [~] Bubble on a tall card, a wide card and the TV card moves and sizes like the canonical card, and is denser on
-  large cards.
+- [ ] Lead review on rendered WebPs at each card size: Bubble on a tall card, a wide card and the TV card moves and
+  sizes like the canonical card, and is denser on large cards.
 
 **Side defect (found during R-170, not fixed)**
 
@@ -1704,13 +1810,13 @@ Evidence: `Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Mo
   in-view correction cap compounds down the list (order-dependent). Fixing it changes canonical Bubble output, so it
   needs an explicit BTF behaviour-change decision first.
 
-**Particle glow (merged; awaiting operator eyes)**
+**Particle glow (merged; awaiting the lead's review)**
 
 Emitted linear light with a hot core and a monotonic halo (no dark moat), no twinkle on drifting sub-pixel cores,
 cheaper ambient CPU pass. Evidence `.artifacts/evidence/visualizers/bubble/particle_glow/20261107_particle_glow/`
 (`before/` vs `after/` 4x crops, flicker strips).
 
-- [~] Operator eyes on the particle glow.
+- [ ] Lead review on the `before/` vs `after/` 4x crops and flicker strips (rendered): the particle glow.
 
 ## 9. Studio for every visualizer (replaces the builders)
 
@@ -1726,43 +1832,48 @@ change.
 - [ ] Finish Waveform Studio acceptance first (section 7.1), then extract any remaining Waveform-shaped assumptions.
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and Neon
   Lake (`shockwave_grid`) built, Spline Curve (`devcurve`) and Oscilloscope built below):
-  - [~] Neon Lake awaits operator acceptance (evidence
+  - [ ] Neon Lake awaits the lead's acceptance review on its rendered Studio frames (evidence
     `.artifacts/evidence/visualizers/shockwave_grid/studio/20261107_studio/`, Presets 1 and 3): recorded engine
     answers like Spectrum, the shared framed camera, no wallpaper; its terrain is painted with the Studio's shared
     brush (evidence `.artifacts/evidence/studio/completion/20261106_completion/brush/`; the retired Settings editor's
     3/4 view Sun / Moon drag is now Position X / Y / Z only).
-  - [~] Extruded Spectrum awaits operator acceptance (evidence
+  - [ ] Extruded Spectrum awaits the lead's acceptance review on its rendered Studio frames (evidence
     `.artifacts/evidence/visualizers/extruded_spectrum/studio/20261107_studio/`); its cast-shadow rows stay out of the
     Studio while they are unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`).
-  - [~] Spectrum awaits operator acceptance (evidence `.artifacts/evidence/visualizers/spectrum/studio/20261105_studio/`).
-  - [~] Operator look at the migrated Settings pages, one sentence per mode: every mode's Settings body is now the
-    preset row and the Studio launcher (operator 6 Nov: migrate fully once parity+ is proven;
-    `tests/test_visualizer_studio_parity.py`).
+  - [ ] Spectrum awaits the lead's acceptance review on its rendered Studio frames (evidence
+    `.artifacts/evidence/visualizers/spectrum/studio/20261105_studio/`).
+  - [ ] Lead review of the rendered Settings pages (the real SettingsDialog, off-screen), one sentence per mode:
+    every mode's Settings body is now the preset row and the Studio launcher (operator 6 Nov: migrate fully once
+    parity+ is proven; `tests/test_visualizer_studio_parity.py`).
 
-**Spline Curve Studio built (6 Nov), awaiting operator acceptance**
+**Spline Curve Studio built (6 Nov), awaiting the lead's acceptance review**
 
 `ui/studio/devcurve_adapter.py`, registered; Spline Curve's preset row shows Open Studio and no Edit Preset. Evidence
 `.artifacts/evidence/visualizers/devcurve/studio/20261107_studio/` (Deep Blue on Rag Doll, Neon Skyline on Human: every
 workspace with the live traces, plus the node rows).
 
-- [~] Operator to judge the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity.
-- [~] Operator to judge the Layers workspace (one panel per layer).
-- [~] Operator to judge whether the Audio Analysis group earns its place (re-analysed from PCM through the production
-  DSP, every offered control moves Spline Curve's frame; AGC Strength and Output Lift read nothing and are now hidden:
-  `Docs/Reference/Visualizer_Reference.md` -> Audio Analysis controls per mode).
+- [ ] Lead review on the rendered Studio frames: the per-layer Body / Accent / Swell traces as the way to read the
+  reworked reactivity.
+- [ ] Lead review on the rendered Studio frames: the Layers workspace (one panel per layer).
 
-**Oscilloscope Studio built (6 Nov), awaiting operator acceptance**
+Whether the Audio Analysis group earns its place is a decision in section 2: it is re-analysed from PCM through the
+production DSP, every offered control moves Spline Curve's frame; AGC Strength and Output Lift read nothing and are
+now hidden (`Docs/Reference/Visualizer_Reference.md` -> Audio Analysis controls per mode).
+
+**Oscilloscope Studio built (6 Nov), awaiting the lead's acceptance review**
 
 `ui/studio/oscilloscope_adapter.py`, registered. Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor
 on Human, Preset 3 Lissajous on Rag Doll: every workspace with the live traces). Recorded engine answers with the
 capture history recorded by identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` section 3).
 
-- [~] Operator to judge Level / Afterglow / Ghosts / Flare / Drive / Tone as the way to read the beam.
-- [~] Operator to judge the three workspaces.
-- [~] Operator to judge whether the Audio Analysis group earns its place (re-analysed from PCM through the production
-  DSP, every offered control moves Flare and Drive, and Bar Count, Block Size and Input Gain also move Tone: the trace
-  itself is the raw capture, but the beam's reactions are not; `Docs/Reference/Visualizer_Reference.md` -> Audio
-  Analysis controls per mode).
+- [ ] Lead review on the rendered Studio frames: Level / Afterglow / Ghosts / Flare / Drive / Tone as the way to
+  read the beam.
+- [ ] Lead review on the rendered Studio frames: the three workspaces.
+
+Whether the Audio Analysis group earns its place is a decision in section 2: it is re-analysed from PCM through the
+production DSP, every offered control moves Flare and Drive, and Bar Count, Block Size and Input Gain also move Tone
+(the trace itself is the raw capture, but the beam's reactions are not; `Docs/Reference/Visualizer_Reference.md` ->
+Audio Analysis controls per mode).
 
 **Edit Preset deleted (6 Nov)**
 
@@ -1771,8 +1882,8 @@ gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with Open 
 To <Preset> (`Docs/Reference/Visualizer_Studio.md` section 4). `tools/flicker_test.py` keeps its own historical mock of
 the old row.
 
-- [~] Operator look: Open Studio's place in the preset row.
-- [~] Operator look: the Save To flow.
+- [ ] Lead review on a render of the real SettingsDialog (off-screen): Open Studio's place in the preset row.
+- [ ] Lead review on a render of the real SettingsDialog with its popup patched: the Save To flow.
 
 **Operator side requests (6 Nov, "important eventually"; queue after the running work)**
 
@@ -1781,15 +1892,16 @@ the old row.
   - [ ] Make them findable (name / workspace / tooltip).
   - [ ] Consider a quiet -> peak History Speed under the flow rule: music pushes history faster, smoothly; knot spacing
     and the anchored ends stay continuous.
-- [~] **Studio clips are seamless loops (6 Nov), awaiting the operator's listen and look.** The Studio plays no sound:
-  the clips are the capture stream the analysis reads, so "listen" means the music-reactive picture across the wrap.
-  Contract `Docs/Reference/Visualizer_Studio.md` section 3 "Studio clips"; evidence
-  `.artifacts/evidence/studio/clip_loop/20261106_clip_loop/`. Operator:
-  - [~] Let any Studio loop on each of the three clips and watch the wrap (end of the 13 s timeline): the preview
-    should not jump, empty, or re-start its motion.
-  - [~] Rag Doll has no steady beat, so its seam is the least certain: judge it first.
-  - [~] The clips now start and end mid-song at the loop points chosen (Human and Growing Pains on their groove), not
-    at the earlier quiet-to-hot windows; say if the quiet-to-hot arc matters more than the seam.
+- [ ] **Studio clips are seamless loops (6 Nov), awaiting the lead's review of the wrap.** The Studio plays no
+  sound: the clips are the capture stream the analysis reads, so the check is the music-reactive picture across the
+  wrap. Contract `Docs/Reference/Visualizer_Studio.md` section 3 "Studio clips"; evidence
+  `.artifacts/evidence/studio/clip_loop/20261106_clip_loop/`. Lead:
+  - [ ] Review a rendered loop WebP of each of the three clips across the wrap (end of the 13 s timeline): the
+    preview should not jump, empty, or re-start its motion.
+  - [ ] Rag Doll has no steady beat, so its seam is the least certain: judge it first.
+  - [ ] The clips now start and end mid-song at the loop points chosen (Human and Growing Pains on their groove), not
+    at the earlier quiet-to-hot windows. Whether the quiet-to-hot arc matters more than the seam is a decision in
+    section 2.
 
 **Studio chrome: Awaiting Validation**
 
@@ -1797,17 +1909,18 @@ Active material work is section 1A, item 1.7; rounded native corners remain open
 `Docs/Reference/Visualizer_Studio.md` (Chrome and theme). Off-screen Studio evidence cannot establish native DWM
 composition; preview-overlay backing stays cheap and scene colours stay independent of chrome.
 
-- [~] Operator-check the shared semantic material on panels, workspace tabs, section headers, tools and instrument
-  wells.
-- [~] Native snap/resize/maximise.
-- [~] Light-theme shadows.
+- [ ] Studio run on D1 (1B.14 harness), lead review of grabbed frames: the shared semantic material on panels,
+  workspace tabs, section headers, tools and instrument wells.
+- [ ] Same run, driven by messages: native snap/resize/maximise.
+- [ ] Same run on a light theme: light-theme shadows.
 
-**Studio drag lag fixed (6 Nov), awaiting the operator's feel check**
+**Studio drag lag fixed (6 Nov), awaiting the lead's drag check**
 
 Drags preview once per frame and re-show only the dragged key (`Docs/Reference/Visualizer_Studio.md` "Drags are
 batched"); evidence `.artifacts/evidence/studio/drag/20261106_drag/` (per move 56 ms -> 0.07 ms on Waveform).
 
-- [~] Operator's feel check of drags.
+- [ ] Studio run on D1 (1B.14 harness), drags posted by messages with `tools/studio_drag_profile.py`: the feel of
+  drags (per move on the 0.07 ms scale of the evidence above).
 - [ ] Side defect (not measured): Bubble's, Extruded Bubble's and Sphere's evaluators still replay exactly in one
   evaluation from the fixture start, without the frame budget and checkpoints Waveform and the engine-answer modes now
   share (`ui/studio/exact_replay.py`). Measure with `tools/studio_drag_profile.py` and move them onto `ExactReplay`
@@ -1830,15 +1943,15 @@ section 4 ("Repaint at the reveal"). This is the third round of this defect.
 - [ ] Acceptance needs the operator's field log plus a fix proven on the real SettingsDialog path, never a stand-in
   only. If the lines show another owner, fix that owner from them.
 
-**Camera reset on every edit and the exit double flicker fixed (operator 8 Nov), awaiting the operator's look**
+**Camera reset on every edit and the exit double flicker fixed (operator 8 Nov), awaiting the lead's D1 run**
 
 On a curated preset (Include current camera view on, the default) each commit used to re-hydrate the framed camera
 editor and drop the orbit committed into the draft (Neon Lake, Extruded Bubble, Waveform Ribbon); Settings now appears
 beneath the Studio and comes forward once it is gone (`Docs/Reference/Visualizer_Studio.md` section 4 "One transition
 out").
 
-- [~] Operator on screen: orbit, then drag sliders (the view stays).
-- [~] Close the Studio by every path (one clean change to Settings, no swap).
+- [ ] Studio run on D1 (1B.14 harness), lead review of grabbed frames: orbit, then drag sliders (the view stays).
+- [ ] Same run: close the Studio by every path (one clean change to Settings, no swap).
 
 **Per-session memory growth in the Studio (side defect, 6 Nov; the clip caches ruled out 7 Nov)**
 
@@ -1854,23 +1967,22 @@ driver heaps), not Python.
 - [ ] A native heap comparison (UMDH or VMMap) across 30 sessions; bar: a trend, not run-to-run noise, before any
   fix.
 
-**Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the operator's feel check**
+**Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the lead's drag check**
 
 The cause was the inspector's ScrollView stealing the press on a vertical wobble; every drag instrument in a scrolling
 panel now sets `preventStealing: true` (`Docs/Reference/Visualizer_Studio.md` "Drags are batched";
 `tests/test_studio_drag_coalescing.py`, with a negative control).
 
-- [~] Operator's feel check: a slider drag holds through a wobble on every mode.
+- [ ] Studio run on D1 (1B.14 harness), a drag with a vertical wobble posted by messages: a slider drag holds
+  through a wobble on every mode.
 
-**No automatic switch to Custom (operator 6 Nov), awaiting the operator's look**
+**No automatic switch to Custom (operator 6 Nov), awaiting the lead's review**
 
 A Studio edit on a curated preset is held, with nothing saved and the preset still selected; closing, switching preset
 or switching mode asks *Unsaved Preset Changes* (spec: `Docs/Reference/Visualizer_Studio.md` section 4 "Canonical
 save"; tests `tests/test_studio_preset_row_and_save_to_preset.py`).
 
-- [~] Operator: the prompt's wording and buttons over a real Studio.
-- [~] Operator: Save As New Preset's file dialog lands in the right folder in an installed build (ProgramData's shared
-  preset tree).
+- [ ] Lead review of a grabbed frame (D1 run, 1B.14 harness): the prompt's wording and buttons over a real Studio.
 
 **Neon Lake: drag the Sun/Moon in the Studio preview**
 
@@ -1878,14 +1990,15 @@ save"; tests `tests/test_studio_preset_row_and_save_to_preset.py`).
   dragged; it is now placed with Position X/Y/Z only. Give the Studio preview a direct drag for it: the same pick
   through the production camera as the terrain brush, one undoable commit on release.
 
-**Operator look: the Studio terrain brush**
+**Lead review: the Studio terrain brush**
 
 Brush button or B in the viewport toolbar; Raise, Lower, Flatten, Water; left-drag paints, right/middle drag pans.
 Evidence `.artifacts/evidence/studio/completion/20261106_completion/brush/`. Audio Analysis now moves the Spline
 Curve, Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Voxel Sphere previews on recorded clips (sensitivity sheet
 `audio_analysis/`); Spline Curve normalises its body, so it barely shows, as live.
 
-- [~] Operator look at the terrain brush in the Studio.
+- [ ] Studio run on D1 (1B.14 harness), strokes posted by messages, lead review of grabbed frames: the terrain brush
+  in the Studio.
 
 ## Operator execution and evidence rules
 
@@ -1896,8 +2009,5 @@ No memory updates without an explicit request.
 ADDITION & SIDE QUEST BOX
 Never Remove This Box. Restore It If Removed. Only Remove Contents As you place them in the active plan as real live checklist targets.
 ####################
-
-
-
 
 ###################

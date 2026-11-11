@@ -25,8 +25,8 @@ Admissions:
 * The Visualizer's process path (native core P2b). The production Visualizer owner runs
   its Visualizer on the engine worker (``WorkerType.VISUALIZER``: capture, DSP and the
   tick out of process; the owner sends control edges and presents the worker's frames)
-  by DEFAULT on Windows (the operator's decision of 8 Nov, after gates 3 and 4), and in
-  process on Linux for the current audit stage (later Linux default admission is ordered in Current_Plan.md)
+  by DEFAULT on every platform (Windows by the operator's decision of 8 Nov, after gates 3
+  and 4; Linux since the H3 source flip of 11 Nov, where the path has never run: Linux_Plan.md)
   (:func:`visualizer_engine_worker_platform_default`). In process stays the automatic
   fallback when the worker fails (``engine_worker_link``'s bounded recovery). Two
   diagnostic tokens choose the path for A/B runs, whatever the platform:
@@ -68,7 +68,7 @@ class ExperimentFlags:
     profile_cpu: bool = False
     mc_window_splash: bool = False
     log_dir: str | None = None
-    # The Visualizer's process path: None follows the platform default (the engine worker on Windows), True is
+    # The Visualizer's process path: None follows the platform default (the engine worker on every platform), True is
     # ``--viz-engine-worker``, False ``--viz-in-process`` (tests and tools state their path the same way).
     visualizer_engine_worker: bool | None = None
 
@@ -246,13 +246,15 @@ def visualizer_switch_telemetry_admitted() -> bool:
 
 
 def visualizer_engine_worker_platform_default() -> bool:
-    """Whether the Visualizer runs on the engine worker when no path was chosen: on Windows (the measured, accepted
-    platform: gates 3 and 4, the frozen checks), not on Linux in this audit stage. Linux's later default admission is
-    ordered in ``Linux_Plan.md`` without a proving prerequisite. Read at call
-    time from ``core.platform_paths`` (the platform owner)."""
-    from core import platform_paths
-
-    return bool(platform_paths.IS_WINDOWS)
+    """Whether the Visualizer runs on the engine worker when no path was chosen: on every platform the product
+    supports. Windows is the measured, accepted platform (gates 2 to 4, the frozen checks). Linux has the same
+    default since the H3 source flip (11 Nov 2026, the operator's 8 Nov decision: no Linux machine, no proving step),
+    and **nothing of the worker path has ever run there**: the session's named wake pipe, the worker's spawn under
+    forkserver, the shared mapping's tracker and Pulse capture in the worker are source-level only
+    (``Linux_Plan.md``, Phase 4). A worker that cannot configure or start leaves the activation in process
+    (``engine_worker_link``'s bounded fallback, logged with its reason), and ``--viz-in-process`` chooses that path
+    outright. This stays a function so a platform can be taken off the worker in one place."""
+    return True
 
 
 def visualizer_engine_worker_admitted() -> bool:

@@ -28,8 +28,10 @@ whole layout with ``use_root``. PNG frames exist only in owner scratch (``scratc
 when the tool succeeds, KEPT when it fails (its path is printed for debugging) until ``prune-scratch`` clears it.
 ``tests/test_artifact_paths_contract.py`` keeps tools honest.
 
-One layout per clone: in a linked git worktree (an agent's checkout) the layout resolves to the MAIN checkout's
-``.artifacts``, so evidence survives the worktree and every agent's output lands in one place.
+One layout per checkout: the layout resolves to the ``.artifacts`` of the checkout this file runs from (the
+repository root of the running tool), a linked git worktree's own included, so a worktree agent needs no redirect and
+its evidence is the lead's to copy into the main checkout when merging. ``main_checkout`` still names the main
+checkout for inputs that live only there (the operator's recordings and evidence chest under ``logs/``).
 
 Not evidence, and not owned here: product assets (``assets/``, ``release/``, ``presets/``), test fixtures
 (``tests/goldens``, ``tests/fixtures``), the application's own logs (``logs/*.log``, the frame trace) and the
@@ -70,7 +72,7 @@ def main_checkout(repo: Path = REPO_ROOT) -> Path:
     return repo
 
 
-ARTIFACTS_ROOT = main_checkout() / ".artifacts"
+ARTIFACTS_ROOT = REPO_ROOT / ".artifacts"
 WEBP_ROOT = ARTIFACTS_ROOT / "webp"
 EVIDENCE_ROOT = ARTIFACTS_ROOT / "evidence"
 SCRATCH_ROOT = ARTIFACTS_ROOT / "scratch"

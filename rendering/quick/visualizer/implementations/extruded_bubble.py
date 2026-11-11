@@ -37,6 +37,7 @@ from rendering.gl_programs.extruded_bubble_scene import (
     SPECKS_FULL, cluster_instances, wake_instances, physical_camera, speck_amount,
     glint_proxies, hero_shell_instance, light_on_screen, ray_motion, ray_strength, scene_knobs, screen_streak,
 )
+from core.settings.framed_camera import effective_aperture_scale
 from core.settings.visualizer_paths import admit_path, world_point
 from rendering.gl_programs.scene3d import scene3d_detail
 from rendering.quick import gl_query
@@ -93,12 +94,12 @@ def _near_spread(height: int) -> float:
     return _NEAR_SPREAD * height / 941.0
 
 
-def _optical_height(parameters, presentation, width: int, height: int) -> float:
+def _optical_height(parameters, aperture_scale: float, width: int, height: int) -> float:
     """Pixel height of the authored (canonical) aperture: the card height over the aperture the projected lens really
-    has (``effective_aperture_scale``: the edge-resize aperture, narrowed only past the framed horizontal cap)."""
-    from core.settings.framed_camera import effective_aperture_scale
+    has (``effective_aperture_scale``: the edge-resize aperture ``aperture_scale``, narrowed only past the framed
+    horizontal cap)."""
     aperture = effective_aperture_scale(float(parameter(parameters, "extruded_bubble_camera_fov")), width / height,
-                                        framed_aperture_scale(presentation))
+                                        aperture_scale)
     return height / aperture
 
 
@@ -333,6 +334,8 @@ class QuickExtrudedBubbleRenderer:
         self._uniforms = _Uniforms()
         self._knobs_for: object = None
         self._knobs: dict[str, object] = {}
+        self._optical_for: tuple[int, int, float] | None = None
+        self._optical_px = 0.0
 
     @property
     def has_resources(self) -> bool:
@@ -374,7 +377,8 @@ class QuickExtrudedBubbleRenderer:
         if not self._probe_for(parameters).warm():
             return False
         if not self._near.warm(width, height,
-                               _near_spread(_optical_height(parameters, frame.snapshot.presentation, width, height))):
+                               _near_spread(_optical_height(parameters, framed_aperture_scale(frame.snapshot.presentation),
+                                                            width, height))):
             return False
         return self._target.warm((width, height), samples, overlay=True, bloom=True, depth_texture=True,
                                  background=True, oit=True, hdr=True)
@@ -391,9 +395,17 @@ class QuickExtrudedBubbleRenderer:
         if width <= 0 or height <= 0:
             return
         parameters = state.parameters
-        optical_height = _optical_height(parameters, presentation, width, height)
+        aperture_scale = framed_aperture_scale(presentation)
         if parameters != self._knobs_for:
             self._knobs, self._knobs_for = scene_knobs(parameters), parameters
+            self._optical_for = None
+        # The near-field reference height changes only with the lens (a parameter), the card size or its aperture:
+        # recomputed on those edges, never per frame at rest.
+        optical_for = (width, height, aperture_scale)
+        if optical_for != self._optical_for:
+            self._optical_px = _optical_height(parameters, aperture_scale, width, height)
+            self._optical_for = optical_for
+        optical_height = self._optical_px
         knobs = self._knobs
         samples = _scene_samples(parameters)
         r = self._resources
@@ -414,7 +426,7 @@ class QuickExtrudedBubbleRenderer:
             pan_y=float(parameter(parameters, "extruded_bubble_scene_pan_y")),
             position_offset=tuple(parameter(parameters, "extruded_bubble_camera_position")),
             fov_y_degrees=fov_y, surface_bound=knobs["mode"] == "surface",
-            aperture_scale=framed_aperture_scale(presentation))
+            aperture_scale=aperture_scale)
         if knobs["mode"] == "deep":
             to_emitter = tuple(float(p) - float(e) for p, e in zip(knobs["light_source"], eye))
             distance = math.sqrt(sum(v*v for v in to_emitter))

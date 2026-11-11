@@ -21,6 +21,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 lightNoise;
     vec4 glassLegibility;
     vec4 panelLimits;
+    float panelCeiling;   // dark ink: the panel's furthest lift toward white (SurfaceContrast.panelCeiling)
 };
 out gl_PerVertex { vec4 gl_Position; };
 void main() {

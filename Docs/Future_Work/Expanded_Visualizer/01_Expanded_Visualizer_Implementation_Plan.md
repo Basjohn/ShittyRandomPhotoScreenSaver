@@ -9,8 +9,10 @@ corrected where the review found drift.
 gate below was superseded when the operator admitted Expanded Visualizer work. The canonical live authority
 is `Current_Plan.md` §1 step 3 and §1A, not historical unchecked implementation boxes in this detailed plan.
 M1/M2, the overlay and Fullscreen Edit functionality, and the M4 covered-display admission implementation
-have landed; M2b's full width-ratio DSP transaction, M4 GPU-load measurements, M5 lifecycle evidence and M6
-4K acceptance are not thereby completed. The original milestones remain as design/evidence checklists.
+have landed, as have (11 Nov) Edit beside the view, Now Playing on the ordinary Edit handlers with the shared and
+the optional overlay seek bar, and the full-display glyphs relative to the Visualizer's display with the
+expanded-to-expanded move between displays; M2b's full width-ratio DSP transaction, M4 GPU-load measurements, M5
+lifecycle evidence and M6 4K acceptance are not thereby completed. The original milestones remain as design/evidence checklists.
 Do not restart earlier implementation phases or claim that an untested later gate passed.
 **Original entry-gate rationale (5–7 Nov, historical):** Waveform physical acceptance and P-A host
 extraction preceded admission. Later 3D work still follows the active `Current_Plan.md` order.  
@@ -322,7 +324,7 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 ### D4. Monitor transfer / loss
 
 - [ ] Resolve true physical destination identity, participation, new DPR/size/refresh, display-local wallpaper status, OSD presence and whether the destination is already under any takeover.
-- [ ] Perform a single **source collapse + target preparation + existing `transfer_visualizer_to`/manager transfer + target expand** transaction. No duplicate renderer or controller in the overlap. If target cannot be preflighted, preserve source intact rather than strand the visualizer.
+- Landed (`32279216`, `ExpandedDisplayCoordinator.expand_on_display`, `QuickCustomLayoutOwner.move_visualizer_to_display`): the full-display glyph's move is one **source collapse + target preparation + existing manager transfer + target expand** transaction; a refused move re-expands the source. Mixed-DPI evidence stays with M5.
 - [ ] Existing `QuickDisplayUnit.attach_visualizer_owner/detach_visualizer_owner` and `DisplayManager._transfer_quick_visualizer_unit` retain exact retirement ownership; add rollback fences for *both* display takeover scopes.
 - [ ] Source widgets/transition eligibility restore; target widgets/transition eligibility suppress. Other displays unaffected.
 - [ ] New target viewport uses local real logical and physical geometry and camera reflow; no artificial scaling from the source display or writes to authored preset coordinates.
@@ -332,9 +334,10 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 
 - [ ] Initial scene admission resolves mode and monitor **first**, then expanded intent; reveal coordinator gates all new retained roots before exposure. A persisted expanded intent must never cause a cold ordinary-card flash.
 - [ ] Settings opens using current `on_settings_requested`, complete teardown and destruction barrier. The *intent* persists in profile settings. On return, only the new generation may re-admit expanded state; no callbacks from prior QML objects.
-- [ ] Edit entry from expanded stays expanded and opens Fullscreen Edit (M3c; operator 8 Nov, superseding the
-  collapse-on-Edit rule M1 implemented) on the expanded display; Edit entered on another display edits that display
-  while the view stays expanded (plan 1B.1, M3c "Edit beside the view"). **If Edit has an active unsaved draft when expansion is requested, prompt/resolve with the current session policy; no implicit discard.** Returning from Edit restores expanded intent only after editor exit and correct readiness, not during drag.
+- Landed (M3c, `9be5024f`): Edit entry from expanded stays expanded and opens Fullscreen Edit on the expanded display;
+  Edit entered on another display edits that display while the view stays expanded (plan 1B.1, M3c "Edit beside the
+  view"); an unsaved draft is never discarded or saved implicitly, only the session's own Save or Cancel ends it.
+- [ ] Returning from Edit restores expanded intent only after editor exit and correct readiness, not during drag.
 - [ ] Terminal exit releases HUD animations, every local lease, visualizer and GL resources with existing exact retirement; preserve settings but not runtime references.
 - [ ] Restoration on startup/Settings and topology change is idempotent, bounded and has a documented safe state if eligible mode is no longer available.
 
@@ -562,7 +565,8 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   `ModeRequested`; the double-click cycle -> `ModeCycleRequested`; mode and preset completions -> `ModeActivated`;
   Edit start -> `EditEntered` before capture (immediate collapse), Save/Cancel -> `EditExited`; an ordinary CUSTOM
   transfer -> one ordinary transfer transaction. While the view is (or is becoming) display-wide, direct Alt
-  gestures, the Edit hover glyphs and display transfers are refused (expanded transfer is M5).
+  gestures, the Edit hover glyphs and display transfers are refused (expanded transfer is M5; the glyph's
+  expanded-to-expanded move landed with `32279216`, see M3c).
 - *Glyph.* `VisualizerPresentation.qml` `visualizerExpandGlyph`: vector arrow (↗, turned to ↙ when expanded), at
   the far corner of the card's bottom-right glyph row (below), Reset Camera's admission and hover fade, a delayed
   "FULL DISPLAY" / "EXIT FULL DISPLAY" tip above the row, right-aligned on the glyph, consumes its own presses
@@ -600,7 +604,7 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   coordinator) V does nothing, like the glyph.
 - *Reducer additions.* `ModeCycleRequested` (the cycling rule, §0.6) and `OwnerRetired` (reload, Visualizer off,
   failed construction: the state dies, the intent persists).
-- *Not M2:* fades of the other widgets (M3), wallpaper policy (M4), expanded transfer (M5), the Spectrum bar count
+- *Not M2:* fades of the other widgets (M3), wallpaper policy (M4), expanded transfer (M5; the glyph's move landed with `32279216`), the Spectrum bar count
   (M2b). Until M2b Spectrum's bars widen with the card.
 - *Gate 2 evidence:* `tools/expanded_visualizer_evidence.py` (digests through the production owner for every capable
   mode, a leak negative control, the ordinary round trip, hidden production-host renders); receipts in
@@ -1067,7 +1071,7 @@ can most geometry normally."
   (traces and the invariant walk with the new entry), `tests/test_custom_layout_session.py`,
   `tests/test_custom_layout_contract.py` (held copies against the global Edit's result). Owed: the operator's
   physical two-monitor check.
-- *Full-display glyphs relative to the Visualizer's display (operator, 12 Nov; plan 1B.12, decided; supersedes the
+- *Full-display glyphs relative to the Visualizer's display (operator, 11 Nov; plan 1B.12, decided; supersedes the
   absolute form of 11 Nov).* The first form offered up-left for "Display index 0" and up-right for index 1 from
   whichever display the card was on; it is gone (no by-index route remains). Now, for consistency with three or more
   monitors, the row's full-display glyphs are relative to the display the Visualizer is on:
@@ -1229,7 +1233,8 @@ can most geometry normally."
 **Milestone 5 | Mode/monitor/Settings/Editor transactional lifecycle**
 
 - [ ] Test capable->capable (synthetic second capable descriptor fixture until another real mode opts in), capable->incapable, failed mode activation, mode-cycle double-click, context-menu mode and preset middle-click.
-- [ ] Cross-display transfer at different DPI/size/refresh retains **one** controller, DSP lane, mode, authored state and exact owner retirement; source restored, target expanded.
+- Landed (`32279216`): the expanded-to-expanded move between displays (source restored on a refused move, target expanded; M3c, 1B.12).
+- [ ] Cross-display transfer at different DPI/size/refresh retains **one** controller, DSP lane, mode, authored state and exact owner retirement; evidence at mixed DPI/size/refresh and the operator's two-monitor check.
 - [ ] Cold launch expanded, repeat Settings open/close, active CUSTOM draft Save/Cancel, monitor hotplug/unplug/restart and terminal shutdown.
 - [ ] **Gate 5:** deterministic event trace and resource-count proofs after multiple cycles; zero stale observer actions or leaking Qt/GL resources.
 
