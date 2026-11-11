@@ -491,91 +491,148 @@ pan-capable Visualizer card; everywhere else the menu opens on press exactly as 
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
-These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it.
-Each confirmed slice gets its own reviewed checkpoint. Keep material changes (1.7) in a separate checkpoint.
+These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it. Live
+checklist: one box per open step. Each confirmed slice gets its own reviewed checkpoint; keep material changes
+(1.7) in a separate checkpoint.
 
-- [~] **1.0 Awaiting Validation:** operator-check Rotate in every mode except Sphere in ordinary/fullscreen Edit,
-  including the rectangle/quarter-turn glyph against Reset Camera. Actual renderer pixels at non-square extents,
-  prepared Scene3D resources, per-mode Save/Cancel and all Studio frame builders have focused proof; the physical
-  stage and camera remain fixed. Extruded Spectrum retains its frameless overflow policy.
-- [~] **1.0b Awaiting Validation:** operator-check Studio's Rotate control (every mode except Sphere), upright
-  handle labels and rotated brush/drag feel. Off-screen proofs cover non-square production pixels, input transforms,
-  preparation barriers and canonical saves. Preview orientation is per-open state, separate from camera/artwork
-  and desktop CUSTOM orientation; Copy Frame captures it.
-- [ ] **1.1 Awaiting Logs:** no direct mode-switch cause in the supplied archive. On recurrence, correlate the
-  reported time, prior/result mode, selected preset and runtime generation with the existing mode-transition owner
-  and frame trace; distinguish explicit selection, enabled-mode normalization and Settings restoration first.
-- [~] **1.2-1.3 Frozen-install validation only:** after the operator accepted the Studio S launch,
-  live-camera handoff and Save Camera repair on 10 Nov, the remaining test is on freshly installed
-  Standard/MC builds as an ordinary Windows user. Confirm the installer grants Modify on the shared
-  ProgramData Visualizer preset tree **and its existing files**, then Save/Save Camera over a shipped
-  preset, Save As and reopen. Source-level file/Qt checks do not establish installed ACLs.
-  Durable behavior: `Docs/Reference/Visualizer_Studio.md`; original evidence:
-  `Docs/Audits/Studio_Camera_And_Fullscreen_Overlay_Self_Audit_2026-11-09.md` and
-  `Docs/Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md`.
-- [~] **1.4-1.5 Remaining fullscreen visual acceptance:** operator-check Media Bar/Floating
-  Glyphs styles, long metadata fitting, multiline Edit boxes and optional album, including Save/Cancel.
-  The parent artwork-border resize, dynamic inward left/right layout and unchanged-artwork edit fade are
-  accepted (10 Nov) and live in the fullscreen presentation contract, not reopened here. Existing
-  Settings/input/text-layout/Edit checks are green; actual Windows full-layout acceptance is still owed.
-- [~] **1.6 Awaiting Validation:** Achievement Pulse counted disabled provider fields as painted capsule rows;
-  replaying the saved payload on Edit entry then changed the canvas. The enabled-row regression is green.
-  Check child placement after Settings/fullscreen return with `--geo`; other families' extent floors are static.
-- [ ] **1.7a Studio legibility follow-up:** the panel guard raises broad light surfaces nearly opaque to carry
-  accent/focus marks. Resolve intended density once, then minimally correct runtime semantic ink against its actual
-  composed locations; retain authored/scene colours and prove controls/traces on final off-screen wallpaper renders.
-- [~] **1.7 Awaiting Validation (separate reversible slice):** operator-compare the supplied widget material
-  screenshots with current cards, especially the good Glass/Frosted volume surfaces, Glass inset/distortion, and
-  Studio panels/tabs/headers/wells. Exercise Settings Opacity Adjust and Widget Opacity Adjust in Style Overrides
-  (-1..1, neutral 0). Contracts and evidence: `Docs/Architecture/Card_Surface_Materials.md`,
-  `Docs/Architecture/Settings_Theme_Architecture.md`, `Docs/Reference/Visualizer_Studio.md`.
-  Final native Settings checks use both exact operator wallpapers under
-  `C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET`; transparency is visible and sampled QLabel cores pass.
-  Final Studio renders are never-shown alpha compositions, without native DWM proof. Check live Studio material
-  switching/snap/resize and the remaining unsampled control/delegate inks. Small isolated GPU checks show an active
-  increase (largest raw whole-frame rise about 0.020 ms for Glass), not performance neutrality or load acceptance.
-  Native rounded corners remain open at 1.9; do not equate material transmission with a clipping fix.
-- [ ] **1.7b Material-aware widget border (near-term, independent material slice; 10 Nov):** extend
-  the existing shared card `MaterialSurface` shader's rounded SDF to shade the **border ring** using the same
-  display-local blurred backdrop already sampled by the fill; never create a second capture/blur, extra
-  material pass, timer or per-frame Python owner. A material-enabled card inherits its surface material for
-  the border **by default**. In `Widgets → General → Style Overrides`, add **Border Material:** Inherit Surface
-  (default) / Flat / Acrylic / Glass / Frosted / Mica / Smoked (explicit overrides), plus **Border Opacity Adjust** (-1..+1, persisted neutral 0),
-  following the existing `core/settings/surface_opacity.py` adjustment semantics and save/flush path. Zero is
-  exactly the authored material/theme baseline, not an always-on override; nonzero adjusts border density
-  independently of `Widget Opacity Adjust` and the existing family border-opacity controls. Retain the
-  authored theme border colour/contrast as the ring's tint/edge authority and border width/radius as its
-  geometric authority. On Normal or Flat, retain today's Rectangle border **pixel-identically**; on active
-  material, remove overdraw by that Rectangle only for the ring. Explicitly selecting a different
-  border material still samples the same shared backdrop and draws through the same card shader
-  (ring-local parameters only; no independent material item). Must remain clear against the fill,
-  including on Glass and bright wallpapers; validate stroke AA, translucent corners, 100/150/200% DPR,
-  normal/material switching, card opacity/theme inheritance, Style Overrides reset, and one focused GPU
-  before/after on busy cards. Include the existing framed Visualizer card if its surface is active, using
-  its own border authority; material children/Context Menu do not inherit this automatically where their
-  independent stroke semantics differ. Preserve older themes and settings via neutral defaults.
-  The shader currently still has `plateInset = borderWidth + 2.5/3 px`, creating the contrasting
-  interior rim the operator asked to eliminate; coordinate this same-pass geometry cleanup with the new
-  border-ring treatment. Extend the existing material face to the inside of the real border, without
-  changing content padding or inventing a separate plate system.
-  Regenerate the bundled `.qsb` from the shader source using the existing Qt toolchain; don't ship
-  uncompiled GLSL changes or assume every QRhi backend accepts an untested shader variant.
-  Contract: `Docs/Architecture/Card_Surface_Materials.md` §3.2.1.
-- [~] **1.8 Awaiting Validation:** operator-check Gmail and Reddit/Reddit2 column gestures: top grips reorder;
-  solid-span endpoints change start/width and truncation. Retained-QML proof covers transformed opposite-edge
-  stability, all-row updates, collision policy, Save/Cancel, Undo, slots and fresh-profile hydration.
-- [ ] **1.9 Settings native corner clipping (next step is 1B.9: the operator's +2 px border allowance):** find a composition treatment that actually clips Accent material
-  at the rounded silhouette. Both Qt and post-Accent native regions were rejected and reverted: all four native
-  dark/light theme/background combinations retain outside-radius material pixels at 150% DPI. Keep a separate
-  reversible fix and repeat the four-case corner/border/shadow gate before claiming improvement. Reproducer and
-  evidence: `tools/settings_native_corners.py`; `Docs/Architecture/Settings_Theme_Architecture.md`.
-  The same defect reproduces on both operator wallpapers. An inset native-child blur candidate was rejected by
-  Windows before pixels; no candidate product edge/child code ships. This needs a viable rounded composition host,
-  including input, resize/DPI, activation and lifetime proof; material transparency alone cannot close it.
-- [ ] **Side defect:** Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1012`)
-  and a test requires it. Replace that tool override with explicit CLI/sidecar admission when opening its owner.
-- [ ] **Awaiting Validation:** after focused proofs, operator checks the changed glyphs, saves in the frozen build,
-  camera/child placement round trips, long fullscreen metadata, controls and material comparisons on native pixels.
+### 1.0 Rotate in ordinary and fullscreen Edit
+
+Focused proof exists for renderer pixels at non-square extents, prepared Scene3D resources, per-mode Save/Cancel and
+all Studio frame builders; the physical stage and camera remain fixed. Extruded Spectrum retains its frameless
+overflow policy.
+
+- [~] Operator: check Rotate in every mode except Sphere, in ordinary and in fullscreen Edit.
+- [~] Operator: check the rectangle/quarter-turn glyph against Reset Camera.
+
+### 1.0b Studio Rotate control
+
+Off-screen proofs cover non-square production pixels, input transforms, preparation barriers and canonical saves.
+Preview orientation is per-open state, separate from camera/artwork and desktop CUSTOM orientation; Copy Frame
+captures it.
+
+- [~] Operator: check Studio's Rotate control in every mode except Sphere.
+- [~] Operator: check upright handle labels.
+- [~] Operator: check rotated brush/drag feel.
+
+### 1.1 Mode switch with no direct cause (Awaiting Logs)
+
+- [ ] No direct mode-switch cause in the supplied archive. On recurrence, correlate the reported time, prior/result
+  mode, selected preset and runtime generation with the existing mode-transition owner and frame trace.
+- [ ] Distinguish explicit selection, enabled-mode normalization and Settings restoration first.
+
+### 1.2-1.3 Frozen-install validation only
+
+Durable behaviour: `Docs/Reference/Visualizer_Studio.md`; evidence:
+`Docs/Audits/Studio_Camera_And_Fullscreen_Overlay_Self_Audit_2026-11-09.md` and
+`Docs/Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md`.
+
+- [~] On freshly installed Standard and MC builds as an ordinary Windows user: confirm the installer grants Modify
+  on the shared ProgramData Visualizer preset tree **and its existing files**.
+- [~] Save and Save Camera over a shipped preset.
+- [~] Save As and reopen. Source-level file/Qt checks do not establish installed ACLs.
+
+### 1.4-1.5 Remaining fullscreen visual acceptance
+
+Existing Settings/input/text-layout/Edit checks are green; actual Windows full-layout acceptance is still owed.
+
+- [~] Operator: Media Bar and Floating Glyphs styles.
+- [~] Operator: long metadata fitting.
+- [~] Operator: multiline Edit boxes and optional album, including Save/Cancel.
+
+### 1.6 Achievement Pulse child placement
+
+The enabled-row regression is green; other families' extent floors are static.
+
+- [~] Check child placement after Settings/fullscreen return with `--geo` (replaying the saved payload on Edit
+  entry must not change the canvas; disabled provider fields must not count as painted capsule rows).
+
+### 1.7a Studio legibility follow-up
+
+- [ ] Resolve the intended density once (the panel guard raises broad light surfaces nearly opaque to carry
+  accent/focus marks).
+- [ ] Minimally correct runtime semantic ink against its actual composed locations; retain authored/scene colours.
+- [ ] Prove controls/traces on final off-screen wallpaper renders.
+
+### 1.7 Material density (separate reversible slice)
+
+Contracts and evidence: `Docs/Architecture/Card_Surface_Materials.md`,
+`Docs/Architecture/Settings_Theme_Architecture.md`, `Docs/Reference/Visualizer_Studio.md`. Final native Settings checks use both exact operator wallpapers under
+`C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET`; final Studio renders are never-shown alpha compositions,
+without native DWM proof. Native rounded corners remain open at 1.9; material transmission is not a clipping fix.
+
+- [~] Operator: compare the supplied widget material screenshots with current cards, especially the good
+  Glass/Frosted volume surfaces, Glass inset/distortion, and Studio panels/tabs/headers/wells.
+- [~] Operator: exercise Settings Opacity Adjust and Widget Opacity Adjust in Style Overrides (-1..1, neutral 0).
+- [~] Operator: live Studio material switching, snap and resize.
+- [ ] The remaining unsampled control/delegate inks.
+- [ ] Small isolated GPU checks show an active increase (largest raw whole-frame rise about 0.020 ms for Glass):
+  that is not performance neutrality or load acceptance; the load measurement is §1 item 7 (card materials).
+
+### 1.7b Material-aware widget border (near-term, independent material slice; 10 Nov)
+
+Contract: `Docs/Architecture/Card_Surface_Materials.md` §3.2.1.
+
+- [ ] Extend the existing shared card `MaterialSurface` shader's rounded SDF to shade the **border ring** using the
+  same display-local blurred backdrop already sampled by the fill; never create a second capture/blur, extra
+  material pass, timer or per-frame Python owner.
+- [ ] A material-enabled card inherits its surface material for the border **by default**. In
+  `Widgets -> General -> Style Overrides` add **Border Material:** Inherit Surface (default) / Flat / Acrylic /
+  Glass / Frosted / Mica / Smoked (explicit overrides). An explicit different border material still samples the same
+  shared backdrop and draws through the same card shader (ring-local parameters only; no independent material item).
+- [ ] Add **Border Opacity Adjust** (-1..+1, persisted neutral 0), following the existing
+  `core/settings/surface_opacity.py` adjustment semantics and save/flush path. Zero is exactly the authored
+  material/theme baseline, not an always-on override; nonzero adjusts border density independently of `Widget
+  Opacity Adjust` and the existing family border-opacity controls.
+- [ ] Retain the authored theme border colour/contrast as the ring's tint/edge authority and border width/radius as
+  its geometric authority.
+- [ ] On Normal or Flat, retain today's Rectangle border **pixel-identically**; on active material, remove overdraw
+  by that Rectangle only for the ring.
+- [ ] The shader currently still has `plateInset = borderWidth + 2.5/3 px`, creating the contrasting interior rim
+  the operator asked to eliminate; coordinate this same-pass geometry cleanup with the new border-ring treatment.
+  Extend the existing material face to the inside of the real border, without changing content padding or
+  inventing a separate plate system.
+- [ ] Must remain clear against the fill, including on Glass and bright wallpapers; validate stroke AA, translucent
+  corners, 100/150/200% DPR, normal/material switching, card opacity/theme inheritance and Style Overrides reset.
+- [ ] One focused GPU before/after on busy cards.
+- [ ] Include the existing framed Visualizer card if its surface is active, using its own border authority; material
+  children/Context Menu do not inherit this automatically where their independent stroke semantics differ.
+- [ ] Preserve older themes and settings via neutral defaults.
+- [ ] Regenerate the bundled `.qsb` from the shader source using the existing Qt toolchain; do not ship uncompiled
+  GLSL changes or assume every QRhi backend accepts an untested shader variant.
+
+### 1.8 Gmail and Reddit/Reddit2 column gestures
+
+Retained-QML proof covers transformed opposite-edge stability, all-row updates, collision policy, Save/Cancel, Undo,
+slots and fresh-profile hydration.
+
+- [~] Operator: top grips reorder.
+- [~] Operator: solid-span endpoints change start/width and truncation.
+
+### 1.9 Settings native corner clipping (next step is 1B.9: the operator's +2 px border allowance)
+
+Reproducer and evidence: `tools/settings_native_corners.py`; `Docs/Architecture/Settings_Theme_Architecture.md`. Both
+Qt and post-Accent native regions were rejected and reverted: all four native dark/light theme/background
+combinations retain outside-radius material pixels at 150% DPI, on both operator wallpapers. An inset native-child
+blur candidate was rejected by Windows before pixels; no candidate product edge/child code ships.
+
+- [ ] Find a composition treatment that actually clips Accent material at the rounded silhouette: a viable rounded
+  composition host, with input, resize/DPI, activation and lifetime proof (material transparency alone cannot
+  close it).
+- [ ] Keep it a separate reversible fix.
+- [ ] Repeat the four-case corner/border/shadow gate before claiming improvement.
+
+### Side defect: Build Runner's Inno discovery
+
+- [ ] Build Runner's Inno discovery still reads `SRPSS_ISCC_PATH` (`tools/build_runner.py:1012`) and a test requires
+  it. Replace that tool override with explicit CLI/sidecar admission when opening its owner.
+
+### Awaiting Validation after the focused proofs
+
+- [~] Operator: the changed glyphs.
+- [~] Operator: saves in the frozen build.
+- [~] Operator: camera/child placement round trips.
+- [~] Operator: long fullscreen metadata and controls.
+- [~] Operator: material comparisons on native pixels.
 
 ## 2. Awaiting the operator (eyes, ears, hardware, decisions; details stay at the item)
 
