@@ -878,6 +878,14 @@ can most geometry normally."
   - Storage (1B.7d): `now_playing.artwork_scale` / `artwork_width` / `artwork_height` are retired; a stored value
     with them loads through the one normaliser's bridge into the `artwork` record
     (`Docs/Architecture/Persisted_Input_Compatibility.md`).
+- *Saved profiles (plan 1B.7h, geometry and storage).* Three profile fixtures (the canonical value with Settings
+  options only, right corners, a pre-1B.7 Fullscreen Edit profile with offsets, scale, extents and child records)
+  rendered off-screen at 100 % and 150 % with main (06cf12d7) and with 1B.7: every overlay and part rectangle is
+  identical (largest difference 0.00 px); the pixels differ only where the artwork border now takes the Media
+  widget's artwork look (the lead's narrowing of h). Evidence:
+  `.artifacts/evidence/visualizers/expanded/20261111_now_playing_contract/h_saved_profiles/` (geometry.json and
+  PNGs before/after). The Media card after every slice: within the harness's own 1-level text-crossfade noise of its
+  pre-1B.7 render, never in the seek band (`a_seekbar_extract/after_all_slices`).
 - *Seek Bar (plan 1B.7g, default off).* `now_playing.seek_bar` (Settings: Fullscreen Mode -> Now Playing -> Seek
   Bar). Now Playing draws the Media card's one seek bar (`MediaSeekBar.qml`, extracted in 1B.7a) under the metadata
   (the card's order: metadata, seek, transport), its look from `MediaPresentationModel.seekBarLook`, its fill from the
