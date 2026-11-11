@@ -161,12 +161,11 @@ P3 ports.
 - [ ] Bubble owner: define Random Group Drift's guarantee before retuning or asserting alignment;
   `test_bubble_reactivity.py::test_group_drift_aligns_non_swirl_bubble_motion[random-x]` depends on the draw.
 
-**Remaining sequence (dedicated Fable High, in this order; it reports at each numbered boundary for the lead's
+**Remaining sequence (one Opus slot, in this order; it reports at each numbered boundary for the lead's
 audit; focused proof for each).** Steps 1 and 2 of the 10 Nov sequence (M4 rendered parity, M5, L2-L5, the POSIX
 transfer lifetime) merged 12 Nov with R-184 and R-185; records: the phase-boundary audit's "11 Nov" section, the
 design and closeout docs.
 
-- [ ] Rendered parity gate green on the merge (`tests/test_visualizer_owner_render_parity.py`, running), then push.
 - [ ] Attribute the Python-call rises since the 7 Nov overhead baseline (`2026-11-07_4bb2b775.json`): +4 in 14
   Scene3D transitions and +5 to +32 in six modes, none from the native-core branch; find the commits, then
   re-record the baseline (the Spectrum +2 of 1B.4 is part of it).
@@ -296,13 +295,12 @@ shape widget is retired; shape drags are in the churn guard; Studio tooltips wra
 - [ ] Admitted later if wanted (operator's call): a pop-out larger canvas; Spline Curve's layer nodes and Voxel
   Sphere's zone boundaries on the same instrument; Shift axis lock, snapping, double-click reset.
 
-### 1B.5 Neon Lake: all visible land is brush-editable (merged 33912e5ae; refinement round in flight, Fable High)
+### 1B.5 Neon Lake: all visible land is brush-editable (merged 33912e5ae; refinement round in flight, Opus High)
 
 A stroke past the grid grows the authored grid under it invisibly (grown cells are an overlay on the generated
 landscape; an authored origin keeps horizon, detail and glow; shipped presets' terrain loads byte-identical;
 one commit and one undo per stroke; a refused state at the 257 cap). Contract: `Docs/Reference/Neon_Lake_Basin.md`.
 
-- [ ] Focused tests green on the merge (running), then push.
 - [ ] Painted growth cost: the mesh refines under one bounding box of painted cells (two far corners refine
   everything between; a fully painted 257 grid costs 5.65 ms against 1.95 ms at 65). Refine in tiles holding
   painted cells only, crack-free; report one corner, two corners and the whole grid; distance-based density if
@@ -434,7 +432,7 @@ a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels
 - [ ] Window border material: the border ring takes 1.7b's border-material treatment (one rule for cards and
   windows), inside the +2 px budget (unused: the border stays 4 px).
 
-### 1B.10 Presets (in flight: one Fable 5.2 Medium agent above the roster cap, this task only)
+### 1B.10 Presets (in flight: one Opus slot; the lead reviews every preset on pixels)
 
 Supersedes the lead's Spectrum presets 2-15 of 7 Nov (section 3). Every preset must read as unique and visually
 impressive; the agent may ask the lead for a feature or architecture a better look needs, if it is not wasteful.
@@ -700,14 +698,16 @@ answers.
 
 ## 3. Lead and agents: active, paused and queued work
 
-**Agents (operator, 11 Nov; replaces the 9 Nov roster):** the lead is orchestrator, auditor and final reviewer;
-all agent results pass that review before acceptance. At most one Fable High (complex/architectural/visual), one
-Opus 5.5 High (general high-quality work), one Opus 5.5 Medium (simpler/brute force) and one Sonnet Medium
-(documents and research only); reuse a loaded agent for related slices. Above that cap (operator, 11 Nov): one
-dedicated Fable High for the native-core sequence (§1 8b, "Remaining sequence", in its order; it reports at each
-numbered boundary for the lead's audit), and one Fable 5.2 Medium for 1B.10's presets. Agents run only the tests related to what
-they changed, never `--isolated`, never take over a display (off-screen renders and captures), and record side
-defects here instead of ignoring them. Wait for agent reports without status polling.
+**Agents (operator, 12 Nov; replaces the 11 Nov roster):** the lead (Fable) is orchestrator, auditor and final
+reviewer; all agent results pass that review before acceptance, and the lead's audits (pixel review, regressions
+re-run against the pre-change code, tests on the merge) are what keep the hand-overs sound. The other slots are
+Opus 5.5: two Opus High (complex, architectural and visual work), two Opus Medium (simpler and brute-force
+work), and one Sonnet 5.5 Medium for documents and research when needed. No Fable agents: the native-core
+sequence (section 1 item 8b), the material track (1B.8) and the presets (1B.10) run in these slots. Agents run
+only the tests related to what they changed, never `--isolated`, never take over a display (off-screen renders
+and captures), and record side defects here instead of ignoring them. Wait for agent reports without status
+polling. An interrupted agent's uncommitted work is preserved as a "WIP (handover)" commit on its branch and the
+next agent merges that branch first.
 
 Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its `[~]`
 validation steps and open side defects. Landed slices live in `Docs/Reference/Architecture_Checklist.md` (AC-01
