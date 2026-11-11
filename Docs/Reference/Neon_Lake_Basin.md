@@ -478,7 +478,11 @@ framed camera: the ray from the eye meets the CPU mirror of the drawn land (`ren
 neon_terrain_surface.py: scene_surface`, the mirror of `basinCurve` / `basinLandHeight`: the smooth cubic land at the
 scene's Terrain Height, without the music's reaction or fine detail), so a hill hides what is behind it. During a
 stroke points are picked on the ground as it was when the stroke began, or a raised ridge would catch every next
-point on its face and climb toward the camera. Only the authored grid is paintable.
+point on its face and climb toward the camera. Only the authored grid is paintable. Land the scene draws past the
+grid (the continuation and far hills) is visible but refused: on preset 1/2 dollied back about 13-20% of the land on
+screen, on an unextended grid (preset 3) about 26% at the default view, reaching basin uv about -1.1..2.5 across and
+-1.7..1.9 deep (`tests/test_neon_lake_brush_reach.py`; strict xfail until the paintable domain is decided, 1B.5).
+Every point on the grid is paintable (no narrower clamp).
 
 ## Layered water (2026-10-24)
 
