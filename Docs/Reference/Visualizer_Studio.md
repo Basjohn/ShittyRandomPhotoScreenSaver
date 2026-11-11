@@ -378,7 +378,9 @@ when both toolbar groups cannot fit side by side.
   - *Gestures.* Drag a node; click empty space to add one there and keep holding it; right-click a node, Delete, or
     the strip's Remove Node to remove it; drag a lane's tag along the axis (a pinned lane's tag stays) and its
     diamond up and down; the header's two layout chips choose the layout (the one boolean that is not a
-    `SwitchRow`: both layouts are named, beside the canvas they change). While an element is selected a strip under
+    `SwitchRow`: both layouts are named, beside the canvas they change). A press goes to the nearer of the nearest
+    node and the nearest diamond; where they overlap (a diamond under a node, as at the right edge of the default
+    curves), a press more than 1.5 px below the diamond's centre takes the diamond, any other the node. While an element is selected a strip under
     the canvas holds its exact Position and Height / Strength fields, Remove Node or the lane swaps; arrow keys
     step it (Shift: ten steps), Esc drops a held drag, then the selection. Hovering says in the header what the
     pointer would do there.
