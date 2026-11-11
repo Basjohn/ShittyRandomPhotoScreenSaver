@@ -681,6 +681,26 @@ answers.
   pages; Open Studio in the preset row and the Save To flow; the seamless clip loops; the chrome; the drag feel; the
   terrain brush.
 - **§5 Frozen release gate:** operator-run builds and installer checks.
+- **Decision, Waveform Preset 4 (the reference):** sign off the fixed-scale v7 trade-offs against main and the
+  "floor first" lift (`TROUGH_LIFT_MAX` 1.5 -> 3: Preset 4's ribbon rides about .7 higher at p90 and stops dipping
+  into the floor, operator: "rather it goes a bit higher when it has to than clips"), or ask for the tag's exact
+  Preset 4 dynamics (numbers at 7.1, "Fixed-scale rework v7"; the lead accepted them on 6 Nov).
+- **Decision, Waveform on a small 640x560 card:** Presets 5 and 6 cannot fit it either way: crests now graze the top
+  on 14-47% of frames, against floor contact before (an authoring choice; no reaction was shrunk). Sign off, or ask
+  for taller-body authoring.
+- **Decision, expanded card's hover Edit lane (plan 01 M3c):** the lane (Restore Widget Size, the transfer arrows)
+  stays withdrawn on the display-wide card outside Edit since M2, because each edits the ordinary card's layout,
+  which that view does not draw (the rotate glyph is in Fullscreen Edit). Return it, and what should each do while
+  expanded?
+- **Decision, overlays on pause:** a pause does nothing to them (by the spec, not built): Now Playing is event-only
+  and has already faded after its window; with Always Show it stays up by definition. Add a fade-out on pause?
+- **Decision, preset rollback recovery copies:** `core/visualizer_preset_tree.py` writes the before-images of a
+  failed preset-replacement rollback to `tempfile.mkdtemp(prefix='srpss_preset_recovery_')` (`%TEMP%`, which Windows
+  Storage Sense may empty and nothing removes) and names the folder in the error. Move it beside the preset tree or
+  the data root? Unchanged until the operator says (the test redirects it to `tmp_path`).
+- **Decision, Extruded Bubble evidence root:** move `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored
+  media, referenced by `Investigation.md`; outside the 7 Nov migration mapping) into the layout
+  (`visualizers/extruded_bubble/...`)?
 
 - **Changed on 11 Nov (no action needed; say only if one should go back):**
   - Now Playing follows the Media widget's Edit rules: its side handles reflow the text box (they resized the
@@ -761,8 +781,9 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   while the card accepts total/latest/playtime/previous/source/selected. Existing fixtures can test impossible rows.
 - [ ] Isolate active Widget Theme state between scene/display tests: the combined 33-file run fails four tests that
   pass alone (Achievement Pulse config, Gmail actions, Media projection and baseline theme material).
-- [~] **Awaiting Validation:** live Style Overrides/theme changes must reach Visualizer and Context Menu material
-  in the current display generation (`_configure_quick_auxiliary`), including the new global opacity override.
+- [ ] **D1 run (1B.14 harness), lead review of grabbed frames:** live Style Overrides/theme changes must reach
+  Visualizer and Context Menu material in the current display generation (`_configure_quick_auxiliary`), including
+  the new global opacity override.
 - [ ] Extend actual faint-run pixel checks to light widget themes beyond the sampled Gmail/Media cards. Keep
   authoring-mirror failures separate from runtime material guards; contract:
   `Docs/Architecture/Card_Surface_Materials.md`.
@@ -772,16 +793,16 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   `.artifacts/evidence/visualizers/spectrum/presets/20261107_lead/` (contact sheets, motion strips, metrics, the
   authoring script) and `D:\Temp\Scratch\SRPSS\evidence\visualizers\spectrum\20261108_ghost_v2\` (`before/`,
   `after/`; falling instants beside Preset 1 with 2x ghost-top crops).
-  - [~] Operator's eyes on the re-authored presets (Silhouette is the plainest by concept).
-  - [~] Operator's eyes on the ghost fix for his 8 Nov verdict on v2: "Those ghosts are too solid and not blurred."
-    The Bar Fill ghost must read like Preset 1's: soft, blurred, translucent (no crisp stripes or stars inside it),
-    fading sooner, with no ~1 px dark seam where a transparent-border bar meets its ghost (merged as 092304dc;
-    evidence `20261108_ghost_seam`). The same bar binds the replacement presets under 1B.10.
-- [~] **Waveform Ribbon, operator decisions from the 7 Nov follow-ups** (evidence:
-  `.artifacts/evidence/visualizers/waveform_ribbon/followups/20261107_followups/`; raw captures not kept):
-  - [~] Preset 4 rides about .7 higher at p90 and stops dipping into the floor: sign off.
-  - [~] On a small 640x560 card, P5 and P6 cannot fit either way: crests now graze the top on 14-47% of frames,
-    against floor contact before. An authoring choice; no reaction was shrunk: sign off.
+  - [ ] Lead review on contact sheets and motion strips (rendered): the re-authored presets (Silhouette is the
+    plainest by concept).
+  - [ ] Lead review on rendered falling instants beside Preset 1 (2x ghost-top crops) for the operator's 8 Nov
+    verdict on v2: "Those ghosts are too solid and not blurred." The Bar Fill ghost must read like Preset 1's: soft,
+    blurred, translucent (no crisp stripes or stars inside it), fading sooner, with no ~1 px dark seam where a
+    transparent-border bar meets its ghost (merged as 092304dc; evidence `20261108_ghost_seam`). The same bar binds
+    the replacement presets under 1B.10.
+- [ ] **Waveform Ribbon, 7 Nov follow-ups** (evidence:
+  `.artifacts/evidence/visualizers/waveform_ribbon/followups/20261107_followups/`; raw captures not kept; the Preset 4
+  and 640x560 card sign-offs are decisions in section 2):
   - [ ] The game60 live check of the tick cut is owed on a quiet machine (see "Lead, the quiet machine").
 - [ ] **AC-02 remainder:** what stays in `DisplayManager` until a second host needs it: the request and gesture
   routing that acts on the owner (mode/preset requests, view orbit, camera reset, Edit move/scale gestures,
@@ -867,20 +888,12 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 
 **Found while centralizing tool output (7 Nov; record, not yet admitted):**
 
-- [~] Preset rollback recovery copies go to `%TEMP%`: `core/visualizer_preset_tree.py` writes the before-images of a
-  failed preset-replacement rollback to `tempfile.mkdtemp(prefix='srpss_preset_recovery_')` and names the folder in
-  the error. It is user-facing recovery data in a folder Windows Storage Sense may empty and nothing ever removes; a
-  location beside the preset tree (or the data root) may be intended. Product behaviour unchanged pending the
-  operator's call (the test redirects it to `tmp_path`).
 - [ ] Hidden cross-test dependency on an earlier test's `tmp_path` (lead, 7 Nov): with pytest's
   `tmp_path_retention_policy = failed`, `test_3d_curated_preset_ownership.py::...promotes_missing_owned_temporal_
   and_profile_keys...[shockwave_grid]` (0.7 vs 0.23) and two or three `test_settings_dialog.py` tab-restore tests
   fail; each passes with the default retention, so something process-scoped keeps a path into an earlier test's
   `tmp_path` (a cached preset tree or storage root). The setting was reverted. Find the cache and give each test its
   own root; this may also hide state leaking between tests.
-- [~] A third evidence root lives in `Docs/`: `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
-  referenced by `Docs/Reference/Extruded_Bubble/Investigation.md`). Not part of the 7 Nov migration mapping; move it
-  into the layout (`visualizers/extruded_bubble/...`) on the operator's word.
 - [ ] Dead evidence references (the folders no longer exist; `tools/artifact_migration.py refs` lists them):
   `logs/evidence_chest/08_*` in Historical_Bugs R-53/56/57/58/59/60/62, `.artifacts/evidence/{ribbon_path,
   ribbon_frames,ribbon_strip,expanded_visualizer,oscilloscope}` and several `waveform_ribbon/wr*` folders in
@@ -912,8 +925,9 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] A takeover fade completes on the publication edge only: like the activation fade it has no deadline, so with no
   logical publication (displays off, parked) an expand or collapse in flight waits and finishes when publications
   resume; the coordinator meanwhile refuses mode requests and transfers as busy. Watch for it at M5 (display power).
-- [~] Operator look: the expanded card shows the theme's surface material (the Visualizer card's
-  `visualizerCardSurfaceMaterial` exists since 0b4abe04, so it is no longer a plain rectangle).
+- [ ] Lead review of a rendered expanded-card frame (hidden host, then D1 grab): the expanded card shows the theme's
+  surface material (the Visualizer card's `visualizerCardSurfaceMaterial` exists since 0b4abe04, so it is no longer
+  a plain rectangle).
 
 **Found while building Expanded Visualizer M3 (7 Nov night; recorded, not yet admitted):**
 
@@ -931,13 +945,15 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 
 **Found while building Expanded Visualizer M3b (8 Nov; recorded, not yet admitted):**
 
-- [~] A Card on a material shows the wallpaper, not the Visualizer: the shared backdrop is the wallpaper layer only
+- [ ] A Card on a material shows the wallpaper, not the Visualizer: the shared backdrop is the wallpaper layer only
   (`Docs/Architecture/Card_Surface_Materials.md` §3), so on Glass over an opaque mode (Extruded Bubble) the card is a
   blurred wallpaper the Visualizer hides everywhere else. It reads as a tinted panel (evidence still
-  `extruded_bubble_06_card_glass.png`); the operator's look decides whether that is acceptable.
-- [~] Right-hand corners sit further in than left ones: they keep clear of the card's hover-revealed controls (about
+  `extruded_bubble_06_card_glass.png`). Lead review on rendered stills (Glass over Extruded Bubble, then other
+  modes): whether that is acceptable.
+- [ ] Right-hand corners sit further in than left ones: they keep clear of the card's hover-revealed controls (about
   80 px from the top edge for the collapse glyph, its tip and the 3D hint; the bottom for Reset Camera, the preset
-  steps and their tip). Fullscreen Edit (M3c) can move an overlay; revisit if the operator finds the gap odd.
+  steps and their tip). Fullscreen Edit (M3c) can move an overlay. Lead review on rendered expanded-card frames:
+  revisit if the gap reads odd.
 - [ ] Now Playing needs an admitted Media card somewhere: it reads the Media model the Visualizer already binds; with
   Media off on every display there is no source and nothing shows (by design: no second Media source).
 - [ ] The hidden render host never waits for the GPU: `tools/expanded_visualizer_evidence.HiddenDisplayHost.render`
@@ -951,14 +967,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] `tests/test_visualizer_preset_glyphs.py` opens a real window (offscreen QPA hangs it), so the glyph-row agent
   could not run its updated assertion (Edit's glyphs match the card's 26 px). Port it to the hidden production host
   (QQuickRenderControl, as `tests/test_visualizer_glyph_row.py` does) and run it.
-- [~] The expanded card's hover Edit lane stays withdrawn (operator's call if wanted back). The rotate glyph the
-  operator missed is now on the expanded card in Fullscreen Edit (plan 01 M3c, "Rotate Widget Content"); the
-  ordinary Visualizer's hover lane never offered rotate. What the display-wide card still does not show outside Edit
-  is that lane (Restore Widget Size, the transfer arrows), withdrawn since M2 because each edits the ordinary card's
-  layout, which the display-wide view does not draw (Restore would resize a hidden card, transfers are M5).
-  Returning it needs a decision on what each does while expanded.
-- [~] A pause does nothing to the overlays (by the spec, not built): Now Playing is event-only and has already faded
-  after its window; with Always Show it stays up by definition. A fade-out on pause would need the operator's word.
 - [ ] `tests/test_qtquick_context_menu.py` fails after `tests/test_qtquick_custom_layout_owner.py` in one process
   (the 1B.1 side defect); the same pairing also turns three `tests/test_visualizer_direct_gestures.py` tests red
   (Alt-wheel / Alt-drag gestures never begin; reproduced on e9bbd7a4 without the M3c single-axis/rotate changes,
