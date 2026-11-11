@@ -276,6 +276,8 @@ class QuickCustomLayoutOwner:
         # Fullscreen Edit (M3c): the overlays' part of the session while it is open (None otherwise), and who hears
         # its unsaved-draft state flip (the display manager's menus).
         self._fullscreen: FullscreenOverlayEdit | None = None
+        # (item, its recorded undo step) of the child move just released; read once by its semantic corner pin.
+        self._child_move_release: tuple[CustomLayoutSessionItem, Any] | None = None
         self._fullscreen_draft_listener = fullscreen_draft_listener
         self._fullscreen_pending = False
         self._retired = False
@@ -379,6 +381,7 @@ class QuickCustomLayoutOwner:
         pending = self._undo_pending
         if pending is not None and pending[0] == kind and pending[1].item is item:
             return
+        self._child_move_release = None
         self._finish_undo_gesture()
         self._undo_pending = (kind, self._capture_undo(item))
 
@@ -399,6 +402,7 @@ class QuickCustomLayoutOwner:
         self._record_undo(before)
 
     def _commit_discrete_undo(self, before: _EditUndoSnapshot) -> None:
+        self._child_move_release = None
         self._finish_undo_gesture()
         self._record_undo(before)
 
@@ -2024,7 +2028,12 @@ class QuickCustomLayoutOwner:
         self._note_fullscreen_draft()       # Fullscreen Edit: Now Playing's parts are its draft too
         if finalize:
             self._child_move_origins.pop(item.source_key, None)
+            last = self._undo_history[-1] if self._undo_history else None
             self._finish_undo_gesture("child_move")
+            recorded = self._undo_history[-1] if self._undo_history else None
+            # The release's semantic corner pin (``set_child_semantic_anchor``, sent by the child layer right after
+            # this) belongs to the same gesture: one undo step restores both.
+            self._child_move_release = (item, recorded) if recorded is not None and recorded is not last else None
             if is_geometry_logging_enabled():
                 logger.info(
                     "[CUSTOM_LAYOUT] [GEO_CHILD] end widget=%s role=%s "
@@ -2108,8 +2117,14 @@ class QuickCustomLayoutOwner:
         """Commit one descriptor-admitted semantic corner anchor."""
 
         role = item.child_role(role_id)
+        release = self._child_move_release
+        self._child_move_release = None
         if role is None or not role.semantic_corner_anchor:
             return False
+        # The pin a child move's release sets is part of that move: its recorded step (still the latest) already
+        # holds the state before the move, so undo restores both at once (one gesture, one step).
+        folded = (release is not None and release[0] is item and bool(self._undo_history)
+                  and self._undo_history[-1] is release[1] and self._undo_pending is None)
         before_undo = self._capture_undo(item)
         next_geometry = set_child_semantic_anchor(
             role, item.child_size(role.role_id), anchor
@@ -2121,7 +2136,8 @@ class QuickCustomLayoutOwner:
                 item.custom_child_roles,
                 item.current_child_sizes,
             )
-            self._commit_discrete_undo(before_undo)
+            if not folded:
+                self._commit_discrete_undo(before_undo)
         return changed
 
     def cancel_child_gesture(self, item: CustomLayoutSessionItem) -> None:

@@ -1484,16 +1484,13 @@ def test_now_playings_parts_move_and_size_inside_the_block_through_the_child_edi
     title = _np_parts(display)["title"]
     slot = _rect(_slot(display, "expandedOverlayNowPlaying"), _root(display)).toRect()
     assert slot.adjusted(-1, -1, 1, 1).contains(title), (slot, title)
-    # Undo brings the containment drag back. The drag ends in the block's corner, which pins the title there (its
-    # semantic corner anchor, plan 1B.7c, as the Media header's): ordinary Edit records that pin as its own step after
-    # the move's, so it can take two (recorded as a shared side defect, not an overlay rule).
+    # One undo step per gesture: the containment drag comes back exactly. The drag ends in the block's corner, which
+    # pins the title there (its semantic corner anchor, plan 1B.7c, as the Media header's); the pin is part of the
+    # move, so the one step restores both (the shared owner once recorded the pin as a second step).
     contained = _np_parts(display)
-    anchored = bool(edit.item("now_playing").current_size_payload["child_geometry"]["title"].get("anchor"))
+    assert edit.item("now_playing").current_size_payload["child_geometry"]["title"].get("anchor")
     assert edit.owner.undo_last_change()
     _run(display, 60)
-    if anchored:
-        assert edit.owner.undo_last_change()
-        _run(display, 60)
     undone = _np_parts(display)
     assert undone != contained and undone["title"] != contained["title"]
     draft_parts, draft_value = _np_parts(display), edit.owner._fullscreen.draft_value()
@@ -1649,6 +1646,17 @@ def test_a_move_snaps_to_the_safe_area_and_draws_its_guide_on_the_edit_layer(dis
     # Back against the left edge: it stops at the safe area, never past it.
     edit.drag("preset", -WIDTH, 0)
     assert edit._local(edit.item("preset").current_global_rect).x() == safe_left
+    # Plan 1B.7e: the other overlay is an ordinary peer of the one guide owner. Now Playing dragged to 4 px short of
+    # the toast's left edge snaps onto it, with a peer guide at that edge in the Edit layer's coordinates.
+    edit.drag("preset", 240, 0)
+    preset = edit._local(edit.item("preset").current_global_rect)
+    now_playing = edit._local(edit.item("now_playing").current_global_rect)
+    edit.drag("now_playing", preset.x() - now_playing.x() - 4, -40, release=False)
+    guides = layer.property("verticalGuides")
+    guides = guides.toVariant() if hasattr(guides, "toVariant") else guides
+    assert edit._local(edit.item("now_playing").current_global_rect).x() == preset.x()
+    assert any(abs(int(guide["position"]) - preset.x()) <= 1 and guide["kind"] == "peer" for guide in guides), guides
+    edit.model.finishMove()
     edit.owner.cancel()
 
 

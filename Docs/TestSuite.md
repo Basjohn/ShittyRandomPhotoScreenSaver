@@ -1006,6 +1006,12 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   opposite-corner solver), its side handle reflows the text box and leaves the artwork factors (red on the former
   artwork-border rule), Restore Size returns the canonical size and keeps the top left; the frame is what is drawn.
   The parity map and the Volume OSD's corner now expect the ordinary rules.
+- Plan 1B.7e (snap and guides through the ordinary owner), same file:
+  `test_a_move_snaps_to_the_safe_area_and_draws_its_guide_on_the_edit_layer` (safe-area centre and edge, and the
+  other overlay as an ordinary peer with its guide in the Edit layer's coordinates); the one-step undo of a child
+  move ending in a corner pin (`test_now_playings_parts_move_and_size_inside_the_block_through_the_child_editor`; red
+  on the shared owner's former second step). `tests/test_custom_layout_guides_contract.py`'s containment assertion
+  follows the current two-line `containmentTarget` expression (the guarded rule is unchanged).
 - Plan 1B.7d (one artwork size carrier, Media's artwork look), same file:
   `test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size` and
   `test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box[False/True]` (the d1 rewrites of the

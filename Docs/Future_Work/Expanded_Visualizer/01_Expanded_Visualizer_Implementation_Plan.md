@@ -878,6 +878,11 @@ can most geometry normally."
   - Storage (1B.7d): `now_playing.artwork_scale` / `artwork_width` / `artwork_height` are retired; a stored value
     with them loads through the one normaliser's bridge into the `artwork` record
     (`Docs/Architecture/Persisted_Input_Compatibility.md`).
+- *Snap and guides (plan 1B.7e).* The overlays snap through the ordinary guide owner inside the safe area: its
+  edges bound them (no edge guide is drawn, as in ordinary Edit; the 8 Nov "edge" guide kind is retired), its centre
+  and the other items (the other overlay, the Volume OSD) are guides, published in the Edit layer's coordinates.
+  Shared owner fix: a child move whose release pins it to a corner (`semantic_corner_anchor`, Media's header too) is
+  one undo step, not two.
 - *Alignment as declared roles (plan 1B.7c, 11 Nov; supersedes the 8 Nov position-based mirroring).* Now Playing has
   one orientation, chosen and stable as the Media card's: its authored side is the anchor corner's (a right corner
   puts the artwork on the right, the text on its right rails); the `title` role, like Media's header, declares
