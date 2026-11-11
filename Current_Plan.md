@@ -254,6 +254,12 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   962bcf48 Halo lingering) and why each failed go into a new `Docs/Historical_Bugs/R-183` entry + index row
   before this is reported done. Acceptance is the operator's exit on native Windows; an offscreen proof alone is
   not a fix.
+  Research (11 Nov, read from source): every earlier test asserted only `QWindow.cursor().shape()` on a never-shown
+  window, never what Windows displays; 3c1f67cf holds no cursor code; production calls no Win32 cursor function.
+  Leading hypothesis: Windows is never told the arrow before the window under the pointer disappears, so nothing
+  re-queries the cursor until the next pointer message; next, capture ordering in the exit click and the
+  link-click + browser-launch exit. Decide with one external observer polling `GetCursorInfo` / `GetCapture` /
+  `GetClipCursor` across the exit paths, then fix.
 - [ ] **1B.3 Studio slider save churn.** Audit every Studio slider/drag instrument (all modes, shared chrome,
   response tuner, camera, brush) for a settings/preset/sidecar write or flush per move. A drag previews in memory
   and commits once on release (the existing "Drags are batched" contract in `Docs/Reference/Visualizer_Studio.md`);
@@ -279,17 +285,38 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   Edit, through the same child-editor contract rather than overlay exceptions. Add an optional seekbar (default
   off) that inherits the Media widget seekbar's traits and style from one shared component. Retire each
   exception the audit finds or record why it must stay.
+  Research (11 Nov): the child editor, descriptor type, child-geometry normaliser, transport bar and metadata fit
+  are already shared. Parallel or missing: the parent move / corner scale / per-axis resize / Restore Size are
+  reimplemented in `fullscreen_overlay_edit.py`; no role declares `alignment_flip` or `semantic_corner_anchor` (the
+  overlay mirrors by position, `ExpandedVisualizerOverlays.qml`); artwork size has two carriers and the parent
+  handles resize the artwork border, unlike Media; artwork border and shape come from the Visualizer card chrome;
+  only the other overlay is a snap peer; storage is `widgets.spotify_visualizer.fullscreen_overlays`, not
+  `widgets.custom_layout`; the seekbar is inline in `MediaPresentation.qml` (no component to reuse; its position
+  comes from GSMTC timeline events, no timer).
 - [ ] **1B.8 Light themes are practically opaque in the application.** Dark themes transmit correctly; light
   themes (Platinum Workstation, Polished Chrome, Plum for example) render nearly opaque in the saver even though
   their Settings GUI variant shows the material correctly. Find where the runtime path diverges from the Settings
   variant (the light-surface legibility guard of 1.7a is the first suspect), and make the application match it
   while keeping text legible on composed pixels. Prove on off-screen wallpaper renders, light beside dark.
+  Research (11 Nov, estimates from the solver's arithmetic, not captured pixels): the cause is the saver's
+  legibility panel, not the themes. `SurfaceContrast.js` assumes faint ink at 55% alpha; black at that alpha
+  reaches only 4.76:1 on white against a 4.8 target, so for every dark-ink theme the solver saturates at white
+  (linear guard limit 1.0, anchor above 1) and `surface_material.frag` mixes the whole panel interior to white.
+  Dark themes get reachable limits and keep following the wallpaper. The Settings variant corrects the ink and
+  leaves the surface at its calibrated density (about .63-.72). Plum Jade is a dark theme (the operator's "Plum"
+  needs identifying on the rendered set).
 - [ ] **1B.9 Settings and Studio window corners still bleed/escape.** Continues 1.9 with the operator's
   allowance: the border may grow by at most 2 px if that covers the escape. Measure with
   `tools/settings_native_corners.py` (four cases, 150% DPI) at +1 and +2 px, report to the operator whether
   thicker borders solve it, and implement the smallest width that does; if neither does, say so with the pixels.
   The window border should also take a material like the planned widget border (1.7b): one border-material
   treatment, not a second system.
+  Research (11 Nov; geometry from a pixel-centre model, to be confirmed by the tool): both windows are rectangular
+  layered HWNDs with Accent blur over the whole rectangle; `paint_forged_window_edge` (shared by Settings and the
+  Studio) forges the rounded look (radius 6.5, 4 px border, logical px). A +2 px border shrinks the leftover wedge
+  from about 5 px to about 1 at 150% (0 at 100%, 3 of 8 at 200%) by squaring the corner, and does not remove it.
+  Never tried: DWM corner preference on a non-layered window, a region applied before Accent, a composition-host
+  clip. The tool shows a real native window; there is no Studio equivalent yet.
 - [ ] **1B.10 Presets (only after 1B.3-1B.6 land; one Fable 5.2 Medium agent, admitted above the roster cap for
   this task only).** Supersedes the lead's Spectrum presets 2-15 of 7 Nov (§3).
   - [ ] Spectrum: replace presets 2 and up with the best and most novel looks the mode can make.
