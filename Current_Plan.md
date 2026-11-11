@@ -1269,7 +1269,7 @@ chosen image/settings/source; the baseline settings are applied to Preset 3.
 
 **Fixed-scale rework v7 (accepted by the lead review 6 Nov, merged; operator sign-off on Preset 4 and the trade-offs)**
 
-No adaptive memory (Adaptive Response toggle, off in every preset), Kick Accent bounded at 15% of the roll (Preset 4
+No adaptive memory (the Adaptive Response toggle is retired), Kick Accent bounded at 15% of the roll (Preset 4
 ships 0), the floor lift bounded by the card's top edge. Lessons of the rejected v4:
 `Docs/Guides/Visualizer_Reactivity_Authoring.md`; measurements: Migration Plan section 8.
 
@@ -1379,9 +1379,9 @@ Evidence `studio_20261105/floor4/`; measurements in Migration Plan section 8.
 **Fixed response, break-proof Breathing, Kick Accent (operator, 6 Nov: "when it went suddenly quiet everything become
 more reactive ... Adaptive is a very problematic approach"; "many sustained kicks ignored"; awaiting operator eyes)**
 
-Geometry drives are a fixed function of the real-music scale (Adaptive Response toggle, off in every preset). Preset 4
-differs from the tag only through it, Kick Accent and the floor lift: set Adaptive Response on and Kick Accent 0 to
-compare. Range audit: `.artifacts/evidence/visualizers/waveform_ribbon/reactivity_preset7/20261107_reactivity_preset7/rangeaudit_*.txt`.
+Geometry drives are a fixed function of the real-music scale (the Adaptive Response toggle is retired). Preset 4
+differs from the tag only through it, Kick Accent and the floor lift: compare against the tag with Kick Accent 0.
+Range audit: `.artifacts/evidence/visualizers/waveform_ribbon/reactivity_preset7/20261107_reactivity_preset7/rangeaudit_*.txt`.
 
 - [~] Operator eyes on the fixed response, Breathing and Kick Accent.
 - [ ] Rotation's drive is never above .36 on any recording (its Peak handle is never reached).
@@ -1485,7 +1485,7 @@ geometry and persistence tests alone cannot establish feel or beauty across movi
 - [ ] After the strand slice, draw ground all the way through the foreground and beyond the waveform into heavy dark
   mist that GENTLY thickens until no horizon line is visible. A strip of reflections over black is rejected.
 - [ ] Keep actors and physical floor contact correct, with smooth waveform collision rather than clipping.
-- [ ] Compare identical snapshots at canonical/wide/tall/large sizes and both projections; inspect reflection
+- [ ] Compare identical snapshots at canonical/wide/tall/large sizes in Perspective; inspect reflection
   normalization/filtering separately.
 - [ ] Preserve live reflectivity/tint/brightness and the shared resize contract; no audio-gain compensation. Columns
   remain secondary.
