@@ -102,7 +102,7 @@ IN_PROCESS_ARG = "--viz-in-process"
 
 def engine_worker_path(app_args) -> bool:
     """Whether the saver runs its Visualizer on the engine worker: as ``core.diagnostics.experiment_flags`` resolves
-    the run's tokens (the product's default on Windows; ``--app-arg=--viz-in-process`` for the in-process control)."""
+    the run's tokens (the product's default; ``--app-arg=--viz-in-process`` for the in-process control)."""
     from core.diagnostics.experiment_flags import parse_experiment_flags, visualizer_engine_worker_platform_default
 
     chosen = parse_experiment_flags(list(app_args)).visualizer_engine_worker

@@ -1239,7 +1239,8 @@ High-value permanent guards include:
   reentry / switch, `--order`, `--stress`; `--paced` for 5.1) and cost: `tools/visualizer_replay/live_engine_gate.py`,
   `tools/visualizer_replay/live_engine_cost.py` (below-normal priority; never in the suite);
   `tests/test_visualizer_owner_engine_worker.py` (work order 5 slice 5.2 and the core of 5.3: the production owner on
-  the engine worker, the default on Windows since 8 Nov; each rig states its path): the REAL owner built by the host
+  the engine worker, the default on Windows since 8 Nov and on every platform since H3 (Linux never run); each rig
+  states its path): the REAL owner built by the host
   binding's `construct` on an
   unshown runtime (`tools/visualizer_replay/owner_worker_gate.py`'s rig), the worker side a real
   `WorkerType.VISUALIZER` process on the shipped clip's PCM (`engine_worker_link.recorded_capture_for_testing`, the

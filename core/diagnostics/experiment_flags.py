@@ -68,7 +68,7 @@ class ExperimentFlags:
     profile_cpu: bool = False
     mc_window_splash: bool = False
     log_dir: str | None = None
-    # The Visualizer's process path: None follows the platform default (the engine worker on Windows), True is
+    # The Visualizer's process path: None follows the platform default (the engine worker on every platform), True is
     # ``--viz-engine-worker``, False ``--viz-in-process`` (tests and tools state their path the same way).
     visualizer_engine_worker: bool | None = None
 

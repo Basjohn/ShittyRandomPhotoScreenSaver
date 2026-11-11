@@ -6,7 +6,7 @@
 Every run builds the REAL ``QuickDisplayVisualizerOwner`` through the host binding's own ``VisualizerHostBinding
 .construct`` on an unshown ``QuickDisplayRuntime`` (the stub host of ``owner_production_replay``: no window is shown,
 created or mapped), with the production presentation kwargs; each side states its process path (``experiment_flags``'
-``visualizer_engine_worker``, set for the run; the worker is the product's default on Windows, in process its fallback)
+``visualizer_engine_worker``, set for the run; the worker is the product's default, in process its fallback)
 and the worker side drives a real ``WorkerType.VISUALIZER`` process. No device is
 opened: the worker side's sessions take the shipped clip's PCM through ``engine_worker_link
 .recorded_capture_for_testing`` (the session refuses the device for its life); the in-process side's live engine refuses

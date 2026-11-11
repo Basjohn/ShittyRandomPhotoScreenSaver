@@ -9,7 +9,7 @@ the host binding's own ``VisualizerHostBinding.construct`` builds the real ``Qui
 ``QuickDisplayRuntime`` (a stub host around it: no window is shown, created or mapped by this tool), resolving the
 activation from the Settings section and passing the production presentation kwargs (``DisplayManager``'s: the model
 plus the resolved 3D Detail tier, no Settings manager), then configures, binds, commits Media's state and starts it,
-on the in-process path, stated (the engine worker's fallback; the worker, the default on Windows, is covered by
+on the in-process path, stated (the engine worker's fallback; the worker, the product's default, is covered by
 ``owner_worker_gate``'s identity against this same owner in process).
 The only substitutions: the recorded ``ReplayBeatEngine`` (deterministic inputs, as every replay) and the cadence
 thread (``start_logical_runtime`` keeps the step the owner installed and runs no thread; each recorded frame then
@@ -122,7 +122,7 @@ def _presentation_kwargs(model: Any, mode: str) -> dict:
 
 @contextlib.contextmanager
 def _in_process_path():
-    """The in-process path, stated (the engine worker is the product's default on Windows since 8 Nov; this replay
+    """The in-process path, stated (the engine worker is the product's default: on Windows since 8 Nov, on Linux since H3; this replay
     ticks the owner's own in-process cadence step, which is also the worker's fallback). A tree from before the
     default flip (``--root``) has the same field with ``False`` meaning in process."""
     import dataclasses

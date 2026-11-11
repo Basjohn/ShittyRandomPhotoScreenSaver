@@ -2,7 +2,7 @@
 
 The REAL owner, built by the host binding's own ``construct`` on an unshown runtime (``tools/visualizer_replay/
 owner_worker_gate.py``'s rig: no window is shown), admitted onto the engine worker by the code-level admission
-(``experiment_flags.visualizer_engine_worker_admitted``: the default on Windows; every rig states its path). No test
+(``experiment_flags.visualizer_engine_worker_admitted``: the default on every platform; every rig states its path). No test
 opens a device: worker sessions take the shipped
 clip's PCM through the link's test-only control (``engine_worker_link.recorded_capture_for_testing``; the session
 refuses the device for its life), and the device-path tests run the session in process with the device constructor
