@@ -724,6 +724,64 @@ significant work". Opus and Sonnet agents resume as the lead sees fit.
 - [ ] Load session: run 11 Nov evening at the gap (no agent running; CPU about 12 %, GPU 4 % before the
   start); results and what the ten minutes did not cover go to item 7 and the Watchlist.
 
+### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; when a relevant agent is free)
+
+Operator: "an option or slider for neon lake to allow the WATER edge/face lines to be completely hidden ... this
+shouldn't be very difficult". Mode id `shockwave_grid`. Today the water draws ripple/face lines (`Water Colour`,
+`Water Detail`), a shoreline line, `Water Line Glow` / `Water Line Glow Strength` and `Shore Glow` (0 "keeps only
+the shoreline"); none of them removes the lines themselves. The lead decides when Neon Lake's reactivity is good
+enough (operator, same message: it "has improved quite a bit already"); see 1B.6.
+
+- [ ] Inventory first: every pass that draws a line on or round the water (face/ripple lines, the shoreline
+  line, the wet fringe, wave crests, reflections of land lines), with the uniform that scales each and whether 0
+  truly removes it today; one 4x crop per pass.
+- [ ] One canonical spec control in `core/settings/visualizer_mode_settings.py` (the single Settings owner; the
+  Surface bucket beside Water Detail): a slider, "Water Lines", 0 to 1, where 1 is today's look and 0 hides the
+  face lines and the edge line completely, fading between (never a hard switch). If the inventory shows the edge
+  and the face need to be hidden separately to look right, two sliders ("Water Lines", "Shoreline") instead; the
+  agent shows both variants and the lead picks.
+- [ ] At 0 the water keeps its body: colour, reflection, shine, the sun/moon path and Water Reaction still
+  draw; only lines go. The shoreline never moves (the standing rule) and the land's own lines are untouched.
+- [ ] Glow follows: Water Line Glow and Shore Glow scale with the lines they belong to, so no glow is left
+  hanging where a line was hidden.
+- [ ] Zero cost when hidden: at 0 the line terms are skipped, not multiplied by zero per fragment where a branch
+  on a uniform is cheaper; at 1 the frame is identical to today (within the run-to-run floor) on Presets 1 to 3.
+- [ ] Authored into every Neon Lake preset at 1 by the repair fill (the completeness guard); shown in Settings
+  and the Studio through the spec; Settings/Studio parity and the engine-worker parity for the mode rerun.
+- [ ] Evidence: a sheet of Presets 1 to 3 at 1, 0.5 and 0, at rest and driven; lead pixel review; one showcase
+  WebP at 0 on the preset where it looks best; `Docs/Reference/Neon_Lake_Basin.md` and the Visualizer Reference
+  updated.
+
+### 1C.9 Sources: RSS Pools shows which pools are active and valid (operator, 11 Nov; small, Opus Medium)
+
+Operator: "RSS Pools in Sources should list which pools are active and valid, right now it looks empty when
+filled with only Just Make It Work pools only saying the number and nothing else. I would suggest listing them in
+Custom Pools as JMIT POOL -> NAME and a right aligned semantic check mark for valid ones, X for failing ones."
+Today `ui/tabs/sources_tab.py` (about line 700) sets one label, "Pools: N enabled", with the names only in its
+tooltip; pool data is `sources/rss/pools.py` (`WALLPAPER_POOLS`, `read_pool_selection`).
+
+- [ ] Inventory first: how the Custom Pools list is built and what a row is; where a pool's or feed's health is
+  known today (last fetch result, the pool index, `Docs/Reference/Feeds.md` and
+  `Docs/Reference/Wallpaper_Pool_Selection.md`); whether "valid" can be read from stored state without a fetch.
+- [ ] Each active Just Make It Work pool is a row in the Custom Pools list, labelled `JMIT POOL -> <Pool Name>`
+  (Title Case for the name; the prefix as the operator wrote it), visually distinct from the user's own custom
+  feeds and not editable or removable there (they are managed by the pool chooser; the row's tooltip says so).
+- [ ] A right-aligned status mark per row, for JMIT pools and custom feeds alike: a check mark in the theme's
+  semantic success colour when the pool's last result is valid, an X in the semantic failure colour when it is
+  failing, and a neutral mark when it has not been tried yet; the tooltip states why (last success time, or the
+  failure reason). Marks are painted glyphs in theme tokens, not coloured text characters, and readable on
+  light and dark themes.
+- [ ] Validity comes from stored state the sources already keep; opening Settings triggers no network request
+  and no new timer or polling; the marks refresh when the sources' own state changes (an existing signal or the
+  tab's existing refresh edge).
+- [ ] The summary label stays, reworded only if needed so it never reads as empty ("Pools: off" only when none).
+- [ ] An empty state: with no pools and no custom feeds the list says so in one line.
+- [ ] Tests on the real `SettingsDialog` (never a stub host): rows exist for the active pools derived from
+  `WALLPAPER_POOLS` and the selection (no pool names or wording pinned), the mark follows a stubbed stored
+  state for valid, failing and untried, no network is touched (transport and DNS stubbed), and a negative control.
+- [ ] Evidence: off-screen stills of the Sources tab on one dark and one light theme with a mix of valid,
+  failing and untried rows; lead pixel review; `Docs/Reference/Feeds.md` updated.
+
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
 These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it. Live
