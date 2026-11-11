@@ -107,8 +107,15 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainVa
         float edge = 1.0 - smoothstep(0.0, 6.0, -d);
         float facing = clamp(dot(-n, normalize(vec2(-0.55, -0.85))) * 0.5 + 0.5, 0.0, 1.0);
         float sheen = clamp(1.0 - (cardUnit.x + cardUnit.y) * 0.6, 0.0, 1.0);
-        c += vec3(glassLegibility.x) * (0.10 * sheen);
-        edgeHighlight = glassLegibility.x * (edge * edge * (0.35 + 0.65 * facing));
+        float edgeTerm = edge * edge * (0.35 + 0.65 * facing);
+        // A child control (negative border width: its own outline is its border) keeps its
+        // highlight under its face, as before: only a card's real border gains it.
+        if (borderWidth < 0.0) {
+            c += vec3(glassLegibility.x) * (edgeTerm + 0.10 * sheen);
+        } else {
+            c += vec3(glassLegibility.x) * (0.10 * sheen);
+            edgeHighlight = glassLegibility.x * edgeTerm;
+        }
     }
 
     vec3 unplated = c;
