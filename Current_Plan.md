@@ -263,7 +263,7 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   second one, a diagonal arrow up-left. With more than one display active both show: up-left expands onto
   Display 0, up-right onto Display 1 (from whichever display the card is on, through the existing transfer +
   expand transaction, never a second path). V keeps expanding on the display the Visualizer is currently on.
-  With one display the single existing glyph stays as today (lead's reading; confirm with the operator). The
+  With one display the single existing glyph stays as today (operator, 11 Nov: "Keep it"). The
   target is a display, not "the Visualizer's display", so SMP can later hold one display fullscreen while the
   Visualizer holds the other. Displays beyond the first two are reached with V. Glyph drawn in the existing
   glyph row's style (painted, no seams), Title Case tooltips, fades in and out with the display count.
