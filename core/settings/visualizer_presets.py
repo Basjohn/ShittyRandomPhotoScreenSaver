@@ -861,9 +861,16 @@ def _load_mode_presets_from_disk(mode: str) -> Dict[int, VisualizerPreset]:
 
     overrides: Dict[int, VisualizerPreset] = {}
     source_paths: Dict[int, Path] = {}
+    unreadable = False
     for json_path in sorted(folder.glob("*.json")):
         try:
             payload = json.loads(json_path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            # Held open by another process (an install, a scanner) or replaced while listed: not this file's
+            # content. Skip it now; the folder is read again at the next open (state left unrecorded below).
+            unreadable = True
+            logger.warning("[VIS_PRESETS] Could not read %s right now: %s", json_path, exc)
+            continue
         except Exception as exc:  # pragma: no cover - logged for debugging only
             logger.warning("[VIS_PRESETS] Failed to parse %s: %s", json_path, exc)
             continue
@@ -903,7 +910,8 @@ def _load_mode_presets_from_disk(mode: str) -> Dict[int, VisualizerPreset]:
         logger.warning("[VIS_PRESETS] %s has no usable settings", json_path.name)
 
     _LOADED_SOURCE_PATHS[mode] = dict(source_paths)
-    _LOADED_FOLDER_STATE[mode] = _folder_state(folder)
+    # A file that could not be read leaves the state unrecorded, so the next open reads the folder again.
+    _LOADED_FOLDER_STATE[mode] = () if unreadable else _folder_state(folder)
     return overrides
 
 
@@ -940,6 +948,7 @@ def _rebuild_mode(mode: str) -> None:
     previous = dict(_LOADED_SOURCE_PATHS.get(mode, {}))
     try:
         _PRESETS[mode] = _build_presets_for_mode(mode)
+        _PENDING_MODES.discard(mode)
     except NoAuthoredPresets:
         if not _PRESET_SOURCE_PATHS.get(mode):
             raise
@@ -948,10 +957,17 @@ def _rebuild_mode(mode: str) -> None:
                        mode, _presets_root() / mode, len(_PRESET_SOURCE_PATHS[mode]))
 
 
-def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
+_CATALOGUE_BUILDS = 0       # > 0 while a mode's catalogue is being read (the lender bridge stands aside)
 
-    curated = _load_mode_presets_from_disk(mode)
-    snapshot_overrides = _load_snapshot_presets(mode)
+
+def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
+    global _CATALOGUE_BUILDS
+    _CATALOGUE_BUILDS += 1
+    try:
+        curated = _load_mode_presets_from_disk(mode)
+        snapshot_overrides = _load_snapshot_presets(mode)
+    finally:
+        _CATALOGUE_BUILDS -= 1
     logger.info(
         "[VIS_PRESETS] Build mode=%s curated_root=%s snapshot_root=%s curated_slots=%d snapshot_overrides=%d",
         mode,
@@ -999,12 +1015,36 @@ def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
     return presets
 
 
-for _mode in MODES:
-    _PRESETS[_mode] = _build_presets_for_mode(_mode)
+# Modes whose folder held no readable preset when this module was imported. Importing never fails on them (a
+# failed import made the first open of Spectrum fail and the second, a fresh import, work: 1C.1); the catalogue
+# is read again when the mode is first asked for.
+_PENDING_MODES: set[str] = set()
+
+
+def _build_all_at_import() -> None:
+    for mode in MODES:
+        try:
+            _PRESETS[mode] = _build_presets_for_mode(mode)
+        except NoAuthoredPresets:
+            _PENDING_MODES.add(mode)
+            logger.warning("[VIS_PRESETS] %s presets could not be read at startup; reading again on first use", mode)
+
+
+_build_all_at_import()
 
 
 def get_presets(mode: str) -> List[VisualizerPreset]:
-    """Return the authored preset list for *mode* plus trailing Custom."""
+    """Return the authored preset list for *mode* plus trailing Custom.
+
+    A mode whose presets could not be read at startup is read again here; if its folder still holds no readable
+    preset, :class:`NoAuthoredPresets` says so (nothing is cached as a failure: the next call reads again)."""
+    if mode in _PENDING_MODES:
+        _PENDING_MODES.discard(mode)        # a lookup made by the rebuild itself must not start another one
+        try:
+            _rebuild_mode(mode)
+        except NoAuthoredPresets:
+            _PENDING_MODES.add(mode)
+            raise
     try:
         return _PRESETS[mode]
     except KeyError as exc:
