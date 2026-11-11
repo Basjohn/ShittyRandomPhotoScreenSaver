@@ -81,24 +81,11 @@ def _theme_qcolor(
     return QColor(*value.as_tuple())
 
 
-def _theme_opaque_qcolor(
-    token: str,
-    theme: SettingsThemeSpec | None = None,
-) -> QColor:
-    """Use a theme surface's RGB as an opaque renderer camouflage colour."""
-
-    resolved_theme = theme or _SETTINGS_THEME
-    value = resolved_theme.color(token)
-    return QColor(value.r, value.g, value.b, 255)
-
-
-# Fragile forged-edge geometry remains renderer-owned by design.  The forged
-# backing/corner camouflage is not independently themeable: it follows the
-# shell surface immediately inside the native edge, forced opaque so the fake
-# rounded corner continues to hide the rectangular acrylic HWND underneath.
-# The geometry and the painter live in ui/settings_window_edge.py, shared with the Studio's frameless window.
+# Fragile rounded-edge geometry remains renderer-owned by design: the rounded
+# outer border is the window's silhouette and everything outside it is left
+# see-through. The geometry and the painter live in ui/settings_window_edge.py,
+# shared with the Studio's frameless window.
 from ui.settings_window_edge import (  # noqa: E402
-    SETTINGS_OUTER_BORDER_BACKING_WIDTH,
     SETTINGS_OUTER_BORDER_WIDTH,
     SETTINGS_OUTER_CORNER_RADIUS,
     ForgedWindowEdgeOverlay,
@@ -106,26 +93,18 @@ from ui.settings_window_edge import (  # noqa: E402
 )
 
 SETTINGS_OUTER_BORDER_COLOR = _theme_qcolor("chrome.outer_border")
-SETTINGS_FORGED_EDGE_COLOR = _theme_opaque_qcolor("window.titlebar.surface")
-SETTINGS_OUTER_BORDER_BACKING_COLOR = SETTINGS_FORGED_EDGE_COLOR
-SETTINGS_CORNER_COVER_COLOR = SETTINGS_FORGED_EDGE_COLOR
+# The size grip sits this far inside the bottom-right corner (logical px), clear of the rounded border.
+SETTINGS_SIZE_GRIP_INSET = 4
 
 
 def _install_settings_dialog_theme(theme: SettingsThemeSpec) -> None:
-    """Install live shell colours without altering forged-edge geometry."""
+    """Install live shell colours without altering the edge geometry."""
 
     global _SETTINGS_THEME
     global SETTINGS_OUTER_BORDER_COLOR
-    global SETTINGS_FORGED_EDGE_COLOR
-    global SETTINGS_OUTER_BORDER_BACKING_COLOR
-    global SETTINGS_CORNER_COVER_COLOR
 
     _SETTINGS_THEME = theme
     SETTINGS_OUTER_BORDER_COLOR = _theme_qcolor("chrome.outer_border", theme)
-    forged_edge = _theme_opaque_qcolor("window.titlebar.surface", theme)
-    SETTINGS_FORGED_EDGE_COLOR = forged_edge
-    SETTINGS_OUTER_BORDER_BACKING_COLOR = forged_edge
-    SETTINGS_CORNER_COVER_COLOR = forged_edge
 
 
 class CustomTitleBar(QWidget):
@@ -2324,7 +2303,7 @@ class SettingsDialog(QDialog):
                 parent = self.size_grip.parent() or self
                 pw = parent.width()
                 ph = parent.height()
-                grip_inset = 0 if self._is_maximized else int((SETTINGS_OUTER_BORDER_BACKING_WIDTH * 0.5) + 1)
+                grip_inset = 0 if self._is_maximized else SETTINGS_SIZE_GRIP_INSET
                 self.size_grip.move(
                     pw - self.size_grip.width() - grip_inset,
                     ph - self.size_grip.height() - grip_inset,
@@ -2394,8 +2373,8 @@ class SettingsDialog(QDialog):
                                 underlay=self._material_underlay)
         painter.end()
 
-    def _forged_edge_state(self) -> tuple[bool, QColor, QColor]:
-        return self._is_maximized, SETTINGS_OUTER_BORDER_COLOR, SETTINGS_CORNER_COVER_COLOR
+    def _forged_edge_state(self) -> tuple[bool, QColor]:
+        return self._is_maximized, SETTINGS_OUTER_BORDER_COLOR
 
     def keyPressEvent(self, event):
         """Enter/Return/Escape close through closeEvent (never a bare hide or minimize)."""

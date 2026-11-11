@@ -1,7 +1,8 @@
 """Studio window chrome painted by Settings' own owners: the forged window edge, panel frames and their casts.
 
-* ``StudioWindowEdge`` paints ``ui.settings_window_edge.paint_forged_window_edge``: the same rounded outer border,
-  backing and corner caps the Settings window paints, at the same geometry.
+* ``StudioWindowEdge`` paints ``ui.settings_window_edge.paint_forged_window_edge``: the same rounded outer border
+  the Settings window paints, at the same geometry, see-through outside it. (A Quick item cannot clear the scene
+  beneath it, so the shell's full-window fills are rounded inside the border: ``StudioShell.qml``.)
 * ``StudioFrame`` paints one card or section: Settings' hard outside-only cast shadow
   (``ui.widgets.control_shadow.cast_shadow_path``), the fill and the border stroked as ONE continuous path
   (``ui.widgets.continuous_border.rounded_border_path``), so a translucent border never seams.
@@ -144,16 +145,14 @@ class StudioFrame(_PaintedChrome):
 
 
 class StudioWindowEdge(_PaintedChrome):
-    """The frameless Studio window's forged rounded edge, exactly as Settings paints its own."""
+    """The frameless Studio window's rounded edge, exactly as Settings paints its own."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._outerBorder = QColor(255, 255, 255)
-        self._forgedEdge = QColor(12, 12, 12)
         self._maximized = False
 
     outerBorder = Property(QColor, *_colour_property("outerBorder"), notify=_PaintedChrome.changed)
-    forgedEdge = Property(QColor, *_colour_property("forgedEdge"), notify=_PaintedChrome.changed)
     maximized = Property(bool, *_bool_property("maximized"), notify=_PaintedChrome.changed)
 
     def paint(self, painter: QPainter) -> None:  # noqa: D401 - Qt override
@@ -162,8 +161,7 @@ class StudioWindowEdge(_PaintedChrome):
         window = self.window()
         dpr = float(window.effectiveDevicePixelRatio()) if window is not None else 1.0
         paint_forged_window_edge(painter, QRectF(0.0, 0.0, self.width(), self.height()), dpr,
-                                 maximized=self._maximized, outer_border=self._outerBorder,
-                                 forged_edge=self._forgedEdge)
+                                 maximized=self._maximized, outer_border=self._outerBorder)
 
 
 def register_chrome_types() -> None:

@@ -8,15 +8,16 @@ and left pale square corners. The edge now paints from ``ForgedWindowEdgeOverlay
 
 Read back from the real dialog (never shown, ``StyledPopup.exec`` patched), rendered with ``QWidget.grab``. The
 subjects are one light and one dark shipped theme picked by ``settings_theme_is_light`` (never by name), and every
-expected colour is the theme's own ``chrome.outer_border`` / opaque ``window.titlebar.surface``, never a pinned value.
+expected colour is the theme's own ``chrome.outer_border``, never a pinned value; outside the rounded border the
+corner is see-through (``tests/test_window_edge_see_through_corners.py``).
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, QRectF, QSize
+from PySide6.QtGui import QColor, QImage, QResizeEvent
 from PySide6.QtWidgets import QApplication
 
 pytestmark = pytest.mark.qt
@@ -88,16 +89,49 @@ def _close(actual: QColor, expected, tolerance: int = 3) -> bool:
 
 
 @pytest.mark.parametrize("light", [True, False], ids=["light theme", "dark theme"])
-def test_the_outer_border_and_corner_caps_are_the_themes_own_on_top_of_the_content(manager, light) -> None:
+def test_the_outer_border_is_the_themes_own_on_top_of_the_content_and_the_corners_see_through(manager, light) -> None:
+    from ui.settings_window_edge import CORNER_OUTSIDE_ALPHA
+
     theme, image = _grab(manager, _shipped_theme(light))
     border = theme.color("chrome.outer_border")
-    cap = theme.color("window.titlebar.surface")
     w, h = image.width(), image.height()
     # The 4 px border is centred half a pixel inside the window edge: the outermost rows and columns are border
     # on every side, under the title bar, the sidebar and the content alike.
     for x, y in ((w // 2, 0), (w // 2, 1), (0, h // 2), (1, h // 2), (w - 1, h // 2), (w // 2, h - 1),
                  (w // 4, 0), (0, h // 4)):
         assert _close(image.pixelColor(x, y), border), (x, y, image.pixelColor(x, y).name(), border)
-    # Outside the rounded outline the window corner pixel is the opaque cap, not a washed blend.
+    # Outside the rounded border the window corner pixel is see-through over the title bar and the content beneath
+    # (they fill the whole rectangle), yet not alpha 0: a layered window keeps hit-testing it.
     for x, y in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
-        assert _close(image.pixelColor(x, y), cap), (x, y, image.pixelColor(x, y).name(), cap)
+        assert image.pixelColor(x, y).alpha() == CORNER_OUTSIDE_ALPHA, (x, y, image.pixelColor(x, y).getRgb())
+
+
+def test_the_size_grip_keeps_its_place_clear_of_the_see_through_corner(manager) -> None:
+    """Hit-testing: the bottom-right size grip sits where it always did (4 px inside the corner), wholly inside
+    the rounded border, so the see-through wedge never takes any of it."""
+    from core.animation import AnimationManager
+    from ui.settings_dialog import SETTINGS_SIZE_GRIP_INSET, SettingsDialog
+    from ui.settings_window_edge import border_outer_path
+
+    dialog = SettingsDialog(manager, AnimationManager())
+    try:
+        dialog.resize(1400, 820)
+        w, h = dialog.width(), dialog.height()
+        # Never shown: deliver the resize the dialog would receive on show, which places the grip.
+        QCoreApplication.sendEvent(dialog, QResizeEvent(QSize(w, h), QSize(w, h)))
+        local = dialog.size_grip.geometry()
+        origin = dialog.size_grip.parentWidget().mapTo(dialog, QPoint(0, 0)) if dialog.size_grip.parentWidget() \
+            is not dialog else QPoint(0, 0)
+        grip = local.translated(origin)
+        assert SETTINGS_SIZE_GRIP_INSET == 4
+        assert (grip.right() + 1, grip.bottom() + 1) == (w - 4, h - 4)
+        silhouette = border_outer_path(QRectF(dialog.rect()))
+        for x in range(grip.left(), grip.right() + 1):
+            for y in range(grip.top(), grip.bottom() + 1):
+                assert silhouette.contains(QPointF(x + 0.5, y + 0.5)), (x, y)
+    finally:
+        dialog.close()
+        QCoreApplication.processEvents()
+        dialog.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        QCoreApplication.processEvents()

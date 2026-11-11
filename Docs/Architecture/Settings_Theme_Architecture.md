@@ -307,9 +307,32 @@ A future move to DWM system backdrops is an **architecture change**, not a theme
 
 `ui/settings_theme.py`, `ui/tabs/shared_styles.py` and component renderers own selector/geometry application while ThemeSpec owns visual values. Typography, spacing, radii, dimensions and behavior stay renderer-owned unless deliberately promoted into the schema.
 
-The forged Settings outer edge/corner remains renderer-owned: its geometry and painter live in
+The rounded Settings outer edge remains renderer-owned: its geometry and painter live in
 `ui/settings_window_edge.py` (`paint_forged_window_edge`), called by Settings' `ForgedWindowEdgeOverlay` and by the
-Studio's frameless window, never copied. Its geometry is fragile and is **not** theme data. Camouflage colour follows the adjacent semantic shell surface; do not independently theme it.
+Studio's frameless window, never copied. Its geometry is fragile and is **not** theme data; only its colour
+(`chrome.outer_border`) is themed.
+
+**See-through corners (11 Nov 2026, plan 1B.9).** The native window is a rectangle; the rounded silhouette is the
+4 px rounded border itself. Every pixel outside the border's outer edge is left see-through: the painter overwrites
+it with alpha 1/255 (`CORNER_OUTSIDE_ALPHA`), whatever the content painted there, so the corner shows the desktop
+through the window's material and never a painted colour. Not alpha 0: Settings is a layered window and Windows
+passes the mouse through a layered window's alpha-0 pixels, so one invisible level keeps every corner pixel the
+window's own for hit-testing, drag and resize, exactly as when the corners were opaque. The size grip keeps its place
+4 px inside the bottom-right corner (`SETTINGS_SIZE_GRIP_INSET`), wholly inside the border. A painter can only
+overwrite what is beneath it in its own surface: Settings' overlay paints into the dialog's backing store, so it
+overwrites the shell surfaces beneath; the Studio's edge is a Quick item with its own texture, so the Studio's
+full-window fills (the window surface and the title bar) are rounded (radius 7, under the border's stroke) instead.
+Maximised, the edge is a plain rectangle and nothing is cleared. Bars: `tests/test_window_edge_see_through_corners.py`
+(painter at 100/150/200%, negative control), `tests/test_settings_forged_edge_over_content.py` (real dialog, size
+grip), `tests/test_studio_chrome.py` (the real Studio shell rendered off-screen, negative control).
+
+This replaced the *forged* edge (April to 10 Nov 2026): opaque corner caps and a 6 px backing stroke in the title-bar
+colour forced opaque camouflaged the rectangle outside the border. The border's outer arc already reaches almost to
+the window corner, so the caps only ever showed as a small wedge of flat camouflage colour at each corner (a
+near-white speck on light themes), and the backing, 1 px wider than the border on each side, showed as a 1 px line
+just inside it. That line was camouflage showing through, not an authored highlight (no theme role; its colour was
+the title-bar fill forced opaque), so it was dropped with the caps.
+
 The edge paints **over** the window's content in both windows (the Studio's edge item at z 1000; Settings' overlay, a
 mouse-transparent child kept above every other child). Settings' shell surfaces fill the whole window
 (`window.dialog_glass`, the title bar), so an edge painted beneath them is covered: dark themes author those surfaces
@@ -317,21 +340,62 @@ nearly clear and hid the defect, light themes author them nearly opaque and lost
 (fixed 8 Nov 2026; bar: `tests/test_settings_forged_edge_over_content.py`). `SettingsDialog.paintEvent` paints only
 the non-Windows material underlay (`paint_material_underlay`), beneath the content.
 
-Native Settings corner acceptance requires desktop captures of dark and light themes on both dark and light
-backgrounds. The forged edge is not a native composition clip: on the layered AccentPolicy HWND, an installed
-window region clips Qt painting but does not remove the Accent material in excluded corner pixels. A QWidget mask
-therefore cannot establish a clean rounded native silhouette. Keep native material residue distinct from the
-renderer stroke, and inspect antialiasing, clipping and seams as well as outside-radius coverage. Product outer-shadow
-coverage is zero; assess any OS-owned DWM shadow separately outside the HWND. Offscreen QWidget captures can test
-edge ownership and lifecycle but cannot close this native composition gate. The Studio's separate Quick window
-is outside this Settings-only acceptance scope.
+**What no layered window can remove.** The AccentPolicy material covers the whole window rectangle and ignores
+window regions and masks, so the see-through corner still shows the *blurred* desktop (the material), not the raw
+desktop: a few pixels per corner differ from the wallpaper (worst difference about 40 on the dark wallpaper and 70-86
+on the light one at 150%, partly the border's own antialiasing). "Zero pixels differing from the desktop outside the
+arc" is therefore not a reachable acceptance for these windows; only a non-layered host (the Windows 11 DWM corner
+preference, which excludes layered and regioned windows) or a rounded composition host that clips the material
+itself could remove it, and both are architecture changes (plan 1B.9 e/f). Native acceptance is visual: a properly
+rounded, antialiased border with no painted colour outside it, in dark and light themes on dark and light
+backgrounds. Product outer-shadow coverage is zero; assess any OS-owned DWM shadow separately outside the HWND.
+Offscreen captures prove the painter and the Studio shell but cannot close this native composition gate.
 
 `tools/settings_native_corners.py` captures this gate from the Windows desktop after `DwmFlush`, using an isolated
 profile and controlled backgrounds; never substitute its offscreen functional checks for those pixels. The rejected
-logical-mask and post-Accent physical-region evidence is under `.artifacts/evidence/settings/native_outer_border/`
-(`20261109_border_before`, `20261109_border_candidate`, `20261109_region_diagnostic`,
-`20261109_physical_region_diagnostic`). [Microsoft's rounded-corner guidance](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-rounded-corners)
+logical-mask and post-Accent physical-region evidence of 9 Nov is under
+`.artifacts/evidence/settings/native_outer_border/` (`20261109_border_before`, `20261109_border_candidate`,
+`20261109_region_diagnostic`, `20261109_physical_region_diagnostic`). [Microsoft's rounded-corner guidance](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-rounded-corners)
 also excludes per-pixel alpha layering and window regions from system rounding, including the opt-in API.
+
+### Native corner measurements (11 Nov 2026, plan 1B.9)
+
+`tools/settings_native_corners.py` measures the real Settings dialog or the real Studio window (`--window`),
+captures several border widths from one short showing (`--extra-border-device-px`, device pixels, applied through
+`paint_forged_window_edge`'s measurement-only `extra_border_device_px` / `border_growth` parameters; no product
+caller passes them), can set a native region before the Accent call (`--region-before-accent`), and can emulate
+another DPR (`--qt-scale-factor`: Qt rasterises at the emulated DPR on the real 150% monitor; DWM shadow and blur stay
+at 150%). Besides the nominal-arc count it reports the **escape**: changed pixels beyond the painted border's outer
+edge, and that edge's "leg" (how far from the corner it leaves the window edge: the nominal arc's leg is its radius,
+a square corner's is 0). Evidence: `.artifacts/evidence/settings/native_corners/20261111_*` (table
+`20261111_summary/corner_table.json`; corner crops and comparison sheets only); real wallpapers (`uwyTD.jpg`,
+`Usu_Underwater_Lab_1440p.png`), Alpine Observatory (Mica, dark) and Pearl Blush (Frosted, light).
+
+Forged edge, by border width (per corner, all four theme/background cases alike):
+
+| DPR | width | escape px (all forged camouflage) | painted-edge leg | nominal-arc changed px |
+|---|---|---|---|---|
+| 150% (real) | 4 px / +1 / +2 device px | 5 / 3 / 1 | 3.27 / 2.42 / 1.62 px (nominal 9.75) | 21 / 21 / 21 |
+| 100% (emulated) | 4 px / +1 / +2 | 3 / 1 / **0** | 2.18 / 1.34 / **0.58** px (nominal 6.5) | 8 / 8 / 8 |
+| 200% (emulated) | 4 px / +1 / +2 | 8 / 6 / 3 | 4.36 / 3.50 / 2.69 px (nominal 13) | 34 / 34 / 34 |
+
+The worst escape difference stayed 224-251 on light themes and 62-72 on dark themes until the last pixel went.
+**Rejected: thicker borders.** Within the operator's +2 px they shrink the camouflage wedge only by squaring the
+outer corner; they remove it only at 100%, where the corner is then square (leg 0.58 px). The width stays 4 px.
+
+**Rejected: a native rounded region set before the AccentPolicy call** (`CreateRoundRectRgn` at the nominal radius,
+`SetWindowRgn`, then Accent on the regioned HWND; `GetWindowRgn` reports COMPLEXREGION). Windows clips Qt's painting
+to the region with an aliased staircase but still composes the material across the whole rectangle (worst
+difference 57-58 on the light wallpaper, 12-13 on the dark). Same result as the region applied after Accent (9 Nov).
+
+**Shipped: see-through corners** (above). Native, 150%, the same four cases (`20261111_settings_150_see_through`,
+`*_forged_vs_see_through.png`): the corner outside the border shows only the material, the border is round and
+antialiased, the camouflage speck and the inner line are gone; worst escape difference falls from 225-251 to 71-86
+in the three cases with a light theme or a light wallpaper and from 72 to 41 in the dark/dark case (what remains is
+material plus the border's antialiasing).
+The Studio is proven off-screen (`20261111_offscreen_see_through`, a never-shown render of the real shell): its
+corner alpha outside the border is 1 where it was 255. Its native capture never showed the Quick scene (the window
+rectangle composited only the material, and one capture hung), so the Studio has no native corner evidence yet.
 
 Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies their semantic visual parameters. Runtime screensaver widget shadow authority is separate.
 

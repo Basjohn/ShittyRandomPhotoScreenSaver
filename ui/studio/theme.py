@@ -278,7 +278,7 @@ def studio_theme(theme=None) -> dict[str, str]:
         "titlebarHover": role("window.titlebar.button.hover", (62, 62, 62, 204), header),
         "titlebarPressed": role("window.titlebar.button.pressed", (50, 50, 50, 220), header),
         "closeHover": role("window.titlebar.close.hover", (232, 17, 35, 204), header),
-        "outerBorder": _hex(*outer_border), "forgedEdge": _hex(titlebar_colour),
+        "outerBorder": _hex(*outer_border),
         "panelAlpha": "%.3f" % panel_alpha,
         # Settings' panel cast (panel.group), scaled to the Studio's tight gutters; hard and static, like Settings'.
         "shadow": _hex(shadow_rgb, shadow.color.a / 255.0),

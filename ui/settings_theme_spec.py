@@ -617,9 +617,9 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "context.submenu.checked_text": WHITE,
     "context.submenu.checked_surface": Rgba(62, 62, 62, 220),
 
-    # The visible forged outer border may be themed. The backing/corner
-    # camouflage is intentionally absent: settings_dialog.py derives opaque RGB
-    # from the adjacent shell surface so the illusion cannot be desynchronised.
+    # The visible rounded outer border may be themed; it is the window's
+    # silhouette, and outside it the window is left see-through
+    # (ui/settings_window_edge.py), so no corner colour role exists.
     "chrome.outer_border": WHITE,
     "chrome.size_grip": Rgba(255, 255, 255, 200),
 }
