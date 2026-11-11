@@ -76,6 +76,12 @@ that stay true.
   in a shared file.
 - Each Windows owner's platform selection ("Windows still constructs the Windows owner") is pinned in
   `tests/test_platform_selection.py`, which runs everywhere.
+- **The one admitted form of a non-Windows case in a shared file:** a platform-injected case of a shared selection
+  function (the platform flag patched, e.g. `core.platform_paths.IS_WINDOWS` to `False`), asserting only what that
+  pure function selects. It runs on Windows and needs nothing of Linux. Today's only instance is the `[False]` case
+  of `test_the_visualizer_runs_on_the_engine_worker_by_default` in `tests/test_platform_selection.py`, the only
+  negative control for the Linux engine-worker default that can run on Windows. A test that needs Linux to run
+  (a Linux backend, sidecar, path root or real Linux behaviour) is never this form: it lives in `tests/test_linux_*.py`.
 - Tests that pin a Windows contract select it explicitly: the `windows_platform`
   fixture for path roots, or `pytest.mark.skipif(sys.platform != "win32", ...)`
   when the test needs a real Windows API. Never delete or loosen the assertion to
