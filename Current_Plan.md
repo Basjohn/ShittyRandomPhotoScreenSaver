@@ -303,8 +303,8 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   reaches only 4.76:1 on white against a 4.8 target, so for every dark-ink theme the solver saturates at white
   (linear guard limit 1.0, anchor above 1) and `surface_material.frag` mixes the whole panel interior to white.
   Dark themes get reachable limits and keep following the wallpaper. The Settings variant corrects the ink and
-  leaves the surface at its calibrated density (about .63-.72). Plum Jade is a dark theme (the operator's "Plum"
-  needs identifying on the rendered set).
+  leaves the surface at its calibrated density (about .63-.72). The operator's third example is Pearl Blush
+  (11 Nov; Plum Jade is a dark theme): prove on Platinum Workstation, Polished Chrome and Pearl Blush.
 - [ ] **1B.9 Settings and Studio window corners still bleed/escape.** Continues 1.9 with the operator's
   allowance: the border may grow by at most 2 px if that covers the escape. Measure with
   `tools/settings_native_corners.py` (four cases, 150% DPI) at +1 and +2 px, report to the operator whether
@@ -317,6 +317,18 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   from about 5 px to about 1 at 150% (0 at 100%, 3 of 8 at 200%) by squaring the corner, and does not remove it.
   Never tried: DWM corner preference on a non-layered window, a region applied before Accent, a composition-host
   clip. The tool shows a real native window; there is no Studio equivalent yet.
+- [ ] **1B.11 Theme filter in the Linked row (operator request, 11 Nov; independent of the items above, runs when
+  a slot is free).** Both theme pages (Settings Themes, Widget Themes) get a type-in filter in the space beside
+  the Linked / Independent button (`ui/tabs/themes_tab.py`, `ui/widgets/theme_list.py`). Typing narrows the list
+  to themes whose name or scheme matches: "Blue" finds every theme with Blue in its name or whose own colours are
+  blue; "Dark", "Light" and the material names ("Glass", "Frosted", ...) filter by kind; several words narrow
+  together. Autocomplete offers the kinds, the colour families and theme names. Kinds and colour families are
+  derived from each theme's own data (ink/surface luminance, material, the hue of its accent and surface) by one
+  pure function both catalogs share, so imported and user themes are covered with no hand-kept tag table. An
+  empty filter shows everything; favourites, linking and the active theme's selection behave as today (the
+  active theme is never deselected by filtering); the filter text is view state, not a saved setting. Styled
+  from the theme's own input role, Title Case, one-sentence tooltip. Test on the real SettingsDialog (built
+  tabs), with the filter derived from catalog data, never pinned theme names.
 - [ ] **1B.10 Presets (only after 1B.3-1B.6 land; one Fable 5.2 Medium agent, admitted above the roster cap for
   this task only).** Supersedes the lead's Spectrum presets 2-15 of 7 Nov (§3).
   - [ ] Spectrum: replace presets 2 and up with the best and most novel looks the mode can make.
