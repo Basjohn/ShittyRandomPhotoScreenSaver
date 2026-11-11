@@ -18,15 +18,15 @@
           ],
           [
             0.18,
-            0.62
+            0.72
           ],
           [
             0.5,
-            0.46
+            0.6
           ],
           [
             1.0,
-            0.3
+            0.44
           ]
         ],
         "spectrum_notch_positions_mirrored": [
@@ -163,12 +163,12 @@
           255
         ],
         "spectrum_bar_border_color": [
-          255,
-          255,
+          0,
+          200,
           255,
           255
         ],
-        "spectrum_bar_border_opacity": 0.0,
+        "spectrum_bar_border_opacity": 1.0,
         "spectrum_rainbow_enabled": false,
         "spectrum_rainbow_speed": 0.6,
         "mode": "spectrum"
