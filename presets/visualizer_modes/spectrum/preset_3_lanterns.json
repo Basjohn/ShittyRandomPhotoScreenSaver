@@ -91,6 +91,7 @@
         "spectrum_rainbow_fill": false,
         "spectrum_rainbow_border": false,
         "spectrum_border_radius": 5.0,
+        "spectrum_bar_gap": 2.0,
         "spectrum_wave_amplitude": 0.15,
         "spectrum_profile_floor": 0.2,
         "spectrum_drop_speed": 0.72,

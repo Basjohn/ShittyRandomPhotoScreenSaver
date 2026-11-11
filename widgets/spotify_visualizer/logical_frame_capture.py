@@ -838,6 +838,7 @@ def _common_style(widget: Any) -> dict[str, object]:
         "ghost_decay": float(widget._spectrum_ghost_decay),
         "single_piece": bool(widget._spectrum_single_piece),
         "border_radius": float(pres._spectrum_border_radius),
+        "bar_gap": float(pres._spectrum_bar_gap),
     }
     # Shared bar colours exist only for a mode that owns or borrows them (the descriptor's
     # shared_bar_appearance / shared_bar_profile_mode); Oscilloscope draws none.
