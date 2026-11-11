@@ -226,36 +226,37 @@ What it left open:
    - [ ] D3: EB geometry once per revision, not per frame. The worker's +34 MB at the first Waveform Ribbon is
      not geometry: 32 MB is the buffer numpy's OpenBLAS reserves on the first matrix-matrix product in a process
      (committed, not resident, never freed), so D3 sizes nothing against it.
-   - [ ] D4: EB's fp64 drift solver on Vulkan, at equal quality (operator, 11 Nov: Vulkan is the front, strong,
-     stable face of the product, never the fallback; OpenGL is the fallback). Direction to prove, not yet decided:
-     (a) keep 64-bit floats where the device has them: `shaderFloat64` is a queryable Vulkan device feature
-     through the native handles a C++ core holds (QRhi's own API has no query, which is why the Python path could
-     not ask); (b) for devices and backends without it, the same solver in double-single arithmetic (two 32-bit
-     floats per value, error-free sums and products) or a camera-relative reformulation that keeps the error
-     below the fp64 oracle's visible threshold, judged against the fp64 result on recorded drift; (c) or the
-     drift integrated in the worker in float64 and sent once per revision, if D3's geometry rule makes that
-     natural. Pick by measured error and cost; the shader-readiness check must discover compute sources instead
-     of a fixed module list.
-     Inventory (Sonnet, 11 Nov): `D:\Temp\Scratch\SRPSS\research\20261111\eb_fp64_drift_inventory.md`. Facts
-     the decision starts from: the doubles live only inside two compute programs (`CHAIN_COMPUTE`,
-     `CLOUD_COMPUTE`: step log, chain geometry, per-chain shift and phase; add, multiply, divide, `floor`, `mod`
-     only); every output the draw shaders read is already fp32; only chains carry exact fp64 state across frames
-     (the cloud's phase, span and seed are float32); the recorded reason is that a float32 span/carry moved a
-     chain's knot step one tick early against the CPU, plus 2 pi reduction of ever-growing phase; a complete
-     float64 CPU oracle exists (`MaterialDriftReference`, tests only, 1e-4, at most about 4 s of simulated time).
-   - [ ] D4 input: nothing detects fp64 today (OpenGL 4.6 Core implies it; a failed context raises "no renderer
-     fallback"); the native core needs an explicit capability read and a stated behaviour without it.
-   - [ ] D4 input: both drift shaders are on the `LEGACY_GL_ONLY` list because they fail `qsb` on loose uniforms,
-     so "qsb compiles fp64 SPIR-V" (phase-boundary audit) is not shown for them: restructure the uniforms into a
-     block and compile them, or correct the audit's claim.
-   - [ ] D4 input: the oracle comparison runs 150 to 240 ticks; extend it to a long horizon (hours of simulated
-     time, the saver's real session length) before any 32-bit formulation is judged, and state the visible
-     threshold of drift error.
-   - [ ] D4 input: option (c) would send about 3.99 MB per revision at full population (240 chains x 128 knots,
-     2500 snow, 216000 specks, 16 B each); measure the worker's CPU cost for it.
-   - [ ] The solver docstring says the CPU reference keeps positions in fp32; it keeps float64 and narrows only
-     when packing. Correct the docstring; the phase-boundary audit cites the doubles at `SOLVER:39-92`, they run
-     to line 210.
+   - **D4 decided in design (lead, 11 Nov; `Docs/Future_Work/Native_Core_P3_Decisions.md`):** no `double` in any
+     shader on any backend, so no device feature is needed and no device is second class (operator: Vulkan is
+     the front, strong, stable face; OpenGL is the fallback). The doubles serve three things only, and each gets
+     its precision where it is free or rebuilt exactly: (1) the per-chain knot decision (`floor`) is made in the
+     engine worker in float64, by the reference's own arithmetic, and published per step as an integer `moved`
+     and a float32 `shift` (at most 240 chains); (2) the three growing phase arguments are reduced mod 2 pi in
+     the worker and published as three float32 angles per step; (3) the per-mote quotient `travel * carry / span`
+     is rebuilt on the GPU from pairs of floats (the worker precomputes `carry / span` per mote as a high and a
+     low float32 in the mote record's two unused floats, and splits `travel` per step; the shader uses an
+     `fma` two-product marked `precise`), about 48 significant bits against the 24 the float32 result can hold.
+     It can be built now in the existing OpenGL renderer, behind the existing reference tests, before any C++.
+   - [ ] D4.1 A NumPy float32 model of the pair arithmetic in the shader's exact operation order (`math.fma`)
+     against `MaterialDriftReference`, on runs starting at one hour's and eight hours' `travel` and `phase`: no
+     GPU, a test file; this proves the formulation before any shader changes.
+   - [ ] D4.2 The worker's drift log publishes the chain decision stream and the three reduced angles; mote
+     geometry carries `carry / span` as a float pair; the step record carries `travel` as a pair; codec and slot
+     sizing follow (`core/visualizer_engine/frame_capacity.py`); in process and worker paths both.
+   - [ ] D4.3 Both compute programs rewritten without `double`; chain `moved` equals the reference's as integers
+     on every tick of a long recorded drive (not a tolerance); displacement, shift, phase offset and progress
+     within the existing 1e-4 at the long horizons; today's `double` shader run on the same horizons beside it.
+   - [ ] D4.4 The largest displacement difference in pixels at 4K for the nearest bead the camera admits, stated.
+   - [ ] D4.5 Both programs pass `qsb` (loose uniforms into a block) and leave `LEGACY_GL_ONLY`; the
+     shader-readiness check discovers compute sources instead of a fixed module list; the phase-boundary audit's
+     "qsb compiles fp64 SPIR-V" claim and its `SOLVER:39-92` citation corrected; the solver docstring corrected
+     (the reference keeps float64 positions and narrows only when packing).
+   - [ ] D4.6 Cost: GPU time per dispatch at Preset 1 and at 216,000 specks against today's, alternated in one
+     session; the worker's tick cost for the decisions; a frame with no new step still dispatches nothing.
+   - [ ] D4.7 A warm-up self-check of the two-product on a known pair (on the edge, never per frame): a compiler
+     that ignores `precise` is logged and reported, never silent drift.
+   - [ ] D4.8 What the user sees when the drift program fails to compile on a device is traced and stated
+     (today: a `RuntimeError` with no fallback), and the long-horizon test stays in the suite.
    - [ ] Transport rule for the substrate: nothing through the resource sharer; a name on POSIX, an exact-process
      handle on Windows.
 
@@ -266,8 +267,9 @@ What it left open:
 native core for all custom drawing, rolled out in this order; each stage retires its raw-Python GL renderer only
 after parity, never leaving a second permanent renderer:
 
-- [ ] P3.0 The four decisions above (D1-D4) and the transport rule written as contracts, seen by the lead and the
-  operator, before any C++.
+- [ ] P3.0 The four decisions above (D1-D4) and the transport rule written as contracts in
+  `Docs/Future_Work/Native_Core_P3_Decisions.md`, seen by the lead and the operator, before any C++ (D4 is
+  written; D1, D2, D3 and the transport rule are owed).
 - [ ] P3.1 Native QRhi substrate: exact Qt/PySide6 ABI, the frozen MSVC DLL guard, resource ownership, the native
   packet reader with its quiescence barrier and drop edge, capture/clip parity. `native/spike_p1` stays evidence,
   never a shipped renderer.
@@ -1119,7 +1121,24 @@ Nov evening: the lead is the only Fable "until I say otherwise"; the preset agen
 the cap): the native-core sequence (section 1 item 8b), the material track (1B.8) and what is left of the presets
 (1B.10, Opus Medium, when nothing more significant is waiting; the lead judges their pixels) run in these slots.
 The plan holds every task in detail before dispatch: a brief is its plan item, and a report is checked against
-the item's boxes (operator, 11 Nov evening). Agents run
+the item's boxes (operator, 11 Nov evening).
+
+**Closing before opening (operator, 12 Nov: "we seem to already struggle with agents not completing before the
+5hr limit ... We do need to focus on closing tasks with real successes ... and thus opening work chances"; and
+on the native core having no agent: "it is disappointing"; no further agents are added).** Rules:
+- A dispatch is one plan item, or one step of a large one, sized to finish, prove and report well inside the
+  limit; it commits at every step so a cut-off loses nothing, and it stops at its review point.
+- A slot does not take new work while its last report is unreviewed or unmerged: the lead audits and merges
+  first, deletes the landed boxes, then opens the next item.
+- Opus High slot A (material: 1C.5, the M2b report): when that is reviewed and merged the slot goes to the
+  native core, not to M3: first D4 (item 8b, D4.1 to D4.8, buildable now in the OpenGL renderer), then D1, D2,
+  D3 and the transport rule as contracts. M3 and M4 (border materials) follow when a High slot is free again.
+- Opus High slot B (Now Playing 1C.3, then the retarget 1C.2) stays on the fullscreen Visualizer until both
+  are merged; then Neon Lake round 3 (1C.10) or M3, whichever the lead finds more valuable then.
+- Opus Medium slots: 1C.4 and 1C.1 (Spline Curve, the preset error), the pool rows restyle (1C.9); then the
+  parked batch 4 (test doubles), the two preset flaws and 1C.8 (water lines) as bounded items.
+
+Agents run
 only the tests related to what they changed, never `--isolated`, never take over a display (off-screen renders
 and captures), and record side defects here instead of ignoring them. Wait for agent reports without status
 polling. An interrupted agent's uncommitted work is preserved as a "WIP (handover)" commit on its branch and the
