@@ -700,6 +700,12 @@ a standing condition and their crop shows lines inside the border band along the
   the shared owner; why Spline Curve shows it and the others do not, with one other mode beside it.
 - [ ] The clip contract test's steady check runs with a non-default border width, a Glass border and the CUSTOM
   route, over every mode, counting the border band.
+- [ ] Operator, 12 Nov, on their crop: "I see 1px or so escaping there ... It's the white lines." The target is
+  Spline Curve's own white bar-border lines reaching about one pixel past the content's bound in steady frames:
+  measured with fills transparent and only the bar border on, all four sides, at 100 %, 125 % and 150 %; the
+  one-pixel disagreement named (border rounding against the clip's inner edge, the clip's soft edge, the line's
+  width or fringe, a scissor wider than the stencil) and fixed at the shared bound; a full-brightness line along
+  each edge added to the clip contract test.
 - [ ] If nothing reproduces off-screen: the lead takes it on Display 1 with the operator's profile copy (1B.14).
 
 ### 1C.5 Volume child control: its drop shadow is cut off sharply (owner: the material agent, before M2b's review)
