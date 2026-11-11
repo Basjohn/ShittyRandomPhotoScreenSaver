@@ -19,8 +19,8 @@ import math
 
 import numpy as np
 
-from widgets.spotify_visualizer.extruded_bubble_drift import DRIFT_DIRECTIONS
-from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES
+from widgets.spotify_visualizer.extruded_bubble_drift import DRIFT_DIRECTIONS, PHASE_RATES
+from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES, SEED_STEPS, KnotClock
 
 FAMILIES = ("chains", "snow", "specks")
 STEP_FIELDS = ("serial", "dt", "phase", "travel", "speed", "kind",
@@ -64,6 +64,33 @@ class DriftFamily:
             descriptor = replace(self, source=())
             object.__setattr__(self, '_render_descriptor', descriptor)
         return descriptor
+
+
+_TAU = 2.0 * math.pi
+_SEED_HEAD = 2.0 ** -24
+
+
+def reduced_angles(t: float) -> tuple[float, ...]:
+    """The drift field's ever-growing phase arguments ``t x rate`` (``PHASE_RATES``), reduced mod 2 pi in float64
+    and narrowed to float32 values: the GPU adds the bounded per-member term and takes ``sin`` in 32-bit."""
+    return tuple(float(np.float32(math.fmod(t * rate, _TAU))) for rate in PHASE_RATES)
+
+
+def float_pair(values):
+    """``values`` (float64) as a high and a low float32 whose sum keeps about 48 significant bits."""
+    values = np.asarray(values, dtype=np.float64)
+    high = values.astype(np.float32)
+    return high, (values - high.astype(np.float64)).astype(np.float32)
+
+
+def seed_heads(seed) -> np.ndarray:
+    """Cloud seeds as float32 heads ``k / 2^24``: a seed is ``k / (2^24 - 1)`` (``seeded_random``), which is
+    ``head + head / 2^24`` to within 2^-48, so the GPU rebuilds the whole seed as a pair from the head alone."""
+    seed = np.asarray(seed, dtype=np.float64)
+    steps = np.rint(seed * SEED_STEPS)
+    if not np.array_equal(steps / float(SEED_STEPS), seed):
+        raise ValueError("Extruded Bubble cloud seeds must be seeded_random values")
+    return (steps * _SEED_HEAD).astype(np.float32)
 
 
 def pack_geometry(family: str, geometry) -> bytes:
@@ -223,16 +250,47 @@ def _field(record) -> dict:
                 origin=tuple(float(v) for v in record[r["origin_x"]:r["origin_z"] + 1]))
 
 
+# One chain's knot decision for one step, as the GPU solver reads it: the shift after the step (float32, in
+# [0, 1/(PATH_NODES-3))), the phase offset after the step (float32) and how many knots the row moves (int32).
+KNOT_DECISION = np.dtype([("shift", "<f4"), ("phase_offset", "<f4"), ("moved", "<i4")])
+KNOT_DECISION_BYTES = KNOT_DECISION.itemsize
+
+
+class KnotDecisions:
+    """The free chains' knot clock on the logical side: the reference's own ``KnotClock`` arithmetic, in float64,
+    run once per step over the same inputs ``MaterialPaths`` reads (``chain_inputs``). ``step`` returns the step's
+    ``chain_rows`` decisions as ``KNOT_DECISION`` records; before any history has begun (no time or no drift yet)
+    every row holds still with no shift, as the reference does."""
+
+    def __init__(self) -> None:
+        self.clock = KnotClock()
+
+    def step(self, source, rows: int, travel: float, speed: float, dt: float, amount: float) -> bytes:
+        base, spans, travel, speed, _phases = chain_inputs(source, rows, travel, speed)
+        records = np.zeros(rows, dtype=KNOT_DECISION)
+        clock = self.clock
+        if clock.step(np.asarray(base), base, np.asarray(spans), np.asarray(travel), speed, dt, amount):
+            records["shift"], records["phase_offset"], records["moved"] = clock.shift, clock.phase_offset, clock.moved
+        return records.tobytes()
+
+
+def chain_inputs(source, rows: int, travel: float, speed: float):
+    """One step's free-chain rows as ``MaterialPaths`` reads them: (base, spans, travel, speed, phases), the
+    stream's travel and speed carried per chain. The reference and the drift log's knot clock both read this."""
+    base, spans, carry, phases = source
+    if rows != len(base):
+        base = base[:rows]   # the whole cached array when nothing is cut: the knot clock's identity fast path
+    spans, carry, phases = spans[:rows], carry[:rows], phases[:rows]
+    return base, spans, travel * carry, speed * carry, phases
+
+
 def _reference_step(name, family, paths, record) -> bytes:
     r = STEP_INDEX
     dt, travel, speed = float(record[r["dt"]]), float(record[r["travel"]]), float(record[r["speed"]])
     amount = float(record[r[f"amount_{name}"]])
     if name == "chains":
-        rows = int(record[r["chain_rows"]])
-        base, spans, carry, phases = family.source
-        base, spans, carry, phases = base[:rows], spans[:rows], carry[:rows], phases[:rows]
-        displacement = paths.advance(base, spans, travel * carry, speed * carry, phases, dt, amount=amount,
-                                     **_field(record))
+        base, spans, travel, speed, phases = chain_inputs(family.source, int(record[r["chain_rows"]]), travel, speed)
+        displacement = paths.advance(base, spans, travel, speed, phases, dt, amount=amount, **_field(record))
         if displacement is None:
             return b""
         packed = np.zeros((*displacement.shape[:2], 4), dtype=np.float32)
@@ -247,5 +305,7 @@ def _reference_step(name, family, paths, record) -> bytes:
 
 
 __all__ = ["CHAIN_GEOMETRY_BYTES", "CHAIN_GEOMETRY_DOUBLES", "CLOUD_GEOMETRY_BYTES", "DriftFamily", "DriftLog", "FAMILIES",
-           "MaterialDriftReference", "STEP_FIELDS", "STEP_FLOATS", "STEP_HISTORY", "STEP_INDEX", "chain_lifetime",
-           "cloud_lifetime", "pack_geometry", "unpack_steps"]
+           "KNOT_DECISION", "KNOT_DECISION_BYTES", "KnotDecisions", "MaterialDriftReference", "STEP_FIELDS",
+           "STEP_FLOATS", "STEP_HISTORY", "STEP_INDEX", "chain_inputs", "chain_lifetime", "cloud_lifetime",
+           "float_pair", "pack_geometry", "reduced_angles", "seed_heads",
+           "unpack_steps"]

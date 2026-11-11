@@ -21,11 +21,14 @@ CHAIN_FADE_BAND = 4.0
 CHAIN_FADE_RATE = 4.0
 
 
+SEED_STEPS = 0xffffff  # seeded_random's values are k / SEED_STEPS for a 24-bit integer k
+
+
 def seeded_random(indices, salt):
     """The existing procedural 24-bit hash; stable CPU/GPU identities."""
     x = np.asarray(indices, dtype=np.uint32) * np.uint32(0x9e3779b9) ^ np.uint32((salt * 0x85ebca6b) & 0xffffffff)
     x ^= x >> 16; x *= np.uint32(0x7feb352d); x ^= x >> 15; x *= np.uint32(0x846ca68b); x ^= x >> 16
-    return (x & 0xffffff).astype(np.float64) / 16777215.
+    return (x & SEED_STEPS).astype(np.float64) / float(SEED_STEPS)
 
 
 def scene_entries(face_seed, uv, direction, weights):
@@ -46,13 +49,68 @@ def scene_entries(face_seed, uv, direction, weights):
     return points, np.maximum(.001,np.min(distances,axis=1))
 
 
+class KnotClock:
+    """The discrete half of ``MaterialPaths``, in float64: each path's knot shift (how far its knot row has slid
+    since the last whole knot), how many knots the row moves this step, and its phase offset (kept across a
+    geometry edit). ``MaterialPaths`` keeps these here; the drift log runs its own clock over the same inputs, so
+    the GPU solver's per-step knot decisions are this arithmetic, made once (no float64 in any shader).
+
+    ``step`` is one logical step. It returns False while no history has begun (zero time or zero drift: nothing
+    happens yet); otherwise it admits the step's rows (a new row starts fresh), rebases the phase offset at a
+    geometry edit and moves the shift, leaving ``moved``, ``rate``, ``before`` (the shift the step started from)
+    and the step's ``resized`` / ``edited`` events for the caller."""
+
+    def __init__(self, nodes=PATH_NODES):
+        self.nodes = nodes
+        self.shift = self.phase_offset = self.spans = self.travel = None
+        self.before = self.moved = self.rate = None
+        self.resized = self.edited = False
+        self._definition = None
+        self._source = None  # the caller's (never mutated) definition array last seen, for an identity fast path
+
+    def step(self, definition, base, spans, travel, speed, dt, amount) -> bool:
+        if self.shift is None and (dt<=0 or amount==0.):
+            return False
+        count=len(definition)
+        self.resized=self.shift is None or count!=len(self.shift)
+        if self.shift is None:
+            self.shift=np.zeros(count);self.phase_offset=np.zeros(count)
+        elif count!=len(self.shift):
+            # Keep the retained rows' state; a newly admitted row starts fresh, exactly as a new path would.
+            keep=min(count,len(self.shift))
+            shift=np.zeros(count);shift[:keep]=self.shift[:keep]
+            phase_offset=np.zeros(count);phase_offset[:keep]=self.phase_offset[:keep]
+            self.shift,self.phase_offset=shift,phase_offset
+            self.spans=np.concatenate((self.spans[:keep],spans[keep:]))
+            self.travel=np.concatenate((self.travel[:keep],travel[keep:]))
+            self._definition=np.concatenate((self._definition[:keep],definition[keep:]))
+            self._source=None
+        self.edited=(self._definition is not None and base is not self._source
+                     and not np.array_equal(definition,self._definition))
+        if self.edited:
+            # Preserve progress phase at a path edit.
+            self.phase_offset=np.mod(self.phase_offset+self.travel/self.spans-self.travel/spans,1.)
+        self.before=self.shift
+        self.rate=np.asarray(speed)/spans
+        shifted=self.shift+self.rate*dt
+        step=1./(self.nodes-3.)
+        self.moved=np.floor(shifted/step+1e-10).astype(np.intp)
+        self.shift=shifted-self.moved*step
+        self.spans,self.travel=spans.copy(),travel.copy()
+        if base is not self._source:
+            # The caller's cached geometry is never mutated: the same object means the same definition.
+            self._definition=definition.copy();self._source=base
+        return True
+
+
 class MaterialPaths:
     """Lagrangian material knots, with two boundary ghosts and no resampling diffusion.
 
     Knots move through progress with the stream and integrate physical drift at
     their own current positions. A bounded ring reindex preserves every retained
     knot; only fresh upstream material starts at zero. The renderer interpolates
-    once between knots, including true inlet/outlet neighbours.
+    once between knots, including true inlet/outlet neighbours. The knot shift,
+    the knot steps and the phase offset are the ``KnotClock``'s.
     """
     def __init__(self, nodes=PATH_NODES):
         if nodes < 5:
@@ -60,23 +118,21 @@ class MaterialPaths:
         self.nodes = nodes
         self.progress = (np.arange(nodes)-1.)/(nodes-3.)
         self.displacement = None
-        self.base = self.spans = self.travel = None
-        self.shift = self.phase_offset = self._definition = None
-        self._source = None  # the caller's (never mutated) definition array last seen, for an identity fast path
+        self.base = None
+        self.clock = KnotClock(nodes)
 
-    def _resize(self, definition, spans, travel):
-        """Keep the retained rows' state; a newly admitted row starts fresh, exactly as a new path would."""
-        count, keep = len(definition), min(len(definition), len(self.displacement))
+    shift = property(lambda self: self.clock.shift)
+    phase_offset = property(lambda self: self.clock.phase_offset)
+    spans = property(lambda self: self.clock.spans)
+    travel = property(lambda self: self.clock.travel)
+
+    def _resize(self, definition):
+        """Keep the retained rows' displacement; a newly admitted row starts fresh, exactly as a new path would."""
+        keep = min(len(definition), len(self.displacement))
         displacement = np.zeros_like(definition); displacement[:keep] = self.displacement[:keep]
-        shift = np.zeros(count); shift[:keep] = self.shift[:keep]
-        phase_offset = np.zeros(count); phase_offset[:keep] = self.phase_offset[:keep]
         fresh = definition[keep:, :1] + (definition[keep:, -1:] - definition[keep:, :1]) * self.progress[None, :, None]
-        self.displacement, self.shift, self.phase_offset = displacement, shift, phase_offset
+        self.displacement = displacement
         self.base = np.concatenate((self.base[:keep], fresh))
-        self.spans = np.concatenate((self.spans[:keep], spans[keep:]))
-        self.travel = np.concatenate((self.travel[:keep], travel[keep:]))
-        self._definition = np.concatenate((self._definition[:keep], definition[keep:]))
-        self._source = None
 
     def _sample(self, rows, coordinates, *, linear=True):
         at = (np.asarray(coordinates)-self.shift[:,None])*(self.nodes-3.)+1.
@@ -90,28 +146,21 @@ class MaterialPaths:
         definition=np.asarray(base);spans=np.asarray(spans);travel=np.asarray(travel)
         if definition.ndim!=3 or definition.shape[1:]!=(self.nodes,3):
             raise ValueError('Material paths require complete world-space inlet/exit rows')
-        if self.displacement is None and (dt<=0 or amount==0.):
+        clock=self.clock
+        if not clock.step(definition,base,spans,travel,speed,dt,amount):
             return None
-        count=len(definition)
         if self.displacement is None:
             self.displacement=np.zeros_like(definition)
-            self.shift=np.zeros(count);self.phase_offset=np.zeros(count)
-        else:
-            if count!=len(self.displacement):
-                self._resize(definition,spans,travel)
-        if self._definition is not None and base is not self._source and not np.array_equal(definition,self._definition):
-            # Preserve progress phase and world centreline at a path edit.
+        elif clock.resized:
+            self._resize(definition)
+        if clock.edited:
+            # Preserve progress phase (the clock's phase offset) and world centreline at a path edit.
             # Static bead arc/scatter is still authored by the existing shader;
             # this does not claim to preserve that independently edited geometry.
-            self.phase_offset = np.mod(self.phase_offset+self.travel/self.spans-self.travel/spans,1.)
-            q=self.progress[None,:]+self.shift[:,None]
+            q=self.progress[None,:]+clock.before[:,None]
             new_base=definition[:,:1]+(definition[:,-1:]-definition[:,:1])*q[...,None]
             self.displacement += self.base-new_base
-        rate=np.asarray(speed)/spans
-        shifted=self.shift+rate*dt
-        step=1./(self.nodes-3.)
-        moved=np.floor(shifted/step+1e-10).astype(np.intp)
-        self.shift=shifted-moved*step
+        rate,moved=clock.rate,clock.moved
         if np.any(moved):
             # Only the paths that advanced a knot shift their history; the others keep theirs as it is.
             rows=np.flatnonzero(moved)
@@ -128,10 +177,7 @@ class MaterialPaths:
         for axis,component in enumerate(field):
             self.displacement[...,axis] += component*available
         self.displacement[q<=0.]=0.
-        self.base,self.spans,self.travel=node_base,spans.copy(),travel.copy()
-        if base is not self._source:
-            # The caller's cached geometry is never mutated: the same object means the same definition.
-            self._definition=definition.copy();self._source=base
+        self.base=node_base
         return self.displacement
 
 
