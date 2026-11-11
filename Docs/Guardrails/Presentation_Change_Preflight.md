@@ -60,6 +60,17 @@ Ask:
 6. Are you accidentally preserving an old pixel owner that is caller-dead?
 7. If source contradicts a durable destination contract, is this actually missing implementation rather than a doc to delete?
 
+## QML traps
+
+Known QML authoring traps that fail without an error. There is no separate QML authoring guide; add a trap here when
+one is found.
+
+- **A property named `left` on a `Text`** collides with Item's built-in `left` (its anchor line) instead of declaring
+  a new property. The hidden scene's load then **hangs silently** instead of raising: no QML warning, no exception, no
+  `Component.Error`. Recognise it by a test or probe that never returns from loading the scene (a hidden/offscreen
+  load that stalls where it used to take seconds). Name the property for what it holds (`leftText`, `leftValue`); do
+  not reuse a built-in Item property name for your own state.
+
 ## Acceptance
 
 Use the relevant subset:
