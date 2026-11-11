@@ -281,11 +281,14 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
   re-queries the cursor until the next pointer message; next, capture ordering in the exit click and the
   link-click + browser-launch exit. Decide with one external observer polling `GetCursorInfo` / `GetCapture` /
   `GetClipCursor` across the exit paths, then fix.
-- [ ] **1B.3 Studio slider save churn.** Audit every Studio slider/drag instrument (all modes, shared chrome,
-  response tuner, camera, brush) for a settings/preset/sidecar write or flush per move. A drag previews in memory
-  and commits once on release (the existing "Drags are batched" contract in `Docs/Reference/Visualizer_Studio.md`);
-  repair every violator at its shared owner and add one test that counts I/O across a drag for every registered
-  adapter.
+- [ ] **1B.3 side defects (the churn audit itself landed 11 Nov, f5693c6d: no Studio drag writes while it moves;
+  `tests/test_studio_drag_io_churn.py` holds every registered adapter to it; camera navigation now rebuilds the
+  inspector once per frame, 1-4 ms a move before).** Found by that audit, not fixed there:
+  - [ ] Sphere Studio: View Turn / View Tilt do not stick. A drag of `sphere_turn` commits and saves once, then
+    reads back 0.0 and the slider snaps back (the keys are excluded from the preset save by
+    `get_visualizer_view_pose_keys`, and Sphere has no framed-camera aim hold).
+  - [ ] Waveform Studio: Camera Position Y snaps back. `waveform_ribbon_camera_position[1]` dragged to its maximum
+    commits once and the save returns 0.0 (the slider's range or the eye limit is wrong).
 - [ ] **1B.4 Shape control for the music-visual shape (Spectrum and Neon Lake): design regression.** Both Studios
   turned the shape editing control into sliders. Recover the original shape control from git before the Studios
   existed, and build one thematic, Studio-matching, visually pleasing shape instrument on the Studio's shared
@@ -295,6 +298,17 @@ High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/re
 - [ ] **1B.5 Neon Lake: all visible land is brush-editable.** The Studio brush stops at limits narrower than the
   land the scene shows. The paintable domain is the visible terrain; move the bound to the terrain's own extent
   owner (no second limit table), with a pick test at the visible edges through the production camera.
+  Reproduced 11 Nov (`tests/test_neon_lake_brush_reach.py`, strict xfail on "every visible land point is
+  paintable"): there is no limit narrower than the authored grid; the refused land is the generated landscape
+  drawn past the grid (`scene_surface`, `rendering/gl_programs/neon_terrain_surface.py`), about 26% of the land
+  on screen for Preset 3 at the default view and 13-20% for Presets 1-2 dollied back; `pick_terrain`
+  (`ui/studio/shockwave_grid_adapter.py`) refuses it because no authored cell exists there. Lead's decision: a
+  stroke past the grid grows the authored grid through the existing extend owner
+  (`rendering/gl_programs/neon_terrain_extent.py`, cap 257), and growth is invisible: new cells take the generated
+  landscape's own heights and the far-land curvature keeps its authored origin, so the horizon, detail and glow
+  do not shift when the grid grows; existing cells stay exactly as stored; the stroke re-maps its coordinates
+  across a mid-stroke growth; one undoable step per stroke including the growth. Runs with 1B.6 (same terrain
+  owners).
 - [ ] **1B.6 Neon Lake: land reactivity pass for smooth deformation.** No tearing or jagged edges at any
   reactivity (continuous normals and silhouette under the production mesh density). Optional, default off and
   preset-authored: growth of spires, mounds and land that is not visible at low reactivity, and indents of land
