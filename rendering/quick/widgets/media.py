@@ -1598,6 +1598,25 @@ class MediaPresentationModel(QObject):
             "fontSize": float(self.fontSize),
         }, sort_keys=True)
 
+    @Property(str, notify=stateChanged)
+    def seekBarLook(self) -> str:
+        """The Media card's seek bar look (the progress traits MediaPresentation.qml binds on its MediaSeekBar) as one
+        JSON object of plain values, for the one seek bar's second drawing: the Expanded Visualizer's Now Playing seek
+        bar. A string for the reason ``transportBarLook`` gives. ``height`` is the Settings-authored seek height."""
+
+        def name(color) -> str:
+            return QColor(color).name(QColor.NameFormat.HexArgb)
+
+        return json.dumps({
+            "trackColor": name(self.progressTrackColor),
+            "fillColor": name(self.progressFillColor),
+            "shadowEnabled": bool(self.progressShadowEnabled),
+            "shadowColor": name(self.progressShadowColor),
+            "glowEnabled": bool(self.progressGlowEnabled),
+            "glowColor": name(self.progressGlowColor),
+            "height": float(self.progressHeight),
+        }, sort_keys=True)
+
 
 class RetainedMediaPresentation:
     def __init__(

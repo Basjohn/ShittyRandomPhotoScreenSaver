@@ -254,7 +254,7 @@ def test_media_nested_seek_and_transport_keep_axis_independent_band_reflow() -> 
     # Both roles remain descendants of their existing Column-owned bands.
     # Changing X or Y child offset must not subtract the band's live Y movement
     # during compact-height parent editing in either semantic orientation.
-    seek = qml.split('id: progressTrack', 1)[1].split('id: progressFill', 1)[0]
+    seek = qml.split('id: progressTrack', 1)[1].split('onSeekRequested', 1)[0]
     transport = qml.split('id: controlsRow', 1)[1].split('id: appVolumeSlider', 1)[0]
     assert 'customEditPlacementCompensationY: 0.0' in seek
     assert 'customEditPlacementCompensationY: 0.0' in transport
