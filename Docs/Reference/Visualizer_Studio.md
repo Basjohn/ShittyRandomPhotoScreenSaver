@@ -346,7 +346,11 @@ when both toolbar groups cannot fit side by side.
   `.artifacts/evidence/studio/completion/20261106_completion/brush/`).
   **Radius** is a size on the ground, a share of the basin's side (`heightfield_brush.RADIUS_RANGE`), the same
   wherever the brush paints and however far the grid reaches (until 11 Nov it was a share of the grid, so an extended
-  grid had a larger brush).
+  grid had a larger brush). Rescaled 12 Nov: the old default covered 0.21 of the basin on Presets 1 and 2 (their grid
+  is 1.75 basins a side) and 0.12 on Preset 3; one ground size now serves all three, so the default
+  (`RADIUS_DEFAULT` 0.16) sits between them (0.76x and 1.33x) and the range (0.03..0.6) keeps the old finest brush and
+  Presets 1 and 2's old largest. The panel's Radius row reads that range from `brushState.radius_range` (it kept its
+  own copy before).
   **Land past the stored grid (11 Nov, 1B.5).** A target may give `BrushTarget.grow` / `reachable` / `refusal`
   (Neon Lake: all the land the scene draws). `pick` then returns the ground point anywhere (outside 0..1 past the
   grid); when the brush would reach past the record's edge `StudioBrush._placed` asks the target for the record grown

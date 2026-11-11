@@ -57,7 +57,7 @@ class _SurfaceProbe:
 
     def draw(self, events=(), *, level=0.0, movement=1.0, detail=0.0, water_detail=0.0, time=0.0,
              bank_band=0.04, uv_rect=(0.0, 0.0, 1.0, 1.0), bands=None, amounts=(1.0, 1.0, 0.0), phase=0.0,
-             shaper=None, forms=(0.0, 0.0, 0.0), drives=(0.0, 0.0), eye=(0.0, 0.0, 100.0)):
+             shaper=None, forms=(0.0, 0.0, 0.0), drives=(0.0, 0.0), eye=(0.0, 0.0, 100.0), place=(1.0, 0.0)):
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.fbo)
         gl.glViewport(0, 0, self.SIZE, self.SIZE)
         gl.glDisable(gl.GL_DEPTH_TEST)
@@ -91,6 +91,7 @@ class _SurfaceProbe:
         # Growth (amount, shape), Indents (amount) scaled by the strength as the renderer binds them, and their drives.
         gl.glUniform4f(uniform("uReactionForms"), movement * forms[0], forms[1], movement * forms[2], 0.0)
         gl.glUniform2f(uniform("uReactionDrives"), *drives)
+        gl.glUniform2f(uniform("uGrowthPlace"), *place)       # Growth's cell scale and region (the usual: 1, 0)
         gl.glUniform3f(uniform("uEye"), *eye)                  # far from the probed land unless a test places it
         gl.glUniform1f(uniform("uTime"), time)
         gl.glUniform1f(uniform("uWaterDetail"), water_detail)

@@ -131,3 +131,17 @@ def test_brush_settings_admit_their_own_bounds():
         assert settings.admitted("mode", mode).mode == mode
     with pytest.raises(KeyError):
         settings.admitted("colour", 1.0)
+    assert RADIUS_RANGE[0] <= settings.radius <= RADIUS_RANGE[1]
+
+
+def test_the_studio_slider_takes_the_radius_range_from_the_brush():
+    """The Studio's Radius row reads its range from the brush's one owner (it once kept its own copy)."""
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from ui.studio.brush import StudioBrush
+    brush = StudioBrush(SimpleNamespace(label="Terrain"), None, lambda: None, lambda: None)
+    assert brush.as_map()["radius_range"] == list(RADIUS_RANGE)
+    shell = (Path(__file__).resolve().parents[1] / "ui" / "studio" / "qml" / "StudioShell.qml").read_text("utf-8")
+    row = shell[shell.index('name: "radius"'):shell.index('name: "strength"')]
+    assert "radius_range" in row and f"{RADIUS_RANGE[1]}" not in row.replace("[0.0, 1.0]", "")
