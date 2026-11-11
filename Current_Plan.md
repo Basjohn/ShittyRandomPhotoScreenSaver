@@ -1195,38 +1195,65 @@ rendering.
 
 The architecture planned for the dropped concepts (volumetric music chamber, audio aurora/ribbon volume, photo
 fracture portal, voxel morph field, holographic depth slices, procedural storm, reactive particle field,
-terrain/skyline/tunnel, deformable blob sphere) is worth having; the modes were not. Build it here as shared primitives
-on the existing Scene3D substrate (`Docs/Reference/Scene3D_Resources.md`): `MeshResources`, `SceneTarget`, depth-aware
-OIT, probe, defocus, HDR intermediate, framed camera. Each primitive is proven on **its own offscreen harness** with
-bounded, measured cost (TIME_ELAPSED, median/p90), lazy creation, zero dormant work and clean retirement; none waits for a
-consumer, and none becomes a second renderer, clock or camera. Read the 3D foundation lessons in
-`Docs/Reference/Transitions.md` before each slice. Order follows which mode needs them first.
+terrain/skyline/tunnel, deformable blob sphere) is worth having; the modes were not. Build shared primitives on the
+existing Scene3D substrate (`Docs/Reference/Scene3D_Resources.md`): `MeshResources`, `SceneTarget`, depth-aware OIT,
+probe, defocus, HDR intermediate, framed camera. Order follows which mode needs them first.
 
-- [ ] **S3D-1 Ribbon / strip primitive:** finish the reusable camera-facing width variant, shared defocus integration,
-  lifecycle/admission proof and bounded cost around the existing history/ring/oriented-strip substrate. Preserve a bounded
-  history SSBO, centripetal Catmull-Rom placement by continuous index, OIT translucency, multi-ribbon support and fixed
-  maximum history. *Consumers: Waveform Ribbon; trails anywhere.*
-- [ ] **S3D-2 Particle population extensions (G4):** inventory the existing compacted-population/sprite/streak
-  helpers first; add bounded lifetimes, emitters, transient bursts, indirect draws and compute-driven arrangement
-  (morphing a fixed population between shapes, from the voxel morph concept). Deterministic admission/retirement.
-  *Consumers: ribbon sparks, rain droplets/crowns, melt droplets.*
-- [ ] **S3D-3 Static scene geometry and materials:** authored static meshes (slabs, curbs, walls, recesses, wells,
-  simple skyline/tunnel slices) with their own roughness/bevel/contact shading, built once and retained; photo-textured
-  shells/planes with real depth (from the fracture portal and depth-slice concepts). *Consumers: Melt Pool chamber,
-  Concrete Rain street.*
-- [ ] **S3D-4 Dynamic surface field:** a bounded GPU height+velocity grid (compute or ping-pong), impulse injection,
-  damping/return, a displaced mesh with normals from the actual surface, and an opt-in deformable sheet for shapes a
-  heightfield cannot make (from the deformable blob sphere concept). *Consumers: Melt Pool body, Concrete Rain
-  ripples/puddles.*
-- [ ] **S3D-5 Reflections and wet surfaces:** a bounded planar/probe reflection for floors and pools, wet-surface and
-  puddle masks over authored ground, and reflection-distortion sampling driven by a surface field. No screen-space trick
-  that collapses under camera motion. *Consumers: Waveform Ribbon floor (next: §7.1), Melt Pool, Concrete Rain.*
-- [ ] **S3D-6 Shared shadows (G2 / S25):** one fitted directional depth map, bounded soft PCF/bias, caster/receiver
-  admission, resize/teardown/dormancy and tier cost on a real test scene (also Usu's S25; not a revival of the rejected
-  Extruded cast shadows).
-- [ ] **S3D-7 Reduced-resolution volumes, then lightning (G5):** prove the bounded static fog slice required by Waveform
-  Ribbon first, with no audio reactivity. Then add bounded procedural bolt geometry/light and fog/smoke volumes with
-  advection/reprojection and no permanent extra targets or separate cadence. *Consumers: chamber/street atmosphere.*
+Rules for every slice below:
+
+- [ ] Read the 3D foundation lessons in `Docs/Reference/Transitions.md` before each slice.
+- [ ] Prove each primitive on its own offscreen harness with bounded, measured cost (TIME_ELAPSED, median/p90), lazy
+  creation, zero dormant work and clean retirement.
+- [ ] None waits for a consumer, and none becomes a second renderer, clock or camera.
+
+**S3D-1 Ribbon / strip primitive** (consumers: Waveform Ribbon; trails anywhere)
+
+- [ ] Finish the reusable camera-facing width variant.
+- [ ] Shared defocus integration.
+- [ ] Lifecycle/admission proof and bounded cost around the existing history/ring/oriented-strip substrate.
+- [ ] Preserve a bounded history SSBO, centripetal Catmull-Rom placement by continuous index, OIT translucency,
+  multi-ribbon support and fixed maximum history.
+
+**S3D-2 Particle population extensions (G4)** (consumers: ribbon sparks, rain droplets/crowns, melt droplets)
+
+- [ ] Inventory the existing compacted-population/sprite/streak helpers first.
+- [ ] Add bounded lifetimes, emitters, transient bursts and indirect draws.
+- [ ] Add compute-driven arrangement (morphing a fixed population between shapes, from the voxel morph concept).
+- [ ] Deterministic admission/retirement.
+
+**S3D-3 Static scene geometry and materials** (consumers: Melt Pool chamber, Concrete Rain street)
+
+- [ ] Authored static meshes (slabs, curbs, walls, recesses, wells, simple skyline/tunnel slices) with their own
+  roughness/bevel/contact shading, built once and retained.
+- [ ] Photo-textured shells/planes with real depth (from the fracture portal and depth-slice concepts).
+
+**S3D-4 Dynamic surface field** (consumers: Melt Pool body, Concrete Rain ripples/puddles)
+
+- [ ] A bounded GPU height+velocity grid (compute or ping-pong) with impulse injection and damping/return.
+- [ ] A displaced mesh with normals from the actual surface.
+- [ ] An opt-in deformable sheet for shapes a heightfield cannot make (from the deformable blob sphere concept).
+
+**S3D-5 Reflections and wet surfaces** (consumers: Waveform Ribbon floor (next: section 7.1), Melt Pool, Concrete
+Rain)
+
+- [ ] A bounded planar/probe reflection for floors and pools.
+- [ ] Wet-surface and puddle masks over authored ground.
+- [ ] Reflection-distortion sampling driven by a surface field.
+- [ ] No screen-space trick that collapses under camera motion.
+
+**S3D-6 Shared shadows (G2 / S25)**
+
+Also Usu's S25; not a revival of the rejected Extruded cast shadows.
+
+- [ ] One fitted directional depth map with bounded soft PCF/bias.
+- [ ] Caster/receiver admission, resize/teardown/dormancy.
+- [ ] Tier cost on a real test scene.
+
+**S3D-7 Reduced-resolution volumes, then lightning (G5)** (consumers: chamber/street atmosphere)
+
+- [ ] Prove the bounded static fog slice required by Waveform Ribbon first, with no audio reactivity.
+- [ ] Then bounded procedural bolt geometry/light and fog/smoke volumes with advection/reprojection and no permanent
+  extra targets or separate cadence.
 
 ## 7. Visualizer modes (one at a time, in this order)
 
