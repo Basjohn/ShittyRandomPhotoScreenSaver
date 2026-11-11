@@ -32,205 +32,198 @@ registry"). The items promoted to run soon are in §3. Nothing else in it is adm
 
 ## 1. Order of work (strict)
 
-Rewritten 7 Nov (evening) after the data-corruption fix (R-174), the Studio leak/close fixes, AC-01..AC-03, AC-17
-and Expanded Visualizer M1 all landed. **Load runs:** game60 at most 10 minutes in total, started by the lead only
+Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its `[~]`
+validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
 **Now (in flight):**
 
-0. **Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below.**
-1. **Operator-reported defects first:**
-   - Material density, composed-stack readability and Studio surfaces: active section 1A, item 1.7. Native
-     Settings corners: open item 1.9. Keep their acceptance and reversible checkpoints separate.
-   - **Studio stall, clip selection and sidecar log (merged 7 Nov after lead review):** while playing, a change whose
-     replay would chase the moving instant restarts the pass (`exact_replay.PassRestart`, every Studio-backed mode),
-     and the transport waits for a converging replay ("Updating…"). A clip pick names itself "analysing" at once and
-     retires every other analysis (latest wins). `logs/screensaver_studio.log` records selections, analysis jobs,
-     replays after a change and preview gaps. The control-hints test runs on a never-shown window (its access
-     violation came from `shiboken6.delete` in the plain-orbit tests). A Sphere <-> Extruded Spectrum switch ends a
-     held orbit. Operator check: edit Reaction Mode while Waveform plays; pick Human once.
-2. **§7.1 Waveform Ribbon reactivity (lead, 7 Nov night; operator: "Adaptivity is the enemy").** Landed: the response
-   is memoryless (no phrase-mean widening, learn gate, Breathing contrast about a mean or presence-ratio gate;
-   Adaptive Response retired as a setting); the body lets go within the authored Decay (`CASCADE_SHARE`), and the raw
-   path takes a fixed pre-FFT gain instead of the block peak normaliser. Travelling Pulse and Frozen Past travel as
-   discrete pulse bands (operator: "a relatively small horizontal width and the full vertical width"), with Pulse
-   Count (1-3 at once) and Pulse Falloff in Settings and the Studio; Frozen Past holds everything that moves the cloth
-   on cloth-fixed cells, so each part stays frozen until a pulse reaches it (Preset 5 on Human: motion outside the
-   pulses .002 against .46 world units/s inside); a kick the pulses cannot show goes to Kick Accent (roll, twist,
-   sparks, strands); optional Freeze Deflate. Measured on eight recordings back to back against the songs' own PCM
-   (Presets 1/4/5/6/7): view-amplitude correlation with loudness up against main in every mode that follows the music.
-   Evidence: `.artifacts/evidence/visualizers/waveform_ribbon/memoryless_reactivity/` (`20261107_lead/`,
-   `20261107_bands/`) and `.artifacts/webp/visualizers/waveform_ribbon/memoryless_reactivity/`. Operator check:
-   Frozen Past (Preset 5) live, and Pulse Count / Pulse Falloff / Freeze Deflate in the Studio. Next, in order:
-   - **Vocals first, remainder.** Pulse Strength is routed mid-led in every preset (operator yes, 7 Nov night; set
-     through the Studio's response tuner and Save To Preset: Bass gain .5, Mids gain .8, both curve 1.3). On the
-     eight recordings: Pulse Strength vs the PCM vocal band +.50 -> +.66 (Don't You See -.58 -> +.18, Rag Doll
-     +.71 -> +.57), loudness tracking P1 +.45 -> +.48, P5 born swell +.50 -> +.56. Open: a kick inside sustained bass
-     raises the swell 21% less (median .058 -> .046; those kicks also reach Kick Accent now); check it on the
-     operator's look before tuning further.
-   - **Breathing as a swell and release with proper motion** (operator: 2D Bubble's breathing is the reference;
-     guide §13A). Breathing is now only a faster release in soft passages.
-   - The onset reward is still sized by the bus's adaptive flux threshold (about 1 s of context: the same kick right
-     after a dense passage scores .22 against .61); size it on the fixed scale.
-   - Group Wave still reads close to Travelling Pulse on rendered strips (it keeps the summed travelling field; its
-     sets need their own pass), and its Pulse Width is not yet the band core the other two modes use.
-   - Pulse bands' colour edges read crisp at Pulse Falloff below ~1 on wide bands (Preset 5's vertical colour columns);
-     judge on the operator's look whether the light's falloff should follow the geometry's broader envelope.
-3. **Expanded Visualizer M2** (plan 01; merged 7 Nov, 884f5a50, after the lead's Gate 2 audit;
-   next: M2b, Spectrum's width-scaled bar count, then M3), with the operator's M1 amendment: a mode switch never
-   re-expands; Expanded is only ever the user's explicit request. Operator, 7 Nov evening:
-   - "Full display" is the Visualizer card placed near the display extents with its border and surface kept, never
-     edge-to-edge (R-63 overscan).
-   - Capable modes: every mode except Sphere and Extruded Spectrum (Extruded Bubble, Spectrum, Oscilloscope, Spline
-     Curve, Bubble, Neon Lake, Waveform Ribbon). Waveform Ribbon's full-display cost is recorded at M6.
-   - Double-click cycling while expanded skips incapable enabled modes and stays expanded; an explicit selection of
-     an incapable mode collapses.
-   - Spectrum gains bars in proportion to the extra width (its own milestone after M2, with a fade at the edges).
-     Operator, 8 Nov: "20% more if fullscreen and horizontal". Landed (agent branch): the expanded, horizontal card
-     draws round(1.2 x) the authored bars (cap 64), resampled from the same logical frame by the renderer; the rule's
-     one owner is `widgets/spotify_visualizer/spectrum_display_bar_count.py`, read from the display-wide record
-     (`expanded_display`), so it switches at the fade-through's invisible midpoint. A quarter turn, the ordinary card
-     and Extruded Spectrum (not expansion-capable) keep the authored count. The width-ratio DSP recompute of plan 01
-     M2b stays open; it needs the hidden activation transaction (an engine bar-count change bumps its generation).
-   - Operator, 7 Nov night: "Don't reach nearly close enough to the screen borders" and "Don't really hide/disable
-     the widgets underneath". Landed 8 Nov (agent branch, lead-audited): the expanded card is inset only by its own
-     chrome plus 2 px (14 logical px at 2560 x 1440 with canonical chrome, was 30) and draws the card's own shadow;
-     the display's ordinary widgets and their shadows fade out with the card and stay hidden (one display-local cover,
-     nothing retired). The operator's physical look at both is owed. Complex transitions under the takeover are M4.
-   - Overlays (operator, 8 Nov; plan 01 §G/M3b, after M3): a top-left preset-name toast in Title Case and a bottom-left
-     Artist/Song/Artwork now-playing, both fading very gently on change; artwork with the themed border, white text
-     with a customizable font; later, cheap bright-area detection to switch the text to black. No volume rail.
-     Options: any corner per overlay, Always Show, Media Controls with the now-playing (default off), an optional card
-     border + theme surface (default off); all in a new Visualizers pill "Fullscreen Mode", first after Setup.
-   - Fullscreen Edit (operator, 8 Nov; plan 01 M3c): merged 8 Nov (with single-axis handles and Rotate Widget
-     Content). Edit entered while expanded stays expanded and edits the overlays (the toast and Now Playing's block)
-     through the one Edit session; Save writes their value (and the Visualizer's turn to CUSTOM),
-     other displays keep running without Edit chrome, and an unsaved draft holds Settings. Also there: Now Playing
-     reveals when playback resumes (paused -> playing).
-     The operator's live defects (8 Nov), merged c5cf132e (plan 01 M3c "Live defects"): Now Playing's rows fill a
-     set box (the artist follows the side handles); the Volume OSD is a Fullscreen Edit part, its placement over the
-     expanded card `fullscreen_overlays.volume_osd` (its ordinary placement untouched); Now Playing's controls are a
-     small Media card control bar (one shared `MediaTransportBar.qml`).
-     The operator's two requests (8 Nov) are built on an agent branch (plan 01 M3c "Now Playing's parts" and §G
-     "Show On Hover"): (a) **Show On Hover** (Fullscreen Mode, default off, `now_playing.hover_reveal`): the pointer
-     resting where Now Playing is placed fades it back in and holds it; leaving runs the reveal's own hold and
-     fade-out (one passive HoverHandler's edges, no timer or polling; nothing under Fullscreen Edit). (b) **Now
-     Playing's parts** (artwork, title, artist, the Media Controls bar) are its block's children in Fullscreen Edit,
-     moved and sized one by one through ordinary Edit's child editor (select the block, open its child lock), stored
-     in `now_playing.child_geometry`; the block is its whole overlay (the separate artwork item is gone); with a
-     Card the parts stay editable inside it. The parts move within the block: it is as large as its content until
-     its own side handles make room. The operator's live look is owed (the feel of the lock, a part drag and the
-     hover re-fade on the real display).
-     Side defect (8 Nov): `tests/test_qtquick_system_audio_osd.py::test_osd_colour_inheritance_respects_active_widget_
-     theme_and_authored_overrides` fails when run after `tests/test_visualizers_fullscreen_mode_pill.py` in one
-     process (passes alone; reproduced on the base): Widget Theme state leaks between the files.
-   - M4 (plan 01 `02_E0_Covered_Display_Admission.md`): built 8 Nov, a covered display that already shows an image
-     is left out of image batches at admission (no queue advance, decode, upload, transition or material refresh; the
-     batch still closes; every display covered = edges are no-ops). Open: the GPU/render-thread measurement with
-     photo changes on the other display, and the operator's two-monitor look.
+### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
+
+### Item 1. Operator-reported defects first
+
+- [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
+- [ ] Native Settings corners: section 1A, item 1.9. Keep their acceptance and reversible checkpoints separate.
+- [~] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
+  test runs on a never-shown window), operator checks:
+  - [~] Edit Reaction Mode while Waveform plays.
+  - [~] Pick Human once.
+
+### Item 2. §7.1 Waveform Ribbon reactivity (operator, 7 Nov night: "Adaptivity is the enemy")
+
+Contract: `Docs/Guides/Visualizer_Reactivity_Authoring.md` (§2B, §2C, §13D). Evidence:
+`.artifacts/evidence/visualizers/waveform_ribbon/memoryless_reactivity/` (`20261107_lead/`, `20261107_bands/`) and
+`.artifacts/webp/visualizers/waveform_ribbon/memoryless_reactivity/`.
+
+- [~] Frozen Past (Preset 5) live.
+- [~] Pulse Count, Pulse Falloff and Freeze Deflate in the Studio.
+- [ ] Vocals first, remainder: a kick inside sustained bass raises the swell 21% less (median .058 -> .046; those
+  kicks also reach Kick Accent now); check it on the operator's look before tuning Pulse Strength's mid-led routing
+  further.
+- [ ] Breathing as a swell and release with proper motion (operator: 2D Bubble's breathing is the reference; guide
+  §13A). Breathing is now only a faster release in soft passages.
+- [ ] The onset reward is still sized by the bus's adaptive flux threshold (about 1 s of context: the same kick right
+  after a dense passage scores .22 against .61); size it on the fixed scale.
+- [ ] Group Wave still reads close to Travelling Pulse on rendered strips (it keeps the summed travelling field; its
+  sets need their own pass), and its Pulse Width is not yet the band core the other two modes use (operator: "a
+  relatively small horizontal width and the full vertical width").
+- [ ] Pulse bands' colour edges read crisp at Pulse Falloff below ~1 on wide bands (Preset 5's vertical colour
+  columns); judge on the operator's look whether the light's falloff should follow the geometry's broader envelope.
+
+### Item 3. Expanded Visualizer M2 onward (plan 01; operator's M1 amendment: a mode switch never re-expands)
+
+Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`
+(§0.6 capable modes, cycling and inset; §G overlays; M3c Fullscreen Edit). Next: M2b, then M3 and M3b/M3c follow-ups.
+
+- [ ] M2b, Spectrum's width-scaled bar count (operator, 8 Nov: "20% more if fullscreen and horizontal"): the display
+  rule is built (`widgets/spotify_visualizer/spectrum_display_bar_count.py`, round(1.2 x) bars, cap 64, resampled
+  by the renderer); the width-ratio DSP recompute of plan 01 M2b stays open and needs the hidden activation
+  transaction (an engine bar-count change bumps its generation). Spectrum's own edge fade is part of it.
+- [~] Operator's physical look at the expanded card's inset (operator, 7 Nov night: "Don't reach nearly close enough
+  to the screen borders") and at the ordinary widgets and their shadows fading out with it (operator: "Don't really
+  hide/disable the widgets underneath"; 14 logical px at 2560 x 1440 was 30). Complex transitions under the takeover
+  are M4.
+- [ ] Bright-area text switch (operator's long-term item, plan 01 §G): overlay text white with a soft shadow should
+  switch to black over a bright Visualizer area; cheap means no per-frame CPU readback (a `ShaderEffect` on the text
+  sampling the already-rendered frame, or a tiny luminance probe only while an overlay shows). Not built.
+- [ ] Agent branch (plan 01 M3c "Now Playing's parts" and §G "Show On Hover"): lead audit and merge of (a) Show On
+  Hover (`now_playing.hover_reveal`; no timer or polling; nothing under Fullscreen Edit) and (b) Now Playing's parts
+  as the block's children in Fullscreen Edit (`now_playing.child_geometry`).
+- [~] Operator's live look at that branch: the feel of the child lock, a part drag and the hover re-fade on the real
+  display.
+- [ ] Side defect (8 Nov): `tests/test_qtquick_system_audio_osd.py::test_osd_colour_inheritance_respects_active_widget_
+  theme_and_authored_overrides` fails when run after `tests/test_visualizers_fullscreen_mode_pill.py` in one
+  process (passes alone; reproduced on the base): Widget Theme state leaks between the files.
+- [ ] M4 (plan 01 `02_E0_Covered_Display_Admission.md`): the GPU/render-thread measurement with photo changes on the
+  other display.
+- [~] M4: the operator's two-monitor look.
 
 **Next (admitted, in this order):**
 
-4. Settings round-trip native residual (about 2.5-6 MB per open/close) and the Studio's about 1-2 MB per session.
-5. Card/theme legibility beyond item 1.7: rerun `tools/theme_legibility.py` against final composed surfaces,
-   retain concrete failing palette roles and fix light-theme shadows. Raw linked widget mirrors remain an authoring
-   concern; runtime ink correction does not make raw exports pass. Details at section 4.
-6. Hygiene: the hidden cross-test `tmp_path` dependency (§3), the AC-13 remainder and AC-14..AC-16.
-7. One measurement session of at most 10 minutes under game60, only after the operator's yes. Owed: a second
-   Waveform round, a clean Waveform P4 GC run, a Settings round-trip run, the alternated Glass/Normal pair, and the
-   two-monitor outlier. Pick the most valuable runs that fit.
-8. **§8 Accepted-mode follow-ups:** the brief Bubble performance-parity check.
+### Item 4. Settings round-trip native residual
+
+- [ ] About 2.5-6 MB of native heap per open/close, and the Studio's about 1-2 MB per session (measurements and the
+  next step: section 3, "Settings round-trip memory growth").
+
+### Item 5. Card/theme legibility beyond item 1.7 (details at section 4)
+
+- [ ] Rerun `tools/theme_legibility.py` against final composed surfaces.
+- [ ] Retain concrete failing palette roles.
+- [ ] Fix light-theme shadows.
+- [ ] Raw linked widget mirrors remain an authoring concern; runtime ink correction does not make raw exports pass.
+
+### Item 6. Hygiene
+
+- [ ] The hidden cross-test `tmp_path` dependency (section 3).
+- [ ] The AC-13 remainder (`Docs/Reference/Architecture_Checklist.md`).
+- [ ] AC-14, AC-15 and AC-16 (same checklist).
+
+### Item 7. One measurement session of at most 10 minutes under game60, only after the operator's yes
+
+Pick the most valuable runs that fit; baselines and evidence paths are in section 3, "Lead, the quiet machine".
+
+- [ ] A second clean Waveform tick-cut round.
+- [ ] A clean Waveform P4 GC run, and the long run with Settings round trips.
+- [ ] A Settings round-trip run.
+- [ ] The alternated Glass/Normal card-materials pair.
+- [ ] The two-monitor canonical game60 outlier (48.6 fps, never repeated).
+
+### Item 8. §8 Accepted-mode follow-ups
+
+- [ ] The brief Bubble performance-parity check.
 
 **Then (decided 5 Nov, `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
 
-8b. **Universal visualizer performance architecture** (operator, 7 Nov; the Decision's addendum), started once the
-   current set of fixes and optimisations lands:
-   - P1 is accepted; native/frozen proof and the production MSVC-runtime guard live in
-     `Docs/Future_Work/Native_Core_P1_Spike.md`.
-   - **P2 current contract:** the Windows visualizer runs in a supervised engine worker owning capture, DSP and the
-     logical tick. Explicit path switches remain; automatic fallback warns/errors with its reason, and capacity
-     violations fail closed. Linux remains in process until H3 below. Packet headers are C-readable; native-core
-     payload layout remains a P3 decision. Contracts: `Spec.md`, `Docs/Contracts.md`; implementation/gate evidence:
-     `Docs/Future_Work/Native_Core_P2_Engine_Design.md`. Remaining checks outside the ordered audit repairs:
-     - [~] **Awaiting Validation, frozen:** next requested build: QtCore-only engine workers, expected image-worker
-       Qt dependencies, flat worker memory, unchanged icons and one Settings round trip. First Neon Lake activation:
-       logged cold link with live progress or cache hit, never an activation-failure reload; second run: cache hit.
-     - [~] **Awaiting Validation, audio devices (design 5.3):** default switch, pinned player, USB/Bluetooth or sole
-       output unplug, silent/remote playback and another player masking the old endpoint; include in-process control
-       and time capture reopen against cadence. No device/load run without the operator.
-     - [~] **Awaiting Validation, M2 latency:** size first reveal against in process in a separately approved load
-       session. The cold configure bound remains six seconds; later owners skip it after a deadline miss this run.
-     - [ ] After device checks, decide whether the in-process owner should use the existing worker delivery watch
-       to recover stale loopback streams; it currently waits for a later playback/activation edge.
-     - [ ] Make the framed-view negative control independent of presentation timing
-       (`test_visualizer_owner_engine_worker.py::test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`).
-     - [ ] Decide bounded reconstruction for a target that never reveals, including stopping a failed owner's runtime
-       on refused reload; the existing loop can retry every six seconds.
-     - [ ] Bubble owner: define Random Group Drift's guarantee before retuning or asserting alignment;
-       `test_bubble_reactivity.py::test_group_drift_aligns_non_swirl_bubble_motion[random-x]` depends on the draw.
-   - **P2 phase-boundary audit (8 Nov, Opus 5.5 high; [Native_Core_P2_Phase_Boundary_Audit.md](Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md)):
-     H1/H2 fixes are reviewed; keep the remaining order below. The operator admitted audit repairs alongside
-     the 9 Nov miscellaneous work.**
-     **Windows defaults to the engine worker.** Explicit `--viz-in-process` / `--viz-engine-worker` choose the path;
-     automatic fallbacks warn/error with their reason, while capacity violations remain terminal. Linux stays in
-     process for this slice. Default-merge and H1/H2 evidence live in the audit's resolution section.
-     **Remaining sequence (10 Nov source reconciliation; focused proof for each):**
-     1. M4 non-default *production-owner parity* and gate-2 rendered no-visual-change record (dynamic
-        capacity/high-water/non-default packet tests are already implemented; don't reopen them).
-     2. M5, L2–L5 and the accepted-but-unread POSIX Connection lifetime repair, which must own a
-        bounded descriptor retirement before Linux worker default can depend on that transport.
-     3. H3 Linux worker-default source flip and focused tests; the operator waived **physical** Linux
-        validation, not source correctness. Do not claim Pulse/forkserver runtime was tested.
-     4. P3's four reader/lifecycle/geometry/FP64 decisions and first native rendering substrate.
-     M1/M2/L1/H1/H2 evidence lives in the audit's resolution section. A first-configure timeout disables the worker
-     for the run; later owners do not repeat the six-second cold wait. Capacity, logging and detached STOP reports
-     retain their focused proof; ordered controls refuse rather than evict and serialize before admission.
-     Load reveal-latency sizing remains an operator gate.
-     - [ ] H3: worker path has no native Linux runtime evidence (forkserver, POSIX wake, Pulse capture).
-       After the source POSIX-lifetime repair, flip Linux default and update `Linux_Plan.md`; the operator's
-       hardware waiver does not turn untested runtime behaviour into a green gate.
-     - [~] M4: schema-maximum/non-default packet capacity and high-water tests already landed;
-       non-default worker/in-process **rendered** parity and the gate-2 no-visual-change record remain open.
-     - [ ] M5: the in-process mode-cycling memory growth (gate 4 side finding) still hits the fallback and the Studios.
-     - [ ] L2: gate 3's "GIL share" fields are wall time, not GIL hold; "revisions waiting 0/0" is zero by
-       construction on the worker path; the worker's audio feed differs from a real device.
-     - [ ] L3: `--usage` costs ~13 ms more per 15 s sample with the worker (see §5's usage-sample hitch).
-     - [ ] L4: the wake listener takes the GIL every frame (unmeasured); presentation inputs holding a Qt type are not
-       forwarded silently; a blocked tick thread whose loop still answers heartbeats freezes undetected.
-     - [ ] L5: reconcile remaining historical qualification: gate 4's worker memory predates R-179; the earlier
-       "next frozen build" wording is already answered by frozen check 2; audit the remaining writer overstatement.
-     - [ ] POSIX transfer lifetime: design bounded ownership for an accepted Connection never decoded because its
-       worker dies. The inherited stdlib sharer can retain one sender descriptor; synchronous serialization creates
-       it earlier. Do not cancel accepted registrations through the private cache or block GUI on a sharer handshake.
-       Boundary/source evidence: phase-boundary audit L1. Linux runtime remains unverified; this is a source repair
-       task, separate from the operator-waived Linux proving step.
-     - [ ] P3 decisions before its first slice: the native reader vs the GUI thread closing the mapping mid-copy; a
-       single consumer and a non-consuming head read for the Python owner; EB geometry once per revision, not per
-       frame; EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check scans
-       a fixed module list and cannot see it).
-   - P3: one C++/QRhi native core for all custom drawing. Substrate, Spectrum parity, shared fullscreen
-     transition passes, Waveform/Extruded Bubble, specialised transitions, the remaining Visualizers and
-     image/background/Scene3D ports follow one staged ownership plan; switch the whole window to Vulkan
-     only when raw-GL nodes have retired. Retain OpenGL through that same QRhi core.
-   - P4: mixed-resolution soft layers in the core.
+### Item 8b. Universal visualizer performance architecture (operator, 7 Nov; the Decision's addendum)
 
-   Triggers 2 (render-thread starvation) and nearly 1 (EB at display size over 8 ms) are met. Expanded Visualizer
-   M2-M5 continue meanwhile; M6 (4K acceptance) waits for P2 and the first P3 ports.
+Started once the current set of fixes and optimisations lands. P1 is accepted
+(`Docs/Future_Work/Native_Core_P1_Spike.md`); P2 contracts: `Spec.md`, `Docs/Contracts.md`,
+`Docs/Future_Work/Native_Core_P2_Engine_Design.md`; phase-boundary audit:
+`Docs/Future_Work/Native_Core_P2_Phase_Boundary_Audit.md` (H1/H2 reviewed; the operator admitted audit repairs
+alongside the 9 Nov miscellaneous work). Triggers 2 (render-thread starvation) and nearly 1 (EB at display size
+over 8 ms) are met; Expanded Visualizer M2-M5 continue meanwhile; M6 (4K acceptance) waits for P2 and the first
+P3 ports.
 
-9. **SMP & Full Display:** Expanded Visualizer first
-   (`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`, EB only; its §0 holds the
-   phase ladder and the 4K budgets), then ShittyMusicPlayer
-   (`Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`, gated behind `--smp` until its
-   Gate M9; its §0A holds the prerequisite phases and §13-16 the operator's audio, Settings-tab, icon/artwork and
-   rearrangement targets; §16A holds the operator's fullscreen arrangement: a tiling tree with choose, swap, resize
-   and split/remove, no dead sections, SMP fullscreen remembered, Settings → Layout pills Widgets and SMP). The
-   production Vulkan backend is not yet enabled: P2 is the Windows-default supervised Python worker;
-   P3 is the planned C++/QRhi native renderer and Vulkan-default migration (with OpenGL fallback),
-   informed by measured cost and the operator's explicit modernization goal. Port-readiness rules
-   bind all new GPU code from now.
-10. **§6 Shared 3D architecture** and **§7 Visualizer modes** (Reactive Liquid / Melt Pool → Concrete Rain → Usu
-   Moonscape, lab-first per §7.0) resume after Expanded Visualizer acceptance and its full-display measurements, under
-   the port-readiness rules; if a trigger fires first, the native Vulkan core precedes them.
+**P2 remaining checks outside the ordered audit repairs:**
+
+- [~] Awaiting Validation, frozen: next requested build: QtCore-only engine workers, expected image-worker Qt
+  dependencies, flat worker memory, unchanged icons and one Settings round trip. First Neon Lake activation: logged
+  cold link with live progress or cache hit, never an activation-failure reload; second run: cache hit.
+- [~] Awaiting Validation, audio devices (design 5.3): default switch, pinned player, USB/Bluetooth or sole output
+  unplug, silent/remote playback and another player masking the old endpoint; include in-process control and time
+  capture reopen against cadence. No device/load run without the operator.
+- [~] Awaiting Validation, M2 latency: size first reveal against in process in a separately approved load session.
+  The cold configure bound remains six seconds; later owners skip it after a deadline miss this run.
+- [ ] After device checks, decide whether the in-process owner should use the existing worker delivery watch to
+  recover stale loopback streams; it currently waits for a later playback/activation edge.
+- [ ] Make the framed-view negative control independent of presentation timing
+  (`test_visualizer_owner_engine_worker.py::test_the_framed_view_the_worker_tick_reads_follows_the_owners_controller`).
+- [ ] Decide bounded reconstruction for a target that never reveals, including stopping a failed owner's runtime on
+  refused reload; the existing loop can retry every six seconds.
+- [ ] Bubble owner: define Random Group Drift's guarantee before retuning or asserting alignment;
+  `test_bubble_reactivity.py::test_group_drift_aligns_non_swirl_bubble_motion[random-x]` depends on the draw.
+
+**Remaining sequence (dedicated Fable High, in this order; it reports at each numbered boundary for the lead's
+audit; focused proof for each):**
+
+1. M4 non-default production-owner parity (dynamic capacity, high-water and non-default packet tests are already
+   implemented; do not reopen them):
+   - [ ] Non-default worker/in-process **rendered** parity.
+   - [ ] The gate-2 rendered no-visual-change record.
+2. M5, L2-L5 and the POSIX Connection lifetime repair (which must own a bounded descriptor retirement before the
+   Linux worker default can depend on that transport):
+   - [ ] M5: the in-process mode-cycling memory growth (gate 4 side finding) still hits the fallback and the Studios.
+   - [ ] L2: gate 3's "GIL share" fields are wall time, not GIL hold; "revisions waiting 0/0" is zero by
+     construction on the worker path; the worker's audio feed differs from a real device.
+   - [ ] L3: `--usage` costs ~13 ms more per 15 s sample with the worker (see section 5's usage-sample hitch).
+   - [ ] L4: the wake listener takes the GIL every frame (unmeasured); presentation inputs holding a Qt type are not
+     forwarded silently; a blocked tick thread whose loop still answers heartbeats freezes undetected.
+   - [ ] L5: reconcile remaining historical qualification: gate 4's worker memory predates R-179; the earlier "next
+     frozen build" wording is already answered by frozen check 2; audit the remaining writer overstatement.
+   - [ ] POSIX transfer lifetime: design bounded ownership for an accepted Connection never decoded because its
+     worker dies. The inherited stdlib sharer can retain one sender descriptor; synchronous serialization creates it
+     earlier. Do not cancel accepted registrations through the private cache or block GUI on a sharer handshake.
+     Boundary/source evidence: phase-boundary audit L1. Linux runtime remains unverified; this is a source repair
+     task, separate from the operator-waived Linux proving step.
+3. H3 Linux worker-default source flip and focused tests (the operator waived **physical** Linux validation, not
+   source correctness; do not claim Pulse/forkserver runtime was tested):
+   - [ ] H3: worker path has no native Linux runtime evidence (forkserver, POSIX wake, Pulse capture). After the
+     source POSIX-lifetime repair, flip Linux default and update `Linux_Plan.md`; the operator's hardware waiver
+     does not turn untested runtime behaviour into a green gate.
+4. P3's four decisions and first native rendering substrate:
+   - [ ] The native reader vs the GUI thread closing the mapping mid-copy.
+   - [ ] A single consumer and a non-consuming head read for the Python owner.
+   - [ ] EB geometry once per revision, not per frame.
+   - [ ] EB's fp64 drift solver (optional on Vulkan, not queryable through QRhi; the shader-readiness check scans a
+     fixed module list and cannot see it).
+
+**P3 and P4:**
+
+- [ ] P3: one C++/QRhi native core for all custom drawing, one staged ownership plan: substrate, Spectrum parity,
+  shared fullscreen transition passes, Waveform/Extruded Bubble, specialised transitions, the remaining
+  Visualizers and image/background/Scene3D ports. Switch the whole window to Vulkan only when raw-GL nodes have
+  retired; retain OpenGL through that same QRhi core.
+- [ ] P4: mixed-resolution soft layers in the core.
+
+### Item 9. SMP & Full Display
+
+Port-readiness rules bind all new GPU code from now. The production Vulkan backend is not yet enabled: P2 is the
+Windows-default supervised Python worker; P3 is the planned C++/QRhi native renderer and Vulkan-default migration
+(with OpenGL fallback), informed by measured cost and the operator's explicit modernization goal.
+
+- [ ] Expanded Visualizer first (`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`,
+  EB only; its §0 holds the phase ladder and the 4K budgets).
+- [ ] Then ShittyMusicPlayer (`Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`,
+  gated behind `--smp` until its Gate M9; its §0A holds the prerequisite phases and §13-16 the operator's audio,
+  Settings-tab, icon/artwork and rearrangement targets; §16A holds the operator's fullscreen arrangement: a
+  tiling tree with choose, swap, resize and split/remove, no dead sections, SMP fullscreen remembered, Settings ->
+  Layout pills Widgets and SMP).
+
+### Item 10. §6 Shared 3D architecture and §7 Visualizer modes
+
+- [ ] Resume after Expanded Visualizer acceptance and its full-display measurements, under the port-readiness
+  rules: Reactive Liquid / Melt Pool -> Concrete Rain -> Usu Moonscape, lab-first per §7.0. If a trigger fires
+  first, the native Vulkan core precedes them.
 
 ## 1B. Operator defects and requests (11 Nov; run first, in this order)
 
