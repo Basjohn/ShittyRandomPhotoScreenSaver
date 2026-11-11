@@ -20,9 +20,9 @@ compares what those frames *draw*, at settings no shipped default has:
 - **Rendered pixels** (``SceneMirror``): the production ``DisplayScene.qml``, ``QuickSceneController``,
   ``VisualizerRenderItem`` and mode render node drawn through ``QQuickRenderControl`` into a hidden GL texture
   (``expanded_visualizer_evidence.HiddenDisplayHost``: the window is never shown or mapped). The owner's own unshown
-  scene forwards the three calls that decide what is drawn (the render source it binds, each presentation record it
-  commits, each present request) to that scene, which is therefore the single consumer of the owner's real render
-  bridge. Every input's presentation is drawn and read back, on both paths, in the same order (a render node's GPU
+  scene forwards the calls that decide what is drawn (the render source it binds, each presentation record it
+  commits, each present request, a retained-frame drop) to that scene, which is therefore the single consumer of
+  the owner's real render bridge. Every input's presentation is drawn and read back, on both paths, in the same order (a render node's GPU
   state, such as Extruded Bubble's drift solve, advances with the frames drawn), and compared over the card and the
   margin its shadow can reach; every ``FULL_EVERY``-th frame is also hashed over the whole display.
 
@@ -34,9 +34,9 @@ or two pixels in a few percent of frames), with bloom off, light shafts off and 
 with one sample per pixel every redraw is identical. So the difference is the multisampled rasterisation of the
 mode's own passes on this GPU, on either process path, and no pixel oracle can be exact through it.
 
-- ``single``: every tier's overlay samples set to none for the run (``single_sample_overlays``: the tier table
-  itself, so every other property of the resolved tier, its glow, reflections, particles and grid, is drawn as the
-  product draws it). **The gate is exact here:** every frame's pixels equal on the two paths.
+- ``single``: every scene target opened with one sample for the run (``single_sample_scene_targets``: the sample
+  count ``SceneTarget.begin`` is given, nothing else, so every pass, program, post effect and tier property is drawn
+  as the product draws it). **The gate is exact here:** every frame's pixels equal on the two paths.
 - ``product``: the tier as resolved for this GPU. A mode whose in-process run repeats exactly (the 2D modes) must
   be exact. A mode whose in-process run does not repeat is reported against that repeat: the differing frames, the
   most pixels differing in one frame and the largest level difference, worker against in process beside in process
@@ -48,7 +48,7 @@ over the run and lit the card (a blank card would be equal on any two paths). On
 the first differing input are written beside an amplified difference map.
 
 Controls (``--skip-controls`` omits them): the in-process run repeated (``single``: identical to itself, the
-oracle's noise floor is zero), and one control of the mode moved a further step must change the drawn frames (the
+oracle's noise floor is zero), and the mode's Sliders moved a further step must change the drawn frames (the
 oracle sees a Settings change; ``single`` only).
 
 Offscreen GL on this machine's GPU: not physical acceptance (no real window, display timing, device or load).
@@ -57,7 +57,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import dataclasses
 import hashlib
 import json
 import sys
@@ -84,13 +83,16 @@ VARIANTS = {"a": (0.37, 1, True, [208, 96, 48, 255], [0.5, 0.3, 0.2]),
 SAMPLINGS = ("single", "product")
 #: A drawn frame counts as lit when this share of the card's region is brighter than ``LIT_LEVEL`` (0-255).
 LIT_LEVEL = 24
+#: The scene commands of the owner that decide what its retained item draws; each is forwarded to the hidden scene.
+FORWARDED = ("set_visualizer_render_source", "apply_visualizer_presentation", "request_visualizer_present",
+             "drop_visualizer_retained_frame")
 
 
-def nondefault_settings(mode: str, variant: str = "a", *, nudge: str | None = None) -> dict:
+def nondefault_settings(mode: str, variant: str = "a", *, nudge: bool = False) -> dict:
     """Settings-section values moving every spec control of ``mode`` off its resting value, as its Custom preset.
 
-    Derived from the canonical spec only. ``nudge`` names one Slider or Range key to move a further 20% of its
-    admitted range (the sensitivity control's single changed value).
+    Derived from the canonical spec only. ``nudge`` moves every non-integer Slider a further 20% of its admitted
+    range (the sensitivity control: a Settings change the drawn frames must show).
     """
     from core.settings.visualizer_mode_settings import (
         Choice, Colour, Range, Slider, Toggle, Triangle, require_mode_settings,
@@ -105,7 +107,7 @@ def nondefault_settings(mode: str, variant: str = "a", *, nudge: str | None = No
             high = control.high if high is None else high
             low = getattr(control, "admission_low", None)
             low = control.low if low is None else low
-            share = fraction + (0.2 if control.key == nudge else 0.0)
+            share = fraction + (0.2 if nudge and isinstance(control, Slider) and not control.integer else 0.0)
             value = low + (high - low) * share
             if control.integer:
                 value = round(value)
@@ -123,17 +125,7 @@ def nondefault_settings(mode: str, variant: str = "a", *, nudge: str | None = No
     return result
 
 
-def nudge_key(mode: str) -> str | None:
-    """The first non-integer Slider of ``mode``'s spec (the sensitivity control's changed value), if it has one."""
-    from core.settings.visualizer_mode_settings import Slider, require_mode_settings
-
-    for control in require_mode_settings(mode).controls:
-        if isinstance(control, Slider) and not control.integer:
-            return control.key
-    return None
-
-
-def section_settings(mode: str, variant: str, *, nudge: str | None = None) -> dict:
+def section_settings(mode: str, variant: str, *, nudge: bool = False) -> dict:
     """The rig's Settings-section overlay: ``mode`` and the mode its script switches to, both non-default."""
     from tools.visualizer_replay import owner_worker_gate as gate
 
@@ -165,27 +157,32 @@ def parity_script(clip_frames, mode: str) -> list:
 
 
 @contextlib.contextmanager
-def single_sample_overlays():
-    """Every 3D Detail tier without overlay multisampling, for the block: the tier table's own entries replaced
-    (the renderers read it at each draw), everything else about each tier as the product has it."""
-    from rendering.gl_programs import scene3d
+def single_sample_scene_targets():
+    """Every scene target opened single-sampled, for the block: ``SceneTarget.begin`` takes one sample whatever its
+    caller asks for (a tier's overlay samples, Waveform Ribbon's fixed four). Nothing else about a draw changes: the
+    same passes, programs, post chain and tier."""
+    from rendering.quick.scene3d.target import SceneTarget
 
-    saved = dict(scene3d.SCENE3D_DETAIL_TIERS)
+    begin = SceneTarget.begin
+
+    def single(self, frame, samples, *args, **kwargs):
+        del samples
+        return begin(self, frame, 1, *args, **kwargs)
+
+    SceneTarget.begin = single
     try:
-        for name, tier in saved.items():
-            scene3d.SCENE3D_DETAIL_TIERS[name] = dataclasses.replace(tier, overlay_samples=0)
         yield
     finally:
-        scene3d.SCENE3D_DETAIL_TIERS.update(saved)
+        SceneTarget.begin = begin
 
 
 class SceneMirror:
     """The owner's unshown scene, drawn: a hidden production scene that takes the owner's own scene commands.
 
     ``attach(runtime)`` (before the owner is built) creates the hidden host at the runtime's device pixel ratio and
-    forwards ``set_visualizer_render_source``, ``apply_visualizer_presentation`` and ``request_visualizer_present``
-    from the runtime's scene controller to the hidden one (the runtime's own still runs each: the owner reads its
-    drawn record back from it). ``frame(index)`` draws and reads the frame the last presentation left; the frames
+    forwards ``FORWARDED`` (the render source bound, each presentation record committed, each present request, a
+    retained-frame drop) from the runtime's scene controller to the hidden one (the runtime's own still runs each:
+    the owner reads its drawn record back from it). ``frame(index)`` draws and reads the frame the last presentation left; the frames
     are kept compressed (``frames``) so two runs can be compared pixel by pixel afterwards.
     """
 
@@ -222,8 +219,9 @@ class SceneMirror:
 
             setattr(scene, name, call)
 
-        for name in ("set_visualizer_render_source", "apply_visualizer_presentation", "request_visualizer_present"):
-            forward(name)
+        for name in FORWARDED:
+            if hasattr(scene, name):                    # a tree from before a command existed draws without it
+                forward(name)
 
     def _note_presentation(self, presentation: Any) -> None:
         dpr = self.host.dpr
@@ -351,7 +349,7 @@ def rendered_parity(mode: str, variant: str, clip_frames, supervisor: Any, *, sa
     settings = section_settings(mode, variant)
     with contextlib.ExitStack() as stack:
         if sampling == "single":
-            stack.enter_context(single_sample_overlays())
+            stack.enter_context(single_sample_scene_targets())
         worker = drawn_run(mode, script, worker=True, supervisor=supervisor, namespace=None, settings=settings)
         in_process = drawn_run(mode, script, worker=False, supervisor=None, namespace=worker["namespace"],
                                settings=settings)
@@ -386,15 +384,11 @@ def rendered_parity(mode: str, variant: str, clip_frames, supervisor: Any, *, sa
             del repeat
         if sampling == "single":
             if controls:
-                key = nudge_key(mode)
-                verdict["nudged_control"] = key
-                if key is not None:
-                    nudged = drawn_run(mode, script, worker=False, supervisor=None, namespace=worker["namespace"],
-                                       settings=section_settings(mode, variant, nudge=key))
-                    verdict["nudged_frames_changed"] = pair_difference(in_process, nudged)["frames"]
-                    del nudged
-                verdict["controls_ok"] = bool(verdict["reproducible"]
-                                              and (key is None or verdict["nudged_frames_changed"] > 0))
+                nudged = drawn_run(mode, script, worker=False, supervisor=None, namespace=worker["namespace"],
+                                   settings=section_settings(mode, variant, nudge=True))
+                verdict["nudged_frames_changed"] = pair_difference(in_process, nudged)["frames"]
+                del nudged
+                verdict["controls_ok"] = bool(verdict["reproducible"] and verdict["nudged_frames_changed"] > 0)
         elif not verdict["reproducible"]:
             # The same path does not repeat itself at this sampling: the paths may differ by no more levels than that.
             pixels_ok = bool(paths["regions_equal"] and verdict["frames_drawn"][0] == verdict["frames_drawn"][1]
