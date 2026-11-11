@@ -271,6 +271,11 @@ def capture(output: Path, *, mode: str = "spectrum", theme: Path | None = None, 
                 elif thinned:
                     bridge.undo()
                     settle(surface, 0.3)
+            pointer.press(2.0, 2.0)                      # leave this instrument unselected and unfocused for the next
+            pointer.release(2.0, 2.0)
+            away.hover(6.0, 6.0)
+            surface.host.root.forceActiveFocus()
+            settle(surface, 0.3)
         (output / f"{stem}.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
     finally:
         controller.close()
