@@ -73,7 +73,7 @@ _GROUP_PANEL = {
 }
 _PRIORITY = {PREFIX + key: rank for rank, key in enumerate((
     "render_mode", "bar_fill_color", "bar_border_color", "bar_border_opacity", "border_radius",
-    "visual_smoothing_enabled", "visual_smoothing", "rainbow_enabled", "rainbow_speed", "unique_colors",
+    "bar_gap", "visual_smoothing_enabled", "visual_smoothing", "rainbow_enabled", "rainbow_speed", "unique_colors",
     "rainbow_fill", "rainbow_border", "ghosting_enabled", "rainbow_ghost", "ghost_alpha", "ghost_decay",
     "ghost_color_source", "ghost_color", "ghost_color.3", "ghost_gradient", "ghost_tip_color", "ghost_tip_color.3",
     "pattern", "pattern_anchor", "pattern_color", "pattern_color.3", "pattern_scale", "pattern_strength", "fill_gradient",

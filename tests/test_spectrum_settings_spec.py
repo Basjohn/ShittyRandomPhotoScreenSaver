@@ -77,7 +77,7 @@ def test_spectrum_specs_reach_real_source_logical_presentation_and_capture_param
               "spectrum_rainbow_fill": False, "spectrum_rainbow_border": True,
               "spectrum_rainbow_ghost": True, "spectrum_glow_enabled": True,
               "spectrum_glow_color": [13, 47, 82, 123], "spectrum_glow_intensity": 1.27,
-              "spectrum_border_radius": 19.0, "spectrum_ghosting_enabled": True,
+              "spectrum_border_radius": 19.0, "spectrum_bar_gap": 3.5, "spectrum_ghosting_enabled": True,
               "spectrum_ghost_alpha": 0.37, "spectrum_ghost_decay": 0.46,
               "spectrum_wave_amplitude": 0.63, "spectrum_profile_floor": 0.21, "spectrum_drop_speed": 2.14,
               "spectrum_ghost_color_source": "Custom", "spectrum_ghost_color": [1, 2, 3, 4],
@@ -124,7 +124,7 @@ def test_spectrum_specs_reach_real_source_logical_presentation_and_capture_param
     for key in DECOR_KEYS:
         assert list(decor[key]) == values[key] if isinstance(values[key], list) else decor[key] == values[key], key
     style = _common_style(logical)
-    assert style["single_piece"] is False and style["border_radius"] == 19.0
+    assert style["single_piece"] is False and style["border_radius"] == 19.0 and style["bar_gap"] == 3.5
     model = SpotifyVisualizerSettings.from_mapping(values, apply_preset_overlay=False)
     assert model.spectrum_border_radius == 19.0
     assert spec.control("spectrum_border_radius").high == 12.0

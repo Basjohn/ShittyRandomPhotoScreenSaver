@@ -1,8 +1,8 @@
 {
-  "description": "Neon: thirteen violet glass capsules lit hot pink from the rim inward.",
+  "description": "One colour for the whole field, drifting slowly round the spectrum; every bar pales to white at its tip.",
   "mode": "spectrum",
-  "name": "Preset 5 (Tube Lights)",
-  "preset_index": 4,
+  "name": "Preset 8 (Mood Ring)",
+  "preset_index": 7,
   "visualizer_preset_override": true,
   "visualizer_preset_mode": "spectrum",
   "snapshot": {
@@ -10,23 +10,23 @@
       "spotify_visualizer": {
         "spectrum_visual_smoothing_enabled": true,
         "spectrum_visual_smoothing": 0.7,
-        "spectrum_mirrored": true,
+        "spectrum_mirrored": false,
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.92
+            0.44
           ],
           [
-            0.35,
-            0.84
+            0.4,
+            0.56
           ],
           [
-            0.7,
-            0.62
+            0.78,
+            0.8
           ],
           [
             1.0,
-            0.44
+            0.7
           ]
         ],
         "spectrum_notch_positions_mirrored": [
@@ -82,22 +82,23 @@
           "Treble": 1.0,
           "Vocal": 0.4096
         },
-        "spectrum_glow_enabled": true,
+        "spectrum_glow_enabled": false,
         "spectrum_glow_color": [
           255,
-          70,
-          190,
-          255
+          255,
+          255,
+          220
         ],
-        "spectrum_glow_intensity": 1.5,
+        "spectrum_glow_intensity": 0.3,
         "spectrum_render_mode": "bars",
         "spectrum_unique_colors": false,
-        "spectrum_rainbow_fill": false,
+        "spectrum_rainbow_fill": true,
         "spectrum_rainbow_border": false,
-        "spectrum_border_radius": 12.0,
+        "spectrum_border_radius": 2.0,
+        "spectrum_bar_gap": 2.0,
         "spectrum_wave_amplitude": 0.15,
         "spectrum_profile_floor": 0.2,
-        "spectrum_drop_speed": 1.2,
+        "spectrum_drop_speed": 0.72,
         "spectrum_ghosting_enabled": true,
         "spectrum_rainbow_ghost": false,
         "spectrum_ghost_alpha": 0.6,
@@ -116,12 +117,12 @@
           255,
           255
         ],
-        "spectrum_gloss": 0.2,
-        "spectrum_fill_gradient": false,
+        "spectrum_gloss": 0.0,
+        "spectrum_fill_gradient": true,
         "spectrum_fill_tip_color": [
           255,
-          255,
-          255,
+          236,
+          236,
           255
         ],
         "spectrum_peak_caps": false,
@@ -142,7 +143,7 @@
         ],
         "spectrum_pattern_scale": 1.0,
         "spectrum_pattern_strength": 0.6,
-        "spectrum_bar_count": 13,
+        "spectrum_bar_count": 33,
         "spectrum_audio_block_size": 128,
         "spectrum_adaptive_sensitivity": false,
         "spectrum_sensitivity": 1.15,
@@ -156,20 +157,20 @@
         "spectrum_manual_floor": 0.42,
         "spectrum_lane_transient_mix": 0.94,
         "spectrum_bar_fill_color": [
-          58,
-          6,
-          84,
-          235
+          255,
+          40,
+          40,
+          255
         ],
         "spectrum_bar_border_color": [
           255,
-          60,
-          170,
+          255,
+          255,
           255
         ],
         "spectrum_bar_border_opacity": 0.0,
-        "spectrum_rainbow_enabled": false,
-        "spectrum_rainbow_speed": 0.6,
+        "spectrum_rainbow_enabled": true,
+        "spectrum_rainbow_speed": 0.3,
         "mode": "spectrum"
       }
     }

@@ -5935,6 +5935,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'spectrum_bar_border_opacity': 1.0,
                                     'spectrum_bar_count': 33,
                                     'spectrum_bar_fill_color': [12, 12, 12, 230],
+                                    'spectrum_bar_gap': 2.0,
                                     'spectrum_border_radius': 2.0,
                                     'spectrum_drop_speed': 1.0,
                                     'spectrum_dynamic_floor': True,
