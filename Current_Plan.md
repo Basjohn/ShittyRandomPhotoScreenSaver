@@ -681,21 +681,16 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
     (`devcurve_runtime.py`, 20 s memory, not opt-in), and its accents read a lane "above its own recent mean"
     (reactivity guide §13D, guide pass 8 Nov).
   - [ ] Extruded Bubble (`extruded_bubble_frame_runtime.py`).
-  - [ ] Neon Lake (`logical_frame_capture.py`, `shockwave_frame_runtime.py`).
+  - [ ] Neon Lake (`logical_frame_capture.py`, `rendering/gl_programs/shockwave_grid_program.py`).
   - [ ] Oscilloscope.
   - [ ] Sphere.
   - [ ] `tools/labs/waveform_ribbon_recorded_input.py` still uses `musical_weight` and no longer matches production.
 - [ ] **Vocal-band scorer into the music-response tool (8 Nov):** the PCM vocal-band (300-3400 Hz) series behind the
   mid-led routing evidence and guide §2C lives only in scratch (`lead_audit/vocal_band.py`); add it to
   `tools/visualizer_replay/waveform_music_response.py` as a lane so it survives scratch pruning.
-- [ ] **Tool-output contract reds (found 8 Nov on `610e38c0`, not fixed there):**
-  `tests/test_artifact_paths_contract.py` fails 3 tests. Route each through `tools/artifact_paths.py` and
+- [ ] **Tool-output contract reds (found 8 Nov on `610e38c0`; the three listed there were fixed by `bed993a4`):**
+  `tests/test_artifact_paths_contract.py`: route each through `tools/artifact_paths.py` and
   `tools/evidence_media.py`, or allowlist it there with its reason:
-  - [ ] `tools/github_remote_build.py` hard-codes `logs/` (lines 200, 249, 703).
-  - [ ] `--out` / `--json` bypass `tools/artifact_paths.py` in `github_remote_build.py`, `theme_legibility.py`,
-    `vulkan_shader_readiness.py` and `visualizer_replay/{engine_main_cost,engine_worker_gate,live_engine_cost,
-    live_engine_gate,owner_production_replay,owner_worker_gate}.py`.
-  - [ ] `owner_worker_gate.py` writes PNG without `tools/evidence_media.py`.
   - [ ] The further reds recorded at 1B.2 (literal `evidence_chest` paths, PNG writes, a `delete=False` temp file).
 - [ ] **Side findings of the Waveform second tick cut (7 Nov, not fixed there):**
   - [ ] `capture_visualizer_logical_frame` refreezes the common style (`freeze_render_fields(_common_style(widget))`,
@@ -802,8 +797,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   - [ ] Card materials (`5_card_materials/`): the alternated second Glass/Normal pair. First pair: Glass costs about
     +16 % of a core on the render thread (53.7 against 37.5), publish->swap +3 ms, hitches 2.46 against 2.05 a
     minute, at the same late %.
-- [ ] Lead audit of the Gmail IMAP interruptible-session fix (branch `worktree-agent-ab77df54c8fe5d4a6`, merged as
-  64950529; the plan recorded it as awaiting the lead's audit; contract `Docs/Contracts.md` Network transports).
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 
@@ -845,13 +838,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   `Docs/Reference/Ribbon_Path.md`, `Waveform_Ribbon_Lab_Plan.md` and
   `Waveform_Ribbon_Mist_Failure_and_Replacement.md`. Left unchanged; prune or mark historical on review.
 
-**Naming follow-ups (naming-audit agent, 7 Nov; `Docs/Reference/Naming.md` is generated and test-guarded):**
-
-- [~] Operator's call: Neon Lake vs Neon Lake (edit only the registry `display_name`, then run
-  `tools/naming_reference.py --write`).
-- [ ] The "Spotify Visualizer" widget label and Spline Curve's Ghost tooltip ("for debug visibility") are audit #6,
-  not done.
-
 **Side defects (Studio stall / clip selection fix, 7 Nov):**
 
 - [ ] Bubble, Sphere and Extruded Bubble replay a change in one GUI-thread evaluation (no frame budget). While
@@ -877,8 +863,8 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] A takeover fade completes on the publication edge only: like the activation fade it has no deadline, so with no
   logical publication (displays off, parked) an expand or collapse in flight waits and finishes when publications
   resume; the coordinator meanwhile refuses mode requests and transfers as busy. Watch for it at M5 (display power).
-- [ ] The expanded card inherits the Visualizer card's surface material (it was a plain rectangle): confirm the
-  expanded card shows the theme's material with no M2 change now that cards have materials.
+- [~] Operator look: the expanded card shows the theme's surface material (the Visualizer card's
+  `visualizerCardSurfaceMaterial` exists since 0b4abe04, so it is no longer a plain rectangle).
 
 **Found while building Expanded Visualizer M3 (7 Nov night; recorded, not yet admitted):**
 
