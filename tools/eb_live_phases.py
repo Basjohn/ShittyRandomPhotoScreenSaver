@@ -37,6 +37,10 @@ _waveform_signals: list = []
 _waveform_configuration: dict = {}
 _waveform_receipt: dict = {}
 _takes: list[float] = []
+# The calling thread's own CPU time inside each tick / take (``time.thread_time``: coarse per call on Windows, exact
+# in sum), beside the wall time: wall includes the thread's waits for the GIL, CPU does not.
+_tick_cpu: list[float] = []
+_take_cpu: list[float] = []
 
 
 def note_waveform_frame(receipt: dict, logical) -> bool:
@@ -69,10 +73,11 @@ def _install_frame_take() -> None:
 
     def timed(self):
         cached = self._peeked is not None
-        start = time.perf_counter()
+        start, cpu = time.perf_counter(), time.thread_time()
         publication = read(self)
         if publication is not None and not cached and self._writer is None:
             _takes.append((time.perf_counter() - start) * 1000.0)
+            _take_cpu.append((time.thread_time() - cpu) * 1000.0)
         return publication
     PacketMailbox._read = timed
 
@@ -152,12 +157,22 @@ def _install() -> None:
     publish = tick_pipeline._publish_logical_state
 
     def ticked(*args, **kwargs):
-        start = time.perf_counter()
+        start, cpu = time.perf_counter(), time.thread_time()
         try:
             return publish(*args, **kwargs)
         finally:
             _ticks.append((time.perf_counter() - start) * 1000.0)
+            _tick_cpu.append((time.thread_time() - cpu) * 1000.0)
     tick_pipeline._publish_logical_state = ticked
+
+
+def _cpu_and_wall_means(wall: list[float], cpu: list[float]) -> dict:
+    """Mean wall and mean thread-CPU milliseconds per call over the same calls (the two lists are appended together;
+    a call in flight at exit may leave one longer)."""
+    count = min(len(wall), len(cpu))
+    if not count:
+        return {}
+    return {"wall_mean": round(sum(wall[:count]) / count, 3), "cpu_mean": round(sum(cpu[:count]) / count, 3)}
 
 
 def _summary() -> dict:
@@ -171,11 +186,13 @@ def _summary() -> dict:
     ticks = sorted(_ticks[200:])
     if ticks:
         summary["logical_publish"] = {"median": round(statistics.median(ticks), 3),
-                                      "p90": round(ticks[int(0.9 * (len(ticks) - 1))], 3)}
+                                      "p90": round(ticks[int(0.9 * (len(ticks) - 1))], 3),
+                                      **_cpu_and_wall_means(_ticks[200:], _tick_cpu[200:])}
     takes = sorted(_takes[200:])
     if takes:
         summary["frame_take"] = {"median": round(statistics.median(takes), 3),
-                                 "p90": round(takes[int(0.9 * (len(takes) - 1))], 3), "takes": len(_takes)}
+                                 "p90": round(takes[int(0.9 * (len(takes) - 1))], 3), "takes": len(_takes),
+                                 **_cpu_and_wall_means(_takes[200:], _take_cpu[200:])}
     if _waveform_signals:summary['waveform_signals']=_waveform_signals
     if _waveform_configuration:summary['waveform_configuration']=_waveform_configuration
     if _waveform_receipt:summary['waveform_frame_receipt']=dict(_waveform_receipt)

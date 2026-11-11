@@ -142,7 +142,11 @@ def test_the_worker_paths_trace_reads_the_same_age_chain_as_in_process(tmp_path)
     for key in ("consumed_age_at_sync_ms", "publish_to_swap_ms", "tick_to_publish_ms", "newest_age_at_sync_ms"):
         assert inproc[key] == worker[key], key
     assert worker["consumed_age_at_sync_ms"]["median"] == 5.0 and worker["publish_to_swap_ms"]["median"] == 12.0
-    assert worker["tick_to_publish_ms"]["median"] == 2.0 and worker["revisions_waiting_at_sync"]["median"] == 0
+    assert worker["tick_to_publish_ms"]["median"] == 2.0
+    # Phase-boundary audit L2: this worker trace superseded every second frame, and main recorded none of them, so a
+    # waiting count read from it would be zero by construction. It is reported as not measured, never as a zero.
+    assert worker["revisions_waiting_at_sync"] is None and "not measured" in worker["revisions_waiting_at_sync_note"]
+    assert inproc["revisions_waiting_at_sync"]["median"] == 0
     # The worker publishes at 90/s although main took 45/s: the revisions are the worker's publication count.
     assert abs(worker["revisions_per_s"] - 90.0) < 1.0 and abs(worker["publish_records_per_s"] - 45.0) < 1.0
     assert abs(inproc["revisions_per_s"] - 90.0) < 1.0
@@ -161,18 +165,30 @@ def test_negative_controls_the_worker_rate_needs_the_flag_and_the_chain_needs_th
     assert blind["tick_to_publish_ms"] is None
 
 
-def test_the_tick_and_the_gil_are_labelled_by_process():
-    from tools.visualizer_live_check import revision_rate, tick_and_gil
+def test_the_tick_and_mains_work_are_labelled_by_process_and_by_what_was_measured():
+    """Phase-boundary audit L2: the shares are wall time (an upper bound on GIL hold) and thread CPU time, named as
+    such; no field claims a GIL share, and each path states how its audio was delivered."""
+    from tools.visualizer_live_check import revision_rate, tick_shares
 
-    worker = tick_and_gil({"frame_take_ms": {"median": 0.5}, "publish_records_per_s": 40.0, "revisions_per_s": 90.0,
-                           "tick_to_publish_ms": {"median": 2.0}}, worker_path=True)
-    assert worker["tick_process"] == "engine_worker" and worker["main_gil_holder"].startswith("frame take")
-    assert worker["main_gil_share"] == 0.02 and worker["worker_gil_share"] == worker["tick_gil_share"] == 0.18
+    worker = tick_shares({"frame_take_ms": {"median": 0.5, "cpu_mean": 0.25}, "publish_records_per_s": 40.0,
+                          "revisions_per_s": 90.0, "tick_to_publish_ms": {"median": 2.0}}, worker_path=True)
+    assert worker["tick_process"] == "engine_worker" and worker["main_per_frame_work"].startswith("frame take")
+    assert worker["main_wall_share"] == 0.02 and worker["main_cpu_share"] == 0.01
+    assert worker["worker_tick_wall_share"] == worker["tick_wall_share"] == 0.18
     assert worker["worker_tick_ms"] == {"median": 2.0}
-    inproc = tick_and_gil({"logical_gil_share": 0.21, "tick_to_publish_ms": {"median": 2.0}, "revisions_per_s": 90.0},
-                          worker_path=False)
-    assert inproc["tick_process"] == "main" and inproc["main_gil_share"] == 0.21 and inproc["tick_gil_share"] == 0.18
-    assert inproc["worker_tick_ms"] is None and inproc["worker_gil_share"] is None
+    inproc = tick_shares({"logical_tick_wall_share": 0.21, "logical_tick_ms": {"median": 2.3, "cpu_mean": 1.0},
+                          "tick_to_publish_ms": {"median": 2.0}, "revisions_per_s": 90.0}, worker_path=False)
+    assert inproc["tick_process"] == "main" and inproc["main_wall_share"] == 0.21 and inproc["tick_wall_share"] == 0.18
+    assert inproc["main_cpu_share"] == 0.09                    # what the tick's thread ran: below its wall share
+    assert inproc["worker_tick_ms"] is None and inproc["worker_tick_wall_share"] is None
+    for summary in (worker, inproc):
+        assert not any("gil" in key for key in summary), sorted(summary)
+    assert worker["audio_delivery"] != inproc["audio_delivery"]
+    assert "cadence" in worker["audio_delivery"] and "capture thread" in inproc["audio_delivery"]
+    # A run from before the CPU reading (no ``cpu_mean``) reports the wall share and no CPU share.
+    older = tick_shares({"frame_take_ms": {"median": 0.5}, "publish_records_per_s": 40.0, "revisions_per_s": 90.0,
+                         "tick_to_publish_ms": {"median": 2.0}}, worker_path=True)
+    assert older["main_wall_share"] == 0.02 and older["main_cpu_share"] is None
     # A new session's revisions start again: the step back adds nothing.
     assert revision_rate([(0, 1), (10 ** 9, 91), (2 * 10 ** 9, 5), (3 * 10 ** 9, 95)]) == 60.0
     assert revision_rate([(0, 1)]) is None

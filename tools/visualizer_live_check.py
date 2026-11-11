@@ -44,16 +44,20 @@ meets it before the operator does.
   the results as ``run_settings_v2.json`` (``SRPSS``) and ``run_settings_v2_mc.json`` (``SRPSS_MC``) and the
   ``profile/`` copy (Steam image cache, backups, encrypted credentials) is deleted.
 * **Report** (``summary.json`` and a table, steady window only: startup and teardown are reported apart): logical
-  tick time and its share of the GIL, revisions/s, the age chain (publish -> sync -> render -> swap, the consumed
-  revision's age at sync and how many newer ones were waiting), render-mode time, swap pacing, the first 2 s after
-  startup, the HUD age, and for Extruded Bubble the render stages (``tools/eb_live_phases.py``). Lines starting
+  tick time and its share of its thread's time, revisions/s, the age chain (publish -> sync -> render -> swap, the
+  consumed revision's age at sync and how many newer ones were waiting), render-mode time, swap pacing, the first 2 s
+  after startup, the HUD age, and for Extruded Bubble the render stages (``tools/eb_live_phases.py``). Lines starting
   ``FLAG`` name a known trap; see ``Docs/Guides/Visualizer_Change_Checklist.md`` "Live-shape performance".
   On the engine worker the same age chain is read from the worker's own publish stamps (each frame
   slot's ``publish_ns``, on the clock every process shares; the main side records a frame's publish when it takes
-  it), and the tick and GIL are labelled by process (``tick_and_gil``): ``tick_process``, ``tick_to_publish_ms`` and
-  ``tick_gil_share`` (both paths, from the trace), ``main_gil_share`` (in process the logical tick's, on the worker
-  path the frame take's) and ``worker_tick_ms`` / ``worker_gil_share`` (the worker's own process). A worker run with
-  no publish records fails. A Waveform run with a ``--clip`` fails unless the recording reached the live body
+  it), and the tick and main's per-frame work are labelled by process and by what was measured (``tick_shares``):
+  ``tick_process``, ``tick_to_publish_ms`` and ``tick_wall_share`` (both paths, from the trace), ``main_wall_share``
+  and ``main_cpu_share`` (in process the logical tick's, on the worker path the frame take's) and ``worker_tick_ms`` /
+  ``worker_tick_wall_share`` (the worker's own process). A wall share is wall time per call times calls per second,
+  an upper bound on GIL hold, never the hold itself; the CPU share excludes waits. The count of revisions waiting at
+  sync is not measured on the worker path (main records only the frames it took), and ``audio_delivery`` states how
+  the recording reached the engine (the worker's is phase-locked to its tick, the in-process run's device-like). A
+  worker run with no publish records fails. A Waveform run with a ``--clip`` fails unless the recording reached the live body
   (``waveform_pcm_receipt``): in process from the body's input rows, on the worker path from the frames main rendered
   (a live body with passage above zero; ``waveform_frame_receipt``).
 
@@ -108,8 +112,10 @@ def engine_worker_path(app_args) -> bool:
 _FLAGS = (
     ("publish_to_swap_ms", 20.0, "publish -> swap median over 20 ms: the frame age budget is gone"),
     ("revisions_waiting_at_sync", 0.0, "the sync consumed a stale revision while newer ones waited"),
-    ("logical_gil_share", 0.30, "the logical tick holds the GIL over 30% of the time: render/GUI threads stall"),
-    ("main_gil_share", 0.30, "main's per-frame Visualizer work holds its GIL over 30% of the time: render/GUI threads stall"),
+    ("logical_tick_wall_share", 0.30, "the logical tick occupies its thread over 30% of the time in main (wall time: "
+                                      "an upper bound on its GIL hold): render/GUI threads stall behind it"),
+    ("main_wall_share", 0.30, "main's per-frame Visualizer work occupies its thread over 30% of the time (wall time: "
+                              "an upper bound on its GIL hold): render/GUI threads stall behind it"),
     ("render_mode_ms", 8.0, "render-mode time over 8 ms: the frame no longer fits half a 60 Hz period"),
     ("steady_late_pct", 10.0, "over 10% of steady frames later than 25 ms"),
     ("post_startup_late_pct", 20.0, "over 20% of the first 2 s after startup later than 25 ms"),
@@ -213,7 +219,11 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
         "frames_per_s": round(len(swaps) / seconds, 1),
         "consumed_age_at_sync_ms": _stats(consumed),
         "newest_age_at_sync_ms": _stats(newest_age),
-        "revisions_waiting_at_sync": _stats(waiting),
+        # On the worker path main records a publish only for a frame it took, so a newer frame it never took is
+        # invisible here and the count would be zero by construction: not measured, rather than a measured zero.
+        "revisions_waiting_at_sync": None if worker_path else _stats(waiting),
+        "revisions_waiting_at_sync_note": ("not measured on the engine worker: main records only the frames it took"
+                                           if worker_path else "newer publications than the one the sync consumed"),
         "publish_to_swap_ms": _stats(to_swap),
         "render_mode_ms": _stats(render_mode),
         "swap_gap_ms": _stats(gaps),
@@ -225,30 +235,53 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
     }
 
 
-def tick_and_gil(summary: dict, *, worker_path: bool) -> dict:
-    """The tick and the GIL, labelled by process (gate 3 compares them in process and on the engine worker).
+#: How the recorded clip reaches the engine on each path (the tick's cost depends on it: phase-locked blocks never
+#: arrive mid-tick, a capture thread's do).
+AUDIO_DELIVERY = {
+    True: (f"the clip's first {WORKER_PCM_LOOP_S:g} s, looped, handed to the engine in whole blocks at the worker's own "
+           "cadence edges (PacedPcmSource): phase-locked to the tick, not a device's callback timing"),
+    False: "the whole clip replayed as the loopback from a capture thread in real time (device-like callback timing)",
+}
+
+
+def tick_shares(summary: dict, *, worker_path: bool) -> dict:
+    """The tick's and main's per-frame work as shares of their threads' time, labelled by process and by what was
+    measured (gate 3 compares them in process and on the engine worker).
+
+    A ``*_wall_share`` is the work's wall time per call (median) times its calls per second: how much of the time the
+    thread is inside that work. It is **not** GIL hold time: it includes the time the thread waited for the GIL or
+    was descheduled inside the call (at 87% system CPU most of an 11 ms tick can be waiting), and time inside C
+    calls that release the GIL. A ``*_cpu_share`` is the thread's own CPU time inside the work (mean per call, from
+    ``time.thread_time`` around every call, exact over a run though coarse per call) times its calls per second: what
+    the thread actually ran, waits excluded. Python exposes no GIL hold time; the hold lies at or below the wall share
+    and, where the work is pure Python, near the CPU share.
 
     ``tick_process``: where the logical tick ran. ``tick_to_publish_ms`` (from the trace, on that process's clock) is
-    the tick's start (its authored now) to its publish record, before the wake; ``tick_gil_share`` is that times
+    the tick's start (its authored now) to its publish record, before the wake; ``tick_wall_share`` is that times
     revisions/s, the same figure on both paths, in the process named by ``tick_process``.
-    ``main_gil_share``: the main process's per-frame GIL holder for the Visualizer's frames; in process the logical tick
-    (``logical_tick_ms``: ``_publish_logical_state``, capture + publish + the GUI wake, times revisions/s:
-    ``logical_gil_share``), on the worker path the frame take (``frame_take_ms``: slot copy, decode and the owner's
-    completion, times the frames taken per second).
-    ``worker_tick_ms`` / ``worker_gil_share``: the engine worker's own tick and GIL (another process: it never stalls
-    main's threads); None in process."""
-    def share(stats, rate):
-        return round(stats["median"] * rate / 1000.0, 2) if stats and rate else None
+    ``main_per_frame_work``: what the main process does per Visualizer frame; in process the logical tick
+    (``logical_tick_ms``: ``_publish_logical_state``, capture + publish + the GUI wake), on the worker path the frame
+    take (``frame_take_ms``: slot copy, decode and the owner's completion). ``main_wall_share`` / ``main_cpu_share``
+    are its shares of its thread. ``worker_tick_ms`` / ``worker_tick_wall_share``: the engine worker's own tick in its
+    own process (it never stalls main's threads; its CPU time is not read from here); None in process.
+    ``audio_delivery``: how the recording reached the engine on this path."""
+    def share(stats, rate, key="median"):
+        value = (stats or {}).get(key)
+        return round(value * rate / 1000.0, 2) if value is not None and rate else None
 
     tick_share = share(summary.get("tick_to_publish_ms"), summary.get("revisions_per_s"))
     if worker_path:
-        return {"tick_process": "engine_worker", "tick_gil_share": tick_share,
-                "main_gil_holder": "frame take (slot copy, decode, completion)",
-                "main_gil_share": share(summary.get("frame_take_ms"), summary.get("publish_records_per_s")),
-                "worker_tick_ms": summary.get("tick_to_publish_ms"), "worker_gil_share": tick_share}
-    return {"tick_process": "main", "tick_gil_share": tick_share,
-            "main_gil_holder": "logical tick (_publish_logical_state: capture, publish, wake)",
-            "main_gil_share": summary.get("logical_gil_share"), "worker_tick_ms": None, "worker_gil_share": None}
+        take, rate = summary.get("frame_take_ms"), summary.get("publish_records_per_s")
+        return {"tick_process": "engine_worker", "tick_wall_share": tick_share,
+                "main_per_frame_work": "frame take (slot copy, decode, completion)",
+                "main_wall_share": share(take, rate), "main_cpu_share": share(take, rate, "cpu_mean"),
+                "worker_tick_ms": summary.get("tick_to_publish_ms"), "worker_tick_wall_share": tick_share,
+                "audio_delivery": AUDIO_DELIVERY[True]}
+    tick, rate = summary.get("logical_tick_ms"), summary.get("revisions_per_s")
+    return {"tick_process": "main", "tick_wall_share": tick_share,
+            "main_per_frame_work": "logical tick (_publish_logical_state: capture, publish, wake)",
+            "main_wall_share": summary.get("logical_tick_wall_share"), "main_cpu_share": share(tick, rate, "cpu_mean"),
+            "worker_tick_ms": None, "worker_tick_wall_share": None, "audio_delivery": AUDIO_DELIVERY[False]}
 
 
 def waveform_pcm_receipt(phases: dict, *, recorded: bool, worker_path: bool) -> dict:
@@ -960,19 +993,19 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
         tick = phases.get("logical_publish")
         summary["logical_tick_ms"] = tick
         if tick:
-            summary["logical_gil_share"] = round(tick["median"] * summary["revisions_per_s"] / 1000.0, 2)
+            summary["logical_tick_wall_share"] = round(tick["median"] * summary["revisions_per_s"] / 1000.0, 2)
         summary["frame_take_ms"] = phases.get("frame_take")
         summary["render_stages_ms"] = {k: v for k, v in phases.items()
                                        if isinstance(v, dict) and k not in ("logical_publish", "frame_take")}
-    summary.update(tick_and_gil(summary, worker_path=worker_path))
+    summary.update(tick_shares(summary, worker_path=worker_path))
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     for key, value in summary.items():
         if key not in ("render_stages_ms", "process_tree", "actual_waveform_configuration", "display_power",
                        "settings_roundtrip"):
             print(f"{key:28s} {value}")
     for key, limit, message in _FLAGS:
-        if key == "main_gil_share" and summary.get("tick_process") == "main":
-            continue                                   # in process it is logical_gil_share, flagged above
+        if key == "main_wall_share" and summary.get("tick_process") == "main":
+            continue                                   # in process it is logical_tick_wall_share, flagged above
         value = summary.get(key)
         value = value["median"] if isinstance(value, dict) else value
         if value is not None and value > limit:
