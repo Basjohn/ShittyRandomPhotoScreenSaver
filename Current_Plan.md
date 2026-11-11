@@ -240,12 +240,33 @@ are born under it), then the fullscreen overlay contract, then window material a
 rendered pixels by the lead. Roster (operator, 11 Nov): one Fable High (complex/architectural/visual), one Opus 5.5
 High, one Opus 5.5 Medium (simpler/brute force), one Sonnet Medium (documents/research only); the lead audits all.
 
-- [ ] **1B.1 Edit reaches only the fullscreen Visualizer's display (very important).** With 2+ displays and the
-  Visualizer expanded on one (say D1), entering Edit from D0 or D1 opens only D1's Fullscreen Edit; D0 cannot be
-  edited at all. Edit entered on a display edits that display: ordinary Edit on D0 while D1 stays expanded and
-  running, Fullscreen Edit only where the expanded card is. One Edit session owner, no second path; cover both
-  entry displays, Save/Cancel on each, and the covered-display admission (M4) with a multi-display regression
-  that fails on today's code.
+- [~] **1B.1 Awaiting Validation (merged 11 Nov, 46129166): Edit edits the display it was entered on.** With the
+  Visualizer expanded on one display, Edit from that display is Fullscreen Edit; Edit from another display is the
+  ordinary Edit of every other display while the view stays expanded and running (contract: plan 01 M3c "Edit
+  beside the view", `Spec.md`). Lead audit: the 13 new two-display tests fail on the pre-fix code; 1019 focused
+  tests pass on the merge. Operator check on two physical monitors: enter Edit from each display by menu and
+  double-right, Save and Cancel on each, and the expanded view still animating while the other display edits.
+  Side defects found there (all fail the same on the pre-fix code):
+  - [ ] `tests/test_visualizer_expansion_fullscreen_edit.py`: 4 reds on main
+    (`test_parent_axes_resize_the_artwork_border_not_the_metadata_text_box` and
+    `test_entering_fullscreen_edit_does_not_refade_already_visible_now_playing_content`: a Qt item already
+    deleted; `test_now_playings_parts_move_and_size_inside_the_block_through_the_child_editor[False/True]`: the
+    title child moves 3 or 15 px against 34). Resolve under 1B.7, which owns that contract.
+  - [ ] `tests/test_qtquick_custom_layout_owner.py` then `tests/test_qtquick_context_menu.py` in one process fails
+    the menu tests (`menuVisible` False); likely the 700 ms right-click suppression armed by an earlier test's
+    Save/Cancel leaking across tests.
+  - [ ] Unreproduced edge: in an ordinary global Edit, closing the Visualizer and then switching mode makes
+    `activate_edit_visualizer_profile` return False (`rendering/quick/custom_layout_owner.py`, the
+    `visible is None` branch), which looks like a forced runtime reload. Reproduce or rule out.
+- [ ] **1B.12 Two fullscreen glyphs, one per display (operator, 11 Nov; "partial extra refinement", for the
+  Expanded Visualizer now and SMP later).** Beside the existing fullscreen glyph (diagonal arrow up-right) add a
+  second one, a diagonal arrow up-left. With more than one display active both show: up-left expands onto
+  Display 0, up-right onto Display 1 (from whichever display the card is on, through the existing transfer +
+  expand transaction, never a second path). V keeps expanding on the display the Visualizer is currently on.
+  With one display the single existing glyph stays as today (lead's reading; confirm with the operator). The
+  target is a display, not "the Visualizer's display", so SMP can later hold one display fullscreen while the
+  Visualizer holds the other. Displays beyond the first two are reached with V. Glyph drawn in the existing
+  glyph row's style (painted, no seams), Title Case tooltips, fades in and out with the display count.
 - [ ] **1B.2 Cursor keeps its changed shape after exit until a click (never actually fixed; 3-4 rounds).** A hand
   or other shape set by the saver survives exit and a single click on the desktop clears it. Reproduce on the real
   exit paths first (key, click, mouse move, Settings, Edit, MC, each display count), find the owner that still
