@@ -10,6 +10,9 @@ A completed implementation task, a focused test, a full acceptance test, a live 
 
 ## 1. Reconciled P2 status on the baseline
 
+*9 Nov baseline (`9872ca18`), kept as written: M4, M5, L2-L5 and the POSIX transfer lifetime have since merged
+(`1af42104`, see §2 "11 Nov status"), and H3's Linux source flip merged on 11 Nov (`6c2039b3`).*
+
 | Work | Source-verifiable status | Remaining distinction |
 | --- | --- | --- |
 | P2 ABI, frame codec, mailbox; in-process loopback | **[x] Implemented** in `core/visualizer_engine/{packet_abi,frame_codec,packet_mailbox}.py` | Preserve bitwise identity and seqlock ordering in P3; Python tagged payload is **not** yet a native per-mode payload. |
