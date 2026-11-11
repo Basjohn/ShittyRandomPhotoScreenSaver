@@ -606,9 +606,22 @@ class EngineWorkerLink:
         if snapshot == self._view_sent and not changed:
             return False
         from core.process.types import MessageType
-        from widgets.spotify_visualizer.logical_edges import detach_presentation_value
+        from widgets.spotify_visualizer.logical_edges import (detach_presentation_value,
+                                                              report_unforwarded_presentation_input)
 
-        changed = {attr: detach_presentation_value(value) for attr, value in changed.items()}
+        refused: dict[str, Any] = {}
+        for attr, value in tuple(changed.items()):
+            try:
+                changed[attr] = detach_presentation_value(value)
+            except TypeError as exc:
+                # A Qt value with no plain form nested in the input (audit L4): never pickled to the worker (its
+                # process loads QtCore only), reported once, and recorded as it is so the same value is not tried
+                # again at every presentation; the session keeps what it holds until the state's value changes.
+                report_unforwarded_presentation_input(attr, exc)
+                refused[attr] = changed.pop(attr)
+        sent.update(refused)
+        if snapshot == self._view_sent and not changed:
+            return False
         extent, rotations, override_extent, override_rotations = snapshot
         self._view_sent = snapshot
         sent.update(changed)

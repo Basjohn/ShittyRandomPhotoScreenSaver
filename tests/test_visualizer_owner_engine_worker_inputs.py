@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.test_visualizer_owner_engine_worker import _InProcessSupervisor, _pump
+from tests.test_visualizer_owner_engine_worker import _InProcessSupervisor, _Log, _pump
 from tools.visualizer_replay import owner_worker_gate as gate
 
 
@@ -356,6 +356,100 @@ def test_an_in_place_edit_of_a_nested_presentation_input_is_forwarded(qt_app, mo
             assert palette == state._waveform_ribbon_palette
             assert palette is not state._waveform_ribbon_palette
             assert palette["strand"] is not state._waveform_ribbon_palette["strand"]
+    finally:
+        link.close()
+
+
+def _forwarded_control_attrs(mode: str) -> list[str]:
+    """``mode``'s forwarded presentation inputs that are its own controls (not the view records or the Detail tier)."""
+    from widgets.spotify_visualizer import logical_edges
+
+    return [attr for attr in logical_edges.presentation_input_attrs(mode)
+            if attr not in logical_edges.VIEW_RECORD_ATTRS and attr != "_scene3d_detail"]
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pre_fix", (False, True))
+def test_a_qt_typed_presentation_input_is_forwarded_plain_or_refused_loudly(qt_app, monkeypatch, pre_fix):
+    # Phase-boundary audit L4: a presentation input holding a Qt value was skipped with no word, so the worker's tick
+    # kept its old value while in process read the new one. A colour now goes as the (r, g, b, a) the in-process
+    # capture freezes it to; a Qt value with no plain form (top level, or nested in a list or dict) is refused with
+    # one error per attribute, never sent (the worker loads QtCore only: a pickled Qt object would drag its module
+    # in) and never retried every presentation; the plain inputs beside it still go. Negative control (the pre-fix
+    # snapshot and copy): the colour and the point are dropped silently, and the nested point is sent as a Qt object.
+    import types
+
+    from PySide6.QtCore import QPointF
+    from PySide6.QtGui import QColor
+
+    from core.process.types import WorkerResponse
+    from tests.test_visualizer_owner_engine_worker_liveness import _ManualSupervisor
+    from widgets.spotify_visualizer import logical_edges
+    from widgets.spotify_visualizer.engine_worker_link import EngineWorkerLink
+
+    mode = "waveform_ribbon"
+    colour_attr, point_attr, nested_attr, plain_attr = _forwarded_control_attrs(mode)[:4]
+    if pre_fix:
+        def silent_snapshot(presentation_state, mode_id):
+            return {attr: value for attr in logical_edges.presentation_input_attrs(mode_id)
+                    for value in (getattr(presentation_state, attr, None),)
+                    if not type(value).__module__.startswith("PySide6")}
+
+        def plain_copy(value):
+            kind = type(value)
+            if kind is list:
+                return [plain_copy(item) for item in value]
+            if kind is dict:
+                return {key: plain_copy(item) for key, item in value.items()}
+            return value
+
+        monkeypatch.setattr(logical_edges, "presentation_inputs_snapshot", silent_snapshot)
+        monkeypatch.setattr(logical_edges, "detach_presentation_value", plain_copy)
+    log = _Log()
+    monkeypatch.setattr(logical_edges, "logger", log)
+    monkeypatch.setattr(logical_edges, "_UNFORWARDED_REPORTED", set(), raising=False)
+    colour = QColor(12, 34, 56, 78)
+    state = types.SimpleNamespace(**{colour_attr: colour, point_attr: QPointF(1.0, 2.0),
+                                     nested_attr: {"anchors": [QPointF(3.0, 4.0)]}, plain_attr: [1, 2, 3]})
+    supervisor = _ManualSupervisor()
+    link = EngineWorkerLink(supervisor, on_lost=lambda _link, _reason: None)
+
+    def answer() -> None:
+        message, correlation = supervisor.sent[-1]
+        supervisor.callbacks[correlation](WorkerResponse(msg_type=message, seq_no=0, correlation_id=correlation,
+                                                         success=True))
+        gate._event_loop_for(qt_app, 5.0, until=lambda: not link.busy)
+
+    def qt_values(value) -> list:
+        if isinstance(value, dict):
+            return [found for item in value.values() for found in qt_values(item)]
+        if isinstance(value, (list, tuple)):
+            return [found for item in value for found in qt_values(item)]
+        return [value] if type(value).__module__.startswith("PySide6") else []
+
+    try:
+        link.set_view_source(lambda: (((640.0, 360.0), {}, None, None),
+                                      logical_edges.presentation_inputs_snapshot(state, mode)))
+        assert link.send_view()
+        sent = supervisor.payloads[-1]["presentation"]
+        answer()
+        errors = [message for level, message in log.records if level == "error"]
+        assert sent[plain_attr] == [1, 2, 3]
+        if pre_fix:
+            assert colour_attr not in sent and point_attr not in sent and not errors      # dropped, no word
+            assert qt_values(sent)                                                        # a Qt object left
+            return
+        assert sent.get(colour_attr) == tuple(colour.getRgb()) and type(sent[colour_attr]) is tuple, sent
+        assert not qt_values(sent), sent
+        assert point_attr not in sent and nested_attr not in sent
+        assert len(errors) == 2 and any(point_attr in message for message in errors) \
+            and any(nested_attr in message for message in errors), errors
+        for _ in range(3):                                   # nothing changed: no resend, no second error
+            assert not link.send_view()
+        assert len([message for level, message in log.records if level == "error"]) == 2
+        setattr(state, nested_attr, {"anchors": [[3.0, 4.0]]})                             # a plain value now goes
+        assert link.send_view()
+        assert supervisor.payloads[-1]["presentation"] == {nested_attr: {"anchors": [[3.0, 4.0]]}}
     finally:
         link.close()
 
