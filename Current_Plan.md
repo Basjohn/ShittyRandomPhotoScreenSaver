@@ -328,6 +328,10 @@ classification is written at each item.
   state access and immutable storage, the program binary cache, per-draw image bindings, multisample resolve
   control, stencil use for the card clip, persistent mapped buffers; and what QRhi requires that we do not do
   yet (render-pass descriptors known up front, resource-update batches, no state leakage between passes).
+- N0.2 and N0.3 researched 12 Nov: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_qrhi_gaps_and_conventions.md`
+  (every OpenGL dependency with its QRhi route, its raw-Vulkan route and a recommendation; Qt 6.11.2's header
+  checked; device ownership). What it changes is written as boxes in N0.6, N1 and N3 below; the two N0 boxes
+  stay open only for the lead to accept the recommendations into D5.
 - [ ] N0.3 Conventions written once and tested: clip-space Y, depth range 0..1 against -1..1, framebuffer origin,
   texture origin, front-face winding, std140/std430 layout rules, sRGB and HDR formats per backend. Every
   shader and matrix reads them from one place, so a mode is not fixed up per backend.
@@ -335,9 +339,14 @@ classification is written at each item.
   whether the core receives finished matrices and rays from the worker (no second camera to keep in step) or
   ports the math behind a parity test; the first is the default unless a per-frame cost shows otherwise.
 - [ ] N0.6 Decision D6, Vulkan device ownership (`Docs/Future_Work/Native_Core_P3_Decisions.md`): the native
-  core creates the `VkInstance` and `VkDevice` itself, with the features and extensions it needs (timestamp
-  queries, `shaderFloat64` where present, what DLSS or FSR need), and hands them to Qt Quick, so Qt renders the UI on
-  our device instead of the core inheriting Qt's defaults; proved in the P1 spike's harness before P3.1.
+  core creates the `VkInstance` and `VkDevice` itself, with the features and extensions it needs, and hands them
+  to Qt Quick (`QQuickWindow::setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(...))` and
+  `setVulkanInstance`; PySide6 6.11.2 exposes none of these, so the native module does it). Qt requires of it a
+  graphics queue that can present, the extensions `preferredExtensionsForImportedDevice()` names plus swapchain,
+  instance API 1.1 or later, and objects that outlive the windows. Extensions alone can be added from Python
+  (`setDeviceExtensions`), and timestamps and the pipeline cache are exposed too, so owning the device is needed
+  only for feature bits and a second (async compute) queue: decide it at P3.5 unless a feature is needed earlier;
+  prove it in the P1 harness first.
 - [ ] N0.5 The substrate's contract as decision D5 in `Docs/Future_Work/Native_Core_P3_Decisions.md`: resource
   ownership and lifetime per window and per device, admission and dormancy, device loss, what a mode's native
   renderer may and may not do (no clock, no camera, no allocation per frame, the card clip is the substrate's).
@@ -354,7 +363,18 @@ classification is written at each item.
   module-level compute strings in eight modules are scanned; the population count and scatter sources and the
   composed fog medium program are never checked): discover every shader source in `rendering/`, compile each through `qsb`, and
   ratchet the failures down the same way, mode by mode in the order of N5.
-- [ ] N1.4 Shaders stop assuming OpenGL's conventions: the items of N0.3 come from shared includes or uniforms.
+- [ ] N1.4 Shaders stop assuming OpenGL's conventions: the items of N0.3 come from shared includes or uniforms:
+  one helper for `gl_FragCoord` used as a texel or uv (bottom-left in OpenGL, top-left elsewhere); the projection
+  matrices (`framed_camera.py` perspective, depth -1..1) corrected at upload by the backend's clip-space matrix; the
+  winding rule (Sphere picks `glFrontFace` from the matrix sign) tested once per backend.
+- [ ] N1.6 Loose uniforms into blocks across the renderer (838 `glUniform*` call sites today; `qsb` needs uniform
+  blocks), mode by mode in N5's order, each pixel-identical in OpenGL before and after; the `.qsb` files baked
+  for every backend, not `--glsl 460` only.
+- [ ] N1.7 Formats QRhi lacks (RG16F, RG32F, R11G11B10F: the defocus circle, motion velocity, the edge field, the
+  heightfield, Bubble's light attachment): move each to a format every backend has (RGBA16F or RGBA32F) in the
+  OpenGL renderer first, pixel-identical, or mark it a raw-Vulkan pass with the reason.
+- [ ] N1.8 Per-sample multisample reads (`sampler2DMS`, `gl_SampleID`): QRhi forbids sampling a resolved
+  multisample texture; each use either resolves first and reads the resolve, or becomes a raw-Vulkan pass.
 - [ ] N1.5 No new 3D primitive is built in the Python OpenGL renderer from here on unless an open defect needs
   it (nothing is built twice); section 6's unbuilt primitives are native-only (N6).
 
@@ -363,15 +383,31 @@ substrate's guarantee (plan 1C.4's contract: no pass of any mode writes outside 
 anti-aliased edge; Sphere's and Extruded Spectrum's deliberate overflow setting is the one admitted exception and
 stays explicit), Spectrum at parity.*
 
-*N3. The native 3D substrate core (C++/QRhi; proved on harness scenes, no mode yet)*
+*N3. The native 3D substrate core (C++; QRhi for what touches Qt Quick's target, raw Vulkan through the native
+handles where QRhi falls short; proved on harness scenes, no mode yet)*
+
+- [ ] N3.0 Pass structure: QRhi cannot nest passes, so every scene, bloom, compute and raw-Vulkan pass runs in the
+  node's prepare step and the render step is one composite draw into Qt Quick's target; the card clip moves into
+  that composite (stencil reference, scissor and the SDF coverage term), which makes "nothing outside the card,
+  nothing under the border's anti-aliased edge" true by construction; every state combination is a pipeline
+  built ahead (the pipeline cache file is exposed in 6.11.2).
+- [ ] N3.0b The routes the research recommends raw Vulkan for, each behind one owner in the core: per-pass GPU
+  timing, the formats QRhi lacks, GPU-driven indirect draws (Qt 6.11.2 has none: until then draw the maximum
+  count and cull in the vertex shader), per-sample multisample reads, the high-rate persistent rings (ribbon and
+  drift); everything that touches Qt Quick's target, the clip or uniforms stays on QRhi.
+- [ ] N3.0c The card-material backdrop pyramid blits Qt Quick's current framebuffer
+  (`rendering/quick/surface_backdrop.py:260`); no route can read Qt Quick's own frame inside its pass: design
+  where the backdrop comes from on the native core (the frame before, or the wallpaper and widget layers rendered
+  by the core itself) and write it as decision D7 before N5.7.
 
 - [ ] N3.1 Scene targets: colour, depth and the HDR intermediate with fixed allocations per size, resize and
   retirement, a sampled depth texture and the background capture (Extruded Bubble), a small extra offscreen
   target with a second light attachment (Bubble), the composite into the card with the card's alpha,
   single-sampled first (the parity gate), then one sampling-policy owner covering all three sources today: the 3D
   Detail tier, a transition's own request (2x to 8x), and two literals (Waveform 4, Oscilloscope 1).
-- [ ] N3.2 Mesh and buffer resources: static meshes built once and kept, dynamic buffers, instancing, indirect
-  draws, point sprites (Bubble, Neon Lake's marks, Waveform's sparks use `gl_PointSize`; QRhi needs a defined
+- [ ] N3.2 Mesh and buffer resources (the persistent-mapped stream ring becomes dynamic buffers with dynamic
+  offsets, or a raw-Vulkan ring where the rate needs it): static meshes built once and kept, dynamic buffers,
+  instancing, indirect draws, point sprites (Bubble, Neon Lake's marks, Waveform's sparks use `gl_PointSize`; QRhi needs a defined
   replacement such as instanced quads), the per-frame ring for uniform and storage data (the stream ring's
   contract), with no allocation per frame.
 - [ ] N3.3 Compute passes: the seam the Python renderer has (dispatch only when there is new work, storage
