@@ -40,10 +40,24 @@ after, every edge of the card reads 8 solid border pixels with nothing blended, 
 DWM composite (`.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge_after/` and
 `20261112_devcurve_card_edge_whole_logical/`).
 
+## Second axis (plan 1C.4 remainder, 12 Nov 2026)
+
+A monitor whose *non*-overscanned axis was not a whole number of logical pixels at its DPR was still stretched on
+that axis. `compat_native_rect` now gives that axis its own exterior-edge overscan, chosen by the same rule
+(`overscan_amount`), whenever the monitor has an exterior edge on it: 1366 × 768 at 125 % gets a top and a left
+overscan; the development machine's Display 0 (2560 × 1440 at 150 %, 1706.67 logical wide) was stretched
+horizontally by 2560 / 1707 = 0.99980 and now goes from `(0,-3)` 2560 × 1443 to `(-2,-3)` 2562 × 1443 device pixels,
+its shared right edge unchanged. Overscan still only goes past an edge on the virtual desktop's boundary, at most one
+edge per axis. Regression bar: the durability sweep in `tests/test_qtquick_window.py` now requires every axis with an
+exterior edge to be whole (red on the one-edge rule, first at `row 1280x720|1280x720 top` at 150 %), and
+`test_native_compat_window_overscans_both_axes_when_neither_is_whole_logical`. Not yet seen on a real display.
+
 ## Still open
 
-A monitor whose *non*-overscanned axis is not a whole number of logical pixels at its DPR (for example 1366 px at
-125 %) is still stretched on that axis; the fix there is a second exterior-edge overscan, recorded in the plan.
+An axis with no exterior edge cannot be overscanned without overdrawing a neighbour, so a monitor enclosed on that
+axis (the middle of three in a row has no left or right exterior edge; the centre of a 3 × 3 grid has none at all)
+keeps Qt Quick's stretch there when its extent is not whole at its DPR. A monitor with no exterior edge at all still
+takes R-63's top fallback, which overscans into the display above it.
 
 ## Lesson
 

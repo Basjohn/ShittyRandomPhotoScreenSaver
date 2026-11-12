@@ -110,7 +110,9 @@ device pixels from the real monitor/virtual-desktop rectangles and DPR, with not
 - `rendering/quick/device_geometry.py` `compat_native_rect`: the monitor plus overscan on one exterior edge only
   (top, bottom, left, right; an interior display falls back to top), using the smallest overscan (>=1 px) whose
   extent survives Qt's whole-logical-pixel rounding (otherwise Qt's idea of the surface height differs from the
-  real one and the scene shifts a row). Never exact cover; never past the monitor on any other edge.
+  real one and the scene shifts a row). Never exact cover; never past the monitor on any other edge. (Since R-192,
+  12 Nov 2026: the overscan makes the axis a whole number of logical pixels, and the other axis gets its own
+  exterior-edge overscan when it is not whole; never on a shared edge.)
 - `QuickDisplayWindow._apply_native_compat_geometry` re-sets the native rectangle with `SetWindowPos` after show and
   after every Qt geometry application, but only while the window still has the logical geometry its own R-63
   placement produced: a window placed by anything else (test harness, tool role) is left alone. The logical
