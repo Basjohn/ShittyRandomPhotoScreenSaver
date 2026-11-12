@@ -279,10 +279,12 @@ def resolve_card_clip_path(
     content there shows through the frame's edge (bright content reads as reaching into the border). Measured on the
     hidden production host (1C.4): on a straight edge the ramp is one device pixel centred on the edge, so pixels
     whose centre lies less than half a device pixel inside it blend; on the rounded corners Qt's tessellated ramp
-    reaches further (up to 18 % frame coverage at 0.56 device pixel inside the arc). The clip therefore ends one
-    anti-aliasing width (one device pixel) inside the frame's inner edge, on the straight edges and, as their
-    parallel curve, on the corners, so only the card's own surface (Normal fill or material) lies under the frame's
-    edge pixels, as on every other card. ``content_rect`` (the authored content geometry, R-21) is unchanged; a larger
+    reaches further (up to 18 % frame coverage at 0.56 device pixel inside the arc), also onto the straight edges
+    next to the corners, so neither half a pixel on the straight edges nor a wider corner alone clears it. The clip
+    therefore ends one anti-aliasing width (one device pixel) inside the frame's inner edge, on the straight edges
+    and, as their parallel curve, on the corners, so only the card's own surface (Normal fill or material) lies
+    under the frame's edge pixels, as on every other card; depending on where the edge falls within a pixel, up to
+    one device pixel of that surface shows between the frame's edge pixel and the content. ``content_rect`` (the authored content geometry, R-21) is unchanged; a larger
     authored content inset is kept as it is. A frameless shell draws no frame: its clip is its content rect.
     """
 
