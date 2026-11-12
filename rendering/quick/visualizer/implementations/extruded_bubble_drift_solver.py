@@ -4,7 +4,8 @@ logical tick's step log (``widgets/spotify_visualizer/extruded_bubble_drift_log`
 The logical tick publishes each step (dt, motion phase, travel, speed, each family's signed amount, the cloud
 counts, the field basis) and each family's seeded geometry; it integrates nothing. Here, on the render thread,
 every step not yet applied is applied once, in order, to persistent per-knot / per-mote state in storage buffers,
-by the arithmetic of ``MaterialPaths`` / ``ProceduralOffsets`` (the float64 CPU reference). The output keeps the
+by the arithmetic of ``MaterialPaths`` / ``ProceduralOffsets`` (the CPU reference, which keeps positions and
+displacement in float64 and narrows to float32 only when it packs its payload). The output keeps the
 layout the bead and speck shaders read (``ebMaterialDrift``: chain rows, then snow, then specks), so no draw
 changes. No readback, no clock of its own: a frame that sees no new step dispatches nothing.
 
