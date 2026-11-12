@@ -1,4 +1,4 @@
-# R-NEW | A Studio mode switch deleted the `studio` bridge under the retiring window, and every binding of its shell failed
+# R-200 | A Studio mode switch deleted the `studio` bridge under the retiring window, and every binding of its shell failed
 
 **Status:** fixed 12 Nov 2026 (13cc7745; the lane guard in 21ee4f8e). Reported from the operator's run of 12 Nov
 (Visualizer Studio, spectrum -> sphere). Owner: `ui/studio/surface.py` (`StudioShellHost`), and the shell's shape
