@@ -1037,6 +1037,15 @@ class ResolvedVisualizerPresentation:
     # True only for the Expanded Visualizer's display-wide record (``resolve_expanded_visualizer_presentation``);
     # a mode may draw it differently (Spectrum: ``spectrum_display_bar_count``). Never persisted.
     expanded_display: bool = False
+    # The display-wide record's display style (Current_Plan 1D.2: ``core.settings.fullscreen_overlays.DISPLAY_STYLES``;
+    # "default" for every other record). Its margin and frame are already resolved into the geometry above; consumers
+    # read it only for what follows from the card meeting the display's edges (a renderer's overflow is held to the
+    # card). Never persisted.
+    display_style: str = "default"
+    # The chrome the full-display overlays' own optional cards draw (border width, corner radius, shadow) when the
+    # display style handed the resolver another frame: the widget cards' chrome, kept whatever the expanded card's
+    # frame is. Empty: the frame's own (every record but a non-Default display-wide one). Never persisted.
+    overlay_chrome: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
         if not isinstance(self.shell_policy, VisualizerShellPolicy):
@@ -1045,6 +1054,11 @@ class ResolvedVisualizerPresentation:
             raise TypeError("clip policy must already be resolved")
         object.__setattr__(self, "viewport_resize_capable", bool(self.viewport_resize_capable))
         object.__setattr__(self, "expanded_display", bool(self.expanded_display))
+        if not isinstance(self.display_style, str) or not self.display_style:
+            raise TypeError("display style must be a resolved style id")
+        object.__setattr__(
+            self, "overlay_chrome", _coerce_frozen_fields(self.overlay_chrome, name="overlay chrome")
+        )
         object.__setattr__(self, "outer_rect", _rect_tuple(self.outer_rect, name="outer rect"))
         object.__setattr__(self, "content_rect", _rect_tuple(self.content_rect, name="content rect"))
         object.__setattr__(self, "dpr", _finite(self.dpr, name="DPR"))

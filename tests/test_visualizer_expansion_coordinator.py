@@ -828,6 +828,8 @@ _MANAGER_METHODS = ("_expanded_display", "_visualizer_section", "_expanded_displ
                     "_expanded_display_blocks_layout",
                     # M3b: the coordinator's creation publishes the full-display overlays' inputs to the scene.
                     "_publish_expanded_overlays", "_publish_expanded_overlay_media",
+                    # 1D.2: with them, the stored display style reaches the owner.
+                    "refresh_expanded_display_style",
                     # Plan 1B.12: the glyph publication asks which sides have a display; a side press resolves
                     # there; the takeover's move and the glyph's own routes.
                     "_expand_glyph_neighbours", "_expand_glyph_sides", "_route_quick_visualizer_expand_to_side",

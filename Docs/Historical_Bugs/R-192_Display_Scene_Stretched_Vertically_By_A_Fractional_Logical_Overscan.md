@@ -62,6 +62,13 @@ axis (the middle of three in a row has no left or right exterior edge; the centr
 keeps Qt Quick's stretch there when its extent is not whole at its DPR. A monitor with no exterior edge at all still
 takes R-63's top fallback, which overscans into the display above it.
 
+Decided 12 Nov 2026 (lead, plan 01 M3c display styles, decision 4): a Watchlist entry, not a blocker for the
+Fullscreen Visualizer's Borders To Edge style. The layouts named: the middle of three in a row (no left or right
+exterior edge) and the centre of a 3 × 3 grid (none at all). On such a display Qt Quick's stretch already softens
+every edge; a frame on the display's edge adds no new defect. The stretch is recorded, never asserted away, by
+`tests/test_expanded_display_styles.py` (`test_the_enclosed_axis_stretch_is_recorded_not_hidden`: three 1366 × 768
+at 125 %, 1366 device pixels drawn as 1093 logical).
+
 ## Lesson
 
 Qt Quick's scale is logical size to surface size, not the DPR: a window whose device extent is not a whole number of

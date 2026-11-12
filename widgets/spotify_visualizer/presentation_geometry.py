@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from dataclasses import replace
 
 from core.settings.visualizer_mode_registry import (
     VisualizerModePresentationPolicy,
@@ -450,6 +451,7 @@ def resolve_expanded_visualizer_presentation(
     *,
     display_size: Sequence[object],
     dpr: float | None = None,
+    display_style: str = "default",
 ) -> ResolvedVisualizerPresentation:
     """The display-wide variant of one resolved ordinary presentation (Expanded Visualizer, plan 01 §B2/§0.6).
 
@@ -467,13 +469,30 @@ def resolve_expanded_visualizer_presentation(
     the card draws it: chrome, not world, so it is not magnified with the display-wide world) and content
     orientation are the ordinary record's, through the same canonical resolver; only DPR may differ (the target
     display's).
+
+    ``display_style`` (Current_Plan 1D.2; plan 01 M3c "Display styles of the expanded card") changes only two inputs:
+    the margin and the frame handed to the canonical resolver. ``default`` is the above, unchanged. The other two put
+    the card on the whole display (margin 0, so ``display_size`` is the card): ``borders_to_edge`` keeps the card's
+    border width and colour with square outer corners (lead, 12 Nov; the border's inner arc follows
+    ``inner_corner_radius``, here 0), ``hide_borders`` hands it no border and square corners, so the content rect is
+    the display. Neither draws the card shadow (nothing of it could reach the display). Their record carries the
+    style and, for the full-display overlays' own cards, the ordinary chrome (``overlay_chrome``).
     """
+
+    from core.settings.fullscreen_overlays import (
+        DISPLAY_STYLE_DEFAULT,
+        DISPLAY_STYLE_HIDE_BORDERS,
+        DISPLAY_STYLES,
+    )
 
     if not isinstance(ordinary, ResolvedVisualizerPresentation):
         raise TypeError("ordinary must be a ResolvedVisualizerPresentation")
+    if display_style not in DISPLAY_STYLES:
+        raise ValueError(f"unknown expanded display style {display_style!r}")
     display_width, display_height = _positive_size(display_size, name="display size")
+    edge_to_edge = display_style != DISPLAY_STYLE_DEFAULT
     # Never more than a quarter of the shorter side: a card always remains.
-    margin = min(expanded_card_inset(ordinary), min(display_width, display_height) / 4.0)
+    margin = 0.0 if edge_to_edge else min(expanded_card_inset(ordinary), min(display_width, display_height) / 4.0)
     card_width, card_height = display_width - 2.0 * margin, display_height - 2.0 * margin
     extent_width, extent_height = ordinary.viewport_extent
     card_aspect = card_width / card_height
@@ -496,7 +515,17 @@ def resolve_expanded_visualizer_presentation(
         return float(value) / scale
 
     shadow_offset = style["shadow_offset"]
-    return resolve_visualizer_presentation(
+    border_width = float(style["authored_border_width"])
+    corner_radius = float(style["authored_corner_radius"])
+    shadow_enabled = bool(style["shadow_enabled"])
+    if edge_to_edge:
+        # The style's frame: the border (Borders To Edge) or none (Hide Borders), square corners, and no card shadow
+        # (its values stay as the card draws them: a renderer reading the shadow's direction sees the same light).
+        if display_style == DISPLAY_STYLE_HIDE_BORDERS:
+            border_width = 0.0
+        corner_radius = 0.0
+        shadow_enabled = False
+    record = resolve_visualizer_presentation(
         policy=VisualizerModePresentationPolicy(
             shell_policy=ordinary.shell_policy,
             clip_policy=ordinary.clip_policy,
@@ -513,18 +542,42 @@ def resolve_expanded_visualizer_presentation(
         expanded_display=True,
         scene_fade=ordinary.scene_fade,
         content_fade=ordinary.content_fade,
-        border_width=float(style["authored_border_width"]),
-        corner_radius=float(style["authored_corner_radius"]),
+        border_width=border_width,
+        corner_radius=corner_radius,
         content_inset=_authored("content_inset"),
         background_color=style["background_color"],
         border_color=style["border_color"],
-        shadow_enabled=bool(style["shadow_enabled"]),
+        shadow_enabled=shadow_enabled,
         shadow_color=style["shadow_color"],
         shadow_blur=_as_drawn(style["shadow_blur"]),
         shadow_offset=(_as_drawn(shadow_offset[0]), _as_drawn(shadow_offset[1])),
         shadow_spread=_as_drawn(style["shadow_spread"]),
         shadow_extensions=tuple(_as_drawn(value) for value in style["shadow_extensions"]),
     )
+    if not edge_to_edge:
+        return record
+    # The full-display overlays' own cards keep the widget cards' chrome (the card as it draws it at Default).
+    return replace(record, display_style=display_style, overlay_chrome=freeze_render_fields({
+        "border_width": float(ordinary.border_width),
+        "corner_radius": float(style["corner_radius"]),
+        "shadow_enabled": bool(style["shadow_enabled"]),
+        "shadow_color": tuple(style["shadow_color"]),
+        "shadow_blur": float(style["shadow_blur"]),
+        "shadow_offset": (float(shadow_offset[0]), float(shadow_offset[1])),
+    }))
+
+
+def renderer_overflow_held(presentation: ResolvedVisualizerPresentation | None) -> bool:
+    """Whether a renderer's declared overflow (Sphere's, Extruded Spectrum's) is held to the card's clip (1D.2).
+
+    A display-wide card in a non-Default display style is the whole display: past it lies only the window's
+    off-desktop overscan (an exterior edge) or nothing (a shared edge), so no style draws past the visible rect (lead,
+    12 Nov). The render node then takes its clipped path, whose clip is the card's (the display rect). Every other
+    record keeps the mode's own overflow choice exactly as before.
+    """
+
+    return bool(presentation is not None and presentation.expanded_display
+                and presentation.display_style != "default")
 
 
 def framed_aperture_scale(presentation: ResolvedVisualizerPresentation, *, content: bool = False) -> float:
@@ -578,4 +631,5 @@ __all__ = [
     "resize_visualizer_presentation_uniformly",
     "resolve_visualizer_presentation",
     "framed_aperture_scale",
+    "renderer_overflow_held",
 ]

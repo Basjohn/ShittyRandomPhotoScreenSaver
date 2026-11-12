@@ -1,7 +1,8 @@
-"""Visualizers → Fullscreen Mode: the full-display overlays' options (plan 01 §G, M3b).
+"""Visualizers → Fullscreen Mode: the full-display overlays' options (plan 01 §G, M3b) and the display style (1D.2).
 
 One page, placed first after Setup, for the overlays the Expanded Visualizer shows on the full display: the preset's
-name and Now Playing (Artist, Song and Artwork). Every value is ``widgets.spotify_visualizer.fullscreen_overlays``
+name and Now Playing (Artist, Song and Artwork), and how the expanded card meets the display's edges (Display Style,
+built from its one spec declaration ``DISPLAY_STYLE_CONTROL``). Every value is ``widgets.spotify_visualizer.fullscreen_overlays``
 (``core.settings.fullscreen_overlays``: one canonical owner, persisted with the Visualizer section, reset and imported
 with it); this page holds no other state. Placement offsets and scales (Fullscreen Edit, M3c) have no control here:
 they are kept as loaded and written back unchanged, except that a new Corner rebases the overlay's offset by the one
@@ -21,6 +22,8 @@ from PySide6.QtWidgets import QCheckBox, QGroupBox, QLabel, QSpinBox, QVBoxLayou
 
 from core.settings.fullscreen_overlays import (
     CORNERS,
+    DISPLAY_STYLE_CONTROL,
+    DISPLAY_STYLE_KEY,
     FONT_SIZE_MAX,
     FONT_SIZE_MIN,
     normalize_fullscreen_overlays,
@@ -36,6 +39,8 @@ if TYPE_CHECKING:
 
 #: The bucket scope of this page in ``ui.visualizer_bucket_states`` (``fullscreen:<bucket>``).
 FULLSCREEN_BUCKET_SCOPE = "fullscreen"
+#: The buckets this page builds, in order (their open state is ``fullscreen:<bucket>``).
+FULLSCREEN_BUCKETS = ("display", "preset", "now_playing", "text")
 _CORNER_LABELS = {
     "top_left": "Top Left",
     "top_right": "Top Right",
@@ -67,8 +72,23 @@ class FullscreenModePage(QWidget):
         shared_styles.apply_shared_label_style(intro, "INFO_LABEL_STYLE")
         group_layout.addWidget(intro)
 
+        # The expanded card's display style (1D.2): built from its one spec declaration (DISPLAY_STYLE_CONTROL).
+        _host, display_layout = build_collapsible_bucket(
+            tab, group_layout, mode_key=FULLSCREEN_BUCKET_SCOPE, bucket_key=FULLSCREEN_BUCKETS[0], title="Display",
+            helper_text="How the Visualizer meets the edges of the display.")
+        style_row = add_aligned_row(display_layout, f"{DISPLAY_STYLE_CONTROL.label}:")[0]
+        self.display_style = StyledComboBox(size_variant="hero")
+        self.display_style.setObjectName("fullscreen_display_style")
+        for value, label in zip(DISPLAY_STYLE_CONTROL.choices, DISPLAY_STYLE_CONTROL.labels, strict=True):
+            self.display_style.addItem(label, value)
+        self.display_style.setToolTip(DISPLAY_STYLE_CONTROL.tooltip)
+        self.display_style.currentIndexChanged.connect(
+            lambda _index: self._set_value((DISPLAY_STYLE_KEY,), str(self.display_style.currentData())))
+        style_row.addWidget(self.display_style)
+        style_row.addStretch()
+
         _host, preset_layout = build_collapsible_bucket(
-            tab, group_layout, mode_key=FULLSCREEN_BUCKET_SCOPE, bucket_key="preset", title="Preset Name",
+            tab, group_layout, mode_key=FULLSCREEN_BUCKET_SCOPE, bucket_key=FULLSCREEN_BUCKETS[1], title="Preset Name",
             helper_text="The preset's name, shown for a moment when the preset changes.")
         self.preset_corner = self._corner_row(preset_layout, "preset")
         self.preset_always_show = self._check(
@@ -79,7 +99,7 @@ class FullscreenModePage(QWidget):
             "Show the name on a card with the theme's border and surface, like the widgets.")
 
         _host, now_playing_layout = build_collapsible_bucket(
-            tab, group_layout, mode_key=FULLSCREEN_BUCKET_SCOPE, bucket_key="now_playing", title="Now Playing",
+            tab, group_layout, mode_key=FULLSCREEN_BUCKET_SCOPE, bucket_key=FULLSCREEN_BUCKETS[2], title="Now Playing",
             helper_text="Artist, song and artwork, shown for a moment when the track changes.")
         self.now_playing_corner = self._corner_row(now_playing_layout, "now_playing")
         self.now_playing_always_show = self._check(
@@ -115,7 +135,7 @@ class FullscreenModePage(QWidget):
             "the Media widget's artwork border either way.")
 
         _host, text_layout = build_collapsible_bucket(
-            tab, group_layout, mode_key=FULLSCREEN_BUCKET_SCOPE, bucket_key="text", title="Text",
+            tab, group_layout, mode_key=FULLSCREEN_BUCKET_SCOPE, bucket_key=FULLSCREEN_BUCKETS[3], title="Text",
             helper_text="The font both overlays use.")
         font_row = add_aligned_row(text_layout, "Font:")[0]
         self.font_combo = StyledFontComboBox(size_variant="hero")
@@ -212,6 +232,8 @@ class FullscreenModePage(QWidget):
             ):
                 with QSignalBlocker(check):
                     check.setChecked(bool(values[overlay][key]))
+            with QSignalBlocker(self.display_style):
+                self.display_style.setCurrentIndex(max(0, self.display_style.findData(values[DISPLAY_STYLE_KEY])))
             with QSignalBlocker(self.font_combo):
                 self.font_combo.setCurrentFont(QFont(str(values["font_family"])))
             with QSignalBlocker(self.now_playing_controls_style):

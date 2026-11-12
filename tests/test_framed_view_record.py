@@ -69,6 +69,10 @@ def _cards(mode: str, dpr: float) -> list[tuple[str, Any, tuple[float, float]]]:
     cards = [(label, card, card.logical_viewport_extent) for label, card in cards]
     cards.append(("expanded", resolve_expanded_visualizer_presentation(base, display_size=display),
                   base.logical_viewport_extent))
+    # The display styles (1D.2): the pixel aspect and the aperture follow each style's extent.
+    for style in ("borders_to_edge", "hide_borders"):
+        cards.append((f"expanded_{style}", resolve_expanded_visualizer_presentation(
+            base, display_size=display, display_style=style), base.logical_viewport_extent))
     return cards
 
 
@@ -173,8 +177,12 @@ def test_the_worker_receives_the_renderers_framed_view(qt_app, mode, dpr):
             discriminating.append(label)
     # Negative control: today's record (the layout extent, and its height over the canonical one) misses the
     # renderer's aspect or aperture on edge-resized CUSTOM stages and Expanded, so the comparison above discriminates.
-    assert {"custom_edge_tall", "custom_edge_both_scaled", "custom_quarter_turn", "expanded"} <= set(discriminating), \
-        discriminating
+    assert {"custom_edge_tall", "custom_edge_both_scaled", "custom_quarter_turn", "expanded",
+            "expanded_borders_to_edge", "expanded_hide_borders"} <= set(discriminating), discriminating
+    # A switch to a margin-0 style changes the view (its extent is the whole display's, not the inset card's), so the
+    # worker follows it; the two margin-0 styles share one extent and so one view (the frame is not the world).
+    views = {label: resolve_framed_view(card) for label, card, _extent in _cards(mode, dpr) if label.startswith("expanded")}
+    assert views["expanded"] != views["expanded_borders_to_edge"] == views["expanded_hide_borders"], views
 
 
 @pytest.mark.qt
@@ -255,7 +263,24 @@ def test_the_real_owners_session_holds_the_drawn_cards_framed_view(qt_app, pcm, 
             rig.settle()
             assert _drawn(owner) != drawn
         seen.append(session.framed_view == renderer_view(_drawn(owner), display_device))
-        assert seen == ([True] * 3 if bound else [False] * 3), seen
+        # 1D.2: a display style switch while expanded (a fade-through) lands the new style's view in the worker.
+        assert owner.set_expanded_display(True)
+        _pump(rig, 0.3)
+        rig.settle()
+        default_view = session.framed_view
+        assert owner.set_expanded_display_style("hide_borders")
+        _pump(rig, 1.5)
+        rig.settle()
+        assert _drawn(owner).display_style == "hide_borders" and _drawn(owner).scene_fade == 1.0
+        # The unshown window publishes no visible rect, so the whole-display card is resolved on Qt's whole-logical
+        # screen size here (half a device pixel past a 1706.67-wide monitor): the oracle is the scene's own
+        # resolution of the card it draws (the renderer's view for every card inside the window, test above).
+        from rendering.quick.visualizer.framed_view import resolve_framed_view
+
+        expected = resolve_framed_view(_drawn(owner))
+        assert expected != default_view, (expected, default_view)
+        seen.append(session.framed_view == expected)
+        assert seen == ([True] * 4 if bound else [False] * 4), seen
     finally:
         rig.close()
         stand_in.close()

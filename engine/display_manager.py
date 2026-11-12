@@ -3714,6 +3714,7 @@ class DisplayManager(QObject):
 
         scene = unit.runtime.scene_controller
         section = self._visualizer_section()
+        self.refresh_expanded_display_style()
         configure = getattr(scene, "set_visualizer_expanded_overlay_config", None)
         if callable(configure):
             configure(resolve_expanded_overlay_config(section))
@@ -3721,6 +3722,25 @@ class DisplayManager(QObject):
         if callable(announce):
             announce(resolve_active_preset_display_name(section), reveal=False)
         self._publish_expanded_overlay_media(self._quick_visualizer_media_model)
+
+    def refresh_expanded_display_style(self) -> bool:
+        """Hand the admitted Visualizer owner the stored display style (1D.2, ``fullscreen_overlays.display_style``).
+
+        Called where the overlays' inputs are published (a takeover's creation, a re-admission, a transfer, a
+        Fullscreen Edit Save) and on a live settings change (the engine's ``settings.changed`` route). The owner keeps
+        it, retargets an expanded card in place with a fade-through, and changes nothing when it is the same; a
+        collapsed card takes it at its next expansion. True when the owner's style changed.
+        """
+
+        owner = self._quick_visualizer_owner
+        if owner is None or owner.is_retired or self._retired:
+            return False
+        setter = getattr(owner, "set_expanded_display_style", None)
+        if not callable(setter):
+            return False
+        from core.settings.fullscreen_overlays import resolve_display_style
+
+        return bool(setter(resolve_display_style(self._visualizer_section().get("fullscreen_overlays"))))
 
     def _publish_expanded_overlay_media(self, model: Any) -> None:
         unit = self._quick_visualizer_unit

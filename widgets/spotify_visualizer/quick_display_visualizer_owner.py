@@ -85,10 +85,12 @@ class _TakeoverFade:
     owns no timer.
     """
 
-    __slots__ = ("target", "source", "started_at", "on_complete", "drawn_expanded", "done", "move")
+    __slots__ = ("target", "source", "started_at", "on_complete", "drawn_expanded", "done", "move",
+                 "source_style", "target_style", "drawn_target")
 
     def __init__(self, *, target: bool, source: bool, started_at: float,
-                 on_complete: Callable[[], None] | None) -> None:
+                 on_complete: Callable[[], None] | None, source_style: str = "default",
+                 target_style: str = "default") -> None:
         self.target = target
         self.source = source
         self.started_at = started_at
@@ -97,6 +99,15 @@ class _TakeoverFade:
         self.done = False
         #: A fade-through across two displays (1C.2): its midpoint is the move (``_DisplayMove``).
         self.move: _DisplayMove | None = None
+        #: The display style (1D.2) each side draws when it is display-wide, and whether the target side is drawn now
+        #: (an expanded-to-expanded fade-through, a style change, has the same ``drawn_expanded`` on both sides).
+        self.source_style = source_style
+        self.target_style = target_style
+        self.drawn_target = False
+
+    @property
+    def drawn_style(self) -> str:
+        return self.target_style if self.drawn_target else self.source_style
 
 
 # The prewarmed target's card while its renderer prepares (1C.2): below one 8-bit level, so nothing shows, yet above
@@ -126,6 +137,25 @@ class _DisplayMove:
         self.prewarm_scene: Any = None
         self.fade_out_due = False
         self.fade_in_due = False
+
+
+def _expanded_display_size(runtime: Any, style: str) -> tuple[float, float]:
+    """The display size the display-wide record is resolved on (1D.2).
+
+    Default keeps today's input, the display identity's geometry (Qt's whole-logical screen size), so its record is
+    unchanged. A style whose card meets the display's edges uses the display's exact laid-out size (the window's
+    on-desktop rect, ``visible_display_size``): on 2560 px at 150 % Qt's 1707 would put the card's right edge half a
+    device pixel past the monitor, and the snapped frame one pixel off it. Before the window publishes that rect
+    (an unshown window), the identity's geometry stands in.
+    """
+
+    _x, _y, width, height = runtime.display_identity.geometry
+    if style != "default":
+        getter = getattr(getattr(runtime, "scene_controller", None), "visible_display_size", None)
+        size = getter() if callable(getter) else None
+        if size is not None:
+            return (float(size[0]), float(size[1]))
+    return (float(width), float(height))
 
 
 def _shared_beat_engine(bar_count: int) -> Any:
@@ -172,6 +202,7 @@ class QuickDisplayVisualizerOwner:
     _takeover: "_TakeoverFade | None" = None
     _expanded_source: Any = None
     _expanded_overlays_drawn = False
+    _expanded_display_style = "default"
     # Engine-worker path class defaults (in process until __init__ reads the path); the worker path owns the values.
     _engine_worker_admitted = False
     _retiring = False            # set first by retire(), joined or not (A9-L1)
@@ -304,6 +335,11 @@ class QuickDisplayVisualizerOwner:
         # The full-display overlays (plan 01 §G, M3b) exist only while the display-wide card is drawn and the displays
         # are on; the last value projected to the scene, so it is written at its edges only.
         self._expanded_overlays_drawn = False
+        # The display-wide card's display style (Current_Plan 1D.2; Settings' ``fullscreen_overlays.display_style``,
+        # pushed by the display manager): what the display-wide route draws. A change while expanded retargets the
+        # card in place through the expanded-to-expanded fade-through; a change while collapsed applies at the next
+        # expansion. The ordinary record never depends on it.
+        self._expanded_display_style = "default"
         # Native core P2b: the process path, read once per construction (never an environment flag): the engine worker
         # by default, in process when ``--viz-in-process`` chose it. ``_worker`` is the live
         # ``engine_worker_link.EngineWorkerLink`` while this owner runs on the worker (None: in process);
@@ -843,6 +879,7 @@ class QuickDisplayVisualizerOwner:
         if self._retired or self._sync is None:
             return False
         expanded = bool(expanded)
+        drawn_style = self._drawn_expanded_style()
         self._abandon_display_move()
         self._takeover = None
         if not animate:
@@ -853,6 +890,8 @@ class QuickDisplayVisualizerOwner:
             source=self._expanded_display,
             started_at=float(self._transition_clock()),
             on_complete=on_complete,
+            source_style=drawn_style,
+            target_style=self._expanded_display_style,
         )
         self._sync.set_presentation_route(
             self._resolve_takeover_presentation, self._commit_takeover_presentation
@@ -861,6 +900,55 @@ class QuickDisplayVisualizerOwner:
             # Present the first faded frame now; later frames ride the logical publications.
             self._reapply_route(request_present=True)
         return True
+
+    @property
+    def expanded_display_style(self) -> str:
+        """The display style the display-wide card is drawn in (or will be, at the next expansion)."""
+
+        return self._expanded_display_style
+
+    def _drawn_expanded_style(self) -> str:
+        takeover = self._takeover
+        return takeover.drawn_style if takeover is not None else self._expanded_display_style
+
+    def set_expanded_display_style(self, style: object) -> bool:
+        """Take the display-wide card's display style (1D.2) at this event edge; True when it changed.
+
+        Retarget before rebuild: nothing is created or torn down (engine, controller, render item and overlays stay).
+        While the card is drawn display-wide and no fade-through runs, the change runs the existing expanded-to-
+        expanded fade-through (``set_expanded_display`` machinery): out in the old style, the swap at zero opacity, in
+        in the new one, sampled on the publication edge (no timer). A fade-through in flight takes it for its target
+        side when that side is not drawn yet, or follows with its own fade-through once it completes. While
+        collapsed it is stored and applies at the next expansion. The ordinary record is never changed by it.
+        """
+
+        from core.settings.fullscreen_overlays import normalize_display_style
+
+        style = normalize_display_style(style)
+        if self._retired or style == self._expanded_display_style:
+            return False
+        previous = self._drawn_expanded_style()
+        self._expanded_display_style = style
+        takeover = self._takeover
+        if takeover is not None:
+            if takeover.target and not takeover.drawn_target:
+                takeover.target_style = style            # its display-wide side has not been drawn yet
+            # Otherwise the fade-through in flight finishes in its own style and the change follows it.
+            return True
+        if not self._expanded_display or self._sync is None:
+            return True                                   # applies at the next expansion
+        self._begin_style_fade(previous)
+        logger.info("[EXPANDED_VIS] Display style %s -> %s (retargeted in place)", previous, style)
+        return True
+
+    def _begin_style_fade(self, source_style: str) -> None:
+        self._takeover = _TakeoverFade(
+            target=True, source=True, started_at=float(self._transition_clock()), on_complete=None,
+            source_style=source_style, target_style=self._expanded_display_style,
+        )
+        self._sync.set_presentation_route(self._resolve_takeover_presentation, self._commit_takeover_presentation)
+        if self._started:
+            self._reapply_route(request_present=True)
 
     def move_display(
         self,
@@ -894,10 +982,12 @@ class QuickDisplayVisualizerOwner:
                 self._neighbour_prewarm = None        # the move's warm below continues what is prepared there
             else:
                 self.release_prepared_display()
+        drawn_style = self._drawn_expanded_style()
         self._abandon_display_move()
         now = float(self._transition_clock())
         takeover = _TakeoverFade(target=bool(end_expanded), source=self._expanded_display, started_at=now,
-                                 on_complete=None)
+                                 on_complete=None, source_style=drawn_style,
+                                 target_style=self._expanded_display_style)
         move = _DisplayMove(target_runtime, hop, on_fade_out, on_fade_in, on_complete, now)
         takeover.move = move
         self._takeover = takeover
@@ -930,15 +1020,15 @@ class QuickDisplayVisualizerOwner:
             return None
         try:
             identity = runtime.display_identity
-            _x, _y, width, height = identity.geometry
+            display_size = _expanded_display_size(runtime, self._expanded_display_style)
             dpr = float(identity.device_pixel_ratio)
         except Exception:
             return None
         if end_expanded:
             from widgets.spotify_visualizer.presentation_geometry import resolve_expanded_visualizer_presentation
 
-            record = resolve_expanded_visualizer_presentation(ordinary, display_size=(float(width), float(height)),
-                                                              dpr=dpr)
+            record = resolve_expanded_visualizer_presentation(ordinary, display_size=display_size,
+                                                              dpr=dpr, display_style=self._expanded_display_style)
         else:
             record = replace(ordinary, dpr=dpr)
         return replace(record, scene_fade=_PREWARM_SCENE_FADE, content_fade=0.0)
@@ -961,7 +1051,7 @@ class QuickDisplayVisualizerOwner:
         half = self._transition_half_duration_s
         now = float(self._transition_clock())
         if move.stage == "warm":
-            takeover.drawn_expanded = takeover.source
+            takeover.drawn_expanded, takeover.drawn_target = takeover.source, False
             scene = move.prewarm_scene
             if scene is not None and now - move.stage_at < _PREPARED_REVEAL_DEADLINE_S:
                 if not scene.visualizer_prewarm_prepared(move.identity):
@@ -971,7 +1061,7 @@ class QuickDisplayVisualizerOwner:
                             _PREPARED_REVEAL_DEADLINE_S)
             move.stage, move.stage_at, move.fade_out_due = "out", now, True
         if move.stage == "out":
-            takeover.drawn_expanded = takeover.source
+            takeover.drawn_expanded, takeover.drawn_target = takeover.source, False
             elapsed = now - move.stage_at
             if half > 0.0 and elapsed < half:
                 linear = 1.0 - elapsed / half
@@ -981,13 +1071,13 @@ class QuickDisplayVisualizerOwner:
         if move.stage == "hop":
             return 0.0
         if move.stage == "hold":
-            takeover.drawn_expanded = takeover.target
+            takeover.drawn_expanded, takeover.drawn_target = takeover.target, True
             scene = self._presentation_runtime.scene_controller
             landed = bool(getattr(scene, "visualizer_arrival_settled", True))
             if not landed and now - move.stage_at < _PREPARED_REVEAL_DEADLINE_S:
                 return 0.0
             move.stage, move.stage_at, move.fade_in_due = "in", now, True
-        takeover.drawn_expanded = takeover.target
+        takeover.drawn_expanded, takeover.drawn_target = takeover.target, True
         elapsed = now - move.stage_at
         if half <= 0.0 or elapsed >= half:
             takeover.done = True
@@ -1049,16 +1139,24 @@ class QuickDisplayVisualizerOwner:
                 request()
 
     def _finish_takeover(
-        self, expanded: bool, on_complete: Callable[[], None] | None, *, reapply: bool
+        self, expanded: bool, on_complete: Callable[[], None] | None, *, reapply: bool,
+        drawn_style: str | None = None,
     ) -> None:
+        """Commit the steady route. ``drawn_style``: the display style a completed fade-through ended in; when the
+        style changed meanwhile (1D.2), its own expanded-to-expanded fade-through follows at once, so the steady
+        route never swaps the style without a fade."""
+
         self._takeover = None
         self._expanded_display = bool(expanded)
         if not expanded:
             self._expanded_source = None
-        resolve, commit = self._route_pair()
-        self._sync.set_presentation_route(resolve, commit)
-        if reapply and self._started:
-            self._reapply_route(request_present=True)
+        if expanded and drawn_style is not None and drawn_style != self._expanded_display_style:
+            self._begin_style_fade(drawn_style)
+        else:
+            resolve, commit = self._route_pair()
+            self._sync.set_presentation_route(resolve, commit)
+            if reapply and self._started:
+                self._reapply_route(request_present=True)
         self._project_expanded_overlays()
         if on_complete is not None:
             on_complete()
@@ -1086,7 +1184,9 @@ class QuickDisplayVisualizerOwner:
         if callable(setter):
             setter(drawn)
 
-    def _resolve_expanded_presentation(self) -> Any:
+    def _resolve_expanded_presentation(self, style: str | None = None) -> Any:
+        """The display-wide record in ``style`` (the owner's display style when None: the steady route)."""
+
         ordinary = self._resolve_current_presentation()
         if ordinary is None:
             return None
@@ -1094,9 +1194,10 @@ class QuickDisplayVisualizerOwner:
             resolve_expanded_visualizer_presentation,
         )
 
-        _x, _y, width, height = self._presentation_runtime.display_identity.geometry
+        style = self._expanded_display_style if style is None else style
         self._expanded_source = ordinary
-        return resolve_expanded_visualizer_presentation(ordinary, display_size=(float(width), float(height)))
+        return resolve_expanded_visualizer_presentation(
+            ordinary, display_size=_expanded_display_size(self._presentation_runtime, style), display_style=style)
 
     def _apply_expanded_presentation(self, presentation: Any) -> None:
         """Commit a display-wide record: the scene shows it; the controller keeps the ordinary metrics."""
@@ -1118,14 +1219,14 @@ class QuickDisplayVisualizerOwner:
         half = self._transition_half_duration_s
         elapsed = max(0.0, float(self._transition_clock()) - takeover.started_at)
         if half <= 0.0 or elapsed >= 2.0 * half:
-            takeover.drawn_expanded = takeover.target
+            takeover.drawn_expanded, takeover.drawn_target = takeover.target, True
             takeover.done = True
             return 1.0
         if elapsed < half:
-            takeover.drawn_expanded = takeover.source
+            takeover.drawn_expanded, takeover.drawn_target = takeover.source, False
             linear = 1.0 - elapsed / half
         else:
-            takeover.drawn_expanded = takeover.target
+            takeover.drawn_expanded, takeover.drawn_target = takeover.target, True
             linear = (elapsed - half) / half
         return linear * linear * (3.0 - 2.0 * linear)
 
@@ -1136,7 +1237,7 @@ class QuickDisplayVisualizerOwner:
             return resolve()
         fade = self._takeover_fade(takeover)
         base = (
-            self._resolve_expanded_presentation()
+            self._resolve_expanded_presentation(takeover.drawn_style)
             if takeover.drawn_expanded
             else self._resolve_current_presentation()
         )
@@ -1171,7 +1272,8 @@ class QuickDisplayVisualizerOwner:
                     move.on_fade_in(bool(move.moved))
         if takeover is not None and takeover.done and self._takeover is takeover:
             # The target is on screen at full opacity: commit the steady route, then report completion.
-            self._finish_takeover(takeover.target, takeover.on_complete, reapply=False)
+            self._finish_takeover(takeover.target, takeover.on_complete, reapply=False,
+                                  drawn_style=takeover.target_style)
 
     def configure_committed_layout(
         self,

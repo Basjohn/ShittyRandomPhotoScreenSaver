@@ -388,6 +388,19 @@ only with `--hidden`. `--help` prints the ready recipes (the first: Spline Curve
   `KIND@N` with `grab`, `hover` or `press` (in process: `QCoreApplication.postEvent` to its window, since posted Win32
   pointers are dropped by its empty region). The second recipe in `--help` drives a Visualizer move toward Display 1.
   Refused with fewer than two displays present.
+- **Live settings** (1D.2): `set:DOTTED.KEY=JSON` writes one setting through the running saver's own `SettingsManager`
+  (as a Settings write would, so the product's live settings route reacts) and reads it back; `--setting` and `set`
+  both take a member of a mapping-valued setting as a dotted key (`widgets.spotify_visualizer.fullscreen_overlays.
+  display_style`), merged into the stored record. The third recipe in `--help` runs each Fullscreen Visualizer display
+  style and a style switch while expanded.
+
+### Fullscreen Visualizer display styles, offscreen (`tools/expanded_display_styles_evidence.py`; 1D.2)
+
+Each display style (Default, Borders To Edge, Hide Borders) of a 2D and a 3D framed mode on the hidden production host
+(`HiddenDisplayHost`, nothing shown), on a real photo wallpaper with the preset toast on its card: one PNG per mode and
+style, one sheet per mode (the styles side by side and 4x crops of the card's corner and right edge) and
+`report.json`, under `.artifacts/evidence/visualizers/shared/expanded_display_styles/<YYYYMMDD>_<label>/`. Not physical
+acceptance (no window, overscan or Qt Quick stretch): that is the D1 recipe above.
 - **Hidden proof only:** a `--hidden` run proves launch, `--only-display`, the reveal, the steps, the readback (the
   invisible window still renders: its frames are real), crops, logs, the self-exit and teardown. It cannot prove what the
   panel shows through DWM, nor posted pointer delivery (Qt drops a posted pointer whose position lies over another

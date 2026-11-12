@@ -184,6 +184,47 @@ def test_settings_are_written_to_the_copy_through_the_settings_manager_and_read_
     with pytest.raises(KeyError):
         d1_run.apply_settings([("widgets.global.no_such_key", 1)], application="Screensaver_MC",
                               storage_base_dir=tmp_path / "copy")
+    # A member of a mapping setting (1D.2's display style): merged into the stored record, the rest kept.
+    key = "widgets.spotify_visualizer.fullscreen_overlays"
+    stored = reopened.get(key)
+    applied = d1_run.apply_settings([(f"{key}.display_style", "borders_to_edge")], application="Screensaver_MC",
+                                    storage_base_dir=tmp_path / "copy")
+    assert applied[f"{key}.display_style"]["after"] == "borders_to_edge"
+    merged = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path / "copy").get(key)
+    assert merged == {**stored, "display_style": "borders_to_edge"}
+    with pytest.raises(KeyError):
+        d1_run.apply_settings([(f"{key}.no_such_member", 1)], application="Screensaver_MC",
+                              storage_base_dir=tmp_path / "copy")
+
+
+def test_a_set_step_writes_a_setting_or_a_member_live_through_the_savers_own_manager(tmp_path, qt_app):
+    """1D.2: ``AT:set:DOTTED.KEY=JSON`` (a style switch while expanded) writes through the running saver's
+    SettingsManager, as Settings would: a whole setting, or one member of a mapping-valued setting merged into it
+    (everything else in it kept), read back; an unknown key or member is refused before anything starts."""
+    from types import SimpleNamespace
+
+    from core.settings import SettingsManager
+
+    step = d1_run.parse_step('14:set:widgets.spotify_visualizer.fullscreen_overlays.display_style="hide_borders"')
+    assert step.kind == "set"
+    manager = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path / "live")
+    before = manager.get("widgets.spotify_visualizer.fullscreen_overlays")
+    (tmp_path / "out").mkdir()
+    driver = d1_run.D1Driver([step], display=1, out=tmp_path / "out")
+    driver._engine = SimpleNamespace(settings_manager=manager)
+    driver.fire(0)
+    assert driver.results[-1]["ok"] is True, driver.results[-1]
+    after = manager.get("widgets.spotify_visualizer.fullscreen_overlays")
+    assert after["display_style"] == "hide_borders"
+    assert {k: v for k, v in after.items() if k != "display_style"} == {
+        k: v for k, v in before.items() if k != "display_style"}
+    for bad in ("widgets.spotify_visualizer.fullscreen_overlays.no_such_member", "widgets.global.no_such_key"):
+        with pytest.raises(d1_run.Refusal):
+            d1_run.check_plan(d1_run.parse_args(["--display", "1", "--seconds", "20",
+                                                 "--step", f"5:set:{bad}=1"]))
+        driver.steps = [d1_run.parse_step(f"5:set:{bad}=1")]
+        driver.fire(0)
+        assert driver.results[-1]["ok"] is False
 
 
 def test_the_main_entry_edits_its_own_profile_and_the_source_is_never_touched(tmp_path):

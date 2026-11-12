@@ -2506,6 +2506,14 @@ class ScreensaverEngine(QObject):
             if setting_key == getattr(self, "_own_sources_write", None):
                 return  # the collection folder this engine just registered itself
             self._on_sources_changed()
+        elif setting_key in ('widgets', 'widgets.spotify_visualizer') or setting_key.startswith(
+                'widgets.spotify_visualizer.fullscreen_overlays'):
+            # The Fullscreen Visualizer's display style (1D.2): the live display manager hands it to the Visualizer
+            # owner, which retargets an expanded card in place (a no-op when the style is unchanged).
+            manager = self.display_manager
+            refresh = getattr(manager, "refresh_expanded_display_style", None)
+            if callable(refresh):
+                refresh()
     
     def _on_monitors_changed(self, new_count: int) -> None:
         """Handle monitor configuration change."""

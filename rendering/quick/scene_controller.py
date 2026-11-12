@@ -2740,6 +2740,16 @@ class QuickSceneController(QObject):
         root.setProperty("cardShadowExtendTop", float(shadow_extensions[1]))
         root.setProperty("cardShadowExtendRight", float(shadow_extensions[2]))
         root.setProperty("cardShadowExtendBottom", float(shadow_extensions[3]))
+        # The full-display overlays' own cards (1D.2): the widget cards' chrome, which a display style may have kept
+        # out of the frame (``overlay_chrome``); otherwise the frame's own, exactly as before.
+        chrome = presentation.overlay_chrome
+        root.setProperty("overlayCardBorderWidth", float(chrome.get("border_width", presentation.border_width)))
+        root.setProperty("overlayCardCornerRadius", float(chrome.get("corner_radius", style["corner_radius"])))
+        root.setProperty("overlayCardShadowEnabled", bool(chrome.get("shadow_enabled", style["shadow_enabled"])))
+        root.setProperty("overlayCardShadowBlur", float(chrome.get("shadow_blur", style["shadow_blur"])))
+        overlay_offset = chrome.get("shadow_offset", shadow_offset)
+        root.setProperty("overlayCardShadowOffsetX", float(overlay_offset[0]))
+        root.setProperty("overlayCardShadowOffsetY", float(overlay_offset[1]))
         root.setProperty("presentationActive", bool(active))
 
     def set_visualizer_camera_reset_available(self, available: bool) -> None:
@@ -3270,6 +3280,16 @@ class QuickSceneController(QObject):
         if not color.isValid():
             raise ValueError(f"invalid visualizer shell color: {value!r}")
         return color
+
+    def visible_display_size(self) -> tuple[float, float] | None:
+        """The display's exact logical size as the scene is laid out on it: the window's on-desktop rect (R-63 /
+        R-192: the monitor, every edge on a whole device pixel), or None before the native window publishes it.
+
+        Qt's screen geometry is a whole number of logical pixels (2560 px at 150 % reads 1707); this is the monitor
+        itself (1706.67), which a card on the display's edges must use (1D.2)."""
+
+        rect = self._published_scene_rect()
+        return None if rect is None else (float(rect.width()), float(rect.height()))
 
     def _published_scene_rect(self) -> Any:
         rect = getattr(self._window, "scene_rect", None)
