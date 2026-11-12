@@ -116,6 +116,15 @@ defaults, the installer script) are committed and pushed at once, silently.
 
 ## 7. Hard limits the lead keeps
 
+- Displays may be unavailable (operator, 12 Nov: "display availability may be on/off later on ... work with what
+  you can"):
+  - Before a D1 run, check the display exists (`tools/d1_run.py --list-displays`). If it is not there, the run
+    stays a pending box and holds nothing.
+  - Offscreen work goes on: hidden GL, the harness's hidden hosts, Vulkan offscreen targets, showcase WebPs and
+    identity harnesses.
+  - Every GPU timing or memory figure records whether the displays were on, and is compared only with figures taken
+    in the same state.
+
 - Display 0 (the operator's primary): rare. The lead may use it only for a specific check nothing else can make (operator, 12 Nov: "you can use Display 0 again when you need to", then "The permission is still rare. Do not make display 0 part of automated tests and use it rarely as possible"), through `tools/d1_run.py --allow-primary`, bounded, the reason in the run's label; never in a test, recipe or automated run; agents never take it. Bounded runs on Display 1 are the lead's, through `tools/d1_run.py`; agents never show
   a window on a real screen.
 - Load runs (game60) only after the operator's yes, at most 10 minutes, lead only, with nothing else running.
