@@ -26,11 +26,13 @@ from rendering.gl_programs.conventions import SRPSS_VERTEX_INDEX_GLSL
 from rendering.gl_programs.scene3d import SCENE3D_PASS_BLOCK_BINDING, Scene3DBlockLayout, _STD140, _std140_type
 
 _OPAQUE = r"(?:[iu]?sampler\w*|[iu]?image\w*|atomic_uint)"
-_LOOSE = re.compile(rf"^[ \t]*uniform[ \t]+(?:(?:lowp|mediump|highp)\s+)?(?!{_OPAQUE}\b)(\w+)[ \t]+(\w+)[ \t]*"
+# A declaration starts a line or follows another on the same line (``uniform mat4 uMatrix; uniform vec2 uItemSize;``).
+_START = r"(?:^|(?<=;))"
+_LOOSE = re.compile(rf"{_START}[ \t]*uniform[ \t]+(?:(?:lowp|mediump|highp)\s+)?(?!{_OPAQUE}\b)(\w+)[ \t]+(\w+)[ \t]*"
                     rf"(?:\[[ \t]*(\w+)[ \t]*\])?[ \t]*;", re.M)
-_SAMPLER = re.compile(rf"^([ \t]*)(?:layout\s*\([^)]*\)\s*)?uniform([ \t]+{_OPAQUE}[ \t]+)(\w+)[ \t]*;", re.M)
-_VARYING = re.compile(r"^([ \t]*)(?:layout\s*\(\s*location\s*=\s*\d+\s*\)\s*)?((?:(?:flat|smooth|noperspective|centroid)"
-                      r"\s+)*)(in|out)([ \t]+)(\w+)[ \t]+(\w+)[ \t]*(\[[^\]]*\])?[ \t]*;", re.M)
+_SAMPLER = re.compile(rf"{_START}([ \t]*)(?:layout\s*\([^)]*\)\s*)?uniform([ \t]+{_OPAQUE}[ \t]+)(\w+)[ \t]*;", re.M)
+_VARYING = re.compile(rf"{_START}([ \t]*)(?:layout\s*\(\s*location\s*=\s*\d+\s*\)\s*)?((?:(?:flat|smooth|noperspective"
+                      r"|centroid)\s+)*)(in|out)([ \t]+)(\w+)[ \t]+(\w+)[ \t]*(\[[^\]]*\])?[ \t]*;", re.M)
 _COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
 _VERSION = re.compile(r"\A[ \t]*#version[^\n]*\n")
 _SLOTS = {"mat4": 4, "mat3": 3, "mat2": 2}

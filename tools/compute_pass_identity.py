@@ -657,17 +657,25 @@ void main() {
 """
 
 
+def _moving_program():
+    """(vertex, fragment, pass block) of the moving squares: ``_MOVING_FRAGMENT`` over the item quad (N1.6)."""
+    from rendering.gl_programs.item_quad import item_quad_program
+
+    return item_quad_program(_MOVING_FRAGMENT, block="IdentityMoving", samplers={})
+
+
 def pass_scene_motion_blur(target):
     """The scene target's motion blur end to end: a photograph and moving squares drawn into the velocity
     attachment, the resolve (multisampled), the tile max and the gather: final pixels and the velocity the post
     pass reads."""
     from types import SimpleNamespace
     from OpenGL import GL as gl
-    from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+    from rendering.gl_programs.portable import pack_block
     from rendering.quick.scene3d.motion import motion_blur_tile
     from rendering.quick.scene3d.resources import MeshResources, bind_frame
     from rendering.quick.scene3d.target import SceneTarget
     outputs, calls = {}, {}
+    vertex, fragment, block = _moving_program()
 
     def frame(width, height, left=0.0, top=0.0, w=None, h=None):
         w, h = (width if w is None else w), (height if h is None else h)
@@ -676,7 +684,6 @@ def pass_scene_motion_blur(target):
         return SimpleNamespace(viewport=(0, 0, width, height), logical_size=(float(w), float(h)),
                                matrix_values=matrix, quad_vao=target.vao)
 
-    names = ("uMatrix", "uItemSize", "uMotion", "uColour")
     for (width, height), samples in (((1920, 1080), 1), ((1920, 1080), 4), ((2560, 1440), 4)):
         target.resize(width, height)
         resources, scene = MeshResources("identity"), SceneTarget("identity")
@@ -691,16 +698,18 @@ def pass_scene_motion_blur(target):
                 target.bind(clear=(0.0, 0.0, 0.0, 1.0))
                 with scene.scope(full, samples, resources, rect=(0, 0, width, height), motion_blur=True):
                     resources.draw_image(full, photo)
-                    program = resources.program("identity_moving", ITEM_QUAD_VERTEX_SOURCE, _MOVING_FRAGMENT)
-                    uniforms = resources.uniforms("identity_moving", names)
+                    program = resources.program("identity_moving", vertex, fragment)
+                    uniforms = resources.uniforms("identity_moving", ())
+                    values = resources.values("identity_moving")
                     with scene.velocity_writes():
                         for left, top, size, motion, colour in squares:
                             square = frame(width, height, left, top, size, size)
-                            bind_frame(program, uniforms, square)
-                            gl.glUniform2f(uniforms["uMotion"], *motion)
-                            gl.glUniform4f(uniforms["uColour"], *colour)
-                            gl.glBindVertexArray(target.vao)
-                            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                            bind_frame(program, uniforms, square, values)
+                            values["uMotion"] = tuple(motion)
+                            values["uColour"] = tuple(colour)
+                            with resources.pass_blocks.bound(pack_block(block, values)):
+                                gl.glBindVertexArray(target.vao)
+                                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
             run()                                                   # compiles and allocates
             counter = {}
             with counting(counter):
@@ -890,8 +899,9 @@ def _paired_defocus(mod, target, size):
 def _paired_scene_motion(mod, target, size, samples):
     from types import SimpleNamespace
     from OpenGL import GL as gl
-    from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+    from rendering.gl_programs.portable import pack_block
     from rendering.quick.scene3d.resources import MeshResources, bind_frame
+    vertex, fragment, block = _moving_program()
     mod("rendering.quick.scene3d.motion")
     target_module = mod("rendering.quick.scene3d.target")
     width, height = size
@@ -910,21 +920,22 @@ def _paired_scene_motion(mod, target, size, samples):
                                logical_size=(float(w or width), float(h or height)),
                                matrix_values=matrix, quad_vao=target.vao)
     full = frame()
-    names = ("uMatrix", "uItemSize", "uMotion", "uColour")
 
     def run(_i):
         target.bind(clear=(0.0, 0.0, 0.0, 1.0))
         with scene.scope(full, samples, resources, rect=(0, 0, width, height), motion_blur=True):
             resources.draw_image(full, photo)
-            program = resources.program("paired_moving", ITEM_QUAD_VERTEX_SOURCE, _MOVING_FRAGMENT)
-            uniforms = resources.uniforms("paired_moving", names)
+            program = resources.program("paired_moving", vertex, fragment)
+            uniforms = resources.uniforms("paired_moving", ())
+            values = resources.values("paired_moving")
             with scene.velocity_writes():
                 for left, top, side, motion, colour in squares:
-                    bind_frame(program, uniforms, frame(left, top, side, side))
-                    gl.glUniform2f(uniforms["uMotion"], *motion)
-                    gl.glUniform4f(uniforms["uColour"], *colour)
-                    gl.glBindVertexArray(target.vao)
-                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                    bind_frame(program, uniforms, frame(left, top, side, side), values)
+                    values["uMotion"] = tuple(motion)
+                    values["uColour"] = tuple(colour)
+                    with resources.pass_blocks.bound(pack_block(block, values)):
+                        gl.glBindVertexArray(target.vao)
+                        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     def release():
         gl.glDeleteTextures([photo])

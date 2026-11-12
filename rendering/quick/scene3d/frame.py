@@ -17,26 +17,6 @@ from rendering.gl_programs.item_quad import item_quad_vertex_source  # noqa: F40
 # stored value, rather than treating cancellation noise as authored subpixels.
 _MATRIX_ROUNDING = (2.0 ** -24) / (1.0 - 2.0 ** -24)
 
-# The item quad: attribute 0 is a unit square placed in Qt Quick item pixels.
-# vUv keeps the bottom-up convention the transition fragments were authored in.
-ITEM_QUAD_VERTEX_SOURCE = """#version 460 core
-layout(location = 0) in vec2 aPosition;
-
-uniform mat4 uMatrix;
-uniform vec2 uItemSize;
-
-out vec2 vUv;
-
-void main() {
-    // Existing transition fragments flip Y. Feed their original bottom-up UV
-    // convention while positioning the quad in Qt Quick item coordinates.
-    vUv = vec2(aPosition.x, 1.0 - aPosition.y);
-    gl_Position = uMatrix * vec4(aPosition * uItemSize, 0.0, 1.0);
-}
-"""
-
-
-
 
 class SceneFrame(Protocol):
     viewport: tuple[int, int, int, int]

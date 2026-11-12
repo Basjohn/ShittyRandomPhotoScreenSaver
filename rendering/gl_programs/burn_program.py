@@ -35,7 +35,7 @@ class BurnProgram(BaseGLProgram):
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUv;
 
-out vec2 vUv;
+layout(location = 0) out vec2 vUv;
 
 void main() {
     vUv = aUv;

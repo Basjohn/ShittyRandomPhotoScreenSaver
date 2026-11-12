@@ -15,6 +15,8 @@ slat not yet turning or done are the photographs exactly.
 
 from __future__ import annotations
 
+from rendering.gl_programs.item_quad import item_quad_program
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, SCENE3D_GLSL
 
 # Each slat's share of the run, and its thickness as a share of its width.
@@ -146,3 +148,11 @@ void main() {{
 }}
 """
 )
+
+# N1.6: each program's values in one std140 pass block (``portable_program``; the backdrop with the item quad's),
+# samplers at their units (the photographs 0 and 1, the environment 2).
+BLINDS_BACKDROP_VERTEX_SOURCE, BLINDS_BACKDROP_FRAGMENT_SOURCE, BLINDS_BACKDROP_BLOCK = item_quad_program(
+    BLINDS_BACKDROP_FRAGMENT_SOURCE, block="BlindsBackdrop", samplers={"uNewTex": 1})
+BLINDS_SLATS_VERTEX_SOURCE, (BLINDS_SLATS_FRAGMENT_SOURCE,), BLINDS_SLATS_BLOCK = portable_program(
+    BLINDS_SLATS_VERTEX_SOURCE, (BLINDS_SLATS_FRAGMENT_SOURCE,), block="BlindsSlats",
+    samplers={"uOldTex": 0, "uNewTex": 1, "uEnvironment": 2})

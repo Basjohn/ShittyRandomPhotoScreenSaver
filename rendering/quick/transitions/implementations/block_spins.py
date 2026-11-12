@@ -25,10 +25,8 @@ from rendering.quick.scene3d.motion import motion_uniform_names, set_motion_unif
 from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
 from rendering.quick.scene3d.resources import MeshResources, warm_pass_blocks, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
-from ..render_contract import (
-    QUICK_TRANSITION_VERTEX_SOURCE,
-    QuickTransitionRenderFrame,
-)
+from rendering.gl_programs.item_quad import item_quad_program
+from ..render_contract import QuickTransitionRenderFrame
 
 
 _DIRECTION_STATES = {
@@ -48,6 +46,9 @@ void main() {
     FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }
 """
+# N1.6: the void is drawn over the item quad, its values (the quad's) one std140 pass block.
+_VOID_VERTEX_SOURCE, _VOID_FRAGMENT_SOURCE, _VOID_BLOCK = item_quad_program(
+    _VOID_FRAGMENT_SOURCE, block="BlockSpinsVoid", samplers={})
 
 
 def _block_spin_direction_state(direction: object) -> tuple[int, float]:
@@ -66,7 +67,6 @@ class QuickBlockSpinsRenderer:
         self._slab_program = 0
         self._box_vao = 0
         self._box_vbo = 0
-        self._void_uniforms: dict[str, int] = {}
         self._slab_uniforms: dict[str, int] = {}
         # The scene target (anti-aliasing, motion blur), its composite and the slab's
         # motion-writing variant.
@@ -131,15 +131,15 @@ class QuickBlockSpinsRenderer:
             entries += [(r, *program) for program in scene_target_programs(samples, False, motion)]
         if not warm_programs(entries):
             return False
-        # The photo environment's copy draws through these resources' pass blocks.
-        if reflections and not warm_pass_blocks(r, size):
+        # The void (and the photo environment's copy) draws through these resources' pass blocks.
+        if not warm_pass_blocks(r, size):
             return False
         return warm_run_resources(self._target, self._trails, size, samples, motion_blur=motion,
                                   bloom=False, with_trails=trails)
 
     def _base_programs(self):
         r = self._target_resources
-        return ((r, "void", QUICK_TRANSITION_VERTEX_SOURCE, _VOID_FRAGMENT_SOURCE),
+        return ((r, "void", _VOID_VERTEX_SOURCE, _VOID_FRAGMENT_SOURCE),
                 (r, "slab", BLOCK_SPIN_QUICK_VERTEX_SOURCE, BLOCK_SPIN_FRAGMENT_SOURCE))
 
     def park(self) -> None:
@@ -153,18 +153,10 @@ class QuickBlockSpinsRenderer:
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         gl.glUseProgram(self._void_program)
-        gl.glUniformMatrix4fv(
-            self._void_uniforms["uMatrix"],
-            1,
-            gl.GL_FALSE,
-            frame.matrix_values,
-        )
-        gl.glUniform2f(
-            self._void_uniforms["uItemSize"],
-            *frame.logical_size,
-        )
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        with self._target_resources.pass_blocks.bound(_VOID_BLOCK.pack({"uMatrix": frame.matrix_values,
+                                                                        "uItemSize": frame.logical_size})):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
         if trails:
             now = frame.sample.eased_progress
@@ -285,8 +277,6 @@ class QuickBlockSpinsRenderer:
                 setattr(self, attribute, 0)
         if not self._slab_program:
             self._slab_uniforms.clear()
-        if not self._void_program:
-            self._void_uniforms.clear()
         if errors:
             raise RuntimeError(
                 "Quick 3D Block Spins cleanup incomplete: " + " | ".join(errors)
@@ -295,12 +285,8 @@ class QuickBlockSpinsRenderer:
     def _initialize(self) -> None:
         try:
             (void_resources, *void), (slab_resources, *slab) = self._base_programs()
-            self._void_program = void_resources.program(*void)
+            self._void_program = void_resources.program(*void)   # its values: _VOID_BLOCK
             self._slab_program = slab_resources.program(*slab)
-            self._void_uniforms = self._uniform_locations(
-                self._void_program,
-                ("uMatrix", "uItemSize"),
-            )
             self._slab_uniforms = self._uniform_locations(
                 self._slab_program,
                 (

@@ -224,12 +224,6 @@ def test_every_target_is_checked_not_only_spirv(tmp_path):
 
 # The sources that did not bake on 12 Nov 2026 (N1.3), in N5's order. Only ever shrinks.
 _RATCHET = {
-    "Shared scene substrate": (
-        # N1.6: the substrate's own programs draw with item_quad_vertex_source(their block); this text stays the 2D
-        # transitions' vertex stage (QUICK_TRANSITION_VERTEX_SOURCE, its uMatrix/uItemSize set by bind_frame) and
-        # converts with them.
-        "rendering.quick.scene3d.frame.ITEM_QUAD_VERTEX_SOURCE",
-    ),
     "Waveform Ribbon": (
         "rendering.gl_programs.fog_volume.FOG_COMPOSITE_FRAGMENT",
         "rendering.gl_programs.fog_volume.FOG_FULLSCREEN_VERTEX",
@@ -315,11 +309,6 @@ _RATCHET = {
         "widgets/spotify_visualizer/shaders/oscilloscope.frag",
     ),
     "Transitions": (
-        "rendering.gl_programs.blinds_program.BlindsProgram.fragment_source",
-        "rendering.gl_programs.blinds_program.BlindsProgram.vertex_source",
-        "rendering.gl_programs.blinds_slats_program.BLINDS_BACKDROP_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blinds_slats_program.BLINDS_SLATS_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blinds_slats_program.BLINDS_SLATS_VERTEX_SOURCE",
         "rendering.gl_programs.blockspin_program.BLOCK_SPIN_FRAGMENT_SOURCE",
         "rendering.gl_programs.blockspin_program.BLOCK_SPIN_GHOST_FRAGMENT_SOURCE",
         "rendering.gl_programs.blockspin_program.BLOCK_SPIN_MOTION_FRAGMENT_SOURCE",
@@ -339,14 +328,6 @@ _RATCHET = {
         "rendering.gl_programs.depth_cascade_program.CASCADE_SHADOW_FRAGMENT_SOURCE",
         "rendering.gl_programs.depth_cascade_program.CASCADE_SHADOW_VERTEX_SOURCE",
         "rendering.gl_programs.depth_cascade_program.CASCADE_VERTEX_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_GHOST_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_SHADOW_VERTEX_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_SPARK_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_SPARK_VERTEX_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_VERTEX_SOURCE",
         "rendering.gl_programs.glass_shatter_program.GLASS_FRAGMENT",
         "rendering.gl_programs.glass_shatter_program.GLASS_GHOST_FRAGMENT",
         "rendering.gl_programs.glass_shatter_program.GLASS_MOTION_FRAGMENT",
@@ -358,7 +339,6 @@ _RATCHET = {
         "rendering.gl_programs.jigsaw_program.JIGSAW_FLIGHT_VERTEX_SOURCE",
         "rendering.gl_programs.jigsaw_program.JIGSAW_SHADOW_FRAGMENT_SOURCE",
         "rendering.gl_programs.jigsaw_program.JIGSAW_SHADOW_VERTEX_SOURCE",
-        "rendering.gl_programs.melt_drip_program.MELT_FRAGMENT_SOURCE",
         "rendering.gl_programs.membrane_program.MEMBRANE_FRAGMENT_SOURCE",
         "rendering.gl_programs.membrane_program.MEMBRANE_VERTEX_SOURCE",
         "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_FRAGMENT_SOURCE",
@@ -370,7 +350,6 @@ _RATCHET = {
         "rendering.quick.scene3d.propagation_field.PropagationField('Quick Capillary Bloom', 'capillary', "
         "CAPILLARY_COST_GLSL)[propagation_seed_capillary]",
         "rendering.quick.scene3d.trails._EDGE_FRAGMENT",
-        "rendering.quick.transitions.implementations.block_spins._VOID_FRAGMENT_SOURCE",
     ),
     "Quick hosts and materials": (
         "rendering.quick.render.background_node._FRAGMENT_SOURCE",

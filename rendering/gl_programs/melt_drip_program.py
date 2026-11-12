@@ -17,12 +17,21 @@ thickness, lip darkening and refraction; Gloss = wet highlight intensity and
 tightness only (never the silhouette).
 """
 
+from rendering.gl_programs.item_quad import item_quad_program
+
 MELT_FRAGMENT_SOURCE = r"""#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
-uniform sampler2D uOldTex,uNewTex;
-uniform vec2 uItemSize,uOrigin;
-uniform float uProgress,uSeed,uDetail,uDepth,uGloss,uOriginMode;
+uniform sampler2D uOldTex;
+uniform sampler2D uNewTex;
+uniform vec2 uItemSize;
+uniform vec2 uOrigin;
+uniform float uProgress;
+uniform float uSeed;
+uniform float uDetail;
+uniform float uDepth;
+uniform float uGloss;
+uniform float uOriginMode;
 
 const float REACH=.60;   // latest melt start (farthest point from the origin)
 const float SPAN=.34;    // time for a melted region to sag, thin and fall away
@@ -176,3 +185,7 @@ void main(){
     FragColor=vec4(mix(revealed,clamp(liquid,0.,1.),film),1.);
 }
 """
+
+# N1.6: the fragment's values and the item quad's in one std140 pass block (``item_quad_program``).
+MELT_VERTEX_SOURCE, MELT_FRAGMENT_SOURCE, MELT_BLOCK = item_quad_program(
+    MELT_FRAGMENT_SOURCE, block="MeltPass", samplers={"uOldTex": 0, "uNewTex": 1})

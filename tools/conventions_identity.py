@@ -265,8 +265,9 @@ def _seed(name: str) -> int:
     return int(hashlib.sha256(name.encode()).hexdigest()[:8], 16)
 
 
-_IN = re.compile(r"^\s*(layout\s*\([^)]*\)\s*)?((?:flat|smooth|noperspective|centroid)\s+)*in\s+(\w+)\s+(\w+)\s*"
-                 r"(?:\[\s*(\d+)\s*\])?\s*;", re.M)
+# A declaration starts a line or follows another on it (``in vec2 vUv; in vec2 vFace;``).
+_IN = re.compile(r"(?:^|(?<=;))[ \t]*(layout\s*\([^)]*\)\s*)?((?:flat|smooth|noperspective|centroid)\s+)*in\s+(\w+)\s+"
+                 r"(\w+)\s*(?:\[\s*(\d+)\s*\])?\s*;", re.M)
 _OUT = re.compile(r"^\s*(?:layout\s*\(\s*location\s*=\s*(\d+)\s*\)\s*)?out\s+(\w+)\s+(\w+)\s*;", re.M)
 
 

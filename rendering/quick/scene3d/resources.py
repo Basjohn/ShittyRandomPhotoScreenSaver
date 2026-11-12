@@ -174,8 +174,9 @@ class MeshResources:
     context) and raises ``ProgramUnavailable`` at once on every later request, never recompiling,
     until ``release_resources`` (a new context tries again)."""
 
-    def __init__(self, label: str, *, block_bytes: int = 256) -> None:
-        """``block_bytes``: the largest pass block one of these resources' draws binds (its ring's copies hold it)."""
+    def __init__(self, label: str, *, block_bytes: int = 256, copies: int = 1) -> None:
+        """``block_bytes``: the largest pass block one of these resources' draws binds (its ring's copies hold it);
+        ``copies``: the most draws one bound scope gives values to (a ghost pass rebinds per ghost)."""
         self.label = label
         self._programs: dict[str, int] = {}
         self._failed_programs: dict[str, str] = {}
@@ -185,7 +186,7 @@ class MeshResources:
         self._instance_buffers: dict[str, int] = {}
         # The pass blocks of the draws made here and with these resources' photo environment copies (N1.6); nothing is
         # allocated until ``warm_pass_blocks`` or the first draw. A scene target's passes have their own.
-        self.pass_blocks = PassBlocks(label, block_bytes=block_bytes)
+        self.pass_blocks = PassBlocks(label, block_bytes=block_bytes, copies=copies)
 
     @property
     def has_resources(self) -> bool:

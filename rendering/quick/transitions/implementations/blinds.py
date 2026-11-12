@@ -8,16 +8,18 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.blinds_program import blinds_program
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_request_samples
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
-from ..render_contract import (
-    QUICK_TRANSITION_VERTEX_SOURCE,
-    QuickTransitionRenderFrame,
-)
+from rendering.quick.scene3d.uniforms import PassBlocks
+from ..fullscreen_pass import fullscreen_pass_parts
+from ..render_contract import QuickTransitionRenderFrame
+
+# The flat style: the authored fragment over the item quad, its values one pass block (N1.6).
+_FLAT_VERTEX_SOURCE, _FLAT_BLOCK = fullscreen_pass_parts(blinds_program.fragment_source, "BlindsPass")
 
 
 _BLINDS_DIRECTION_MODES = {
@@ -107,13 +109,15 @@ def _slats_program():
 class QuickBlindsRenderer:
     transition_id = "blinds"
 
-    _SLAT_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uEnvironment", "uProgress", "uCount",
-                      "uVertical", "uGloss")
-    _BACKDROP_UNIFORMS = ("uMatrix", "uItemSize", "uNewTex", "uProgress", "uCount", "uVertical")
+    # The photographs each 3D Slats program reads (bind_frame binds them); every other value is in its pass block.
+    _SLAT_SAMPLERS = ("uOldTex", "uNewTex")
+    _BACKDROP_SAMPLERS = ("uNewTex",)
 
     def __init__(self) -> None:
         self._program = 0
-        self._uniforms: dict[str, int] = {}
+        # The flat program's pass block values as its uniforms held them (N1.6), and their ring.
+        self._values: dict[str, object] = {}
+        self._blocks = PassBlocks("Quick Blinds", block_bytes=_FLAT_BLOCK.size)
         # 3D Slats only: nothing below is touched by the flat style.
         self._resources = MeshResources("Quick Blinds 3D Slats")
         self._target = SceneTarget("Quick Blinds 3D Slats")
@@ -121,8 +125,8 @@ class QuickBlindsRenderer:
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._program or self._resources.has_resources or self._target.has_resources
-                    or self._environment.has_resources)
+        return bool(self._program or self._blocks.has_resources or self._resources.has_resources
+                    or self._target.has_resources or self._environment.has_resources)
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         parameters = frame.run.request.parameter_dict()
@@ -131,46 +135,40 @@ class QuickBlindsRenderer:
             return
         if not self._program:
             self._initialize()
-        uniforms = self._uniforms
         feather = _blinds_feather(parameters)
         direction = _blinds_direction_mode(frame.run.request.direction)
         cols, rows = _blinds_grid(frame.logical_size)
 
+        # The flat program's values, one pass block (N1.6); u_resolution is declared but never read nor set.
+        values = self._values
+        values["uMatrix"] = frame.matrix_values
+        values["uItemSize"] = frame.logical_size
+        values["u_progress"] = float(frame.sample.eased_progress)
+        values["u_grid"] = (float(cols), float(rows))
+        values["u_feather"] = feather
+        values["u_direction"] = direction
         gl.glUseProgram(self._program)
-        gl.glUniformMatrix4fv(
-            uniforms["uMatrix"],
-            1,
-            gl.GL_FALSE,
-            frame.matrix_values,
-        )
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform1f(
-            uniforms["u_progress"],
-            float(frame.sample.eased_progress),
-        )
-        gl.glUniform2f(uniforms["u_grid"], float(cols), float(rows))
-        gl.glUniform1f(uniforms["u_feather"], feather)
-        gl.glUniform1i(uniforms["u_direction"], direction)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
-        gl.glUniform1i(uniforms["uOldTex"], 0)
         gl.glActiveTexture(gl.GL_TEXTURE1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
-        gl.glUniform1i(uniforms["uNewTex"], 1)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        with self._blocks.bound(pack_block(_FLAT_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
         """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs). The flat style is one program, compiled in this one step."""
+        between runs). The flat style is one program, compiled in one step, then (given the render
+        ``size``) its pass block's ring in the next."""
         if not _slats_style(parameters):
             if not self._program:
                 self._initialize()
-            return True
+                return size is None
+            return size is None or self._blocks.warm()
         samples = scene3d_request_samples(parameters)
         r, shaders = self._resources, _slats_program()
         entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
-                   (r, "backdrop", ITEM_QUAD_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE),
+                   (r, "backdrop", shaders.BLINDS_BACKDROP_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE),
                    (r, "slats", shaders.BLINDS_SLATS_VERTEX_SOURCE, shaders.BLINDS_SLATS_FRAGMENT_SOURCE)]
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, False, False)]
@@ -214,32 +212,35 @@ class QuickBlindsRenderer:
     def _draw_slats(self, frame, progress: float, count: int, columns: int, gloss: float,
                     environment: int) -> None:
         r, shaders = self._resources, _slats_program()
-        program = r.program("backdrop", ITEM_QUAD_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("backdrop", self._BACKDROP_UNIFORMS)
+        program = r.program("backdrop", shaders.BLINDS_BACKDROP_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("backdrop", self._BACKDROP_SAMPLERS)
+        values = r.values("backdrop")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1i(uniforms["uCount"], count)
-        gl.glUniform1i(uniforms["uVertical"], columns)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        bind_frame(program, uniforms, frame, values)
+        values["uProgress"] = progress
+        values["uCount"] = count
+        values["uVertical"] = columns
+        with r.pass_blocks.bound(pack_block(shaders.BLINDS_BACKDROP_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
         r.begin_depth(frame)
         program = r.program("slats", shaders.BLINDS_SLATS_VERTEX_SOURCE, shaders.BLINDS_SLATS_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("slats", self._SLAT_UNIFORMS)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1i(uniforms["uCount"], count)
-        gl.glUniform1i(uniforms["uVertical"], columns)
-        gl.glUniform1f(uniforms["uGloss"], gloss)
-        gl.glActiveTexture(gl.GL_TEXTURE2)
+        uniforms = r.uniforms("slats", self._SLAT_SAMPLERS)
+        values = r.values("slats")
+        bind_frame(program, uniforms, frame, values)
+        values["uProgress"] = progress
+        values["uCount"] = count
+        values["uVertical"] = columns
+        values["uGloss"] = gloss
+        gl.glActiveTexture(gl.GL_TEXTURE2)                # the environment's binding
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         vao, vertices = r.mesh("slat", shaders.BLINDS_SLAT_BOX_VERTICES, shaders.BLINDS_SLAT_BOX_ATTRIBUTES)
-        gl.glBindVertexArray(vao)
-        gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+        with r.pass_blocks.bound(pack_block(shaders.BLINDS_SLATS_BLOCK, values)):
+            gl.glBindVertexArray(vao)
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
 
     def release_resources(self) -> None:
         errors: list[str] = []
@@ -248,9 +249,13 @@ class QuickBlindsRenderer:
         except Exception as exc:
             errors.append(str(exc))
         if self._program:
-            gl.glDeleteProgram(self._program)
+            delete_program(self._program)
             self._program = 0
-            self._uniforms.clear()
+            self._values = {}              # a new program's values start at zero, as its uniforms did
+        try:
+            self._blocks.release()
+        except Exception as exc:
+            errors.append(str(exc))
         if errors:
             raise RuntimeError(" | ".join(errors))
 
@@ -265,41 +270,15 @@ class QuickBlindsRenderer:
             raise RuntimeError(" | ".join(errors))
 
     def _initialize(self) -> None:
-        program = compile_program(
-            QUICK_TRANSITION_VERTEX_SOURCE,
-            blinds_program.fragment_source,
-            label="Quick Blinds",
-        )
-        self._program = program
-        try:
-            # u_resolution exists in the legacy shader source but is not read
-            # by that shader and may be optimized out.  Do not turn an unused
-            # compatibility uniform into a new runtime requirement.
-            uniform_names = (
-                "uMatrix",
-                "uItemSize",
-                "u_progress",
-                "u_grid",
-                "u_feather",
-                "u_direction",
-                "uOldTex",
-                "uNewTex",
-            )
-            uniforms = {
-                name: int(gl.glGetUniformLocation(program, name))
-                for name in uniform_names
-            }
-            missing = [
-                name for name, location in uniforms.items() if location < 0
-            ]
-            if missing:
-                raise RuntimeError(
-                    "Quick Blinds uniforms are incomplete: " + ", ".join(missing)
-                )
-            self._uniforms = uniforms
-        except Exception:
-            self.release_resources()
-            raise
+        # u_resolution exists in the legacy shader source but is not read by that shader; it stays in the block at
+        # zero, never a runtime requirement.
+        held = {name for name, _kind in _FLAT_BLOCK.fields}
+        missing = [name for name in ("uMatrix", "uItemSize", "u_progress", "u_grid", "u_feather", "u_direction")
+                   if name not in held]
+        if missing:
+            raise RuntimeError("Quick Blinds pass block is incomplete: " + ", ".join(missing))
+        self._program = compile_program(_FLAT_VERTEX_SOURCE, blinds_program.fragment_source, label="Quick Blinds")
+        self._values = {}
 
 
 def create_transition_renderer() -> QuickBlindsRenderer:
