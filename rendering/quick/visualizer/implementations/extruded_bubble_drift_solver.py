@@ -20,19 +20,34 @@ Positions and displacement are float32, as the draws read them.
 
 A geometry edit continues the old history (the CPU rebase); a render gap longer than the published history, a
 lost context or a retired family restarts that family's history from zero (lifecycle, like a fresh family).
+
+Every replacement of a family's state (a new revision, a geometry edit, a capacity change) allocates the new state
+before the old is released (D3's failed swap): an allocation that fails leaves the current state current and drawn,
+is logged once and its (revision, capacity) is not tried again; a new key is.
+
+A family's state is keyed on its revision alone, and that is a whole stream identity, not a per-process count: every
+engine session numbers its revisions from its own label namespace (``engine_worker``: ``namespace << 32``; the main
+process's ``engine_worker_link.next_label_namespace`` gives every configure a fresh one, never repeated, a replacement
+worker included), and the main process's own in-process simulations number from 1 in one shared counter, far below
+any namespace. So no two streams this renderer can be handed (a worker and its replacement, two activations, worker
+and in-process) present the same revision, and a stream's step serials restarting cannot hide behind an old state.
+The guard is ``test_a_replacement_stream_never_presents_an_alias_of_the_old_streams_geometry`` (D3's identity test):
+without the namespace the stale geometry is drawn. Only a tool that runs a namespace-0 session in the main process
+restarts that counter; the product never does.
 """
 from __future__ import annotations
 
 import ctypes
 import math
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from OpenGL import GL as gl
 
 from core.constants.extruded_bubble_world import WORLD_UNIT
 from rendering.quick import gl_query
+from rendering.quick.scene3d.resources import ProgramUnavailable
 from rendering.quick.scene3d.stream import StreamRing
 from widgets.spotify_visualizer import extruded_bubble_drift as drift
 from widgets.spotify_visualizer.extruded_bubble_drift_log import (
@@ -307,7 +322,11 @@ _CLOUD_FIELDS = {"snow": (_R["count_snow"], _R["amount_snow"]), "specks": (_R["c
 def _buffer(size: int) -> int:
     name = (ctypes.c_uint * 1)()
     gl.glCreateBuffers(1, name)
-    gl.glNamedBufferStorage(int(name[0]), max(16, size), None, gl.GL_DYNAMIC_STORAGE_BIT)
+    try:
+        gl.glNamedBufferStorage(int(name[0]), max(16, size), None, gl.GL_DYNAMIC_STORAGE_BIT)
+    except BaseException:
+        _delete(int(name[0]))       # a name without storage is still a name
+        raise
     return int(name[0])
 
 
@@ -375,18 +394,28 @@ class DriftCarryover:
     output: int
     output_vec4s: int
     fence: object
+    failed: dict = field(default_factory=dict)   # the source's failed keys (``DriftSolver._failed``): not retried
+
+    def wait(self) -> None:
+        """The taker's GPU waits for the source's last dispatch; the fence is deleted whatever the wait does."""
+        fence, self.fence = self.fence, None
+        if fence:
+            try:
+                gl.glWaitSync(fence, 0, _TIMEOUT_IGNORED)
+            finally:
+                gl.glDeleteSync(fence)
 
     def discard(self) -> None:
-        """Delete what was never adopted, in any context that shares with the source's (its own current)."""
-        if self.fence:
-            gl.glWaitSync(self.fence, 0, _TIMEOUT_IGNORED)
-            gl.glDeleteSync(self.fence)
-            self.fence = None
-        for family in self.families.values():
-            _delete(family.geometry, family.state, family.aux)
-        self.families = {}
-        _delete(self.output)
-        self.output = 0
+        """Delete what was never adopted, in any context that shares with the source's (its own current). Each name
+        is deleted once, even when the wait raises (then the error is raised after the names are gone)."""
+        families, output = self.families, self.output
+        self.families, self.output = {}, 0
+        try:
+            self.wait()
+        finally:
+            for family in families.values():
+                _delete(family.geometry, family.state, family.aux)
+            _delete(output)
 
 
 class DriftSolver:
@@ -398,6 +427,13 @@ class DriftSolver:
         self.output = 0
         self._output_vec4s = 0
         self._families: dict[str, _Family] = {}
+        # A family whose new state could not be allocated: the (revision, capacity) that failed. Its current state
+        # stays drawn and unchanged; the same key is never retried, a new one is (D3, failed swap).
+        self._failed: dict[str, tuple[int, int]] = {}
+        self._output_failed = 0                # the output size (vec4s) that could not be allocated: not retried
+        # Whether both drift programs exist in this context: None until the first frame with work asks (or the
+        # warm-up compiled them), False when one failed (the mode then draws without drift, never retried here).
+        self._programs: bool | None = None
         self._ring: StreamRing | None = None   # sized to the most chain rows a step has carried (_ring_for)
         # The warm-up check of the pair arithmetic: None until run, then whether this device computes it exactly.
         self.pairs_exact: bool | None = None
@@ -411,12 +447,35 @@ class DriftSolver:
         for family in self._families.values():
             _delete(family.geometry, family.state, family.aux)
         self._families.clear()
+        self._failed.clear()
         _delete(self.output)
-        self.output, self._output_vec4s = 0, 0
+        self.output, self._output_vec4s, self._output_failed = 0, 0, 0
         if self._ring is not None:
             self._ring.release()
             self._ring = None
         self.pairs_exact = self.pairs_report = None   # a new context checks again
+        self._programs = None
+
+    def _programs_ready(self, resources) -> bool:
+        """Both drift programs, asked for together before anything is allocated (so drift never appears for one
+        family and is then taken away). One that failed (its compile error logged once by ``resources``, which
+        caches it) leaves this solver without output for the context: the mode draws without drift."""
+        if self._programs is None:
+            try:
+                for key, source in PROGRAMS[:2]:
+                    resources.compute_program(key, source)
+            except ProgramUnavailable:
+                self._programs = False
+                # Only a history carried here from another window can exist yet; it cannot advance in this context.
+                for family in self._families.values():
+                    _delete(family.geometry, family.state, family.aux)
+                self._families.clear()
+                _delete(self.output)
+                self.output, self._output_vec4s = 0, 0
+                logger.warning("%s: a drift program is unavailable on this device; drawn without drift", self.label)
+                return False
+            self._programs = True
+        return self._programs
 
     def export(self) -> DriftCarryover | None:
         """Source render thread, its context current: give up the history (not deleted here) behind a fence."""
@@ -424,26 +483,30 @@ class DriftSolver:
             return None
         fence = gl.glFenceSync(gl.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
         gl.glFlush()                           # the fence must reach the GPU before another context waits on it
-        carryover = DriftCarryover(dict(self._families), self.output, self._output_vec4s, fence)
-        self._families = {}
-        self.output, self._output_vec4s = 0, 0
+        carryover = DriftCarryover(dict(self._families), self.output, self._output_vec4s, fence, dict(self._failed))
+        self._families, self._failed = {}, {}
+        self.output, self._output_vec4s, self._output_failed = 0, 0, 0
         return carryover
 
     def adopt(self, carryover: DriftCarryover) -> None:
         """Target render thread, its context current (sharing with the source's): continue the source's history.
 
         Whatever this solver integrated meanwhile (a target that drew before the source let go) is replaced: the
-        adopted families resume from their own last step, and the step log brings them up to date."""
-        if carryover.fence:
-            gl.glWaitSync(carryover.fence, 0, _TIMEOUT_IGNORED)
-            gl.glDeleteSync(carryover.fence)
-            carryover.fence = None
+        adopted families resume from their own last step, and the step log brings them up to date. A handoff that
+        fails (the wait on the source's fence) releases the carried history once and keeps this solver's own; the
+        error is raised to the host. Adopting allocates nothing; a later replacement of an adopted family allocates
+        before it releases, as any other (``_replace``)."""
+        try:
+            carryover.wait()
+        except BaseException:
+            carryover.discard()
+            raise
         for family in self._families.values():
             _delete(family.geometry, family.state, family.aux)
         _delete(self.output)
-        self._families = dict(carryover.families)
-        self.output, self._output_vec4s = carryover.output, carryover.output_vec4s
-        carryover.families, carryover.output = {}, 0
+        self._families, self._failed = dict(carryover.families), dict(carryover.failed)
+        self.output, self._output_vec4s, self._output_failed = carryover.output, carryover.output_vec4s, 0
+        carryover.families, carryover.output, carryover.failed = {}, 0, {}
         logger.info("%s: drift history carried over from another window (%s)", self.label,
                     {name: family.serial for name, family in self._families.items()})
 
@@ -455,8 +518,19 @@ class DriftSolver:
         left"), False when it ran now."""
         if self.pairs_exact is not None:
             return True
+        try:
+            program = resources.compute_program(*PROGRAMS[2])
+        except ProgramUnavailable:
+            # Logged once by the resources; drift itself does not need the check (it is never silent: that log).
+            self.pairs_exact, self.pairs_report = False, {"program_unavailable": PROGRAMS[2][0]}
+            return False
         cases, expected = pair_check_cases()
-        source, target = _buffer(cases.nbytes), _buffer(16 * _CHECK_CASES)
+        source = _buffer(cases.nbytes)
+        try:
+            target = _buffer(16 * _CHECK_CASES)
+        except BaseException:
+            _delete(source)
+            raise
         gl.glNamedBufferSubData(source, 0, cases.nbytes, cases)
         prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         saved = [(binding, gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING, binding),
@@ -465,7 +539,7 @@ class DriftSolver:
         generic = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING)
         results = np.empty((_CHECK_CASES, 4), dtype=np.float32)
         try:
-            gl.glUseProgram(resources.compute_program(*PROGRAMS[2]))
+            gl.glUseProgram(program)
             gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _STEPS, source)
             gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _OUT, target)
             gl.glDispatchCompute(1, 1, 1)
@@ -524,13 +598,18 @@ class DriftSolver:
             if name not in live:
                 old = self._families.pop(name)
                 _delete(old.geometry, old.state, old.aux)
+        for name in tuple(self._failed):
+            if name not in live or self._failed[name] != (live[name].revision, live[name].capacity):
+                del self._failed[name]          # gone, or a new key: that one is tried
         offsets = self.layout(families)
-        if not live:
-            return offsets
+        if not live or self._programs is False:
+            return offsets      # nothing live, or no drift program in this context: drawn without drift
         records = unpack_steps(steps)
         serials = records[:, _R["serial"]].astype(np.int64)
         needed = []
         for name, family in live.items():
+            if name in self._failed:
+                continue        # its new state failed to allocate: the current one stays as it is, no retry
             state = self._families.get(name)
             after = state.serial if state is not None and (state.revision == family.revision
                                                             or family.rebase_from == state.revision) \
@@ -540,12 +619,29 @@ class DriftSolver:
                 needed.append(int(pending[0]))
         if not needed:
             return offsets      # no new logical step since the last frame: nothing to integrate
+        if not self._programs_ready(resources):
+            return offsets      # no output: the mode draws without drift
         self.check(resources)   # once, if the warm-up did not already (an edge, never per frame)
         if offsets["_total"] > self._output_vec4s:
             # Every dispatch rewrites its family's whole output from its state: a new buffer loses nothing.
+            # Allocated before the old is released: a failure keeps the current output and state as they are (logged
+            # once per size, not retried for it), and nothing is integrated until a size that fits can be had.
+            vec4s = max(256, 1 << (offsets["_total"] - 1).bit_length())
+            if self._output_failed == vec4s:
+                return offsets
+            output = 0
+            try:
+                output = _buffer(16 * vec4s)
+                # A family with no state (its allocation failed) is drawn from here: zero drift, never undefined.
+                gl.glClearNamedBufferData(output, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
+            except Exception as exc:
+                _delete(output)
+                self._output_failed = vec4s
+                logger.error("%s: the drift output for %s rows could not be allocated (%s); the current drift stays "
+                             "as it is", self.label, vec4s, exc)
+                return offsets
             _delete(self.output)
-            self._output_vec4s = max(256, 1 << (offsets["_total"] - 1).bit_length())
-            self.output = _buffer(16 * self._output_vec4s)
+            self.output, self._output_vec4s, self._output_failed = output, vec4s, 0
         base = min(needed)
         starts = knot_starts(records)
         if len(knots) != int(starts[-1]) * KNOT_DECISION_BYTES:
@@ -564,7 +660,7 @@ class DriftSolver:
                 upload = records[start:end]
                 with ring.bound(gl.GL_SHADER_STORAGE_BUFFER, _STEPS, _upload(records, starts, knots, start, end)):
                     for name in ("chains", "snow", "specks"):
-                        if name in live:
+                        if name in live and name not in self._failed:
                             self._advance(resources, name, live[name], offsets[name], upload, serials[start:end])
         finally:
             for binding, buffer, start, size in saved:
@@ -585,24 +681,35 @@ class DriftSolver:
             old_steps = np.flatnonzero((serials > state.serial) & (serials < family.first_serial))
             if len(old_steps):
                 self._dispatch(resources, name, state, offset, upload, old_steps, fresh=False)
-            replacement = self._allocate(family, state)
+            replacement = self._replace(name, family, state)
+            if replacement is None:
+                return          # the old rows stay current and drawn
             replacement.serial, replacement.travel, replacement.count = state.serial, state.travel, state.count
             self._families[name] = replacement
             pending = np.flatnonzero(serials > replacement.serial)
-            if len(pending):
-                self._dispatch(resources, name, replacement, offset, upload, pending, fresh=False,
-                               old_geometry=state.geometry)
-            _delete(state.geometry, state.state, state.aux)
+            try:
+                if len(pending):
+                    self._dispatch(resources, name, replacement, offset, upload, pending, fresh=False,
+                                   old_geometry=state.geometry)
+            finally:
+                # The old rows are no longer the family's on every path (a raise included): nothing else holds them.
+                _delete(state.geometry, state.state, state.aux)
             return
         fresh = False
+        # The new state exists before the old is released: a failed allocation leaves the old one current and drawn.
         if state is None or state.revision != family.revision:
+            replacement = self._replace(name, family)
+            if replacement is None:
+                return
             if state is not None:
                 _delete(state.geometry, state.state, state.aux)
-            state = self._allocate(family)
+            state = replacement
             state.serial = family.first_serial - 1
             fresh = True
         elif family.capacity != state.capacity:
-            grown = self._allocate(family, state)
+            grown = self._replace(name, family, state)
+            if grown is None:
+                return
             grown.serial, grown.travel, grown.count = state.serial, state.travel, state.count
             _delete(state.geometry, state.state, state.aux)
             state = grown
@@ -615,23 +722,45 @@ class DriftSolver:
             fresh = True
         self._dispatch(resources, name, state, offset, upload, pending, fresh=fresh)
 
+    def _replace(self, name: str, family, previous: _Family | None = None) -> _Family | None:
+        """``family``'s new state (``previous``'s history rows copied), or None when it cannot be allocated: then
+        nothing of the current state is touched, the failure is logged once and its key is not tried again."""
+        try:
+            return self._allocate(family, previous)
+        except Exception as exc:
+            self._failed[name] = (family.revision, family.capacity)
+            logger.error("%s: the %s drift state for revision %s (%s rows) could not be allocated (%s); %s",
+                         self.label, name, family.revision, family.capacity, exc,
+                         "the current state stays drawn" if previous is not None or name in self._families
+                         else "drawn without drift")
+            return None
+
     def _allocate(self, family, previous: _Family | None = None) -> _Family:
         chains = family.family == "chains"
         row_bytes = CHAIN_GEOMETRY_BYTES if chains else CLOUD_GEOMETRY_BYTES
         if len(family.geometry) != row_bytes * family.capacity:
             raise ValueError(f"{self.label}: {family.family} geometry does not match its capacity")
-        geometry = _buffer(len(family.geometry))
-        gl.glNamedBufferSubData(geometry, 0, len(family.geometry), family.geometry)
-        rows = family.capacity * (PATH_NODES if chains else 1)
-        state, aux = _buffer(16 * rows), _buffer(16 * (family.capacity if chains else rows))
-        for buffer in (state, aux):
-            gl.glClearNamedBufferData(buffer, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
-        if previous is not None:
-            # Keep the existing history rows (a stable seeded prefix), as written by every earlier dispatch.
-            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
-            keep = min(previous.capacity, family.capacity)
-            gl.glCopyNamedBufferSubData(previous.state, state, 0, 0, 16 * keep * (PATH_NODES if chains else 1))
-            gl.glCopyNamedBufferSubData(previous.aux, aux, 0, 0, 16 * keep)
+        created: list[int] = []
+        try:
+            geometry = _buffer(len(family.geometry))
+            created.append(geometry)
+            gl.glNamedBufferSubData(geometry, 0, len(family.geometry), family.geometry)
+            rows = family.capacity * (PATH_NODES if chains else 1)
+            state = _buffer(16 * rows)
+            created.append(state)
+            aux = _buffer(16 * (family.capacity if chains else rows))
+            created.append(aux)
+            for buffer in (state, aux):
+                gl.glClearNamedBufferData(buffer, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
+            if previous is not None:
+                # Keep the existing history rows (a stable seeded prefix), as written by every earlier dispatch.
+                gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+                keep = min(previous.capacity, family.capacity)
+                gl.glCopyNamedBufferSubData(previous.state, state, 0, 0, 16 * keep * (PATH_NODES if chains else 1))
+                gl.glCopyNamedBufferSubData(previous.aux, aux, 0, 0, 16 * keep)
+        except BaseException:
+            _delete(*created)       # a partial allocation leaves nothing behind
+            raise
         return _Family(family.revision, family.capacity, geometry, state, aux, float(family.carry))
 
     def _dispatch(self, resources, name: str, state: _Family, offset: int, upload: np.ndarray, pending: np.ndarray,

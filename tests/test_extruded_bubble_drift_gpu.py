@@ -82,11 +82,11 @@ def test_production_host_integrates_only_live_drift_and_restores_zero_picture(ta
     assert np.array_equal(capture.render(host,snap),base)
 
 
-def test_a_drift_program_that_fails_to_compile_is_a_loud_error_and_drift_free_frames_still_draw(target,monkeypatch):
-    """What a device whose compiler refuses a drift program gets (D4.8, traced in the report): the hidden warm-up
-    raises the compile error (the render node logs it once and counts repeats; the owner reveals after its bound),
-    every frame that carries drift raises it again, retrying the compile, and draws no Extruded Bubble; a frame
-    without drift draws as ever, since the solver compiles nothing until a family is live."""
+def test_a_drift_program_that_fails_to_compile_is_logged_once_and_the_mode_draws_without_drift(target,monkeypatch,
+                                                                                                caplog):
+    """What a device whose compiler refuses a drift program gets: the shared resources cache the failure (one compile
+    attempt and one logged error per program and context), the warm-up completes, and every frame that carries drift
+    draws Extruded Bubble without drift (the picture of the same frame without drift), never an empty card."""
     from dataclasses import replace
     from rendering.quick.scene3d import resources as scene_resources
     from rendering.quick.visualizer.implementations import extruded_bubble as eb
@@ -107,32 +107,29 @@ def test_a_drift_program_that_fails_to_compile_is_a_loud_error_and_drift_free_fr
     from rendering.quick.visualizer import render_host
     monkeypatch.setattr(render_host,'PREPARE_SPACING_S',0.)
     hidden=_snapshot(fade=0.0,extruded_bubble_bead_chains=[2.,2.],extruded_bubble_particles=[0.,0.])
-    errors=[]
-    for _ in range(400):                              # the warm-up's units, one per hidden frame, until it fails
-        try:
+    assert np.abs(base-base[0,0]).max()>0                     # the healthy picture is not an empty card
+    with caplog.at_level('ERROR'):
+        for _ in range(400):                              # the warm-up's units, one per hidden frame: it completes
             capture.render(host,hidden)
-        except RuntimeError as exc:
-            errors.append(str(exc))
-            if len(errors)==3:
+            if host.prepared_activation is not None:
                 break
-    assert len(errors)==3 and all('compile' in error for error in errors)   # it fails on that unit, every time
-    assert host.prepared_activation is None                                # and never completes
-    controls=ExtrudedBubbleControls(large_count=(0,0),mid_count=(0,0),bead_chains=(2.,2.),emission=(0.,0.),
-        stream_path=(0.,-1.,0.,0.,1.,0.),drift=(1.,1.),drift_chains=(2.,2.),drift_direction='swirl_cw',
-        stream_speed=(.1,.1))
-    sim=ExtrudedBubbleSimulation(7)
-    failed=[]
-    for _ in range(3):
-        logical=sim.advance(MusicInput(1/60,True,1.,(),(.6,.5,.3)),controls)
-        drifting=replace(snap,logical=replace(snap.logical,mode_state=replace(
-            snap.logical.mode_state,drift_families=logical.drift_families,drift_steps=logical.drift_steps,
-            drift_knots=logical.drift_knots)))
-        before=len(attempts)
-        with pytest.raises(RuntimeError,match='compile'):
-            capture.render(host,drifting)
-        failed.append(len(attempts)-before)
-    # The failing compile is retried on every drifting frame (the first also compiles what the warm-up never reached).
-    assert failed[0]>=1 and failed[1:]==[1,1]
+        assert host.prepared_activation is not None
+        controls=ExtrudedBubbleControls(large_count=(0,0),mid_count=(0,0),bead_chains=(2.,2.),emission=(0.,0.),
+            stream_path=(0.,-1.,0.,0.,1.,0.),drift=(1.,1.),drift_chains=(2.,2.),drift_direction='swirl_cw',
+            stream_speed=(.1,.1))
+        sim=ExtrudedBubbleSimulation(7)
+        for _ in range(30):
+            logical=sim.advance(MusicInput(1/60,True,1.,(),(.6,.5,.3)),controls)
+            drifting=replace(snap,logical=replace(snap.logical,mode_state=replace(
+                snap.logical.mode_state,drift_families=logical.drift_families,drift_steps=logical.drift_steps,
+                drift_knots=logical.drift_knots)))
+            assert np.array_equal(capture.render(host,drifting),base)   # drawn, without drift
+    broken_label=[label for label in attempts if 'drift_chains_broken' in label]
+    assert len(broken_label)==1, attempts                                  # one compile attempt in all those frames
+    lines=[record for record in caplog.records if record.levelname=='ERROR']
+    assert len(lines)==1 and 'drift_chains_broken' in lines[0].getMessage(), [r.getMessage() for r in lines]
+    renderer=host._implementations['extruded_bubble']
+    assert not renderer._drift.output and not renderer._drift.has_resources
     assert np.array_equal(capture.render(host,snap),base)   # no drift: Extruded Bubble draws exactly as before
 
 

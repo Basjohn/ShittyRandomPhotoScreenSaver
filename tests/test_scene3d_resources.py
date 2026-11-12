@@ -31,6 +31,39 @@ void main() {
 """
 
 
+def test_a_program_that_fails_to_compile_is_cached_logged_once_and_settles_the_warm_up(monkeypatch, caplog):
+    attempts = []
+
+    def refuse(*_args, label):
+        attempts.append(label)
+        raise RuntimeError(f"{label} compute shader compile failed: injected")
+    monkeypatch.setattr(resource_module, "compile_compute_program", refuse)
+    monkeypatch.setattr(resource_module, "compile_program", refuse)
+    resources = MeshResources("failed program probe")
+    with caplog.at_level("ERROR"):
+        assert resources_warm(resources) is False             # the failed compile is that step's unit
+        assert resources_warm(resources) is False             # the next program's
+        assert resources_warm(resources) is True              # both settled: the warm-up completes
+        for _ in range(20):
+            with pytest.raises(resource_module.ProgramUnavailable, match="injected"):
+                resources.compute_program("compute", "source")
+            with pytest.raises(resource_module.ProgramUnavailable, match="injected"):
+                resources.program("draw", "vertex", "fragment")
+    assert len(attempts) == 2                                  # one compile per program and context
+    assert len([record for record in caplog.records if record.levelname == "ERROR"]) == 2
+    assert resources.program_failed("compute") and not resources.has_program("compute")
+    resources.release_resources()                              # a new context tries again
+    assert not resources.program_failed("compute")
+    with pytest.raises(resource_module.ProgramUnavailable):
+        resources.compute_program("compute", "source")
+    assert len(attempts) == 3
+
+
+def resources_warm(resources):
+    return resource_module.warm_programs([(resources, "compute", "source"),
+                                          (resources, "draw", "vertex", "fragment")])
+
+
 def test_incomplete_dsa_mesh_is_never_reused_as_a_zero_count_mesh(monkeypatch):
     created = iter((41, 42))
     deleted = []
