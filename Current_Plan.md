@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N0.3's scenes (High), 1D.0's code boxes (Medium), the plan narrative cleanup (Sonnet).
+**Now (in flight):** N0.3's scenes (High; build round 2 after the lead's F1 to F4 decisions), 1D.1 (Medium).
 
 **Next, by slot (lead, 12 Nov night audit, `Docs/Future_Work/Audit_2026-11-12_Night.md`):**
 - High:
@@ -47,8 +47,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
   3. 1C.10.
   4. The 1C.2 Save stall.
 - Medium:
-  1. 1D.0's two code boxes (the old bridge disconnect, the picker edge).
-  2. 1D.1.
+  1. 1D.1.
+  2. The 1D.0 test-order flake.
   3. The native runtime check before import.
   4. 1B.10.
 - Docs (Sonnet):
@@ -1061,16 +1061,14 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
-### 1D.0 Studio mode switch (fixed and merged 12 Nov, R-200): side defects left
+### 1D.0 Studio mode switch (R-200 and its follow-ups merged 12 Nov): one side defect left
 
-- [ ] `ui/studio/controller.py:343` and `:1583`: a retiring shell's old bridge stays connected to
-  `_on_bridge_close`, and its slots reach the new mode's session through `self._c` until the shell is destroyed.
-  Disconnect the old bridge from the controller at retirement, with a test that calls a slot on it after
-  `request_mode_switch` and sees no effect on the new session.
-- [ ] `StudioShell.qml:2456`: the mode picker's `onActivated` runs the whole retire-and-open inside the retiring
-  shell's own signal handler. Hand it to the controller as an edge the controller acts on (no timer).
-- [ ] Not seen in the product yet: the operator's later errors at lines 1687 to 2268 (after "shown") are the
-  same mechanism; confirm they are gone from a real Studio session's QML log.
+- [ ] Test-order flake: each Studio close leaves a 60 s reveal watch armed (`ui/studio/presence.py:181`, expiry
+  logged at `:255`); a later test's drag counts that expiry line as a write
+  (`test_studio_drag_io_churn.py::...[devcurve]`). Reproduce: `pytest tests/test_studio_exit_repaint.py
+  tests/test_studio_exit_every_mode.py tests/test_studio_drag_io_churn.py -p no:cacheprovider -q`. Root cause
+  first: should a closed Studio's watch end at its close (product), or should the test only count its own
+  session's writes? Fix at the owner, with a test.
 
 ### 1D.1 Guided Setup: newer Visualizer images, JMIT Pools, UX audit (one Opus Medium; the lead judges pixels)
 
