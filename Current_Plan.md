@@ -347,14 +347,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   Qt 6.12 through `tools/compute_pass_identity.py` (the propagation relaxation within its own documented race
   spread); GL calls per run fell for the edge field, propagation, Waveform's fields and fog (motion and population
   +1 and +2, a bind replacing a uniform). Evidence `.artifacts/evidence/architecture/native_core_n1_2/`.
-- [ ] Bake targets are the shipped backends' (lead's decision, 12 Nov): SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2. GLSL
-  310 es is used by no backend we ship (desktop QRhi OpenGL takes the 430 variant) and is dropped from the required
-  set in the readiness test; the images N1.2 widened only for ES (the edge field's luma, blur and strength images,
-  +6 MB per field and 0.019 ms at 1080p, two fields under Edge Bloom; the fog's steady share, +7.1 MB at Waveform's
-  largest grid) go back to R16F where the result stays bit-identical (N1.7's rule, measured before and after).
-- [ ] `qsb` accepts `rg16f`/`rg32f` storage images for ES although GLSL ES 3.1 does not: the motion tiles
-  (`scene3d/motion.py`) and the edge field's flood and field images still use them; N1.7 decides each against the
-  shipped targets only.
 - [ ] N1.3 The readiness check discovers every shader source in `rendering/` (today it scans module-level compute
   strings in eight modules; the population count and scatter sources and the composed fog medium program are
   never checked), vertex and fragment included, compiles each through `qsb` and ratchets the failures down, mode
@@ -367,15 +359,21 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   per frame recorded before and after (fewer calls is a gain today); `.qsb` baked for every backend, not
   `--glsl 460` only. A mode whose conversion is not pixel-identical inside one dispatch is converted at its port
   instead.
-- [ ] N1.7 Formats QRhi lacks (RG16F, RG32F, R11G11B10F: the defocus circle, motion velocity, the edge field, the
-  heightfield, Bubble's light attachment): widen each to RGBA16F or RGBA32F in the OpenGL renderer first,
-  pixel-identical, with the memory and GPU time before and after; only a target whose widening measurably costs
-  goes to D5.3's format service.
-  - Listed for D5.3's formats service (threshold: +0.05 ms paired GPU median per frame, or +64 MiB per display at
-    3840x2160 in the worst allocation the product can make): the scene target's multisampled velocity attachment
-    (`scene3d/target.py`, RG16F kept). RGBA16F adds 127.5 MiB per 4K display at 4x and 255 MiB at 8x (the next
-    largest widening, the defocus circle, is +42 MiB); its GPU cost was under the time threshold (+0.02 to +0.04 ms
-    at 4K 4x). Evidence `.artifacts/evidence/native_core/n1_formats/`.
+- N1.7 landed 12 Nov (merge of af9986e8): bake targets are the shipped backends' (SPIR-V, GLSL 430, HLSL 5.0, MSL
+  1.2; GLSL ES is no longer baked); the ES-only widenings back to R16F, identical; every RG16F, RG32F and R11G11B10F
+  target widened to RGBA16F/RGBA32F, identical in OpenGL (Waveform's slope map: 4 of 460,800 anisotropic samples one
+  half-float step off; Bubble's light one 8-bit code more accurate in its halos, signed off by the lead on the stills).
+  `tests/test_qrhi_texture_formats.py` forbids the formats outside one listed use. GPU times are paired medians
+  (`tools/compute_pass_identity.py paired --ref`). Evidence `.artifacts/evidence/native_core/n1_formats/`.
+- [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
+  (`scene3d/target.py`, RG16F kept; RGBA16F would add 127.5 MiB per 4K display at 4x, 255 MiB at 8x). Built with the
+  substrate when the scene target ports (N3), or reconsidered if N1.8's resolve-first rule removes the multisampled
+  velocity.
+- [ ] D5.6 row 13's control was not run: fill the widened targets' unused channels with non-zero values in a test, so
+  a consumer that reads them fails (the scan and source checks show only `.rg`/`.xy`/`.rgb` reads today).
+- [ ] Side defect: `rendering/quick/visualizer/implementations/bubble_ambient_gl.py:421` restores the caller's program
+  unconditionally; a program deleted while current makes the restore raise `GL_INVALID_VALUE` (hit by the harness;
+  production's Quick program is live): restore only a live program, with a test.
 - [ ] N1.8 Per-sample multisample reads (`sampler2DMS`, `gl_SampleID`): each use resolves first and reads the
   resolve, with stills before and after; a use that cannot is listed for D5.3's per-sample service with the
   reason.
