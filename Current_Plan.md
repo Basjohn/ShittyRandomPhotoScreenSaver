@@ -320,7 +320,10 @@ classification is written at each item.
   fields, sphere impostors, optics, the framed camera, the card clip), with the owning file for each, so the
   port order below is checked against real use and nothing is ported that nobody uses.
 - [ ] N0.2 (also: `rendering/quick/bootstrap.py:66` requires `glMultiDrawArraysIndirect`, which nothing calls;
-  drop the requirement or use it) What OpenGL gives that QRhi does not, item by item, with the chosen replacement: GPU timer queries,
+  drop the requirement or use it). The pipeline is our own OpenGL and Vulkan pipeline (operator, 12 Nov: "it
+  should still be Vulkan. If we rely on QT then we run into other issues"); QRhi is a thin recording layer used
+  where it serves and bypassed with raw Vulkan where it falls short (the 8 Nov decision). For each item: the
+  QRhi route, the raw-Vulkan route through the native handles, and the one chosen. What OpenGL gives that QRhi does not, item by item, with the chosen replacement: GPU timer queries,
   explicit state restoration against Qt's scene graph (the protected clip and inherited-state work), direct
   state access and immutable storage, the program binary cache, per-draw image bindings, multisample resolve
   control, stencil use for the card clip, persistent mapped buffers; and what QRhi requires that we do not do
@@ -331,6 +334,10 @@ classification is written at each item.
 - [ ] N0.4 The camera: `core/settings/framed_camera.py` stays the one owner of the framed physical camera. Decide
   whether the core receives finished matrices and rays from the worker (no second camera to keep in step) or
   ports the math behind a parity test; the first is the default unless a per-frame cost shows otherwise.
+- [ ] N0.6 Decision D6, Vulkan device ownership (`Docs/Future_Work/Native_Core_P3_Decisions.md`): the native
+  core creates the `VkInstance` and `VkDevice` itself, with the features and extensions it needs (timestamp
+  queries, `shaderFloat64` where present, what DLSS or FSR need), and hands them to Qt Quick, so Qt renders the UI on
+  our device instead of the core inheriting Qt's defaults; proved in the P1 spike's harness before P3.1.
 - [ ] N0.5 The substrate's contract as decision D5 in `Docs/Future_Work/Native_Core_P3_Decisions.md`: resource
   ownership and lifetime per window and per device, admission and dormancy, device loss, what a mode's native
   renderer may and may not do (no clock, no camera, no allocation per frame, the card clip is the substrate's).
@@ -834,10 +841,7 @@ the current track's text; Restore Size clears it; Edit/Arrange parity; old profi
 Evidence `.artifacts/evidence/visualizers/shared/expanded_now_playing/20261112_1c3_after/` (`resize_sheet.png`,
 `sides_sheet.png`). The 11 Nov behaviour changes of 1B.7 for side handles and the flip are withdrawn.
 
-- [ ] D1 run (lead, `tools/d1_run.py` with a real player session): side handles in and out, corner and wheel,
-  the block dragged across the midpoint and up and down, the text group's flip glyph and undo, the child lock
-  (move and scale the group, move the artist, the artwork's side strip), Seek Bar on and a click-seek, save,
-  collapse, re-expand, a profile saved before 12 Nov; DPR 1.5.
+Operator, 12 Nov: "I can confirm Now Playing works well all in all regards I could test myself." Accepted.
 - [ ] Side defect: `tests/test_visualizers_fullscreen_mode_pill.py` crashed once with an access violation when run
   after overlay_settings, fullscreen_edit and overlays in one process (not reproduced with two files); watch.
 

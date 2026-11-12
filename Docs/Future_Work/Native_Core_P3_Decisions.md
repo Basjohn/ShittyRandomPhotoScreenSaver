@@ -120,6 +120,36 @@ D4.7's self-check is for.
   runtime self-check of the two-product on a known pair at warm-up, on the edge, never per frame; a failure is
   logged and reported rather than silently producing drift.
 
+## D6. Real Vulkan, and who owns the Vulkan device (proposed by the lead, 12 Nov 2026)
+
+Operator, 12 Nov: "We are a custom OpenGL and Vulkan Pipeline. Vulkan goes through QRhi from your suggestions but it
+should still be Vulkan. If we rely on QT then we run into other issues no?"
+
+What stands from the 8 Nov decision (`Graphics_Backend_Decision_2026-11-05.md`): on the Vulkan backend every command
+the core records is a Vulkan command; QRhi is a thin C++ recording layer over it (no GIL, negligible overhead), used
+where it tracks barriers, frames in flight and render-pass compatibility for us inside Qt Quick's frame, and bypassed
+per pass with raw Vulkan (`QRhiCommandBuffer::beginExternal()`/`endExternal()` and the native handles) wherever it
+falls short (no timestamp queries, no async compute, no bindless or descriptor indexing, no mesh shaders, no arbitrary
+extensions, no indirect draws in 6.11). The OpenGL fallback is the same core on Qt's GL backend.
+
+The issues of relying on Qt are real, and each has an answer:
+
+- *Qt chooses the device's features.* Proposed: the core creates the `VkInstance` and `VkDevice` itself with what it
+  needs and gives them to Qt Quick (`QQuickGraphicsDevice`, `QQuickWindow::setGraphicsDevice`), so Qt renders the UI
+  on our device. To be proved in the P1 harness before P3.1 (N0.6); PySide6 does not expose `QVulkanInstance`, so
+  the native module does it, as P1 already attaches the instance.
+- *QRhi's compatibility guarantees are limited.* The core is built against PySide6's exact Qt and every upgrade
+  re-runs the parity gates (8 Nov).
+- *Qt owns the swapchain and the frame loop.* Every Qt Quick frame has a short sync with the GUI thread. The core
+  keeps that path Python-free; if measurements still show late frames, the escalation (8 Nov) is a core that owns
+  the swapchain and its frame pacing on its own native thread, with Qt Quick rendering only the UI into a texture for
+  the core to composite.
+- *QRhi's lowest common denominator.* Never accepted as a limit: a pass that needs a Vulkan feature records raw
+  Vulkan.
+
+D4 is unaffected: owning the device would let the core ask for 64-bit shader floats, but Intel Arc, most mobile
+GPUs and every Metal device lack them, so the no-`double` formulation stays the one path.
+
 ## D1, D2, D3 and the transport rule
 
 Not yet written. Their one-line statements are in `Current_Plan.md` (item 8b, step 4) and their inputs in the
