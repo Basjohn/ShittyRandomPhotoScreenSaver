@@ -288,6 +288,10 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   uploads only) is written into D9.
 - [ ] N0.8 D11: before N2.1, check whether a PySide6 newer than 6.11.2 with indirect draws in QRhi is released;
   take it first (whole suite, a GitHub frozen build) or record that the core starts on 6.11.2.
+  - Finding: PySide6 6.12.0 (8 Oct 2026, cp310-abi3 win_amd64 wheel, Python 3.14 listed) is released and its QRhi has
+    `drawIndirect`/`drawIndexedIndirect`, `DrawIndirect`, `DrawIndirectMulti`, `ShaderDrawParameters`; no new texture
+    formats; every QRhi call of the P1 spike still exists. Recommendation: take 6.12.0 first. Draft in the decisions
+    document (lead to decide).
 
 **N1. Every shader portable, in the existing OpenGL renderer (no C++; can start now)**
 
