@@ -129,32 +129,46 @@ def delete_program(program: int) -> None:
 # The conventions block (``rendering.gl_programs.conventions``): one buffer per context, created and bound at its
 # reserved point when the first program declaring the block links there, deleted with the last such program. Its
 # values never change for a context, so nothing is written or bound per frame.
+#
+# A context is identified by its native QOpenGLContext pointer, never by ``id()`` of the Python wrapper: for a context
+# Qt created in C++ (Qt Quick's render-thread context) PySide makes a new wrapper per ``currentContext()`` call
+# whenever Python holds none, so ``id()`` changed between two calls in one context and was reused across contexts
+# (R-NEW: one buffer per link, none released, another context left unbound at the block's binding). The native pointer
+# lives exactly as long as the context and is never kept alive by the registry (holding the wrapper would extend the
+# life of a context Python owns). Its ``aboutToBeDestroyed`` is connected once per context (the connection is Qt's and
+# outlives any wrapper) and forgets the context's entry, so a pointer reused by a later context starts clean. Buffer
+# and programs belong to the share group, which outlives the context when others share it; they are not deleted then.
 _conventions_lock = threading.Lock()
-_conventions: dict[int, list] = {}              # id(context) -> [buffer, holding programs]
-_convention_programs: set[tuple[int, int]] = set()   # (id(context), program)
+_conventions: dict[int, list] = {}              # native context -> [buffer, holding programs, native share group]
+_convention_programs: set[tuple[int, int]] = set()   # (native context, program)
+_watched_contexts: set[int] = set()             # native contexts whose aboutToBeDestroyed is connected
 
 
-def _context_key() -> int | None:
+def _native(qobject) -> int:
+    import shiboken6
+
+    return int(shiboken6.getCppPointer(qobject)[0])
+
+
+def _current_context():
     from PySide6.QtGui import QOpenGLContext
 
-    context = QOpenGLContext.currentContext()
-    return None if context is None else id(context)
+    return QOpenGLContext.currentContext()
 
 
 def _forget_context(key: int) -> None:
     with _conventions_lock:
         _conventions.pop(key, None)
+        _watched_contexts.discard(key)
         for entry in [entry for entry in _convention_programs if entry[0] == key]:
             _convention_programs.discard(entry)
 
 
 def _acquire_conventions(program: int) -> None:
-    from PySide6.QtGui import QOpenGLContext
-
-    context = QOpenGLContext.currentContext()
+    context = _current_context()
     if context is None:
         raise RuntimeError("the conventions block needs the program's current context")
-    key = id(context)
+    key = _native(context)
     with _conventions_lock:
         if (key, program) in _convention_programs:
             return
@@ -167,18 +181,25 @@ def _acquire_conventions(program: int) -> None:
             gl.glNamedBufferStorage(buffer, len(data), data, 0)
             # Multi-bind sets the indexed point only, never the generic uniform-buffer binding Qt Quick may hold.
             _gl44.glBindBuffersBase(gl.GL_UNIFORM_BUFFER, SCENE3D_CONVENTIONS_BLOCK_BINDING, 1, name)
-            entry = _conventions[key] = [buffer, 0]
-            context.aboutToBeDestroyed.connect(lambda key=key: _forget_context(key))
+            entry = _conventions[key] = [buffer, 0, _native(context.shareGroup())]
+            if key not in _watched_contexts:
+                _watched_contexts.add(key)
+                context.aboutToBeDestroyed.connect(lambda key=key: _forget_context(key))
         entry[1] += 1
         _convention_programs.add((key, program))
 
 
 def _release_conventions(program: int) -> None:
-    key = _context_key()
-    if key is None:
-        return
+    context = _current_context()
+    key = None if context is None else _native(context)
     with _conventions_lock:
         if (key, program) not in _convention_programs:
+            group = None if context is None else _native(context.shareGroup())
+            if any(held == program and _conventions[other][2] == group for other, held in _convention_programs):
+                # Deleted in another context of the share group than the one that holds it: the hold stays rather
+                # than unbinding the block in a context that may still draw with it.
+                logger.error("[GL_CONVENTIONS] program %d deleted outside the context that holds its conventions "
+                             "buffer; the hold is kept", program)
             return
         _convention_programs.discard((key, program))
         entry = _conventions[key]
