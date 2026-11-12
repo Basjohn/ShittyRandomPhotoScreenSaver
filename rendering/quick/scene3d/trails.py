@@ -20,11 +20,12 @@ from typing import Callable, Iterable, Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
-from rendering.gl_programs.portable import pack_block
+from rendering.gl_programs.portable import pack_block, portable_program
 from rendering.quick import gl_query
 
 from .passes import blend_scope
 from .post import FULLSCREEN_VERTEX_SOURCE
+from .uniforms import PassBlocks
 
 # Edges between a ghost and what lies around it, as a soft line (``scene3d_trail_line``
 # either side): bright white, as strong as the step in ghost value (the newest ghost's
@@ -52,6 +53,9 @@ void main() {
     FragColor = vec4(vec3(0.94, 0.97, 1.0), edge * uStrength);
 }
 """
+# N1.6: the edge pass's values in one std140 pass block (``portable_program``), the ghosts at unit 0.
+_, (_EDGE_FRAGMENT,), _EDGE_BLOCK = portable_program(None, (_EDGE_FRAGMENT,), block="TrailEdges",
+                                                     samplers={"uGhosts": 0})
 
 TRAIL_STRENGTH = 0.6
 
@@ -104,10 +108,11 @@ class MotionTrails:
         self._texture = 0
         self._fbo = 0
         self._size: tuple[int, int] | None = None
+        self._blocks = PassBlocks(f"{label} trail edges")   # the edge pass's block
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._texture or self._fbo)
+        return bool(self._texture or self._fbo) or self._blocks.has_resources
 
     def draw(self, target, frame, resources, ghosts: Iterable[tuple[float, float]],
              draw_ghosts: Callable[[Iterable[tuple[float, float]]], None]) -> None:
@@ -133,25 +138,22 @@ class MotionTrails:
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, scene)
         gl.glViewport(0, 0, width, height)
         program = resources.program("trail_edges", FULLSCREEN_VERTEX_SOURCE, _EDGE_FRAGMENT)
-        uniforms = resources.uniforms("trail_edges", ("uGhosts", "uSize", "uRadius", "uStrength"))
         gl.glUseProgram(program)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self._texture)
-        gl.glUniform1i(uniforms["uGhosts"], 0)
-        gl.glUniform2i(uniforms["uSize"], width, height)
-        gl.glUniform1f(uniforms["uRadius"], trail_line(height))
-        gl.glUniform1f(uniforms["uStrength"], TRAIL_STRENGTH)
         gl.glBindVertexArray(frame.quad_vao)
-        with blend_scope(gl.GL_FUNC_ADD, gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA):
+        with blend_scope(gl.GL_FUNC_ADD, gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA), \
+                self._blocks.bound(_EDGE_BLOCK.pack({"uSize": (width, height), "uRadius": trail_line(height),
+                                                     "uStrength": TRAIL_STRENGTH})):
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         gl.glViewport(*viewport)
 
     def warm(self, target) -> bool:
-        """Allocate for ``target``'s allocation if not yet (ahead of a run, or at first use);
-        True if it was."""
+        """Allocate for ``target``'s allocation if not yet (ahead of a run, or at first use), one unit per call (the
+        ghost buffer, then the edge pass's block); True if all of it was."""
         width, height, _samples = target.allocation
         if self._size == (width, height):
-            return True
+            return self._blocks.warm()
         self.release()
         self._allocate(width, height)
         return False
@@ -189,6 +191,10 @@ class MotionTrails:
             except Exception as exc:
                 errors.append(str(exc))
         self._size = None
+        try:
+            self._blocks.release()
+        except Exception as exc:
+            errors.append(str(exc))
         if errors:
             raise RuntimeError(f"{self.label} motion trails cleanup incomplete: {' | '.join(errors)}")
 
