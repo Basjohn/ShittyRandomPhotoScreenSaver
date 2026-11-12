@@ -85,7 +85,7 @@ class _TakeoverFade:
     owns no timer.
     """
 
-    __slots__ = ("target", "source", "started_at", "on_complete", "drawn_expanded", "done")
+    __slots__ = ("target", "source", "started_at", "on_complete", "drawn_expanded", "done", "move")
 
     def __init__(self, *, target: bool, source: bool, started_at: float,
                  on_complete: Callable[[], None] | None) -> None:
@@ -95,6 +95,37 @@ class _TakeoverFade:
         self.on_complete = on_complete
         self.drawn_expanded = source
         self.done = False
+        #: A fade-through across two displays (1C.2): its midpoint is the move (``_DisplayMove``).
+        self.move: _DisplayMove | None = None
+
+
+# The prewarmed target's card while its renderer prepares (1C.2): below one 8-bit level, so nothing shows, yet above
+# Qt Quick's opacity cut (a subtree under 0.001 is not rendered, and an unrendered node prepares nothing).
+_PREWARM_SCENE_FADE = 0.002
+
+
+class _DisplayMove:
+    """One display move as one fade-through (1C.2): warm the target while the source draws, fade out, move the
+    admission at zero opacity (``hop``), wait for the source's render-thread history to land, fade in on the target."""
+
+    __slots__ = ("target_runtime", "hop", "on_fade_out", "on_fade_in", "on_complete", "stage", "stage_at",
+                 "moved", "identity", "prewarm_scene", "fade_out_due", "fade_in_due")
+
+    def __init__(self, target_runtime: Any, hop: Callable[[], bool], on_fade_out: Callable[[], None] | None,
+                 on_fade_in: Callable[[bool], None] | None, on_complete: Callable[[bool], None] | None,
+                 started_at: float) -> None:
+        self.target_runtime = target_runtime
+        self.hop = hop
+        self.on_fade_out = on_fade_out
+        self.on_fade_in = on_fade_in
+        self.on_complete = on_complete
+        self.stage = "warm"          # warm -> out -> hop -> hold -> in
+        self.stage_at = started_at
+        self.moved: bool | None = None
+        self.identity: Any = None
+        self.prewarm_scene: Any = None
+        self.fade_out_due = False
+        self.fade_in_due = False
 
 
 def _shared_beat_engine(bar_count: int) -> Any:
@@ -738,6 +769,7 @@ class QuickDisplayVisualizerOwner:
         if self._retired or self._sync is None:
             return False
         expanded = bool(expanded)
+        self._abandon_display_move()
         self._takeover = None
         if not animate:
             self._finish_takeover(expanded, on_complete, reapply=True)
@@ -755,6 +787,169 @@ class QuickDisplayVisualizerOwner:
             # Present the first faded frame now; later frames ride the logical publications.
             self._reapply_route(request_present=True)
         return True
+
+    def move_display(
+        self,
+        target_runtime: Any,
+        *,
+        end_expanded: bool,
+        hop: Callable[[], bool],
+        on_fade_out: Callable[[], None] | None = None,
+        on_fade_in: Callable[[bool], None] | None = None,
+        on_complete: Callable[[bool], None] | None = None,
+    ) -> bool:
+        """Move the live view to ``target_runtime``'s display as one fade-through (Current_Plan 1C.2).
+
+        Nothing is torn down: this owner, its controller, logical runtime and engine (worker session) stay; only the
+        presentation edge moves. In order, each step at a publication edge (no timer): the target's renderer is
+        prepared on the target's own render thread from the latest snapshot while the source keeps drawing (bounded by
+        the prepared reveal's deadline); the view fades out where it is (``on_fade_out``); at zero opacity it is put
+        on its ordinary card and ``hop`` moves the admission (the CUSTOM move and its Save; the scene transfer carries
+        the mode's render-thread history); once that history has landed it fades in on the target, display-wide when
+        ``end_expanded`` (``on_fade_in(moved)``), and ``on_complete(moved)`` follows the fully visible frame. A hop
+        that fails fades the view back in where it was. False (nothing done) when retired, not running, or already
+        on that display. A later ``set_expanded_display`` or retirement abandons the move (its callbacks are dropped).
+        """
+
+        if self._retired or self._sync is None or not self._started:
+            return False
+        if target_runtime is None or target_runtime is self._presentation_runtime:
+            return False
+        self._abandon_display_move()
+        now = float(self._transition_clock())
+        takeover = _TakeoverFade(target=bool(end_expanded), source=self._expanded_display, started_at=now,
+                                 on_complete=None)
+        move = _DisplayMove(target_runtime, hop, on_fade_out, on_fade_in, on_complete, now)
+        takeover.move = move
+        self._takeover = takeover
+        identity = self._render_identity
+        scene = getattr(target_runtime, "scene_controller", None)
+        begin = getattr(scene, "begin_visualizer_prewarm", None)
+        if identity is not None and callable(begin):
+            record = self._move_target_presentation(target_runtime, bool(end_expanded))
+            if record is not None and begin(identity, record):
+                move.identity = identity
+                move.prewarm_scene = scene
+                scene.feed_visualizer_prewarm(self._controller.render_bridge.peek())
+        self._sync.set_presentation_route(self._resolve_takeover_presentation, self._commit_takeover_presentation)
+        self._reapply_route(request_present=True)
+        logger.info("[SPOTIFY_VIS] Display move began screen=%s -> %s end_expanded=%s prewarm=%s",
+                    getattr(self._presentation_runtime, "screen_index", "?"),
+                    getattr(target_runtime, "screen_index", "?"), bool(end_expanded), move.prewarm_scene is not None)
+        return True
+
+    @property
+    def display_move_active(self) -> bool:
+        takeover = self._takeover
+        return takeover is not None and takeover.move is not None
+
+    def _move_target_presentation(self, runtime: Any, end_expanded: bool) -> Any:
+        """The record the view arrives in on ``runtime``'s display, at the prewarm's sub-visible opacity."""
+
+        ordinary = self._resolve_current_presentation()
+        if ordinary is None:
+            return None
+        try:
+            identity = runtime.display_identity
+            _x, _y, width, height = identity.geometry
+            dpr = float(identity.device_pixel_ratio)
+        except Exception:
+            return None
+        if end_expanded:
+            from widgets.spotify_visualizer.presentation_geometry import resolve_expanded_visualizer_presentation
+
+            record = resolve_expanded_visualizer_presentation(ordinary, display_size=(float(width), float(height)),
+                                                              dpr=dpr)
+        else:
+            record = replace(ordinary, dpr=dpr)
+        return replace(record, scene_fade=_PREWARM_SCENE_FADE, content_fade=0.0)
+
+    def _abandon_display_move(self) -> None:
+        takeover = self._takeover
+        move = None if takeover is None else takeover.move
+        if move is None:
+            return
+        takeover.move = None
+        scene = move.prewarm_scene
+        move.prewarm_scene = None
+        if scene is not None and scene is not self._presentation_runtime.scene_controller:
+            try:
+                scene.end_visualizer_prewarm()
+            except RuntimeError:
+                pass                                  # a scene already retiring with its display
+
+    def _move_fade(self, takeover: _TakeoverFade, move: _DisplayMove) -> float:
+        """Sample one display move's fade-through (``move_display``) at a publication edge."""
+
+        half = self._transition_half_duration_s
+        now = float(self._transition_clock())
+        if move.stage == "warm":
+            takeover.drawn_expanded = takeover.source
+            scene = move.prewarm_scene
+            if scene is not None and now - move.stage_at < _PREPARED_REVEAL_DEADLINE_S:
+                if not scene.visualizer_prewarm_prepared(move.identity):
+                    return 1.0
+            elif scene is not None:
+                logger.info("[SPOTIFY_VIS] Display move goes ahead before the target's renderer prepared (%.1f s)",
+                            _PREPARED_REVEAL_DEADLINE_S)
+            move.stage, move.stage_at, move.fade_out_due = "out", now, True
+        if move.stage == "out":
+            takeover.drawn_expanded = takeover.source
+            elapsed = now - move.stage_at
+            if half > 0.0 and elapsed < half:
+                linear = 1.0 - elapsed / half
+                return linear * linear * (3.0 - 2.0 * linear)
+            move.stage = "hop"                        # the commit edge moves the admission at zero opacity
+            return 0.0
+        if move.stage == "hop":
+            return 0.0
+        if move.stage == "hold":
+            takeover.drawn_expanded = takeover.target
+            scene = self._presentation_runtime.scene_controller
+            landed = bool(getattr(scene, "visualizer_arrival_settled", True))
+            if not landed and now - move.stage_at < _PREPARED_REVEAL_DEADLINE_S:
+                return 0.0
+            move.stage, move.stage_at, move.fade_in_due = "in", now, True
+        takeover.drawn_expanded = takeover.target
+        elapsed = now - move.stage_at
+        if half <= 0.0 or elapsed >= half:
+            takeover.done = True
+            return 1.0
+        linear = elapsed / half
+        return linear * linear * (3.0 - 2.0 * linear)
+
+    def _run_display_hop(self, takeover: _TakeoverFade, move: _DisplayMove) -> None:
+        """The move's midpoint, at a commit edge with the view at zero opacity on the source."""
+
+        move.stage, move.stage_at = "hold", float(self._transition_clock())
+        source_expanded = bool(takeover.source)
+        # The move admits, projects and commits the ordinary card (CUSTOM truth), never the display-wide one: put the
+        # view on its ordinary card first, still at zero opacity, its overlays leaving with it.
+        self._expanded_display = False
+        self._expanded_source = None
+        takeover.drawn_expanded = False
+        self._project_expanded_overlays()
+        ordinary = self._resolve_current_presentation()
+        if ordinary is not None:
+            self._apply_resolved_presentation(replace(ordinary, scene_fade=0.0))
+        moved = False
+        try:
+            moved = bool(move.hop())
+        except Exception:
+            logger.exception("[SPOTIFY_VIS] Display move failed; the view returns where it was")
+        move.moved = moved
+        scene = move.prewarm_scene
+        move.prewarm_scene = None
+        if scene is not None and scene is not self._presentation_runtime.scene_controller:
+            scene.end_visualizer_prewarm()            # the move did not land there
+        if not moved:
+            takeover.target = source_expanded
+        takeover.on_complete = (lambda m=move: m.on_complete(bool(m.moved))) if move.on_complete else None
+        logger.info("[SPOTIFY_VIS] Display move %s screen=%s", "landed" if moved else "refused",
+                    getattr(self._presentation_runtime, "screen_index", "?"))
+        request = getattr(self._presentation_runtime.scene_controller, "request_visualizer_present", None)
+        if callable(request):
+            request()
 
     def _route_pair(self) -> tuple[Callable[[], Any], Callable[[Any], None]]:
         if self._takeover is not None:
@@ -841,6 +1036,8 @@ class QuickDisplayVisualizerOwner:
     def _takeover_fade(self, takeover: _TakeoverFade) -> float:
         """Sample the fade-through and pick the side drawn now (smoothstep each half)."""
 
+        if takeover.move is not None:
+            return self._move_fade(takeover, takeover.move)
         half = self._transition_half_duration_s
         elapsed = max(0.0, float(self._transition_clock()) - takeover.started_at)
         if half <= 0.0 or elapsed >= 2.0 * half:
@@ -879,6 +1076,22 @@ class QuickDisplayVisualizerOwner:
         if takeover is not None and takeover.drawn_expanded != self._expanded_overlays_drawn:
             # The fade-through's midpoint (only this route carries it, and only during the fade).
             self._project_expanded_overlays()
+        move = None if takeover is None else takeover.move
+        if move is not None and self._takeover is takeover:
+            if move.stage == "warm" and move.prewarm_scene is not None:
+                # The target prepares from the snapshot just published (the source consumes its own copy).
+                move.prewarm_scene.feed_visualizer_prewarm(self._controller.render_bridge.peek())
+            if move.fade_out_due:
+                move.fade_out_due = False
+                if move.on_fade_out is not None:
+                    move.on_fade_out()
+            if move.stage == "hop":
+                self._run_display_hop(takeover, move)
+                return
+            if move.fade_in_due:
+                move.fade_in_due = False
+                if move.on_fade_in is not None:
+                    move.on_fade_in(bool(move.moved))
         if takeover is not None and takeover.done and self._takeover is takeover:
             # The target is on screen at full opacity: commit the steady route, then report completion.
             self._finish_takeover(takeover.target, takeover.on_complete, reapply=False)
@@ -2575,6 +2788,10 @@ class QuickDisplayVisualizerOwner:
         self._worker_commit = None
         self._recovery_stage = 0
         # A takeover fade dies with the owner; its completion is never reported to a retired generation.
+        try:
+            self._abandon_display_move()
+        except Exception:
+            logger.exception("[SPOTIFY_VIS] A display move's prewarm could not be ended at retirement")
         self._takeover = None
         self._expanded_display = False
         self._expanded_source = None

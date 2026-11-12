@@ -263,17 +263,49 @@ def resolve_child_resize_geometry(
     normalization_width: float,
     normalization_height: float,
     outer_scale: float,
+    size_compensation_width: float = 1.0,
+    size_compensation_height: float = 1.0,
 ) -> ResolvedChildResize:
     """Resolve one child-resize sample through the canonical descriptor rules.
 
     The helper is shared by mutation and preview paths.  Keeping this math here
     prevents QML from becoming a shadow authority for min/max scale, uniform
     intrinsic roles, or left/top authored-relative placement.
+
+    ``size_compensation_*`` is the family's rendered/requested size ratio for the
+    role (1.0 unless the family bounds the drawn size, e.g. Media's volume track
+    by its lane). The first *real* sample rebases the saved scale onto what is
+    drawn, so a saved scale above the bound has no dead zone: the first shrink
+    moves at once (1C.5). A zero-motion press/release ignores it, like move's
+    placement compensation, so a click cannot rewrite saved geometry.
     """
 
     handle_id = str(handle or "")
     if not role.admits_resize_handle(handle_id):
         raise ValueError(f"Unsupported resize handle {handle_id!r} for {role.role_id!r}")
+    moved = (
+        math.isfinite(float(raw_dx))
+        and math.isfinite(float(raw_dy))
+        and (abs(float(raw_dx)) > 1.0e-9 or abs(float(raw_dy)) > 1.0e-9)
+    )
+    if moved:
+        factors = []
+        for value in (size_compensation_width, size_compensation_height):
+            try:
+                factor = float(value)
+            except (TypeError, ValueError):
+                factor = 1.0
+            factors.append(factor if math.isfinite(factor) and factor > 0.0 else 1.0)
+        if factors != [1.0, 1.0]:
+            origin = clamp_child_geometry(
+                role,
+                origin.width_scale * factors[0],
+                origin.height_scale * factors[1],
+                origin.x_offset,
+                origin.y_offset,
+                origin.alignment,
+                origin.anchor,
+            )
 
     width = max(1.0e-6, float(visible_width))
     height = max(1.0e-6, float(visible_height))

@@ -328,13 +328,18 @@ class RejectModeRequest:
 
 @dataclass(frozen=True, slots=True)
 class BeginTransfer:
-    """One transaction on the existing transfer seam; answer ``TransferCommitted`` or ``TransferFailed``."""
+    """One transaction on the existing transfer seam; answer ``TransferCommitted`` or ``TransferFailed``.
+
+    One move, one fade-through across the two displays (1C.2): the view fades out on the source as it is drawn
+    (``expanded``), the admission moves at zero opacity, and it fades in on the target as it ends
+    (``end_expanded``): never an ordinary card in between, never a second enter."""
 
     txn: int
     request_id: int
     source_display: str
     target_display: str
-    expanded: bool             # collapse the source and expand the target inside the same transaction
+    expanded: bool             # the source is display-wide (an expanded move resumes expanded)
+    end_expanded: bool = False  # the target ends display-wide (an expanded move, or "full display there")
 
 
 @dataclass(frozen=True, slots=True)
@@ -803,7 +808,8 @@ def _transfer_requested(state: TakeoverState, event: TransferRequested) -> Step:
     state = replace(state, phase=Phase.TRANSFER_PENDING, txn=txn, txn_origin=None,
                     transfer_target=event.target_display, transfer_resume_expanded=expanded,
                     transfer_then_expand=then_expand)
-    return _applied(state, BeginTransfer(txn, event.request_id, str(source), event.target_display, expanded))
+    return _applied(state, BeginTransfer(txn, event.request_id, str(source), event.target_display, expanded,
+                                         expanded or then_expand))
 
 
 def _transfer_rollback(state: TakeoverState) -> Step:
@@ -822,13 +828,16 @@ def _transfer_committed(state: TakeoverState, event: TransferCommitted) -> Step:
     moved = replace(state, display=state.transfer_target, transfer_target=None)
     if state.transfer_resume_expanded:
         return _after_expanded(replace(moved, phase=Phase.EXPANDED, transfer_resume_expanded=False))
-    moved, writes = _flush_cleared_intent(moved)
     if state.transfer_then_expand:
-        # The user's "full display there": the enter is the glyph's own (its commit persists the intent).
-        rested = _rest(moved)
-        if rested.phase is Phase.ORDINARY and rested.eligible:
-            rested, begin = _begin_enter(rested, Origin.USER, True)
-            return _applied(rested, *writes, begin)
+        # The user's "full display there" (1C.2): the move's own fade-through ended display-wide on the target, so
+        # this commit is the user's enter there; it persists the intent as the glyph's enter commit does.
+        expanded = replace(moved, phase=Phase.EXPANDED, transfer_then_expand=False, txn_origin=None)
+        writes: tuple[Action, ...] = ()
+        if not expanded.requested and expanded.mode_capable:
+            expanded = replace(expanded, requested=True)
+            writes = (PersistIntent(True),)
+        return _after_expanded(expanded, *writes)
+    moved, writes = _flush_cleared_intent(moved)
     step = _settle_resting(moved, animate=True)
     return _applied(step.state, *writes, *step.actions)
 

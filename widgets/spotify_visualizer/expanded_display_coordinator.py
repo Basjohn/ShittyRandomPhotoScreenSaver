@@ -112,6 +112,8 @@ class ExpandedDisplayServices:
     #: Move the collapsed Visualizer onto the display a takeover event names (plan 1B.12): the CUSTOM display hop and
     #: its Save, with no Edit chrome. True once committed; False (or a raise) leaves the source exactly as it was.
     move_to_display: Callable[[str], bool] = lambda _display: False
+    #: The live display unit a takeover event's display key names (None: none), for the move's target runtime.
+    display_unit: Callable[[str], Any] = lambda _display: None
 
 
 def display_key(unit: Any) -> str | None:
@@ -461,13 +463,8 @@ class ExpandedDisplayCoordinator:
                 # An ordinary move Edit already committed (its display hop and Save) is only reported.
                 self._events.append(TransferCommitted(generation, action.txn) if not action.expanded
                                     else TransferFailed(generation, action.txn))
-            elif not action.expanded:
-                # A display glyph's move (plan 1B.12): the CUSTOM hop and Save, then the reducer's commit edge
-                # (which begins the enter there when the user asked for full display).
-                self._events.append(TransferCommitted(generation, action.txn) if self._move(action.target_display)
-                                    else TransferFailed(generation, action.txn))
             else:
-                self._run_expanded_transfer(generation, action)
+                self._run_display_move(generation, action)
         elif isinstance(action, (RollbackTransfer, RejectTransfer)):
             pass
         elif isinstance(action, RetireTakeover):
@@ -489,35 +486,54 @@ class ExpandedDisplayCoordinator:
             logger.exception("[EXPANDED_VIS] Visualizer display move failed")
             return False
 
-    def _run_expanded_transfer(self, generation: int | None, action: BeginTransfer) -> None:
-        """One source-collapse + move + target-expand transaction (§D4, plan 1B.12).
+    def _run_display_move(self, generation: int | None, action: BeginTransfer) -> None:
+        """One display move as one fade-through across the two displays (Current_Plan 1C.2; supersedes the 1B.12
+        "collapse, move, expand" form, which drew the ordinary card on both displays and popped it across).
 
-        The display-wide card collapses on its display (the widgets there fade back in with it), the collapsed card
-        moves through the CUSTOM hop and Save, and the card expands on the target (its widgets fade out). A move that
-        fails re-expands on the source, so the reducer's rollback finds it exactly as it was. Each half completes at
-        the owner's own completion edge; a stale completion (another generation or transaction) does nothing."""
+        The owner prepares the target while the view still draws, fades the view out where it is (the source's
+        covered widgets fade back in with it), moves it at zero opacity through the CUSTOM hop and Save (``hop``),
+        and fades it in on the target in the route it ends in (``action.end_expanded``; the target's widgets fade
+        out with a display-wide arrival). A refused move fades the view back in where it was, so the reducer's
+        rollback finds it exactly as it was. A stale completion (another generation or transaction) does nothing."""
 
         owner = self._services.admitted_owner()
-        self._cover_widgets(False, animate=True)
+        target = self._services.display_unit(action.target_display)
 
-        def collapsed() -> None:
+        def hop() -> bool:
+            if self._stale_transfer(generation, action.txn):
+                return False
+            return self._move(action.target_display)
+
+        def faded_out() -> None:
+            if not self._stale_transfer(generation, action.txn) and action.expanded:
+                self._cover_widgets(False, animate=True)
+
+        def fading_in(moved: bool) -> None:
             if self._stale_transfer(generation, action.txn):
                 return
-            moved = self._move(action.target_display)
-            live = self._services.admitted_owner()
-            self._cover_widgets(True, animate=True)
-            started = live is not None and live.set_expanded_display(
-                True, animate=True,
-                on_complete=lambda: self._complete(TransferCommitted(generation, action.txn) if moved
-                                                   else TransferFailed(generation, action.txn)))
-            if not started:
-                # Nothing can draw it display-wide any more (the owner went): the takeover answers as a failed move.
-                self._cover_widgets(False, animate=True)
-                self._complete(TransferFailed(generation, action.txn))
+            if action.end_expanded if moved else action.expanded:
+                self._cover_widgets(True, animate=True)      # the display the view arrives on display-wide
 
-        started = owner is not None and owner.set_expanded_display(False, animate=True, on_complete=collapsed)
-        if not started:
-            collapsed()
+        def done(moved: bool) -> None:
+            if not self._stale_transfer(generation, action.txn):
+                self._complete(TransferCommitted(generation, action.txn) if moved
+                               else TransferFailed(generation, action.txn))
+
+        runtime = getattr(target, "runtime", None)
+        started = owner is not None and runtime is not None and bool(owner.move_display(
+            runtime, end_expanded=bool(action.end_expanded), hop=hop, on_fade_out=faded_out, on_fade_in=fading_in,
+            on_complete=done))
+        if started:
+            return
+        # No running owner to draw a fade (or the target is gone): the move happens at once, unseen.
+        self._cover_widgets(False, animate=True)
+        moved = target is not None and self._move(action.target_display)
+        live = self._services.admitted_owner()
+        if live is not None and (action.end_expanded if moved else action.expanded):
+            live.set_expanded_display(True, animate=False)
+            self._cover_widgets(True, animate=False)
+        self._events.append(TransferCommitted(generation, action.txn) if moved
+                            else TransferFailed(generation, action.txn))
 
     def _stale_transfer(self, generation: int | None, txn: int) -> bool:
         state = self._state

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+import json
 from pathlib import Path
 import sys
 import types
@@ -35,7 +36,11 @@ if "ui" not in sys.modules:
 from ui.settings_theme_io import load_settings_theme_file
 from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME, Rgba, SettingsThemeSpec, strip_material_tag
 from ui.theme_semantics import settings_theme_is_light
-from ui.widget_theme_io import load_widget_theme_file, widget_theme_to_json
+from ui.widget_theme_io import (
+    RETIRED_WIDGET_THEME_COLOR_ROLES,
+    load_widget_theme_file,
+    widget_theme_to_json,
+)
 from ui.widget_theme_spec import DEFAULT_DARK_WIDGET_THEME, WidgetThemeSpec
 
 
@@ -252,7 +257,6 @@ def mirrored_widget_theme(
         # Settings equivalents makes mirrored packs feel deliberately matched.
         "context.menu.indicator.border": _rgba(settings_theme, "context.submenu.checked_text"),
         "context.menu.indicator.fill": _rgba(settings_theme, "control.list.selected_accent"),
-        "context.menu.arrow": _rgba(settings_theme, "context.menu.border"),
         "context.submenu.indicator.border": _rgba(settings_theme, "context.submenu.checked_text"),
         "context.submenu.indicator.fill": _rgba(settings_theme, "control.list.selected_accent"),
     }
@@ -455,8 +459,41 @@ def fill_widget_theme_mirror_materials(themes_root: Path) -> tuple[Path, ...]:
     return tuple(changed)
 
 
+def drop_retired_widget_theme_roles(themes_root: Path) -> tuple[Path, ...]:
+    """Remove retired colour roles from every ``.srwtheme``, changing nothing else.
+
+    The repair for a retired role (``RETIRED_WIDGET_THEME_COLOR_ROLES``): the loader
+    already drops it, so each file that still carries one is rewritten in canonical
+    form without it. Linked and unlinked themes alike; a file whose bytes, minus the
+    retired roles, the canonical writer would not reproduce is refused rather than
+    rewritten. Returns the files it changed.
+    """
+
+    root = Path(themes_root)
+    changed: list[Path] = []
+    for path in sorted((root / "widgets").glob("*.srwtheme"), key=lambda value: value.name.casefold()):
+        raw = path.read_bytes()
+        text = raw.decode("utf-8").replace("\r\n", "\n")
+        payload = json.loads(text)
+        colors = payload.get("colors") if isinstance(payload, dict) else None
+        if not isinstance(colors, dict) or not set(colors) & RETIRED_WIDGET_THEME_COLOR_ROLES:
+            continue
+        canonical = widget_theme_to_json(load_widget_theme_file(path))
+        payload["colors"] = {
+            role: value for role, value in colors.items() if role not in RETIRED_WIDGET_THEME_COLOR_ROLES
+        }
+        if json.dumps(payload, ensure_ascii=False, indent=2) + "\n" != canonical:
+            raise ValueError(f"{path.name} is not in canonical form; refusing to rewrite it")
+        newline = "\r\n" if b"\r\n" in raw else "\n"
+        with path.open("w", encoding="utf-8", newline=newline) as handle:
+            handle.write(canonical)
+        changed.append(path)
+    return tuple(changed)
+
+
 _USAGE = """usage: generate_widget_theme_mirrors.py MODE
   --fill-materials     fill each linked mirror's surface_material, changing nothing else
+  --drop-retired-roles remove retired colour roles from every Widget theme, changing nothing else
   --regenerate-all     rewrite every mirror from its Settings theme; refuses to
                        overwrite hand-authored mirrors or delete other Widget themes
                        unless these name that intent too:
@@ -471,10 +508,16 @@ def main(argv: list[str] | None = None, *, themes_root: Path | None = None) -> i
         Path(__file__).resolve().parent.parent / "themes"
     )
     flags = set(args)
-    known = {"--fill-materials", "--regenerate-all", "--overwrite-authored", "--delete-unlinked"}
+    known = {
+        "--fill-materials", "--drop-retired-roles", "--regenerate-all", "--overwrite-authored", "--delete-unlinked",
+    }
     if flags - known or len(flags) != len(args):
         print(_USAGE, file=sys.stderr)
         return 2
+    if flags == {"--drop-retired-roles"}:
+        changed = drop_retired_widget_theme_roles(root)
+        print(f"Dropped retired colour roles from {len(changed)} Widget themes in {root / 'widgets'}")
+        return 0
     if flags == {"--fill-materials"}:
         changed = fill_widget_theme_mirror_materials(root)
         print(f"Filled surface_material into {len(changed)} Widget theme mirrors in {root / 'widgets'}")

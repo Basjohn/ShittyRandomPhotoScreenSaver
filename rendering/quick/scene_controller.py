@@ -26,7 +26,7 @@ from widgets.spotify_visualizer.render_bridge import (
     VisualizerRenderIdentity,
     VisualizerSnapshotBridge,
 )
-from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
+from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation, VisualizerRenderSnapshot
 from widgets.spotify_visualizer.presentation_geometry import (
     resize_visualizer_presentation,
     resolve_card_drawn_rect,
@@ -73,6 +73,7 @@ from .state import QuickInputState, QuickSceneReadiness
 from .surface_backdrop_owner import SurfaceBackdropOwner
 from .transitions.state import TransitionRun
 from .visualizer import VisualizerRenderItem, VisualizerRenderNodeTelemetry
+from .visualizer.render_host import VisualizerRenderCarryover
 from .widgets.host import OrdinaryWidgetPresentationHost, OverlayWidgetGeometry
 from .widgets.registry import (
     ORDINARY_WIDGET_FAMILY_COMPONENTS,
@@ -189,6 +190,8 @@ class VisualizerSceneTransfer:
     double_click_admission: Any | None
     middle_click_admission: Any | None
     volume_wheel_handler: Any | None
+    #: The mode's render-thread history on its way from the source window to the target's (1C.2).
+    carryover: Any | None = None
 
 
 class QuickSceneFactory(QObject):
@@ -2379,6 +2382,55 @@ class QuickSceneController(QObject):
         self._custom_layout_visualizer_baseline = None
         return identity
 
+    def begin_visualizer_prewarm(
+        self,
+        identity: VisualizerRenderIdentity,
+        presentation: ResolvedVisualizerPresentation,
+    ) -> bool:
+        """A display move's target, before the swap (1C.2): prepare ``identity``'s renderer here while the source
+        keeps drawing. ``presentation`` is the record the view will arrive in, at a sub-visible ``scene_fade``
+        (below one 8-bit level; Qt Quick skips a subtree whose opacity is below 0.001, so the card must be rendered
+        to prepare). Its content draws at zero opacity, so only the render host's preparation units run, on this
+        window's own render thread and context. Nothing is admitted: no render source, no input. False (nothing
+        done) when this display already owns an admission or its scene is closed."""
+
+        if not self._readiness.admission_open:
+            return False
+        current = self._visualizer_item
+        if current is not None and current.render_identity is not None:
+            return False
+        item = self._ensure_visualizer_items()
+        self._apply_visualizer_presentation_items(presentation, active=True)
+        item.begin_prewarm(identity)
+        return True
+
+    def feed_visualizer_prewarm(self, snapshot: VisualizerRenderSnapshot | None) -> None:
+        item = self._visualizer_item
+        if item is not None:
+            item.feed_prewarm(snapshot)
+
+    def visualizer_prewarm_prepared(self, identity: VisualizerRenderIdentity) -> bool:
+        item = self._visualizer_item
+        return item is not None and item.renderer_prepared(identity.mode_id, identity.activation_id)
+
+    @property
+    def visualizer_arrival_settled(self) -> bool:
+        """The Visualizer last moved here has its render-thread history (if any) deposited by its source: the move's
+        fade-in may begin (1C.2). True when nothing is on its way."""
+        carryover = getattr(self, "_visualizer_arrival_carryover", None)
+        return carryover is None or carryover.closed
+
+    def end_visualizer_prewarm(self) -> None:
+        """The move did not land here: hide the sub-visible shell and release what was prepared (an edge)."""
+
+        item = self._visualizer_item
+        if item is None or not item.prewarming:
+            return
+        item.end_prewarm()
+        root = self._visualizer_root
+        if root is not None and item.render_identity is None:
+            root.setProperty("presentationActive", False)
+
     def transfer_visualizer_to(
         self,
         target: "QuickSceneController",
@@ -2418,10 +2470,12 @@ class QuickSceneController(QObject):
             double_click_admission=self._visualizer_double_click_admission,
             middle_click_admission=self._visualizer_middle_click_admission,
             volume_wheel_handler=self._visualizer_volume_wheel_handler,
+            carryover=VisualizerRenderCarryover(),
         )
         root.setProperty("customLayoutWorkingVisible", False)
         root.setProperty("presentationActive", False)
-        item.clear_render_source()
+        # The release hands the mode's render-thread history (Extruded Bubble's drift) to the target (1C.2).
+        item.clear_render_source(carryover=transfer.carryover)
         # Admission moves; the display-local shell/render item lives until its
         # scene retires. Deleting this Python-created child mid-generation can
         # invalidate unrelated Shiboken wrappers in the attached display tree
@@ -2449,6 +2503,9 @@ class QuickSceneController(QObject):
             dpr=self._display_device_pixel_ratio(),
         )
         self.set_visualizer_render_source(transfer.bridge, transfer.identity)
+        self._visualizer_arrival_carryover = transfer.carryover
+        if transfer.carryover is not None:
+            self._visualizer_item.expect_carryover(transfer.carryover)
         self.apply_visualizer_presentation(
             presentation,
             active=transfer.active,

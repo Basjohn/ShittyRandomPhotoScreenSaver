@@ -44,7 +44,10 @@ def _fmt(action) -> str:
     if isinstance(action, ForwardModeRequest):
         return f"Forward[{action.mode_id},{'keep' if action.keep_expanded else 'plain'}]"
     if isinstance(action, BeginTransfer):
-        return f"BeginTransfer[{action.target_display},{'expanded' if action.expanded else 'ordinary'}]"
+        side = "expanded" if action.expanded else "ordinary"
+        end = "expanded" if action.end_expanded else "ordinary"
+        return f"BeginTransfer[{action.target_display},{side}]" if side == end else \
+            f"BeginTransfer[{action.target_display},{side}->{end}]"
     if isinstance(action, RetireTakeover):
         return f"Retire[{action.reason}]"
     return type(action).__name__
@@ -212,13 +215,14 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
      [*EXPANDED_TRACE, "applied expanded", "applied retiring Retire[settings]",
       "applied enter_pending BeginEnter[restore,still]"]),
     # Display glyphs (operator, 11 Nov; plan 1B.12): "full display on that display" is one transfer transaction.
-    ("a display glyph from a collapsed view moves it, then expands there; the expand persists as the glyph's",
-     [ready(), TransferRequested(GEN, ACT, 5, B, True, True), moved, prepared, committed],
-     ["applied ordinary", "applied transfer_pending BeginTransfer[display-B,ordinary]",
-      "applied enter_pending BeginEnter[user,anim]", "applied entering RunEnter", "applied expanded Persist[True]"]),
+    # 1C.2: one fade-through across the displays ends display-wide on the target; no second enter.
+    ("a display glyph from a collapsed view moves it and ends expanded there; the commit persists as the glyph's",
+     [ready(), TransferRequested(GEN, ACT, 5, B, True, True), moved],
+     ["applied ordinary", "applied transfer_pending BeginTransfer[display-B,ordinary->expanded]",
+      "applied expanded Persist[True]"]),
     ("a failed display move stays collapsed on the source and expands nowhere",
      [ready(), TransferRequested(GEN, ACT, 5, B, True, True), move_failed],
-     ["applied ordinary", "applied transfer_pending BeginTransfer[display-B,ordinary]",
+     ["applied ordinary", "applied transfer_pending BeginTransfer[display-B,ordinary->expanded]",
       "applied ordinary RollbackTransfer"]),
     ("a display glyph from an expanded view moves it expanded (one collapse + move + expand transaction)",
      [*EXPAND_BY_USER, TransferRequested(GEN, ACT, 5, B, True, True), moved],
@@ -235,7 +239,7 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
      ["applied ordinary", "applied ordinary", "rejected ordinary RejectTransfer"]),
     ("the move's display lost mid-transfer rolls back, nothing expands",
      [ready(), TransferRequested(GEN, ACT, 5, B, True, True), DisplayLost(GEN, B)],
-     ["applied ordinary", "applied transfer_pending BeginTransfer[display-B,ordinary]",
+     ["applied ordinary", "applied transfer_pending BeginTransfer[display-B,ordinary->expanded]",
       "applied ordinary RollbackTransfer"]),
     # Edit beside the view (operator, 11 Nov; plan 1B.1): Edit edits the display it was entered on.
     ("Edit entered on another display keeps the view expanded, with no collapse transaction and no write",
@@ -560,14 +564,15 @@ def _check(s0: tk.TakeoverState, event: tk.Event, step: tk.Step) -> None:
         if isinstance(a, (CancelEnter, RollbackTransfer, RunEnter)):
             assert a.txn == s0.txn, ctx
     assert s1.txn >= s0.txn, ctx
-    # Only the user's glyph (or the commit of the user's enter, on a capable mode) writes the intent True; False
-    # is the user's collapse (also one that waited for Fullscreen Edit's own Save/Cancel), or an incapable mode
-    # clearing it where nothing is drawn expanded any more.
+    # Only the user's glyph (the commit of the user's enter, or of the user's "full display there" move, on a capable
+    # mode) writes the intent True; False is the user's collapse (also one that waited for Fullscreen Edit's own
+    # Save/Cancel), or an incapable mode clearing it where nothing is drawn expanded any more.
     writes = [a for a in actions if isinstance(a, PersistIntent)]
     assert len(writes) <= 1, ctx
     if writes:
         if writes[0].requested:
-            assert isinstance(event, EnterCommitted) and s1.mode_capable, ctx
+            user_move = isinstance(event, TransferCommitted) and s0.transfer_then_expand
+            assert (isinstance(event, EnterCommitted) or user_move) and s1.mode_capable, ctx
         elif isinstance(event, EditExited) and s0.edit_collapse_press is not None:
             assert any(isinstance(a, BeginExit) and a.reason.value == "user" for a in actions), ctx
         elif isinstance(event, _NON_WRITERS):

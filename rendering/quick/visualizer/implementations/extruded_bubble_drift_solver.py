@@ -368,8 +368,38 @@ class _Family:
     count: int = 0                         # motes alive (clouds) / paths with history (chains) after that step
 
 
+#: GL_TIMEOUT_IGNORED as the GL specification defines it (all bits set). PyOpenGL's constant has the wrong value
+#: (0x8000000000000001), which glWaitSync answers with GL_INVALID_VALUE (measured 12 Nov 2026).
+_TIMEOUT_IGNORED = 0xFFFFFFFFFFFFFFFF
+
+
+@dataclass
+class DriftCarryover:
+    """The drift history leaving one window's renderer for another's on a display move (1C.2): the families'
+    storage buffers and their applied-step records, and a fence after the source's last dispatch. The windows'
+    contexts share one share group, so the names stay valid; the taker waits on the fence before it reads them."""
+
+    families: dict
+    output: int
+    output_vec4s: int
+    fence: object
+
+    def discard(self) -> None:
+        """Delete what was never adopted, in any context that shares with the source's (its own current)."""
+        if self.fence:
+            gl.glWaitSync(self.fence, 0, _TIMEOUT_IGNORED)
+            gl.glDeleteSync(self.fence)
+            self.fence = None
+        for family in self.families.values():
+            _delete(family.geometry, family.state, family.aux)
+        self.families = {}
+        _delete(self.output)
+        self.output = 0
+
+
 class DriftSolver:
-    """The render thread's drift state for one renderer (released with it)."""
+    """The render thread's drift state for one renderer (released with it, or carried to another window's renderer
+    on a display move: ``export`` / ``adopt``)."""
 
     def __init__(self, label: str) -> None:
         self.label = label
@@ -399,6 +429,35 @@ class DriftSolver:
             self._ring.release()
             self._ring = None
         self.pairs_exact = self.pairs_report = None   # a new context checks again
+
+    def export(self) -> DriftCarryover | None:
+        """Source render thread, its context current: give up the history (not deleted here) behind a fence."""
+        if not self._families and not self.output:
+            return None
+        fence = gl.glFenceSync(gl.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+        gl.glFlush()                           # the fence must reach the GPU before another context waits on it
+        carryover = DriftCarryover(dict(self._families), self.output, self._output_vec4s, fence)
+        self._families = {}
+        self.output, self._output_vec4s = 0, 0
+        return carryover
+
+    def adopt(self, carryover: DriftCarryover) -> None:
+        """Target render thread, its context current (sharing with the source's): continue the source's history.
+
+        Whatever this solver integrated meanwhile (a target that drew before the source let go) is replaced: the
+        adopted families resume from their own last step, and the step log brings them up to date."""
+        if carryover.fence:
+            gl.glWaitSync(carryover.fence, 0, _TIMEOUT_IGNORED)
+            gl.glDeleteSync(carryover.fence)
+            carryover.fence = None
+        for family in self._families.values():
+            _delete(family.geometry, family.state, family.aux)
+        _delete(self.output)
+        self._families = dict(carryover.families)
+        self.output, self._output_vec4s = carryover.output, carryover.output_vec4s
+        carryover.families, carryover.output = {}, 0
+        logger.info("%s: drift history carried over from another window (%s)", self.label,
+                    {name: family.serial for name, family in self._families.items()})
 
     def check(self, resources) -> bool:
         """One warm-up unit (the reveal's hidden frames, or the first frame with work): run the pair arithmetic on

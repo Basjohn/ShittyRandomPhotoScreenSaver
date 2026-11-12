@@ -253,31 +253,15 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   any packet carries it.
 - N0.2 decided 12 Nov (`Native_Core_P3_Decisions.md` D5.6 and the lead's answers): eighteen dependencies to
   their routes, no service outside D5.3; the unused `glMultiDrawArraysIndirect` start-up requirement removed.
-- [ ] N0.9 The module compile on GitHub (operator, 12 Nov: builds only through GitHub workflows; handbook
-  section 8). No product C++; the two harness proofs below wait on it.
-  - [ ] A dispatch-only workflow that compiles `native/spike_p1` (later the core) for a pushed ref on GitHub's
-    Windows runner (MSVC, the pinned Qt SDK fetched by script, `qsb`), and uploads the `.pyd`, the baked shaders
-    and the build log with a manifest (commit, Qt version, sha256 per file).
-    Built (agent, 12 Nov, unproved): `.github/workflows/native-module.yml` (dispatch and reusable `workflow_call`;
-    SDK by `tools/native_sdk_fetch.py`, sha256 before extraction, cached; `build.cmd` with vswhere is the one CMake
-    call; GPU-free `native/spike_p1/python/import_check.py` on the runner; manifest adds Qt, PySide6, MSVC; the Qt
-    version is one value, requirements.txt's PySide6 pin, with archives per version in `QT_SDKS`).
-  - [ ] `tools/build_runner.py`'s GitHub mode (operator, 12 Nov: it has workflow builds and a usable CLI) gains the
-    native module as a selectable target, with `tools/github_remote_build.py` as the shared source beneath; never in
-    the default selection or the installer chain until N2.1. It publishes into `release/` (its own folder, with its
-    manifest) through the same validated swap (operator, 12 Nov: "This is the direction we are heading"), and its
-    module build is a stage N2.1 folds into the Standard and MC workflows. The target: push check,
-    dispatch, wait, download, manifest validated; refuses a ref that is not
-    pushed. Run by the lead only; agents never start it.
-    Built (agent, 12 Nov, unproved): target `native_module` in `tools/github_remote_build.py`, job "Native Module
-    (GitHub)" in `tools/build_runner.py` (never pre-selected, no installer); published into the running checkout's
-    `release/native_module/` with its manifest; an unpushed HEAD is refused. Lead's command and the slice loop:
-    `Docs/Guides/GitHub_Remote_Build.md`, "The native module".
-  - [ ] Proved end to end by the lead on the current spike: the downloaded module imports in the venv and the
-    spike's hidden-host test passes; the time from dispatch to download recorded (it sets how C++ slices iterate).
-    Ready for the lead (agent, 12 Nov): merge to `main` and push (GitHub lists the workflow only from `main`), then
-    `tools/build_runner.py --mode github --run --select native_module`, then `run_spike.py --module-dir
-    release/native_module`.
+- N0.9 done 12 Nov: the native module compiles on GitHub's Windows runner (`.github/workflows/native-module.yml`,
+  dispatch-only and callable by the product workflows; SDK fetched and sha256-checked by `tools/native_sdk_fetch.py`;
+  the Qt version is the PySide6 pin in `requirements.txt`) as Build Runner's `native_module` target, published into
+  `release/native_module/` with its manifest. Lead's end-to-end proof on 994099fc: dispatch to validated download
+  3 min 34 s (09:44:15 to 09:47:49, SDK cache cold); the downloaded module on Qt 6.12.0 runs the P1 spike green on
+  D3D11, D3D12, Vulkan and OpenGL (RHI, hybrid and Qt Quick parts; the native render thread called 240 times with
+  no Python thread state), backends within 3/255 (`.artifacts/evidence/architecture/native_core_p1/20261112_n09/`).
+  A C++ slice iterates: the agent commits, the lead pushes its branch and runs
+  `tools/build_runner.py --mode github --run --select native_module` from that worktree.
 - [ ] N0.6 D6's proof, in the P1 harness (C++; nothing shipped):
   - [ ] The module creates the instance and a device at the baseline (Qt requires of it: a graphics queue that
     can present, the extensions `preferredExtensionsForImportedDevice()` names plus swapchain, the preferred
@@ -449,6 +433,10 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   audit rerun on it.
 - [ ] N3.7 The orientation and quarter-turn contract (the scene frame's rotation in the composite) and the
   Expanded Visualizer's display-size targets at 4K (the M6 budget).
+- [ ] N3.9 A display move keeps a mode's GPU-held history (1C.2, plan 01 M3c "Display moves retarget the live
+  owner"): with one device per window (D6) nothing is shared, so the handoff is a copy through the job thread (D9)
+  from the source device to the target's before the target integrates again; a test equal to an uninterrupted run
+  (Extruded Bubble's drift first, N5.6).
 
 **N4. Shared primitives, each against its Python harness, each ported just before its first consumer below
 (the unconsumed ones on the primitives track)**
@@ -676,17 +664,15 @@ runs from 3-10 a frame to 0, light themes and Normal unchanged, no shader change
 and fixed (the solver added the Glass sheen after the legibility limit; a hidden crossfade copy held a plate).
 58 dark themes change; the table is `changed_table.md` in the evidence folder.
 
+Side defects landed 12 Nov (merge of a7b877d4): the dead `context.menu.arrow` role retired with a load bridge
+(`RETIRED_WIDGET_THEME_COLOR_ROLES`, 115 theme files lose the key through the generator's `--drop-retired-roles`);
+the dense families' role counts derived from their QML declarations; 1C.5's first Edit shrink of an over-lane volume
+height acts at once (R-193; the saved value is corrected at the first resize, no runtime observer).
+
 Follow-ups landed 12 Nov (evidence `.artifacts/evidence/materials/20261112_followups/`): ink is judged on the fill
 a run sits on (row lift included); passing runs stay byte-identical, headroom only for corrected runs; the
 Context Menu's arrows take the label ink; 1C.5's volume height is capped at its lane.
 
-- [ ] The theme role `context.menu.arrow` is dead since the arrows take the label ink (theme files,
-  `ui/widget_theme_spec.py`, `ui/widget_visual_roles.py`, `tools/generate_widget_theme_mirrors.py`; Theme Foundry
-  edits it with no effect): retire it with a load bridge for theme files that carry it
-  (`Docs/Architecture/Persisted_Input_Compatibility.md`), mirrors regenerated, the Foundry row removed.
-- [ ] `test_remaining_dense_and_grouped_families_keep_authored_baselines_out_of_role_models` pins role counts
-  (Weather 11, SystemStats 3, FriendPulse 6, AchievementPulse 8, AbandonmentIssues 7): derive them from the
-  declarations.
 
 - [ ] Accents whose corrected text ink collapses toward the card text: Royal Orchard most (#3e4f2c to #97a08d,
   48 % of its colour kept) and Smoke Quartz; Slate Lavender, Tungsten Blues, Lantern Grove and Riviera Dusk keep
@@ -921,8 +907,6 @@ strip's clip now grows by the shadow's reach; guard `test_media_child_shadows_ar
 card`. Evidence `.artifacts/evidence/materials/20261111_m2b/before_after_*_4x.png` (the "before" matches the
 operator's crop).
 
-- [ ] A saved volume height scale above what the lane holds has a dead zone on its first Edit shrink (Edit
-  resizes from the saved scale, the cap from the lane): clamp the saved scale at the owner when the lane shrinks.
 - [ ] The agent could not reproduce the cut at the operator's stored Media layout (no volume edits in their
   settings): a D1 run with a copy of the operator's profile (1B.14), a 4x crop of the volume bar, lead review.
 

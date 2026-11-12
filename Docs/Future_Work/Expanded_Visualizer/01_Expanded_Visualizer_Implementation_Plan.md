@@ -324,7 +324,7 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 ### D4. Monitor transfer / loss
 
 - [ ] Resolve true physical destination identity, participation, new DPR/size/refresh, display-local wallpaper status, OSD presence and whether the destination is already under any takeover.
-- Landed (`32279216`, `ExpandedDisplayCoordinator.expand_on_display`, `QuickCustomLayoutOwner.move_visualizer_to_display`): the full-display glyph's move is one **source collapse + target preparation + existing manager transfer + target expand** transaction; a refused move re-expands the source. Mixed-DPI evidence stays with M5.
+- Landed (`32279216`, `ExpandedDisplayCoordinator.expand_on_display`, `QuickCustomLayoutOwner.move_visualizer_to_display`): the full-display glyph's move is one **source collapse + target preparation + existing manager transfer + target expand** transaction; a refused move re-expands the source. Mixed-DPI evidence stays with M5. **Superseded 12 Nov** by "Display moves retarget the live owner" (M3c, 1C.2): that form rebuilt the whole runtime generation on every move.
 - [ ] Existing `QuickDisplayUnit.attach_visualizer_owner/detach_visualizer_owner` and `DisplayManager._transfer_quick_visualizer_unit` retain exact retirement ownership; add rollback fences for *both* display takeover scopes.
 - [ ] Source widgets/transition eligibility restore; target widgets/transition eligibility suppress. Other displays unaffected.
 - [ ] New target viewport uses local real logical and physical geometry and camera reflow; no artificial scaling from the source display or writes to authored preset coordinates.
@@ -1189,6 +1189,114 @@ can most geometry normally."
   the left end; 100% and 150%; frames and 2x row crops; the first form's are `20261111_two_glyphs/`). Owed: the
   operator's physical check on two or more monitors (the arrows from each display, a move between monitors of
   different size or DPR and its fades).
+- *Display moves retarget the live owner, never rebuild it (Current_Plan 1C.2; decided 12 Nov, confirmed by the
+  lead the same day; supersedes the move's "collapse, transfer, expand" form above and in D4).* Operator, 11 Nov: "we do
+  not want teardowns and rebuilds unless absolutely needed. They are a last resort." It binds every path that moves
+  the Visualizer between displays: the full-display glyphs, Edit's display hop, the hover transfer arrows, and (box 6
+  of 1C.2) a display arrangement change.
+  - **What a move did (trace, 12 Nov; evidence `.artifacts/evidence/visualizers/expanded/20261112_1c2_root_cause/`).**
+    (1) *The whole generation was rebuilt on every glyph move.* `move_visualizer_to_display` binds no scene to its
+    session, so the controller never receives the session's working viewport and the target's retained item keeps
+    the transferred source rect; Save's live promotion (`commit_live_custom_layout`) then refuses ("requires an
+    active override"; the rect check refuses a display of another size too), and Save requests
+    `save_corrupt_retained_runtime`: `ScreensaverEngine.stop(exit_app=False)` and a restart, so every display window,
+    widget family, the wallpaper, the Visualizer owner, its controller, logical runtime, BeatEngine and engine worker
+    session go and come back, and the new generation restores the intent at readiness. Reproduced on the real owner
+    and layout owner across two real units, same-size and larger target; control: Edit's own hop + Save of the same
+    item requests nothing (`move_trace.txt`). (2) *Every move (Edit's hop too) rebuilds the renderers on the target
+    on a visible frame*: the scene transfer clears the source admission (the source releases every renderer) and the
+    target node resolves a new renderer whose first frame cost 104.8 ms on the render thread at full opacity
+    (programs from the program-binary cache: 22 hits, 1 miss). (3) *Extruded Bubble's drift history restarts*: its
+    chains', snow's and specks' state is integrated on the GPU (`DriftSolver`), the target gets a fresh solver, and no
+    frame after the hop ever equals an uninterrupted run (36 of 36 differ; two uninterrupted runs: identical;
+    `gpu_hop.txt`). (4) *The card*: expanded to expanded ran two fade-throughs (expanded out, ordinary in on the
+    source; ordinary out, expanded in on the target) with the hop between them at full opacity, so the ordinary card
+    vanished on the source and popped on the target. The logical owner itself was never recreated by the hop
+    (`VisualizerHostBinding.transfer` -> `set_presentation_runtime` moves edges only).
+  - **Per layer (the minimum):**
+    1. *Generation* (display manager, displays, widget families, wallpaper): survives every move. The glyph's move is
+       Edit's hop + Save with the same working state Edit's session gives the owner: the chrome-less session is bound
+       to the source and target scenes the way the direct Alt gesture binds its display
+       (`bind_direct_custom_layout_session`: the working rect reaches the retained item, the working viewport reaches
+       the controller, no Edit chrome), so the promotion is live. A reload stays only for classified retained-object
+       corruption, which is what it exists for.
+    2. *Logical owner* (`QuickDisplayVisualizerOwner`, controller, logical runtime and its revision counter,
+       BeatEngine or the engine worker link and its session mapping, activation id, the mode's logical state:
+       simulation, history, adaptive levels): survives (already true at the host binding; the proof test pins it).
+    3. *Render-thread history* (Extruded Bubble's drift state: the families' state, aux, geometry and output storage
+       buffers): survives, handed from the source renderer to the target renderer. Buffers are shared objects: the
+       product sets `AA_ShareOpenGLContexts` before Qt starts (`rendering/quick/bootstrap.py`), under which Qt Quick
+       creates every window's context in one share group. The source's render thread stops dispatching, fences
+       (`glFenceSync`) and gives up the solver instead of deleting it; the target's render thread waits on the fence
+       (`glWaitSync`) before its first dispatch. Per-context parts (the step ring, any VAO) are made in the target.
+       First implementation step: prove the windows' contexts share (`QOpenGLContext.areSharing` logged once on the
+       target's render thread); if they do not, this layer is the named exception below.
+    4. *Render-thread resources that are not state* (each renderer's programs, VAOs, framebuffers and their
+       attachments, per-frame uploads, the clip host): rebuilt in the target's context, because VAOs and framebuffers
+       cannot be shared between contexts at all and every renderer allocates them together with its programs and
+       targets at the target's size; they hold nothing that outlives a frame, so nothing is lost, and the programs
+       load from the program-binary cache instead of compiling. Handing whole renderers across render threads was
+       rejected: a cross-thread ownership handoff in all nine renderers and the Scene3D owners (each checks the context
+       it was made in) to preserve nothing. **Warmed before the swap:** the target's render host is built and
+       prepared on the target's own render thread (a one-shot render-thread event on the target window, the
+       `_RetirementEvent` pattern of `item.py`; the render host's existing preparation units, spaced as today) from
+       the latest immutable snapshot rebased to the target's presentation, while the source keeps drawing; the
+       target's node adopts the prepared host at its first sync (same thread, same context). Bounded by the prepared
+       reveal's deadline (`_PREPARED_REVEAL_DEADLINE_S`): past it the move goes ahead and the renderer finishes on its
+       first visible frame, as a mode switch does. The source releases its renderers at the swap, as today.
+    5. *QML*: the target's Visualizer shell is created once (at the warm, if the Visualizer was never on that
+       display) and retained; the source's shell stays retained and inactive (the existing rule: a Python-created
+       child is never deleted mid-generation).
+    6. *The card (the fade)*: one fade-through across the two displays whose midpoint is the hop. The view fades out
+       on the source from whatever it draws (expanded or ordinary) over one half, the source's covered widgets
+       fading back in over the same half; at zero opacity the admission moves (nothing visible vanishes); the view
+       fades in on the target directly in its final route (expanded for a diagonal, and for "full display there" from
+       an ordinary card; ordinary for an ordinary move) over the second half, the target's widgets fading out with it
+       when it ends expanded. No ordinary card is shown in between on either display, nothing pops, and the whole move
+       takes one fade-through, as an enter on one display does. No black or empty frame: the target is prepared before
+       the fade begins and its first visible frame is a drawn frame of the live owner. The fade-through stays the
+       owner's (`_TakeoverFade` with a target on another display); the coordinator performs the hop at its midpoint
+       through its existing `move_to_display` service; the warm and the drift handoff belong to the scene transfer
+       (`transfer_visualizer_to`), so every path that moves the admission gets them; the display manager only routes.
+       Reducer: `BeginTransfer` says whether the target ends expanded; the user's "full display there" persists the
+       intent at the transfer's commit (as the glyph's enter does at its commit) instead of a second enter; a refused
+       move fades the view back in on the source in its own route.
+  - **Built (12 Nov, 1C.2 boxes 3-4):** as decided above; `move_visualizer_to_display` binds the source and target
+    scenes as a direct gesture does and returns False when Save still ends in a reload; `QuickDisplayVisualizerOwner.
+    move_display` (warm, out, hop at zero, hold until the history landed, in; each step at a publication edge, the
+    warm and the hold bounded by the prepared reveal's 1.5 s); `ExpandedDisplayCoordinator._run_display_move`;
+    `BeginTransfer.end_expanded` (the user's "full display there" persists at the transfer's commit);
+    `QuickSceneController.begin_visualizer_prewarm` (the target card at 0.002 opacity, content at zero, the render
+    host's own preparation units); `VisualizerRenderCarryover` and `DriftSolver.export` / `adopt`. Tests
+    `tests/test_visualizer_display_move_retarget.py`, `tests/test_visualizer_display_move_gpu.py`; R-NEW.
+  - **The other paths that move or re-admit the Visualizer (1C.2 box 6, audited 12 Nov):**
+    - *Edit's display hop* (the arrows and a drag across the seam): retargets. Same owner, controller, session and
+      render identity (Edit's hop + Save requested nothing even before 1C.2), and the scene transfer now carries
+      Extruded Bubble's drift history. Not prewarmed and not faded: the target is known only when the gesture
+      crosses, and inside Edit the card is the working card that follows the gesture at full opacity, so its first
+      frame on the target still builds the renderer there (about 70-105 ms measured, warm program cache). Follow-up
+      (wording for the lead): prewarm the adjacent display when a drag nears the seam.
+    - *The hover transfer arrows* (`_route_hover_edit_glyph` "transfer_left/right"): enter the one Edit session and run
+      Edit's hop (`transferItem`), so exactly as above; the target is known at the hover, so a prewarm there is
+      possible (same follow-up).
+    - *A display arrangement change, a display added or removed, the owning display lost*: rebuild, by design. The
+      monitor reconcile replaces the generation whenever the screen signature (identity and geometry) changes: every
+      display window is replaced, and the Visualizer owner is generation-owned work behind the hard retirement
+      barrier (Visualizer_Presentation §14B, §15), so it cannot outlive its windows; the intent is restored at the new
+      generation's readiness. Retargeting across a topology change would need an owner that outlives its generation
+      (an SMP-readiness item, not this one).
+  - **Native core (a contract it keeps):** the cross-window move of a mode's GPU-held history survives the native
+    core: with one device per window (D6) the handoff there is a copy through the job thread (D9), not a shared
+    name (Current_Plan item 8b, N3.9).
+  - **Teardown remains only for:** the owning display's loss and a display arrangement change while that is still a
+    topology replacement (windows are replaced; 1C.2 box 6 decides whether the owner can be retargeted across it);
+    Settings (§0.5); classified retained-runtime corruption; and Extruded Bubble's drift history only if the windows'
+    contexts are proven not to share (then its history restarts at a move, and the decision says so).
+  - **Proof:** a focused test that the engine worker's session mapping, the owner, the controller, the logical runtime
+    and its revision counter are the same before and after a move in both directions and that no reload is requested
+    (negative control: the pre-fix move requests `save_corrupt_retained_runtime`); the drift history across a hop in
+    shared contexts equals an uninterrupted run; the target's first visible frame is a drawn frame; frames across the
+    fade show no vanish or pop; the lead's Display 1 run of the move toward Display 1.
 - *Exits (decided).* An unsaved draft is never discarded or saved implicitly; nothing ends it but the user's own Save
   or Cancel (there is no runtime prompt to reuse: the session's user-choice path is Enter/Esc, the background
   double-click and the menu). The collapse glyph is withdrawn under Edit, as in every Edit, and a stale press is
