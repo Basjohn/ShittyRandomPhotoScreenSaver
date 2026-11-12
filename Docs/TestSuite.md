@@ -1358,6 +1358,18 @@ High-value permanent guards include:
   the collector (before the fix: 30 for 10 round trips).
   `tests/test_extruded_bubble_frame_drift_boundary.py` keeps CPU-reference arrays out of canonical captured frames,
   preserving renderer bytes/digests and descriptor reuse through capacity growth and edits without cyclic retention.
+  EB's drift solver without 64-bit floats (D4, `Docs/Future_Work/Native_Core_P3_Decisions.md`), all against the
+  float64 `MaterialDriftReference`: `tests/test_extruded_bubble_drift_precision.py` is the NumPy float32 model of
+  both compute programs in their operation order at an hour's and eight hours' travel and phase (no GPU; a plain
+  float32 port of the quotient on the same run must miss the bound: its negative control);
+  `tests/test_extruded_bubble_drift_publication.py` proves the published knot decisions are the reference's own
+  on every tick across an edit and a resize, and the angle and pair fields; `tests/test_extruded_bubble_drift_solver.py`
+  runs the real programs on GL 4.6 (hidden): every drift direction, an edit, a render gap, the long-horizon runs
+  (tick-exact chains, no mote recycled on another tick, within 1e-4; keep these in the suite), no 64-bit type in
+  any program, a frame with no new step dispatching and uploading nothing, the step ring sized to the chain rows,
+  and the warm-up pair check (a broken compile is reported). Today's `double` programs live test-only in
+  `tests/_eb_drift_solver_fp64_baseline.py` as the comparison baseline. `tests/test_extruded_bubble_drift_gpu.py`
+  also traces a drift program that fails to compile (a loud, repeated error; drift-free frames still draw).
   `tests/test_visualizer_engine_frame_capacity.py` covers non-default/schema-maximum controls in every mode, maximum
   EB geometry/step/wake/body payload, activation-time admission, matching hidden-edge remaps and read quiescence,
   stale/failed/retired mappings, initial IPC allocation cleanup, and terminal overflow reporting without execution-path

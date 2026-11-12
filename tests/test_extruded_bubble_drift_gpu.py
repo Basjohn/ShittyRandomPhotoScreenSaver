@@ -82,6 +82,60 @@ def test_production_host_integrates_only_live_drift_and_restores_zero_picture(ta
     assert np.array_equal(capture.render(host,snap),base)
 
 
+def test_a_drift_program_that_fails_to_compile_is_a_loud_error_and_drift_free_frames_still_draw(target,monkeypatch):
+    """What a device whose compiler refuses a drift program gets (D4.8, traced in the report): the hidden warm-up
+    raises the compile error (the render node logs it once and counts repeats; the owner reveals after its bound),
+    every frame that carries drift raises it again, retrying the compile, and draws no Extruded Bubble; a frame
+    without drift draws as ever, since the solver compiles nothing until a family is live."""
+    from dataclasses import replace
+    from rendering.quick.scene3d import resources as scene_resources
+    from rendering.quick.visualizer.implementations import extruded_bubble as eb
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as solver
+    from widgets.spotify_visualizer.extruded_bubble_simulation import (
+        ExtrudedBubbleControls, ExtrudedBubbleSimulation, MusicInput)
+    capture,host=target
+    snap=_snapshot(extruded_bubble_bead_chains=[2.,2.],extruded_bubble_particles=[0.,0.])
+    base=capture.render(host,snap)                   # the healthy drift-free picture (programs compiled as shipped)
+    host.release_resources()
+    broken=(('drift_chains_broken',solver.CHAIN_COMPUTE+'\nthis is not GLSL;\n'),*solver.PROGRAMS[1:])
+    monkeypatch.setattr(solver,'PROGRAMS',broken)
+    monkeypatch.setattr(eb,'_DRIFT_PROGRAMS',broken)
+    attempts=[]
+    compile_compute=scene_resources.compile_compute_program
+    monkeypatch.setattr(scene_resources,'compile_compute_program',
+                        lambda source,label: (attempts.append(label),compile_compute(source,label=label))[1])
+    from rendering.quick.visualizer import render_host
+    monkeypatch.setattr(render_host,'PREPARE_SPACING_S',0.)
+    hidden=_snapshot(fade=0.0,extruded_bubble_bead_chains=[2.,2.],extruded_bubble_particles=[0.,0.])
+    errors=[]
+    for _ in range(400):                              # the warm-up's units, one per hidden frame, until it fails
+        try:
+            capture.render(host,hidden)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            if len(errors)==3:
+                break
+    assert len(errors)==3 and all('compile' in error for error in errors)   # it fails on that unit, every time
+    assert host.prepared_activation is None                                # and never completes
+    controls=ExtrudedBubbleControls(large_count=(0,0),mid_count=(0,0),bead_chains=(2.,2.),emission=(0.,0.),
+        stream_path=(0.,-1.,0.,0.,1.,0.),drift=(1.,1.),drift_chains=(2.,2.),drift_direction='swirl_cw',
+        stream_speed=(.1,.1))
+    sim=ExtrudedBubbleSimulation(7)
+    failed=[]
+    for _ in range(3):
+        logical=sim.advance(MusicInput(1/60,True,1.,(),(.6,.5,.3)),controls)
+        drifting=replace(snap,logical=replace(snap.logical,mode_state=replace(
+            snap.logical.mode_state,drift_families=logical.drift_families,drift_steps=logical.drift_steps,
+            drift_knots=logical.drift_knots)))
+        before=len(attempts)
+        with pytest.raises(RuntimeError,match='compile'):
+            capture.render(host,drifting)
+        failed.append(len(attempts)-before)
+    # The failing compile is retried on every drifting frame (the first also compiles what the warm-up never reached).
+    assert failed[0]>=1 and failed[1:]==[1,1]
+    assert np.array_equal(capture.render(host,snap),base)   # no drift: Extruded Bubble draws exactly as before
+
+
 @pytest.mark.parametrize('family',('snow','specks'))
 @pytest.mark.parametrize('coverage',('BEAM','SCENE'))
 def test_production_cloud_generators_read_nonuniform_stable_id_offsets_without_resizing_motes(qt_app,family,coverage):
