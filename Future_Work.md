@@ -36,9 +36,9 @@ default and OpenGL selectable; SMP's foundations follow it (item 9).
 Accepted transition membership belongs to the canonical registry and `Docs/Reference/Transitions.md`.
 
 The remaining Visualizer modes are **queued in `Current_Plan.md` §7** (Waveform Ribbon → Reactive Liquid / Melt Pool →
-Concrete Rain → Usu Moonscape), built on the shared 3D primitives of `Current_Plan.md` §6, and only after the Vulkan-vs-SMP/Full Display backend decision
-(decided 5 Nov: after Expanded Visualizer, under the port-readiness rules of
-`Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`). Their contracts:
+Concrete Rain → Usu Moonscape), built on the shared 3D primitives of `Current_Plan.md` §6, and (12 Nov 2026, `Current_Plan.md` item 9) only on the native core, after it: SMP's foundations come first after the native flip, then new modes
+(Expanded Visualizer is accepted and is no longer a gate; the port-readiness rules of
+`Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md` still bind new GPU code). Their contracts:
 `Docs/Future_Work/Waveform_Ribbon.md`, `Docs/Future_Work/Melt_Pool.md`, `Docs/Future_Work/Concrete_Rain.md`,
 `Docs/Future_Work/Usu_Moonscape.md` (with `Usu_Blender_Work.md`). Other mode concepts were dropped on 2026-10-25; the
 architecture they called for is the shared step in `Current_Plan.md` §6.
