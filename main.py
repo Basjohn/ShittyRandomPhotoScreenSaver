@@ -207,6 +207,24 @@ def _args_without_exit_after(argv: list[str] | tuple[str, ...]) -> list[str]:
     return stripped
 
 
+def _resolve_only_display(argv: list[str] | tuple[str, ...], screen_count: int) -> int | None:
+    """Check the RUN-only ``--only-display <index>`` against the screens present at startup.
+
+    Returns the index, or ``None`` without the flag. Raises ``ValueError`` (RUN refuses to start, exit code 2) for a
+    malformed value or an index no screen has: the saver never falls back to another display.
+    """
+    from core.diagnostics.experiment_flags import ONLY_DISPLAY_FLAG, parse_only_display
+
+    index = parse_only_display(argv)
+    if index is None:
+        return None
+    count = max(0, int(screen_count))
+    if index >= count:
+        present = f"screens 0..{count - 1}" if count else "no screens"
+        raise ValueError(f"{ONLY_DISPLAY_FLAG} {index}: no such display ({count} present: {present})")
+    return index
+
+
 def _arm_cli_exit_after(engine, seconds: float | None) -> bool:
     """Arm one GUI-thread terminal shutdown request for an admitted RUN test.
 
@@ -269,7 +287,8 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --frame-trace - Explicit low-observer binary publication->Quick->draw trace
     - --gui-stall-stacks - With --frame-trace, capture all Python stacks on steady-state GUI stalls
     - --exit-after <seconds> - RUN-only one-shot normal terminal shutdown for bounded tests
-    - --viz - Enable visualizer logging and diagnostics
+    - --only-display <index> - RUN-only: the saver's windows on that one screen (0-based, as the logs number them)
+    - --viz -Enable visualizer logging and diagnostics
     - --geo - Enable geometry/z-order/edit-layout diagnostics
     - --set - Enable settings mutation/import/schema diagnostics
     - --life - Enable widget/worker/engine lifecycle diagnostics
@@ -1210,6 +1229,17 @@ def main(*, entrypoint: str = "main"):
                 exit_after_seconds = None
             if exit_code == 2:
                 logger.error("RUN startup aborted because --exit-after is invalid")
+            else:
+                try:
+                    only_display = _resolve_only_display(sys.argv, len(app.screens()))
+                except ValueError as exc:
+                    logger.error("[DISPLAY] Invalid CLI: %s; RUN startup aborted", exc)
+                    print(f"SRPSS: {exc}; RUN startup aborted", file=sys.stderr, flush=True)
+                    exit_code = 2
+                else:
+                    if only_display is not None:
+                        logger.info("[DISPLAY] --only-display %d: the saver's windows use that screen only",
+                                    only_display)
             # Request 1ms timer resolution for smooth animations only when RUN is admitted.
             if exit_code != 2:
                 timer_res_set = _set_windows_timer_resolution(1)

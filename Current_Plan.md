@@ -7,6 +7,8 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 ## 0. Scope and rules
 
+**If you are the lead (orchestrator):** read `Docs/Guides/Orchestrator_Handbook.md` before anything else, and run `tools/agent_handover.py` to see every agent worktree, its journal and its unmerged work. Agents read `Docs/Guardrails/Agent_Worktree_Rules.md`, then their item here.
+
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake (`shockwave_grid`),
 Oscilloscope, Spectrum/Rainbow Ghost, Voxel Sphere (`sphere`), source routing, transitions and Foundry launch buttons. Reopen an accepted
 area only for a concrete new defect; deferred or unadmitted work belongs in `Future_Work.md`. Historical recovery
@@ -272,7 +274,7 @@ after parity, never leaving a second permanent renderer:
   written; D1, D2, D3 and the transport rule are owed).
 - [ ] P3.1 Native QRhi substrate: exact Qt/PySide6 ABI, the frozen MSVC DLL guard, resource ownership, the native
   packet reader with its quiescence barrier and drop edge, capture/clip parity. `native/spike_p1` stays evidence,
-  never a shipped renderer.
+  never a shipped renderer. Its 3D half is stage N3 of the ladder below.
 - [ ] P3.2 Spectrum first: pixel parity against the single-sample gate
   (`tools/visualizer_replay/owner_render_parity.py`), frame trace and CPU/GIL measurements, inside the same
   scene (no second compositor).
@@ -280,12 +282,151 @@ after parity, never leaving a second permanent renderer:
   keeping timing, image ownership, covered-display admission, protected clipping, shader identity and GPU
   resource accounting.
 - [ ] P3.4 Waveform Ribbon, Extruded Bubble, the remaining Visualizers, the image presenter/background and the
-  Scene3D nodes.
+  Scene3D nodes, in the order of stage N5 below.
 - [ ] P3.5 Switch the whole Qt Quick window's backend once every raw-GL dependency has retired: Vulkan as the
   default, OpenGL through the same core as the selectable fallback (D3D where supported); never a Python OpenGL
   node inside a Vulkan window.
 - [ ] P4 Mixed-resolution soft layers in the same core; thin emissive lines, dots, rims, particles and UI stay
-  full resolution; no per-mode extra renderer or backend.
+  full resolution; no per-mode extra renderer or backend. Its volume half is N4.f below.
+
+**The 3D work inside the native core, in order (operator, 12 Nov: "definitely put in the 3D work needed into the
+native work plan, in detail and order"; the lead's view: the port rewrites every mode's renderer anyway, so the
+shared 3D architecture is decided and built as part of it, never afterwards and never twice).** This ladder
+replaces section 6's separate "one step before the next mode": its primitives S3D-1 to S3D-7 are placed here.
+The existing Python substrate is `rendering/quick/scene3d/` and `rendering/gl_programs/`, described in
+`Docs/Reference/Scene3D_Resources.md` (its "Shared Scene3D capability inventory" is the starting list). Rules
+for every stage: read the 3D foundation lessons (`Docs/Reference/Transitions.md`) before it and append after it;
+each primitive is proved on its own off-screen harness scene with measured cost (GPU time median and p90),
+lazy creation, zero work when dormant and clean retirement; none becomes a second renderer, clock or camera;
+parity is judged on single-sampled targets against the Python renderer it replaces, which retires only after
+parity.
+
+**Which primitives are built without a consumer (operator, 12 Nov: "don't strictly build primitives when they
+have a consumer, we like to open potential. High potential primitives should be built regardless, low potential
+only when a consumer. We can always improve.").** A primitive is high potential when several modes, transitions
+or SMP surfaces could plausibly use it and it changes what scenes can look like; it is then built and proved on
+its harness in its place in the order below, with no mode waiting for it. A low-potential primitive (one effect,
+one mode) is built only when that consumer is admitted. The lead classifies and may reclassify; the
+classification is written at each item.
+
+*N0. Inventory and contract (design; no C++; can start now)*
+
+- [ ] N0.1 The capability matrix (Sonnet): every mode and every 3D transition against every substrate
+  capability it uses today (targets and formats, depth, multisampling, order-independent transparency, the
+  HDR intermediate and bloom, defocus, the scene probe, planar reflections, the fog volume, heightfields,
+  populations and indirect draws, the stream ring and storage buffers, compute passes, edge and propagation
+  fields, sphere impostors, optics, the framed camera, the card clip), with the owning file for each, so the
+  port order below is checked against real use and nothing is ported that nobody uses.
+- [ ] N0.2 What OpenGL gives that QRhi does not, item by item, with the chosen replacement: GPU timer queries,
+  explicit state restoration against Qt's scene graph (the protected clip and inherited-state work), direct
+  state access and immutable storage, the program binary cache, per-draw image bindings, multisample resolve
+  control, stencil use for the card clip, persistent mapped buffers; and what QRhi requires that we do not do
+  yet (render-pass descriptors known up front, resource-update batches, no state leakage between passes).
+- [ ] N0.3 Conventions written once and tested: clip-space Y, depth range 0..1 against -1..1, framebuffer origin,
+  texture origin, front-face winding, std140/std430 layout rules, sRGB and HDR formats per backend. Every
+  shader and matrix reads them from one place, so a mode is not fixed up per backend.
+- [ ] N0.4 The camera: `core/settings/framed_camera.py` stays the one owner of the framed physical camera. Decide
+  whether the core receives finished matrices and rays from the worker (no second camera to keep in step) or
+  ports the math behind a parity test; the first is the default unless a per-frame cost shows otherwise.
+- [ ] N0.5 The substrate's contract as decision D5 in `Docs/Future_Work/Native_Core_P3_Decisions.md`: resource
+  ownership and lifetime per window and per device, admission and dormancy, device loss, what a mode's native
+  renderer may and may not do (no clock, no camera, no allocation per frame, the card clip is the substrate's).
+
+*N1. Every shader portable, in the existing OpenGL renderer (no C++; can start now; D4 is its first item)*
+
+- [ ] N1.1 D4: the Extruded Bubble drift solver without `double` (boxes D4.1 to D4.8 above; in flight).
+- [ ] N1.2 The remaining 16 compute sources on `LEGACY_GL_ONLY` (`tests/test_vulkan_shader_readiness.py`: fog
+  volume integrate and inject, Waveform atmosphere field, Waveform floor give blur and section, the five edge
+  field passes and header, motion tile max, population scan, the propagation field's three) compile through
+  `qsb`: loose uniforms into blocks, nothing OpenGL-only; each stays pixel-identical in OpenGL (its own
+  harness before and after) and leaves the list. The list ends empty and the test then forbids it.
+- [ ] N1.3 The readiness check covers vertex and fragment shaders too (today only compute sources are scanned,
+  from a fixed module list): discover every shader source in `rendering/`, compile each through `qsb`, and
+  ratchet the failures down the same way, mode by mode in the order of N5.
+- [ ] N1.4 Shaders stop assuming OpenGL's conventions: the items of N0.3 come from shared includes or uniforms.
+- [ ] N1.5 No new 3D primitive is built in the Python OpenGL renderer from here on unless an open defect needs
+  it (nothing is built twice); section 6's unbuilt primitives are native-only (N6).
+
+*N2. The native substrate's 2D half (P3.1 and P3.2 above): the device, the packet reader, the card clip as the
+substrate's guarantee (plan 1C.4's contract: no pass of any mode writes outside the card), Spectrum at parity.*
+
+*N3. The native 3D substrate core (C++/QRhi; proved on harness scenes, no mode yet)*
+
+- [ ] N3.1 Scene targets: colour, depth and the HDR intermediate with fixed allocations per size, resize and
+  retirement, the composite into the card with the card's alpha, single-sampled first (the parity gate), then
+  the product's sampling policy through one owner (Waveform's hard-coded 4 samples goes through it).
+- [ ] N3.2 Mesh and buffer resources: static meshes built once and kept, dynamic buffers, instancing, indirect
+  draws, the per-frame ring for uniform and storage data (the stream ring's contract), with no allocation per
+  frame.
+- [ ] N3.3 Compute passes: the seam the Python renderer has (dispatch only when there is new work, storage
+  buffers shared with draws, no readback in the product).
+- [ ] N3.4 Transparency and post-processing as shared stages: depth-aware order-independent transparency, bloom
+  and the HDR resolve, the defocus layer; each opt-in, each absent from a mode that does not use it.
+- [ ] N3.5 GPU timing for every pass through native handles (QRhi has no timer query), reported in the frame
+  trace as today's `TIME_ELAPSED` figures are, opt-in and zero cost when off.
+- [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, one device per
+  window, device loss handled by rebuilding from the last packet; the working-set and GPU-memory readings of
+  the P2 audit rerun on it.
+- [ ] N3.7 The orientation and quarter-turn contract (the scene frame's rotation in the final composite) and the
+  Expanded Visualizer's display-size targets at 4K (the M6 budget).
+
+*N4. Shared primitives, ported in the order their first consumer needs them, each against its Python harness*
+
+- [ ] N4.a Fullscreen pass and image sampling (transitions; the presenter's background).
+- [ ] N4.b Ribbon and strip (S3D-1: the bounded history buffer, centripetal placement by continuous index, the
+  camera-facing width variant, multi-ribbon): Waveform Ribbon.
+- [ ] N4.c Populations (S3D-2: compacted populations, sprites and streaks, bounded lifetimes and emitters,
+  indirect draws, compute-driven arrangement): Waveform sparks and bursts, Extruded Bubble's snow and specks,
+  the Particle and Crumble transitions.
+- [ ] N4.d Planar reflections and rough receivers, the scene probe, wet-surface masks (S3D-5): Waveform's floor,
+  Neon Lake's water.
+- [ ] N4.e Heightfields and refined terrain meshes (the authored heightfield resource; Neon Lake's tile-refined
+  basin; the grid a dynamic surface field will share).
+- [ ] N4.f Reduced-resolution volumes (S3D-7 and P4): the fog volume and its detail march, mixed-resolution soft
+  layers composited under full-resolution lines, dots and rims.
+- [ ] N4.g Edge and propagation fields, sphere impostors, shared optics and underwater light: Extruded Bubble
+  and the transitions that use them.
+- [ ] N4.h Shared shadows (S3D-6: one fitted directional depth map, bounded soft filtering, caster and receiver
+  admission, measured tiers). **High potential: built without a consumer** (every lit 3D scene gains depth
+  from it), proved on a harness scene; this is the shared primitive, not a revival of the rejected Extruded
+  cast shadows, and no mode turns it on without its own review.
+
+*N5. Modes and transitions onto the substrate, simplest first, each retiring its Python renderer at parity*
+
+- [ ] N5.1 Spectrum (P3.2), then the other flat modes: Oscilloscope, Bubble, Spline Curve.
+- [ ] N5.2 The transitions' shared fullscreen pass, then the Scene3D transitions (3D Block Spins first, then
+  Crumble and Particle, which need N4.c).
+- [ ] N5.3 Extruded Spectrum and Sphere (meshes, lighting, bloom; no compute).
+- [ ] N5.4 Waveform Ribbon (N4.b, N4.c, N4.d, N4.f): the first mode that needs most of the substrate, and the
+  one over its render budget under load, so its port is measured against the 11 Nov load session.
+- [ ] N5.5 Neon Lake (N4.d, N4.e; its reaction textures and growth).
+- [ ] N5.6 Extruded Bubble last (compute drift from N1.1, populations, transparency, optics, glints): the most
+  demanding consumer, ported when every primitive it needs is already proved.
+- [ ] N5.7 The image presenter and background, the Studio's preview host and the release-media and capture tools
+  render through the same core; then P3.5 switches the window's backend.
+- [ ] Each port: pixel parity on single-sampled targets, the frame trace and CPU/GIL figures beside the Python
+  path's, Settings/Studio and engine-worker parity, GPU time per pass, no cost at rest, the mode's own tests
+  green, then the Python renderer and its shaders deleted in the same change (never two permanent renderers).
+
+*N6. Primitives planned but never built: native only, after the substrate (N3); the high-potential ones in
+this order without waiting for a mode, the low-potential ones when a consumer is admitted*
+
+- [ ] N6.1 Dynamic surface field (S3D-4). **High potential** (water, ripples, pools, melt, any reactive
+  surface; Neon Lake's water and SMP surfaces could use it): a bounded GPU height and velocity grid with
+  impulse injection and damping, a displaced mesh with true normals, reflection distortion driven by it
+  (with N4.d).
+- [ ] N6.2 Static scene geometry and materials (S3D-3). **High potential** (it is what turns a mode into a
+  place: floors, walls, wells, simple skyline and tunnel slices, with roughness, bevel and contact shading,
+  built once and kept).
+- [ ] N6.3 Advected smoke and haze on the volume primitive (the rest of S3D-7's volumes). **High potential**
+  (atmosphere for every 3D scene; shares N4.f's reduced-resolution path).
+- [ ] N6.4 Photo-textured shells and planes with real depth (from the fracture-portal and depth-slice
+  concepts). **Low potential until a consumer** (a transition or a mode built round the user's photos).
+- [ ] N6.5 The opt-in deformable sheet (shapes a heightfield cannot make). **Low potential until a consumer.**
+- [ ] N6.6 Lightning: procedural bolt geometry and its light. **Low potential until a consumer** (one effect).
+- [ ] When a high-potential primitive lands: one showcase WebP from its harness scene and a short "what this
+  makes possible" note in `Docs/Reference/Scene3D_Resources.md`, so the potential is visible when modes are
+  next designed.
 - [ ] Expanded Visualizer M6 (4K acceptance) waits for the first P3 ports (plan 01); P2 holds nothing.
 
 ### Item 9. SMP & Full Display
@@ -302,11 +443,17 @@ Windows-default supervised Python worker; P3 is the planned C++/QRhi native rend
   tiling tree with choose, swap, resize and split/remove, no dead sections, SMP fullscreen remembered, Settings ->
   Layout pills Widgets and SMP).
 
-### Item 10. §6 Shared 3D architecture and §7 Visualizer modes
+### Item 10. §7 Visualizer modes (the shared 3D architecture is now inside item 8b, stages N0 to N6)
 
-- [ ] Resume after Expanded Visualizer acceptance and its full-display measurements, under the port-readiness
-  rules: Reactive Liquid / Melt Pool -> Concrete Rain -> Usu Moonscape, lab-first per §7.0. If a trigger fires
-  first, the native Vulkan core precedes them.
+- [ ] New modes (Reactive Liquid / Melt Pool -> Concrete Rain -> Usu Moonscape, lab-first per §7.0) wait for the
+  native core and are built on it only, never in the Python OpenGL renderer (item 8b, N1.5 and N6): the
+  triggers have fired, so the native Vulkan core precedes them.
+- [ ] After the native core and Vulkan parity: SMP's foundations first (operator, 12 Nov: "SMP foundations
+  first after native parity, as you suggest"): the library, the playlists and a playback service that meets
+  the measured audio bar (plan 02's first milestones), then the question of how far to go before returning to
+  modes. Reasons on record: that work closes reliably without visual sign-off, gives the Visualizer decoded
+  audio with look-ahead instead of a loopback capture, and proves "one Visualizer owner, any surface". The
+  visual track meanwhile finishes what is open and builds the high-potential primitives (item 8b, N4 and N6).
 
 ## 1B. Operator defects and requests (11 Nov; run first, in this order)
 
@@ -546,6 +693,10 @@ Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us afte
 
 ### 1B.14 Lead verification harnesses (operator, 11 Nov: "why can you not make tests that exercise these?")
 
+Built 12 Nov: `--only-display <index>` (RUN only, fails closed) and `tools/d1_run.py` (the real saver on one
+display, bounded, frames read back from the saver's own window and from the desktop, crops, logs; refuses the
+primary display; `--help` holds the recipes). Both in `Docs/Reference/Harness_Index.md`. The boxes below use it.
+
 The lead's lapse: these were filed as operator checks. They are testable: a frozen build through GitHub, the
 real product run on Display 1 (the second monitor) for diagnostics, and real audio endpoints. **Permissions
 (operator, 11 Nov):** bounded runs on Display 1 are permitted; Display 0 is never taken without permission;
@@ -553,13 +704,6 @@ builds run only through GitHub's workflows, never on this machine's resources. L
 harnesses and prove them hidden; the lead runs the visible part); each visible run is short, bounded, fails
 closed and always tears down. Queued for the next free Opus High slot.
 
-- [ ] A CLI flag that tells the saver which display to use (operator: better than editing diagnostics settings),
-  RUN-only like the existing `--exit-after <seconds>` self-exit flag, which bounds every run. One owner for the
-  display choice; with the flag absent nothing changes; a Linux path or an explicit inert one.
-- [ ] D1 run harness: start the real saver from source on Display 1 only (that flag), with diagnostic flags,
-  recorded music and `--exit-after`, driven by messages posted to the saver's own windows (never global input);
-  collect its logs, frame trace and grabbed frames; a watchdog ends it if the self-exit does not. A tool under
-  `tools/`, opt-in, zero product cost.
 - [ ] Cursor after exit (R-183) on D1 with `tools/cursor_exit_observer.py`: key, click, mouse-move, link click
   (browser launch stubbed), Settings and Media Center exits, the pointer placed over the saver on D1 for the
   run and put back after; a verdict per path. Then R-183 is accepted, or the failing path is fixed at the
@@ -602,26 +746,24 @@ an agent's brief is its plan item, and its report is checked against the boxes, 
 in the lead's memory. Each item below starts with a root-cause box: the cause is established on the real product
 path (an off-screen reproduction or a Display 1 run), with a negative control, before anything is changed.
 
-### 1C.1 "Spectrum presets did not exist" on first open; the second open worked (owner: Opus Medium)
+### 1C.1 "Spectrum presets did not exist" on first open (fixed and merged 12 Nov, R-190)
 
-Likely cause to prove or refute: Spectrum's curated presets were replaced today (slots 2-15 of 7 Nov became 2-10,
-then round 2 renumbers again), so a stored slot or path in the operator's profile no longer resolves; the first
-open raises, something then rewrites the stored slot, and the second open succeeds.
+Cause: the preset catalogue was read once, at its module's first import; if no Spectrum file could be read at that
+moment (a file held open by another process or being replaced), the import raised "visualizer mode 'spectrum' has
+no authored presets", and Python retried the import on the next open. The import now never fails; a mode that could
+not be read is read again on use; one unreadable file drops only that preset. A stored selection follows its preset
+by name when the folder changes and otherwise falls back quietly to Preset 1. Test
+`tests/test_visualizer_preset_unreadable_folder.py` (reproduces the operator's exact message on the old code).
 
-- [ ] Root cause: reproduce off-screen with the real `SettingsDialog` and the real Studio (never a stub host) on a
-  profile copy whose stored Spectrum preset is each of: a retired slot (11-15), a slot whose file was renamed, a
-  user-authored preset, Preset 1. Record the exact message, who raises it and who shows it.
-- [ ] Check the registry too: the test-order fault fixed in batch 3 (`missing authored preset path: spectrum:1`
-  after a save-over-curated round trip) may be the same owner failing in the product after a Save To Preset.
-- [ ] Contract (write it in `Docs/Architecture/Persisted_Input_Compatibility.md`): a stored preset reference that
-  no longer resolves falls back at the owner (the same name if a preset of that name exists, else Preset 1),
-  logs one line, shows no error, and repairs the stored reference once; never a dialog, never a failed open.
-- [ ] The same rule checked for every mode with curated presets (one parametrised test over the mode registry,
-  derived from the canonical preset tree; no preset values or wording pinned).
-- [ ] Removing or renumbering curated presets gets a guard: the preset tree's own test fails when a curated slot
-  disappears without a compatibility entry (so round 2's renumbering cannot repeat this).
-- [ ] Negative control: the reproduction fails on the pre-fix code with the operator's message.
-- [ ] R-NNN entry if the fault predates today (it would then have been silent for every past preset removal).
+The agent also built a guard that listed the shipped preset names in product code and failed a test when a preset
+was removed or renamed. That broke a foundational rule (presets are authored, mutable, exchangeable; nothing
+manifests them) and was removed the same hour (d226af58). The rule is now explicit in
+`Docs/Guardrails/Visualizer_Presentation.md` (first section), the agent rules and the orchestrator handbook's audit
+checklist; the lead greps every preset-related diff for preset names before merging.
+
+- [ ] Side defect: importing `core.settings.normalization` before anything else raises a circular `ImportError`
+  (`normalization.py:28` -> `models/__init__.py:27` -> `models/_core.py:16`, then `_core.py:367-373` at class
+  definition); the enum parsing must leave `normalization` (Opus Medium, bounded).
 
 ### 1C.2 Diagonal fullscreen glyphs tear the Visualizer down and rebuild it (owner: Opus High, Expanded Visualizer)
 
@@ -677,47 +819,30 @@ corner). Those changes are withdrawn: the Media widget's behaviour is the contra
 - [ ] Proof: before/after sheets for the three gestures and the four sides; a D1 run with a real player session;
   section 2's "Changed on 11 Nov" entry for Now Playing corrected to what ships.
 
-### 1C.4 Spline Curve's lines escape the card border (owner: Opus Medium, lead pixel review)
+### 1C.4 Spline Curve's white lines show about one pixel into the card border (cause found on Display 1, 12 Nov)
 
-Operator: "Lines from Spline Curve slightly escape our borders, nothing from any visualizer should be capable of
-that. Most seen in full but its there in small/normal mode too. No other visualizer mode shows this weakness."
-The mode id is `devcurve`. The operator's crop shows a magenta band crossing the left border near its foot.
+Merged: the transient case (R-188, the clip followed the retained snapshot's record after a resize or collapse).
 
-- [ ] Root cause: render `devcurve` off-screen on a card with a contrasting border at 1x and at display size,
-  drive it hard (recorded music, its widest line and glow settings), and find which pass writes outside the
-  card's inner edge: line width or glow expanding past the scissor, a pass drawn without the shared clip, a
-  multisample resolve, or the rounded-corner mask.
-- [ ] Fix at the shared owner, not in the mode: whatever clip every Visualizer is given must bound every pass of
-  every mode (so no mode can escape), without retuning the protected QSG/clip optimisations (ce07b991,
-  07486d83, 985b9d53); if the shared clip is already correct and only `devcurve` bypasses it, the bypass goes.
-- [ ] A structural guard: one parametrised off-screen test over every registered mode that no pixel outside the
-  card's inner edge differs from the same frame with the Visualizer hidden (tolerance stated; rounded corners
-  included); negative control: the pre-fix `devcurve` fails it.
-- [ ] The same check at display size (Expanded Visualizer) and with Glass card material on.
-- [ ] Before/after 4x crops of the left and bottom border for `devcurve`; lead pixel review.
-- [ ] R-NNN entry (a contract every mode relied on was not enforced).
+Found by the lead's Display 1 run (`tools/d1_run.py --display 1 --mode devcurve`, the operator's profile copy;
+evidence `.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge/`): no content pixel lies inside the
+border band (1,947 rows, three frames, zero), but the border's inner edge pixel is anti-aliased and is an exact
+50/50 blend of the border colour and whatever content is under it: over dark content (50,50,50) it reads
+(130,114,153), over magenta fill it reads (191,132,218). Over Spline Curve's white lines it would read about
+(232,216,255): a near-white pixel that looks like the white line reaching one pixel into the border. Other modes
+leave the card's edges dark, so their blend pixel looks like part of the border. So the operator's "1px or so,
+the white lines" is the content showing through the border's anti-aliasing, for every mode, most visible with
+bright content at the edge.
 
-Lead's audit note, 12 Nov: the agent's first fix (0e01e147, R-187: the clip was built from the retained
-snapshot's record, so content could cross the rounded corners between a geometry change and the next coherent
-publication) is right in itself but is a transient, and steady frames were reported clean; the operator described
-a standing condition and their crop shows lines inside the border band along the left edge. Not closed until:
-
-- [ ] Steady frames proved under the operator's own setup: theme `Amethyst Night [Single] [Glass]` (translucent
-  border), `card_border_width_px` 5, CUSTOM layout with slots, Spline Curve's own white bar border on, a 3840 x
-  2160 display at 150 %, ordinary and display-wide card; pixels counted in the border band (between the card's
-  outer edge and the drawn border's inner edge) and outside the card, before and after the fix.
-- [ ] If the band shows content: the wrong geometry named (clip inset against the configured border width, DPR
-  rounding, a translucent border over an outer-path clip, the CUSTOM record, a generous scissor) and fixed at
-  the shared owner; why Spline Curve shows it and the others do not, with one other mode beside it.
-- [ ] The clip contract test's steady check runs with a non-default border width, a Glass border and the CUSTOM
-  route, over every mode, counting the border band.
-- [ ] Operator, 12 Nov, on their crop: "I see 1px or so escaping there ... It's the white lines." The target is
-  Spline Curve's own white bar-border lines reaching about one pixel past the content's bound in steady frames:
-  measured with fills transparent and only the bar border on, all four sides, at 100 %, 125 % and 150 %; the
-  one-pixel disagreement named (border rounding against the clip's inner edge, the clip's soft edge, the line's
-  width or fringe, a scissor wider than the stencil) and fixed at the shared bound; a full-brightness line along
-  each edge added to the clip contract test.
-- [ ] If nothing reproduces off-screen: the lead takes it on Display 1 with the operator's profile copy (1B.14).
+- [ ] Fix at the shared clip owner (`rendering/quick/visualizer/clip_host.py` and its SDF): the content's clip
+  ends far enough inside the border's inner edge that no content lies under the border's anti-aliased pixel
+  (about one device pixel at every DPR; derive it from the frame's own edge width, never a constant per mode);
+  the card's own background (Normal or the material) shows under that pixel, as on every other card. Rounded
+  corners follow the same inset. The protected clip commits (ce07b991, 07486d83, 985b9d53) are not retuned.
+- [ ] Guard in `tests/test_visualizer_card_clip_contract.py`: every mode with a full-brightness white line along
+  each edge; the border's inner edge pixels must equal the same frame with the Visualizer hidden (within the
+  run-to-run floor); negative control on the current clip.
+- [ ] Display 1 proof by the lead: the same `d1_run.py` recipe before and after, with a frame chosen while the
+  white lines touch the left edge (several grabs), 4x crops; the edge pixel no longer follows the content.
 
 ### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
 
@@ -780,6 +905,10 @@ significant work". Opus and Sonnet agents resume as the lead sees fit.
 - [ ] Small boxes batch 4 (`worktree-agent-a4e50f79894c549ec`; WIP edf2100a: six sibling test files moved onto
   the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
   a Medium slot is free after 1C.1 and 1C.4.
+- [ ] Native core D4 (`worktree-agent-a2e34d3d2dc0079ee`, stopped by the usage limit 12 Nov; its uncommitted
+  work saved as a "WIP (handover)" commit; journal in its worktree): resumed by the same agent (same session).
+- [ ] Now Playing 1C.3 (`worktree-agent-a4fad866a60eddb36`, twelve commits, stopped mid first-touch fix, saved
+  as a handover commit): resumed by the same agent; merge after the lead's review, then 1C.2.
 
 ### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; step b of round 3, 1C.10)
 
@@ -1124,8 +1253,11 @@ Watchlist entry (operator, 11 Nov).
 
 ## 3. Lead and agents: active, paused and queued work
 
-**Agents (operator, 11 Nov; replaces the 11 Nov roster):** the lead (Fable) is orchestrator, auditor and final
-reviewer; all agent results pass that review before acceptance, and the lead's audits (pixel review, regressions
+**Agents (operator, 12 Nov; replaces the 11 Nov roster):** the lead is Opus 5.5 High (orchestrator, auditor,
+planner and final reviewer); Fable 5.2 High only as a rare one-off audit at a major architectural milestone; agent
+slots are three Opus 5.5 High, two Opus 5.5 Medium and two Sonnet 5.5 Medium (documents and research only). The
+workflow is `Docs/Guides/Orchestrator_Handbook.md`. Earlier text of this paragraph, kept for its rules: the lead is
+orchestrator, auditor and final reviewer; all agent results pass that review before acceptance, and the lead's audits (pixel review, regressions
 re-run against the pre-change code, tests on the merge) are what keep the hand-overs sound. The other slots are
 Opus 5.5: two Opus High (complex, architectural and visual work), two Opus Medium (simpler and brute-force
 work), and one Sonnet 5.5 Medium for documents and research when needed. No Fable agents at all (operator, 11
@@ -1672,70 +1804,24 @@ not establish installed ACLs; the frozen run of 1B.14 covers the artifact, not a
 - [ ] Dual-display reboot recovery (R-134–R-145) needs a new reproduction.
 - [ ] The 90 Hz versus 60 Hz investigation stays off limits.
 
-## 6. Shared 3D architecture (one step, before the next mode; after Expanded Visualizer, under port-readiness rules)
+## 6. Shared 3D architecture (folded into the native core: section 1, item 8b, stages N0 to N6)
 
-The architecture planned for the dropped concepts (volumetric music chamber, audio aurora/ribbon volume, photo
-fracture portal, voxel morph field, holographic depth slices, procedural storm, reactive particle field,
-terrain/skyline/tunnel, deformable blob sphere) is worth having; the modes were not. Build shared primitives on the
-existing Scene3D substrate (`Docs/Reference/Scene3D_Resources.md`): `MeshResources`, `SceneTarget`, depth-aware OIT,
-probe, defocus, HDR intermediate, framed camera. Order follows which mode needs them first.
+Operator, 12 Nov: the 3D work goes into the native work plan, in detail and order. The lead's reasoning: the port
+rewrites every mode's renderer, so the shared 3D architecture is decided and built as part of it, not after it
+and not twice. The primitives this section listed live there now: S3D-1 ribbon and strip is N4.b; S3D-2
+populations N4.c; S3D-5 reflections and wet surfaces N4.d; S3D-7 reduced-resolution volumes N4.f (with P4) and
+its smoke N6.3 and lightning N6.6; S3D-6 shadows N4.h; S3D-4 dynamic surface field N6.1; S3D-3 static scene
+geometry N6.2 (its photo-textured shells N6.4). The rules stay as they were (the 3D foundation lessons before
+each slice; each primitive proved on its own harness with measured, bounded cost, lazy creation, zero dormant
+work and clean retirement; none becomes a second renderer, clock or camera), with two changes of 12 Nov: no new
+3D primitive is built in the Python OpenGL renderer unless an open defect needs it (N1.5), and high-potential
+primitives are built without waiting for a consumer while low-potential ones wait for one (operator; the
+classification is at each item in 8b).
 
-Rules for every slice below:
-
-- [ ] Read the 3D foundation lessons in `Docs/Reference/Transitions.md` before each slice.
-- [ ] Prove each primitive on its own offscreen harness with bounded, measured cost (TIME_ELAPSED, median/p90), lazy
-  creation, zero dormant work and clean retirement.
-- [ ] None waits for a consumer, and none becomes a second renderer, clock or camera.
-
-**S3D-1 Ribbon / strip primitive** (consumers: Waveform Ribbon; trails anywhere)
-
-- [ ] Finish the reusable camera-facing width variant.
-- [ ] Shared defocus integration.
-- [ ] Lifecycle/admission proof and bounded cost around the existing history/ring/oriented-strip substrate.
-- [ ] Preserve a bounded history SSBO, centripetal Catmull-Rom placement by continuous index, OIT translucency,
-  multi-ribbon support and fixed maximum history.
-
-**S3D-2 Particle population extensions (G4)** (consumers: ribbon sparks, rain droplets/crowns, melt droplets)
-
-- [ ] Inventory the existing compacted-population/sprite/streak helpers first.
-- [ ] Add bounded lifetimes, emitters, transient bursts and indirect draws.
-- [ ] Add compute-driven arrangement (morphing a fixed population between shapes, from the voxel morph concept).
-- [ ] Deterministic admission/retirement.
-
-**S3D-3 Static scene geometry and materials** (consumers: Melt Pool chamber, Concrete Rain street)
-
-- [ ] Authored static meshes (slabs, curbs, walls, recesses, wells, simple skyline/tunnel slices) with their own
-  roughness/bevel/contact shading, built once and retained.
-- [ ] Photo-textured shells/planes with real depth (from the fracture portal and depth-slice concepts).
-
-**S3D-4 Dynamic surface field** (consumers: Melt Pool body, Concrete Rain ripples/puddles)
-
-- [ ] A bounded GPU height+velocity grid (compute or ping-pong) with impulse injection and damping/return.
-- [ ] A displaced mesh with normals from the actual surface.
-- [ ] An opt-in deformable sheet for shapes a heightfield cannot make (from the deformable blob sphere concept).
-
-**S3D-5 Reflections and wet surfaces** (consumers: Waveform Ribbon floor (next: section 7.1), Melt Pool, Concrete
-Rain)
-
-- [ ] A bounded planar/probe reflection for floors and pools.
-- [ ] Wet-surface and puddle masks over authored ground.
-- [ ] Reflection-distortion sampling driven by a surface field.
-- [ ] No screen-space trick that collapses under camera motion.
-
-**S3D-6 Shared shadows (G2 / S25)**
-
-Also Usu's S25; not a revival of the rejected Extruded cast shadows.
-
-- [ ] One fitted directional depth map with bounded soft PCF/bias.
-- [ ] Caster/receiver admission, resize/teardown/dormancy.
-- [ ] Tier cost on a real test scene.
-
-**S3D-7 Reduced-resolution volumes, then lightning (G5)** (consumers: chamber/street atmosphere)
-
-- [ ] Prove the bounded static fog slice required by Waveform Ribbon first, with no audio reactivity.
-- [ ] Then bounded procedural bolt geometry/light and fog/smoke volumes with advection/reprojection and no permanent
-  extra targets or separate cadence.
-
+What already exists in the Python substrate and is therefore a port, not new work: the ribbon history and
+oriented strip, compacted populations with sprites and streaks, planar reflections and rough receivers, the fog
+volume and its detail march, authored heightfields, the scene probe, defocus and the HDR intermediate, edge and
+propagation fields, sphere impostors, shared optics (`Docs/Reference/Scene3D_Resources.md`).
 ## 7. Visualizer modes (one at a time, in this order)
 
 ### 7.0 Method: lab first, then production

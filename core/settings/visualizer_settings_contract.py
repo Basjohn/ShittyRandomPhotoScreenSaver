@@ -270,10 +270,13 @@ def migrate_profile_lender_owned_settings(
         return migrated
 
     preset_module = sys.modules.get("core.settings.visualizer_presets")
-    if preset_module is not None and not hasattr(preset_module, "apply_preset_to_config"):
-        # Curated presets are normalised while their module builds the catalog.
-        # They are already authored under their own namespace, and persisted
-        # user input reaches this bridge after the catalog is complete.
+    if preset_module is not None and (not hasattr(preset_module, "apply_preset_to_config")
+                                      or getattr(preset_module, "_CATALOGUE_BUILDS", 0)):
+        # Curated presets are normalised while their module builds the catalog
+        # (at import, and at every rebuild: a lender whose own catalogue is not
+        # built yet must not be consulted, 1C.1). They are already authored under
+        # their own namespace, and persisted user input reaches this bridge after
+        # the catalog is complete.
         return migrated
 
     from core.settings.visualizer_presets import (

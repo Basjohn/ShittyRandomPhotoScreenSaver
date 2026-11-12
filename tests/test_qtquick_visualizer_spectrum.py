@@ -499,22 +499,19 @@ def test_generic_source_admission_keeps_paused_scene_until_fresh_play_frame() ->
     node.synchronize(
         identity=identity,
         snapshot=paused,
-        logical_size=(420.0, 280.0),
-        device_pixel_ratio=1.0,
+        presentation=paused.presentation,
     )
     assert node.snapshot is paused
     node.synchronize(
         identity=identity,
         snapshot=stale_play,
-        logical_size=(420.0, 280.0),
-        device_pixel_ratio=1.0,
+        presentation=paused.presentation,
     )
     assert node.snapshot is paused
     node.synchronize(
         identity=identity,
         snapshot=fresh_play,
-        logical_size=(420.0, 280.0),
-        device_pixel_ratio=1.0,
+        presentation=paused.presentation,
     )
     assert node.snapshot is fresh_play
     assert node.telemetry.snapshot().admission_rejection_count == 1
