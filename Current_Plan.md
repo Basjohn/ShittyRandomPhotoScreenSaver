@@ -847,9 +847,7 @@ Every tool and harness (236 files) with its flags, who may run it, output, tests
 Check's `--load` defaulted to `game60`, so an agent omitting the flag started the lead-only load; the default is now
 `none`.
 
-- [ ] `Docs/Reference/Harness_Index.md` disagrees with the code (Sonnet): line 95 (`mode_audit` covers Bubble, not
-  Sine Wave: `visualizer_replay/mode_audit.py:33`), line 864 (add `agent_handover.py --retire`), line 909 (add
-  `generate_widget_theme_mirrors.py --drop-retired-roles`), lines 28-29 (add the `native_core` and `materials` areas).
+- `Harness_Index.md`'s four disagreements with the code fixed 12 Nov (b7e84c31).
 - [ ] Candidates to retire (Tooling.md's table; the operator keeps useful tools, so the lead judges each and deletes
   only what is dead and superseded, recording the reason): high confidence `verify_compile.py` (repo root) and
   `.github/tools/linux_smoke_dist.py` (a stale copy no workflow runs); the medium and low rows stay unless a caller
