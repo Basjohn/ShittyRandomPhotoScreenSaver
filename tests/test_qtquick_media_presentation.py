@@ -1547,8 +1547,8 @@ def test_media_child_shadows_are_never_clipped_by_their_lane_or_card(qt_app, dir
         descriptor = get_widget_runtime_descriptor("media")
         role = next(r for r in descriptor.custom_child_roles if r.role_id == "volume_bar")
         widest = role.maximum_scale[0]
-        # The tallest track that still fits the lane (a taller one is a geometry question of its own).
-        tallest = min(role.maximum_scale[1], lane.height() / max(1.0, track.height()))
+        # The descriptor's full height range: the track never grows past what its lane holds.
+        tallest = role.maximum_scale[1]
         for left in (False, True):
             item.setX(1600.0 - item.width() - 20.0 if left else 20.0)
             qt_app.processEvents()
@@ -1561,6 +1561,10 @@ def test_media_child_shadows_are_never_clipped_by_their_lane_or_card(qt_app, dir
                     }})
                     qt_app.processEvents()
                     assert volume_shadow.isVisible()
+                    # The track itself lies inside its lane (1C.5: past about 1.2x it was cut square).
+                    assert -0.01 <= track.y() and track.y() + track.height() <= lane.height() + 0.01, (
+                        height_scale, offset, track.y(), track.height(), lane.height())
+                    assert -0.01 <= track.x() and track.x() + track.width() <= lane.width() + 0.01
                     misses = _shadow_reach_outside_clips(volume_shadow)
                     assert misses == [], (left, width_scale, height_scale, offset, misses)
     finally:

@@ -285,7 +285,11 @@ mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and th
   (`legibilityPanel: false`), so the backdrop reads through ("deserves more transparency"); the outline sits on top
   unchanged. Its drop shadow fades out on every material and on Normal: the accessory lane's paint boundary is grown
   by the shadow's reach (`OverlayWidget.accessoryPaintOutset`), so an Edit-widened or moved track no longer has its
-  shadow cut square at the lane edge (1C.5, R-187; not a material effect).
+  shadow cut square at the lane edge (1C.5, R-187; not a material effect). The track itself is never taller than its
+  lane (12 Nov): the descriptor admits 2.5x the authored height but the lane is the widget's height, so from about
+  1.2x the track ran past it and was cut square; its height is now bounded by the lane at the presentation owner
+  (`MediaPresentation.qml`, the same place that already bounds its x and y). Edit's resize was already contained by
+  the lane; the bound covers saved and reflowed geometry (a later taller card shrinks the lane's headroom).
 - The volume's level (the adjustable part inside the track) is material too (operator, 8 Nov: it "does not inherit
   surfaces"): its own `ChildMaterialSurface` tinted by the fill colour at full strength, no darker panel, so it reads
   above the track's 40 % tint; it drops its flat colour while the material is active and keeps it on Normal

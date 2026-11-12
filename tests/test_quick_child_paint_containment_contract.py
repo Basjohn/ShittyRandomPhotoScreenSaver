@@ -101,7 +101,8 @@ def test_media_volume_is_bounded_by_accessory_not_by_card_or_canonical_height() 
     assert 'customEditPlacementCompensationX: x - requestedTrackX' in track
     assert 'customEditPlacementCompensationY: y - requestedTrackY' in track
     assert 'readonly property real requestedTrackY:' in track
-    assert 'height: mediaRoot.customVolumeTrackHeight' in track
+    # Never taller than the lane holds (1C.5: from about 1.2x it was cut square at the lane edge).
+    assert 'height: Math.max(1.0, Math.min(mediaRoot.customVolumeTrackHeight, parent.height))' in track
     slider = media.split('id: appVolumeSlider', 1)[1].split('id: appVolumeTrack', 1)[0]
     # The lane is the accessory layer's paint boundary (it clips), grown by the track shadow's
     # reach; the slider sits back on the lane and does not clip again (1C.5: that cut the

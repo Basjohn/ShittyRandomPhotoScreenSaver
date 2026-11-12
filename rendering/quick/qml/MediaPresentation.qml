@@ -1066,7 +1066,11 @@ OverlayWidget {
                 readonly property real customEditPlacementCompensationX: x - requestedTrackX
                 readonly property real customEditPlacementCompensationY: y - requestedTrackY
                 width: mediaRoot.customVolumeTrackWidth
-                height: mediaRoot.customVolumeTrackHeight
+                // The descriptor admits up to 2.5x the authored height, but the lane is only
+                // the widget's height: the track never grows past what its lane can hold
+                // (it was cut square at the lane edge from about 1.2x; 1C.5). Edit's resize is
+                // already contained by the lane; this bounds saved and reflowed geometry too.
+                height: Math.max(1.0, Math.min(mediaRoot.customVolumeTrackHeight, parent.height))
                 radius: width / 2.0
                 // On a surface material the track is material too (its fill tints it).
                 color: appVolumeTrackMaterial.active ? "transparent" : mediaRoot.mediaModel.appVolumeTrackColor

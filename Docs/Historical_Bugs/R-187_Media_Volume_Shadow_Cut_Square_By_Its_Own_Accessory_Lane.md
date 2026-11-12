@@ -38,6 +38,15 @@ unclipped. Crops (4x, Default Dark and Polished Chrome, Normal and Glass, both P
 `.artifacts/evidence/materials/20261111_m2b/c15_volume_shadow/` (`root_cause_commits_*_4x.png`,
 `before_after_{default,wide,tall}_*_4x.png`).
 
+## Follow-up (12 Nov 2026)
+
+The same cut, from the track rather than its shadow: the `volume_bar` descriptor admits 2.5x the authored height, but
+the lane is only the widget's height, so a track heightened past about 1.2x (saved geometry, or a card made taller
+after the edit) ran past the lane and was cut square. The track's height is now bounded by the lane in
+`MediaPresentation.qml` beside its existing x/y bound; the R-187 regression test now walks the descriptor's full
+height range and also asserts the track lies inside its lane. Crops:
+`.artifacts/evidence/materials/20261112_followups/box4_volume_height/`.
+
 ## Lesson
 
 A paint boundary written for a control must include the control's own shadow; a clip sized to the control's layout
