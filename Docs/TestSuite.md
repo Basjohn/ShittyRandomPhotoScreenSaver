@@ -1119,12 +1119,19 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   display's refresh-edge clock (the production `RefreshStateGlyph.qml` settles at once, no phase callback) and
   animates again after uncover. Negative controls: no host call at the cover edge (3 red), the Clock not bound to
   the cover (2 red), refresh edges animating while covered (1 red), a transfer ignoring the target's cover (1 red).
+- `tests/test_qrhi_texture_formats.py` — N1.7: no texture, render target or storage image under `rendering/` uses a
+  format QRhi lacks (RG16F, RG32F, R11G11B10F, as a GL enum or a GLSL image layout), except the targets D5.3's
+  formats service takes (the scene target's multisampled velocity attachment); a stale service entry fails too. A
+  second test shows the scan finds each format in both spellings and passes the widened ones. Negative control: the
+  scan over the pre-N1.7 sources (`git show` of each file at the parent of the N1.7 commit) reports 20 unlisted uses.
 - `tests/test_vulkan_shader_readiness.py` — port-readiness rule 5: every GLSL compute shader the tool discovers in
-  the product compiles with PySide6's `qsb` for every target (SPIR-V, GLSL 430 and 310 es, HLSL 5.0, MSL 1.2), with
+  the product compiles with PySide6's `qsb` for every shipped backend's target (SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2;
+  GLSL 310 es is loaded by nothing we ship and is not baked), with
   no exception list (the legacy list emptied with D4 and N1.2 and was removed: nothing can be added back). Further
   tests pin the rule's two sides on a tiny program (loose uniform fails, std140 block compiles), that discovery still
-  finds the converted modules, that a 64-bit float, which SPIR-V alone accepts, fails the full target set, and that
-  an `r16f` storage image fails GLSL ES while `rgba16f` compiles (why the scalar half images widened). Negative
+  finds the converted modules, that a 64-bit float, which SPIR-V alone accepts, fails the full target set, that the
+  required set is the shipped backends', and that a storage-image format a target rejects fails the bake (`r16f`
+  with GLSL ES added) while `r16f` and `rgba16f` compile for the shipped targets. Negative
   control: any of the pre-N1.2 sources (e.g. `git show 7ac980d7:rendering/quick/scene3d/motion.py`) fails it.
 - `tests/test_visualizer_glyph_row.py` — the Visualizer card's one bottom-right glyph row (operator, 8 Nov) on the
   hidden production scene: on the ordinary, a narrow and the display-wide card, every combination of Reset Camera and

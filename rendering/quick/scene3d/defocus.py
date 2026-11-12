@@ -6,7 +6,7 @@ over its own disc and lays the result over the scene. A bright point becomes a d
 softens by exactly its circle, and the light a pixel carries is kept, only spread.
 
 * ``DefocusLayer(label)``; ``begin(width, height)`` binds the layer (RGBA16F premultiplied colour at location 0, the
-  circle of confusion in pixels, RG16F, at location 1, both cleared to 0) with premultiplied-over blending on
+  circle of confusion in pixels in .rg of an RGBA16F, at location 1, both cleared to 0) with premultiplied-over blending on
   colour and max blending on the circle, so nearer layered objects win; the caller draws its near objects with
   ``SCENE_DEFOCUS_GLSL`` ``sceneDefocusWrite(premultipliedColour, alpha, cocPixels)``. ``end()`` hands back the
   caller's framebuffer, viewport, blend and draw buffers.
@@ -247,7 +247,7 @@ class DefocusLayer:
     def _allocate(self, width: int, height: int) -> None:
         self._drop_targets()
         self._colour = self._texture(gl.GL_RGBA16F, width, height)
-        self._circle = self._texture(gl.GL_RG16F, width, height)
+        self._circle = self._texture(gl.GL_RGBA16F, width, height)   # .rg used (N1.7: QRhi has no RG16F)
         name = (ctypes.c_uint * 1)()
         gl.glCreateFramebuffers(1, name)
         self._fbo = int(name[0])

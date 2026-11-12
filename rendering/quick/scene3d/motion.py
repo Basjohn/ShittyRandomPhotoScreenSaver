@@ -39,14 +39,14 @@ _TILE_ROW_INVOCATIONS = 64
 # The longest motion in each K x K tile, one workgroup per tile: each invocation takes a row
 # and finds its longest motion left to right, then the first invocation takes the longest of
 # those rows top to bottom. The first strictly longer motion wins at both steps, so ties
-# resolve exactly as a column-then-row scan. Every value is a velocity texel (RG16F), stored
-# back unchanged.
+# resolve exactly as a column-then-row scan. Every value is a velocity texel (half floats in .xy of
+# an RGBA16F, as the velocity is), stored back unchanged.
 # Bindings (one namespace on Vulkan): the velocity on texture unit 0, the tiles on image unit 1.
 _TILE_MAX_BLOCK = Scene3DBlockLayout.of("MotionTileMax", (("uTile", "int"),))
 _TILE_MAX_COMPUTE = f"""#version 460 core
 layout(local_size_x = {_TILE_ROW_INVOCATIONS}) in;
 layout(binding = 0) uniform sampler2D uVelocity;
-layout(rg16f, binding = 1) writeonly uniform image2D uTiles;
+layout(rgba16f, binding = 1) writeonly uniform image2D uTiles;
 {_TILE_MAX_BLOCK.glsl(COMPUTE_BLOCK_BINDING)}shared vec2 rowLongest[{MOTION_BLUR_MAX_TILE}];
 void main() {{
     ivec2 size = textureSize(uVelocity, 0);
@@ -200,7 +200,7 @@ class MotionBlur:
         gl.glUseProgram(resources.compute_program("motion_tile_max", _TILE_MAX_COMPUTE))
         gl.glBindTextureUnit(0, velocity_texture)
         with self._blocks.bound(_TILE_MAX_BLOCK.pack({"uTile": tile})), \
-                bound_image(1, tiles, gl.GL_WRITE_ONLY, gl.GL_RG16F):
+                bound_image(1, tiles, gl.GL_WRITE_ONLY, gl.GL_RGBA16F):
             dispatch((tile_w, tile_h, 1), gl.GL_TEXTURE_FETCH_BARRIER_BIT)
 
         gl.glBindVertexArray(vao)
@@ -253,7 +253,7 @@ class MotionBlur:
         tile = motion_blur_tile(height)
         tile_w, tile_h = -(-width // tile), -(-height // tile)
         # The tile max is a compute-written image; only the blurred scene is drawn.
-        self._allocate_texture(tile_w, tile_h, gl.GL_RG16F)
+        self._allocate_texture(tile_w, tile_h, gl.GL_RGBA16F)   # .xy used (N1.7: QRhi has no RG16F)
         texture = self._allocate_texture(width, height, gl.GL_RGBA8)
         framebuffer_name = (ctypes.c_uint * 1)()
         gl.glCreateFramebuffers(1, framebuffer_name)

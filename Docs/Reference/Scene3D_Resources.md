@@ -111,7 +111,7 @@ An extended mesh's near controls sample clamped authored data, with identical po
 opt-in positive cubic B-spline surface sampling, over the existing bendable mesh. Fragment-only helpers supply curved
 surface wire coordinates and contours; tessellation edges are not the artistic wireframe.
 Only admitted heightfield consumers import/use these primitives. `rendering/quick/scene3d/heightfield.py` owns one lazy
-immutable R32F or explicitly requested RG32F texture per consumer/context, with upload-on-change and explicit
+immutable R32F or explicitly requested two-component (RGBA32F storage since N1.7, uploaded as RG) texture per consumer/context, with upload-on-change and explicit
 unpack/texture/sampler restoration. The optional second channel holds authored distance to bilinear land support;
 its bounded separable distance transform runs at configuration, never on the logical or render clock.
 Failed release retains the owned handle for retry. There is no shared simulation, clock or global texture cache.
@@ -216,7 +216,7 @@ and binds; depth renderbuffers also use named storage. Rendering and resolve pas
 | `SceneTarget` order-independent transparency | `oit=True` adds an RGBA16F accumulation and an R16F revealage (multisampled with the colour) in their own framebuffer, sharing the scene depth (tested, never written) and, with bloom, the emission attachment at location 2 (added). Passes inside `transparent_writes(frame, resources)` write `sceneTransparent(premultiplied, alpha, view_depth)` (`SCENE_OIT_GLSL`: weighted blended OIT, McGuire-Bavoil equation 10 on view depth); leaving resolves per sample (`gl_SampleID`) over attachment 0, premultiplied, alpha added on overlays (coverage) and only dimmed otherwise (emitted brightness), then restores blend (indices 0-2), colour masks, depth test and depth mask |
 | `SceneTarget` light shafts (2026-10-17) | `shafts=True` (overlays only) adds an R16F shaft-source attachment at location 2, written only inside `shaft_writes()` (colour and emission masked there); a `ShaftLight` set during the scope makes `end` run `LightShafts` (half-size resolve plus two 16-tap radial gathers into two R16F levels) and composite through `_with_shafts`, the one transform of the overlay composite that adds the rays where the scene drew. Without a light that frame, the overlay composites as before |
 | Bloom | Four progressively halved RGBA16F levels, allocated with the requesting target |
-| Motion | One RG16F compute-written tile-max image (no framebuffer) and one RGBA8 output, using existing tile and target sizes |
+| Motion | One RGBA16F (.xy) compute-written tile-max image (no framebuffer) and one RGBA8 output, using existing tile and target sizes |
 | Motion Trails | Existing R8 mask, allocated only for its active requesting consumer |
 
 Names enter their current owner before parameter/storage calls so an exception cannot strand an untracked resource.
@@ -294,8 +294,10 @@ with `layout.glsl(COMPUTE_BLOCK_BINDING)`, which the pass's owner binds through 
 stream ring, warmed as one step of the owner's `warm`, left unbound after each scope; `rebind` gives a later dispatch
 in the same scope its own values). Every resource in a compute source has its own binding number (samplers, images,
 storage and the block share one namespace on Vulkan); in OpenGL the texture or image unit is that number.
-`tools/compute_pass_identity.py` records each converted pass's outputs on fixed inputs and its GL calls, and compares
-two records bit by bit.
+`tools/compute_pass_identity.py` records each converted pass's outputs on fixed inputs, its GL calls and its textures'
+memory, and compares two records bit by bit; `paired` times a git revision's owner against the working tree's in one
+process. Storage-image formats are the shipped backends' (SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2): a scalar half-float
+image is `r16f` (the edge field's luma, blur and strength images, the fog's steady share); GLSL ES is not a target.
 
 **First consumer: motion blur's tile max.** The candidates were measured first (2560x1440 offscreen, RTX 4090):
 
@@ -312,7 +314,7 @@ two records bit by bit.
 The tile max is one dispatch, one workgroup per K x K tile: an invocation per tile row finds the first strictly longest
 motion left to right, then the first invocation takes the first strictly longest row top to bottom, which is exactly
 the separable column-then-row scan (ties and partial edge tiles included). The gather takes the 3 x 3 neighbourhood
-maximum of the tile image itself (same scan order). Values are RG16F velocity texels stored back unchanged. Tile
+maximum of the tile image itself (same scan order). Values are half-float velocity texels (.xy of an RGBA16F since N1.7) stored back unchanged. Tile
 rows are held in a fixed 256-row shared array; a target needing larger tiles (over ~10,000 px high) is a loud error.
 The dispatch issues `GL_TEXTURE_FETCH_BARRIER_BIT` for the gather's sampled read. Motion Blur Off compiles, allocates
 and dispatches nothing.
@@ -376,13 +378,14 @@ the CPU side stays constant. A future consumer with a smaller pool should be mea
 ## Edge fields (contour distance)
 
 `rendering/quick/scene3d/edge_field.py` derives, once per run and photograph, a field of the distance to the
-picture's nearest structural contour and that contour's strength (RG16F, linear) from the lent presentation texture:
+picture's nearest structural contour and that contour's strength (.rg of an RGBA16F, linear) from the lent presentation texture:
 luma copy, two binomial blurs, Sobel ridges after non-maximum suppression (seeded at their sub-texel ridge position), jump flooding on 32-bit positions, resolve. Seven dispatches
 plus one per flood step, on the render thread in the frame that first needs it; image units are scoped by
-`bound_image`. Six textures at 768 px on the longer side (about 14.6 MB at 16:9: three RGBA16F for the luma, blur
-and strength, two RG32F flood buffers, the RG16F field; the three scalar images were R16F, 8.6 MB in all, until N1.2:
-GLSL ES 3.1 has no `r16f` storage image, and RGBA16F keeps the same half-float values, so the field stays
-bit-identical; the build went from about 0.11 to 0.13 ms GPU at 1080p), allocated by the consumer's warm-up
+`bound_image`. Six textures at 768 px on the longer side (about 14.6 MiB at 16:9: three R16F for the luma, blur
+and strength, two RGBA32F flood buffers whose .rg hold the seed positions, the RGBA16F field; N1.2 widened the scalar
+images to RGBA16F for GLSL ES, which is no longer a target, and they went back to R16F; N1.7 widened the flood
+buffers from RG32F and the field from RG16F, which QRhi lacks: each step bit-identical, the build +0.035 ms GPU at
+1080p, once per run), allocated by the consumer's warm-up
 for the render size and dropped at its `park()`; nothing exists otherwise. `edge_field_reference` is the CPU mirror
 (tests compare ridges and flooded distances). First consumer: Edge Bloom Reveal. Seeded differently it can serve
 organic fills (Capillary Bloom, Surface Tension Merge).
@@ -436,7 +439,8 @@ state and allocation.
 ## Defocus layer and HDR scenes
 
 `rendering/quick/scene3d/defocus.py`: `DefocusLayer` is depth of field for objects near the lens. `begin(w, h)`
-binds an RGBA16F premultiplied colour and an RG16F alpha-weighted circle of confusion (both mipmapped); the caller
+binds an RGBA16F premultiplied colour and an alpha-weighted circle of confusion in .rg of an RGBA16F (RG16F until
+N1.7; both mipmapped); the caller
 draws its near objects sharp with `SCENE_DEFOCUS_GLSL` `sceneDefocusWrite(premultiplied, alpha, cocPixels)`; `begin`
 sets its own colour masks for both outputs (masks are per draw buffer index: a scene target masks its emission index
 outside `emission_writes()`, which dropped every circle); `end()` hands back framebuffer, viewport, blend, depth and

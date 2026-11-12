@@ -1165,7 +1165,8 @@ class SceneTarget:
         gl.glNamedFramebufferTexture(self._names["resolve_fbo"], gl.GL_COLOR_ATTACHMENT0,
                                      self._names["resolve_texture"], 0)
         if motion:
-            self._allocate_plain_texture("resolve_velocity", width, height, gl.GL_RG16F)
+            # .xy of an RGBA16F (N1.7: QRhi has no RG16F; every reader takes .xy).
+            self._allocate_plain_texture("resolve_velocity", width, height, gl.GL_RGBA16F)
             gl.glNamedFramebufferTexture(self._names["resolve_fbo"], gl.GL_COLOR_ATTACHMENT1,
                                          self._names["resolve_velocity"], 0)
             gl.glNamedFramebufferDrawBuffers(self._names["resolve_fbo"], 2,
@@ -1212,6 +1213,8 @@ class SceneTarget:
         self._names["fbo"] = _new_framebuffer(f"{self.label} scene target")
         self._allocate_attachment("colour", samples, width, height, gl.GL_RGBA16F if hdr else gl.GL_RGBA8)
         if motion_blur:
+            # RG16F stays (N1.7): widened to RGBA16F this multisampled attachment costs +127.5 MiB per 3840x2160
+            # display at 4x and +255 MiB at 8x, so the native core takes it through D5.3's formats service.
             self._allocate_attachment("velocity", samples, width, height, gl.GL_RG16F)
         if emission:
             self._allocate_attachment("emission", samples, width, height, gl.GL_RGBA16F)

@@ -56,7 +56,9 @@ class HeightfieldTexture:
             if not self._texture:
                 raise RuntimeError(f"{self.label}: heightfield texture allocation failed")
             # Retain the handle on failure: release() is still its deletion owner.
-            internal_format = gl.GL_R32F if self._components == 1 else gl.GL_RG32F
+            # Two components are stored RGBA32F (N1.7: QRhi has no RG32F; the GL_RG upload leaves b = 0, a = 1,
+            # exactly what an RG32F texture samples as).
+            internal_format = gl.GL_R32F if self._components == 1 else gl.GL_RGBA32F
             gl.glTextureStorage2D(self._texture, 1, internal_format, size, size)
             gl.glTextureParameteri(self._texture, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
             gl.glTextureParameteri(self._texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)

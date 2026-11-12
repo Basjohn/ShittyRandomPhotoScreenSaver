@@ -951,8 +951,8 @@ values during unrelated work.
   same-snapshot rendered radii. Invisible/zero-alpha heroes do not need a mask. Preserve rounded/stencilled
   content clipping, quarter-turn rotation, and canonical/extreme-wide/extreme-tall/expanded viewports.
 - The optional ambient renderer is a **bounded, content-local transparent GPU target**, with at most 2048
-  pixels on its longest edge; aspect remains uniform. Its glow light is a second same-size R11F_G11F_B10F
-  attachment that exists only while some particle glows. No decor renderer resources or extra ambient texture,
+  pixels on its longest edge; aspect remains uniform. Its glow light is a second same-size RGBA16F (.rgb)
+  attachment (R11F_G11F_B10F until N1.7: QRhi has no such format) that exists only while some particle glows. No decor renderer resources or extra ambient texture,
   sprite/mask draw work should persist for a never-enabled or subsequently disabled scene.
 - **Performance caveat:** big-over-small hero foreground composition changes the *shared* Bubble shader,
   so it can have cost even when decorations are OFF. At maximum ambient density and Glow Spread, sprite
