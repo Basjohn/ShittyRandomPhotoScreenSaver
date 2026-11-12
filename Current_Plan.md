@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** the N1.6 remainder (Medium); N2.4 next in the High slot.
+**Now (in flight):** N2.4 (High); the relax race fix (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -46,8 +46,10 @@ at the size asked.
   1. N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
   2. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
-  1. The N1.6 remainder (the motion and trail family, then its transitions; no C++).
-  2. 1B.10.
+  1. The propagation relax race (N1, before N4.g), then the raw-delete side defect.
+  2. The remaining N1.6 groups by first consumer (the 2D modes with `QUICK_VISUALIZER_VERTEX_SOURCE`, the scene
+     substrate), each bit-identical on OpenGL.
+  3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -373,18 +375,24 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   ratchet in the same change. A group whose conversion is not pixel-identical inside one dispatch is converted at
   its port instead. Order: by first consumer on the ladder, not N5's order. Merged 12 Nov (ratchet 197 to 95): the
   substrate step, Spectrum, the seven fullscreen transitions, the item-quad transition families, the Quick hosts and
-  Waveform Ribbon (its fog composite, fullscreen vertex and march left: see the last box below). Open (this is the
-  one home of the remainder; ratchet 95):
+  Waveform Ribbon; 13 Nov (ratchet 95 to 52): the motion and trail family and its transitions, `bind_frame`'s loose
+  branch deleted, and Waveform's fog. Open (this is the one home of the remainder; ratchet 52):
   - [ ] Spline Curve, Oscilloscope, Bubble (N5.1), with `QUICK_VISUALIZER_VERTEX_SOURCE`.
   - [ ] The rest of the shared scene substrate (targets' resolves, post, environment, resources).
   - [ ] Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere.
-  - [ ] The remaining transitions: the shared motion and trail helpers (`set_motion_uniforms`, `trail_program`) to
-    pass blocks as their own family, then Block Spins, Crumble, Depth Cascade, Glass Shatter, Jigsaw, Membrane,
-    Pixel Accretion, `motion._GATHER_FRAGMENT`, `trails._EDGE_FRAGMENT` and the Capillary seed; then `bind_frame`'s
-    loose branch is deleted.
-  - [ ] Waveform's `FOG_COMPOSITE_FRAGMENT`, `FOG_FULLSCREEN_VERTEX` and the fog march (with N4.f1's fog volume
-    port).
-  - [ ] Is `rendering/gl_programs/lighting.py` (loose uniforms) in a group? Place it.
+  - `rendering/gl_programs/lighting.py` belongs to N4.m: it is not a product shader (no `#version`; only its test
+    draws it), and a program that includes it converts it (a 3088-byte block, about 3 KB of resources).
+  - [ ] Defect, before N4.g/N5.2g: the propagation field's relax pass reads the field it writes, so at 1920x1080
+    two runs of the same code differ in 552 to 1063 of 36,864 values (at most 0.0009). That is undefined behaviour
+    on every backend and can be worse off NVIDIA. Make relax ping-pong between two buffers (or stage per
+    dispatch with a barrier), so the result is deterministic. Prove it bit-repeatable over runs, and show Capillary
+    and Edge Bloom frames before and after for the lead's visual judgement (exact parity with a racy original
+    cannot exist).
+  - [ ] Side defect: tests delete programs with a raw `glDeleteProgram` (for example
+    `tests/test_scene3d_lighting.py:53`, `tests/test_scene3d_target.py:331`, `tests/test_scene3d_uniforms.py:123`,
+    most `tests/test_extruded_bubble_*_gpu.py`; grep `glDeleteProgram\(` over `tests/`), and so does
+    `tools/compute_pass_identity.py:850`. A program that holds the conventions block leaves a stale hold. Switch
+    every one to `delete_program`, and add a test that greps `tests/` and `tools/` for the raw call.
 - [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
   (`scene3d/target.py`, RG16F kept; RGBA16F would add 127.5 MiB per 4K display at 4x, 255 MiB at 8x). Built with the
   substrate when the scene target ports (N3), or reconsidered if N1.8's resolve-first rule removes the multisampled
