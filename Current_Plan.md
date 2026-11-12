@@ -389,11 +389,18 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   ratchet in the same change. A group whose conversion is not pixel-identical inside one dispatch is converted at
   its port instead. Order: by first consumer on the ladder, not N5's order. Merged 12 Nov (ratchet 197 to 95): the
   substrate step, Spectrum, the seven fullscreen transitions, the item-quad transition families, the Quick hosts and
-  Waveform Ribbon (its fog composite, fullscreen vertex and march left: the N1.6 remainder box under N2b). Open:
+  Waveform Ribbon (its fog composite, fullscreen vertex and march left: see the last box below). Open (this is the
+  one home of the remainder; ratchet 95):
   - [ ] Spline Curve, Oscilloscope, Bubble (N5.1), with `QUICK_VISUALIZER_VERTEX_SOURCE`.
   - [ ] The rest of the shared scene substrate (targets' resolves, post, environment, resources).
-  - [ ] Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere; the remaining transitions (the N1.6 remainder box
-    under N2b).
+  - [ ] Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere.
+  - [ ] The remaining transitions: the shared motion and trail helpers (`set_motion_uniforms`, `trail_program`) to
+    pass blocks as their own family, then Block Spins, Crumble, Depth Cascade, Glass Shatter, Jigsaw, Membrane,
+    Pixel Accretion, `motion._GATHER_FRAGMENT`, `trails._EDGE_FRAGMENT` and the Capillary seed; then `bind_frame`'s
+    loose branch is deleted.
+  - [ ] Waveform's `FOG_COMPOSITE_FRAGMENT`, `FOG_FULLSCREEN_VERTEX` and the fog march (with N4.f1's fog volume
+    port).
+  - [ ] Is `rendering/gl_programs/lighting.py` (loose uniforms) in a group? Place it.
 - [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
   (`scene3d/target.py`, RG16F kept; RGBA16F would add 127.5 MiB per 4K display at 4x, 255 MiB at 8x). Built with the
   substrate when the scene target ports (N3), or reconsidered if N1.8's resolve-first rule removes the multisampled
@@ -490,11 +497,6 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 
 **N2b. The background layer, natively, and the first full rehearsal**
 
-- [ ] N1.6 remainder (merged 12 Nov to ratchet 95): the shared motion and trail helpers (`set_motion_uniforms`,
-  `trail_program`) to pass blocks as their own family, then Block Spins, Crumble, Depth Cascade, Glass Shatter,
-  Jigsaw, Membrane, Pixel Accretion, `motion._GATHER_FRAGMENT`, `trails._EDGE_FRAGMENT` and the Capillary seed;
-  then `bind_frame`'s loose branch is deleted. Waveform's `FOG_COMPOSITE_FRAGMENT`, `FOG_FULLSCREEN_VERTEX` and
-  the fog march. Is `rendering/gl_programs/lighting.py` (loose uniforms) in a group? Place it.
 - [ ] Side defect: the legacy program classes' `render()` and `cache_uniforms()` in
   `rendering/gl_programs/{blinds,burn,crossfade,particle,raindrops,slide,warp,wipe}` are unused and now read
   block sources; delete them (grep first) with the readiness ratchet unchanged.
