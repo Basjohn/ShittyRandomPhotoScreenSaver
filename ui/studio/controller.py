@@ -2522,8 +2522,14 @@ class StudioController(QObject):
             self.bridge.notify(f"Kept: {kept}{rest}{policy}")
 
     def orbit_save_route(self) -> str:
-        """How this mode's orbit is saved outside the gesture (``framed.orbit_save_route``: its capabilities)."""
-        from ui.studio.framed import orbit_save_route
+        """How this mode's orbit is saved outside the gesture (``framed.orbit_save_route``: its capabilities).
+
+        A mode without camera navigation (2D / camera-less, ``navigation()`` is None) has no orbit at all, so
+        nothing is saved and its mode descriptor is never consulted: the Studio hosts any adapter, not only
+        registered visualizer modes."""
+        from ui.studio.framed import PREVIEW_ONLY, orbit_save_route
+        if self.navigation() is None:
+            return PREVIEW_ONLY
         return orbit_save_route(self.adapter.mode_id,
                                 can_save_camera=callable(getattr(self.store, "save_camera", None)))
 
