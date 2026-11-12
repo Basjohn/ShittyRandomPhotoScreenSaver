@@ -19,9 +19,6 @@ LEGACY_GL_ONLY = frozenset({
     "rendering.gl_programs.waveform_atmosphere.FIELD_COMPUTE",
     "rendering.gl_programs.waveform_floor_give.FLOOR_GIVE_BLUR_COMPUTE",
     "rendering.gl_programs.waveform_floor_give.FLOOR_GIVE_SECTION_COMPUTE",
-    "rendering.quick.scene3d.propagation_field._EXTENT_COMPUTE",
-    "rendering.quick.scene3d.propagation_field._HEADER",
-    "rendering.quick.scene3d.propagation_field._RELAX_COMPUTE",
 })
 
 
