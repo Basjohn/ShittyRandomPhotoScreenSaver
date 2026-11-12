@@ -382,7 +382,7 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 - D4 landed (D4.1 to D4.8 merged 12 Nov, evidence `.artifacts/evidence/native_core/20261112_d4/`): no 64-bit type
   in either drift program; exact Dekker products instead of `fma` (`qsb` turns `fma` into HLSL `mad`, which may round
-  twice); baked for SPIR-V, GLSL 430 and 310 es, HLSL 5.0 and MSL 1.2; the readiness check discovers compute sources
+  twice); baked for SPIR-V, GLSL 430, HLSL 5.0 and MSL 1.2; the readiness check discovers compute sources
   and bakes every target (`LEGACY_GL_ONLY` now 16); full specks 0.279 to 0.050 ms GPU and 3.89 to 0.34 ms CPU
   submit; the worst 4K difference 1.4 px at the near plane (the old `double` path 1.3 px; both keep float32
   displacement); the stream ring sized to the chain count; a warm-up self-check of the pair arithmetic.
