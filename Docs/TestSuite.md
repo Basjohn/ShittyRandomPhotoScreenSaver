@@ -1034,6 +1034,10 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   `test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box[False/True]` (the side handles give or
   take the block, the artwork is what `MediaArtworkRule.js` gives it, evaluated as written; the text column is the
   rest; Media's artwork look still applies; red with the artwork height held at its natural size);
+  `test_the_first_sample_of_a_gesture_on_a_never_edited_block_moves_nothing[handle]` (each side, a corner, a
+  two-axis diagonal: the first sample stores the block and its base and moves nothing; then width taken narrows and
+  width given widens the artwork from natural; red on the reference-without-base rule, taking 50 px widened it to
+  165 px);
   `test_the_artwork_is_the_same_for_a_short_and_a_very_long_track[corner-box]` (one stored record, a short and a very
   long track, album present or not: the same artwork rectangle, natural and with a stored box; red on the
   text-relative share);

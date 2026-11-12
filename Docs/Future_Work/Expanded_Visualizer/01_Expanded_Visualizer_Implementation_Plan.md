@@ -893,19 +893,19 @@ can most geometry normally."
     given (or minus it, taken) beyond the widget's reference width, never under 0.4 of its natural size (the artwork
     role's own minimum), always leaving the text its room, and at most the spec's widest shape (`maxAspect`: the Media
     card 1, never wider than tall, its render unchanged; Now Playing 16:9, lead 12 Nov). Now Playing's reference is its
-    natural artwork, the gap and the text's minimum room (2.5 ems, or the Media Controls bar's width): geometry only,
-    so the artwork never changes from one track to the next (lead, 12 Nov); the text group takes the rest of the width
-    and elides. An unset width is the natural block: the artwork keeps its natural width and the block hugs the text.
+    **base** (lead, 12 Nov): at the first size gesture on a never-edited block (a side handle, a corner, the wheel)
+    Fullscreen Edit stores the block as drawn (`text_width`, `text_height`) and its width as `base_width`, so that first
+    sample moves nothing; from then on the share is the width given or taken since the base, so the artwork follows
+    the stored geometry only and never the current track's text; the text group takes the rest of the width and elides.
+    A never-edited block is natural: it hugs the text beside a natural artwork. Restore Size returns all three to 0.
     The album row is reserved in the artwork's height whenever the Media widget shows albums (its option, not the
     track). A corner or the wheel scales the whole block. The artwork child record multiplies on top, as on Media.
     Stored in the same members: `text_height` is the block's height and `text_width` its width beyond the natural
     artwork column (the artwork's natural side and the gap), so a 1B.7 value (which set the text box beside a natural
-    artwork) draws the same block width (its artwork now reshaped by the rule). Measured (off-screen sheets, default
-    font, title "Midnight City", from the natural block): natural 93 x 93; width given 160 px -> 165 x 93 (16:9);
-    width taken 50 px -> 120 x 93; height given 90 px -> 93 x 183; height taken 24 px -> 93 x 69; corner 142 x 142.
-    The first touch of a width handle steps the artwork from its natural width to the rule's width for that block
-    (the natural block hugs the track's text, the rule's reference does not): for this title +27 px even when width is
-    taken; within a set block, taking width narrows it and giving width widens it.
+    artwork) draws the same block width; such a value has no base and loads one through the bridge (the reference the
+    first 1C.3 rule used), so it draws what that rule drew. Measured (off-screen sheets, default font, title "Midnight
+    City", from the natural block): natural 93 x 93; width given 160 px -> 149 x 93; width taken 50 px -> 76 x 93;
+    height given 90 px -> 93 x 183; height taken 24 px -> 93 x 69; corner 142 x 142.
   - *Orientation* is the side of the display the block's centre lies on (left half: artwork left, text left-aligned;
     right half: mirrored; exactly at the midpoint: left), as accepted on 10 Nov; top and bottom never change it (the
     text sits beside the artwork, centred on it). The block's width does not depend on its side (no binding loop). The
