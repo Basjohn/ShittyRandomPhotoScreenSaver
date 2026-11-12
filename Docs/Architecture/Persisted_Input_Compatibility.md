@@ -242,6 +242,36 @@ without the safe path below.
   editing between 8 and 12 Nov 2026).
   *Blocked:* re-adding `title` / `album` as roles beside the group (two owners of one line's place), or renaming the
   persisted key or the `metadata` role.
+- **Now Playing's block base** (`core/settings/fullscreen_overlays.py`, `_bridge_base_width`, inside the one
+  normaliser; plan 1C.3, 12 Nov 2026). Since 12 Nov the Media artwork rule measures Now Playing's width share against
+  `now_playing.base_width`, the block's width stored once at its first size gesture in Fullscreen Edit (so that first
+  sample moves nothing). Fullscreen Edit never writes a set block width (`text_width`) without a base. A value with a
+  set width and no base (the member missing or zero) was written before it: by 1B.7 (the text box) or by the first
+  1C.3 rule, which measured against the natural artwork, the gap and the text's minimum room. Its base is that
+  reference (`now_playing_text_room`: 2.5 ems, or the Media Controls bar's width, with the QML's pixel rounding), so
+  it draws exactly what that rule drew; a second load changes nothing. Tests: the bridge asserts in
+  `tests/test_visualizer_expansion_overlay_settings.py::test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_group`
+  (the same raw fixture) and the drawn check in the saved-profile load test of
+  `tests/test_visualizer_expansion_fullscreen_edit.py`. *Horizon:* until the operator closes it.
+  *Blocked:* treating a set width without a base as an edited block (its artwork would step on the next touch).
+- **Visualizer preset references** (`core/settings/visualizer_preset_indices.py`, `preset_references` beside
+  the `preset_<mode>` indices; plan 1C.1, 12 Nov 2026; R-190). A stored preset is the slot index plus the preset's
+  identity (its authored name without the slot number), a signature of the catalogue it was chosen from and the
+  slot it was written with. While the catalogue is unchanged, or when a writer chose another slot since (the
+  stored index differs from the reference's slot: a selection made against the catalogue the process holds), the
+  index is the user's choice; when it changed (presets removed, renamed or
+  renumbered by an install or round of authoring), the identity decides: the same preset wherever it now sits,
+  Custom as Custom, else the mode's Preset 1. Presets are authored, mutable content: deleting or renaming one
+  needs no record anywhere and has no consequence beyond that quiet fallback (operator, 12 Nov 2026). One log line per repair, never a dialog, never a failed open; the settings load stores the
+  resolved reference once (`repair_preset_references`; a second load changes nothing). **Bridge:** a profile
+  written before 12 Nov 2026 has indices only: an index the catalogue still has keeps its slot, one past it falls
+  back to Preset 1, and the load writes the reference. Fixture:
+  `tests/fixtures/visualizer_preset_reference_old_profile.json`; tests:
+  `tests/test_visualizer_preset_references.py` (every curated mode; the real Settings dialog and Studio).
+  *Horizon:* the index-only bridge stays while shipped profiles may
+  predate references. *Blocked:* resolving by index alone after a catalogue change (a stored Custom silently
+  became a curated preset, a removed slot silently became its neighbour); and any list, record or test of the
+  shipped presets' names, counts or contents (a guard of that kind was merged and removed on 12 Nov 2026).
 
 ### Not debt — current input contracts (do not "simplify")
 

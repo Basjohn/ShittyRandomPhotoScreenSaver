@@ -25,6 +25,9 @@ from core.settings.visualizer_mode_registry import (
 from core.settings.visualizer_mode_settings import read_control_value, spec_control, spec_controls
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_preset_indices import (
+    PRESET_REFERENCES_KEY,
+    normalize_preset_references,
+    stamp_preset_references,
     get_missing_preset_fallback_index,
     resolve_all_preset_indices_from_getter,
     resolve_all_preset_indices_from_mapping,
@@ -171,6 +174,8 @@ _CORE_SETTINGS_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "expanded_display_requested": normalize_expanded_display_requested,
     # Expanded Visualizer overlays (M3b): one global Visualizer setting, no mode prefix (presets never carry it).
     "fullscreen_overlays": normalize_fullscreen_overlays,
+    # The stored preset references (identity + catalogue per mode) beside the slot indices (1C.1).
+    "preset_references": normalize_preset_references,
     "rainbow_enabled": bool,
     "rainbow_speed": float,
 }
@@ -442,6 +447,9 @@ def _build_visualizer_core_kwargs(
     )
     data["fullscreen_overlays"] = normalize_fullscreen_overlays(
         read_value("fullscreen_overlays", _visualizer_default("fullscreen_overlays"))
+    )
+    data["preset_references"] = normalize_preset_references(
+        read_value(PRESET_REFERENCES_KEY, _visualizer_default(PRESET_REFERENCES_KEY))
     )
     data.update(
         {
@@ -762,6 +770,9 @@ class SpotifyVisualizerSettings:
     fullscreen_overlays: Dict[str, Any] = field(
         default_factory=lambda: normalize_fullscreen_overlays(_visualizer_default('fullscreen_overlays'))
     )
+    preset_references: Dict[str, Dict[str, str]] = field(
+        default_factory=lambda: normalize_preset_references(_visualizer_default(PRESET_REFERENCES_KEY))
+    )
     spectrum_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing_enabled'))
     spectrum_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('spectrum_visual_smoothing'))
     spectrum_mirrored: bool = field(default_factory=lambda: _visualizer_default('spectrum_mirrored'))
@@ -846,6 +857,7 @@ class SpotifyVisualizerSettings:
     def __post_init__(self):
         self.expanded_display_requested = normalize_expanded_display_requested(self.expanded_display_requested)
         self.fullscreen_overlays = normalize_fullscreen_overlays(self.fullscreen_overlays)
+        self.preset_references = normalize_preset_references(self.preset_references)
         self._apply_core_visual_defaults()
         self._apply_devcurve_defaults()
         self._apply_sphere_defaults()
@@ -1015,6 +1027,8 @@ class SpotifyVisualizerSettings:
         kwargs["mode_activation"] = normalize_visualizer_mode_activation(
             get(f"{prefix}.mode_activation", _visualizer_default("mode_activation"))
         )
+        # The indices were resolved against the current catalogue: their references follow them.
+        kwargs["preset_references"] = stamp_preset_references(_preset_kwargs)
         return cls(**kwargs)
 
     @classmethod
@@ -1080,6 +1094,10 @@ class SpotifyVisualizerSettings:
         kwargs["mode_activation"] = normalize_visualizer_mode_activation(
             _get("mode_activation", _visualizer_default("mode_activation"))
         )
+        if resolve_preset_indices:
+            # Resolved against the current catalogue (by identity where the catalogue changed): the stored
+            # references follow the indices, so the next save repairs a reference that no longer resolved.
+            kwargs["preset_references"] = stamp_preset_references(_preset_kwargs)
         return cls(**kwargs)
 
     def to_dict(self, prefix: str = "widgets.spotify_visualizer") -> Dict[str, Any]:

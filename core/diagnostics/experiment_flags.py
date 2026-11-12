@@ -33,6 +33,12 @@ Admissions:
   ``--viz-in-process`` (the in-process path; it wins when both are given) and
   ``--viz-engine-worker`` (the worker). Read once per owner construction
   (:func:`visualizer_engine_worker_admitted`).
+* ``--only-display <index>`` / ``--only-display=<index>`` — RUN only: the saver's display windows go on exactly one
+  display, the 0-based screen index the product's logs report (``screen 0`` is the first screen Qt lists, normally
+  the primary). The one consumer is ``DisplayManager._get_allowed_screen_indices`` (it replaces the profile's physical
+  selection for the run; nothing is persisted). ``main.py`` refuses a malformed value, or an index no screen has, at
+  RUN startup with exit code 2; a display that disappears mid-run leaves the selection empty and never moves the
+  saver to another display. Absent, nothing changes (:func:`only_display_index` is ``None``).
 
 All are ordinary argv tokens in the ``=`` form, so a harness that launches a
 child passes them as arguments; nothing is read from the environment.
@@ -71,6 +77,8 @@ class ExperimentFlags:
     # The Visualizer's process path: None follows the platform default (the engine worker on every platform), True is
     # ``--viz-engine-worker``, False ``--viz-in-process`` (tests and tools state their path the same way).
     visualizer_engine_worker: bool | None = None
+    # ``--only-display``: the one screen index the saver's windows may use (RUN only); None leaves the selection alone.
+    only_display: int | None = None
 
     @property
     def lifecycle_telemetry_admitted(self) -> bool:
@@ -80,6 +88,39 @@ class ExperimentFlags:
         flag turns it on; neither leaves it off (Standard/MC runtime).
         """
         return self.viz_switch_telemetry or self.abc_drive is not None
+
+
+ONLY_DISPLAY_FLAG = "--only-display"
+
+
+def parse_only_display(argv: Sequence[str]) -> int | None:
+    """The ``--only-display`` screen index in ``argv``, strictly: ``None`` when absent.
+
+    Accepts ``--only-display 1`` and ``--only-display=1``. Raises ``ValueError`` for a missing, non-integer or
+    negative value, or a second occurrence; whether a screen has that index is checked where the screens are known
+    (``main.py``'s RUN startup).
+    """
+    args = [str(arg) for arg in argv]
+    found: int | None = None
+    index = 0
+    while index < len(args):
+        token = args[index].strip()
+        raw: str | None = None
+        if token == ONLY_DISPLAY_FLAG:
+            if index + 1 >= len(args):
+                raise ValueError(f"{ONLY_DISPLAY_FLAG} requires a display index (0, 1, ...)")
+            raw = args[index + 1].strip()
+            index += 1
+        elif token.startswith(ONLY_DISPLAY_FLAG + "="):
+            raw = token.split("=", 1)[1].strip()
+        if raw is not None:
+            if found is not None:
+                raise ValueError(f"{ONLY_DISPLAY_FLAG} may be supplied only once")
+            if not raw.isdigit():
+                raise ValueError(f"{ONLY_DISPLAY_FLAG} requires a non-negative integer display index, got {raw!r}")
+            found = int(raw)
+        index += 1
+    return found
 
 
 def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
@@ -151,6 +192,10 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
                 pass
     if in_process_chosen:
         visualizer_engine_worker = False          # the in-process choice wins (the known-good fallback path)
+    try:
+        only_display = parse_only_display(args)
+    except ValueError:
+        only_display = None                       # RUN startup refuses it strictly (main.py); never a fallback here
     return ExperimentFlags(
         abc_drive=abc_drive,
         viz_switch_telemetry=viz_switch_telemetry,
@@ -160,6 +205,7 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
         mc_window_splash=mc_window_splash,
         log_dir=log_dir,
         visualizer_engine_worker=visualizer_engine_worker,
+        only_display=only_display,
     )
 
 
@@ -184,9 +230,10 @@ def experiment_flag_tokens(argv: Sequence[str]) -> tuple[str, ...]:
             or arg.startswith("--abc-drive=")
             or arg.startswith("--abc-layout-slot=")
             or arg.startswith("--abc-exclude-seconds=")
+            or arg.startswith(ONLY_DISPLAY_FLAG + "=")
         ):
             tokens.append(arg)
-        elif arg in ("--abc-drive", "--abc-layout-slot", "--abc-exclude-seconds"):
+        elif arg in ("--abc-drive", "--abc-layout-slot", "--abc-exclude-seconds", ONLY_DISPLAY_FLAG):
             tokens.append(arg)
             if index + 1 < len(args):
                 tokens.append(args[index + 1])
@@ -264,6 +311,11 @@ def visualizer_engine_worker_admitted() -> bool:
     return visualizer_engine_worker_platform_default() if chosen is None else bool(chosen)
 
 
+def only_display_index() -> int | None:
+    """The screen index ``--only-display`` restricts the saver's windows to, or ``None`` (the profile's selection)."""
+    return active_experiment_flags().only_display
+
+
 def override_active_flags_for_testing(flags: ExperimentFlags | None) -> None:
     """Set/clear the process admission directly (tests of the admission only)."""
     global _ACTIVE
@@ -284,5 +336,8 @@ __all__ = [
     "visualizer_switch_telemetry_admitted",
     "visualizer_engine_worker_platform_default",
     "visualizer_engine_worker_admitted",
+    "ONLY_DISPLAY_FLAG",
+    "parse_only_display",
+    "only_display_index",
     "override_active_flags_for_testing",
 ]

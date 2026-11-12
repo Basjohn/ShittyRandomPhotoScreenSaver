@@ -44,7 +44,7 @@ def running_from(worktree: Path) -> list[str]:
     if sys.platform != "win32":
         return []
     script = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('"
-              + worktree.name + "') -and $_.Name -ne 'powershell.exe' -and $_.Name -ne 'pwsh.exe' } | "
+              + worktree.name + "') -and $_.Name -ne 'powershell.exe' -and $_.Name -ne 'pwsh.exe' -and -not $_.CommandLine.Contains('agent_handover') } | "
               "ForEach-Object { \"$($_.ProcessId) $($_.Name) $($_.CommandLine.Substring(0, "
               "[Math]::Min(120, $_.CommandLine.Length)))\" }")
     done = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True)
@@ -74,7 +74,7 @@ def report(worktree: Path, commit: bool) -> None:
         for line in journal.read_text(encoding="utf-8", errors="replace").splitlines()[:80]:
             print(f"     | {line}")
     else:
-        print("   no journal (an agent briefed before the journal rule, or one that had not started)")
+        print("   NO JOURNAL: the agent never started, or broke the first rule of Agent_Worktree_Rules.md")
     evidence = worktree / ARTIFACTS_NAME / EVIDENCE_NAME
     if evidence.is_dir():
         folders = sorted({str(path.parent.relative_to(worktree)) for path in evidence.rglob("*") if path.is_file()})
@@ -101,7 +101,23 @@ def main() -> int:
             print(f"{worktree.name}: not a worktree")
             continue
         report(worktree, args.commit)
+    if not args.worktrees:
+        orphans(chosen)
     return 0
+
+
+def orphans(worktrees: list[Path]) -> None:
+    """Agent branches that are not merged into main and have no worktree any more (an automatic clean-up, a
+    removed folder): their work would otherwise be forgotten."""
+    with_worktree = {git(path, "rev-parse", "--abbrev-ref", "HEAD") for path in worktrees}
+    unmerged = git(ROOT, "branch", "--no-merged", "main", "--format=%(refname:short)").splitlines()
+    left = [name for name in unmerged if name.startswith("worktree-agent-") and name not in with_worktree]
+    if not left:
+        return
+    print("=" * 100)
+    print("UNMERGED AGENT BRANCHES WITHOUT A WORKTREE (merge or abandon each deliberately; say which in the plan):")
+    for name in left:
+        print(f"   {name}   {git(ROOT, 'log', '-1', '--format=%h %ad %s', '--date=short', name)[:130]}")
 
 
 if __name__ == "__main__":

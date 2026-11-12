@@ -1,7 +1,13 @@
 # Agent worktree rules (the lead's standing brief for every subagent)
 
 Every agent the lead dispatches reads this file first. Its task is a plan item in `Current_Plan.md`; this file is
-the environment and the rules that never change between tasks. The lead owns this file and the plan.
+the environment and the rules that never change between tasks. The lead owns this file and the plan. The lead's
+own side of the workflow (dispatch, audit, merge, handover after a usage cut-off) is
+`Docs/Guides/Orchestrator_Handbook.md`.
+
+**Your first action, before reading anything else:** create `.artifacts/handover/JOURNAL.md` in your worktree with
+your plan item's name and the line "started". The lead's tooling treats a worktree without a journal as an agent
+that never started.
 
 ## Environment (binding; calls outside these shapes are refused and waste a turn)
 - You are in a git worktree of the SRPSS repository (PySide6/Qt Quick screensaver with music visualizers, Windows 11). Your cwd is the worktree. One simple command per Bash call: no `&&`, `;`, `||`, pipes, subshells, `$(...)`, heredocs or `cd`. Never `python -c`: write a script with the Write tool inside your worktree under `.artifacts/scratch/<your task>/` and run it by path.
@@ -9,15 +15,19 @@ the environment and the rules that never change between tasks. The lead owns thi
 - Before any test or render that loads Qt resources, copy `ui/resources/assets.rcc` and `ui/resources/onboarding_assets.rcc` from `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\ui\resources\` into your worktree's `ui/resources/` (ignored by git; two plain `cp` calls).
 - Off-screen rendering of real pixels: offscreen QPA with `QT_QPA_FONTDIR=C:/Windows/Fonts`, or the hidden product host the existing capture tools use (`tools/` has harnesses for almost everything: read `Docs/Reference/Harness_Index.md` before writing a new one). A hidden host must call the product's Quick graphics configuration.
 - git only in plain forms from your cwd: `git status`, `git diff <paths>`, `git add <paths>`, `git commit -m "..."`, `git log -n 5 --oneline`, `git merge <branch>`. No `git -C`. Never push.
-- Never write or edit anything in the main checkout `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\` outside your worktree (reading there is fine). Evidence goes under your worktree's `.artifacts/evidence/<area>/20261111_<name>/`; list those paths in your report.
+- Never write or edit anything in the main checkout `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\` outside your worktree (reading there is fine). Evidence goes under your worktree's `.artifacts/evidence/<area>/<YYYYMMDD>_<name>/`; list those paths in your report.
 - Do not call `update_plan` or `wrap_up`. Do not edit `Current_Plan.md`: the lead owns it. Your task is written there in detail and that plan item is your brief; work through its boxes in order and report box by box.
 - Tests: run only the test files related to what you change, in the foreground, with `timeout 900` in front and `-p no:cacheprovider -q`. When you change a shared owner (DisplayManager, a runtime, a settings owner), grep `tests/` for the changed method and class names and run every file that hits, not only the files you edit. Never the whole suite, never `--isolated`. No background commands and no polling loops; nothing of yours may still be running when you report. New tests use the shared doubles in `tests/_display_manager_doubles.py` instead of hand-built stubs, and the real `SettingsDialog` instead of stub hosts.
 - Forbidden: load runs (`game60`, `tools/gpu_load_generator.py`, `--load`), visible windows of any kind on a real screen, builds or installers, live network, environment-variable flags, new timers or polling in product code, changes that retune the protected QSG/clip optimisation commits (ce07b991, 07486d83, 985b9d53).
+- Presets are authored, mutable, exchangeable content (`Docs/Guardrails/Visualizer_Presentation.md`, first
+  section): never list, manifest, sign, count, guard or test their names, slots or contents anywhere (tests,
+  product code, tools), never ask for a record when one is removed or renamed, never change a preset to make a
+  test pass. A stored selection that no longer resolves falls back quietly.
 - Tests never pin preset or default values or UI wording; assert structure and derive expectations from the canonical source. Every new test has a negative control you have seen fail on the pre-change code (say how you checked). Do not weaken or delete an assertion.
 - Standing product rules: fix at the owner, one contract and no exceptions; anything that appears or disappears fades (never vanishes); no teardown and rebuild where a live owner can be retargeted (a last resort); nothing costs per frame at rest; spec systems (`core/settings/visualizer_mode_settings.py`, `transition_settings.py`) are the single Settings owners; persisted ids are never renamed (Neon Lake is `shockwave_grid`, Spline Curve is `devcurve`); a changed stored shape loads old profiles through a bridge with a fixture (`Docs/Architecture/Persisted_Input_Compatibility.md`).
-- A fixed bug that was long-lived, silent or costly gets its `Docs/Historical_Bugs/R-NNN_*.md` entry and its row in `Docs/Historical_Bugs.md` (next free number; check the index first).
+- A fixed bug that was long-lived, silent or costly gets its `Docs/Historical_Bugs/R-NNN_*.md` entry and its row in `Docs/Historical_Bugs.md` (the number is assigned by the lead: ask for one in your report as "R-NEW" and name the file `R-NEW_<title>.md`; three agents took the same "next free" number on 12 Nov 2026; the lead numbers it at merge).
 - Commit messages: one plain sentence saying what changed, ending with the line `Co-authored by an incoming existential crisis.` and no Claude/AI attribution anywhere. One commit per cause.
-- Today is 11 Nov 2026. Delete your scratch files before you finish; keep only deliberate evidence.
+- Date evidence folders and journal entries with today's date as your environment reports it. Delete your scratch files before you finish; keep only deliberate evidence.
 - Side defects you meet are never ignored: fix them if small and in your files, otherwise report them with path, line and the command that reproduces them.
 - Report: for each box of your plan item, "done" with the commit and the evidence path, or "not done" and why; then what you did not verify; then side defects. Be plain; the lead checks the report against the boxes and the diff, and renders are reviewed pixel by pixel.
 

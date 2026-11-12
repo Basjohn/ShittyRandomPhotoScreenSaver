@@ -19,7 +19,10 @@ from core.performance.frame_trace import (
 )
 from widgets.spotify_visualizer.render_bridge import VisualizerRenderIdentity
 from widgets.spotify_visualizer import mode_capabilities
-from widgets.spotify_visualizer.render_state import VisualizerRenderSnapshot
+from widgets.spotify_visualizer.render_state import (
+    ResolvedVisualizerPresentation,
+    VisualizerRenderSnapshot,
+)
 
 from .clip_host import (
     VisualizerClipFrame,
@@ -65,8 +68,10 @@ class VisualizerRenderNode(QSGRenderNode):
         self._telemetry = telemetry or VisualizerRenderNodeTelemetry()
         self._identity: VisualizerRenderIdentity | None = None
         self._snapshot: VisualizerRenderSnapshot | None = None
+        # The record the scene draws the card from at this sync (the item's own). The clip is built from it, never
+        # from the retained snapshot's record, which can be older and larger (R-188).
+        self._presentation: ResolvedVisualizerPresentation | None = None
         self._logical_size = (0.0, 0.0)
-        self._device_pixel_ratio = 1.0
         self._clip_host = VisualizerClipHost()
         self._render_host = QuickVisualizerRenderHost()
         self._released = False
@@ -104,12 +109,17 @@ class VisualizerRenderNode(QSGRenderNode):
         *,
         identity: VisualizerRenderIdentity | None,
         snapshot: VisualizerRenderSnapshot | None,
-        logical_size: tuple[float, float],
-        device_pixel_ratio: float,
+        presentation: ResolvedVisualizerPresentation | None,
         clear_snapshot: bool = False,
         screen_index: int = -1,
     ) -> None:
-        """Accept detached state during the blocked-GUI synchronization phase."""
+        """Accept detached state during the blocked-GUI synchronization phase.
+
+        ``presentation`` is the record the scene draws the card from at this sync (the retained item's). It sizes
+        the node and bounds the clip. The snapshot may be one retained from an earlier sync whose record no longer
+        matches (a resize, an expand or collapse between publications): its pixels are kept, but never outside the
+        card that is drawn now.
+        """
 
         if identity != self._identity:
             self._identity = identity
@@ -135,11 +145,15 @@ class VisualizerRenderNode(QSGRenderNode):
                 # pixels until a current source replaces them. A non-present
                 # logical publication likewise cannot erase a valid scene.
                 self._telemetry.note_admission_rejected()
+        self._presentation = presentation
         self._logical_size = (
-            max(0.0, float(logical_size[0])),
-            max(0.0, float(logical_size[1])),
+            (0.0, 0.0)
+            if presentation is None
+            else (
+                max(0.0, float(presentation.outer_rect[2])),
+                max(0.0, float(presentation.outer_rect[3])),
+            )
         )
-        self._device_pixel_ratio = max(0.01, float(device_pixel_ratio))
         self._screen_index = int(screen_index)
         self._telemetry.note_sync()
 
@@ -209,7 +223,8 @@ class VisualizerRenderNode(QSGRenderNode):
                     int(state.stencilValue()) if stencil_enabled else None
                 ),
             )
-            if snapshot is None or min(self._logical_size) <= 0.0:
+            card = self._presentation
+            if snapshot is None or card is None or min(self._logical_size) <= 0.0:
                 return
             # The QML root's inherited opacity (the generation startup-reveal gate
             # multiplied by the authored scene fade) must fade the GL content
@@ -246,8 +261,9 @@ class VisualizerRenderNode(QSGRenderNode):
                 )
             matrix = self.projectionMatrix() * self.matrix()
             matrix_values = tuple(float(value) for value in matrix.data())
+            # The card drawn now bounds every pass: a retained snapshot's record can be older and larger.
             clip_frame = VisualizerClipFrame.from_presentation(
-                snapshot.presentation,
+                card,
                 matrix_values=matrix_values,
                 viewport=viewport,
             )

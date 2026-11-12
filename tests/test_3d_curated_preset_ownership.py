@@ -35,6 +35,14 @@ def _owned(mode):
     return {key for key in _BASE if key.startswith(mode + "_") and key not in view_keys}
 
 
+def _live_camera_position(mode):
+    """The framed camera's position: saved by the live-view owner, so ordinary hydration keeps the live value and
+    only an explicit selection seeds the preset's (``apply_preset_to_config`` / ``apply_preset_starting_view``)."""
+    from core.settings.framed_camera import spec_for_mode
+    camera = spec_for_mode(mode)
+    return camera.key("camera_position") if camera is not None else None
+
+
 def _raw(mode, index):
     path = get_preset_file_path(mode, index)
     assert path is not None
@@ -404,7 +412,9 @@ def test_curated_3d_apply_model_activation_and_source_projection_ignore_poisoned
     untouched = deepcopy(original)
     applied = apply_preset_to_config(mode, index, original)
     assert original == untouched
-    for key in _owned(mode):
+    position = _live_camera_position(mode)
+    preset_owned = _owned(mode) - {position}
+    for key in preset_owned:
         assert applied[key] == normalized[key], key
     for key in _owned("spectrum"):
         assert applied[key] == original[key], key
@@ -413,9 +423,13 @@ def test_curated_3d_apply_model_activation_and_source_projection_ignore_poisoned
     serialized = model.to_dict()
     activation = resolve_visualizer_activation_payload(original)
     assert activation.mode == mode and activation.preset_index == index
-    for key in _owned(mode):
+    for key in preset_owned:
         assert serialized[f"widgets.spotify_visualizer.{key}"] == normalized[key], key
         assert activation.resolved_config[key] == normalized[key], key
+    if position is not None:
+        # The live camera position survives hydration (this config carries the full live view).
+        assert applied[position] == original[position]
+        assert activation.resolved_config[position] == original[position]
     projected = resolve_mode_source_config(mode, activation.resolved_config)
     for suffix in ("mirrored", "shape_nodes", "notch_positions_mirrored", "notch_positions_linear",
                    "lane_strengths_mirrored", "lane_strengths_linear", "wave_amplitude", "profile_floor", "drop_speed"):
