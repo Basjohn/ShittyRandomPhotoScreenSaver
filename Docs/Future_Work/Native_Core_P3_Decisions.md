@@ -836,6 +836,180 @@ native schema id equals `frame_codec.CODEC_SCHEMA` and that the Python decoder r
    (`extruded_bubble_drift_solver.py:539-549`) is fixed now in N1 or only in the native path.
 4. The `payload_schema` numbering in transport rule 4 is a proposal.
 
+## D5, the rest: resources, lifetime, admission, device loss, and what a mode may not do (N0.5)
+
+*Proposed (draft for the lead), 12 Nov 2026. This completes D5 (N0.5); it does not change D5.1 to D5.4, D6, D7, D9
+or D10, and nothing here is decided. Every "today" claim was read in source at commit `7ac980d7`.*
+
+### Today, in source
+
+- **A mode renderer is a small Protocol** (`rendering/quick/visualizer/render_contract.py:175-188`): `mode_id`,
+  `has_resources`, `render(frame)`, `release_resources()`, and for a renderer with `prepared_reveal` an optional
+  `prepare_step(frame) -> bool`. It receives a frame object that carries Quick's own state (the item matrix
+  `matrix_values`, a shared `quad_vao`, a viewport; `render_host.py:206-213`).
+- **One host per window owns the mode renderers** (`QuickVisualizerRenderHost`,
+  `rendering/quick/visualizer/render_host.py`): it creates a renderer on the mode's first frame
+  (`:200-203`), sets blend, cull, depth and viewport itself before the mode runs (`:229-241`), and releases the
+  inactive modes **once, after the active mode has drawn**, at the mode boundary (`_retire_inactive_at_boundary`,
+  `:285-301`; `release_inactive_implementations`, `:303-357`): render-thread only, a failed release stays cached and
+  accounted and is retried only at the next boundary or at teardown, never per frame. `release_resources` at
+  teardown (`:359-388`) refuses to run without a current context. The node's `releaseResources`
+  (`rendering/quick/visualizer/node.py:415-444`) runs on Qt's render owner; `sceneGraphInvalidated` reaches the item's
+  retirement (`item.py:182-191,351-357`).
+- **Warm-up is gradual and host-owned**: a hidden mode (content fade 0) is prepared one unit at a time, spaced by
+  `PREPARE_SPACING_S` using the host's clock (`render_host.py:252-262`).
+- **Accounting exists and is passive**: `has_resources` on every renderer, `_record_ownership` in the host
+  (`render_host.py:205,352,388`), and `ResourceAccountingRecord` / `ResourceAccountingSnapshot` (owner, generation,
+  bytes, lease count; `core/performance/resource_metrics.py:41-88`).
+- **Per display, one render thread and one context** (`rendering/quick/gl_query.py:6-7`, per the research file);
+  a display transfer rebuilds on the target (plan 1C.2; D6 point 4).
+- **No mode implementation reads a clock** (a grep of `rendering/quick/visualizer` finds clocks only in the item
+  and host, `item.py:371,439,481`, `render_host.py:257`, and trace sampling, `render_contract.py:73,107`;
+  `rendering/quick/scene3d` has none). Time is in the frame (`ExtrudedBubbleFrame.time`,
+  `logical_frame_capture.py:446-450`).
+- **No device-loss handling exists** in the Python renderer: a grep for graphics reset status, context lost or
+  device lost in `rendering/`, `engine/`, `core/` and `ui/` finds nothing.
+- **Modes set GL state today**: 97 `glEnable`/`glDisable`/`glBlendFunc`/`glDepthFunc`/`glDepthMask`/`glCullFace`/
+  `glFrontFace`/`glViewport`/`glScissor` sites in six implementation files
+  (`rendering/quick/visualizer/implementations/`: `shockwave_grid.py` 31, `sphere_voxel.py` 21, `extruded_bubble.py`
+  19, `bubble_ambient_gl.py` 17, `extruded_spectrum.py` 5, `oscilloscope.py` 4). That is the count the port removes.
+
+### Resource ownership and lifetime (proposed)
+
+**Scopes, outermost first.** Each resource has exactly one owner, in one scope, and is created and destroyed on one
+thread.
+
+| Scope | Created | Owns | Destroyed |
+|---|---|---|---|
+| Process | at module load, before any window (D6.1) | the instance (Vulkan), the shader bake tables (read-only), the pipeline-cache policy | at process exit, after every device |
+| Device (one per window, D6.4) | with the window's scene graph, on that window's render thread | samplers, shader-resource-binding layouts, the pipeline cache for that device, static meshes, the D9 job thread and its queue, staging | on `sceneGraphInvalidated` or device loss, after every window-scope resource; before the device itself (D6: windows, then devices, then the instance) |
+| Window | the frame driver (D5.2), lazily per layer | the background layer target, the backdrop pyramid (D7), per-surface scene targets, the composite's texture providers | with the window's scene graph; the pyramid also when demand reaches zero (D7 point 2) |
+| Surface (a Visualizer card, a transition) | when it is first admitted | its output texture, its mode's resources | when the surface goes away |
+| Mode renderer | at the mode's first activation on the window (as `render_host.py:200-203`) | its pass graph, pipelines it alone uses, buffers, textures, geometry residencies (D3) | at the mode boundary after the active mode drew (as `:285-357`), or at teardown |
+| Job | by the job thread (D9) | its inputs, its back slot | published, then retired by the frame driver |
+
+**Rules.**
+1. Resources are never shared across devices. A display transfer is: the target device's mode renderer is built and
+   warmed, its first frame is presented, then the source device's renderer is released (the logical session
+   stays; D6 point 4). Nothing vanishes between the two (fade-in on the target, fade-out on the source).
+2. Creation and destruction of a device-scope or window-scope resource happens on that device's render thread,
+   never on the GUI thread and never from a Python callback (D5.4). Job-scope resources are created on the job
+   thread and **released on the render thread** after the completion edge or the D1 retire job.
+3. Destruction order is the reverse of creation: mode, surface, window, device, process. A release that fails is
+   recorded once and retried at the next boundary or at teardown, never per frame (the host's rule above).
+4. Every resource registers itself in the device's ownership table (kind, owner, generation, bytes). The table is
+   plain data reported to the existing accounting snapshot (`resource_metrics.py:41-88`); it is incremented at
+   create and destroy only, so it costs nothing at rest. `has_resources` stays the per-owner question.
+5. Pipelines are keyed by (shader hash, fixed pipeline state, render-pass compatibility) at the device and are
+   created only in warm-up units (one per spaced already-rendered frame, next-likely first), never inside a frame
+   that draws. The device cache is bounded by the finite set of modes, transitions and primitives; a mode release
+   does not destroy pipelines other modes share.
+6. Frames in flight: a resource a recorded frame still refers to is never freed while Qt's frames in flight use
+   it; release is deferred to the frame edge (QRhi's own `releaseLater` discipline for QRhi objects; the core's raw
+   objects follow the same two-frame rule).
+
+**Test that fails without it.** Create and destroy cycles of a mode on a hidden host: the ownership table returns
+to its baseline after each cycle and after teardown, for the same mode, for two modes alternating, for a failed
+release (injected), and for a display transfer (the source device's table is zero after the target presents).
+*Negative control:* skip the deferred release (free a resource a frame in flight still uses) and run under
+validation layers: they report it. The ownership table has a second negative control: delete the registration of one
+resource kind; the baseline test fails.
+
+### Admission and dormancy (proposed)
+
+- **Admission is lazy and edge-driven.** A window gets a device, a frame driver and layer targets when something
+  needs them; a mode renderer exists only after its first activation; the backdrop pyramid exists only while the
+  demand count is above zero (D7 point 2); the job thread exists once per device and is parked (D9 point 1).
+  Admission of capacity-bound inputs stays what it is today for the frame stream (the activation-time capacity
+  envelope, `core/visualizer_engine/frame_capacity.py:12-42`); D3 adds the geometry arena to it.
+- **Dormancy is a state with a definition:** a surface that is off, a display that is powered off, a mode that is
+  not the active one, a transition that is not running. For each: no pass is recorded, no upload is issued, no
+  wake-up is requested, no timer runs, no job is queued. The resources of an inactive *mode* are released at the
+  next boundary (as today, `render_host.py:285-357`); the resources of a surface that is merely paused (display power
+  off) are kept until the display's power edge says otherwise, and the frame driver records nothing for it.
+- **The frame driver at rest records nothing** (D5.2's driver is woken by Qt's `beforeRendering`; with no surface
+  dirty and nothing animating it records zero passes: the retained background and the retained card textures are
+  simply composited by Qt).
+- **Warm-up is the only way a pipeline or a large resource is created while hidden**: one unit per spaced rendered
+  frame, next-likely first (the existing host does this, `render_host.py:252-262`). No burst at start-up, no
+  polling, no driver thread.
+
+**Test that fails without it.** A hidden host at rest for a minute: zero recorded passes, zero uploads, zero
+job-thread wake-ups, ownership table unchanged (it is the per-frame cost test of the performance contract applied to
+the core). *Negative control:* a mode that requests a repaint at rest fails the zero-pass count. A mode switch
+releases the outgoing mode exactly once (a counter on `release`).
+
+### Device loss (proposed)
+
+Today nothing handles it (above). QRhi reports it (the end-of-frame result is `FrameOpDeviceLost`; `QRhi::isDeviceLost()`
+answers afterwards; the research file, addendum B, records it as Qt's), and Qt Quick then invalidates and
+re-initialises the scene graph.
+
+1. **Detect once, at the frame edge**, from QRhi's result. The core marks the device lost with one atomic and stops
+   recording for that device immediately (a lost device records nothing, even if the frame driver is called again).
+2. **Release without touching the device**: every window-scope, surface-scope and mode-scope resource is
+   dropped by the ownership table walk; destroy calls on a lost device are allowed to fail and their failures are not
+   errors. Nothing is read back (nothing is read back from the GPU in production anyway, `extruded_bubble_drift_log.py:11-12`).
+3. **The D9 job thread is quiesced by the D1 retire job** and its in-flight jobs are abandoned (D9 point 6).
+4. **Rebuild from the last packet, through the ordinary admission path**: after Qt re-initialises the scene graph,
+   the frame driver is `Absent`, the next frame's admission creates the targets and the mode renderer, warm-up runs,
+   and the mode is revealed as an activation is (hidden, then faded in; never a vanish, never an abrupt pop: the
+   card fades out before the rebuild if the loss is observed while visible, and in after). The logical side keeps its
+   state; state that exists only in GPU memory (the drift solver's per-mote state) restarts as the solver already
+   does when the render falls behind its history (`extruded_bubble_drift_solver.py:554-556`, "a lifecycle event").
+5. **Bounded.** A window that loses its device twice within a bounded count of frames is treated as a backend
+   failure, not retried: the Visualizer on that window is parked (fade out), the failure is logged and remembered
+   by D6 point 5's state file so the next start uses OpenGL; there is never a teardown from Vulkan to OpenGL in a
+   running process (D6 point 5).
+6. **The OpenGL fallback** does the same on a reset status from the context (`GL_GUILTY_CONTEXT_RESET` and the
+   other reset codes, where the context was created with robustness; else Qt's own context-lost handling).
+
+**Test that fails without it.** A harness-only hook marks the device lost at a chosen point (mid-frame, mid-job,
+during a display transfer, during warm-up): no crash, the ownership table is empty afterwards, validation layers
+are clean, a rebuilt frame is presented and equals the pre-loss frame (a fixed packet; single-sampled), the mode is
+revealed by fade, and the second loss within the bound parks the Visualizer. *Negative control:* a core that keeps
+recording after the lost mark (the pre-contract behaviour) trips the validation layers or the "record after loss"
+assertion. The hook is compiled into the harness only.
+
+### What a mode's native renderer may not do (proposed)
+
+A mode renderer is a pure function of its inputs: the decoded frame (from the packet), the resolved parameters the
+packet carries, the targets and extents the frame driver gives it, and the core's matrices. Each rule is enforced
+where it can be enforced mechanically, and each states what today's Python renderers do.
+
+| May not | Why | Enforced by | Today |
+|---|---|---|---|
+| Read a clock (any `now`) | time is a logical input; D1's packets carry it; the same packet draws the same pixels | the mode API offers no clock; a mode translation unit that includes `<chrono>`/the platform timer fails a CI include check | holds already for modes (above); the host and item keep the only clocks |
+| Compute or own a camera | one camera owner (N0.4); the core receives finished matrices and rays | the mode API has no projection builder; matrices arrive as plain data | `core/settings/framed_camera.py` is the owner; `perspective_matrix` at `:286-289` |
+| Allocate per frame (heap, GPU buffers, pipelines, descriptor sets, textures) | no allocation per frame; warm-up units create things | debug build: a counting allocator and the ownership table; both must read zero growth over a steady frame; `prepare_step` is the only creating entry | not enforced; `StreamRing` slots and the drift solver's ring (`:441-449`) are the allocation edges |
+| Set render state (blend, depth, cull, front face, viewport, scissor, stencil) | state belongs to pipelines; the pass graph declares it; QRhi has no state setters | the mode API has no such call: it declares passes and pipelines as data | 97 call sites in six implementation files (above); the host sets baseline state (`render_host.py:229-241`) |
+| Name Qt Quick (`QQuickWindow`, `QSG*`, Quick's render target, the item matrix) | D5.1: only the host adapter touches Qt | a CI include check: no `QtQuick`/`qsg` header in a mode or primitive translation unit | the Python renderer's frame carries `matrix_values` and a Quick-owned VAO (`render_host.py:206-213`) |
+| Hold or call Python (a thread state, a callback, an attribute lookup) | D5.4 | the P1 probe: calls made with a Python thread state, zero, rerun at every port | n/a; today's renderers are Python |
+| Call the graphics API directly (GL or Vulkan) except through a D5.3 service | the service list is closed | include check on `<vulkan/…>` and GL headers outside the service sources | the six files above call GL directly |
+| Read back from the GPU, wait on a fence, or block the render thread | a frame is never held; D9 publishes by latch | the mode API offers no readback or wait; harness-only readbacks live in tools | some readbacks exist in tools only; the product's drift path reads nothing back |
+| Create threads, do file, network or environment access, or read settings | modes are pure; settings arrive resolved in the packet; no environment flags | include check; the mode API takes no path or handle | n/a |
+| Write outside its own targets (the card, other surfaces, Quick's target) | the composite owns the card edge (D5.2) | the mode has no handle to any target but its own | the clip host and fence exist to protect this (`clip_host.py`, per the research file, N0.2 item 3) |
+| Keep state across activations that the ownership table cannot see | a mode must release to zero | the table baseline test (above) | accounted by `has_resources` per renderer |
+| Build or compile a pipeline while a visible frame is recording | no hitch | a trace assertion: no pipeline creation inside a `render` call | `prepare_step` exists; not enforced |
+
+**Test that fails without it.** For each row a compile-or-run check with a negative control: (a) a mode snippet that
+includes the clock header, a Quick header, or a graphics API header fails the include check (the harness carries
+three must-fail snippets); (b) a mode that allocates inside `render` trips the debug counting allocator; (c) a mode
+that tries to set blend state does not compile because the API has no such function; (d) the P1 probe on a mode with
+a Python callback reports a Python thread state.
+
+### Questions for the lead (N0.5)
+
+1. The drift solver's GPU-only per-mote state restarts after device loss (a visible reset of snow and specks,
+   hidden by the mode's reveal fade). Is that acceptable, or must it be reconstructed from the worker's log? (The
+   log keeps only `STEP_HISTORY` = 128 steps, `extruded_bubble_drift_log.py:37`, so a full rebuild is not possible
+   from the log alone.)
+2. The bound in "device loss, rule 5" (how many losses, in how many frames) is a number to choose.
+3. Is a per-window GPU-memory budget part of admission (refuse or degrade a surface that would exceed it), or is
+   accounting (the table) enough, as today? The draft proposes accounting only.
+4. Pipelines are device-scoped and survive a mode release (rule 5). The alternative, releasing a mode's private
+   pipelines with it, saves a little memory and costs a warm-up on every return to the mode.
+
 ## Long-term risks of this direction, and what holds each (audit, 12 Nov 2026)
 
 | Risk | Why it could make the direction fail | What holds it |
