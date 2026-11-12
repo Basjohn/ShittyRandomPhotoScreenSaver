@@ -339,38 +339,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   near layer's defocus before the bound is quoted as visible error.
 - [ ] Verify the drift programs on a non-NVIDIA driver and through fxc/dxc and the Vulkan backend when the native
   core first runs them (D4.7's self-check reports a compiler that breaks the pairs; Watchlist until then).
-- [ ] **Defect (High, audit of 12 Nov evening): the conventions buffer is keyed by a wrapper that does not live.**
-  `rendering/quick/render/gl_resources.py:133-190` keys its registry by `id(QOpenGLContext.currentContext())`; for
-  a context Qt owns (Qt Quick's render thread) PySide makes a new wrapper per call unless Python holds one
-  (`scene3d/waveform.py:175-176` says so). Measured on the product's registry
-  (`.artifacts/evidence/native_core/n1_4_conventions/20261112_fable_audit/`): 3 links in one context give 3
-  entries, 3 buffers, holds [1, 1, 1]; after 3 `delete_program` calls 3 buffers live, 3 stale holds. So Extruded
-  Bubble and the 3D transitions leak one buffer per link, and a reused id can leave another context with nothing
-  bound at binding 17 (undefined reads; zeros on NVIDIA equal OpenGL's values, so nothing here can see it). Opus
-  Medium, before more programs go through `_link` (N1.6):
-  - [ ] Root cause on the real path: the probe's four lines reproduced by the agent (it is the negative control).
-    - Reproduced on 73742841 (3 entries, buffers [1, 2, 3], holds [1, 1, 1]; 3 left after the deletes). Cause: the
-      key `id(QOpenGLContext.currentContext())` names a PySide wrapper, not the context. For a context Qt created
-      in C++ PySide keeps a wrapper only while Python references it; the registry kept the int, not the wrapper, and
-      a connected `aboutToBeDestroyed` does not keep it either, so each later call made a new wrapper at a new (or a
-      freed, reused) address. Fix: key by the native pointer (`shiboken6.getCppPointer`), which lives exactly as
-      long as the context; `aboutToBeDestroyed` connected once per context (Qt's connection outlives the wrapper)
-      forgets the entry. Holding the wrapper instead was tried and dropped: it kept Python-owned contexts alive
-      (a test's dead context kept its holds). After: 1 entry, buffer [1], holds [3]; nothing after the deletes.
-  - [ ] Contract: a context is identified by something that lives as long as it does (the wrapper held in the
-    entry, or the native pointer); one buffer per context for as long as a holder lives there; the buffer is bound
-    in every context that links a holder; release happens in the holder's context or is refused loudly.
-  - [ ] Fix at the owner (`gl_resources.py`), no change to any shader or caller.
-  - [ ] Guard: the probe as a test on a context Qt owns (the global share context, the wrapper dropped between
-    calls): 1 entry, 1 buffer, 3 holds, nothing after the deletes; and two sharing contexts each bound at 17.
-    `tests/test_conventions_include.py:224` holds its own context and cannot see any of this.
-  - [ ] Evidence: the probe's output before and after; R-NEW entry (silent, shipped a day).
-- [ ] Side defect, same owner: `_link` reads "declares the block" from the text `SrpssConventions` in the source
-  (`gl_resources.py:117`), which the mapping-only include also carries inside a false `#if`
-  (`gl_programs/fog_volume.py:129,255`): the fog march and composite fragments take a hold without a block, and
-  `scene3d/fog_volume.py:424` deletes them with a raw `glDeleteProgram`, which never hands it back. Decide by the
-  linked program (its active uniform block) or by the fragment define; every owner of a holder deletes through
-  `delete_program`; a test that greps `rendering/` for a raw delete of a program that can hold.
 - [ ] Side defect: `tools/gl_object_ledger.py:84` records only names a create call returns; objects created through
   out-parameters (`glCreateBuffers(1, arr)` in `scene3d/stream.py`, `population.py`, the defocus targets) are
   invisible to the lifecycle tests: record those too, with a test.
@@ -495,6 +463,14 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 **N2b. The background layer, natively, and the first full rehearsal**
 
+- [ ] N1.6 remainder (merged 12 Nov to ratchet 95): the shared motion and trail helpers (`set_motion_uniforms`,
+  `trail_program`) to pass blocks as their own family, then Block Spins, Crumble, Depth Cascade, Glass Shatter,
+  Jigsaw, Membrane, Pixel Accretion, `motion._GATHER_FRAGMENT`, `trails._EDGE_FRAGMENT` and the Capillary seed;
+  then `bind_frame`'s loose branch is deleted. Waveform's `FOG_COMPOSITE_FRAGMENT`, `FOG_FULLSCREEN_VERTEX` and
+  the fog march. Is `rendering/gl_programs/lighting.py` (loose uniforms) in a group? Place it.
+- [ ] Side defect: the legacy program classes' `render()` and `cache_uniforms()` in
+  `rendering/gl_programs/{blinds,burn,crossfade,particle,raindrops,slide,warp,wipe}` are unused and now read
+  block sources; delete them (grep first) with the readiness ratchet unchanged.
 - [ ] N4.a The fullscreen pass and image sampling as a primitive.
 - [ ] N3.8 The async job service (D9), built to N0.7's verdict: the job thread, self-contained jobs, the latch,
   the in-frame form; first job: a photo's upload and mips.
@@ -1188,16 +1164,16 @@ serves the Themes lists, the Folders list and this one; the delegate sets no fon
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
-### 1D.0 Studio: a mode switch floods the QML log with TypeErrors (in flight, Opus Medium)
+### 1D.0 Studio mode switch (fixed and merged 12 Nov, R-200): side defects left
 
-- [ ] After spectrum -> sphere, almost every `StudioShell.qml` binding reads `studio` as null (lines 14 to 3961,
-  between "open" and "shown", and some after "shown"); `lanes[hoverIndex].pinned` reads undefined (870, 1398).
-  - [ ] Root cause: which window evaluates with a null context (the retiring one, the new one before its
-    context is set, or both).
-  - [ ] Fix at the owner (`ui/studio/` surface and controller): no window ever evaluates with `studio` null; the
-    new window loads with its context already set; the lane guard fixed at its cause. No timers, no added rebuild.
-  - [ ] Test: open, switch and retire through the real controller on an invisible window, zero QML TypeErrors
-    (negative control: red on the old code); historical bug entry.
+- [ ] `ui/studio/controller.py:343` and `:1583`: a retiring shell's old bridge stays connected to
+  `_on_bridge_close`, and its slots reach the new mode's session through `self._c` until the shell is destroyed.
+  Disconnect the old bridge from the controller at retirement, with a test that calls a slot on it after
+  `request_mode_switch` and sees no effect on the new session.
+- [ ] `StudioShell.qml:2456`: the mode picker's `onActivated` runs the whole retire-and-open inside the retiring
+  shell's own signal handler. Hand it to the controller as an edge the controller acts on (no timer).
+- [ ] Not seen in the product yet: the operator's later errors at lines 1687 to 2268 (after "shown") are the
+  same mechanism; confirm they are gone from a real Studio session's QML log.
 
 ### 1D.1 Guided Setup: newer Visualizer images, JMIT Pools, UX audit (one Opus Medium; the lead judges pixels)
 
@@ -1245,6 +1221,22 @@ spec system and never by hand.
   (negative controls for each).
 - [ ] Lead: D1 run per style (Display 1, the hidden second host), edges read at native pixels as in R-192, plus
   a style switch while expanded.
+
+### 1D.3 Document contradictions found by the primitives catalogue (12 Nov; for the audit slot)
+
+- [ ] `Current_Plan.md` §7.1 says Waveform Ribbon is the first consumer of S3D-1/S3D-2/S3D-5, but S3D-2 is N4.c
+  (populations) and Waveform uses none; correct it to S3D-1 and S3D-5.
+- [ ] D8 row 6 (`Native_Core_P3_Decisions.md`) omits N4.d from the high-potential list while the plan calls its
+  wet-surface masks high potential: one class, written in both.
+- [ ] D5.3 is called a "closed list of six services" but the indirect-draw service is retired: five.
+- [ ] `Scene3D_Resources.md` names Neon Lake and Extruded Bubble as the framed-camera consumers; the registry also
+  declares Waveform Ribbon (`core/settings/visualizer_mode_registry.py:473`).
+- [ ] Plan numbering: N3 has no N3.5; N3.8 sits under the N2b heading. Renumber or explain once.
+- [ ] `Index.md` cites `Current_Plan.md` §6 as a live checklist; §6 is a stub. Point it at item 8b.
+- [ ] R-94 (integer hash) is cited in `Transitions.md:142,205` with no entry file or index row: write it or
+  remove the citation.
+- [ ] The standing rule's "what this makes possible" note (item 8b rules) points at `Scene3D_Resources.md`; the
+  catalogue is now `Docs/Reference/Primitives.md`.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
