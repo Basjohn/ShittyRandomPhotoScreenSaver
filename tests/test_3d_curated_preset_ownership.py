@@ -19,6 +19,7 @@ from core.settings.visualizer_presets import (
     build_normalized_custom_snapshot, restore_visualizer_snapshot,
 )
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_mode_payload
+from tests._extruded_spectrum_repeatability import same_render
 from tests.test_qtquick_extruded_spectrum import _snapshot, target
 from widgets.spotify_visualizer.source_config_applier import resolve_mode_source_config
 from widgets.spotify_visualizer.config_applier import apply_logical_vis_mode_kwargs
@@ -688,7 +689,8 @@ def test_existing_extruded_rainbow_colour_field_is_consumed_only_by_spectral_col
     initial = capture.render(host, at_animation(0.0))
     drifted = capture.render(host, at_animation(1.0))
     if colouring == "Bar Colours":
-        assert np.array_equal(initial, drifted)
+        # Exact, or within one level at 8x multisampling (tests/_extruded_spectrum_repeatability.py).
+        assert same_render(initial, drifted, snapshot.logical.mode_state.parameters)
     else:
         assert (np.abs(initial[..., :3] - drifted[..., :3]).max(axis=2) > 8).sum() > 200
         from rendering.quick.visualizer.implementations.extruded_spectrum import extruded_hue_shift

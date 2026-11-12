@@ -13,6 +13,7 @@ from rendering.gl_programs.extruded_spectrum_program import (
 )
 from rendering.quick.scene3d.shadows import directional_shadow_vector
 from rendering.quick.visualizer.edit_content_envelope import resolve_edit_content_envelope
+from tests._extruded_spectrum_repeatability import same_render
 from tests.test_qtquick_extruded_spectrum import _snapshot, _with_shadow_style, target
 from widgets.spotify_visualizer.render_state import freeze_render_fields
 from OpenGL import GL as gl
@@ -63,6 +64,7 @@ def test_rejected_shadow_never_expands_edit_bounds_target_or_pixels(target):
     off = dataclasses.replace(snapshot.logical.mode_state, parameters=freeze_render_fields(parameters))
     disabled = dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=off))
     without_shadow = capture.render(host, disabled, (0.88, 0.73, 0.49, 1.0))
-    assert np.array_equal(with_shadow, without_shadow)
+    # Exact, or within one level at 8x multisampling (tests/_extruded_spectrum_repeatability.py: not bit-repeatable).
+    assert same_render(with_shadow, without_shadow, disabled.logical.mode_state.parameters)
     assert resolve_edit_content_envelope(
         'extruded_spectrum', snapshot.presentation, parameters, logical=disabled.logical) == original

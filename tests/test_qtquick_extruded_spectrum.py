@@ -37,6 +37,7 @@ from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     spectrum_bar_to_boosted,
 )
 from widgets.spotify_visualizer.render_state import freeze_render_fields
+from tests._extruded_spectrum_repeatability import same_render
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
 pytestmark = pytest.mark.qt
@@ -670,8 +671,10 @@ def test_optional_directional_shadow_uses_canonical_direction_without_an_extra_t
         backdrop=backdrop,
     )
     assert renderer._target.allocation == allocation
-    assert np.array_equal(enabled_se, disabled)
-    assert np.array_equal(enabled_se, enabled_nw)
+    # Exact, or within one level at 8x multisampling (tests/_extruded_spectrum_repeatability.py: not bit-repeatable).
+    parameters = se.logical.mode_state.parameters
+    assert same_render(enabled_se, disabled, parameters)
+    assert same_render(enabled_se, enabled_nw, parameters)
 
 
 def test_e8_shadow_strength_at_normal_authored_setting_is_visible_on_wallpaper(target):
@@ -701,8 +704,9 @@ def test_e8_shadow_strength_at_normal_authored_setting_is_visible_on_wallpaper(t
             base.logical, mode_state=disabled_mode)), backdrop=(.85, .75, .65, 1.),
     )
     enabled = capture.render(host, base, backdrop=(.85, .75, .65, 1.))
-    darkened = disabled[..., :3] - enabled[..., :3]
-    assert not np.any(darkened), "disabled shadow may not render even from saved preset"
+    # Exact, or within one level at 8x multisampling (tests/_extruded_spectrum_repeatability.py: not bit-repeatable).
+    assert same_render(disabled[..., :3], enabled[..., :3], base.logical.mode_state.parameters), \
+        "disabled shadow may not render even from saved preset"
 
 
 def test_e8_shadow_is_visible_beneath_opaque_bars_and_reflection_at_shallow_tilt(target):
@@ -755,8 +759,9 @@ def test_e8_shadow_is_visible_beneath_opaque_bars_and_reflection_at_shallow_tilt
 
     off = render(disabled)
     on = render(snapshot)
-    # A persisted shadow flag must have no visible pixels or compositing side effects.
-    assert np.array_equal(off, on)
+    # A persisted shadow flag must have no visible pixels or compositing side effects. Exact, or within one level
+    # at 8x multisampling (tests/_extruded_spectrum_repeatability.py: not bit-repeatable).
+    assert same_render(off, on, snapshot.logical.mode_state.parameters)
 
 
 def test_directional_shadow_follows_actual_audio_heights_not_a_constant_sheet(target):

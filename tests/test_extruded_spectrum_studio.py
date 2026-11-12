@@ -28,6 +28,7 @@ from ui.studio.extruded_spectrum_adapter import (
     control_available, engine_key, engine_values, owned_keys,
 )
 from ui.studio.extruded_spectrum_recorded_inputs import extract, frame_digest, to_inputs
+from tests._extruded_spectrum_repeatability import repeat_tolerance, same_render
 
 MODE = "extruded_spectrum"
 PREFIX = MODE + "_"
@@ -856,7 +857,9 @@ def test_the_production_renderer_fills_the_viewport_and_draws_the_production_fra
     images = _snapshots(surface, frames, controller.presented_extent())
     for variant in ("normal", "plain", "mirror"):
         assert images[f"{variant}/live"][..., :3].std() > 2.0
-        assert np.array_equal(images[f"{variant}/live"], images[f"{variant}/studio"]), variant
+        # Exact, or within one level at 8x multisampling (tests/_extruded_spectrum_repeatability.py).
+        assert same_render(images[f"{variant}/live"], images[f"{variant}/studio"],
+                           frames[f"{variant}/live"].mode_state.parameters), variant
     # The variants render differently (negative control on the pairs): view and colouring; the reflection.
     assert np.abs(images["normal/live"] - images["plain/live"]).max() > 20
     assert np.abs(images["normal/live"] - images["mirror/live"]).max() > 20
@@ -883,13 +886,17 @@ def test_rainbow_ghost_colours_only_the_ghost_columns(qt_app, dialog_tab, no_gl_
             evaluator.release()
     images = _snapshots(surface, {repr(k): f for k, f in frames.items()}, controller.presented_extent())
     on, off = images[repr((True, True))], images[repr((True, False))]
+    # A pixel "changes" beyond the renders' repeatability: exact, or one level at 8x multisampling
+    # (tests/_extruded_spectrum_repeatability.py: not bit-repeatable there).
+    level = repeat_tolerance(frames[(True, True)].mode_state.parameters)
     assert np.abs(on - off).max() > 20                                       # ghosts recoloured
-    recoloured = np.abs(on - off).max(axis=2) > 0
-    ghost_pixels = ((np.abs(on - images[repr((False, True))]).max(axis=2) > 0)
-                    | (np.abs(off - images[repr((False, False))]).max(axis=2) > 0))
+    recoloured = np.abs(on - off).max(axis=2) > level
+    ghost_pixels = ((np.abs(on - images[repr((False, True))]).max(axis=2) > level)
+                    | (np.abs(off - images[repr((False, False))]).max(axis=2) > level))
     assert recoloured.any() and not (recoloured & ~ghost_pixels).any()
     assert ghost_pixels.mean() < 0.5                         # the ghosts are a part of the picture (sanity)
-    assert np.array_equal(images[repr((False, True))], images[repr((False, False))])   # no ghosts: no effect
+    assert same_render(images[repr((False, True))], images[repr((False, False))],
+                       frames[(False, True)].mode_state.parameters)                 # no ghosts: no effect
     controller.close()
 
 
@@ -911,7 +918,8 @@ def test_scene_colours_never_follow_the_studio_theme(qt_app, dialog_tab, no_gl_c
         surface.pump(2)
         assert controller.bridge.theme["panel"] == skin["panel"]
         renders.append(_snapshots(surface, {"frame": frame}, controller.presented_extent())["frame"])
-    assert np.array_equal(renders[0], renders[1])
+    # Exact, or within one level at 8x multisampling (tests/_extruded_spectrum_repeatability.py).
+    assert same_render(renders[0], renders[1], frame.mode_state.parameters)
     controller.close()
 
 
