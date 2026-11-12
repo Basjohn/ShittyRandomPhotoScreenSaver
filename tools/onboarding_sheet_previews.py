@@ -281,8 +281,12 @@ def _framed(region: Image.Image, colour: tuple[int, int, int]) -> Image.Image:
 
 
 def build_visualizers(sheet_path: Path, output: Path) -> list[str]:
-    """``visualizer_<mode>.png`` for every Visualizer mode in the operator sheet."""
+    """``visualizer_<mode>.png`` for every Visualizer mode in the operator sheet, except the modes with a recorded
+    preview run (``preview_runs.json`` beside the manifest), which the foundry renders."""
 
+    from tools.onboarding_preview_foundry import load_preview_runs
+
+    recorded = load_preview_runs()
     sheet = Image.open(sheet_path).convert("RGB")
     pixels = numpy.asarray(sheet).astype(int)
     written = []
@@ -291,10 +295,14 @@ def build_visualizers(sheet_path: Path, output: Path) -> list[str]:
         edges = _outer_edges(pixels, box)
         card = _apply_mask(sheet.crop(edges).convert("RGBA"), _outer_radius(pixels, edges))
         colour = _frame_colour(card)
+        if mode in recorded:
+            continue
         name = f"visualizer_{mode}.png"
         _with_shadow(card).save(output / name, "PNG", optimize=True)
         written.append(name)
     for mode, box in VISUALIZER_UNFRAMED.items():
+        if mode in recorded:
+            continue
         name = f"visualizer_{mode}.png"
         _with_shadow(_framed(sheet.crop(box), colour)).save(output / name, "PNG", optimize=True)
         written.append(name)
