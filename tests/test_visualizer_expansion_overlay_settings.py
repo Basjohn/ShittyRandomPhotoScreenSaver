@@ -25,6 +25,9 @@ from core.settings.fullscreen_overlays import (
     TEXT_EXTENT_MAX,
     rebase_offset_for_corner,
     CORNERS,
+    DISPLAY_STYLE_CONTROL,
+    DISPLAY_STYLE_KEY,
+    DISPLAY_STYLES,
     FONT_SIZE_MAX,
     FONT_SIZE_MIN,
     FULLSCREEN_OVERLAYS_KEY,
@@ -59,6 +62,7 @@ ACTIVE_MODES = [mode for mode in VISUALIZER_MODE_IDS if is_mode_active(mode)]
 def _flipped() -> dict:
     """A test-owned value differing from the canonical default in every member, so a dropped member is observable."""
     value = canonical_fullscreen_overlays()
+    value[DISPLAY_STYLE_KEY] = next(style for style in reversed(DISPLAY_STYLES) if style != value[DISPLAY_STYLE_KEY])
     value["font_family"] = value["font_family"] + " Test"
     value["font_size"] = FONT_SIZE_MIN if value["font_size"] != FONT_SIZE_MIN else FONT_SIZE_MAX
     for overlay in OVERLAY_IDS:
@@ -90,7 +94,8 @@ def test_canonical_default_has_the_schema_every_consumer_reads(profile):
     value = require_canonical_default(FULLSCREEN_OVERLAYS_KEY, profile)
     assert isinstance(value["font_family"], str) and value["font_family"].strip()
     assert isinstance(value["font_size"], int) and FONT_SIZE_MIN <= value["font_size"] <= FONT_SIZE_MAX
-    assert set(value) == {"font_family", "font_size", *OVERLAY_IDS, VOLUME_OSD_ID}
+    assert set(value) == {DISPLAY_STYLE_KEY, "font_family", "font_size", *OVERLAY_IDS, VOLUME_OSD_ID}
+    assert value[DISPLAY_STYLE_KEY] in DISPLAY_STYLES
     # The Volume OSD's placement over the expanded card: placement members only (no Settings options).
     assert set(value[VOLUME_OSD_ID]) == set(PLACEMENT_KEYS[VOLUME_OSD_ID])
     assert all(isinstance(number, float) for number in value[VOLUME_OSD_ID].values())
@@ -313,6 +318,49 @@ def test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_gr
     # A value that already has a group record keeps it (the title's would never overwrite it).
     both = {"now_playing": {"child_geometry": {"metadata": {"x_offset": 0.2}, "title": {"x_offset": -0.3}}}}
     assert normalize_fullscreen_overlays(both)["now_playing"]["child_geometry"]["metadata"]["x_offset"] == 0.2
+
+
+def test_the_display_style_is_one_member_declared_through_the_spec_system():
+    """1D.2: ``display_style`` is a member of this record, declared once as a spec ``Choice`` (its persisted values,
+    their names and its tooltip), admitted by its owner: each declared value round-trips, a known value's case and
+    surrounding space are forgiven, anything else falls back to the canonical value."""
+    from core.settings.visualizer_mode_settings import Choice
+
+    assert isinstance(DISPLAY_STYLE_CONTROL, Choice) and DISPLAY_STYLE_CONTROL.key == DISPLAY_STYLE_KEY
+    assert DISPLAY_STYLE_CONTROL.choices == DISPLAY_STYLES and len(set(DISPLAY_STYLES)) == len(DISPLAY_STYLES) == 3
+    assert len(DISPLAY_STYLE_CONTROL.labels) == len(DISPLAY_STYLES) and all(DISPLAY_STYLE_CONTROL.labels)
+    assert DISPLAY_STYLE_CONTROL.tooltip
+    canonical = canonical_fullscreen_overlays()
+    for style in DISPLAY_STYLES:
+        assert normalize_fullscreen_overlays({DISPLAY_STYLE_KEY: style})[DISPLAY_STYLE_KEY] == style
+        assert normalize_fullscreen_overlays({DISPLAY_STYLE_KEY: f"  {style.upper()} "})[DISPLAY_STYLE_KEY] == style
+    for junk in ("", "fullscreen", "Default Style", None, 3, True, ["default"], {"style": "hide_borders"}):
+        assert normalize_fullscreen_overlays({DISPLAY_STYLE_KEY: junk})[DISPLAY_STYLE_KEY] == canonical[
+            DISPLAY_STYLE_KEY], junk
+    # The style is its own member: nothing else in the record moves with it.
+    for style in DISPLAY_STYLES:
+        value = normalize_fullscreen_overlays({**canonical, DISPLAY_STYLE_KEY: style})
+        assert {k: v for k, v in value.items() if k != DISPLAY_STYLE_KEY} == {
+            k: v for k, v in canonical.items() if k != DISPLAY_STYLE_KEY}
+
+
+def test_a_value_stored_before_the_display_style_loads_as_the_canonical_style(tmp_path):
+    """A profile saved before 1D.2 (every member but ``display_style``) loads with the canonical style and everything
+    stored kept, through a real manager; no bridge (the one normaliser fills the member)."""
+    canonical = canonical_fullscreen_overlays()
+    stored = _flipped()
+    stored.pop(DISPLAY_STYLE_KEY)
+    result = normalize_fullscreen_overlays(stored)
+    assert result[DISPLAY_STYLE_KEY] == canonical[DISPLAY_STYLE_KEY]
+    assert {k: v for k, v in result.items() if k != DISPLAY_STYLE_KEY} == stored
+    settings = _manager(tmp_path)
+    settings.set(f"widgets.spotify_visualizer.{KEY}", stored)
+    assert normalize_fullscreen_overlays(settings.get(FULLSCREEN_OVERLAYS_KEY)) == result
+    # And each style persists through the manager and the section normaliser.
+    for style in DISPLAY_STYLES:
+        settings.set(FULLSCREEN_OVERLAYS_KEY, {**result, DISPLAY_STYLE_KEY: style})
+        section = settings.get("widgets.spotify_visualizer")
+        assert normalize_visualizer_section_mapping(section)[KEY][DISPLAY_STYLE_KEY] == style
 
 
 def test_a_value_stored_before_the_single_axis_extents_reads_them_as_the_natural_look():

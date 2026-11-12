@@ -215,6 +215,40 @@ def test_its_controls_carry_tooltips_and_the_checkboxes_follow_the_settings_styl
     page = tab._fullscreen_page
     for check in page.findChildren(QCheckBox):
         assert check.toolTip() and check.property("circleIndicator") is True
-    for combo in (page.preset_corner, page.now_playing_corner, page.font_combo, page.font_size):
+    for combo in (page.display_style, page.preset_corner, page.now_playing_corner, page.font_combo, page.font_size):
         assert combo.toolTip()
     _destroy(dialog)
+
+
+def test_the_display_style_round_trips_through_settings_and_keeps_everything_else(manager):
+    """1D.2: the Display Style control is built from its one spec declaration (its values in order, their names, its
+    tooltip), each choice writes only ``display_style`` of the one canonical value, a reload shows what is stored,
+    and a stored value the control does not know shows (and saves) the canonical style."""
+    from core.settings.fullscreen_overlays import DISPLAY_STYLE_CONTROL, DISPLAY_STYLE_KEY
+
+    canonical = canonical_fullscreen_overlays()
+    seeded = deepcopy(canonical)
+    seeded["preset"].update(offset_x=0.125, scale=1.25)
+    manager.set(FULLSCREEN_OVERLAYS_KEY, seeded)
+    dialog, tab = _dialog(manager)
+    try:
+        page = tab._fullscreen_page
+        tab._fullscreen_pill.click()
+        combo = page.display_style
+        assert [combo.itemData(i) for i in range(combo.count())] == list(DISPLAY_STYLE_CONTROL.choices)
+        assert [combo.itemText(i) for i in range(combo.count())] == list(DISPLAY_STYLE_CONTROL.labels)
+        assert combo.toolTip() == DISPLAY_STYLE_CONTROL.tooltip
+        assert combo.currentData() == canonical[DISPLAY_STYLE_KEY]
+        for style in (*[s for s in DISPLAY_STYLE_CONTROL.choices if s != canonical[DISPLAY_STYLE_KEY]],
+                      canonical[DISPLAY_STYLE_KEY]):
+            combo.setCurrentIndex(combo.findData(style))
+            _flush(tab)
+            assert _stored(manager) == {**seeded, DISPLAY_STYLE_KEY: style}
+            tab.load_from_settings()
+            assert combo.currentData() == style and page.values()[DISPLAY_STYLE_KEY] == style
+        manager.set(FULLSCREEN_OVERLAYS_KEY, {**seeded, DISPLAY_STYLE_KEY: "not a style"})
+        tab.load_from_settings()
+        assert combo.currentData() == canonical[DISPLAY_STYLE_KEY]
+        assert page.values() == seeded
+    finally:
+        _destroy(dialog)

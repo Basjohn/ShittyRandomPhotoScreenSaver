@@ -59,12 +59,17 @@ def test_the_tab_keeps_no_copy_of_the_live_preset_key_rules():
 def test_canonical_visualizer_disclosure_schemas_name_only_buckets_a_mode_builds():
     from core.settings.default_settings import DEFAULT_SETTINGS
     from core.settings.visualizer_mode_settings import mode_settings
+    from ui.tabs.visualizers_fullscreen_page import FULLSCREEN_BUCKET_SCOPE, FULLSCREEN_BUCKETS
     schemas = {key: value for key, value in DEFAULT_SETTINGS["ui"].items()
                if key.startswith("visualizer_") and key.endswith("_states")}
     assert schemas, "the Custom leaf schema must remain"
     for name, members in schemas.items():
         for member in members:
             mode, _, bucket = str(member).partition(":")
+            if mode == FULLSCREEN_BUCKET_SCOPE:
+                # The Fullscreen Mode page's buckets (not a mode's spec): only the ones that page builds.
+                assert bucket in FULLSCREEN_BUCKETS, f"ui.{name} declares {member!r}, which the page never builds"
+                continue
             spec = mode_settings(mode)
             assert spec is not None and bucket in {b.key for b in spec.buckets}, \
                 f"ui.{name} declares {member!r}, which no mode's spec builds"

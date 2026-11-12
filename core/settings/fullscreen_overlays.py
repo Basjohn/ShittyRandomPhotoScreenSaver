@@ -41,6 +41,16 @@ overlays' model: ``offset_x``/``offset_y`` in fractions of the safe area and ``s
 ordinary layout puts it (zero offset and unit scale: exactly there). It applies only while the display-wide card is
 drawn; the OSD's ordinary placement (ordinary Edit, CUSTOM) is never changed by it. It has no Settings options.
 
+The expanded card's display style (``display_style``, Current_Plan 1D.2; plan 01 M3c "Display styles of the expanded
+card"): ``default`` (today's card, inset by its own chrome), ``borders_to_edge`` (the card's frame and border on the
+display's edges, square outer corners) or ``hide_borders`` (the content fills the display, no frame or border). One
+value per profile in this record (lead, 12 Nov: a member, not a sibling key); an unknown or missing value is Default
+(a profile saved before it loads as Default, no bridge). It is declared once as a spec ``Choice``
+(:data:`DISPLAY_STYLE_CONTROL`): the normaliser admits through it and Settings builds its control from it. It changes
+only the margin and the frame handed to the display-wide resolver
+(``widgets.spotify_visualizer.presentation_geometry.resolve_expanded_visualizer_presentation``); placements are never
+rewritten by it.
+
 Pure and Qt-free: the settings model, Settings and the display runtime all read it.
 """
 from __future__ import annotations
@@ -51,6 +61,7 @@ import math
 from typing import Any
 
 from core.settings.default_contract import require_canonical_default
+from core.settings.visualizer_mode_settings import Choice
 from rendering.custom_child_geometry import (
     CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY,
     CustomChildRoleDescriptor,
@@ -66,6 +77,21 @@ VOLUME_OSD_ID = "volume_osd"
 #: Anchor corners, in Settings' order.
 CORNERS = ("top_left", "top_right", "bottom_left", "bottom_right")
 MEDIA_CONTROLS_STYLES = ("bar", "floating")
+#: The expanded card's display style (1D.2): its member, its values in Settings' order and their names.
+DISPLAY_STYLE_KEY = "display_style"
+DISPLAY_STYLE_DEFAULT = "default"
+DISPLAY_STYLE_BORDERS_TO_EDGE = "borders_to_edge"
+DISPLAY_STYLE_HIDE_BORDERS = "hide_borders"
+DISPLAY_STYLES = (DISPLAY_STYLE_DEFAULT, DISPLAY_STYLE_BORDERS_TO_EDGE, DISPLAY_STYLE_HIDE_BORDERS)
+#: The one declaration of the control (spec system): persisted values, Title Case names, tooltip.
+DISPLAY_STYLE_CONTROL = Choice(
+    key=DISPLAY_STYLE_KEY,
+    label="Display Style",
+    choices=DISPLAY_STYLES,
+    labels=("Default", "Borders To Edge", "Fullscreen (Hide Borders)"),
+    tooltip=("Default keeps a thin gap of wallpaper around the card. Borders To Edge puts the card's frame on the "
+             "display's edges. Fullscreen (Hide Borders) fills the display with the Visualizer, with no frame."),
+)
 FONT_SIZE_MIN, FONT_SIZE_MAX = 12, 72
 OFFSET_MIN, OFFSET_MAX = -1.0, 1.0
 SCALE_MIN, SCALE_MAX = 0.5, 3.0
@@ -164,6 +190,9 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
     result = canonical_fullscreen_overlays(application)
     if not isinstance(value, Mapping):
         return result
+    if DISPLAY_STYLE_KEY in value:
+        result[DISPLAY_STYLE_KEY] = normalize_display_style(value.get(DISPLAY_STYLE_KEY),
+                                                            result[DISPLAY_STYLE_KEY])
     family = value.get("font_family")
     if isinstance(family, str) and family.strip():
         result["font_family"] = family.strip()
@@ -199,6 +228,24 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
             _bridge_artwork_factors(raw, target)
             _bridge_base_width(raw, target, float(result["font_size"]))
     return result
+
+
+def normalize_display_style(value: Any, default: Any = DISPLAY_STYLE_DEFAULT) -> str:
+    """One stored display style, admitted by its spec declaration: a known value as stored (case and surrounding
+    space forgiven), anything else ``default`` (Default when ``default`` itself is unknown)."""
+
+    if isinstance(value, str):
+        value = value.strip().lower()
+    fallback = default if default in DISPLAY_STYLES else DISPLAY_STYLE_DEFAULT
+    return str(DISPLAY_STYLE_CONTROL.admit(value, fallback))
+
+
+def resolve_display_style(fullscreen_overlays: Any) -> str:
+    """The display style a stored ``fullscreen_overlays`` value asks for (Default for anything malformed)."""
+
+    if not isinstance(fullscreen_overlays, Mapping):
+        return DISPLAY_STYLE_DEFAULT
+    return normalize_display_style(fullscreen_overlays.get(DISPLAY_STYLE_KEY))
 
 
 def _bridge_artwork_factors(raw: Mapping[str, Any], target: dict[str, Any]) -> None:
@@ -343,6 +390,12 @@ __all__ = [
     "CHILD_GEOMETRY_KEY",
     "CHILD_NORMALIZATION_EMS",
     "CORNERS",
+    "DISPLAY_STYLES",
+    "DISPLAY_STYLE_BORDERS_TO_EDGE",
+    "DISPLAY_STYLE_CONTROL",
+    "DISPLAY_STYLE_DEFAULT",
+    "DISPLAY_STYLE_HIDE_BORDERS",
+    "DISPLAY_STYLE_KEY",
     "FONT_SIZE_MAX",
     "FONT_SIZE_MIN",
     "FULLSCREEN_OVERLAYS_KEY",
@@ -360,10 +413,12 @@ __all__ = [
     "RETIRED_TEXT_ROLES",
     "VOLUME_OSD_ID",
     "canonical_fullscreen_overlays",
+    "normalize_display_style",
     "normalize_fullscreen_overlays",
     "normalize_now_playing_children",
     "now_playing_text_room",
     "rebase_offset_for_corner",
+    "resolve_display_style",
     "volume_osd_anchor",
     "volume_osd_rect",
 ]
