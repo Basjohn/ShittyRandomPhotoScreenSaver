@@ -1038,6 +1038,12 @@ SCENE3D_COMPUTE_BLOCK_BINDING = 16
 # it links, never per frame, and never bound by anything else. Clear of the other uniform-buffer points the renderer
 # uses (the draws' scene block 15, the dispatch block 16) and of the ones Qt Quick's own shaders use (the low ones).
 SCENE3D_CONVENTIONS_BLOCK_BINDING = 17
+# The uniform-buffer binding a draw program declares its pass block at (N1.6: a program's loose uniforms gathered into
+# one std140 block, ``PassBlocks`` in ``rendering.quick.scene3d.uniforms``). Each pass binds its own copy for its draws
+# and leaves the point unbound, so nothing inherits it; clear of the scene block (15), the dispatch block (16) and the
+# conventions block (17). A program's samplers take the low bindings (their texture units), so on Vulkan, where
+# samplers and blocks share one binding namespace per program, nothing collides.
+SCENE3D_PASS_BLOCK_BINDING = 18
 
 # type -> (base alignment, size, struct format), per the std140 rules for these types.
 _STD140 = {

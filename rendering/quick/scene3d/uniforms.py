@@ -19,15 +19,55 @@ so no host fence has to know about it.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Iterator, Mapping
+from typing import Callable, Iterator, Mapping
 
 from OpenGL import GL as gl
 
-from rendering.gl_programs.scene3d import Scene3DBlockLayout
+from rendering.gl_programs.scene3d import SCENE3D_PASS_BLOCK_BINDING, Scene3DBlockLayout
 from rendering.quick.scene3d.stream import StreamRing
 
 # Well clear of the points Qt Quick's own shaders use; restored after every use anyway.
 SCENE3D_UNIFORM_BINDING = 15
+# A pass block's binding (``SCENE3D_PASS_BLOCK_BINDING``): its program's sources state it, the pass binds it.
+PASS_BLOCK_BINDING = SCENE3D_PASS_BLOCK_BINDING
+# One bound scope (a pass's draws, each with its own copy at the uniform offset alignment, at most 256) holds at most
+# this many bytes; a slot holds four scopes' worth, so a fence falls every few dozen passes.
+_PASS_HOLD = 4096
+
+
+def declares_pass_block(source: str) -> bool:
+    """Whether a shader source declares a pass block (``Scene3DBlockLayout.glsl(PASS_BLOCK_BINDING)``)."""
+    return f"binding = {PASS_BLOCK_BINDING}) uniform" in source
+
+
+class PassBlocks:
+    """A program owner's pass blocks (N1.6). A program whose loose uniforms became one std140 block (Vulkan GLSL has
+    no loose uniforms) declares it with ``layout.glsl(PASS_BLOCK_BINDING)``; the pass that drew with ``glUniform*``
+    calls packs the same values, from the same place in the frame, and draws inside ``bound(layout.pack(values))``:
+    one write into a small fenced stream ring (``stream.py``) and one bind, instead of a call per uniform. ``rebind``
+    gives a later draw of the scope other values (each draw already submitted keeps its own copy). The point is left
+    unbound afterwards: nothing is read back and nothing inherits it. Nothing is allocated until ``warm`` or the first
+    ``bound``; ``release`` returns it to zero."""
+
+    def __init__(self, label: str) -> None:
+        self._ring = StreamRing(f"{label} pass blocks", slots=4, slot_bytes=4 * _PASS_HOLD, hold_bytes=_PASS_HOLD)
+
+    @property
+    def has_resources(self) -> bool:
+        return self._ring.has_resources
+
+    def warm(self) -> bool:
+        """One warm-up step: True when the ring already exists, else allocate it."""
+        return self._ring.warm()
+
+    @contextmanager
+    def bound(self, data: bytes) -> Iterator[Callable[[bytes], None]]:
+        ring = self._ring
+        with ring.bound(gl.GL_UNIFORM_BUFFER, PASS_BLOCK_BINDING, data, restore=False):
+            yield lambda values: ring.rebind(gl.GL_UNIFORM_BUFFER, PASS_BLOCK_BINDING, values)
+
+    def release(self) -> None:
+        self._ring.release()
 
 
 class UniformBlock:

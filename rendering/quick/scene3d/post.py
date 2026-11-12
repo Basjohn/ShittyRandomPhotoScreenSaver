@@ -19,25 +19,35 @@ import ctypes
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.conventions import SRPSS_VERTEX_INDEX_GLSL
+from rendering.gl_programs.scene3d import Scene3DBlockLayout
+
 from .passes import blend_scope
+from .uniforms import PASS_BLOCK_BINDING
 
 BLOOM_LEVELS = 4
 
-FULLSCREEN_VERTEX_SOURCE = """#version 460 core
-out vec2 vUv;
+# A fragment drawn with it reads ``layout(location = 0) in vec2 vUv``.
+FULLSCREEN_VERTEX_SOURCE = "#version 460 core\n" + SRPSS_VERTEX_INDEX_GLSL + """
+layout(location = 0) out vec2 vUv;
 void main() {
-    vec2 corner = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+    vec2 corner = vec2((srpssVertexIndex << 1) & 2, srpssVertexIndex & 2);
     vUv = corner;
     gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);
 }
 """
 
+# The bloom passes' values (binding plan: uSource 0, the block PASS_BLOCK_BINDING).
+BLOOM_BLOCK = Scene3DBlockLayout.of("SceneBloomPass", (
+    ("uTexel", "vec2"),   # one source texel in uv
+    ("uFirst", "int"),    # 1: keep only the emitted light (colour scaled to alpha's brightness); the upsample ignores it
+))
+
 _DOWNSAMPLE_FRAGMENT = """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
-uniform sampler2D uSource;
-uniform vec2 uTexel;       // one source texel in uv
-uniform int uFirst;        // 1: keep only the emitted light (colour scaled to alpha's brightness)
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
+layout(binding = 0) uniform sampler2D uSource;
+""" + BLOOM_BLOCK.glsl(PASS_BLOCK_BINDING) + """
 vec3 tap(vec2 offset) {
     vec4 value = texture(uSource, vUv + offset * uTexel);
     if (uFirst != 1) return value.rgb;
@@ -55,10 +65,10 @@ void main() {
 """
 
 _UPSAMPLE_FRAGMENT = """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
-uniform sampler2D uSource;
-uniform vec2 uTexel;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
+layout(binding = 0) uniform sampler2D uSource;
+""" + BLOOM_BLOCK.glsl(PASS_BLOCK_BINDING) + """
 void main() {
     // A 3x3 tent, added onto the next larger level by the blend state.
     vec3 sum = texture(uSource, vUv).rgb * 4.0;
