@@ -1043,6 +1043,8 @@ native schema id equals `frame_codec.CODEC_SCHEMA` and that the Python decoder r
 
 ## D5, the rest: resources, lifetime, admission, device loss, and what a mode may not do (N0.5)
 
+*Bake targets (doc sweep, 12 Nov 2026): the spike still bakes `100 es`; the product module (`native/core/`) does not (SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2).*
+
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. This completes D5 (N0.5); it does not change D5.1 to D5.4, D6, D7, D9
 or D10, and nothing here is decided. Every "today" claim was read in source at commit `7ac980d7`.*
 
