@@ -94,6 +94,16 @@ SDK's Qt version differs from 6.11.2. The `GuiPrivate` warning is expected: QRhi
 .venv\Scripts\python.exe native\spike_p1\python\run_spike.py --module-dir release\native_module --part all --label p1
 ```
 
+N0.6 (D6's proof: the module owns the Vulkan instance and device; `src/vk_n06.*`) has its own driver, one round
+per module build, hidden only, never an environment variable (`--help` lists the rounds):
+
+```bat
+.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round facts --label n06_facts
+```
+
+Evidence: `.artifacts/evidence/native_core/n06/<date>_<label>/summary.json`; the last line is `N06 VERDICT PASS` or
+`N06 VERDICT FAIL: <checks>`.
+
 `python/import_check.py` is the GPU-free part the runner runs after compiling (import, `runtime_info()`, the Qt DLLs
 loaded from PySide6's folder); every part of `run_spike.py` needs a GPU device.
 

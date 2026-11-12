@@ -10,6 +10,7 @@
 #include "quadfield.h"
 #include "rhi_offscreen.h"
 #include "thread_probe.h"
+#include "vk_n06.h"
 
 #ifdef SPIKE_WITH_QUICK
 #include "quick_item.h"
@@ -415,6 +416,19 @@ PyObject *probe_reset(PyObject *, PyObject *)
     Py_RETURN_NONE;
 }
 
+// ---------------------------------------------------------------- N0.6 (D6's proof)
+
+PyObject *pyJson(const QByteArray &json)
+{
+    return PyUnicode_FromStringAndSize(json.constData(), json.size());
+}
+
+PyObject *n06_facts(PyObject *, PyObject *)
+{
+    // GUI thread, synchronous, keeps the GIL: Qt may log through a message handler a Python caller installed.
+    return pyJson(n06VulkanFactsJson());
+}
+
 // ---------------------------------------------------------------- part B
 
 #ifdef SPIKE_WITH_QUICK
@@ -514,6 +528,8 @@ PyMethodDef methods[] = {
     { "vulkan_attach", vulkan_attach, METH_VARARGS, "(window_ptr)" },
     { "probe_stats", probe_stats, METH_VARARGS, "(['hybrid'|'native']) -> dict" },
     { "probe_reset", probe_reset, METH_NOARGS, "()" },
+    { "n06_facts", n06_facts, METH_NOARGS,
+      "() -> JSON str: N0.6 round 1, Vulkan facts and Qt's own device (GUI thread, QGuiApplication)" },
 #ifdef SPIKE_WITH_QUICK
     { "quick_session_begin", quick_session_begin, METH_VARARGS,
       "(rc, window, w, h[, threaded]) -> dict with handle" },

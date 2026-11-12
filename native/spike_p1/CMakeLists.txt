@@ -77,6 +77,7 @@ set(_sources
     src/gui_helpers.cpp
     src/image_stats.cpp
     src/thread_probe.cpp
+    src/vk_n06.cpp
     ${_shader_headers})
 if(SPIKE_WITH_QUICK)
     list(APPEND _sources src/quick_item.cpp src/quick_offscreen.cpp)
