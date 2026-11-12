@@ -40,6 +40,10 @@ of them after "shown". Nothing visible: the window that failed was already queue
   rebuild; the bridge is gone once the engine is (the test asserts it, so this is not a leak).
 - The shape instrument reads a hovered lane's pin through one guarded property, `hoverPinned`
   (`hoverPart === "lane" && 0 <= hoverIndex < lanes.length`).
+- Follow-up (plan 1D.0): a bridge that outlives its session must not act on the next one. The controller's retirement
+  (`_retire`, first step `bridge`) detaches it: its `closeRequested` is disconnected from the controller and every slot
+  is inert (the `_attached` gate on each `StudioBridge` slot); its properties still read, so a retiring binding never
+  sees null. Regression bar: `tests/test_studio_retired_bridge.py`.
 
 ## Why it hid
 
