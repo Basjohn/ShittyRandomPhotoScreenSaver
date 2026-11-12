@@ -856,12 +856,16 @@ arrangement change, a display added or removed, the owning display lost, Setting
   (no blank card, no pop, the music response continuous); Extruded Bubble and Spectrum, both directions.
 - [ ] Is the 1.5 s preparation bound enough for Extruded Bubble on real hardware? Measure on the D1 run (the test
   needed more than 40 frames); a slow target goes ahead and finishes on its first visible frame.
-- [ ] Edit's display hop and the hover transfer arrows keep the live owner but build the target's renderer on its
-  first visible frame (no preparation on those paths): prepare the neighbouring display when the pointer hovers its
-  arrow or a drag nears the seam (an edge, never polling).
-- [ ] While preparing, the target card sits at 0.002 opacity (under one 8-bit level, over Qt Quick's 0.001 cutoff):
-  make it transparent to input for that time, and check on a bright display that no pixel shows; replace the
-  near-zero opacity with a render-without-show path when the native core's job thread exists (D9).
+- Landed 12 Nov: the neighbouring display prepares on the transfer arrows' hover (Edit's and the hover glyph's) and
+  on a Visualizer drag within one card width of the seam, released on leave, turn-back, drag end, Edit end or
+  retirement (edges only); a preparing card takes no input (`prepareOnly`, the scene's hit test refuses it) and
+  0.002 opacity was measured invisible on white, black and grey (0 levels; 0.004 shows 1 to 2).
+- [ ] One test that renders the hop through the real owner and asserts the target's first visible frame reuses the
+  prepared renderer (today proved in two halves: the hop takes the prepared item; the GPU test shows the renderer
+  survives the take-over).
+- [ ] Fullscreen Edit with pixel shift active: a test (only ordinary Edit has one).
+- [ ] Side defect: `tests/test_visualizer_hover_transfer_native.py` shows a small window on screen: convert it to the
+  invisible-window pattern (`tests/_invisible_windows.py`) so no test shows a window.
 - [ ] PyOpenGL's `GL_TIMEOUT_IGNORED` has the wrong value (`glWaitSync` rejects it): the move uses the GL spec's
   value; record it where GL constants are shared so nothing else takes PyOpenGL's.
 
@@ -890,12 +894,8 @@ solid border pixels with nothing blended, in the saver's frame and in the DWM co
 - [ ] D1 run of the second-axis fix when two displays are connected (the MSI is Display 0 and is never taken without the
   operator's permission; a check there is the operator's or waits for their leave): the card's left and right edges
   on the MSI at native pixels.
-- [ ] Side defect: `rendering/quick/custom_layout_overlay.py:998-1013` does not refresh `contentEnvelopeItem` when the
-  session item changes, so a Visualizer root created after Edit binds leaves the frame without envelope, glyph row or
-  drawn rect until the model resets (the product order shows the Visualizer first; a test binding first never gets
-  the root): refresh at the owner, test in both orders.
-- [ ] Side defect: the Edit overlay sits outside `pixelShiftLayer`, so with pixel shift active during Edit the frame
-  would not follow the shifted card: decide whether Edit suspends pixel shift or the overlay follows it, and test.
+- Landed 12 Nov: the overlay re-reads the Visualizer's envelope whichever is created first; Edit suspends pixel shift
+  while its chrome is open (Arrange never shifts; Edit snaps and saves the unshifted layout).
 - [ ] The tests that open windows were not run on the merge (`test_qtquick_visualizer_clip_smoke.py`, Neon Lake's
   `actual_neon_qsg_pixels`): run them hidden at the next milestone run.
 
