@@ -8,7 +8,7 @@ This file is the **current test/acceptance authority** for SRPSS. It describes w
 snapshots, output schema and physical-acceptance limits are documented in `Docs/Reference/Harness_Index.md` → Bounded
 self-terminating RUN sessions. It is operator tooling, not a test-runner facade or product runtime owner.
 
-**Execution owner:** Frozen-product builds, installer compilation and lengthy whole-suite Windows acceptance are operator-run only, with logs delivered to the agent. A source/documentation agent must **never attempt a build**, and should return only affected focused tests unless asked to request or run a full suite.
+**Execution owner:** Frozen-product builds, installer compilation and lengthy whole-suite Windows acceptance are run only by the operator (locally) or the lead (GitHub workflows only), with logs delivered to the agent. A source/documentation agent must **never attempt a build**, and should return only affected focused tests unless asked to request or run a full suite.
 
 **Optional tool testing policy:** Disposable or subjective preview/authoring tools do
 not need GUI/style/usability tests. Only tools capable of changing critical

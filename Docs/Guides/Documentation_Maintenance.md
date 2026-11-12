@@ -90,7 +90,7 @@ For Settings theme/backdrop ownership changes also inspect `Docs/Architecture/Se
 
 ## Build and test execution ownership
 
-An archive/documentation agent may run read-only audits and bounded relevant focused tests. **Never invoke frozen product compilation, Build Runner, Nuitka, installer packaging or trial builds:** the operator runs those costly gates and supplies reports/logs. Do not automatically request another four-chunk suite; provide only affected focused tests unless the operator chooses the expensive full gate. Instructions copied into Godzip Foundry RUN SCRIPT must be one line and semicolon-separated.
+An archive/documentation agent may run read-only audits and bounded relevant focused tests. **Never invoke frozen product compilation, Build Runner, Nuitka, installer packaging or trial builds:** the operator (locally) or the lead (GitHub workflows only) runs those costly gates and supplies reports/logs. Do not automatically request another four-chunk suite; provide only affected focused tests unless the operator chooses the expensive full gate. Instructions copied into Godzip Foundry RUN SCRIPT must be one line and semicolon-separated.
 
 ## Test documentation
 
@@ -131,7 +131,7 @@ These requirements belong to this subsystem. They are not a second global guardr
 ### Operator build boundaries and source review discipline
 
 
-Agents **do not run frozen builds** (Build Runner, Nuitka, helper compilation, installers or trial builds). The operator owns expensive build execution and frozen/physical acceptance and shares reports. Agents audit source and supplied results and may run only appropriate bounded focused non-build tests; do not call for the full chunked suite by default.
+Agents **do not run frozen builds** (Build Runner, Nuitka, helper compilation, installers or trial builds). Expensive build execution is the operator's (locally) or the lead's (GitHub workflows only, never on this machine); frozen/physical acceptance is the operator's, who shares reports. Agents audit source and supplied results and may run only appropriate bounded focused non-build tests; do not call for the full chunked suite by default.
 
 ## Read / scope discipline
 

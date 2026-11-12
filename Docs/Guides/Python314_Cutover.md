@@ -23,7 +23,7 @@ workarounds. If the warning also occurs outside the managed sandbox, investigate
 
 The operator's migration tooling selection passed **47/47**; R149's source repair focus passed **124/124**; R150 Sphere/Shockwave audio isolation focus passed **96/96**; and R151's Windows Steam/Settings regression selection passed **106/106**. Sphere and Shockwave were also physically accepted. Those focused results do not imply a full R151 destination-suite pass. The latest supplied four-chunk results, from before the R151 publication-lock repair, had one Windows Steam final-publication collision in chunk 4; its repair has now passed the relevant focused tests. The now-retired R149 test diary is not current evidence authority; the substantial Sphere analysis and cache publication mechanisms remain in R150 and R151, linked from `Docs/Historical_Bugs.md`.
 
-## Build and physical acceptance | operator owns execution
+## Build and physical acceptance | the operator (locally) or the lead (GitHub workflows only) runs builds
 
 **Agents must not launch Build Runner, Nuitka, installers, trial builds, helper freezes, or expensive product compilation.** The **operator** runs Standard (which also publishes the Diagnostic file), Media Center and Reddit Helper frozen builds and provides their outputs, Nuitka compilation reports and footprint JSON. The agent then diagnoses the actual logs and returns source corrections with only relevant focused tests. A full four-chunk repeat is **not requested** unless the operator chooses it.
 

@@ -553,7 +553,7 @@ regression control captures and documented remaining native gates. Presets remai
 - [ ] Check startup/prepared reveal, first useful frame, retirement, display removal/context invalidation and replacement.
   Retire under the legal GL context on its owner thread; failed releases remain accounted and retryable.
 - [ ] Observe Bubble active-music temporal fidelity and accepted baseline modes if shared owners changed. Do not trade
-  their cadence, response or pixels for Waveform headroom. Frozen builds/installed validation stay operator-executed.
+  their cadence, response or pixels for Waveform headroom. Frozen builds/installed validation stay with the operator (locally) or the lead (GitHub workflows only).
 - [ ] Present target/candidate ROIs and uninterrupted music sequences for operator A–H sign-off. Record each gate's
   evidence and decision separately. Leave Awaiting Validation/Logs with the precise missing action in Current_Plan.
 
