@@ -131,7 +131,7 @@ projection and distinct terrain/water shaders. The retired flat shaders and thei
 Only active Neon Settings configuration packs terrain into immutable FrozenFields; other modes and unknown hosts
 perform no terrain normalization/packing. Equal full configurations reuse the frozen payload; changed grids derive
 their bytes once at configuration. Captures retain that same payload by identity;
-they do not copy or pack the control grid. A shared lazy `HeightfieldTexture` supports R32F heights or explicit RG32F
+they do not copy or pack the control grid. A shared lazy `HeightfieldTexture` supports R32F heights or explicit two-component (RGBA32F storage since N1.7)
 height/bank-distance storage; Neon uses the latter as one representation. The distance transform is derived once at
 configuration, leaving exact authored-zero water ownership unchanged. Water displacement tapers over a narrow bank
 band so a crest meets the solid shore continuously. The mode binds a half-cell

@@ -364,6 +364,11 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   heightfield, Bubble's light attachment): widen each to RGBA16F or RGBA32F in the OpenGL renderer first,
   pixel-identical, with the memory and GPU time before and after; only a target whose widening measurably costs
   goes to D5.3's format service.
+  - Listed for D5.3's formats service (threshold: +0.05 ms paired GPU median per frame, or +64 MiB per display at
+    3840x2160 in the worst allocation the product can make): the scene target's multisampled velocity attachment
+    (`scene3d/target.py`, RG16F kept). RGBA16F adds 127.5 MiB per 4K display at 4x and 255 MiB at 8x (the next
+    largest widening, the defocus circle, is +42 MiB); its GPU cost was under the time threshold (+0.02 to +0.04 ms
+    at 4K 4x). Evidence `.artifacts/evidence/native_core/n1_formats/`.
 - [ ] N1.8 Per-sample multisample reads (`sampler2DMS`, `gl_SampleID`): each use resolves first and reads the
   resolve, with stills before and after; a use that cannot is listed for D5.3's per-sample service with the
   reason.

@@ -95,7 +95,8 @@ def _slope_texture(height: np.ndarray) -> int:
     name = (gl.GLuint*1)()
     gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
     texture = int(name[0])
-    gl.glTextureStorage2D(texture, max(slope.shape[:2]).bit_length(), gl.GL_RG16F, slope.shape[1], slope.shape[0])
+    # RGBA16F (N1.7: QRhi has no RG16F); the GL_RG upload leaves b = 0, a = 1, and the floor reads .rg.
+    gl.glTextureStorage2D(texture, max(slope.shape[:2]).bit_length(), gl.GL_RGBA16F, slope.shape[1], slope.shape[0])
     gl.glTextureSubImage2D(texture, 0, 0, 0, slope.shape[1], slope.shape[0], gl.GL_RG, gl.GL_FLOAT,
                            np.ascontiguousarray(slope))
     gl.glGenerateTextureMipmap(texture)

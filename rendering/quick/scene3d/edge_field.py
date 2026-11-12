@@ -96,7 +96,7 @@ void main() {
 _EDGES_COMPUTE = _VERSION + _HEADER + f"""
 layout(r16f, binding = 0) readonly uniform image2D uLuma;
 layout(r16f, binding = 1) writeonly uniform image2D uEdge;
-layout(rg32f, binding = 2) writeonly uniform image2D uSeed;
+layout(rgba32f, binding = 2) writeonly uniform image2D uSeed;
 float lumaAt(ivec2 q) {{
     return imageLoad(uLuma, clamp(q, ivec2(0), uSize - 1)).r;
 }}
@@ -133,8 +133,8 @@ void main() {{
 """
 
 _FLOOD_COMPUTE = _VERSION + _HEADER + """
-layout(rg32f, binding = 0) readonly uniform image2D uSeedIn;
-layout(rg32f, binding = 1) writeonly uniform image2D uSeedOut;
+layout(rgba32f, binding = 0) readonly uniform image2D uSeedIn;
+layout(rgba32f, binding = 1) writeonly uniform image2D uSeedOut;
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     if (p.x >= uSize.x || p.y >= uSize.y) return;
@@ -159,9 +159,9 @@ void main() {
 """
 
 _RESOLVE_COMPUTE = _VERSION + _HEADER + f"""
-layout(rg32f, binding = 0) readonly uniform image2D uSeed;
+layout(rgba32f, binding = 0) readonly uniform image2D uSeed;
 layout(r16f, binding = 1) readonly uniform image2D uEdge;
-layout(rg16f, binding = 2) writeonly uniform image2D uField;
+layout(rgba16f, binding = 2) writeonly uniform image2D uField;
 void main() {{
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     if (p.x >= uSize.x || p.y >= uSize.y) return;
@@ -274,8 +274,10 @@ def edge_distance_reference(strength: np.ndarray, points: np.ndarray) -> tuple[n
 class EdgeField:
     """One photograph's edge field, rebuilt when the run, photograph or thresholds change."""
 
+    # The two-channel images (seed positions, the field) use .rg of a four-channel format: QRhi has no RG16F or
+    # RG32F (N1.7).
     _ROLES = (("luma", gl.GL_R16F, False), ("blur", gl.GL_R16F, False), ("edge", gl.GL_R16F, False),
-              ("ping", gl.GL_RG32F, False), ("pong", gl.GL_RG32F, False), ("field", gl.GL_RG16F, True))
+              ("ping", gl.GL_RGBA32F, False), ("pong", gl.GL_RGBA32F, False), ("field", gl.GL_RGBA16F, True))
 
     def __init__(self, label: str) -> None:
         self.label = label
@@ -344,22 +346,22 @@ class EdgeField:
             use("edge_field_edges", _EDGES_COMPUTE)
             with bound_image(0, t["luma"], gl.GL_READ_ONLY, gl.GL_R16F), \
                     bound_image(1, t["edge"], gl.GL_WRITE_ONLY, gl.GL_R16F), \
-                    bound_image(2, t["ping"], gl.GL_WRITE_ONLY, gl.GL_RG32F):
+                    bound_image(2, t["ping"], gl.GL_WRITE_ONLY, gl.GL_RGBA32F):
                 dispatch(groups, image_barrier)
 
             use("edge_field_flood", _FLOOD_COMPUTE)
             source, target = t["ping"], t["pong"]
             for jump in edge_field_jumps(self._size):
                 rebind(_DISPATCH_BLOCK.pack({**values, "uJump": jump}))
-                with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RG32F), \
-                        bound_image(1, target, gl.GL_WRITE_ONLY, gl.GL_RG32F):
+                with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RGBA32F), \
+                        bound_image(1, target, gl.GL_WRITE_ONLY, gl.GL_RGBA32F):
                     dispatch(groups, image_barrier)
                 source, target = target, source
 
             use("edge_field_resolve", _RESOLVE_COMPUTE)
-            with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RG32F), \
+            with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RGBA32F), \
                     bound_image(1, t["edge"], gl.GL_READ_ONLY, gl.GL_R16F), \
-                    bound_image(2, t["field"], gl.GL_WRITE_ONLY, gl.GL_RG16F):
+                    bound_image(2, t["field"], gl.GL_WRITE_ONLY, gl.GL_RGBA16F):
                 dispatch(groups, gl.GL_TEXTURE_FETCH_BARRIER_BIT)
 
     def _allocate(self, size: tuple[int, int], internal: int, linear: bool, role: str) -> None:

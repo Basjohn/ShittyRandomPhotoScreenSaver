@@ -1119,6 +1119,11 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   display's refresh-edge clock (the production `RefreshStateGlyph.qml` settles at once, no phase callback) and
   animates again after uncover. Negative controls: no host call at the cover edge (3 red), the Clock not bound to
   the cover (2 red), refresh edges animating while covered (1 red), a transfer ignoring the target's cover (1 red).
+- `tests/test_qrhi_texture_formats.py` — N1.7: no texture, render target or storage image under `rendering/` uses a
+  format QRhi lacks (RG16F, RG32F, R11G11B10F, as a GL enum or a GLSL image layout), except the targets D5.3's
+  formats service takes (the scene target's multisampled velocity attachment); a stale service entry fails too. A
+  second test shows the scan finds each format in both spellings and passes the widened ones. Negative control: the
+  scan over the pre-N1.7 sources (`git show` of each file at the parent of the N1.7 commit) reports 20 unlisted uses.
 - `tests/test_vulkan_shader_readiness.py` — port-readiness rule 5: every GLSL compute shader the tool discovers in
   the product compiles with PySide6's `qsb` for every shipped backend's target (SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2;
   GLSL 310 es is loaded by nothing we ship and is not baked), with

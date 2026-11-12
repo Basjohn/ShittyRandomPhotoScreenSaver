@@ -446,7 +446,8 @@ def test_rg_surface_texture_upload_samples_both_authored_channels_and_reuses_sto
 
         texture_id = texture.ensure(terrain["size"], payload)
         assert texture.uploads == 1
-        assert _texture_internal_format(texture_id) == gl.GL_RG32F
+        # Two channels stored in a format QRhi has (N1.7: RG32F widened to RGBA32F; the upload stays GL_RG).
+        assert _texture_internal_format(texture_id) == gl.GL_RGBA32F
         assert {name: int(gl.glGetIntegerv(name)) for name in unpack_names} == unpack_before
         assert int(gl.glGetIntegerv(gl.GL_ACTIVE_TEXTURE)) == active_before
 

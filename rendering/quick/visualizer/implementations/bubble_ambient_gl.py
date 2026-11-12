@@ -6,7 +6,7 @@ its original wake, ghost and hero loops. Nothing touches the bubble simulator,
 its RNG, 110-body shader loop, scene clipping or persistent render clock.
 
 Particle glow is real emitted light: while any particle glows, a second,
-same-sized R11F_G11F_B10F float attachment accumulates its *linear-light* radiance
+same-sized half-float (RGBA16F) attachment accumulates its *linear-light* radiance
 additively (a bright energy-conserving core plus a smooth, monotonic halo in
 the particle's own hue). The Bubble shader adds that light over the gradient in
 linear space and lets it fill the remaining headroom without clipping
@@ -91,7 +91,7 @@ in float vHaloRadius;
 uniform vec4 uMicroColor;
 uniform vec4 uParticleColor;
 layout(location=0) out vec4 fragColor;   // premultiplied sRGB coverage (8-bit)
-layout(location=1) out vec4 fragLight;   // linear-light radiance (R11G11B10 float), additive
+layout(location=1) out vec4 fragLight;   // linear-light radiance (half float .rgb), additive
 
 vec3 srgbToLinear(vec3 c) {
     return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
@@ -195,6 +195,12 @@ void main() {
 # them every frame. Same driver functions, same names, same order.
 
 
+# The light attachment: linear radiance in .rgb of an RGBA16F (N1.7: QRhi has no R11G11B10F; RGB10A2 is unorm and
+# has no headroom). Its alpha is written 0 by the particles and erased with the rest by the hero mask; nothing reads
+# it.
+_LIGHT_FORMAT = gl.GL_RGBA16F
+
+
 def _points_glow(points: tuple[float, ...]) -> bool:
     """True when any particle record emits light (glow is the record's fifth field)."""
     return max(points[4::RECORD_STRIDE], default=0.0) > 0.0
@@ -281,7 +287,7 @@ class QuickBubbleAmbientPoints:
             # Glow toggled on an unchanged target: attach or retire only the light.
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._fbo)
             if light:
-                self._light_texture = self._new_texture(width, height, gl.GL_R11F_G11F_B10F, gl.GL_FLOAT)
+                self._light_texture = self._new_texture(width, height, _LIGHT_FORMAT, gl.GL_FLOAT)
                 gl.glFramebufferTexture2D(gl.GL_DRAW_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT1, gl.GL_TEXTURE_2D,
                                           self._light_texture, 0)
                 gl.glDrawBuffers(2, [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
@@ -298,7 +304,7 @@ class QuickBubbleAmbientPoints:
         try:
             texture = self._new_texture(width, height, gl.GL_RGBA8, gl.GL_UNSIGNED_BYTE)
             if light:
-                light_texture = self._new_texture(width, height, gl.GL_R11F_G11F_B10F, gl.GL_FLOAT)
+                light_texture = self._new_texture(width, height, _LIGHT_FORMAT, gl.GL_FLOAT)
             fbo = int(gl.glGenFramebuffers(1))
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER,fbo)
             gl.glFramebufferTexture2D(gl.GL_DRAW_FRAMEBUFFER,gl.GL_COLOR_ATTACHMENT0,gl.GL_TEXTURE_2D,texture,0)
