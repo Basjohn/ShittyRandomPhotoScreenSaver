@@ -924,9 +924,6 @@ dropped from the group and the cap. Its Spectrum work merges as it stands ("stil
 now"); flaws the lead sees are noted in 1B.10 for an Opus Medium agent "at a point where we do not have more
 significant work". Opus and Sonnet agents resume as the lead sees fit.
 
-- [ ] Small boxes batch 4 (`worktree-agent-a4e50f79894c549ec`; WIP edf2100a: six sibling test files moved onto
-  the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
-  a Medium slot is free after 1C.1 and 1C.4.
 - [ ] Native core D4 (`worktree-agent-a2e34d3d2dc0079ee`, stopped by the usage limit 12 Nov; its uncommitted
   work saved as a "WIP (handover)" commit; journal in its worktree): resumed by the same agent (same session).
 
@@ -1190,11 +1187,8 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 - [ ] Keep it a separate reversible fix.
 - [ ] Repeat the four-case corner/border/shadow gate before claiming improvement.
 
-### Test doubles for the display manager (stale-stub reds repaired 11 Nov; migration in flight, Opus Medium successor of batch 4)
+### Test doubles for the display manager (shared doubles in `tests/_display_manager_doubles.py`; the nineteen sibling files migrated 12 Nov)
 
-- [ ] Nineteen sibling test files still hand-build their own `DisplayManager` or owner stubs (green today; the
-  list is in the repair's merge, e.g. `test_qtquick_custom_layout_owner`, `test_visualizer_hover_transfer`,
-  `test_qtquick_h_cutover`): move them onto the shared doubles so one added owner member cannot break them.
 - [ ] Briefs that change a shared owner name the caller sweep: grep `tests/` for the changed methods and run
   every file that hits (three merges ran only the files they edited; nine reds went unnoticed for a day).
 
