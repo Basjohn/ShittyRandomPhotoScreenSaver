@@ -74,6 +74,8 @@ agent.md
 
 # Build/release binary artifacts
 release/
+# The native core placed in its package by the frozen probe build (scripts/venv/build_native_core_probe.ps1)
+/rendering/native/*.pyd
 *.exe
 *.scr
 *.msi

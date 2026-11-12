@@ -32,12 +32,12 @@ Rounds (one per GitHub build of the module):
           extended style, the backdrop HRESULTs, and the alpha in Qt's grabWindow and in PrintWindow
           (PW_RENDERFULLCONTENT, DWM's copy of the window). See-through to the desktop is the lead's visible run.
 
-Usage (repository venv, the module built on GitHub):
-  python native/spike_p1/python/run_n06.py --module-dir release/native_module --round facts --label n06_facts
-  python native/spike_p1/python/run_n06.py --module-dir release/native_module --round device --label n06_device
-  python native/spike_p1/python/run_n06.py --module-dir release/native_module --round lifecycle --label n06_lifecycle
-  python native/spike_p1/python/run_n06.py --module-dir release/native_module --round owners --cycles 12 --label n06_owners
-  python native/spike_p1/python/run_n06.py --module-dir release/native_module --round translucent --label n06_translucent
+Usage (repository venv, the module built on GitHub: tools/build_runner.py --mode github --run --select native_spike):
+  python native/spike_p1/python/run_n06.py --module-dir release/native_spike --round facts --label n06_facts
+  python native/spike_p1/python/run_n06.py --module-dir release/native_spike --round device --label n06_device
+  python native/spike_p1/python/run_n06.py --module-dir release/native_spike --round lifecycle --label n06_lifecycle
+  python native/spike_p1/python/run_n06.py --module-dir release/native_spike --round owners --cycles 12 --label n06_owners
+  python native/spike_p1/python/run_n06.py --module-dir release/native_spike --round translucent --label n06_translucent
 With the Khronos validation layer installed outside the registry, add --layer-path <folder with
 VkLayer_khronos_validation.json>: VK_ADD_LAYER_PATH is set for this process only and reported as allowed. With the
 layer the reference instance is validated too, Qt's QRhi names its objects (debug markers), every error is kept

@@ -9,6 +9,11 @@
 # audits, QRC regeneration, frozen-source audit and publication contract. No installer is compiled here: installers
 # are compiled locally by Build Runner from the validated download.
 #
+# Each product also carries the native core (Current_Plan.md item 8b, N2.1): the job "native" runs the reusable
+# native-module.yml for the same commit and token; the build job validates its artifact, places it in
+# release/native_module (published with the product) and runs the separate frozen probe of it
+# (scripts/venv/build_native_core_probe.ps1). Nothing in the product imports the module yet.
+#
 # Trigger: manual dispatch only (Build Runner, or `gh workflow run windows-build.yml -f target=... -f commit=...
 # -f token=...`). Ordinary pushes never start a run.
 name: Windows build
@@ -41,7 +46,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The product's native core (N2.1): compiled and import-checked for the same commit and token by the native workflow
+  # (reusable), then carried in this product's release tree. A module that does not build fails the product build.
+  native:
+    uses: ./.github/workflows/native-module.yml
+    with:
+      commit: ${{ inputs.commit }}
+      token: ${{ inputs.token }}
+      source: native/core
+
   build:
+    needs: native
     runs-on: windows-2025
     timeout-minutes: 180
     defaults:
@@ -93,6 +108,27 @@ jobs:
           $worker = if ($env:TARGET -eq 'standard') { 'scripts/venv/build_nuitka.ps1' } else { 'scripts/venv/build_nuitka_mc_onedir.ps1' }
           pwsh -NoProfile -ExecutionPolicy Bypass -File $worker
           if ($LASTEXITCODE -ne 0) { throw "$worker failed with exit code $LASTEXITCODE" }
+
+      # The native job's artifact of this run: validated against this checkout (commit, version, pinned Qt, shader
+      # sources) and placed in release/native_module beside the product, with its manifest and reports.
+      - uses: actions/download-artifact@v4
+        with:
+          name: srpss-native_module
+          path: build/native_core_artifact
+
+      - name: Place the native core in the release tree
+        run: |
+          .venv\Scripts\python.exe tools\github_remote_build.py place-native --artifact-dir build\native_core_artifact `
+            --commit $env:COMMIT --token $env:SRPSS_BUILD_RUN_ID
+          if ($LASTEXITCODE -ne 0) { throw 'The native core failed its validation' }
+
+      # A separate frozen build (the product's Qt includes and QML prune) loads the module as the product will; its
+      # report is one of the product's required reports. The product binary is not touched.
+      - name: Frozen probe of the native core
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/venv/build_native_core_probe.ps1 `
+            -Report "logs\native_core_frozen_probe_$($env:SRPSS_BUILD_RUN_ID).json"
+          if ($LASTEXITCODE -ne 0) { throw 'The frozen probe of the native core failed' }
 
       - name: Record the build manifest
         run: |

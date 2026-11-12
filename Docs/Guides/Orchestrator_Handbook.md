@@ -132,11 +132,15 @@ Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Cor
   build as long as you use github workflows to do it. This is authoritive."). The audit proposed that agents
   compile the module in their own worktrees with the scripted CMake step; that is *not* in force: no local
   compile exception is added to `Docs/Guardrails/Agent_Worktree_Rules.md` without the operator's explicit yes.
-  A C++ slice's module is compiled by a GitHub workflow for a pushed ref (N0.9 built that workflow on 12 Nov:
-  `.github/workflows/native-module.yml`; the harness proofs N0.6 and N0.7 ran through it), the artefact is downloaded into the worktree
-  (`Docs/Guides/GitHub_Remote_Build.md`, "The native module": the lead pushes the agent's branch and runs
-  `tools/build_runner.py --mode github --run --select native_module` from that worktree), and agents never start a
-  build, remote included. Frozen products and the lead's installers go through GitHub; the operator may compile installers locally.
+  A C++ slice's module is compiled by a GitHub workflow for a pushed ref (`.github/workflows/native-module.yml`,
+  built in N0.9 on 12 Nov; the harness proofs N0.6 and N0.7 ran through it). The artefact is downloaded into the
+  worktree (`Docs/Guides/GitHub_Remote_Build.md`, "The native modules"). The lead pushes the agent's branch and
+  runs `tools/build_runner.py --mode github --run` from that worktree:
+  - `--select native_spike` for a harness slice, landing in `release\native_spike\`;
+  - `--select native_module` for the product's native core `native/core`, landing in `release\native_module\`.
+
+  Agents never start a build, remote included. Frozen products and the lead's installers go through GitHub; the
+  operator may compile installers locally.
 - **A port is audited on both backends.** Beside section 4's checks: the OpenGL parity record against the Python
   renderer, the Vulkan record against the native OpenGL result (hidden host), the thread probe (no call with a
   Python thread state), GPU time per pass, and the Python renderer deleted in the same change (a transition's at

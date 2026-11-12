@@ -23,9 +23,11 @@ All parts draw the same 4096 instanced, animated dots (`src/quadfield.*`) and re
 ## Building it: on GitHub only
 
 Since 12 Nov 2026 the module is compiled only by `.github/workflows/native-module.yml` on GitHub's Windows runner
-(operator: builds happen only through GitHub workflows, never on this machine). The lead runs
-`tools/build_runner.py --mode github --run --select native_module`; the validated module lands in
-`release\native_module\` of the checkout the tool runs from. The SDK fetch below is now
+(operator: builds happen only through GitHub workflows, never on this machine), with the workflow's `source` input
+`native/spike_p1` (its default is the product's native core, `native/core`). The lead runs
+`tools/build_runner.py --mode github --run --select native_spike`; the validated module lands in
+`release\native_spike\` of the checkout the tool runs from (until 12 Nov 2026 the spike was the job `native_module`
+in `release\native_module\`, which is now the product's core). The SDK fetch below is now
 `tools/native_sdk_fetch.py` (the archives per Qt version, sha256-checked before extraction), and `build.cmd` is the
 workflow's one CMake invocation. The Qt version is one value, the PySide6 pin: CMake's guard reads it from
 `requirements.txt`. The SDK layout no longer names a version (`vulkan_headers\include`). Everything (the lead's
@@ -91,18 +93,18 @@ SDK's Qt version differs from 6.11.2. The `GuiPrivate` warning is expected: QRhi
 ```bat
 .venv\Scripts\python.exe native\spike_p1\python\run_spike.py --module-dir D:\Temp\Scratch\SRPSS\native_spike\build --part all --label p1
 :: the module built on GitHub
-.venv\Scripts\python.exe native\spike_p1\python\run_spike.py --module-dir release\native_module --part all --label p1
+.venv\Scripts\python.exe native\spike_p1\python\run_spike.py --module-dir release\native_spike --part all --label p1
 ```
 
 N0.6 (D6's proof: the module owns the Vulkan instance and device; `src/vk_n06.*`) has its own driver, one round
 per module build, hidden only, never an environment variable (`--help` lists the rounds):
 
 ```bat
-.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round facts --label n06_facts
-.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round device --label n06_device
-.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round lifecycle --label n06_lifecycle
-.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round owners --cycles 12 --label n06_owners
-.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round translucent --label n06_translucent
+.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_spike --round facts --label n06_facts
+.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_spike --round device --label n06_device
+.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_spike --round lifecycle --label n06_lifecycle
+.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_spike --round owners --cycles 12 --label n06_owners
+.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_spike --round translucent --label n06_translucent
 ```
 
 The translucent round shows real windows kept invisible by `tests/_invisible_windows.py`'s pattern; its Win32
@@ -115,10 +117,10 @@ N0.7 (D9's proof: the job thread, its QRhi on the second queue, the latch, the e
 `shaders/n07_edge_*.comp`; `src/vk_n07.*`) builds on N0.6's context; one module build serves its four rounds:
 
 ```bat
-.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_module --round jobs --label n07_jobs
-.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_module --round measure --label n07_measure
-.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_module --round retire --label n07_retire
-.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_module --round rest --label n07_rest
+.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_spike --round jobs --label n07_jobs
+.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_spike --round measure --label n07_measure
+.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_spike --round retire --label n07_retire
+.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_spike --round rest --label n07_rest
 ```
 
 Evidence: `.artifacts/evidence/native_core/n07/<date>_<label>/summary.json`; the last line is `N07 VERDICT ...`.

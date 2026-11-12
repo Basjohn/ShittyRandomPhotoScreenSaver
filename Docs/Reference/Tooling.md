@@ -9,7 +9,8 @@ Routing of the recurring acceptance commands (what to run for which claim) stays
 inventory: if a tool exists it has a row here.
 
 **Keeping it current.** Whoever adds, renames, removes or changes the flags of a tool edits its row in the same
-commit (a new file under `tools/`, `scripts/` or `native/spike_p1/python/` without a row is an incomplete change).
+commit (a new file under `tools/`, `scripts/`, `native/spike_p1/python/` or `native/core/python/` without a row is an
+incomplete change).
 The Orchestrator Handbook's "where everything is" table points here. A tool nobody calls goes to the
 [Candidates to retire](#candidates-to-retire) table first; nothing is deleted without the operator's word
 (operator rule: keep useful tools).
@@ -58,7 +59,7 @@ The Orchestrator Handbook's "where everything is" table points here. A tool nobo
 | 16 | `tools/compute_pass_identity.py` | bit-for-bit before/after of the scene3d compute passes (`record`, `compare`, `paired`) | ANY |
 | 17 | `tools/conventions_identity.py` | bit-identity of every transition and mode across a conventions change (`record`, `compare`, `pairs`) | ANY |
 | 18 | `tools/vulkan_shader_readiness.py` | does every shader compile with `qsb` for every backend (`--out`) | ANY |
-| 19 | `native/spike_p1/python/run_n06.py`, `import_check.py` | native module drivers: Vulkan device ownership rounds; GPU-free import and Qt-binding check | ANY (module from `release\native_module\`) |
+| 19 | `native/spike_p1/python/run_n06.py`, `run_n07.py`, `native/core/python/import_check.py` | native module drivers: the harness's Vulkan device and job rounds (`release\native_spike\`); the product core's GPU-free check (`release\native_module\`) | ANY |
 | 20 | `tools/frame_trace_report.py`, `frame_trace_cadence.py` | read a `--frame-trace` binary (handoff median/p95, late overlap, presentation cadence) | ANY |
 
 ## 1. Workflow and evidence plumbing
@@ -77,8 +78,8 @@ The Orchestrator Handbook's "where everything is" table points here. A tool nobo
 
 | Path | What it does and how to run it | Who | Out | Tests / docs |
 |---|---|---|---|---|
-| `tools/build_runner.py` | The Build Foundry (tkinter GUI, stdlib only) for Normal, Repo Venv and GitHub Remote builds. `PY tools/build_runner.py [--mode normal\|venv\|github] [--smoke-test] [--run [--select JOB ...]] [--iscc PATH] [--debug]`. `--run` is headless and needs `--mode github`; job keys `standard media_center reddit_helper standard_installer media_center_installer linux linux_mc native_module`. `--smoke-test` prints a JSON routing/fingerprint check and opens nothing. A local Normal/Venv build is operator-only; agents never build. | LEAD (`--mode github`), OP (local modes) | `release/`, `logs/` build logs | `test_build_runner.py` and 17 more; Docs/Guides/GitHub_Remote_Build.md |
-| `tools/github_remote_build.py` | The GitHub Remote contract: `run --target standard\|media_center\|native_module [--branch B]` (target repeatable; builds on GitHub runners, downloads, validates, publishes into `release/`); workflow-side `manifest --target T --commit C --token X --out F [--run-id --run-attempt]` and `stage-native --build-dir D [--target native_module]`. Run by the lead from a pushed commit. | LEAD | `release/<payload>/` | `test_github_remote_build.py`, `test_native_module_build.py`; GitHub_Remote_Build.md |
+| `tools/build_runner.py` | The Build Foundry (tkinter GUI, stdlib only) for Normal, Repo Venv and GitHub Remote builds. `PY tools/build_runner.py [--mode normal\|venv\|github] [--smoke-test] [--run [--select JOB ...]] [--iscc PATH] [--debug]`. `--run` is headless and needs `--mode github`; job keys `standard media_center reddit_helper standard_installer media_center_installer linux linux_mc native_module native_spike` (`native_module` the product's native core, `native_spike` the P1 harness). `--smoke-test` prints a JSON routing/fingerprint check and opens nothing. A local Normal/Venv build is operator-only; agents never build. | LEAD (`--mode github`), OP (local modes) | `release/`, `logs/` build logs | `test_build_runner.py` and 17 more; Docs/Guides/GitHub_Remote_Build.md |
+| `tools/github_remote_build.py` | The GitHub Remote contract: `run --target standard\|media_center\|native_module\|native_spike [--branch B]` (target repeatable; builds on GitHub runners, downloads, validates, publishes into `release/`); workflow-side `manifest --target T --commit C --token X --out F [--run-id --run-attempt]`, `stage-native --build-dir D [--target native_module\|native_spike (=native_module)]`, `native-target --source FOLDER` (prints the module target a native source builds) and `place-native --artifact-dir D --commit C --token X` (the product workflow: validate the run's native core and place it in `release/native_module`). Run by the lead from a pushed commit. | LEAD | `release/<payload>/` | `test_github_remote_build.py`, `test_native_module_build.py`; GitHub_Remote_Build.md |
 | `tools/build_evidence.py` | Portable operator-build evidence bundle; never invokes a compiler. | LIB (operator) | bundle folder | `test_build_evidence.py` |
 | `tools/frozen_build_audit.py` | Frozen module audit and deterministic source provenance. `PY tools/frozen_build_audit.py fingerprint\|verify\|compare [--root P] [--receipt P] [--report P] [--expected H] [--artifact P]`. Build-side; called from the build workers. | LEAD / GH | receipt/report paths given | `test_frozen_build_audit.py` |
 | `tools/regen_qrc.py` | Regenerates the binary Qt resource packs (`ui/resources/assets.rcc`, `onboarding_assets.rcc`) with one PySide toolchain. `PY tools/regen_qrc.py [--python P] [--qrc MANIFEST --output RCC] [--check]` (`--check` fails when regeneration is needed). | ANY (`--check`); the `.rcc` are git-ignored and copied into a worktree | `ui/resources/*.rcc` | `test_qrc_regeneration.py` |
@@ -86,10 +87,11 @@ The Orchestrator Handbook's "where everything is" table points here. A tool nobo
 | `tools/qml_import_contract.py` | The allowlist above, readable from Python so a test fails on an unreviewed QML import before a release build does. | LIB | none | `test_build_layout.py` |
 | `tools/check_qml_source_contract.py` | Headless build preflight for duplicate direct QML property assignments. `PY tools/check_qml_source_contract.py` (exit code). | ANY | stdout | called by the build workers |
 | `tools/nuitka_worker_qt_plugin.py` | Nuitka user plugin: importing PySide6 loads no Qt GUI module in a compiled worker process. | LIB (build) | none | `test_nuitka_worker_qt_plugin.py`, `test_frozen_build_audit.py` |
-| `tools/native_sdk_fetch.py` | Fetches the pinned Qt SDK (qtbase + qtdeclarative) and Vulkan-Headers for the native module, sha256-checked. `--prefix DIR \| --print-qt-version` (one required), `[--keep-downloads]`. Downloads: the workflow runs it; never run it on this machine. | GH | SDK prefix outside the repository | `test_native_sdk_fetch.py`; GitHub_Remote_Build.md ("The native module") |
+| `tools/native_sdk_fetch.py` | Fetches the pinned Qt SDK (qtbase + qtdeclarative) and Vulkan-Headers for the native modules, sha256-checked. `--prefix DIR \| --print-qt-version` (one required), `[--keep-downloads]`. Downloads: the workflow runs it; never run it on this machine. | GH | SDK prefix outside the repository | `test_native_sdk_fetch.py`; GitHub_Remote_Build.md ("The native modules") |
 | `tools/python314_probe.py` | Fail-fast Windows runtime/ABI probe for the Python 3.14 cutover. `PY tools/python314_probe.py`. | ANY | stdout | `test_python314_migration_contract.py`; Docs/Guides/Python314_Cutover.md |
 | `scripts/venv/build_nuitka.ps1` | Canonical standard (screensaver) Nuitka worker: `[-EntryPoint main.py] [-AppName SRPSS] [-Console] [-KeepExe] [-ReinstallVenvDeps] [-PrepareEnvironmentOnly] [-BuildTarget screensaver] [-DistributionName screensaver] [-LogStem build_nuitka] [-BuildWorkspace normal\|venv] [-OnefileCacheName onefile] [-ProductNameOverride S] [-DescriptionOverride S] [-DiagnosticArtifactName SRPSS_Diagnostic]`. Called by the runner and the workflow. | GH | `release/`, `logs/*_report_*.xml`, `*_footprint_*.json` | `test_build_layout.py`, `test_build_closeout_contract.py` |
 | `scripts/venv/build_nuitka_mc_onedir.ps1` | Canonical Media Center one-dir worker: `[-EntryPoint main_mc.py] [-AppName SRPSS_Media_Center] [-Console] [-ReinstallVenvDeps] [-BuildWorkspace normal\|venv]`. | GH | as above | as above |
+| `scripts/venv/build_native_core_probe.ps1` | The native core's frozen probe build (N2.1): Nuitka standalone of `native/core/python/frozen_probe.py` with the product's Qt includes and the shared QML prune, carrying `release/native_module`'s core as `rendering.native._srpss_native_core`; runs it and fails unless its report says `ok` and `frozen`. `-Report FILE`. Run by `windows-build.yml` after the worker and `place-native`. | GH | `-Report` (`logs/native_core_frozen_probe_<token>.json`) | `test_native_module_build.py`; GitHub_Remote_Build.md |
 | `scripts/venv/build_reddit_helper.ps1` | Reddit helper worker: `[-EntryPoint helpers/reddit_helper_worker.py] [-AppName SRPSS_RedditHelper] [-Console] [-ReinstallVenvDeps]`; output `release/reddit_helper/SRPSS_RedditHelper.exe`. | GH | `release/reddit_helper/` | `test_build_runner.py`, `test_reddit_helper_task_harness.py` |
 | `scripts/build_nuitka.ps1`, `scripts/build_nuitka_mc_onedir.ps1`, `scripts/build_reddit_helper.ps1` | Compatibility entry points that forward to the `scripts/venv/` workers with `-BuildWorkspace normal` (same parameters). Do not reintroduce global-Python builds. | OP | as the workers | `test_build_closeout_contract.py` |
 | `scripts/build_qtquick_smoke.ps1` | Builds (and with `-Run` runs) the bounded Phase A render-node smoke: `[-Run] [-Windows 1\|2] [-PhaseDelayMs 400]`; output `build/a4_qtquick_smoke/` (ignored). A local compile and a window: operator-only. | OP | `build/a4_qtquick_smoke/` | `test_qtquick_build_packaging.py` |
@@ -163,12 +165,17 @@ open a device. The hidden host (`tools/expanded_visualizer_evidence.py: HiddenDi
 | `tools/visualizer_replay/live_engine_cost.py` | What P2b removes from the main process, measured on the live engine. `--out DIR [--seconds 20] [--modes ...] [--sections live take gil]`. | ANY (it measures; no load) | layout | same |
 | `tools/visualizer_replay/engine_read_audit.py` | Which beat-engine attributes the logical tick reads, per mode (the live-input surface). Module, no CLI. | ANY | stdout | same |
 | `tools/visualizer_replay/live_audio.py` | `recorded_pcm` and `RecordedLoopback`: a recording's native PCM played into the worker's capture callback in real time, never a device. | LIB | none | gates above |
-| `native/spike_p1/python/run_n06.py` | N0.6 driver: the module owns the Vulkan instance and device. `--module-dir DIR [--round facts\|device\|lifecycle\|owners\|translucent (=facts)] [--label n06] [--cycles 10] [--long-cycles 40] [--force-no-second-queue]`. Uses an invisible Quick window; module from `release\native_module\`. | ANY | layout `native_core/n06` | Native_Core_P3_Decisions.md |
+| `native/core/python/import_check.py` | GPU-free check of the product's native core through `rendering.native.load` (its one importer: exact Qt, ABI, MSVC runtime origin) plus the Qt DLLs' origin. `--module-dir DIR --expect-qt X.Y.Z [--json FILE]`. Also the workflow's check for `native/core`. | ANY / GH | `--json` | `test_native_core_loader.py`, `test_native_core_module.py` |
+| `native/core/python/frozen_probe.py` | The native core's frozen probe entry: loads the core through `rendering.native.load()` from the package location (every importer check), checks Qt and the module came from the frozen build's folder, hands an unshown `QQuickWindow` to the host entry. `--out FILE`. Frozen only by the probe build on GitHub; unfrozen it reports `frozen: false`. | GH (frozen) / ANY | `--out` | `test_native_module_build.py` |
+| `native/core/build.cmd`, `CMakeLists.txt`, `cmake/`, `src/`, `shaders/`, `README.md` | The product's native core `_srpss_native_core` (D5.7; imported only by `rendering/native/`). Never built locally; `native-module.yml` builds it by default (`tools/build_runner.py --mode github --run --select native_module`). | GH | `release/native_module/` | native/core/README.md; `test_native_core_build.py` |
+| `native/spike_p1/python/run_n06.py` | N0.6 driver: the module owns the Vulkan instance and device. `--module-dir DIR [--round facts\|device\|lifecycle\|owners\|translucent (=facts)] [--label n06] [--cycles 10] [--long-cycles 40] [--force-no-second-queue]`. Uses an invisible Quick window; module from `release\native_spike\`. | ANY | layout `native_core/n06` | Native_Core_P3_Decisions.md |
 | `native/spike_p1/python/n06_windows.py` | Helpers for it: the invisible window and the Win32 reads that need no pixel. | LIB | none | |
-| `native/spike_p1/python/import_check.py` | GPU-free check that the module imports into the venv's PySide6 and binds to that Qt. `--module-dir DIR --expect-qt X.Y.Z [--without-quick] [--json FILE]`. Also the workflow's check. | ANY / GH | `--json` | `test_native_module_build.py` |
+| `native/spike_p1/python/run_n07.py` | N0.7 driver: the job thread, its QRhi on the second queue, the latch. `--module-dir DIR [--round jobs\|measure\|retire\|rest (=jobs)] [--label n07] [--field-size WxH] [--period-ms MS] [--repeat 4] [--frames 600] [--every 30] [--first 15] [--passes 2] [--cycles 6] [--layer-path DIR] [--retire-repeat 32] [--rest-seconds 60]`. Hidden host; module from `release\native_spike\`. | ANY | layout `native_core/n07` | Native_Core_P3_Decisions.md (D9) |
+| `native/spike_p1/python/n07_census.py` | Helper for it: the process's handles by kernel type and threads by start module (Windows). | LIB | none | |
+| `native/spike_p1/python/import_check.py` | GPU-free check that the spike imports into the venv's PySide6 and binds to that Qt. `--module-dir DIR --expect-qt X.Y.Z [--without-quick] [--json FILE]`. Also the workflow's check for `native/spike_p1`. | ANY / GH | `--json` | `test_native_module_build.py` |
 | `native/spike_p1/python/run_spike.py` | P1 toolchain spike driver. `--module-dir DIR [--part all\|rhi\|gil\|hybrid\|quick] [--backend d3d11\|d3d12\|vulkan\|opengl] [--label spike]`. `quick` and the backends open GPU contexts; judge before running. | ANY (offscreen parts) | layout `architecture/native_core_p1` | Native_Core_P1_Spike.md; GitHub_Remote_Build.md |
 | `native/spike_p1/python/frozen_probe.py` | Entry point of the operator's Nuitka probe of the spike. `--out DIR --part rhi\|hybrid\|quick [--backend d3d11]`. Compiled builds are GitHub-only. | OP | `--out` | |
-| `native/spike_p1/build.cmd`, `CMakeLists.txt`, `cmake/`, `src/`, `shaders/`, `README.md` | The C++ module's sources and the workflow's one CMake invocation. Never built locally; `native-module.yml` builds it (`tools/build_runner.py --mode github --run --select native_module`). | GH | `release/native_module/` | native/spike_p1/README.md |
+| `native/spike_p1/build.cmd`, `CMakeLists.txt`, `cmake/`, `src/`, `shaders/`, `README.md` | The P1 harness module's sources (never ships) and its CMake invocation. Never built locally; `native-module.yml` builds it with `source=native/spike_p1` (`tools/build_runner.py --mode github --run --select native_spike`). | GH | `release/native_spike/` | native/spike_p1/README.md |
 
 ## 6. Visualizer modes
 
@@ -414,8 +421,9 @@ found on 12 Nov 2026, counting an import or a path mention as a caller. "Newer" 
 
 ## Counts
 
-236 files carry a row (every `.py`, `.ps1`, `.sh`, `.iss` and `.xml` under `tools/` including `tools/labs/` and
-`tools/visualizer_replay/`, `scripts/` including `scripts/linux/` and `scripts/venv/`, and `native/spike_p1/python/`),
+241 files carry a row (every `.py`, `.ps1`, `.sh`, `.iss` and `.xml` under `tools/` including `tools/labs/` and
+`tools/visualizer_replay/`, `scripts/` including `scripts/linux/` and `scripts/venv/`, `native/spike_p1/python/` and
+`native/core/python/`),
 each counted once in the section where it first appears. Data folders (`tools/baselines/overhead/` 22 JSON,
 `tools/godzip_themes/` 55 `.srtheme`) and the C++ module sources are described, not counted. Libraries (LIB)
 are importable helpers, not commands.
@@ -423,10 +431,10 @@ are importable helpers, not commands.
 | Section | Files |
 |---|---|
 | 1 Workflow and evidence plumbing | 6 |
-| 2 Build (tools and `scripts/`) | 21 |
+| 2 Build (tools and `scripts/`) | 22 |
 | 3 Real-saver runs | 7 |
 | 4 Performance, load and attribution | 24 |
-| 5 Native core (incl. `native/spike_p1/python`) | 18 |
+| 5 Native core (incl. `native/spike_p1/python`, `native/core/python`) | 22 |
 | 6 Visualizer modes, Studios, presets | 69 |
 | 7 Transitions | 6 |
 | 8 Evidence and capture | 23 |
@@ -436,7 +444,7 @@ are importable helpers, not commands.
 | 12 Migration and one-off | 4 |
 | 13 Probes | 11 |
 | 14 Labs | 13 |
-| Total | 236 |
+| Total | 241 |
 
 Page generated by hand from the tools' own argparse and source, so it can drift: when a row and `--help` disagree,
 `--help` wins and the row is wrong (fix it in the same commit).
