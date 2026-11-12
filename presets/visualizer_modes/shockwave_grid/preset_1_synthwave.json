@@ -111,6 +111,7 @@
         "shockwave_grid_wave_height": 0.06,
         "shockwave_grid_wave_speed": 0.35,
         "shockwave_grid_water_detail": 0.45,
+        "shockwave_grid_water_lines": 1.0,
         "shockwave_grid_scroll": 0.25,
         "shockwave_grid_idle": 0.25,
         "shockwave_grid_water_reflection": 1.0,

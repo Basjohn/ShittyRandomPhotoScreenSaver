@@ -59,7 +59,7 @@ _UNIFORMS = _VIEW_UNIFORMS + (
     "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
     "uWaterLineGlowColor","uWaterLineGlow","uWaterShine","uDepthScale","uShoreGlow","uShoreGlowColor","uContourLines",
-    "uWaterGlint","uGlintLight","uWaterReact",
+    "uWaterGlint","uGlintLight","uWaterReact","uWaterLines",
 ) + _CELESTIAL_UNIFORMS + _REACTION_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
     "uSkyPass","uShaftSpread","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow",
@@ -82,6 +82,11 @@ def shockwave_quality(parameters) -> tuple[int, float, tuple[int, int]]:
         # lattice rather than introducing a second approximation/depth owner.
         cells=tuple(round(value*math.sqrt(1.10)) for value in cells)
     return detail.overlay_samples, glow, cells
+
+
+def water_lines_amount(parameters) -> float:
+    """Water Lines (0..1): how much of the water's face lines and shoreline, with their glow, is drawn."""
+    return max(0.0, min(1.0, float(parameter(parameters, "shockwave_grid_water_lines"))))
 
 
 def basin_water_bank_band(cells: tuple[int, int]) -> float:
@@ -421,6 +426,9 @@ class QuickShockwaveGridRenderer:
             gl.glUniform4f(uniforms["uGlintLight"], *_halo_light(parameters), midband, beat_pulse)
             # Water Reaction reads the admitted waves (fixed real-music scale), not the pinned display bars.
             gl.glUniform1f(uniforms["uWaterReact"], water_amount * music_drive)
+            # Water Lines: the face lines and the shoreline (with their glow) fade together; 0 skips them.
+            water_lines = water_lines_amount(parameters)
+            gl.glUniform2f(uniforms["uWaterLines"], water_lines, water_lines)
             # fwidth already measures physical fragments, including DPR/MSAA.
             gl.glUniform1f(uniforms["uEdgePx"], 0.75)
             gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))
@@ -478,7 +486,8 @@ class QuickShockwaveGridRenderer:
                     gl.glUseProgram(program)
                     gl.glUniform1i(uniforms["uDepthOnly"],0)
                     self._draw_scene(frame,uniforms,vao,vertices,cells,style,
-                                     reflection>0.0 and view.eye[1]>0.001,depth_prepared=depth_prepared)
+                                     reflection>0.0 and view.eye[1]>0.001,depth_prepared=depth_prepared,
+                                     reflected_lines=water_lines>0.0)
                     # Screen-space displacement of the exact terrain triangles.
                     # The unshifted surface depth rejects internal colour, leaving
                     # a narrow ridge line against sky (never projected-column boxes).
@@ -535,7 +544,8 @@ class QuickShockwaveGridRenderer:
                                 gl.glDrawArrays(gl.GL_TRIANGLES,0,sky_count)
                             self._target.set_shaft_light(light)
 
-    def _draw_scene(self,frame,uniforms,vao,vertices,cells,style,reflections,*,depth_prepared=False):
+    def _draw_scene(self,frame,uniforms,vao,vertices,cells,style,reflections,*,depth_prepared=False,
+                    reflected_lines=True):
         points=self._points(cells) if style&2 else None
         if not style&2 and self._points_cells is not None:
             self._drop_points()
@@ -554,8 +564,11 @@ class QuickShockwaveGridRenderer:
                     # as when its depth buffer was initially clear.
                     gl.glDepthFunc(gl.GL_ALWAYS)
                 gl.glDepthMask(gl.GL_FALSE)
-                gl.glUniform1i(uniforms["uPass"],0)
-                gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+                if reflected_lines:
+                    # The mirrored surface draws only the water's lines (its fringe lines and the shoreline):
+                    # with Water Lines at 0 there is nothing to draw, so the pass is skipped.
+                    gl.glUniform1i(uniforms["uPass"],0)
+                    gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
                 if points:
                     self._draw_points(uniforms,points,0,depth_function=gl.GL_ALWAYS if depth_prepared else gl.GL_LEQUAL)
             if depth_prepared:
