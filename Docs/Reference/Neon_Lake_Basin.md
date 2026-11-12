@@ -863,6 +863,11 @@ Stays at 0: the water's colour, reflection and mirrored land/skyline, shine and 
 the crest wash on the body, Water Reaction (its net, lift and the ridge breath) and every land line (ridges,
 Contour Lines, marks). Contracts: `tests/test_neon_water_lines.py`.
 
+Cost (RTX 4090, 2560x1440, PairedBench, control-relative): at 1 the Guided Setup frame is unchanged (255.5 -> 255.0
+cf; +1 GL call, the uniform; +10 Python calls). At 0, driven, one session: Preset 1 281.0 -> 248.0 cf, Preset 2
+257.1 -> 225.6, Preset 3 522.6 -> 497.9, two GL calls fewer (the skipped mirrored-line draw). Evidence
+`.artifacts/evidence/visualizers/shockwave_grid/water_lines/20261112_{inventory,sheet,cost}/`.
+
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
 These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored
