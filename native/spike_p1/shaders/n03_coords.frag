@@ -1,6 +1,7 @@
 #version 440
 // N0.3 scene 1, second pass (coordinates): what the conventions include says about this fragment, beside the raw
 // values it is derived from, as float32 (the analysis in python/run_n03.py compares them with the content).
+#define SRPSS_NATIVE_CORE
 #define SRPSS_CONVENTIONS_FRAGMENT
 //@srpss_conventions
 //@n03_common

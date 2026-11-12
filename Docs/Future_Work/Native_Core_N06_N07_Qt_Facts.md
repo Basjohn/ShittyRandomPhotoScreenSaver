@@ -525,7 +525,22 @@ frame's command buffer, which already rendered into the acquired image, with no 
 on before the image is written. Route: the product never grabs a Vulkan window (only tools and the hidden harness
 do); the core reads pixels back from its own targets, never from the swapchain. Excused only in grab phases.
 
-**E. Qt's thread pool started from the job thread (owners round): ours, through QPainter.** The extra +4 handles and
+**E. `QRhiTexture::sRGB` is ignored by QRhi's OpenGL backend for uncompressed formats: Qt 6.12.0's (N0.3 run 1,
+added 12 Nov by the N0.3 agent).** Not a validation message (OpenGL has none here) but a Qt behaviour the convention
+scenes measured: an RGBA8 texture created with the `sRGB` flag samples on OpenGL as the raw byte over 255 (max
+difference 3e-8 across all 256 values, identical to the unflagged copy), while Vulkan, D3D11 and D3D12 decode it
+(bit-identical to each other, 8 significant bits; evidence
+`.artifacts/evidence/native_core/n0_3/20261112_n03_scenes_reanalysed/`). A hidden probe through PySide6's QRhi read
+`GL_TEXTURE_INTERNAL_FORMAT` = `GL_RGBA` (0x1908) for the flagged texture and for the unflagged one. [SRC] `v6.12.0`
+`src/gui/rhi/qrhigles2.cpp`: `toGlTextureFormat(format, caps, ...)` takes no flags (RGBA8 gives `GL_RGBA8` or `GL_RGBA`),
+and the flag is read only in `toGlCompressedTextureFormat` (the BC, ETC2 and ASTC sRGB variants); `QGles2Texture::create`
+allocates uncompressed storage at once with that format. No excuse id is needed (nothing is reported); the route is
+decision F4 (`Native_Core_P3_Decisions.md`, N0.3): the one sRGB asset is plain RGBA8 decoded in its shader by the
+include's `srgbToLinear` on every backend, so nothing relies on the flag. Worth a Qt bug report (`GL_SRGB8_ALPHA8` for
+RGBA8 with the flag, as the other backends do).
+
+**F. Qt's thread pool started from the job thread (owners round): ours, through QPainter.** (Lettered E until 12 Nov,
+when Qt's sRGB behaviour took E beside Qt's A to D.) The extra +4 handles and
 +1 thread of the retire round were `Qt6Core.dll` threads named "Thread (pooled)" (+1 Thread, +1 IoCompletion,
 Events), appearing in the step where the job thread generated a photo (service start: the edge field's photograph;
 the upload job). Reproduced in a plain process: QPainter's antialiased fills of more than 2^17 pixels into a

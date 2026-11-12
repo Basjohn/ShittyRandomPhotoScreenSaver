@@ -318,6 +318,10 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
       except F2 (`ndcToUv`/`uvToNdc` on D3D11 and D3D12) and F4 (Qt 6.12.0's OpenGL ignores the sRGB flag), both
       proposed in the decisions document ("Run 1's findings"); F1 (OpenGL's correction flips Y) waits for the same
       answer. A rerun after the lead's decision needs the include changed for F2, and the strip's route for F4.
+    - F1 to F4 decided by the lead 12 Nov and built: the include (3a2e2e51; product pixels identical across every mode,
+      transition and changed fragment source), the floor's shader decode (25688bbf; Waveform Ribbon's floor moves at
+      most one 8-bit step on 0.5 % of pixels), the harness for run 2 (block `y`, the clip-NDC flip's negative
+      control, the shader's sRGB decode gated). Run 2 owed: build round 2.
   - [ ] Known-depth plane through `framed_camera.perspective_matrix` corrected at upload:
     `viewDepthFromDepthTexture` equals the analytical window depth on every backend. Negative controls: skip the
     depth part of the correction; upload an uncorrected matrix.

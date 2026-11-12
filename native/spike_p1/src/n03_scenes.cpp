@@ -114,7 +114,9 @@ QMatrix4x4 correctionFor(QRhi *rhi, const QString &mode, bool *known)
 }
 
 // Rule 4 (rendering/gl_programs/conventions.py front_face_clockwise): whether the counter-clockwise-authored front
-// faces are clockwise, from the matrix's handedness and the backend's clip-space Y.
+// faces are clockwise, from the matrix's handedness and the backend's clip-space Y. `m` is the matrix as uploaded,
+// after the correction (decided F3, 12 Nov; run 1: the uncorrected matrix culls the wrong faces on Vulkan, whose
+// correction flips Y, and on OpenGL, whose core-target correction flips Y; on D3D the two agree).
 bool frontFaceClockwise(const QMatrix4x4 &m, bool ndcYUp)
 {
     const float *d = m.constData();
@@ -466,9 +468,16 @@ bool endFrame(QRhi *rhi, QString *error)
     return true;
 }
 
+// The conventions block of a target (decided F1, F2): x the fragment Y flip, y the clip-NDC Y flip.
+QByteArray conventionsBlock(float includeFlip, float ndcFlip)
+{
+    const float values[4] = { includeFlip, ndcFlip, 0.0f, 0.0f };
+    return QByteArray(reinterpret_cast<const char *>(values), int(sizeof(values)));
+}
+
 // Scene 1: the writer, the two readers and the block probe, one frame.
 bool runChecker(const RunContext &c, const QJsonObject &run, const QMatrix4x4 &uploaded, const QMatrix4x4 &glForm,
-                float includeFlip, QJsonObject *out, QString *error)
+                float includeFlip, float ndcFlip, QJsonObject *out, QString *error)
 {
     QRhi *rhi = c.rhi;
     const QSize size = c.size;
@@ -484,9 +493,7 @@ bool runChecker(const RunContext &c, const QJsonObject &run, const QMatrix4x4 &u
                                 "n03 checker scene block", u);
     auto probeSceneUbo = makeUniform(rhi, sceneBlock(QMatrix4x4(), QMatrix4x4(), probeSize, 0.0f),
                                      "n03 probe scene block", u);
-    const float conventions[4] = { includeFlip, 0.0f, 0.0f, 0.0f };
-    auto convUbo = makeUniform(rhi, QByteArray(reinterpret_cast<const char *>(conventions), int(sizeof(conventions))),
-                               "n03 conventions block", u);
+    auto convUbo = makeUniform(rhi, conventionsBlock(includeFlip, ndcFlip), "n03 conventions block", u);
     QJsonArray probeUsed;
     const bool reflected = run.value(QStringLiteral("pack")).toString() != QLatin1String("hand");
     auto probeUbo = makeUniform(rhi, packProbe(c.probe, checker.value(QStringLiteral("probe")).toObject(), reflected,
@@ -590,7 +597,7 @@ bool runChecker(const RunContext &c, const QJsonObject &run, const QMatrix4x4 &u
 
 // Scene 2: the planes into a colour target and a D32F target with LESS, then the depth sampled through the include.
 bool runDepth(const RunContext &c, const QJsonObject &run, const QMatrix4x4 &uploaded, const QMatrix4x4 &glForm,
-              float includeFlip, QJsonObject *out, QString *error)
+              float includeFlip, float ndcFlip, QJsonObject *out, QString *error)
 {
     QRhi *rhi = c.rhi;
     const QSize size = c.size;
@@ -601,9 +608,7 @@ bool runDepth(const RunContext &c, const QJsonObject &run, const QMatrix4x4 &upl
     auto fsVbo = makeVertices(rhi, fullscreen, "n03 fullscreen quad", u);
     auto sceneUbo = makeUniform(rhi, sceneBlock(uploaded, glForm, size, 0.0f), "n03 depth scene block", u);
     auto readUbo = makeUniform(rhi, sceneBlock(QMatrix4x4(), QMatrix4x4(), size, 0.0f), "n03 depth read block", u);
-    const float conventions[4] = { includeFlip, 0.0f, 0.0f, 0.0f };
-    auto convUbo = makeUniform(rhi, QByteArray(reinterpret_cast<const char *>(conventions), int(sizeof(conventions))),
-                               "n03 conventions block", u);
+    auto convUbo = makeUniform(rhi, conventionsBlock(includeFlip, ndcFlip), "n03 conventions block", u);
     if (!vbo || !fsVbo || !sceneUbo || !readUbo || !convUbo) {
         u->release();
         *error = QStringLiteral("depth resources failed");
@@ -757,6 +762,16 @@ QJsonObject runOne(const RunContext &c, const QJsonObject &run)
     if (flipValue.isString() && flipValue.toString() == QLatin1String("framebuffer"))
         includeFlip = c.rhi->isYUpInFramebuffer() ? 1.0f : 0.0f;
     out.insert(QStringLiteral("include_flip"), double(includeFlip));
+    // The clip-NDC flip (decided F2): the backend's value isYUpInNDC() && !isYUpInFramebuffer() (D3D11, D3D12, Metal)
+    // unless the run states a number, or "inverse_backend" (the negative control).
+    const float backendNdcFlip = (c.rhi->isYUpInNDC() && !c.rhi->isYUpInFramebuffer()) ? 1.0f : 0.0f;
+    const QJsonValue ndcValue = run.value(QStringLiteral("ndc_flip"));
+    float ndcFlip = backendNdcFlip;
+    if (ndcValue.isDouble())
+        ndcFlip = float(ndcValue.toDouble());
+    else if (ndcValue.toString() == QLatin1String("inverse_backend"))
+        ndcFlip = 1.0f - backendNdcFlip;
+    out.insert(QStringLiteral("ndc_flip"), double(ndcFlip));
 
     const QString faceMode = run.value(QStringLiteral("front_face")).toString(QStringLiteral("rule"));
     bool clockwise = false;
@@ -774,9 +789,9 @@ QJsonObject runOne(const RunContext &c, const QJsonObject &run)
     if (!known)
         error = QStringLiteral("unknown correction %1").arg(mode);
     else if (scene == QLatin1String("checker"))
-        ok = runChecker(c, run, upload.m, glForm, includeFlip, &out, &error);
+        ok = runChecker(c, run, upload.m, glForm, includeFlip, ndcFlip, &out, &error);
     else if (scene == QLatin1String("depth"))
-        ok = runDepth(c, run, upload.m, glForm, includeFlip, &out, &error);
+        ok = runDepth(c, run, upload.m, glForm, includeFlip, ndcFlip, &out, &error);
     else if (scene == QLatin1String("cull"))
         ok = runCull(c, run, upload.m, glForm, clockwise, &out, &error);
     else

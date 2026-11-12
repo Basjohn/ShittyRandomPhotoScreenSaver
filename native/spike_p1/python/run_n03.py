@@ -11,10 +11,12 @@ written by one pass is read by the next with no per-pass flip, and every matrix 
 are memory rows, row 0 first, never flipped.
 
 Runs per backend (each a fresh set of targets in one offscreen frame):
-  checker  scene 1: correction "target" (clipSpaceCorrMatrix and, on a Y-up framebuffer, a Y flip: OpenGL is the
-           backend that flips), the include's flip 0. Recorded alternative "clip": clipSpaceCorrMatrix alone with the
-           include's flip at isYUpInFramebuffer (the route conventions.py's docstring names). Negative controls: the
-           include's flip inverted; no correction; the probe block packed by hand (ignoring std140's vec3 rule).
+  checker  scene 1 (decided F1, F2, F4, 12 Nov): correction "target" (clipSpaceCorrMatrix and, on a Y-up framebuffer,
+           a Y flip: OpenGL is the backend that flips), the block's fragment flip 0 and its clip-NDC flip at the
+           backend's value (isYUpInNDC && !isYUpInFramebuffer); the sRGB strip decoded by the include's srgbToLinear.
+           Recorded alternative "clip": clipSpaceCorrMatrix alone with the fragment flip at isYUpInFramebuffer (the
+           rejected route). Negative controls: the fragment flip inverted; the clip-NDC flip inverted; no correction;
+           the probe block packed by hand (ignoring std140's vec3 rule).
   depth    scene 2: the planes through framed_camera.perspective_matrix, corrected at upload, into D32F with LESS;
            negative controls: the depth part of the correction skipped; no correction.
   cull     scene 3: two triangles, back faces culled, the front face from rule 4 on the uploaded matrix, with Quick's
@@ -60,7 +62,8 @@ BACKEND_TOLERANCE_U8 = 3
 DEPTH_TOLERANCE = 2.0e-6       # window depth, absolute (about 30 float32 steps just below 1.0)
 COORD_TOLERANCE = 1.0e-5       # uv and NDC from the include
 ITEM_TOLERANCE = 1.0e-3        # an interpolated item position, in pixels
-SRGB_BACKEND_TOLERANCE = 1.0e-4  # the decoding backends against each other (run 1: bit-identical)
+SRGB_BACKEND_TOLERANCE = 1.0e-4  # the hardware-decoding backends against each other (run 1: bit-identical); a record
+SHADER_DECODE_TOLERANCE = 1.0e-5  # srgbToLinear against the exact curve, and the backends against each other (float32)
 EDGE_MARGIN_PX = 1.0           # scene 3: pixels this close to a triangle edge are not compared (fill rules)
 
 IDENTITY = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
@@ -272,6 +275,8 @@ def build_spec() -> dict:
         {"name": "checker_target", "scene": "checker", "correction": "target", "include_flip": 0.0},
         {"name": "checker_clip_route", "scene": "checker", "correction": "clip", "include_flip": "framebuffer"},
         {"name": "checker_include_flip_inverted", "scene": "checker", "correction": "target", "include_flip": 1.0},
+        {"name": "checker_ndc_flip_inverted", "scene": "checker", "correction": "target", "include_flip": 0.0,
+         "ndc_flip": "inverse_backend"},
         {"name": "checker_uncorrected", "scene": "checker", "correction": "none", "include_flip": 0.0},
         {"name": "checker_hand_packed", "scene": "checker", "correction": "target", "include_flip": 0.0,
          "pack": "hand"},
@@ -332,9 +337,9 @@ def _rows(matrix) -> list[list[float]]:
     return [[float(matrix[4 * c + r]) for c in range(4)] for r in range(4)]
 
 
-def ndc_y_flip_candidate(facts: dict) -> bool:
-    """Where the clip NDC's +Y lands on memory row 0 after the "target" correction: on a backend whose NDC is Y up and
-    whose framebuffer rows are top-down (D3D, Metal). There ``ndcToUv`` must flip Y to agree with the writer."""
+def ndc_y_flip(facts: dict) -> bool:
+    """The conventions block's y on this backend (decided F2): the clip NDC's +Y lands on memory row 0 where the NDC is
+    Y up and the framebuffer rows are top-down (D3D, Metal), and there ``ndcToUv``/``uvToNdc`` negate Y."""
     return bool(facts.get("is_y_up_in_ndc")) and not bool(facts.get("is_y_up_in_framebuffer"))
 
 
@@ -360,39 +365,49 @@ def analyse_checker(run: dict, facts: dict) -> dict:
     checks["ndc_to_uv_agrees_with_writer"] = uvs is not None and _within(uvs[..., 2:], uvs[..., :2], COORD_TOLERANCE)
     checks["uv_to_ndc_agrees_with_clip_ndc"] = (mapping is not None and ndc is not None
                                                 and _within(mapping[..., :2], ndc[..., :2], COORD_TOLERANCE))
-    if strip is not None:
-        checks["srgb_flag_live"] = (_within(strip[..., 1], values / 255.0, 1.0e-6)
-                                    and _max_abs(strip[..., 0], values / 255.0) > 0.1)
-        measures.update(srgb_decode_measures(strip[..., 0], values))
-        measures["srgb_decode_equals_raw"] = bool(np.array_equal(strip[..., 0], strip[..., 1]))
-        checks["srgb_decode_keeps_every_byte"] = bool(checks["srgb_flag_live"] and measures["srgb_identifies_its_byte"]
-                                                      and measures["srgb_monotonic"])
-    else:
-        checks["srgb_flag_live"] = checks["srgb_decode_keeps_every_byte"] = False
-    checks["probe_values"] = _equal(img.get("probe"), probe_expected())
-    checks["double_correction_refused"] = run.get("double_correction_refused") is True
     # Records (not gating): what the raw values say on this backend.
     info: dict = {}
+    if strip is not None:
+        # Decided F4: the sRGB asset is plain RGBA8 decoded by the include's srgbToLinear on every backend. The raw byte
+        # must arrive as byte/255, and the shader's decode must be the exact curve within float32 arithmetic.
+        exact = srgb_decode(values)
+        measures["srgb_shader_decode_max_error"] = _max_abs(strip[..., 2], exact)
+        checks["srgb_shader_decode_matches_analytic"] = (
+            _within(strip[..., 1], values / 255.0, 1.0e-6)
+            and measures["srgb_shader_decode_max_error"] <= SHADER_DECODE_TOLERANCE
+            and _max_abs(strip[..., 2], values / 255.0) > 0.1)          # the decode is live, not the raw byte
+        # The sampler's own decode of the sRGB-flagged copy, kept as a record (Qt defect E on OpenGL).
+        info["srgb_flag_live"] = (_within(strip[..., 1], values / 255.0, 1.0e-6)
+                                  and _max_abs(strip[..., 0], values / 255.0) > 0.1)
+        measures.update(srgb_decode_measures(strip[..., 0], values))
+        measures["srgb_decode_equals_raw"] = bool(np.array_equal(strip[..., 0], strip[..., 1]))
+    else:
+        checks["srgb_shader_decode_matches_analytic"] = False
+    checks["probe_values"] = _equal(img.get("probe"), probe_expected())
+    checks["double_correction_refused"] = run.get("double_correction_refused") is True
+    if run.get("name") == "checker_target":
+        # The module wrote the backend's decided clip-NDC flip into the block (F2).
+        checks["ndc_flip_is_the_backends"] = run.get("ndc_flip") == (1.0 if ndc_y_flip(facts) else 0.0)
     info["gl_fragcoord_is_memory_texel_centre"] = raw is not None and _within(raw[..., :2], centres, 0.0)
     info["content_at_memory_texel"] = raw is not None and _within(raw[..., 2:], centres, ITEM_TOLERANCE)
     info["content_upside_down_in_memory"] = _equal(img.get("written"), content[::-1])
     info["ndc_to_uv_of_view_ndc_agrees"] = (mapping is not None and uvs is not None
                                             and _within(mapping[..., 2:], uvs[..., :2], COORD_TOLERANCE))
     if ndc is not None and uvs is not None:
-        flip = ndc_y_flip_candidate(facts)
+        flip = ndc_y_flip(facts)
         post = ndc[..., :2].astype(np.float64)
         candidate = np.stack([post[..., 0] * 0.5 + 0.5, (-post[..., 1] if flip else post[..., 1]) * 0.5 + 0.5], -1)
-        info["candidate_ndc_y_flip"] = flip
-        info["candidate_ndc_to_uv_agrees"] = _within(candidate, uvs[..., :2], COORD_TOLERANCE)
+        info["decided_ndc_y_flip"] = flip
+        info["decided_ndc_to_uv_agrees"] = _within(candidate, uvs[..., :2], COORD_TOLERANCE)
         measures["ndc_to_uv_max_error_per_axis"] = [float(e) for e in np.abs(
             uvs[..., 2:].astype(np.float64) - uvs[..., :2]).reshape(-1, 2).max(0)]
-        measures["candidate_ndc_to_uv_max_error_per_axis"] = [float(e) for e in np.abs(
+        measures["decided_ndc_to_uv_max_error_per_axis"] = [float(e) for e in np.abs(
             candidate - uvs[..., :2]).reshape(-1, 2).max(0)]
         if mapping is not None:
             fragment_uv = uvs[..., :2].astype(np.float64)
             back = np.stack([fragment_uv[..., 0] * 2.0 - 1.0,
                              (1.0 - fragment_uv[..., 1] * 2.0) if flip else (fragment_uv[..., 1] * 2.0 - 1.0)], -1)
-            info["candidate_uv_to_ndc_agrees"] = _within(back, post, COORD_TOLERANCE)
+            info["decided_uv_to_ndc_agrees"] = _within(back, post, COORD_TOLERANCE)
             measures["uv_to_ndc_max_error_per_axis"] = [float(e) for e in np.abs(
                 mapping[..., :2].astype(np.float64) - post).reshape(-1, 2).max(0)]
         # One texel, as numbers for the record: the top-left one.
@@ -461,6 +476,8 @@ def analyse_cull(run: dict, facts: dict, matrix) -> dict:
 NEGATIVE = {
     "checker_include_flip_inverted": ("checker_target", ("frag_texel_matches_writer", "frag_uv_matches_writer"),
                                       "never"),
+    "checker_ndc_flip_inverted": ("checker_target", ("ndc_to_uv_agrees_with_writer", "uv_to_ndc_agrees_with_clip_ndc"),
+                                  "never"),
     "checker_uncorrected": ("checker_target", ("texel_origin_top_left",), "xy_rows"),
     "checker_hand_packed": ("checker_target", ("probe_values",), "never"),
     "depth_skip_depth": ("depth_target", ("window_depth_analytic",), "z_row"),
@@ -542,7 +559,8 @@ def analyse_backend(result: dict) -> dict:
 
 SCENE_RUNS = {"checker": ("checker_target",), "depth": ("depth_target",),
               "cull": ("cull_quick_rule", "cull_up_rule")}
-SCENE_NEGATIVES = {"checker": ("checker_include_flip_inverted", "checker_uncorrected", "checker_hand_packed"),
+SCENE_NEGATIVES = {"checker": ("checker_include_flip_inverted", "checker_ndc_flip_inverted", "checker_uncorrected",
+                               "checker_hand_packed"),
                    "depth": ("depth_skip_depth", "depth_uncorrected"),
                    "cull": ("cull_quick_ccw", "cull_quick_rule_gl_form", "cull_up_ccw", "cull_up_rule_gl_form")}
 
@@ -581,62 +599,39 @@ def cross_backend(results: dict) -> dict:
 
 
 def cross_backend_srgb(results: dict) -> dict:
-    """The sRGB decode of every backend that decodes, against the first one that does. The draft compared with the
-    OpenGL decode, but Qt 6.12.0's OpenGL backend does not decode (finding F4: QRhiTexture::sRGB is ignored for
-    uncompressed formats), so OpenGL cannot be the reference; a backend that does not decode is listed, and fails its
-    own srgb_flag_live check."""
+    """Decided F4: the shader's decode (``srgbToLinear``) of every backend against the reference backend's, gating.
+    Recorded beside it: the sampler's own decode of the sRGB-flagged copy, among the backends that decode at all (Qt
+    6.12.0's OpenGL backend does not: defect E)."""
     strips: dict = {}
     for backend, result in results.items():
         run = next((r for r in result.get("runs", []) if r["name"] == "checker_target" and r.get("ok")), None)
         strip = images(run).get("strip") if run else None
         if strip is not None:
             strips[backend] = strip
+    out: dict = {"reference": REFERENCE_BACKEND if REFERENCE_BACKEND in strips else None, "shader_decode": {}}
+    for backend, strip in strips.items():
+        if backend == REFERENCE_BACKEND or REFERENCE_BACKEND not in strips:
+            continue
+        value = _max_abs(strip[..., 2], strips[REFERENCE_BACKEND][..., 2])
+        out["shader_decode"][backend] = {"max_abs": value,
+                                         "within": value is not None and value <= SHADER_DECODE_TOLERANCE}
+    out["within"] = out["reference"] is not None and all(e["within"] for e in out["shader_decode"].values())
     decoding = [b for b, s in strips.items() if not np.array_equal(s[..., 0], s[..., 1])]
-    out: dict = {"reference": decoding[0] if decoding else None, "compared": {},
-                 "not_decoding": sorted(set(strips) - set(decoding))}
-    for backend in decoding[1:]:
-        value = _max_abs(strips[backend][..., 0], strips[decoding[0]][..., 0])
-        out["compared"][backend] = {"max_abs": value, "within": value is not None and value <= SRGB_BACKEND_TOLERANCE}
-    out["within"] = bool(decoding) and all(e["within"] for e in out["compared"].values())
+    out["sampler_decode_record"] = {
+        "backends_that_decode": decoding, "backends_that_do_not": sorted(set(strips) - set(decoding)),
+        "against_first": {b: _max_abs(strips[b][..., 0], strips[decoding[0]][..., 0]) for b in decoding[1:]}}
     return out
-
-
-# Failures the run explains by a convention finding that waits for the lead's decision (decisions document, N0.3,
-# "Run 1's findings"). Each is recognised from the readbacks, never from the backend's name alone; a failure that is
-# not recognised stays unexplained.
-FINDINGS = {
-    "F2": "ndcToUv/uvToNdc of the clip NDC disagree with the writer where clip Y is up and rows are top-down "
-          "(isYUpInNDC && !isYUpInFramebuffer: D3D11, D3D12); the candidate with Y negated agrees",
-    "F4": "QRhi's OpenGL backend ignores QRhiTexture::sRGB for an uncompressed format (Qt 6.12.0): the sampled "
-          "value is the raw byte over 255",
-}
-
-
-def finding_for(backend_analysis: dict, run_name: str, check: str) -> str | None:
-    entry = backend_analysis["runs"].get(run_name, {})
-    info, measures = entry.get("info", {}), entry.get("measures", {})
-    if (check in ("ndc_to_uv_agrees_with_writer", "uv_to_ndc_agrees_with_clip_ndc") and info.get("candidate_ndc_y_flip")
-            and info.get("candidate_ndc_to_uv_agrees") and info.get("candidate_uv_to_ndc_agrees")):
-        return "F2"
-    if (check in ("srgb_flag_live", "srgb_decode_keeps_every_byte") and measures.get("srgb_decode_equals_raw")
-            and backend_analysis["facts"].get("backend") == "OpenGL"):
-        return "F4"
-    return None
 
 
 def scene_verdicts(analyses: dict, cross: dict, validation: dict | None) -> dict:
     verdicts: dict = {}
     for scene, names in SCENE_RUNS.items():
         failed: list[str] = []
-        awaiting: dict = {}
         for backend, analysis in analyses.items():
             for name in names:
                 for check, ok in analysis["runs"].get(name, {"checks": {"missing": False}})["checks"].items():
                     if not ok:
                         failed.append(f"{backend}:{name}.{check}")
-                        finding = finding_for(analysis, name, check)
-                        if finding:
-                            awaiting.setdefault(finding, []).append(failed[-1])
             for name in SCENE_NEGATIVES[scene]:
                 status = analysis["negatives"].get(name, {}).get("status")
                 if status not in ("fails as it must", "vacuous here"):
@@ -656,14 +651,11 @@ def scene_verdicts(analyses: dict, cross: dict, validation: dict | None) -> dict
             for key, value in entry.items():
                 if key.startswith(prefixes) and not (value or {}).get("within"):
                     failed.append(f"cross-backend {backend} vs {REFERENCE_BACKEND}: {key} {value}")
-        explained = {f for items in awaiting.values() for f in items}
-        verdicts[scene] = {"pass": not failed, "failed": failed, "awaiting_lead": awaiting,
-                           "unexplained": [f for f in failed if f not in explained]}
+        verdicts[scene] = {"pass": not failed, "failed": failed}
     if validation is not None and not validation.get("clean_or_not_required", False):
         for scene in verdicts:
             verdicts[scene]["pass"] = False
             verdicts[scene]["failed"].append(f"vulkan validation: {validation.get('status')}")
-            verdicts[scene]["unexplained"].append(f"vulkan validation: {validation.get('status')}")
     return verdicts
 
 
@@ -858,13 +850,7 @@ def main() -> int:
     failed = [f"{scene}" for scene, v in verdicts.items() if not v["pass"]] + failed_backends
     if not env["clean"]:
         failed.append("environment")
-    awaiting = sorted({f for v in verdicts.values() for f in v["awaiting_lead"]})
-    unexplained = sum(len(v["unexplained"]) for v in verdicts.values()) + len(failed_backends) + (not env["clean"])
-    note = ""
-    if awaiting:
-        note = (f" ({unexplained} unexplained; the rest are findings awaiting the lead: {', '.join(awaiting)})"
-                if unexplained else f" (only findings awaiting the lead: {', '.join(awaiting)})")
-    print("N03 VERDICT " + ("PASS" if passed else "FAIL: " + ", ".join(failed) + note))
+    print("N03 VERDICT " + ("PASS" if passed else "FAIL: " + ", ".join(failed)))
     return 0
 
 

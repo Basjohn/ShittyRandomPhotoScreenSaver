@@ -135,30 +135,39 @@ def _quantised_decode(values: np.ndarray) -> np.ndarray:
     return np.where(exact > 0, np.round(exact / step) * step, 0.0)
 
 
-def _checker_run(facts: dict, *, mirrored: bool = False, srgb: str = "exact") -> dict:
-    """What a backend that keeps the decided convention reads back (the clip NDC per its facts)."""
+def _checker_run(facts: dict, *, mirrored: bool = False, hardware: str = "quantised", shader: str = "exact",
+                 block_flip: bool | None = None) -> dict:
+    """What a backend reads back under the decided convention (the clip NDC per its facts). ``block_flip`` is the
+    clip-NDC flip the module wrote into the block (default: the backend's decided value); ``hardware`` the sampler's
+    decode of the flagged strip, ``shader`` srgbToLinear's."""
     content = n03.checker_content()
     y, x = np.mgrid[0:n03.HEIGHT, 0:n03.WIDTH]
     ux, uy = (x + 0.5) / n03.WIDTH, (y + 0.5) / n03.HEIGHT
-    flip = n03.ndc_y_flip_candidate(facts)
+    flip = n03.ndc_y_flip(facts)
+    block_flip = flip if block_flip is None else block_flip
     post_y = (1.0 - 2.0 * uy) if flip else (2.0 * uy - 1.0)
     post = np.stack([2.0 * ux - 1.0, post_y], -1)
     view = np.stack([2.0 * ux - 1.0, 1.0 - 2.0 * uy], -1)
+    sign = -1.0 if block_flip else 1.0
+    ndc_to_uv = np.stack([post[..., 0] * 0.5 + 0.5, sign * post[..., 1] * 0.5 + 0.5], -1)
+    uv_to_ndc = np.stack([2 * ux - 1, sign * (2 * uy - 1)], -1)
     one = np.ones_like(ux)
     v = n03.strip_values()
     written = content[::-1] if mirrored else content
-    decoded = {"exact": n03.srgb_decode(v), "raw": v / 255.0, "quantised": _quantised_decode(v)}[srgb]
+    decodes = {"exact": n03.srgb_decode(v), "raw": v / 255.0, "quantised": _quantised_decode(v),
+               "shifted": n03.srgb_decode(np.clip(v.astype(int) + 1, 0, 255))}
     readbacks = {
         "written": written, "fetch": written, "sample": written, "upload_fetch": content, "uploaded_raw": content,
-        "strip": np.stack([decoded, v / 255.0, 0 * one, one], -1),
+        "strip": np.stack([decodes[hardware], v / 255.0, decodes[shader], one], -1),
         "pixel": np.stack([x + 0.5, y + 0.5, x, y], -1),
-        "uv": np.stack([ux, uy, post[..., 0] * 0.5 + 0.5, post[..., 1] * 0.5 + 0.5], -1),
+        "uv": np.concatenate([np.stack([ux, uy], -1), ndc_to_uv], -1),
         "raw": np.stack([x + 0.5, y + 0.5, x + 0.5, y + 0.5], -1),
         "ndc": np.concatenate([post, view], -1),
-        "mapping": np.concatenate([np.stack([2 * ux - 1, 2 * uy - 1], -1), view * 0.5 + 0.5], -1),
+        "mapping": np.concatenate([uv_to_ndc, view * 0.5 + 0.5], -1),
         "probe": n03.probe_expected(),
     }
     return {"name": "checker_target", "scene": "checker", "ok": True, "double_correction_refused": True,
+            "ndc_flip": 1.0 if block_flip else 0.0,
             "readbacks": {k: _entry(a if a.dtype == np.uint8 else a.astype(np.float32)) for k, a in readbacks.items()}}
 
 
@@ -174,36 +183,36 @@ def test_the_checker_analysis_passes_the_convention_and_fails_mirrored_rows():
     assert bad["checks"]["frag_texel_matches_writer"] is False
 
 
-def test_on_a_y_up_ndc_with_top_down_rows_the_production_ndc_to_uv_disagrees_and_the_candidate_agrees():
-    result = n03.analyse_checker(_checker_run(D3D_FACTS), D3D_FACTS)
-    assert result["checks"]["ndc_to_uv_agrees_with_writer"] is False
-    assert result["checks"]["uv_to_ndc_agrees_with_clip_ndc"] is False
-    assert result["info"]["candidate_ndc_to_uv_agrees"] is True
-    assert result["info"]["candidate_uv_to_ndc_agrees"] is True
-    backend = {"facts": {"backend": "D3D11", **D3D_FACTS}, "runs": {"checker_target": result}}
-    assert n03.finding_for(backend, "checker_target", "ndc_to_uv_agrees_with_writer") == "F2"
-    # Where the candidate does not agree either, the failure stays unexplained.
-    vulkan = n03.analyse_checker(_checker_run(VULKAN_FACTS), D3D_FACTS)
-    assert n03.finding_for({"facts": {"backend": "D3D11"}, "runs": {"checker_target": vulkan}}, "checker_target",
-                           "ndc_to_uv_agrees_with_writer") is None
+def test_with_the_decided_clip_ndc_flip_d3d_agrees_and_without_it_disagrees():
+    # Decided F2: on a Y-up NDC with top-down rows (D3D11, D3D12) the block's y negates the clip NDC's Y.
+    decided = n03.analyse_checker(_checker_run(D3D_FACTS), D3D_FACTS)
+    assert all(decided["checks"].values()), decided["checks"]
+    # Run 1's production include (y never read): the writer's row mirrored, the negative control's failure.
+    unflipped = n03.analyse_checker(_checker_run(D3D_FACTS, block_flip=False), D3D_FACTS)
+    assert unflipped["checks"]["ndc_to_uv_agrees_with_writer"] is False
+    assert unflipped["checks"]["uv_to_ndc_agrees_with_clip_ndc"] is False
+    assert unflipped["checks"]["ndc_flip_is_the_backends"] is False
+    # The same flip on Vulkan, where the backend's value is 0, breaks it there.
+    wrong = n03.analyse_checker(_checker_run(VULKAN_FACTS, block_flip=True), VULKAN_FACTS)
+    assert wrong["checks"]["ndc_to_uv_agrees_with_writer"] is False
 
 
-def test_the_srgb_check_takes_the_hardware_precision_and_names_a_decode_that_is_not_there():
-    # The hardware's 8-significant-bit decode keeps every byte (run 1's 0.00375 at byte 251 is within it).
-    kept = n03.analyse_checker(_checker_run(VULKAN_FACTS, srgb="quantised"), VULKAN_FACTS)
-    assert kept["checks"]["srgb_decode_keeps_every_byte"] is True
+def test_the_srgb_check_gates_the_shaders_decode_and_records_the_samplers():
+    # Decided F4: srgbToLinear's decode is the exact curve on every backend; the sampler's decode is a record only.
+    result = n03.analyse_checker(_checker_run(VULKAN_FACTS, hardware="raw"), VULKAN_FACTS)
+    assert result["checks"]["srgb_shader_decode_matches_analytic"] is True
+    assert result["info"]["srgb_flag_live"] is False          # Qt defect E on OpenGL: recorded, not gating
+    # No decode in the shader, or one a byte off: refused.
+    for shader in ("raw", "shifted"):
+        bad = n03.analyse_checker(_checker_run(VULKAN_FACTS, shader=shader), VULKAN_FACTS)
+        assert bad["checks"]["srgb_shader_decode_matches_analytic"] is False, shader
+    # The hardware's 8-significant-bit decode (run 1: 0.00375 at byte 251) keeps every byte; a shifted one does not.
+    kept = n03.analyse_checker(_checker_run(VULKAN_FACTS, hardware="quantised"), VULKAN_FACTS)
+    assert kept["measures"]["srgb_identifies_its_byte"] is True
     assert kept["measures"]["srgb_max_error_vs_analytic"] > 1.0e-3
-    # A decode one byte off is refused.
     v = n03.strip_values()
     shifted = n03.srgb_decode(np.clip(v.astype(int) + 1, 0, 255))
     assert n03.srgb_decode_measures(shifted, v)["srgb_identifies_its_byte"] is False
-    # No decode at all (Qt 6.12.0's OpenGL backend): the flag is not live, recognised as F4 on OpenGL only.
-    raw = n03.analyse_checker(_checker_run(VULKAN_FACTS, srgb="raw"), VULKAN_FACTS)
-    assert raw["checks"]["srgb_flag_live"] is False and raw["checks"]["srgb_decode_keeps_every_byte"] is False
-    gl = {"facts": {"backend": "OpenGL"}, "runs": {"checker_target": raw}}
-    assert n03.finding_for(gl, "checker_target", "srgb_flag_live") == "F4"
-    assert n03.finding_for({"facts": {"backend": "Vulkan"}, "runs": {"checker_target": raw}}, "checker_target",
-                           "srgb_flag_live") is None
 
 
 def test_the_cull_analysis_fails_the_wrong_triangle():
