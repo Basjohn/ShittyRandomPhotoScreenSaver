@@ -19,15 +19,56 @@ so no host fence has to know about it.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Iterator, Mapping
+from typing import Callable, Iterator, Mapping
 
 from OpenGL import GL as gl
 
-from rendering.gl_programs.scene3d import Scene3DBlockLayout
+from rendering.gl_programs.scene3d import SCENE3D_PASS_BLOCK_BINDING, Scene3DBlockLayout
 from rendering.quick.scene3d.stream import StreamRing
 
 # Well clear of the points Qt Quick's own shaders use; restored after every use anyway.
 SCENE3D_UNIFORM_BINDING = 15
+# A pass block's binding (``SCENE3D_PASS_BLOCK_BINDING``): its program's sources state it, the pass binds it.
+PASS_BLOCK_BINDING = SCENE3D_PASS_BLOCK_BINDING
+# Every copy of a pass block is written at the uniform-buffer offset alignment (at most 256 bytes), and every pass
+# block fits in it. A ring's slot holds 64 copies, so a fence falls every dozen frames or more, never every frame.
+_PASS_COPY = 256
+_PASS_SLOT = 64 * _PASS_COPY
+
+
+class PassBlocks:
+    """A program owner's pass blocks (N1.6). A program whose loose uniforms became one std140 block (Vulkan GLSL has
+    no loose uniforms) declares it with ``layout.glsl(PASS_BLOCK_BINDING)``; the pass that drew with ``glUniform*``
+    calls packs the same values, from the same place in the frame, and draws inside ``bound(layout.pack(values))``:
+    one write into a small fenced stream ring (``stream.py``) and one bind, instead of a call per uniform. ``rebind``
+    gives a later draw of the scope other values (each draw already submitted keeps its own copy). The point is left
+    unbound afterwards: nothing is read back and nothing inherits it. Nothing is allocated until ``warm`` or the first
+    ``bound``; ``release`` returns it to zero. ``copies`` is the most draws one ``bound`` scope gives values to and
+    ``block_bytes`` the largest block (a slot holds 64 copies; four slots a ring)."""
+
+    def __init__(self, label: str, *, copies: int = 1, block_bytes: int = _PASS_COPY) -> None:
+        copy = -(-int(block_bytes) // _PASS_COPY) * _PASS_COPY
+        # One more copy's room: a scope's first copy starts at the next aligned offset after the last scope's end.
+        hold = copy * (int(copies) + 1)
+        self._ring = StreamRing(f"{label} pass blocks", slots=4, slot_bytes=max(_PASS_SLOT, 64 * copy),
+                                hold_bytes=hold)
+
+    @property
+    def has_resources(self) -> bool:
+        return self._ring.has_resources
+
+    def warm(self) -> bool:
+        """One warm-up step: True when the ring already exists, else allocate it."""
+        return self._ring.warm()
+
+    @contextmanager
+    def bound(self, data: bytes) -> Iterator[Callable[[bytes], None]]:
+        ring = self._ring
+        with ring.bound(gl.GL_UNIFORM_BUFFER, PASS_BLOCK_BINDING, data, restore=False):
+            yield lambda values: ring.rebind(gl.GL_UNIFORM_BUFFER, PASS_BLOCK_BINDING, values)
+
+    def release(self) -> None:
+        self._ring.release()
 
 
 class UniformBlock:

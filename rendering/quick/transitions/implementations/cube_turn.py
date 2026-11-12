@@ -17,7 +17,7 @@ from rendering.gl_programs.cube_turn_program import (
 from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, scene3d_request_samples
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -85,6 +85,8 @@ class QuickCubeTurnRenderer:
             return False
         if not r.has_mesh("box"):
             r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
+            return False
+        if not warm_pass_blocks(self._resources, size):
             return False
         return warm_run_resources(self._target, None, size, samples)
 

@@ -19,7 +19,7 @@ from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.population import CompactedPopulation, population_programs
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from rendering.quick.scene3d.uniforms import UniformBlock
@@ -99,6 +99,8 @@ class QuickDisintegrateRenderer:
             columns, rows, _size = disintegrate_grid(size[0], size[1], grain)
             if not self._grains.warm(columns * rows):
                 return False
+        if not warm_pass_blocks(self._resources, size):
+            return False
         return warm_run_resources(self._target, None, size, samples)
 
     def park(self) -> None:

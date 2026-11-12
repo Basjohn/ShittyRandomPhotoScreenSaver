@@ -18,18 +18,22 @@ import ctypes
 
 from OpenGL import GL as gl
 
-from rendering.gl_programs.scene3d import SCENE3D_ENVIRONMENT_SIZE
+from rendering.gl_programs.scene3d import SCENE3D_ENVIRONMENT_SIZE, Scene3DBlockLayout
 from rendering.quick import gl_query
 
 from .post import FULLSCREEN_VERTEX_SOURCE
+from .uniforms import PASS_BLOCK_BINDING
+
+# The copy's values (binding plan: uPhoto 0, the block PASS_BLOCK_BINDING).
+COPY_BLOCK = Scene3DBlockLayout.of("ScenePhotoCopy", (("uStep", "vec2"),))   # a quarter of one copy texel, in uv
 
 # 16 bilinear taps over the output texel's footprint: a box filter wide enough for a
 # 4K photograph (~7.5 source texels per copy texel) without aliasing into the copy.
 _COPY_FRAGMENT = """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
-uniform sampler2D uPhoto;
-uniform vec2 uStep;   // a quarter of one copy texel, in uv
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
+layout(binding = 0) uniform sampler2D uPhoto;
+""" + COPY_BLOCK.glsl(PASS_BLOCK_BINDING) + """
 void main() {
     vec3 sum = vec3(0.0);
     for (int y = 0; y < 4; ++y) {
@@ -159,14 +163,12 @@ class PhotoEnvironment:
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDepthMask(gl.GL_FALSE)
             program = resources.program("photo_environment", FULLSCREEN_VERTEX_SOURCE, _COPY_FRAGMENT)
-            uniforms = resources.uniforms("photo_environment", ("uPhoto", "uStep"))
             gl.glUseProgram(program)
             gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glBindTexture(gl.GL_TEXTURE_2D, lent)          # sampled only
-            gl.glUniform1i(uniforms["uPhoto"], 0)
-            gl.glUniform2f(uniforms["uStep"], 0.25 / size[0], 0.25 / size[1])
-            gl.glBindVertexArray(vao)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            with resources.pass_blocks.bound(COPY_BLOCK.pack({"uStep": (0.25 / size[0], 0.25 / size[1])})):
+                gl.glBindVertexArray(vao)
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             gl.glGenerateTextureMipmap(texture)                # only our owned copy gets mip levels
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, draw)

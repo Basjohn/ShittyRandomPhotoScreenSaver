@@ -20,7 +20,7 @@ from ..crumble_dynamics import MOTION_FRAMES
 from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress, scene3d_trail_ghosts
 from rendering.quick.scene3d.motion import motion_program, motion_uniform_names, set_motion_uniforms
 from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import (
@@ -119,6 +119,8 @@ class QuickCrumbleRenderer:
                     self._rebuild_geometry(geometry)
                     self._geometry_key = key
                     return False
+        if not warm_pass_blocks(self._resources, size):
+            return False
         return warm_run_resources(self._target, self._trails, size, samples, motion_blur=motion,
                                   bloom=False, with_trails=trails)
 

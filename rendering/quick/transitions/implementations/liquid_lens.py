@@ -15,7 +15,7 @@ from rendering.gl_programs.liquid_lens_program import (
     lens_state,
 )
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -73,7 +73,8 @@ class QuickLiquidLensRenderer:
         liquid_lens_parameters(parameters)
         r = self._resources
         return warm_programs([(r, *UNDERLAY_PROGRAM),
-                              (r, "liquid_lens", ITEM_QUAD_VERTEX_SOURCE, LIQUID_LENS_FRAGMENT_SOURCE)])
+                              (r, "liquid_lens", ITEM_QUAD_VERTEX_SOURCE, LIQUID_LENS_FRAGMENT_SOURCE)]
+                             ) and warm_pass_blocks(r, size)
 
     def park(self) -> None:
         """Forget the run's plan; the programs stay warm."""

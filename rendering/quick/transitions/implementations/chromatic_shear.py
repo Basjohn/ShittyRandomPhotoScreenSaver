@@ -13,7 +13,7 @@ from rendering.gl_programs.chromatic_shear_program import (
     SHEAR_SLICES_RANGE,
 )
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -67,7 +67,8 @@ class QuickChromaticShearRenderer:
         chromatic_shear_parameters(parameters)
         r = self._resources
         return warm_programs([(r, *UNDERLAY_PROGRAM),
-                              (r, "chromatic_shear", ITEM_QUAD_VERTEX_SOURCE, CHROMATIC_SHEAR_FRAGMENT_SOURCE)])
+                              (r, "chromatic_shear", ITEM_QUAD_VERTEX_SOURCE, CHROMATIC_SHEAR_FRAGMENT_SOURCE)]
+                             ) and warm_pass_blocks(r, size)
 
     def park(self) -> None:
         """Nothing per run to drop; the programs stay warm."""

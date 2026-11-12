@@ -40,7 +40,7 @@ class ShaftLight:
 
 
 _DOWNSAMPLE_FRAGMENT = """#version 460 core
-in vec2 vUv;
+layout(location = 0) in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uSource;
 void main() {
@@ -66,7 +66,7 @@ void main() {
 """
 
 _GATHER_FRAGMENT = """#version 460 core
-in vec2 vUv;
+layout(location = 0) in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uSource;
 uniform vec2 uLight;   // the light, in uv (may lie outside 0..1)

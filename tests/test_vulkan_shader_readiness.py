@@ -225,36 +225,10 @@ def test_every_target_is_checked_not_only_spirv(tmp_path):
 # The sources that did not bake on 12 Nov 2026 (N1.3), in N5's order. Only ever shrinks.
 _RATCHET = {
     "Shared scene substrate": (
-        "rendering.quick.scene3d.environment.PHOTO_ENVIRONMENT_PROGRAM[1]",
-        "rendering.quick.scene3d.environment._COPY_FRAGMENT",
+        # N1.6: the substrate's own programs draw with item_quad_vertex_source(their block); this text stays the 2D
+        # transitions' vertex stage (QUICK_TRANSITION_VERTEX_SOURCE, its uMatrix/uItemSize set by bind_frame) and
+        # converts with them.
         "rendering.quick.scene3d.frame.ITEM_QUAD_VERTEX_SOURCE",
-        "rendering.quick.scene3d.post._DOWNSAMPLE_FRAGMENT",
-        "rendering.quick.scene3d.post._UPSAMPLE_FRAGMENT",
-        "rendering.quick.scene3d.resources._CAMERA_PLANE_FRAGMENT",
-        "rendering.quick.scene3d.resources._CAMERA_PLANE_VERTEX",
-        "rendering.quick.scene3d.resources._IMAGE_FRAGMENT",
-        "rendering.quick.scene3d.target._BACKGROUND_FRAGMENT",
-        "rendering.quick.scene3d.target._BACKGROUND_SAMPLES_FRAGMENT",
-        "rendering.quick.scene3d.target._COMPOSITE_FRAGMENT",
-        "rendering.quick.scene3d.target._COMPOSITE_OVERLAY_BLOOM_FRAGMENT",
-        "rendering.quick.scene3d.target._COMPOSITE_OVERLAY_BLOOM_SAMPLES_FRAGMENT",
-        "rendering.quick.scene3d.target._COMPOSITE_OVERLAY_FRAGMENT",
-        "rendering.quick.scene3d.target._COMPOSITE_OVERLAY_SAMPLES_FRAGMENT",
-        "rendering.quick.scene3d.target._COMPOSITE_OVERLAY_SHAFTS_FRAGMENT",
-        "rendering.quick.scene3d.target._COMPOSITE_OVERLAY_SHAFTS_SAMPLES_FRAGMENT",
-        "rendering.quick.scene3d.target._COMPOSITE_SAMPLES_FRAGMENT",
-        "rendering.quick.scene3d.target._OIT_RESOLVE_FRAGMENT",
-        "rendering.quick.scene3d.target._OIT_RESOLVE_SAMPLES_FRAGMENT",
-        "rendering.quick.scene3d.target._ORIENTED_COMPOSITES[0]",
-        "rendering.quick.scene3d.target._ORIENTED_COMPOSITES[1]",
-        "rendering.quick.scene3d.target._ORIENTED_COMPOSITES[2]",
-        "rendering.quick.scene3d.target._ORIENTED_COMPOSITES[3]",
-        "rendering.quick.scene3d.target._ORIENTED_COMPOSITES[4]",
-        "rendering.quick.scene3d.target._ORIENTED_COMPOSITES[5]",
-        "rendering.quick.scene3d.target._ORIENTED_COMPOSITES[6]",
-        "rendering.quick.scene3d.target._ORIENTED_COMPOSITES[7]",
-        "rendering.quick.scene3d.target._RESOLVE_FRAGMENT",
-        "rendering.quick.scene3d.target._RESOLVE_MOTION_FRAGMENT",
     ),
     "Waveform Ribbon": (
         "rendering.gl_programs.fog_volume.FOG_COMPOSITE_FRAGMENT",
@@ -333,11 +307,12 @@ _RATCHET = {
         "rendering.quick.visualizer.implementations.bubble_ambient_gl._OCCLUDER_VERTEX",
         "rendering.quick.visualizer.implementations.bubble_ambient_gl._POINT_FRAGMENT",
         "rendering.quick.visualizer.implementations.bubble_ambient_gl._POINT_VERTEX",
+        # N1.6: Spectrum draws with quick_visualizer_vertex_source(its block); this text stays Bubble's and Spline
+        # Curve's vertex stage (its uMatrix/uItemSize/uContentRotationQuarters set by their renderers) until N5.1.
         "rendering.quick.visualizer.render_contract.QUICK_VISUALIZER_VERTEX_SOURCE",
         "widgets/spotify_visualizer/shaders/bubble.frag",
         "widgets/spotify_visualizer/shaders/devcurve.frag",
         "widgets/spotify_visualizer/shaders/oscilloscope.frag",
-        "widgets/spotify_visualizer/shaders/spectrum.frag",
     ),
     "Transitions": (
         "rendering.gl_programs.base_program.BaseGLProgram.FULLSCREEN_VERTEX_SHADER",

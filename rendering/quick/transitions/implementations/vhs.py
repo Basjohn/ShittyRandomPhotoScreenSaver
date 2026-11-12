@@ -8,7 +8,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.vhs_program import VHS_FRAGMENT_SOURCE, VHS_PERIOD, vhs_envelope, vhs_roll
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
 _ROLL_SIGN = {"up": 1.0, "down": -1.0}
@@ -67,7 +67,8 @@ class QuickVhsRenderer:
         allocates nothing per run."""
         vhs_parameters(parameters)
         r = self._resources
-        return warm_programs([(r, *UNDERLAY_PROGRAM), (r, "vhs", ITEM_QUAD_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE)])
+        return (warm_programs([(r, *UNDERLAY_PROGRAM), (r, "vhs", ITEM_QUAD_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE)])
+                and warm_pass_blocks(r, size))
 
     def park(self) -> None:
         """Nothing per run to drop; the programs stay warm."""

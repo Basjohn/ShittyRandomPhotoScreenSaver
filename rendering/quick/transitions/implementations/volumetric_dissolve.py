@@ -23,7 +23,7 @@ from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, Photo
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.population import CompactedPopulation, population_programs
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from rendering.quick.scene3d.uniforms import UniformBlock
@@ -123,6 +123,8 @@ class QuickVolumetricDissolveRenderer:
             columns, rows, _size = volumetric_grid(size[0], size[1], particle_size)
             if not self._particles.warm(columns * rows):
                 return False
+        if not warm_pass_blocks(r, size):
+            return False
         return warm_run_resources(self._target, None, size, samples)
 
     def park(self) -> None:

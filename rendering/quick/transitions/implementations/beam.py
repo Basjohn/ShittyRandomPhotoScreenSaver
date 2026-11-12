@@ -22,7 +22,7 @@ from rendering.gl_programs.beam_program import (
     beam_sweep_end,
 )
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
 _CODES = frozenset(("left", "right", "up", "down", "diag_tl_br", "diag_tr_bl", "diag_bl_tr", "diag_br_tl"))
@@ -89,7 +89,7 @@ class QuickBeamRenderer:
         entries = [(r, *UNDERLAY_PROGRAM), (r, "beam", ITEM_QUAD_VERTEX_SOURCE, BEAM_FRAGMENT_SOURCE)]
         if sparks:
             entries.append((r, "sparks", BEAM_SPARK_VERTEX_SOURCE, BEAM_SPARK_FRAGMENT_SOURCE))
-        return warm_programs(entries)
+        return warm_programs(entries) and warm_pass_blocks(r, size)
 
     def park(self) -> None:
         """Nothing per run to drop; the programs stay warm."""

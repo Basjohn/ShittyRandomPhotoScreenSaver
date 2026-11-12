@@ -55,6 +55,24 @@ vec2 fragUv(vec2 targetSize) {{ return fragPixel(targetSize) / targetSize; }}
 """
 SRPSS_CONVENTIONS_FRAGMENT_GLSL = "\n#define SRPSS_CONVENTIONS_FRAGMENT" + SRPSS_CONVENTIONS_GLSL
 
+# The vertex and instance index with OpenGL's meaning on every backend (N1.6): ``srpssVertexIndex`` and
+# ``srpssInstanceIndex``. Vulkan GLSL (``qsb`` compiles with ``VULKAN`` defined) has only ``gl_VertexIndex`` and
+# ``gl_InstanceIndex``, which add the draw's first vertex and first instance; OpenGL's ``gl_VertexID`` adds the first
+# vertex too and ``gl_InstanceID`` never adds a base instance. The renderer draws with no base instance, so both read
+# the same numbers; SPIRV-Cross writes the OpenGL target's base-instance term itself.
+SRPSS_VERTEX_INDEX_GLSL = """
+#ifndef SRPSS_VERTEX_INDEX
+#define SRPSS_VERTEX_INDEX
+#ifdef VULKAN
+#define srpssVertexIndex gl_VertexIndex
+#define srpssInstanceIndex gl_InstanceIndex
+#else
+#define srpssVertexIndex gl_VertexID
+#define srpssInstanceIndex gl_InstanceID
+#endif
+#endif
+"""
+
 # The block's values in this OpenGL renderer: no flip (its targets keep the bottom-up rows the shaders were authored
 # in), the reserved fields zero.
 OPENGL_CONVENTIONS = (0.0, 0.0, 0.0, 0.0)
@@ -84,6 +102,7 @@ __all__ = [
     "SCENE3D_CONVENTIONS_BLOCK_BINDING",
     "SRPSS_CONVENTIONS_FRAGMENT_GLSL",
     "SRPSS_CONVENTIONS_GLSL",
+    "SRPSS_VERTEX_INDEX_GLSL",
     "conventions_block",
     "front_face_clockwise",
 ]
