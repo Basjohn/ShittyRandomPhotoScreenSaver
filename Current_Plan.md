@@ -38,21 +38,19 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** 1D.2 (High), the native runtime check before import (Medium).
+**Now (in flight):** N2.2 (High), 1D.5 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
-  1. 1D.2 (in flight; the operator's request).
-  2. N2.2, the host interface and frame driver (unblocked by N0.3).
-  3. Then N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
-  4. The 1C.2 Save stall, and 1C.10, as defects between N steps.
+  1. N2.2, the host interface and frame driver (unblocked by N0.3).
+  2. Then N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
+  3. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
-  1. The native runtime check before import (N2.1 leftover).
-  2. 1D.1's two leftovers (the probe's preset list, the flaky pair).
+  1. 1D.5's two reds and the Extruded Spectrum tolerance.
+  2. 1D.4 (the default-mode marker and the image-time row; small, as asked).
   3. The N1.6 remainder (the motion and trail family, then its transitions; no C++).
-  4. 1D.4 (the default-mode marker and the image-time row; small, as asked).
-  5. 1B.10.
+  4. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -1060,16 +1058,22 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
-### 1D.1 Guided Setup side defects (merged 12 Nov): what is left
+### 1D.5 Reds and flakes found 12 Nov (Medium; each is a side defect, fix at the owner)
 
-- [ ] `tools/visualizer_replay/extruded_bubble_projection_gate_probe.py` names presets (`PRESETS`), and
-  `tests/test_tool_preset_identity.py::test_projection_gate_probe_reads_named_presets_against_current_source`
-  tests that list. Make the probe take a mode and preset number as run options, and delete the named list and its
-  test.
-- [ ] Flaky pair, found 12 Nov: `test_qtquick_extruded_spectrum.py::test_optional_directional_shadow_uses_canonical_direction_without_an_extra_target`
-  failed once when run after `test_neon_terrain_growth.py::test_an_unpainted_growth_to_the_largest_grid_renders_the_same_picture`,
-  and `...renders_the_same_picture[0]` failed once in a big batch. Both pass on rerun. Find the shared state
-  (GL or global) at its owner.
+- [ ] `tests/test_visualizer_expansion_geometry.py::test_published_logical_frames_are_identical_ordinary_and_expanded[waveform_ribbon]`
+  is red at main (digest differs at index 69). It is likely stale since R-196/N0.4, when Waveform's pulse began
+  reading the drawn card's framed view, so ordinary and expanded frames now legitimately differ. Root cause first.
+  If the difference is the framed view, the test replays each owner's `VIS_SET_VIEW` (as
+  `test_visualizer_engine_worker.py` does) or compares only view-independent fields. If not, fix the product.
+- [ ] `tests/test_surface_material_style.py:150`
+  (`test_a_list_line_gets_one_even_row_that_holds_the_floor_for_every_run`) is red at main: Normal after Glass is
+  not byte-equal. Root cause at its owner (state carried from Glass into Normal?).
+- [ ] Extruded Spectrum at High 3D Detail with Smooth Edges (8x multisampling, `fwidth` edges,
+  `rendering/gl_programs/extruded_spectrum_program.py:382-391`) is not bit-repeatable on the RTX 4090: one edge
+  pixel toggles by one level between identical frames (41 of 240). It is invisible. Decided (lead, 12 Nov): exact-
+  equality pixel tests at that setting compare within one 8-bit step, with the reason in the test. Every other
+  setting stays exact. `test_qtquick_extruded_spectrum.py::test_optional_directional_shadow_uses_canonical_direction_without_an_extra_target`
+  is the known case.
 
 ### 1D.4 Guided Setup: the default Visualizer mode (operator, 12 Nov; Medium, after 1D.1's side defects)
 
@@ -1084,38 +1088,11 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   heading ("Change Every" and the 	iming.interval control Settings uses, same range and steps, read from its
   owner), editing the draft; a test through the real wizard (Finish saves, Cancel does not) with a negative control.
 
-### 1D.2 Fullscreen Visualizer: three display styles (one Opus High; the lead runs the D1 proof)
+### 1D.2 Fullscreen Visualizer display styles (merged and proved on Display 1, 12 Nov)
 
-The setting lives in the Fullscreen Visualizer settings. It is one value per profile, beside
-`expanded_display_requested`; its owner is `core/settings/fullscreen_overlays.py`, and it is declared through the
-spec system and never by hand.
-- **Default:** today's look, unchanged pixel for pixel.
-- **Borders To Edge:** the card's frame and border sit on the display's edges.
-- **Fullscreen (Hide Borders):** the content fills the display with no card frame or border.
-
-- [ ] Design note first, in plan 01 (Expanded Visualizer) M3c beside the display-wide contract: per style, the
-  geometry, the coverage and clip contract (1C.4: nothing drawn outside the card or under the border's
-  anti-aliased edge; in Hide Borders the coverage is the whole display), the glyphs, the Now Playing overlay and
-  Edit. How each style keeps R-63/R-192's whole-logical overscan and the device-pixel card (1C.4). The lead
-  approves it before code.
-- [ ] Built on the existing presentation owners (a style is a geometry and border input to the framed view, not
-  a new renderer or a rebuild): switching style while expanded retargets in place and fades (Retarget before
-  rebuild; Fade, never vanish).
-- [ ] Guards: no artifact on any other display. The window and the overscan go only past an exterior edge; a
-  neighbour's pixels are unchanged in each style, checked on the hidden second host. The 3D framed modes keep the
-  framed camera standard (`core/settings/framed_camera.py`); the pixel aspect and the aperture follow the new
-  extent through `VIS_SET_VIEW`.
-- [ ] Tests: each style's geometry against the display at 100 %, 125 % and 150 % (whole logical, both axes), the
-  clip contract per style, the style round-trip through Settings, and the default reproducing today's pixels
-  (negative controls for each).
-- [ ] Lead: D1 run per style (Display 1, the hidden second host), edges read at native pixels as in R-192, plus
-  a style switch while expanded.
-
-## 1A. Miscellaneous repair slices (operator, 9 Nov)
-
-These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it. Live
-checklist: one box per open step. Each confirmed slice gets its own reviewed checkpoint; keep material changes
-(1.7) in a separate checkpoint.
+- Watchlist: R-192's enclosed axis. A monitor with no exterior edge on an axis whose extent is not whole at its
+  DPR (the middle of three in a row; the centre of a 3 x 3 grid) keeps Qt Quick's stretch there, and Borders To
+  Edge's frame shows it. `test_the_enclosed_axis_stretch_is_recorded_not_hidden` records it.
 
 ### 1.0 Rotate in ordinary and fullscreen Edit
 
