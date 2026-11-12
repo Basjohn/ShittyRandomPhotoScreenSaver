@@ -3,18 +3,19 @@ import numpy as np
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
 from rendering.quick import gl_query
-from rendering.quick.scene3d.compute import bound_image,dispatch
+from rendering.quick.scene3d.compute import DispatchBlocks,bound_image,dispatch
 from rendering.quick.scene3d.resources import MeshResources,warm_programs
 from rendering.quick.scene3d.ribbon import ribbon_grade
-from rendering.gl_programs.waveform_atmosphere import FIELD_COMPUTE,FIELD_ROWS,FIELD_RIBBONS
+from rendering.gl_programs.waveform_atmosphere import FIELD_BLOCK,FIELD_COMPUTE,FIELD_ROWS,FIELD_RIBBONS
 
 
 class WaveformField:
     def __init__(self):
         self.resources=MeshResources('waveform world field');self.texture=0;self._samples=0;self._context=None
+        self._blocks=DispatchBlocks('waveform world field')
 
     @property
-    def has_resources(self):return bool(self.texture or self.resources.has_resources)
+    def has_resources(self):return bool(self.texture or self.resources.has_resources or self._blocks.has_resources)
 
     def _check(self):
         current=QOpenGLContext.currentContext()
@@ -24,7 +25,8 @@ class WaveformField:
 
     def prepare_step(self):
         self._check()
-        return warm_programs(((self.resources,'field',FIELD_COMPUTE),))
+        # One unit per step: the program, then the dispatch blocks.
+        return warm_programs(((self.resources,'field',FIELD_COMPUTE),)) and self._blocks.warm()
 
     def update(self,packet,*,translation,span,grade,side=1.,restore=True):
         """``restore=False``: the caller owns the program and image unit for its frame (nothing read back)."""
@@ -42,14 +44,14 @@ class WaveformField:
         before=gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         try:
             program=self.resources.compute_program('field',FIELD_COMPUTE);gl.glUseProgram(program)
-            locations=self.resources.uniforms('field',('uFieldSpan','uFieldOrigin','uGrade','uGradeStops','uFieldSide'),required=False)
-            gl.glUniform1f(locations['uFieldSide'],float(side))
-            gl.glUniform4f(locations['uFieldSpan'],first,last,samples,packet.instances)
-            gl.glUniform4f(locations['uFieldOrigin'],*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances)
             values=ribbon_grade(grade[0],grade[1],grade[3])
-            gl.glUniform4f(locations['uGrade'],*values['uGrade'])
-            gl.glUniform4fv(locations['uGradeStops'],6,np.asarray(values['uGradeStops'],np.float32))
-            with bound_image(0,self.texture,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
+            block=FIELD_BLOCK.pack({
+                'uFieldOrigin':(*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances),
+                'uFieldSide':float(side),'uGrade':tuple(values['uGrade']),
+                'uGradeStops':[tuple(stop) for stop in np.asarray(values['uGradeStops'],np.float32).reshape(6,4)],
+                'uFieldSpan':(first,last,samples,packet.instances)})
+            # Image unit 1: binding 0 is the packet's storage (one namespace on Vulkan).
+            with self._blocks.bound(block),bound_image(1,self.texture,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
                 dispatch((-(-samples//64),1,1),gl.GL_TEXTURE_FETCH_BARRIER_BIT)
         finally:
             if before is not None:gl.glUseProgram(before)
@@ -62,6 +64,8 @@ class WaveformField:
             except Exception as error:errors.append(error)
             else:self.texture=0;self._samples=0
         try:self.resources.release_resources()
+        except Exception as error:errors.append(error)
+        try:self._blocks.release()
         except Exception as error:errors.append(error)
         if errors:raise ExceptionGroup('Waveform field remains for retry',errors)
         self._context=None

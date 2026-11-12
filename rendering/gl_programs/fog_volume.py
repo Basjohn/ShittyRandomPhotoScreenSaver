@@ -9,6 +9,7 @@ there (lighting and albedo folded in). It is evaluated once per cell per update;
 ``fog_inject_source`` wraps it. ``FOG_INTEGRATE_COMPUTE`` accumulates in-scatter and transmittance front to back,
 exactly per slice (radiance x (1 - exp(-extinction x length))), into the texture ``MIST_GLSL`` samples.
 """
+from rendering.gl_programs.scene3d import SCENE3D_COMPUTE_BLOCK_BINDING, Scene3DBlockLayout
 
 FOG_DEPTH_MAPPING_GLSL = """
 float fogDepthFraction(float depth) {
@@ -28,16 +29,19 @@ float fogSliceDepth(float f) {
     return uFogRange.x*pow(uFogRange.y/uFogRange.x,f/uFogRange.z);
 }
 """
-FOG_SLICE_GLSL = """
-uniform vec4 uFogLens;     // Perspective tangents, unused, asinh scale (0: legacy positive log mapping)
-uniform vec4 uFogRange;    // near, far, slices, 1 + optional focus depth (0: disabled sampling)
-""" + FOG_DEPTH_MAPPING_GLSL
+# The volume's own values for its two compute programs, one block: the volume camera's view -> world (inject only),
+# the Perspective tangents, unused, asinh scale (0: legacy positive log mapping), and near, far, slices, 1 + optional
+# focus depth (0: disabled sampling).
+FOG_VOLUME_BLOCK = Scene3DBlockLayout.of("FogVolumeDispatch", (("uFogInvView", "mat4"), ("uFogLens", "vec4"),
+                                                               ("uFogRange", "vec4")))
+FOG_SLICE_GLSL = FOG_VOLUME_BLOCK.glsl(SCENE3D_COMPUTE_BLOCK_BINDING) + FOG_DEPTH_MAPPING_GLSL
 
-_INJECT_HEAD = """#version 460 core
-layout(local_size_x=4,local_size_y=4,local_size_z=4) in;
-layout(rgba16f,binding=0) uniform writeonly image3D uFogInject;
-layout(r16f,binding=1) uniform writeonly image3D uFogSteady;
-uniform mat4 uFogInvView;  // the volume camera's view -> world
+# The inject program's head (a fragment, not a shader: ``fog_inject_source`` puts the version line before it and the
+# consumer's medium after it). Its images sit at 2 and 3, clear of storage a medium declares at 0 (one namespace on
+# Vulkan); the steady share is RGBA16F (GLSL ES has no r16f image; the same half value in .r).
+_INJECT_HEAD = """layout(local_size_x=4,local_size_y=4,local_size_z=4) in;
+layout(rgba16f,binding=2) uniform writeonly image3D uFogInject;
+layout(rgba16f,binding=3) uniform writeonly image3D uFogSteady;
 """ + FOG_SLICE_GLSL
 
 _INJECT_MAIN = """
@@ -62,7 +66,7 @@ def fog_inject_source(medium_glsl: str) -> str:
     if 'fogMedium' not in medium_glsl:
         raise ValueError('A fog medium must define fogMedium(vec3 world, out vec3 radiance, out float extinction, '
                          'out float steady)')
-    return _INJECT_HEAD + medium_glsl + _INJECT_MAIN
+    return "#version 460 core\n" + _INJECT_HEAD + medium_glsl + _INJECT_MAIN
 
 
 FOG_INTEGRATE_COMPUTE = """#version 460 core

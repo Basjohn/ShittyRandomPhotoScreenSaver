@@ -1030,6 +1030,10 @@ def scene3d_particle_streak(matrix: tuple[float, ...], item_size: tuple[float, f
 
 # ---- std140 uniform blocks (pure layout; the GL buffer is rendering.quick.scene3d.uniforms) ----
 
+# The uniform-buffer binding every compute program declares its dispatch block at (``rendering.quick.scene3d.compute``
+# binds it; see ``COMPUTE_BLOCK_BINDING`` there for why this number).
+SCENE3D_COMPUTE_BLOCK_BINDING = 16
+
 # type -> (base alignment, size, struct format), per the std140 rules for these types.
 _STD140 = {
     "float": (4, 4, "f"), "int": (4, 4, "i"), "uint": (4, 4, "I"),
@@ -1086,13 +1090,16 @@ class Scene3DBlockLayout:
             cursor += count * stride
         return cls(name, tuple(fields), tuple(offsets), -(-cursor // 16) * 16)
 
-    def glsl(self) -> str:
+    def glsl(self, binding: int | None = None) -> str:
+        """The block's declaration; ``binding`` states its binding point in the source (Vulkan GLSL needs it; the
+        draw blocks attach theirs with ``glUniformBlockBinding`` instead)."""
         members = ""
         for field, glsl_type in self.fields:
             element, count, _alignment, _stride = _std140_type(glsl_type)
             suffix = f"[{count}]" if "[" in glsl_type else ""
             members += f"    {element} {field}{suffix};\n"
-        return f"layout(std140) uniform {self.name} {{\n{members}}};\n"
+        qualifier = "std140" if binding is None else f"std140, binding = {int(binding)}"
+        return f"layout({qualifier}) uniform {self.name} {{\n{members}}};\n"
 
     def pack(self, values) -> bytes:
         data = bytearray(self.size)

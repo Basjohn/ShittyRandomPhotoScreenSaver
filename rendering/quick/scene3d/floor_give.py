@@ -2,11 +2,13 @@
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
 from rendering.quick import gl_query
-from rendering.quick.scene3d.compute import bound_image,dispatch
+from rendering.quick.scene3d.compute import DispatchBlocks,bound_image,dispatch
 from rendering.quick.scene3d.resources import MeshResources,warm_programs
 from rendering.gl_programs.waveform_atmosphere import FIELD_RIBBONS
 from rendering.gl_programs.waveform_floor_give import (FLOOR_GIVE_SECTION_COMPUTE,FLOOR_GIVE_BLUR_COMPUTE,
-                                                       FLOOR_GIVE_ROWS)
+                                                       FLOOR_GIVE_ROWS,FLOOR_GIVE_SECTION_BLOCK,
+                                                       FLOOR_GIVE_BLUR_BLOCK)
+from rendering.gl_programs.ribbon import RIBBON_GRADE_STOPS
 
 # Texture unit the yielding floor's field is bound to for the floor and ribbon passes (clear of the floor's 0-4, the
 # mist's 8-12 and 15 and the world field's 14).
@@ -28,10 +30,11 @@ class FloorGiveField:
     """Caller owns the current GL context; ``update`` once per frame, then ``uniforms`` for every consumer."""
     def __init__(self):
         self.resources=MeshResources('waveform floor give');self.texture=0;self._sections=0;self._samples=0
-        self._context=None;self._span=None
+        self._context=None;self._span=None;self._blocks=DispatchBlocks('waveform floor give')
 
     @property
-    def has_resources(self):return bool(self.texture or self._sections or self.resources.has_resources)
+    def has_resources(self):
+        return bool(self.texture or self._sections or self.resources.has_resources or self._blocks.has_resources)
 
     def _check(self):
         current=QOpenGLContext.currentContext()
@@ -41,8 +44,9 @@ class FloorGiveField:
 
     def prepare_step(self):
         self._check()
+        # One unit per step: the two programs, then the dispatch blocks.
         return warm_programs(((self.resources,'sections',FLOOR_GIVE_SECTION_COMPUTE),
-                              (self.resources,'blur',FLOOR_GIVE_BLUR_COMPUTE)))
+                              (self.resources,'blur',FLOOR_GIVE_BLUR_COMPUTE))) and self._blocks.warm()
 
     def _release_textures(self):
         names=[name for name in (self.texture,self._sections) if name]
@@ -66,20 +70,22 @@ class FloorGiveField:
         step=(last-first)/(samples-1)
         before=gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         try:
-            program=self.resources.compute_program('sections',FLOOR_GIVE_SECTION_COMPUTE);gl.glUseProgram(program)
-            u=self.resources.uniforms('sections',('uGiveSpan','uGiveShape','uFieldOrigin','uFieldSide'),required=False)
-            gl.glUniform1f(u['uFieldSide'],float(side))
-            gl.glUniform4f(u['uGiveSpan'],first,last,samples,EDGE_FADE)
-            gl.glUniform4f(u['uGiveShape'],height+gap,floor.give_softness,float(camber),0.)
-            gl.glUniform4f(u['uFieldOrigin'],*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances)
-            with bound_image(0,self._sections,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
-                dispatch((-(-samples//64),FIELD_RIBBONS,1),gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
-            program=self.resources.compute_program('blur',FLOOR_GIVE_BLUR_COMPUTE);gl.glUseProgram(program)
-            u=self.resources.uniforms('blur',('uGiveBlur',),required=False)
-            gl.glUniform4f(u['uGiveBlur'],samples,floor.give_blur/step,floor.give,floor.give_radius)
-            with bound_image(0,self._sections,gl.GL_READ_ONLY,gl.GL_RGBA32F,restore=restore),\
-                 bound_image(1,self.texture,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
-                dispatch((-(-samples//64),1,1),gl.GL_TEXTURE_FETCH_BARRIER_BIT)
+            # The sections read the packet at storage binding 0, so their image is unit 1 (one namespace on Vulkan).
+            # The grade stays zero: the sections read only the light's presence.
+            sections=FLOOR_GIVE_SECTION_BLOCK.pack({
+                'uFieldOrigin':(*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances),
+                'uFieldSide':float(side),'uGrade':(0.,0.,0.,0.),'uGradeStops':[(0.,0.,0.,0.)]*RIBBON_GRADE_STOPS,
+                'uGiveSpan':(first,last,samples,EDGE_FADE),'uGiveShape':(height+gap,floor.give_softness,float(camber),0.)})
+            with self._blocks.bound(sections) as rebind:
+                program=self.resources.compute_program('sections',FLOOR_GIVE_SECTION_COMPUTE);gl.glUseProgram(program)
+                with bound_image(1,self._sections,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
+                    dispatch((-(-samples//64),FIELD_RIBBONS,1),gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+                program=self.resources.compute_program('blur',FLOOR_GIVE_BLUR_COMPUTE);gl.glUseProgram(program)
+                rebind(FLOOR_GIVE_BLUR_BLOCK.pack({'uGiveBlur':(samples,floor.give_blur/step,floor.give,
+                                                               floor.give_radius)}))
+                with bound_image(0,self._sections,gl.GL_READ_ONLY,gl.GL_RGBA32F,restore=restore),\
+                     bound_image(1,self.texture,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
+                    dispatch((-(-samples//64),1,1),gl.GL_TEXTURE_FETCH_BARRIER_BIT)
         finally:
             if before is not None:gl.glUseProgram(before)
         self._span=(first-.5*step,1./(last-first+step),floor.give_depth,step)
@@ -96,6 +102,8 @@ class FloorGiveField:
         try:self._release_textures()
         except Exception as error:errors.append(error)
         try:self.resources.release_resources()
+        except Exception as error:errors.append(error)
+        try:self._blocks.release()
         except Exception as error:errors.append(error)
         if errors:raise ExceptionGroup('Floor give field remains for retry',errors)
         self._context=None;self._span=None

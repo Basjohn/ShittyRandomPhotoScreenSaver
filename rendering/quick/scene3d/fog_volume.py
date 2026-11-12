@@ -5,7 +5,7 @@
 includes ``MIST_GLSL`` read it (``mistTransmittance`` / ``mistOver``). The caller sets its medium's own uniforms on
 the inject program through ``medium``; the owner sets the camera mapping and dispatches with its own barriers.
 
-Two RGBA16F 3D textures, allocated at the first update of a grid size and reused while it holds; ``warm`` allocates
+Three RGBA16F 3D textures (medium, integrated, steady share), allocated at the first update of a grid size and reused while it holds; ``warm`` allocates
 on a hidden frame instead. Nothing is allocated per frame. ``release`` deletes everything under the owning context.
 A mirrored reflection camera uses its own instance (its view is ``mirror_view`` of the scene's).
 """
@@ -21,11 +21,11 @@ from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
 
 from rendering.gl_programs.fog_volume import (FOG_COMPOSITE_FRAGMENT, FOG_FULLSCREEN_VERTEX, FOG_INTEGRATE_COMPUTE,
-                                              fog_detail_noise, fog_march_source)
+                                              FOG_VOLUME_BLOCK, fog_detail_noise, fog_march_source)
 from rendering.gl_programs.mist import FOG_TEXTURE_UNIT
 from rendering.quick import gl_query
 from rendering.quick.render.gl_resources import compile_compute_program
-from .compute import bound_image, dispatch
+from .compute import DispatchBlocks, bound_image, dispatch
 
 MAX_FOG_CELLS = 256*256*128
 
@@ -40,19 +40,12 @@ class FogVolume:
         self._integrate_program = 0
         self._uniforms = None
         self._context_ref = None
-        self._locations: dict[tuple[int, str], int] = {}
+        self._blocks = DispatchBlocks(f"{label} fog volume")
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._inject or self._integrated or self._steady or self._integrate_program)
-
-    def _location(self, program: int, name: str) -> int:
-        """A uniform location, looked up once per program (each lookup is a driver round trip per frame)."""
-        key = (program, name)
-        location = self._locations.get(key)
-        if location is None:
-            location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
-        return location
+        return bool(self._inject or self._integrated or self._steady or self._integrate_program
+                    or self._blocks.has_resources)
 
     @property
     def grid(self) -> tuple[int, int, int]:
@@ -69,7 +62,7 @@ class FogVolume:
 
     @property
     def steady_texture(self) -> int:
-        """The coarse extinction share a detail march must not erode (R16F), from the last update."""
+        """The coarse extinction share a detail march must not erode (in .r of an RGBA16F), from the last update."""
         return self._steady
 
     @property
@@ -101,7 +94,7 @@ class FogVolume:
         gl.glCreateTextures(gl.GL_TEXTURE_3D, 3, names)
         self._inject, self._integrated, self._steady = (int(n) for n in names)
         for texture in (self._inject, self._integrated, self._steady):
-            gl.glTextureStorage3D(texture, 1, gl.GL_R16F if texture == self._steady else gl.GL_RGBA16F, *grid)
+            gl.glTextureStorage3D(texture, 1, gl.GL_RGBA16F, *grid)
             gl.glTextureParameteri(texture, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
             gl.glTextureParameteri(texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
             for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T, gl.GL_TEXTURE_WRAP_R):
@@ -118,10 +111,11 @@ class FogVolume:
         return False
 
     def prepare_program(self) -> bool:
-        """Compile one hidden-frame unit with legal ownership even if reveal is cancelled before update."""
+        """Compile one hidden-frame unit with legal ownership even if reveal is cancelled before update (then the
+        dispatch blocks, one more unit)."""
         self._check_context(admit=True)
         if self._integrate_program:
-            return True
+            return self._blocks.warm()
         self._integrate_program=compile_compute_program(FOG_INTEGRATE_COMPUTE,label=f'{self.label} integrate')
         return False
 
@@ -151,24 +145,22 @@ class FogVolume:
         range4 = (near, far, float(grid[2]), 1.+focus)
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         try:
-            gl.glUseProgram(inject_program)
-            location = self._location
-            gl.glUniformMatrix4fv(location(inject_program, 'uFogInvView'), 1, gl.GL_TRUE,
-                                  np.linalg.inv(view).astype(np.float32))
-            gl.glUniform4f(location(inject_program, 'uFogLens'), *lens4)
-            gl.glUniform4f(location(inject_program, 'uFogRange'), *range4)
-            if medium is not None:
-                medium(inject_program)
-            with bound_image(0, self._inject, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
-                    bound_image(1, self._steady, gl.GL_WRITE_ONLY, gl.GL_R16F, layered=True, restore=restore):
-                dispatch(tuple(-(-n//4) for n in grid),
-                         gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | gl.GL_TEXTURE_FETCH_BARRIER_BIT)
-            gl.glUseProgram(self._integrate_program)
-            gl.glUniform4f(location(self._integrate_program, 'uFogLens'), *lens4)
-            gl.glUniform4f(location(self._integrate_program, 'uFogRange'), *range4)
-            with bound_image(0, self._inject, gl.GL_READ_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
-                    bound_image(1, self._integrated, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore):
-                dispatch((-(-grid[0]//8), -(-grid[1]//8), 1), gl.GL_TEXTURE_FETCH_BARRIER_BIT)
+            # std140 mat4 is column-major: the inverse view's columns (as glUniformMatrix4fv with transpose did).
+            inverse = tuple(np.linalg.inv(view).astype(np.float32).flatten(order='F'))
+            block = FOG_VOLUME_BLOCK.pack({"uFogInvView": inverse, "uFogLens": lens4, "uFogRange": range4})
+            with self._blocks.bound(block):
+                gl.glUseProgram(inject_program)
+                if medium is not None:
+                    medium(inject_program)
+                with bound_image(2, self._inject, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
+                        bound_image(3, self._steady, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore):
+                    dispatch(tuple(-(-n//4) for n in grid),
+                             gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | gl.GL_TEXTURE_FETCH_BARRIER_BIT)
+                gl.glUseProgram(self._integrate_program)
+                with bound_image(0, self._inject, gl.GL_READ_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
+                        bound_image(1, self._integrated, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True,
+                                    restore=restore):
+                    dispatch((-(-grid[0]//8), -(-grid[1]//8), 1), gl.GL_TEXTURE_FETCH_BARRIER_BIT)
         finally:
             if program_before is not None:
                 gl.glUseProgram(program_before)
@@ -208,9 +200,9 @@ class FogVolume:
         if self._integrate_program:
             gl.glDeleteProgram(self._integrate_program)
         self._integrate_program = 0
+        self._blocks.release()
         self._uniforms = None
         self._context_ref = None
-        self._locations = {}    # program names may be reused once deleted
 
 
 class FogMarch:

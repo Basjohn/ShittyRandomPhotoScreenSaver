@@ -12,14 +12,22 @@ smooth in time: the dent cannot pop or flicker. Ribbons fade their dents with th
 Two small dispatches: the sections, one invocation per (x sample, ribbon) so the cloth is evaluated once per sample in
 parallel; then the blur along x over those samples, one invocation per x sample.
 """
-from rendering.gl_programs.waveform_atmosphere import PACKET_GLSL, FIELD_RIBBONS
+from rendering.gl_programs.scene3d import Scene3DBlockLayout
+from rendering.gl_programs.waveform_atmosphere import (FIELD_BLOCK_BINDING, FIELD_RIBBONS, PACKET_FIELDS,
+                                                       packet_compute_glsl)
 
 FLOOR_GIVE_ROWS = 3
-FLOOR_GIVE_SECTION_COMPUTE = '#version 460 core\n' + PACKET_GLSL + '''
+# uGiveSpan: first x, last x, samples, edge fade (world); uGiveShape: contact level (world y: floor plus gap), reach
+# softness, cross camber, unused. The packet's grade is never set here (zero: the sections read only the light's
+# presence).
+FLOOR_GIVE_SECTION_BLOCK = Scene3DBlockLayout.of('FloorGiveSectionDispatch',
+                                                 (*PACKET_FIELDS, ('uGiveSpan', 'vec4'), ('uGiveShape', 'vec4')))
+# uGiveBlur: samples, blur sigma (samples), share of the reach the floor takes, base z radius.
+FLOOR_GIVE_BLUR_BLOCK = Scene3DBlockLayout.of('FloorGiveBlurDispatch', (('uGiveBlur', 'vec4'),))
+FLOOR_GIVE_SECTION_COMPUTE = ('#version 460 core\n'
+                              + packet_compute_glsl(FLOOR_GIVE_SECTION_BLOCK.glsl(FIELD_BLOCK_BINDING)) + '''
 layout(local_size_x=64) in;
-layout(rgba32f,binding=0) writeonly uniform image2D uSections;
-uniform vec4 uGiveSpan;   // first x, last x, samples, edge fade (world)
-uniform vec4 uGiveShape;  // contact level (world y: floor plus gap), reach softness, cross camber, unused
+layout(rgba32f,binding=1) writeonly uniform image2D uSections;  // binding 0 is the packet
 const int ACROSS=9;
 void main() {
     int column=int(gl_GlobalInvocationID.x),owner=int(gl_GlobalInvocationID.y),samples=int(uGiveSpan.z);
@@ -47,12 +55,12 @@ void main() {
     }
     imageStore(uSections,ivec2(column,owner),section);
 }
-'''
+''')
 FLOOR_GIVE_BLUR_COMPUTE = '''#version 460 core
 layout(local_size_x=64) in;
 layout(rgba32f,binding=0) readonly uniform image2D uSections;
 layout(rgba32f,binding=1) writeonly uniform image2D uOutput;
-uniform vec4 uGiveBlur;   // samples, blur sigma (samples), share of the reach the floor takes, base z radius
+''' + FLOOR_GIVE_BLUR_BLOCK.glsl(FIELD_BLOCK_BINDING) + '''
 void main() {
     int column=int(gl_GlobalInvocationID.x),samples=int(uGiveBlur.x);
     if(column>=samples)return;

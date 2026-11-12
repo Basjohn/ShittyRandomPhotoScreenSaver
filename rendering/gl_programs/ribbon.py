@@ -17,14 +17,21 @@ from core.ribbon_geometry import MAX_PATH_SAMPLES
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL
 
-RIBBON_GRADE_GLSL = """
+# The grade in three parts so a compute program can carry its two uniforms in a block (``RIBBON_GRADE_FIELDS``) while
+# the draws keep ``RIBBON_GRADE_GLSL`` as it is.
+RIBBON_GRADE_STOPS = 6
+RIBBON_GRADE_HEAD = """
 // World colour grade (a preset look): up to GRADE_STOPS colour nodes at ascending positions across a world-x range,
 // and the share they take of the ribbon's own colour. Share 0 leaves every ribbon its own colours. Between two nodes
 // the colour eases (smoothstep), so a node is a soft waypoint, never a visible seam.
 const int GRADE_STOPS=6;
-uniform vec4 uGradeStops[GRADE_STOPS];  // rgb, position along the range (0..1, strictly ascending)
+"""
+RIBBON_GRADE_UNIFORMS = """uniform vec4 uGradeStops[GRADE_STOPS];  // rgb, position along the range (0..1, strictly ascending)
 uniform vec4 uGrade;                    // world x of position 0, world x of position 1, share, node count
-vec3 graded(vec3 colour, float worldX) {
+"""
+# The same two as block members (``Scene3DBlockLayout`` fields).
+RIBBON_GRADE_FIELDS = (("uGradeStops", f"vec4[{RIBBON_GRADE_STOPS}]"), ("uGrade", "vec4"))
+RIBBON_GRADE_FUNCTION = """vec3 graded(vec3 colour, float worldX) {
     if(uGrade.z<=0.0) return colour;
     float t=clamp((worldX-uGrade.x)/max(uGrade.y-uGrade.x,1e-3),0.0,1.0);
     int count=clamp(int(uGrade.w),1,GRADE_STOPS);
@@ -34,6 +41,7 @@ vec3 graded(vec3 colour, float worldX) {
     return mix(colour,grade,clamp(uGrade.z,0.0,1.0));
 }
 """
+RIBBON_GRADE_GLSL = RIBBON_GRADE_HEAD + RIBBON_GRADE_UNIFORMS + RIBBON_GRADE_FUNCTION
 
 # A yielding floor (opt-in; uFloorGive.y 0 is off and nothing samples it). A small field reduced once per frame from
 # the published cloth holds, per world x and per ribbon (one channel each), how deep the floor gives under that

@@ -26,7 +26,9 @@ import ctypes
 
 from OpenGL import GL as gl
 
-from .compute import bound_image, dispatch
+from rendering.gl_programs.scene3d import Scene3DBlockLayout
+
+from .compute import COMPUTE_BLOCK_BINDING, DispatchBlocks, bound_image, dispatch
 from .post import FULLSCREEN_VERTEX_SOURCE
 
 MOTION_BLUR_TAPS = 16
@@ -39,12 +41,13 @@ _TILE_ROW_INVOCATIONS = 64
 # those rows top to bottom. The first strictly longer motion wins at both steps, so ties
 # resolve exactly as a column-then-row scan. Every value is a velocity texel (RG16F), stored
 # back unchanged.
+# Bindings (one namespace on Vulkan): the velocity on texture unit 0, the tiles on image unit 1.
+_TILE_MAX_BLOCK = Scene3DBlockLayout.of("MotionTileMax", (("uTile", "int"),))
 _TILE_MAX_COMPUTE = f"""#version 460 core
 layout(local_size_x = {_TILE_ROW_INVOCATIONS}) in;
 layout(binding = 0) uniform sampler2D uVelocity;
-layout(rg16f, binding = 0) writeonly uniform image2D uTiles;
-uniform int uTile;
-shared vec2 rowLongest[{MOTION_BLUR_MAX_TILE}];
+layout(rg16f, binding = 1) writeonly uniform image2D uTiles;
+{_TILE_MAX_BLOCK.glsl(COMPUTE_BLOCK_BINDING)}shared vec2 rowLongest[{MOTION_BLUR_MAX_TILE}];
 void main() {{
     ivec2 size = textureSize(uVelocity, 0);
     ivec2 tile = ivec2(gl_WorkGroupID.xy);
@@ -172,10 +175,11 @@ class MotionBlur:
         self._key: tuple[int, int] | None = None
         # (texture, fbo, width, height): the tile max (a compute-written image, no framebuffer), blurred scene.
         self._passes: list[tuple[int, int, int, int]] = []
+        self._blocks = DispatchBlocks(f"{label} motion blur")
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._passes)
+        return bool(self._passes) or self._blocks.has_resources
 
     def apply(self, scene_texture: int, velocity_texture: int, allocation: tuple[int, int], resources,
               vao: int) -> int:
@@ -184,8 +188,8 @@ class MotionBlur:
         Both cover the whole allocation (outside the drawn rect: black, no motion);
         so does the result. The caller has turned depth testing and writes off, and
         the host fence restores texture units 0-2 and the program, so none of that is
-        repeated here (every GL call costs the render thread ~2 us). Image unit 0 is
-        handed back by ``bound_image``.
+        repeated here (every GL call costs the render thread ~2 us). Image unit 1 is
+        handed back by ``bound_image``; the tile size travels in the pass's dispatch block.
         """
         self.warm(allocation)
         width, height = allocation
@@ -194,9 +198,9 @@ class MotionBlur:
 
         # The gather samples the tile image, so the dispatch owns a texture-fetch barrier.
         gl.glUseProgram(resources.compute_program("motion_tile_max", _TILE_MAX_COMPUTE))
-        gl.glUniform1i(resources.uniforms("motion_tile_max", ("uTile",))["uTile"], tile)
         gl.glBindTextureUnit(0, velocity_texture)
-        with bound_image(0, tiles, gl.GL_WRITE_ONLY, gl.GL_RG16F):
+        with self._blocks.bound(_TILE_MAX_BLOCK.pack({"uTile": tile})), \
+                bound_image(1, tiles, gl.GL_WRITE_ONLY, gl.GL_RG16F):
             dispatch((tile_w, tile_h, 1), gl.GL_TEXTURE_FETCH_BARRIER_BIT)
 
         gl.glBindVertexArray(vao)
@@ -223,9 +227,10 @@ class MotionBlur:
         return blurred
 
     def warm(self, allocation: tuple[int, int]) -> bool:
-        """Allocate for ``allocation`` if not yet (ahead of a run, or at first use); True if it was."""
+        """Allocate for ``allocation`` if not yet (ahead of a run, or at first use), one unit per call (the textures,
+        then the dispatch blocks); True if all of it was."""
         if self._key == allocation:
-            return True
+            return self._blocks.warm()
         self.release()
         self._allocate(*allocation)
         self._key = allocation
@@ -277,6 +282,10 @@ class MotionBlur:
                 kept.append((texture, fbo, width, height))
         self._passes = kept
         self._key = None
+        try:
+            self._blocks.release()
+        except Exception as exc:
+            errors.append(str(exc))
         if errors:
             raise RuntimeError(f"{self.label} motion blur cleanup incomplete: {' | '.join(errors)}")
 
