@@ -942,7 +942,7 @@ Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us afte
 Tools: `--only-display <index>` (RUN only, fails closed) and `tools/d1_run.py` (the real saver on one display,
 bounded, frames read back from the saver's own window and from the desktop, crops, logs; refuses the primary
 display; `--help` holds the recipes); both in `Docs/Reference/Harness_Index.md`. Permissions (operator, 11 Nov):
-bounded runs on Display 1 are the lead's; Display 0 is never taken; builds run only through GitHub's workflows.
+bounded runs on Display 1 are the lead's; Display 0 is rare (the lead only, through `--allow-primary`, never in a test, recipe or automated run; agents never take it); builds run only through GitHub's workflows.
 Agents build harnesses and prove them hidden; each visible run is short, bounded, fails closed and tears down.
 Every `[~]` box in this plan that says "D1 run", "Studio run on D1" or "Frozen run" is run in these sessions.
 

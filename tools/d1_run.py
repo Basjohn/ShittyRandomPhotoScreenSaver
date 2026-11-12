@@ -1,7 +1,7 @@
 """Display 1 run: the real saver from source on ONE named display, bounded, with grabbed frames, logs and the trace.
 
 The lead's verification harness (Current_Plan 1B.14; operator, 11 Nov: bounded runs on Display 1 are permitted,
-Display 0 is never taken). It starts ``main_mc.py`` (or ``main.py``) with the product's own RUN-only flags
+Display 0 is rare: the lead only, through ``--allow-primary``, never in a test, recipe or automated run, and agents never take it). It starts ``main_mc.py`` (or ``main.py``) with the product's own RUN-only flags
 ``--only-display <index>`` and ``--exit-after <seconds>``, from a COPY of a profile, and brings back:
 
 * **frames**: at the requested times after the first reveal, the saver window's own content on that display (the
@@ -1033,7 +1033,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--display", type=int, help="the display index, as the saver's logs number screens (1 = D1)")
     parser.add_argument("--list-displays", action="store_true", help="print the displays and exit")
     parser.add_argument("--allow-primary", action="store_true",
-                        help="permit the primary display (only with the operator's leave; the lead never passes it)")
+                        help="permit the primary display (rare: the lead only, for a specific check nothing else can make; never in a test, recipe or automated run; agents never pass it)")
     parser.add_argument("--seconds", type=float, default=30.0, help="--exit-after for the saver (default 30, max 600)")
     parser.add_argument("--entry", choices=sorted(ENTRIES), default="mc",
                         help="mc (main_mc.py, interaction mode; default) or main (main.py: input exits the saver)")
