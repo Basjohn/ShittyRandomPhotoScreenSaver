@@ -7,7 +7,8 @@ whose hide and destruction are queued to the event loop, still had that bridge a
 when Python dropped the last reference the bridge was deleted under a live engine and every binding of the retiring
 shell re-evaluated with ``studio`` null.
 
-This drives the switch the way the shell does (the mode picker calls ``studio.switchMode``) through the real
+This drives the switch through the shell's own mode picker (its ``onActivated`` asks ``studio.switchMode``; the
+controller switches on its own queued edge once the handler has returned, plan 1D.0) through the real
 controller, the real SettingsDialog and the production ``StudioWindowSurface`` with its queued hide and deferred
 destruction. Nothing is shown: the surface's show is recorded instead of made. Every QML warning of every Studio
 engine is captured (each engine's own ``warnings`` signal, so a warning names the window it came from) across open,
@@ -152,9 +153,17 @@ def _open(tab, warnings):
     return controller, made
 
 
-def _switch_as_the_mode_picker_does(controller, mode_id: str) -> None:
-    """The shell's mode picker calls ``studio.switchMode`` from its handler; the switch runs inside that call."""
-    controller.bridge.switchMode(mode_id)
+def _switch_as_the_mode_picker_does(controller, shell_root, mode_id: str) -> None:
+    """The shell's own mode picker is activated (its ``onActivated`` handler runs). The handler only asks: the switch
+    is the controller's own edge, after the handler has returned (plan 1D.0)."""
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
+    picker = shell_root.findChild(QObject, "studioModePicker")
+    assert picker is not None, "the shell has no mode picker"
+    index = [mode["id"] for mode in controller.bridge.modes].index(mode_id)
+    before = controller.adapter.mode_id
+    QMetaObject.invokeMethod(picker, "activated", Qt.ConnectionType.DirectConnection, Q_ARG(int, index))
+    assert controller.adapter.mode_id == before, "the switch ran inside the retiring shell's own signal handler"
+    QCoreApplication.processEvents()               # the controller's edge: the queued request
     gc.collect()                                   # whenever Python's collector runs, it must find nothing to break
 
 
@@ -165,7 +174,7 @@ def test_a_mode_switch_never_evaluates_a_shell_with_studio_missing(settings_tab,
     assert warnings.type_errors() == [], warnings.type_errors()[:5]
     warnings.phase = "switch"
     old_bridge = weakref.ref(controller.bridge)
-    _switch_as_the_mode_picker_does(controller, SECOND)
+    _switch_as_the_mode_picker_does(controller, made[0].host.root, SECOND)
     assert controller.adapter.mode_id == SECOND and len(made) == 2 and made[0]._retired
     made[1].presented.emit()
     warnings.phase = "retiring window destroyed"

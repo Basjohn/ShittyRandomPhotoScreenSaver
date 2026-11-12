@@ -298,6 +298,9 @@ def test_the_registry_and_mode_switch_rebuild_the_session_without_revealing_sett
     controller.open()
     surfaces[-1].pump()
     controller.bridge.switchMode("toy_other")
+    assert controller.adapter.mode_id == "toy_mode"              # the picker only asks; the controller's edge switches
+    from PySide6.QtCore import QCoreApplication
+    QCoreApplication.processEvents()
     assert presence.concealed and presence.reveals == 0          # no Settings flash between modes
     surfaces[-1].pump()
     assert controller.adapter.mode_id == "toy_other" and controller.bridge.modeId == "toy_other"

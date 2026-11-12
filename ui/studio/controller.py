@@ -372,10 +372,14 @@ class StudioBridge(QObject):
     modes = Property("QVariantList", _modes, constant=True)
     modeId = Property(str, _mode_id, constant=True)
 
+    # The mode picker asks for a switch; the controller acts on it as its own edge (``StudioController.open``), never
+    # inside the picker's handler, whose shell the switch retires.
+    modeSwitchRequested = Signal(str)
+
     @Slot(str)
     @_attached
     def switchMode(self, mode_id: str) -> None:
-        self._c.request_mode_switch(mode_id)
+        self.modeSwitchRequested.emit(str(mode_id))
     presetLabel = Property(str, _preset, notify=headerChanged)
     presets = Property("QVariantList", _presets, notify=headerChanged)
     dirty = Property(bool, _dirty, notify=headerChanged)
@@ -1677,6 +1681,10 @@ class StudioController(QObject):
                 self.bridge.set_theme(self._theme_provider())
             self._unsubscribe = self.session.subscribe(self._on_session_changed)
             self.bridge.closeRequested.connect(self._on_bridge_close)
+            # Queued: the picker's ``onActivated`` returns, and the ComboBox finishes its activation, before the
+            # switch retires that shell and opens the next. Run inside the handler, the retiring shell's own signal
+            # handler was still on the stack while its bridge was cut off and its window queued for destruction.
+            self.bridge.modeSwitchRequested.connect(self.request_mode_switch, Qt.ConnectionType.QueuedConnection)
             self.surface = self._surface_factory(self)
             self.viewport = self.surface.viewport
             self.viewport.rendered.connect(self._on_rendered, Qt.ConnectionType.QueuedConnection)
@@ -2811,10 +2819,12 @@ class StudioController(QObject):
             if bridge is None:
                 return
             bridge.detach()
-            try:
-                bridge.closeRequested.disconnect(self._on_bridge_close)
-            except (RuntimeError, TypeError):
-                pass
+            for signal, slot in ((bridge.closeRequested, self._on_bridge_close),
+                                 (bridge.modeSwitchRequested, self.request_mode_switch)):
+                try:
+                    signal.disconnect(slot)
+                except (RuntimeError, TypeError):
+                    pass
 
         def retire_surface() -> None:
             nonlocal awaiting_window
