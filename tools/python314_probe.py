@@ -5,9 +5,27 @@ This is a dependency smoke, NOT proof of bundled exe/Qt/GL or visual parity.
 from __future__ import annotations
 
 from importlib import import_module, metadata
+from pathlib import Path
 import platform
 import struct
 import sys
+
+# The versions the probe checks are the repository's own pins (one source: a bump edits requirements.txt only).
+_PINNED = ("PySide6", "PySide6_Addons", "PySide6_Essentials", "shiboken6", "numpy", "Nuitka", "PyAudioWPatch", "psutil")
+
+
+def pinned_versions(requirements: Path = Path(__file__).resolve().parents[1] / "requirements.txt") -> dict[str, str]:
+    """The exact ``==`` pins of the probed distributions in requirements.txt (missing or unpinned raises)."""
+    pins: dict[str, str] = {}
+    for raw in requirements.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if "==" in line:
+            name, version = (part.strip() for part in line.split(";", 1)[0].split("==", 1))
+            pins[name] = version
+    missing = [name for name in _PINNED if name not in pins]
+    if missing:
+        raise RuntimeError(f"requirements.txt does not pin {missing} exactly")
+    return {name: pins[name] for name in _PINNED}
 
 
 def main() -> int:
@@ -15,16 +33,7 @@ def main() -> int:
     assert struct.calcsize("P") == 8, "32-bit interpreter is not supported"
     assert sys._is_gil_enabled(), "Free-threaded Python is not yet supported"
     assert platform.system() == "Windows", "Run this probe on Windows"
-    expected = {
-        "PySide6": "6.11.2",
-        "PySide6_Addons": "6.11.2",
-        "PySide6_Essentials": "6.11.2",
-        "shiboken6": "6.11.2",
-        "numpy": "2.4.5",
-        "Nuitka": "4.2",
-        "PyAudioWPatch": "0.2.12.9",
-        "psutil": "7.2.2",
-    }
+    expected = pinned_versions()
     for name, version in expected.items():
         assert metadata.version(name) == version, (name, metadata.version(name), version)
     modules = (
@@ -40,7 +49,7 @@ def main() -> int:
     from PySide6 import QtCore
     import numpy as np
 
-    assert QtCore.qVersion() == "6.11.2", QtCore.qVersion()
+    assert QtCore.qVersion() == expected["PySide6"], (QtCore.qVersion(), expected["PySide6"])
     # Verify little-endian tightly packed float32 data used at native GL boundaries.
     values = np.ascontiguousarray([0.0, 0.5, -1.0, 4.0], dtype="<f4")
     assert values.flags.c_contiguous and values.dtype.itemsize == 4
