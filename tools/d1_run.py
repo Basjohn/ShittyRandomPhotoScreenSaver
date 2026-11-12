@@ -19,7 +19,7 @@ Display 0 is never taken). It starts ``main_mc.py`` (or ``main.py``) with the pr
 Fail closed, everything torn down on every path:
 
 * refused before anything starts (exit 2): not Windows; fewer than two displays; an index no display has; the
-  chosen display is the primary (Qt's or Windows') unless ``--allow-primary`` (the lead never passes it); its Windows
+  chosen display is the primary (Qt's or Windows') unless ``--allow-primary`` (the lead's, when a check needs Display 0; operator, 12 Nov; agents never pass it); its Windows
   monitor cannot be matched; a step after the self-exit; a ``screen`` step in a ``--hidden`` run; an unknown setting;
 * a guard checks the saver's visible windows four times a second and kills the run (exit 5) if one lies on another
   display (``--hidden``: if one could show a pixel at all, ``visualizer_live_check``'s guard);

@@ -227,6 +227,10 @@ reads) are expected not to be needed for parity at all.
 thread state for a native surface: connections are made in C++, introspection lives in C++, and every port reruns
 the P1 probe (calls made with a Python thread state: zero).
 
+**D5.7 Where the product module lives (decided 12 Nov 2026, lead).** `native/core/` (C++ and CMake, beside the
+harness `native/spike_p1/`), module `_srpss_native_core`; its only Python importer is `rendering/native/`, which checks
+the module's Qt version and ABI and is the host adapter's Python face. The spike never ships.
+
 ## D6. Real Vulkan, and who owns the Vulkan device (decided 12 Nov 2026)
 
 Operator, 12 Nov: "We are a custom OpenGL and Vulkan Pipeline. Vulkan goes through QRhi from your suggestions but it

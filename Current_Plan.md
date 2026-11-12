@@ -489,7 +489,12 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 - [ ] N2.1 The product module's build (waits for neither N0.6 nor N0.7; the SDK fetch per Qt version and the
   workflow itself are N0.9's and done; the spike already refuses another Qt, `native/spike_p1/src/module.cpp:652`):
-  - [ ] Lead's decision: where the product module lives (the spike stays evidence) and its name.
+  - Decided 12 Nov (lead, at the operator's question "what is the cleanest and following repo convention"): the
+    product module lives in `native/core/` (beside `native/spike_p1/`; `native/` is the repository's home for C++ and
+    CMake), with its own `CMakeLists.txt`, `src/` and `shaders/`, and builds `_srpss_native_core.pyd`. Its Python side
+    is one package, `rendering/native/`, the only code that imports the module: it checks the module's Qt version and
+    ABI and exposes the host adapter (D5.1), so a missing or wrong module fails in one place with one reason. The spike
+    stays the harness and evidence (the N0.6 and N0.7 rounds keep running there). Tests: `tests/test_native_core_*.py`.
   - [ ] The product module's tree with the spike's CMake guard (the PySide6 pin), the exact-Qt import guard and
     the MSVC runtime's origin check (`msvcp140`, `vcruntime140`) carried over, each with its failing test.
   - [ ] `native-module.yml` takes the source folder as an input (today `NATIVE_SOURCE: native/spike_p1`, line 61),
