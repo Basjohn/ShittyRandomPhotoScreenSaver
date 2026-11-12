@@ -243,13 +243,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   drift program compile cached once at `MeshResources` (`ProgramUnavailable`) and the mode drawn without drift. Revision
   aliasing is impossible: each worker session numbers revisions in its own namespace (`engine_worker.py:171-175`),
   guarded by a two-session upload-hash test.
-- [ ] `rendering/quick/visualizer/render_host.py:274-277`: if `adopt_carryover` raises, the host drops the taken
-  payload without an owner (the solver's `adopt` now discards it; the host should not rely on that): release it at the
-  host, with a test.
-- [ ] A capacity growth whose new allocation fails keeps the held state alive, but the drawn region can be stale or
-  zero until a new key succeeds: keep the old layout drawn until the new one exists.
-- [ ] A history carried into a window whose drift programs fail is released and that window draws without drift at
-  once: fade the drift layer out instead (fade, never vanish).
+- The three drift follow-ups landed 12 Nov (277ac6a2): the host releases a history its renderer does not adopt, a
+  failed capacity growth keeps its held rows drawn where the draws read them, a carried history fades out over 0.9 s
+  (the bubble fade length, counted in logical steps) when the drift programs fail.
 - N0.4 in the worker landed 12 Nov: `VIS_SET_VIEW` v2 carries the drawn card's pixel aspect and both aperture scales
   (`core/framed_view.py`), resolved by the renderers' own functions and sent only when the drawn record's geometry
   changes; the worker's Waveform Ribbon and Extruded Bubble cameras equal the renderer's bit for bit at three DPRs
@@ -734,10 +730,15 @@ gradients, the rim glow cap, Bar Fill ghosts; `Docs/Reference/Visualizer_Referen
   not the bar, so a tip colour must be set past the colour wanted at a normal bar height.
 - The level-colour look was dropped 12 Nov (lead's verdict on its showcase: seven of eight frames a saturated green
   bar chart, the warm end only on one peak; fewer looks over filler). A profile that selected it falls back quietly.
-- [ ] Side defect (renderer, not a preset): in every thin-bar still one bar edge steps sideways by 1 px along the
-  diagonal of the full-field quad (about (123,478), (325,345), (525,208) in the 840x560 stills), likely the seam
-  between the quad's two triangles in `spectrum.frag`'s bar coverage; reproduce with the round's
-  `render_spectrum_evidence.py stills`. Fix in the shader (coverage from one continuous coordinate), pixel-checked.
+- The thin-bar diagonal seam is fixed (R-197, 277ac6a2): Spectrum's bar coverage comes from `gl_FragCoord` through an
+  affine map resolved once per placement; 192 seam columns corrected, every other pixel within 1 level.
+- [ ] Side defect (same cause as R-197, unchecked): Oscilloscope (`widgets/spotify_visualizer/shaders/oscilloscope.frag`
+  about :352), Spline Curve (`devcurve.frag` about :262) and Bubble (`bubble.frag` about :121) threshold the
+  interpolated `v_uv * u_resolution` too: render each at 840x560 and compare coverage across the quad's diagonal; fix
+  any that steps with the same affine map (one helper, not three copies).
+- [ ] Side defect: the presets round's `render_spectrum_evidence.py` sets `ROOT = HERE.parents[5]`, which under the
+  evidence junction resolves to `D:\TEMP\Scratch\SRPSS`, not the repo: kept evidence scripts take the repository root
+  from `tools/artifact_paths.py` (or an explicit argument), never from their own location.
 - [ ] Round 2 was never reported: check the Bar Gap control end to end (Settings and Studio rows through the
   spec, authored into every Spectrum preset by the repair fill, the Visualizer Reference) and the whole-song
   reactivity table for the round's new presets (`response.json` in the evidence folder).
