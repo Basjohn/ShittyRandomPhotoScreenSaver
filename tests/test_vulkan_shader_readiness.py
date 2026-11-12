@@ -291,8 +291,6 @@ _RATCHET = {
         "widgets/spotify_visualizer/shaders/devcurve.frag",
         "widgets/spotify_visualizer/shaders/oscilloscope.frag",
     ),
-    "Transitions": (
-    ),
     "Quick hosts and materials": (
         "rendering.quick.visualizer.clip_host._FRAGMENT_SOURCE",
         "rendering.quick.visualizer.clip_host._VERTEX_SOURCE",
