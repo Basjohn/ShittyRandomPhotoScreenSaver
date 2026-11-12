@@ -178,7 +178,7 @@ def runner_build(root: Path, target=NATIVE, *, import_ok: bool = True, info: dic
                  shaders: bool = True, log: bool = True) -> Path:
     """What the workflow leaves in the checkout before the manifest step: a build tree, its log and import check."""
     build = root / "build" / "native_module"
-    (build / "generated").mkdir(parents=True)
+    (build / "generated").mkdir(parents=True, exist_ok=True)
     if pyd:
         (build / f"{target.module_name}.pyd").write_bytes(b"MZ module")
     if shaders:
@@ -389,6 +389,161 @@ def test_a_module_of_another_commit_version_or_run_is_refused(tmp_path, field, v
     staging = _artifact(root, tmp_path / "staging")
     with pytest.raises(remote.RemoteBuildError, match=field):
         _validate(staging, root, **{field: value})
+
+
+# --------------------------------------------------------------- the products carry the native core (product job)
+
+
+def test_every_product_carries_the_native_core_and_requires_its_frozen_probe():
+    for target in remote.TARGETS.values():
+        assert target.native == remote.CARRIED_NATIVE.key == NATIVE.key
+        assert set(NATIVE.payload_dirs) <= set(target.payload_dirs) and NATIVE.primary in target.artifacts
+        assert target.payload_dirs[0] != NATIVE.payload_dirs[0]               # the product's own folder comes first
+        assert remote.NATIVE_PROBE_REPORT in target.reports
+
+
+def test_the_product_workflow_calls_the_native_workflow_then_places_and_probes_its_module():
+    text = (ROOT / remote.WORKFLOW_PATH).read_text(encoding="utf-8")
+    jobs = text.split("\njobs:\n", 1)[1]
+    native = jobs.split("\n  build:\n", 1)[0]
+    assert f"uses: ./.github/workflows/{remote.NATIVE_WORKFLOW_FILE}" in native
+    assert "commit: ${{ inputs.commit }}" in native and "token: ${{ inputs.token }}" in native
+    assert f"source: {NATIVE.source}" in native
+    build = jobs.split("\n  build:\n", 1)[1]
+    assert "needs: native" in build
+    steps = [build.index(marker) for marker in (
+        "Build with the canonical worker", f"name: {NATIVE.artifact}\n", "place-native --artifact-dir",
+        "scripts/venv/build_native_core_probe.ps1", "Record the build manifest")]
+    assert steps == sorted(steps)                                            # worker, place, probe, then manifest
+    assert remote.NATIVE_PROBE_REPORT.format(token="$($env:SRPSS_BUILD_RUN_ID)") in build
+    probe = (ROOT / "scripts" / "venv" / "build_native_core_probe.ps1").read_text(encoding="utf-8")
+    for needed in ("Get-SRPSSNuitkaQmlPruneArguments -RepoRoot $Root", "--standalone", "--enable-plugin=pyside6",
+                   "--include-qt-plugins=qml", "--include-module=rendering.native.$ModuleName",
+                   "native\\core\\python\\frozen_probe.py", "$Result.ok -ne $true", "$Result.frozen -ne $true"):
+        assert needed in probe, needed
+    assert f"$ModuleName = '{NATIVE.module_name}'" in probe
+    assert "main.py" not in probe                                            # the product itself is not frozen here
+
+
+def _placed(root: Path, tmp_path: Path) -> str:
+    """The product job's place-native on this run's native artifact; returns the built commit."""
+    sha = _git(root, "rev-parse", "HEAD")
+    artifact = _artifact(root, tmp_path / "native_artifact", NATIVE)
+    shutil.rmtree(root / "release")                         # the product checkout: no native build of its own
+    shutil.rmtree(root / "logs")
+    remote.place_native_module(root, artifact, sha, TOKEN)
+    return sha
+
+
+def test_place_native_puts_the_validated_module_in_the_release_tree(tmp_path):
+    root = _repo(tmp_path)
+    _placed(root, tmp_path)
+    payload = root / "release" / NATIVE.payload_dirs[0]
+    assert (root / "release" / NATIVE.primary).read_bytes() == b"MZ module"
+    assert sorted(path.name for path in (payload / remote.SHADERS_DIR).iterdir()) == _baked(NATIVE.key)
+    kept = json.loads((payload / remote.MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert (kept["target"], kept["native_source"], kept["token"]) == (NATIVE.key, NATIVE.source, TOKEN)
+    for name in NATIVE.reports:
+        assert (root / "logs" / name.format(token=TOKEN)).is_file()
+
+
+@pytest.mark.parametrize("case", ["qt-version", "pyd-bytes", "no-shaders", "other-source"])
+def test_place_native_refuses_an_altered_module_and_places_nothing(tmp_path, case):
+    root = _repo(tmp_path)
+    sha = _git(root, "rev-parse", "HEAD")
+    artifact = _artifact(root, tmp_path / "native_artifact", NATIVE)
+    shutil.rmtree(root / "release")
+    _tamper(artifact, case, NATIVE)
+    with pytest.raises(remote.RemoteBuildError):
+        remote.place_native_module(root, artifact, sha, TOKEN)
+    assert not (root / "release").exists()
+    with pytest.raises(remote.RemoteBuildError, match="token"):
+        remote.place_native_module(root, _artifact(root, tmp_path / "other_run", NATIVE), sha,
+                                   "20261112_120000_000009")
+
+
+def _product_with_core(root: Path, tmp_path: Path, *, probe: dict | None = None) -> Path:
+    """A Standard build of the fixture commit carrying the placed core, uploaded as the product workflow does."""
+    sha = _placed(root, tmp_path)
+    target = remote.TARGETS["standard"]
+    for relative in (target.primary, *target.companions):
+        path = root / "release" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"product")
+    if probe is not False:
+        (root / "logs" / remote.NATIVE_PROBE_REPORT.format(token=TOKEN)).write_text(
+            json.dumps(probe or {"ok": True, "frozen": True, "checks": {"load": "ok"}}), encoding="utf-8")
+    manifest = remote.build_manifest(root, target.key, sha, TOKEN)
+    staging = tmp_path / "product_staging"
+    staging.mkdir()
+    (staging / remote.MANIFEST_NAME).write_text(json.dumps(manifest), encoding="utf-8")
+    shutil.copytree(root / "release", staging / "release")
+    shutil.copytree(root / "logs", staging / "logs")
+    return staging
+
+
+def _validate_product(staging: Path, root: Path):
+    sha = _git(root, "rev-parse", "HEAD")
+    return remote.validate_staging(staging, "standard", commit=sha, version="9.8.7", token=TOKEN,
+                                   qt_version=remote.qt_version_at_commit(root, sha),
+                                   shaders=remote.shaders_at_commit(root, sha, NATIVE.source))
+
+
+def test_a_product_carrying_the_runs_validated_core_validates(tmp_path):
+    root = _repo(tmp_path)
+    staging = _product_with_core(root, tmp_path)
+    manifest = _validate_product(staging, root)
+    assert f"release/{NATIVE.primary}" in manifest["files"]
+    assert remote.REPORTS_PREFIX + remote.NATIVE_PROBE_REPORT.format(token=TOKEN) in manifest["files"]
+
+
+def _rehash(staging: Path, relative: str) -> None:
+    path = staging / relative
+    _edit_manifest(staging, lambda m: m["files"].update(
+        {relative: {"bytes": path.stat().st_size, "sha256": remote.sha256_file(path)}}))
+
+
+@pytest.mark.parametrize("case", ["swapped-core", "core-of-another-run", "probe-failed", "probe-unfrozen"])
+def test_a_product_whose_core_is_not_the_runs_or_failed_its_probe_is_refused(tmp_path, case):
+    root = _repo(tmp_path)
+    probe = {"probe-failed": {"ok": False, "frozen": True, "checks": {"load": "FAILED: x"}},
+             "probe-unfrozen": {"ok": True, "frozen": False, "checks": {}}}.get(case)
+    staging = _product_with_core(root, tmp_path, probe=probe)
+    folder = f"release/{NATIVE.payload_dirs[0]}/"
+    if case == "swapped-core":                     # other bytes, consistently re-listed in the product's manifest
+        (staging / "release" / NATIVE.primary).write_bytes(b"MZ other core")
+        _rehash(staging, f"release/{NATIVE.primary}")
+    elif case == "core-of-another-run":
+        carried = staging / folder / remote.MANIFEST_NAME
+        data = json.loads(carried.read_text(encoding="utf-8"))
+        data["token"] = "20261112_120000_000009"
+        carried.write_text(json.dumps(data), encoding="utf-8")
+        _rehash(staging, folder + remote.MANIFEST_NAME)
+    with pytest.raises(remote.RemoteBuildError):
+        _validate_product(staging, root)
+
+
+def test_a_product_without_its_frozen_probe_report_is_not_described(tmp_path):
+    root = _repo(tmp_path)
+    with pytest.raises(remote.RemoteBuildError, match=remote.NATIVE_PROBE_REPORT.format(token=TOKEN)):
+        _product_with_core(root, tmp_path, probe=False)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the native core is built for Windows only so far")
+def test_the_frozen_probe_reports_a_core_it_cannot_load_as_its_failure(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / NATIVE.source / "python"))
+    monkeypatch.delitem(sys.modules, "frozen_probe", raising=False)
+    monkeypatch.delitem(sys.modules, NATIVE.module_name, raising=False)
+    import frozen_probe
+
+    try:
+        out = tmp_path / "probe.json"
+        assert frozen_probe.main(["--out", str(out)]) == 1      # unfrozen, nothing at the package location
+        report = json.loads(out.read_text(encoding="utf-8"))
+        assert report["frozen"] is False and report["ok"] is False
+        assert report["checks"]["load"].startswith("FAILED: ") and "cannot be imported" in report["checks"]["load"]
+    finally:
+        sys.modules.pop("frozen_probe", None)
 
 
 # ---------------------------------------------------------------------------- dispatch, follow, publish (local)

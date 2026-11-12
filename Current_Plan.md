@@ -532,6 +532,13 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
       built commit; the manifest records the source.
   - [ ] The product workflows call it (`workflow_call`) and place the module in the product's `release/` tree;
     the frozen probe rerun from the product's pruned build.
+    - Written (not yet run; build round 2 of 49c3e385 built and import-checked the core): `windows-build.yml` job
+      `native` calls `native-module.yml` (source `native/core`); the build job waits on it, validates the artifact
+      against its checkout and places it in `release/native_module` (`github_remote_build.py place-native`), then
+      `scripts/venv/build_native_core_probe.ps1` freezes the separate `native/core/python/frozen_probe.py` with the
+      product's Qt includes and QML prune and runs it (`main.py` untouched). Both products' targets now publish
+      `release/native_module` and require the probe report; local validation refuses a carried core that is not the
+      run's validated build or a probe that did not load it frozen.
   - [ ] Tests that need the module skip with a stated reason where it is not built.
     - Written (with box 1 and the docs commit): `rendering/native/` (`load(module_dir=None)`: the package location
       by default, a named folder for tools and tests; every check in `loader.checked`, one `NativeCoreUnavailable`

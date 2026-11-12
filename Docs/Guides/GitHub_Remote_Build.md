@@ -74,9 +74,19 @@ Ctrl+C cancels the runs on GitHub. Installers are compiled from the Build Runner
   requested product, commit, version (read from that commit's `versioning.py`) and run token. Every payload and
   report file must match its recorded size and SHA-256; no unlisted file may be present; the diagnostic copy must
   be the same binary as `SRPSS.scr`; the primary binary's Windows product version must equal the version.
-- **Publishing.** Only then are `release\screensaver` + `release\diagnostic` (Standard) or `release\media_center`
-  swapped in. If a swap fails (for example a running `.scr` locks the folder) the previous payload is restored.
-  A failed run, download or validation never touches `release\`.
+- **The native core it carries** (N2.1). Each product run first runs the native workflow for the same commit and
+  token (the job `native`; a core that does not compile or fails its import check fails the product run). The build
+  job validates that artifact against its checkout and places it in `release\native_module` with its own manifest
+  (`tools/github_remote_build.py place-native`), then `scripts/venv/build_native_core_probe.ps1` freezes the separate
+  probe `native/core/python/frozen_probe.py` with the product's Qt includes and QML prune, runs it and requires its
+  report to say the frozen build loaded the core (`logs\native_core_frozen_probe_<token>.json`, a required report of
+  the product). Locally the download is refused unless the carried core's manifest names this commit, version, token,
+  source, the commit's pinned Qt and shader sources, lists exactly the files the product publishes in
+  `release\native_module`, and the probe report says `ok` and `frozen`. Nothing in the product imports the core yet.
+- **Publishing.** Only then are `release\screensaver` + `release\diagnostic` (Standard) or `release\media_center`,
+  and with either `release\native_module`, swapped in. If a swap fails (for example a running `.scr` locks the folder,
+  or a Python process holds the native core) the previous payload is restored. A failed run, download or validation
+  never touches `release\`.
 
 ## Where things land
 
@@ -84,6 +94,7 @@ Ctrl+C cancels the runs on GitHub. Installers are compiled from the Build Runner
 | --- | --- |
 | Standard + Diagnostic | `release\screensaver\SRPSS.scr`, `release\diagnostic\SRPSS_Diagnostic.scr` |
 | Media Center | `release\media_center\` (onedir, `SRPSS_Media_Center.exe`) |
+| The native core either product carries | `release\native_module\` (`_srpss_native_core.pyd` and its `remote_build_manifest.json`); the frozen probe's report `logs\native_core_frozen_probe_<token>.json` |
 | Installers (local) | `release\installers\Setup_SRPSS.exe`, `release\installers\Setup_SRPSS_Media_Center.exe` |
 | Runner log per product | `logs\build_runner_<product>_<token>.log` (Log link: dispatch, run URL, status, validation; the failed steps' log tail on failure) |
 | Worker reports from the runner | `logs\build_nuitka[_mc_onedir]_{,report_,footprint_,frozen_audit_}<token>.*` |
@@ -116,7 +127,9 @@ folder (`Current_Plan.md` item 8b, N0.9 and N2.1):
 Each is a target of the same contract as the products: the workflow compiles it, `tools/github_remote_build.py`
 dispatches (with `source=<folder>`), follows, cancels, downloads and validates it, and **Native Core Module (GitHub)**
 and **Native Spike Harness (GitHub)** on this tab run them. Neither is pre-selected and no installer packages either.
-The workflow is reusable (`workflow_call`), so the product builds can call it as a job.
+The workflow is reusable (`workflow_call`): every product run calls it for `native/core` and publishes the core in
+`release\native_module` with the product (section "What gets checked before anything is replaced"), so a product
+build refreshes the core too.
 
 **The lead's commands** (agents never start them, nor any other build):
 

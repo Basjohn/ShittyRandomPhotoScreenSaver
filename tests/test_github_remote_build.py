@@ -25,6 +25,7 @@ from tools import github_remote_build as remote
 
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN = "20261108_120000_000001"
+FIXTURE_QT = "7.8.9"                  # the fixture repository's pin (the carried native core is checked against it)
 
 
 # ------------------------------------------------------------------------------------------------- the workflow
@@ -84,9 +85,36 @@ def _repo(tmp_path: Path, version: str = "9.8.7") -> Path:
     (root / "themes").mkdir()
     (root / "themes" / "a.srtheme").write_text("{}", encoding="utf-8")
     (root / ".gitignore").write_text("release/\nlogs/\nbuild/\n", encoding="utf-8")
+    (root / "requirements.txt").write_text(f"PySide6=={FIXTURE_QT}\n", encoding="utf-8")
     _git(root, "add", "-A")
     _git(root, "commit", "-q", "-m", "fixture")
     return root
+
+
+def _carry_native(root: Path) -> None:
+    """What the product job's place-native and frozen probe leave: the run's native core with its own manifest in
+    release/<module payload>, and the probe's report (tests/test_native_module_build.py runs place-native itself)."""
+    module = remote.MODULE_TARGETS[remote.TARGETS["standard"].native]
+    pyd = root / "release" / module.primary
+    pyd.parent.mkdir(parents=True, exist_ok=True)
+    pyd.write_bytes(b"MZ native core")
+    carried = {
+        "schema": remote.MANIFEST_SCHEMA, "target": module.key, "commit": _git(root, "rev-parse", "HEAD"),
+        "version": remote.parse_app_version((root / "versioning.py").read_text(encoding="utf-8")), "token": TOKEN,
+        "native_source": module.source, "qt_version": FIXTURE_QT, "pyside6_version": FIXTURE_QT,
+        "msvc_version": "19.51.36231", "with_quick": True,
+        "files": {f"release/{module.primary}": {"bytes": pyd.stat().st_size, "sha256": remote.sha256_file(pyd)}},
+    }
+    (pyd.parent / remote.MANIFEST_NAME).write_text(json.dumps(carried), encoding="utf-8")
+    (root / "logs").mkdir(exist_ok=True)
+    (root / "logs" / remote.NATIVE_PROBE_REPORT.format(token=TOKEN)).write_text(
+        json.dumps({"ok": True, "frozen": True, "checks": {"load": "ok"}}), encoding="utf-8")
+
+
+def _checks(**overrides) -> dict:
+    """What a product's validation is checked against beside commit, version and token: the built commit's pinned Qt
+    and shader sources, for the native core it carries."""
+    return {"qt_version": FIXTURE_QT, "shaders": (), **overrides}
 
 
 def _publish_built(root: Path, target_key: str, *, payload: bytes = b"binary") -> None:
@@ -101,6 +129,8 @@ def _publish_built(root: Path, target_key: str, *, payload: bytes = b"binary") -
     (root / "logs").mkdir(exist_ok=True)
     stem = "build_nuitka" if target_key == "standard" else "build_nuitka_mc_onedir"
     (root / "logs" / f"{stem}_{TOKEN}.log").write_text("built", encoding="utf-8")
+    if target.native:
+        _carry_native(root)
 
 
 def _artifact(root: Path, target_key: str, into: Path) -> Path:
@@ -123,9 +153,15 @@ def test_a_whole_unaltered_build_of_the_requested_commit_validates(tmp_path, tar
     _publish_built(root, target_key)
     staging = _artifact(root, target_key, tmp_path / "staging")
     commit = _git(root, "rev-parse", "HEAD")
-    manifest = remote.validate_staging(staging, target_key, commit=commit, version="9.8.7", token=TOKEN)
+    manifest = remote.validate_staging(staging, target_key, commit=commit, version="9.8.7", token=TOKEN, **_checks())
     assert any(name.startswith("logs/") for name in manifest["files"])          # reports travel with the payload
     assert all(f"release/{relative}" in manifest["files"] for relative in remote.TARGETS[target_key].artifacts)
+    target = remote.TARGETS[target_key]
+    carried = remote.MODULE_TARGETS[target.native]
+    assert set(carried.payload_dirs) <= set(target.payload_dirs) and f"release/{carried.primary}" in manifest["files"]
+    with pytest.raises(remote.RemoteBuildError, match="pinned Qt"):            # the carried core needs the pin
+        remote.validate_staging(staging, target_key, commit=commit, version="9.8.7", token=TOKEN,
+                                **_checks(qt_version=None))
 
 
 def _tamper(staging: Path, case: str) -> dict:
@@ -158,7 +194,7 @@ def test_an_altered_or_incomplete_download_is_refused(tmp_path, case):
     _tamper(staging, case)
     with pytest.raises(remote.RemoteBuildError):
         remote.validate_staging(staging, "standard", commit=_git(root, "rev-parse", "HEAD"), version="9.8.7",
-                                token=TOKEN)
+                                token=TOKEN, **_checks())
 
 
 @pytest.mark.parametrize("field,value", [("commit", "f" * 40), ("version", "9.8.8"), ("token", "20261108_120000_000002")])
@@ -166,7 +202,8 @@ def test_a_build_of_another_commit_version_or_run_is_refused(tmp_path, field, va
     root = _repo(tmp_path)
     _publish_built(root, "standard")
     staging = _artifact(root, "standard", tmp_path / "staging")
-    expected = {"commit": _git(root, "rev-parse", "HEAD"), "version": "9.8.7", "token": TOKEN, field: value}
+    expected = {"commit": _git(root, "rev-parse", "HEAD"), "version": "9.8.7", "token": TOKEN, **_checks(),
+                field: value}
     with pytest.raises(remote.RemoteBuildError, match=field):
         remote.validate_staging(staging, "standard", **expected)
 
@@ -191,7 +228,7 @@ def test_version_comes_from_the_built_commit_not_the_working_tree(tmp_path):
 
 def _release_with_previous(tmp_path: Path) -> Path:
     release = tmp_path / "release"
-    for directory in ("screensaver", "diagnostic"):
+    for directory in remote.TARGETS["standard"].payload_dirs:
         (release / directory).mkdir(parents=True)
         (release / directory / "previous.txt").write_text(directory, encoding="utf-8")
     return release
@@ -224,7 +261,7 @@ def test_a_failed_swap_restores_the_previous_payload(tmp_path, monkeypatch):
     with pytest.raises(remote.RemoteBuildError, match="previous payload was kept"):
         remote.publish_payload(staging, release, "standard")
     monkeypatch.setattr(remote.shutil, "move", real_move)
-    for directory in ("screensaver", "diagnostic"):
+    for directory in remote.TARGETS["standard"].payload_dirs:
         assert sorted(path.name for path in (release / directory).iterdir()) == ["previous.txt"]
     assert not list(release.glob(".remote_previous_*"))
 
@@ -408,8 +445,10 @@ def test_the_github_tab_offers_the_remote_products_and_local_steps(tmp_path):
     for key in ("standard", "media_center"):
         assert github[key].kind == "github" and github[key].script == tmp_path / remote.WORKFLOW_PATH
         assert github[key].artifacts == venv[key].artifacts and github[key].output_dir == venv[key].output_dir
-        assert remote.TARGETS[key].artifacts == tuple(
-            path.relative_to(tmp_path / "release").as_posix() for path in github[key].artifacts)
+        # The remote build also carries the native core (published with it); the local worker's job does not.
+        carried = remote.MODULE_TARGETS[remote.TARGETS[key].native].primary
+        assert remote.TARGETS[key].artifacts == (*(
+            path.relative_to(tmp_path / "release").as_posix() for path in github[key].artifacts), carried)
     assert github["reddit_helper"].script == venv["reddit_helper"].script          # built locally, venv worker
     # The installers are the venv tab's own local jobs, unchanged but for the label: GitHub has no say (operator, 8 Nov).
     for key in ("standard_installer", "media_center_installer"):
