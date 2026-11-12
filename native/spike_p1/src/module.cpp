@@ -10,6 +10,7 @@
 #include "quadfield.h"
 #include "rhi_offscreen.h"
 #include "thread_probe.h"
+#include "vk_n06.h"
 
 #ifdef SPIKE_WITH_QUICK
 #include "quick_item.h"
@@ -415,6 +416,77 @@ PyObject *probe_reset(PyObject *, PyObject *)
     Py_RETURN_NONE;
 }
 
+// ---------------------------------------------------------------- N0.6 (D6's proof)
+
+PyObject *pyJson(const QByteArray &json)
+{
+    return PyUnicode_FromStringAndSize(json.constData(), json.size());
+}
+
+PyObject *n06_facts(PyObject *, PyObject *)
+{
+    // GUI thread, synchronous, keeps the GIL: Qt may log through a message handler a Python caller installed.
+    return pyJson(n06VulkanFactsJson());
+}
+
+PyObject *n06_context_create(PyObject *, PyObject *args)
+{
+    int validation = 1;
+    const char *queueMode = "one";
+    const char *parts = "full";
+    if (!PyArg_ParseTuple(args, "|pss", &validation, &queueMode, &parts))
+        return nullptr;
+    return pyJson(n06ContextCreateJson(validation != 0, QString::fromUtf8(queueMode), QString::fromUtf8(parts)));
+}
+
+PyObject *n06_handle_count(PyObject *, PyObject *)
+{
+    return PyLong_FromLongLong(n06HandleCount());
+}
+
+PyObject *n06_process_counters(PyObject *, PyObject *)
+{
+    return pyJson(n06ProcessCountersJson());
+}
+
+PyObject *n06_set_phase(PyObject *, PyObject *args)
+{
+    const char *phase = nullptr;
+    if (!PyArg_ParseTuple(args, "s", &phase))
+        return nullptr;
+    n06SetPhase(QString::fromUtf8(phase));
+    Py_RETURN_NONE;
+}
+
+PyObject *n06_context_destroy(PyObject *, PyObject *)
+{
+    return pyJson(n06ContextDestroyJson());
+}
+
+#ifdef SPIKE_WITH_QUICK
+PyObject *n06_attach_window(PyObject *, PyObject *args)
+{
+    unsigned long long windowPtr = 0;
+    int ours = 1;
+    if (!PyArg_ParseTuple(args, "Kp", &windowPtr, &ours))
+        return nullptr;
+    QString error;
+    if (!n06AttachQuickWindow(ptr<QQuickWindow>(windowPtr), ours != 0, &error)) {
+        PyErr_SetString(PyExc_RuntimeError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *n06_window_surface(PyObject *, PyObject *args)
+{
+    unsigned long long windowPtr = 0;
+    if (!PyArg_ParseTuple(args, "K", &windowPtr))
+        return nullptr;
+    return pyJson(n06WindowSurfaceJson(ptr<QQuickWindow>(windowPtr)));
+}
+#endif
+
 // ---------------------------------------------------------------- part B
 
 #ifdef SPIKE_WITH_QUICK
@@ -452,6 +524,9 @@ PyObject *quick_session_begin(PyObject *, PyObject *args)
     put(d, "device", pyStr(session->deviceName()));
     put(d, "gui_thread_id", PyLong_FromUnsignedLongLong(session->guiThread()));
     put(d, "render_thread_id", PyLong_FromUnsignedLongLong(session->renderThread()));
+    put(d, "vk_device", PyLong_FromUnsignedLongLong(session->vkDevice()));
+    put(d, "vk_queue_family", PyLong_FromLong(session->vkQueueFamily()));
+    put(d, "vk_queue_index", PyLong_FromLong(session->vkQueueIndex()));
     return d;
 }
 
@@ -480,6 +555,28 @@ PyObject *quick_session_frames(PyObject *, PyObject *args)
     put(d, "lit_pixels", PyLong_FromLong(r.litPixels));
     put(d, "pixel_checksum", PyLong_FromUnsignedLongLong(r.pixelChecksum));
     return d;
+}
+
+PyObject *quick_session_resize(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int w = 0, h = 0;
+    if (!PyArg_ParseTuple(args, "Lii", &handle, &w, &h))
+        return nullptr;
+    QuickOffscreenSession *session = sessions().value(handle);
+    if (!session) {
+        PyErr_SetString(PyExc_KeyError, "unknown session");
+        return nullptr;
+    }
+    bool ok = false;
+    Py_BEGIN_ALLOW_THREADS
+    ok = session->resize(w, h);
+    Py_END_ALLOW_THREADS
+    if (!ok) {
+        PyErr_SetString(PyExc_RuntimeError, session->error().toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
 }
 
 PyObject *quick_session_end(PyObject *, PyObject *args)
@@ -514,11 +611,27 @@ PyMethodDef methods[] = {
     { "vulkan_attach", vulkan_attach, METH_VARARGS, "(window_ptr)" },
     { "probe_stats", probe_stats, METH_VARARGS, "(['hybrid'|'native']) -> dict" },
     { "probe_reset", probe_reset, METH_NOARGS, "()" },
+    { "n06_facts", n06_facts, METH_NOARGS,
+      "() -> JSON str: N0.6 round 1, Vulkan facts and Qt's own device (GUI thread, QGuiApplication)" },
+    { "n06_context_create", n06_context_create, METH_VARARGS,
+      "([validation=True[, queue_mode='one'|'second'|'force_absent']]) -> JSON str: N0.6 our VkInstance (adopted "
+      "by Qt) and VkDevice, and a reference instance" },
+    { "n06_handle_count", n06_handle_count, METH_NOARGS, "() -> int: the process handle count" },
+    { "n06_process_counters", n06_process_counters, METH_NOARGS,
+      "() -> JSON str: handles, GDI/USER objects, threads, private bytes, GPU heap usage" },
+    { "n06_set_phase", n06_set_phase, METH_VARARGS, "(phase) attributes later debug messages to it" },
+    { "n06_context_destroy", n06_context_destroy, METH_NOARGS,
+      "() -> JSON str: teardown steps and the debug message counts per phase (windows destroyed first)" },
 #ifdef SPIKE_WITH_QUICK
+    { "n06_attach_window", n06_attach_window, METH_VARARGS,
+      "(quick_window_ptr, ours) our instance + device, or the reference instance (Qt's own device)" },
+    { "n06_window_surface", n06_window_surface, METH_VARARGS,
+      "(quick_window_ptr) -> JSON str: the shown Vulkan window's surface capabilities (composite alpha, ...)" },
     { "quick_session_begin", quick_session_begin, METH_VARARGS,
       "(rc, window, w, h[, threaded]) -> dict with handle" },
     { "quick_session_frames", quick_session_frames, METH_VARARGS,
       "(handle, animated, count[, png]) -> dict" },
+    { "quick_session_resize", quick_session_resize, METH_VARARGS, "(handle, w, h) new offscreen target size" },
     { "quick_session_end", quick_session_end, METH_VARARGS, "(handle)" },
 #endif
     { nullptr, nullptr, 0, nullptr }

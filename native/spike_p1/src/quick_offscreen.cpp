@@ -3,6 +3,7 @@
 #include "image_stats.h"
 
 #include <rhi/qrhi.h>
+#include <rhi/qrhi_platform.h>
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QElapsedTimer>
@@ -92,6 +93,15 @@ bool QuickOffscreenSession::begin()
         QRhi *rhi = m_control->rhi();
         m_backendName = QString::fromLatin1(rhi->backendName());
         m_deviceName = QString::fromUtf8(rhi->driverInfo().deviceName);
+        if (rhi->backend() == QRhi::Vulkan) {
+            // N0.6: which VkDevice and queue this session's QRhi really runs on (ours, or one Qt created).
+            const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+            if (handles) {
+                m_vkDevice = quint64(reinterpret_cast<quintptr>(handles->dev));
+                m_vkQueueFamily = int(handles->gfxQueueFamilyIdx);
+                m_vkQueueIndex = int(handles->gfxQueueIdx);
+            }
+        }
         if (!createOffscreenTarget(rhi, m_width, m_height, &m_target, &m_error))
             return;
         m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));
@@ -143,6 +153,29 @@ QuickFramesResult QuickOffscreenSession::frames(QObject *animated, int count, co
     }
     res.ok = res.error.isEmpty();
     return res;
+}
+
+bool QuickOffscreenSession::resize(int width, int height)
+{
+    if (!m_begun) {
+        m_error = QStringLiteral("session not begun");
+        return false;
+    }
+    bool ok = false;
+    m_host->runBlocking([&]() {
+        // The old target is released through QRhi's deferred release (a frame in flight keeps it alive).
+        m_window->setRenderTarget(QQuickRenderTarget());
+        destroyOffscreenTarget(&m_target);
+        if (!createOffscreenTarget(m_control->rhi(), width, height, &m_target, &m_error))
+            return;
+        m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));
+        ok = true;
+    });
+    if (ok) {
+        m_width = width;
+        m_height = height;
+    }
+    return ok;
 }
 
 void QuickOffscreenSession::end()

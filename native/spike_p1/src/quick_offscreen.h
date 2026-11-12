@@ -39,6 +39,9 @@ public:
 
     bool begin();
     QuickFramesResult frames(QObject *animated, int count, const QString &pngPath);
+    // N0.6: a new offscreen target of this size replaces the old one (the caller resizes the window and the
+    // scene on the GUI thread before the next frames()).
+    bool resize(int width, int height);
     void end();
 
     QString error() const { return m_error; }
@@ -46,6 +49,10 @@ public:
     QString deviceName() const { return m_deviceName; }
     quintptr guiThread() const { return m_guiThread; }
     quintptr renderThread() const { return m_renderThread; }
+    // Vulkan only (0 / -1 otherwise): the session QRhi's VkDevice and graphics queue (family, index).
+    quint64 vkDevice() const { return m_vkDevice; }
+    int vkQueueFamily() const { return m_vkQueueFamily; }
+    int vkQueueIndex() const { return m_vkQueueIndex; }
 
 private:
     QQuickRenderControl *m_control;
@@ -61,6 +68,9 @@ private:
     QString m_deviceName;
     quintptr m_guiThread = 0;
     quintptr m_renderThread = 0;
+    quint64 m_vkDevice = 0;
+    int m_vkQueueFamily = -1;
+    int m_vkQueueIndex = -1;
 };
 
 } // namespace srpss_spike
