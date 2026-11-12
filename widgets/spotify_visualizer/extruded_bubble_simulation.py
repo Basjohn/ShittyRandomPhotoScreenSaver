@@ -163,6 +163,7 @@ class ExtrudedBubbleSnapshot:
     drift_families: tuple = ()             # live DriftFamily descriptors (extruded_bubble_drift_log)
     drift_steps: bytes = b""               # the last STEP_HISTORY float64 drift steps, oldest first
     chain_drive: float = 0.0               # where the free chains sit in their Bead Chains Range (slow, rate-capped)
+    drift_knots: bytes = b""               # beside drift_steps: each step's free-chain knot decisions
 
     @property
     def count(self) -> int:
@@ -1379,7 +1380,7 @@ class ExtrudedBubbleSimulation:
                                       self._travel, self._rays, self._shimmer, self._motion_phase,
                                       self._wakes(dt, controls.wake_trails), self._passage, self._chain_activity,
                                       self._drift_log.families, self._drift_log.steps,
-                                      chain_drive=self._chain_drive)
+                                      chain_drive=self._chain_drive, drift_knots=self._drift_log.knots)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

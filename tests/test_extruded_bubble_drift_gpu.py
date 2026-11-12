@@ -74,7 +74,8 @@ def test_production_host_integrates_only_live_drift_and_restores_zero_picture(ta
         logical=sim.advance(MusicInput(1/60,True,1.,(),(.6,.5,.3)),controls)
         assert [family.family for family in logical.drift_families]==['chains']
         changed=replace(snap,logical=replace(snap.logical,mode_state=replace(
-            state,drift_families=logical.drift_families,drift_steps=logical.drift_steps)))
+            state,drift_families=logical.drift_families,drift_steps=logical.drift_steps,
+            drift_knots=logical.drift_knots)))
         moved=capture.render(host,changed)
     assert renderer._drift.output
     assert np.abs(moved-base).mean()>.01

@@ -18,6 +18,10 @@ _SWISH_RATE = 0.55         # radians of motion phase per second of the shared sw
 _SWIRL_SPEED = 0.30        # tangential
 _SWIRL_WIDEN = 0.06        # outward, so the orbit becomes a widening spiral
 _STEERED_WANDER = 0.4      # share of the original meander kept under a steered direction
+# Radians of motion phase per second of the meander's three carriers. With _SWISH_RATE they are the field's
+# ever-growing phase arguments t x rate, which the drift log reduces mod 2 pi in float64 for the GPU solver.
+_WANDER_RATE, _WANDER_RATE_2, _DEEP_RATE = .37, .83, .29
+PHASE_RATES = (_WANDER_RATE, _WANDER_RATE_2, _DEEP_RATE, _SWISH_RATE)
 def steer(kind: str, position, phase: float, t: float, direction, across, depth_axis, axis_origin,
                  amount: float, *, ops=math):
     """Extra drift velocity for a Drift Direction; ``amount`` is the musical drift in world units/s."""
@@ -89,8 +93,8 @@ def _swirl(kind, position, phase, direction, across, depth_axis, axis_origin, am
 def velocity(kind, position, phase, t, direction, across, depth_axis, axis_origin, amount, *, ops=math):
     """Full calibrated ordinary drift, scalar or batched; never includes stream/Sway/push."""
     meander = 1.0 if kind == 'wander' else _STEERED_WANDER
-    wander = meander * amount * .05 * (ops.sin(t * .37 + phase) + .6 * ops.sin(t * .83 + 2.1 * phase))
-    deep = meander * amount * .015 * ops.sin(t * .29 + 1.7 * phase)
+    wander = meander * amount * .05 * (ops.sin(t * _WANDER_RATE + phase) + .6 * ops.sin(t * _WANDER_RATE_2 + 2.1 * phase))
+    deep = meander * amount * .015 * ops.sin(t * _DEEP_RATE + 1.7 * phase)
     directed = steer(kind, position, phase, t, direction, across, depth_axis, axis_origin, amount, ops=ops)
     return (across[0] * wander + depth_axis[0] * deep + directed[0],
             across[1] * wander + depth_axis[1] * deep + directed[1],

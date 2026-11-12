@@ -30,6 +30,7 @@ def test_production_capture_omits_cpu_sources_and_preserves_renderer_bytes(qt_ap
     def checked(logical):
         state, source = logical.mode_state, snapshots[-1]
         assert state.drift_steps == source.drift_steps
+        assert state.drift_knots == source.drift_knots
         assert len(state.drift_families) == len(source.drift_families)
         for rendered, original in zip(state.drift_families, source.drift_families):
             assert original.source, 'the fixture must exercise the actual CPU-oracle arrays'

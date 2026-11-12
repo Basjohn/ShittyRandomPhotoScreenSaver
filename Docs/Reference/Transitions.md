@@ -239,6 +239,15 @@ Each foundation slice adds what it learned here.
 - Discrete decisions in a ported integrator (`floor` of a knot shift) need the CPU's precision in their inputs: float32
   span/carry moved a chain's knot step one tick early. Keep the inputs of those decisions in fp64, plus ever-growing
   phase and travel arguments (reduce mod 2π in fp64 before `sin`).
+- No shader uses a 64-bit float (Vulkan's `shaderFloat64` is optional; EB drift, D4, 2026-11-12). Make each float64
+  decision once on the logical side with the reference's own code and publish its result (EB's knot `moved`,
+  shift and phase offset per chain per step; phase arguments reduced mod 2π), and rebuild an ever-growing
+  per-member quotient on the GPU from float pairs (an `fma` two-product, `precise`). A float32 input to a discrete
+  decision is a decision on another tick: a float32 seed (3e-8 off) would recycle a mote on another tick at
+  roughly 1.5e-4 of its wraps (estimated, at a typical 2e-4 of a span per tick), so the seed and the phase offset are pairs too, and the wrap compares the pair-exact fraction.
+  Prove it first in a NumPy float32 model in the shader's operation order against the float64 reference at
+  hours of travel (`tests/test_extruded_bubble_drift_precision.py`): at eight hours the old `double` shader with
+  float32 spans recycled 31,524 motes on other ticks in 240 ticks; the pairs none.
 - Offline captures that sample sparse frames must hand the renderer every step in between
   (`tools/visualizer_replay/driver.py`). Otherwise stateful GPU work restarts, and pixel comparisons fail by hundreds of
   levels.
