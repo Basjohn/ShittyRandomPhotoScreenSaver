@@ -422,6 +422,8 @@ class QuickSceneController(QObject):
     readiness_changed = Signal(object)
     jedi_mode_requested = Signal(str, str)
     hover_edit_glyph_requested = Signal(str, str)
+    #: The pointer entered (True) or left (False) a hover transfer arrow ("transfer_left" / "transfer_right", 1C.2).
+    visualizer_transfer_hover_changed = Signal(str, bool)
     visualizer_camera_reset_requested = Signal()
     # Expanded Visualizer glyph (plan 01 M2): True = expand to the display, False = collapse.
     visualizer_expand_requested = Signal(bool)
@@ -893,6 +895,20 @@ class QuickSceneController(QObject):
             return
         self.hover_edit_glyph_requested.emit(action, model_identity)
 
+    def _publish_visualizer_transfer_hover(self, action: object, hovered: object) -> None:
+        """A QML signal's handler (a plain method): the hover arrow's edges. A leave always passes (it releases what
+        an entry prepared); an entry only under the glyph click's own admission."""
+        action, hovered = str(action), bool(hovered)
+        if action not in {"transfer_left", "transfer_right"}:
+            return
+        if hovered:
+            state = self._input_state
+            if (self._custom_layout_session is not None or state is None or not state.admission_open
+                    or state.exiting or state.context_menu_active
+                    or not (state.interaction_mode_enabled or state.ctrl_held) or not state.always_show_glyphs):
+                return
+        self.visualizer_transfer_hover_changed.emit(action, hovered)
+
     def apply_widget_glow_press(self, state: QuickInputState, scene_position: Any) -> bool:
         """Observe an admitted discrete press without participating in actions."""
 
@@ -1226,6 +1242,7 @@ class QuickSceneController(QObject):
         move_finished_handler: MoveFinishedHandler | None = None,
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
+        display_transfer_hover_handler: Callable[[CustomLayoutSessionItem, str, bool], bool] | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
         child_resize_begin_handler: ChildResizeBeginHandler | None = None,
@@ -1281,6 +1298,7 @@ class QuickSceneController(QObject):
             move_finished_handler=move_finished_handler,
             display_transfer_capability=display_transfer_capability,
             display_transfer_handler=display_transfer_handler,
+            display_transfer_hover_handler=display_transfer_hover_handler,
             size_reset_handler=size_reset_handler,
             content_rotation_handler=content_rotation_handler,
             presentation_item_resolver=self._custom_layout_presentation_item,
@@ -2238,6 +2256,7 @@ class QuickSceneController(QObject):
             raise RuntimeError("Quick scene admission is closed")
         self._ensure_visualizer_items().bind_render_source(bridge, identity)
         self._visualizer_bridge = bridge
+        self._set_visualizer_prepare_only(False)      # a prepared display move's target is admitted: input returns
 
     def _semantic_double_click_hit_test(self, scene_position: Any) -> bool:
         """Retained double-click admission: ordinary families, then visualizer.
@@ -2337,7 +2356,8 @@ class QuickSceneController(QObject):
         root = self._visualizer_root
         if root is None:
             return False
-        if not bool(root.property("presentationActive")) or not root.isVisible():
+        # A prepared display move's target is transparent to input (``prepareOnly``: the shell is disabled).
+        if not bool(root.property("presentationActive")) or not root.isVisible() or not root.isEnabled():
             return False
         try:
             local = root.mapFromScene(scene_position)
@@ -2438,9 +2458,19 @@ class QuickSceneController(QObject):
         if current is not None and current.render_identity is not None:
             return False
         item = self._ensure_visualizer_items()
+        # Transparent to input and drawn whatever Edit shows here, from before its first frame (1C.2).
+        self._set_visualizer_prepare_only(True)
         self._apply_visualizer_presentation_items(presentation, active=True)
         item.begin_prewarm(identity)
         return True
+
+    def _set_visualizer_prepare_only(self, prepare_only: bool) -> None:
+        """The one owner of the prepared card's input transparency (``prepareOnly`` disables the shell's handlers;
+        ``visualizer_contains_scene_position`` reads the root's enabled state)."""
+
+        root = self._visualizer_root
+        if root is not None and bool(root.property("prepareOnly")) != bool(prepare_only):
+            root.setProperty("prepareOnly", bool(prepare_only))
 
     def feed_visualizer_prewarm(self, snapshot: VisualizerRenderSnapshot | None) -> None:
         item = self._visualizer_item
@@ -2468,6 +2498,7 @@ class QuickSceneController(QObject):
         root = self._visualizer_root
         if root is not None and item.render_identity is None:
             root.setProperty("presentationActive", False)
+        self._set_visualizer_prepare_only(False)
 
     def transfer_visualizer_to(
         self,
@@ -3137,6 +3168,9 @@ class QuickSceneController(QObject):
                     str(action), "spotify_visualizer"
                 )
             )
+        transfer_hover = getattr(root, "displayTransferHoverChanged", None)
+        if transfer_hover is not None and hasattr(transfer_hover, "connect"):
+            transfer_hover.connect(self._publish_visualizer_transfer_hover)
         root.presetStepRequested.connect(self.visualizer_preset_step_requested.emit)
         camera_reset = getattr(root, "cameraResetRequested", None)
         if camera_reset is not None and hasattr(camera_reset, "connect"):

@@ -15,6 +15,8 @@ Item {
     readonly property color buttonBorder: "#c0777d86"
     readonly property color buttonInk: "#f2f4f7"
     signal actionRequested(string action)
+    // The pointer entered or left a transfer arrow: an edge the owner uses to prepare the display a click moves to.
+    signal transferHoverChanged(string action, bool hovered)
     // One event-triggered animation clock while a glyph is hovered; nothing
     // schedules or polls when a pointer is absent. Zero extra windows/threads.
     property string activeTip: ""
@@ -217,6 +219,9 @@ Item {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 propagateComposedEvents: false
+                readonly property bool preparing: containsMouse && enabled
+                onPreparingChanged: chrome.transferHoverChanged(actionKind, preparing)
+                Component.onDestruction: if (preparing) chrome.transferHoverChanged(actionKind, false)
                 onEntered: {
                     chrome.activeTip = tipText
                     chrome.tipX = parent.x + parent.width / 2

@@ -35,6 +35,7 @@ ResizeWheelHandler = Callable[[CustomLayoutSessionItem, int], bool]
 MoveFinishedHandler = Callable[[], None]
 DisplayTransferCapability = Callable[[CustomLayoutSessionItem, str], bool]
 DisplayTransferHandler = Callable[[CustomLayoutSessionItem, str], bool]
+DisplayTransferHoverHandler = Callable[[CustomLayoutSessionItem | None, str, bool], bool]
 SizeResetHandler = Callable[[CustomLayoutSessionItem], bool]
 ContentRotationHandler = Callable[[CustomLayoutSessionItem], bool]
 PresentationItemResolver = Callable[[CustomLayoutSessionItem], QQuickItem | None]
@@ -163,6 +164,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         move_finished_handler: MoveFinishedHandler | None = None,
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
+        display_transfer_hover_handler: DisplayTransferHoverHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
         presentation_item_resolver: PresentationItemResolver | None = None,
@@ -195,6 +197,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._move_finished_handler = move_finished_handler
         self._display_transfer_capability = display_transfer_capability
         self._display_transfer_handler = display_transfer_handler
+        self._display_transfer_hover_handler = display_transfer_hover_handler
         self._size_reset_handler = size_reset_handler
         self._content_rotation_handler = content_rotation_handler
         self._presentation_item_resolver = presentation_item_resolver
@@ -433,6 +436,24 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return False
         session.notify_item_changed(item)
         return True
+
+    @Slot(int, str, bool)
+    def setTransferHover(self, row: int, direction: str, hovered: bool) -> None:
+        """The pointer entered or left a transfer arrow (an edge from its hover area, 1C.2): the owner prepares the
+        display a click would move to, or releases it. A leave needs no row (the arrow may already be gone)."""
+
+        handler = self._display_transfer_hover_handler
+        if handler is None:
+            return
+        if not hovered:
+            handler(None, "", False)
+            return
+        if not 0 <= int(row) < len(self._items):
+            return
+        item = self._items[int(row)]
+        direction = str(direction or "").strip().lower()
+        if direction in {"left", "right"} and self._can_transfer(item, direction):
+            handler(item, direction, True)
 
     @Slot(int, result=bool)
     def restoreSize(self, row: int) -> bool:
@@ -894,6 +915,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._move_finished_handler = None
         self._display_transfer_capability = None
         self._display_transfer_handler = None
+        self._display_transfer_hover_handler = None
         self._size_reset_handler = None
         self._content_rotation_handler = None
         self._presentation_item_resolver = None
@@ -1071,6 +1093,7 @@ class RetainedCustomLayoutOverlay:
         move_finished_handler: MoveFinishedHandler | None = None,
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
+        display_transfer_hover_handler: DisplayTransferHoverHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
         presentation_item_resolver: PresentationItemResolver | None = None,
@@ -1101,6 +1124,7 @@ class RetainedCustomLayoutOverlay:
             move_finished_handler=move_finished_handler,
             display_transfer_capability=display_transfer_capability,
             display_transfer_handler=display_transfer_handler,
+            display_transfer_hover_handler=display_transfer_hover_handler,
             size_reset_handler=size_reset_handler,
             content_rotation_handler=content_rotation_handler,
             presentation_item_resolver=presentation_item_resolver,

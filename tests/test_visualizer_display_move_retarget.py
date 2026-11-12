@@ -330,6 +330,145 @@ def test_on_the_engine_worker_a_move_keeps_the_session_both_ways(qt_app, worker_
         stand_in.close()
 
 
+class _PrewarmTrace:
+    """What the target display's item is told: prewarms begun, released and fed, and every renderer release."""
+
+    def __init__(self, scene) -> None:
+        self.scene = scene
+        self.begun: list = []
+        self.ended = 0
+        self.fed = 0
+        self.releases: list = []
+        item = scene._ensure_visualizer_items()
+        for name, record in (("begin_prewarm", self.begun.append), ("end_prewarm", None), ("feed_prewarm", None)):
+            method = getattr(item, name)
+
+            def spy(*args, _method=method, _name=name, _record=record, **kwargs):
+                if _name == "begin_prewarm":
+                    _record(args[0])
+                elif _name == "end_prewarm" and item.prewarming:
+                    self.ended += 1
+                elif _name == "feed_prewarm" and args[0] is not None:
+                    self.fed += 1
+                return _method(*args, **kwargs)
+            setattr(item, name, spy)
+        retirement = item._retirement
+        release = retirement.request_inactive_release
+
+        def releasing(*args, **kwargs):
+            self.releases.append(kwargs.get("active_mode_id"))
+            return release(*args, **kwargs)
+        retirement.request_inactive_release = releasing
+
+    @property
+    def root(self):
+        return self.scene._visualizer_root
+
+
+def _visualizer_row(scene) -> int:
+    model = scene.custom_layout_overlay.model
+    return next(index for index, item in enumerate(model._items) if item.model_identity == "spotify_visualizer")
+
+
+def test_edits_hop_swaps_into_the_display_its_arrow_prepared(qt_app, quiet_ticks):
+    """Edit's display hop (1C.2): hovering the transfer arrow prepares the target's renderer on the target (the same
+    prewarm a glyph move runs), and the hop's retained transfer adopts that prepared item: the identity it was
+    prepared for becomes its render source and nothing it prepared is released in between, so the target's first
+    visible frame draws with the renderer it prepared (the GPU side: ``test_visualizer_display_move_gpu``). Negative
+    control (pre-change): the arrow prepared nothing, the target item first heard of the identity at the hop."""
+    rig = _Rig(qt_app, QRect(1280, 0, 1280, 720))
+    try:
+        assert rig.publish(2.0)
+        target_scene = rig.units[1].runtime.scene_controller
+        trace = _PrewarmTrace(target_scene)
+        assert rig.layout.start() is True
+        source_scene = rig.units[0].runtime.scene_controller
+        model, row = source_scene.custom_layout_overlay.model, _visualizer_row(source_scene)
+        identity = rig.owner.render_identity
+        model.setTransferHover(row, "right", True)
+        assert trace.begun == [identity] and target_scene.visualizer_item.prewarming
+        assert rig.owner.prepared_display is rig.units[1].runtime
+        assert trace.root.property("prepareOnly") is True
+        rig.publish()
+        rig.publish()
+        assert trace.fed >= 2                      # every publication feeds the target while it prepares
+        releases_before_hop = list(trace.releases)
+        assert model.transferItem(row, "right") is True
+        assert rig.current["unit"] is rig.units[1] and rig.reloads == []
+        item = target_scene.visualizer_item
+        assert item.render_identity == identity and not item.prewarming
+        assert trace.ended == 0                    # adopted, never released
+        # The adoption's own release keeps the prepared mode; nothing released the prepared renderer.
+        assert None not in trace.releases[len(releases_before_hop):]
+        assert rig.owner.prepared_display is None
+        assert trace.root.property("prepareOnly") is False
+        model.setTransferHover(row, "right", False)    # the arrow's leave after the hop releases nothing
+        assert trace.ended == 0
+        rig.layout.cancel()
+    finally:
+        rig.close()
+
+
+def test_an_abandoned_arrow_hover_releases_the_prepared_display_exactly_once(qt_app, quiet_ticks):
+    """Leaving the arrow without clicking ends the target's preparation once (its renderer released, its card no
+    longer drawn); a repeated leave and Edit's end release nothing more. Negative control: nothing was prepared."""
+    rig = _Rig(qt_app, QRect(1280, 0, 1280, 720))
+    try:
+        assert rig.publish(2.0)
+        target_scene = rig.units[1].runtime.scene_controller
+        trace = _PrewarmTrace(target_scene)
+        assert rig.layout.start() is True
+        source_scene = rig.units[0].runtime.scene_controller
+        model, row = source_scene.custom_layout_overlay.model, _visualizer_row(source_scene)
+        model.setTransferHover(row, "right", True)
+        model.setTransferHover(row, "right", True)     # a repeated entry edge prepares nothing twice
+        assert len(trace.begun) == 1
+        releases = len(trace.releases)
+        model.setTransferHover(row, "right", False)
+        assert trace.ended == 1 and trace.releases[releases:] == [None]
+        assert not target_scene.visualizer_item.prewarming
+        assert trace.root.property("presentationActive") is False and trace.root.property("prepareOnly") is False
+        model.setTransferHover(row, "right", False)
+        rig.layout.cancel()
+        assert trace.ended == 1 and trace.releases[releases:] == [None]
+        assert rig.current["unit"] is rig.units[0] and rig.owner.prepared_display is None
+    finally:
+        rig.close()
+
+
+def test_a_drag_nearing_the_seam_prepares_the_neighbour_and_turning_back_releases_it(qt_app, quiet_ticks):
+    """A Visualizer drag's own move samples (no poll): within one card width of the seam the neighbour prepares,
+    past one and a half it is released (once), and a drag that ends near the seam without crossing releases it."""
+    rig = _Rig(qt_app, QRect(1280, 0, 1280, 720))
+    try:
+        assert rig.publish(2.0)
+        target_scene = rig.units[1].runtime.scene_controller
+        trace = _PrewarmTrace(target_scene)
+        assert rig.layout.start() is True
+        item = next(entry for entry in rig.layout.session.items() if entry.model_identity == "spotify_visualizer")
+        width, height = item.current_global_rect.width(), item.current_global_rect.height()
+
+        def drag_to(x: int) -> None:
+            proposed = QRect(x, 100, width, height)
+            rig.layout.resolve_move(item, proposed, proposed.center())
+
+        drag_to(100)                                    # far from the seam: nothing
+        assert trace.begun == []
+        drag_to(1280 - width - width // 2)              # within one card width of the seam
+        assert len(trace.begun) == 1 and rig.owner.prepared_display is rig.units[1].runtime
+        drag_to(1280 - width - width)                   # between the two distances: kept
+        assert trace.ended == 0
+        drag_to(1280 - width - 2 * width)               # turned back past one and a half widths
+        assert trace.ended == 1 and rig.owner.prepared_display is None
+        drag_to(1280 - width - 10)
+        assert len(trace.begun) == 2
+        rig.layout.clear_move_guides()                  # the drag ends without crossing
+        assert trace.ended == 2 and rig.current["unit"] is rig.units[0]
+        rig.layout.cancel()
+    finally:
+        rig.close()
+
+
 def _coordinator(rig: _Rig, covers: list, writes: list) -> ExpandedDisplayCoordinator:
     requested = {"value": False}
 

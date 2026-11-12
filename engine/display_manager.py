@@ -2428,6 +2428,11 @@ class DisplayManager(QObject):
                 self._route_hover_edit_glyph, str(action), str(widget_id)
             )
         )
+        runtime.scene_controller.visualizer_transfer_hover_changed.connect(
+            lambda action, hovered: live_unit_route(
+                self._route_hover_transfer_preparation, str(action), bool(hovered)
+            )
+        )
         runtime.scene_controller.visualizer_expand_requested.connect(
             lambda expand: live_unit_route(
                 lambda display, value: self._route_quick_visualizer_input(
@@ -2609,6 +2614,23 @@ class DisplayManager(QObject):
 
         return not is_global_custom_layout_mode_selected(widgets)
 
+    def _route_hover_transfer_preparation(self, source: QuickDisplayUnit, action: str, hovered: bool) -> bool:
+        """The hover transfer arrow's edges (1C.2): entering prepares the display its click moves the Visualizer to,
+        leaving releases it. While its own click runs (the Edit session it opens retires the hover chrome, whose leave
+        then arrives), the preparation is kept for the hop that adopts it."""
+        owner = self._quick_custom_layout_owner
+        if owner is None or self._retired:
+            return False
+        if not hovered:
+            if getattr(self, "_hover_transfer_click_active", False):
+                return False
+            return owner.release_visualizer_display_preparation()
+        if (source.is_retired or source not in self.displays or source is not self._quick_visualizer_unit
+                or _takeover_blocks_layout(self) or owner.is_active):
+            return False
+        direction = action.removeprefix("transfer_")
+        return owner.prepare_visualizer_display_transfer(source, direction)
+
     def _route_hover_edit_glyph(
         self, source: QuickDisplayUnit, action: str, widget_id: str
     ) -> bool:
@@ -2702,6 +2724,24 @@ class DisplayManager(QObject):
             options = owner.visualizer_display_transfer_options(source)
             if not options[0 if transfer_direction == "left" else 1]:
                 return False
+            # The click's own Edit session retires the hover chrome; the arrow's leave must not release the display it
+            # prepared before the hop adopts it (1C.2). A click that does not move releases it.
+            self._hover_transfer_click_active = True
+            try:
+                moved = self._route_hover_edit_action(source, action, widget_id, transfer_direction)
+            finally:
+                self._hover_transfer_click_active = False
+            if not moved:
+                owner.release_visualizer_display_preparation()
+            return moved
+        return self._route_hover_edit_action(source, action, widget_id, None)
+
+    def _route_hover_edit_action(
+        self, source: QuickDisplayUnit, action: str, widget_id: str, transfer_direction: str | None
+    ) -> bool:
+        """``_route_hover_edit_glyph``'s Edit part: open (or join) the one Edit session and run the model action."""
+        owner = self._quick_custom_layout_owner
+        scene = source.runtime.scene_controller
         # Edit already open on this display (a request from a display it does not edit opens a new session there).
         was_editing = _edit_open_on(self, source)
         if not self._start_quick_custom_layout_session(source):

@@ -1353,6 +1353,12 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    // The hover's edges prepare the display a click moves to (1C.2); never polled.
+                    readonly property bool preparing: containsMouse && enabled && transferLeftControl.visible
+                    onPreparingChanged: if (customLayoutOverlay.sessionModel)
+                        customLayoutOverlay.sessionModel.setTransferHover(editFrame.index, "left", preparing)
+                    Component.onDestruction: if (preparing && customLayoutOverlay.sessionModel)
+                        customLayoutOverlay.sessionModel.setTransferHover(editFrame.index, "left", false)
                     onClicked: customLayoutOverlay.sessionModel.transferItem(editFrame.index, "left")
                 }
             }
@@ -1407,6 +1413,11 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    readonly property bool preparing: containsMouse && enabled && transferRightControl.visible
+                    onPreparingChanged: if (customLayoutOverlay.sessionModel)
+                        customLayoutOverlay.sessionModel.setTransferHover(editFrame.index, "right", preparing)
+                    Component.onDestruction: if (preparing && customLayoutOverlay.sessionModel)
+                        customLayoutOverlay.sessionModel.setTransferHover(editFrame.index, "right", false)
                     onClicked: customLayoutOverlay.sessionModel.transferItem(editFrame.index, "right")
                 }
             }

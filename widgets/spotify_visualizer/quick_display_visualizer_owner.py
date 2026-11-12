@@ -297,6 +297,9 @@ class QuickDisplayVisualizerOwner:
         # display-wide ones, reach the controller, so the ordinary geometry round-trips untouched).
         self._expanded_display = False
         self._takeover: _TakeoverFade | None = None
+        # A neighbouring display prepared ahead of Edit's hop or a hover transfer arrow (1C.2): (runtime, scene), from
+        # the edge that begins it (``prepare_display``) to the edge that ends it or the hop that adopts it.
+        self._neighbour_prewarm: tuple[Any, Any] | None = None
         self._expanded_source: Any = None
         # The full-display overlays (plan 01 §G, M3b) exist only while the display-wide card is drawn and the displays
         # are on; the last value projected to the scene, so it is written at its edges only.
@@ -579,6 +582,10 @@ class QuickDisplayVisualizerOwner:
             raise RuntimeError(
                 "fresh visualizer publication has no retained presentation item"
             )
+        neighbour = self._neighbour_prewarm
+        if neighbour is not None:
+            # A prepared neighbour (1C.2) draws the snapshot just published, so its render thread keeps preparing.
+            neighbour[1].feed_visualizer_prewarm(self._controller.render_bridge.peek())
 
     def set_playing(
         self,
@@ -698,7 +705,74 @@ class QuickDisplayVisualizerOwner:
             )
             old_presentation_runtime.scene_controller.set_presentation_image_listener(self._refresh_backdrop)
             raise
+        neighbour = self._neighbour_prewarm
+        if neighbour is not None:
+            # The hop that moved here adopted a neighbour prepared on this display (its renderer kept, nothing to
+            # end); one prepared elsewhere is released.
+            self._neighbour_prewarm = None
+            if neighbour[1] is not runtime.scene_controller:
+                self._end_prewarm_on(neighbour[1])
         return True
+
+    def prepare_display(self, target_runtime: Any) -> bool:
+        """Prepare ``target_runtime``'s display for a hop that may follow (1C.2): Edit's display hop and the hover
+        transfer arrows move the live view at full opacity, so the target's renderer is built ahead of the hop on the
+        target's own render thread, exactly as a glyph move's warm (``begin_visualizer_prewarm``), until
+        ``release_prepared_display`` or the hop (which adopts it). Called at an edge only: the pointer entering a
+        transfer arrow, a drag's card nearing the seam. One neighbour at a time; a second replaces the first. False
+        (nothing done) when not running, during a display move (it warms its own target), or for this display."""
+
+        if self._retired or self._sync is None or not self._started:
+            return False
+        if target_runtime is None or target_runtime is self._presentation_runtime:
+            return False
+        if self.display_move_active:
+            return False
+        neighbour = self._neighbour_prewarm
+        if neighbour is not None:
+            if neighbour[0] is target_runtime:
+                return True
+            self.release_prepared_display()
+        identity = self._render_identity
+        scene = getattr(target_runtime, "scene_controller", None)
+        begin = getattr(scene, "begin_visualizer_prewarm", None)
+        if identity is None or not callable(begin):
+            return False
+        record = self._move_target_presentation(target_runtime, False)
+        if record is None or not begin(identity, record):
+            return False
+        self._neighbour_prewarm = (target_runtime, scene)
+        scene.feed_visualizer_prewarm(self._controller.render_bridge.peek())
+        logger.info("[SPOTIFY_VIS] Neighbouring display prepared screen=%s -> %s",
+                    getattr(self._presentation_runtime, "screen_index", "?"),
+                    getattr(target_runtime, "screen_index", "?"))
+        return True
+
+    def release_prepared_display(self, target_runtime: Any = None) -> bool:
+        """End the neighbour's preparation (the pointer left the arrow, the drag turned back or ended): its renderer is
+        released once. ``target_runtime``: only when that display is the prepared one. False when nothing was."""
+
+        neighbour = self._neighbour_prewarm
+        if neighbour is None or (target_runtime is not None and neighbour[0] is not target_runtime):
+            return False
+        self._neighbour_prewarm = None
+        runtime = self._presentation_runtime
+        if runtime is None or neighbour[1] is not runtime.scene_controller:
+            self._end_prewarm_on(neighbour[1])
+        return True
+
+    @property
+    def prepared_display(self) -> Any:
+        """The runtime whose display is prepared ahead of a hop, or None."""
+        neighbour = self._neighbour_prewarm
+        return None if neighbour is None else neighbour[0]
+
+    @staticmethod
+    def _end_prewarm_on(scene: Any) -> None:
+        try:
+            scene.end_visualizer_prewarm()
+        except RuntimeError:
+            pass                                      # a scene already retiring with its display
 
     def set_authored_outer_origin(self, x: float, y: float) -> bool:
         """Set ordinary/non-CUSTOM presentation origin without adding a cadence.
@@ -815,6 +889,11 @@ class QuickDisplayVisualizerOwner:
             return False
         if target_runtime is None or target_runtime is self._presentation_runtime:
             return False
+        if self._neighbour_prewarm is not None:
+            if self._neighbour_prewarm[0] is target_runtime:
+                self._neighbour_prewarm = None        # the move's warm below continues what is prepared there
+            else:
+                self.release_prepared_display()
         self._abandon_display_move()
         now = float(self._transition_clock())
         takeover = _TakeoverFade(target=bool(end_expanded), source=self._expanded_display, started_at=now,
@@ -872,11 +951,9 @@ class QuickDisplayVisualizerOwner:
         takeover.move = None
         scene = move.prewarm_scene
         move.prewarm_scene = None
-        if scene is not None and scene is not self._presentation_runtime.scene_controller:
-            try:
-                scene.end_visualizer_prewarm()
-            except RuntimeError:
-                pass                                  # a scene already retiring with its display
+        runtime = self._presentation_runtime
+        if scene is not None and (runtime is None or scene is not runtime.scene_controller):
+            self._end_prewarm_on(scene)
 
     def _move_fade(self, takeover: _TakeoverFade, move: _DisplayMove) -> float:
         """Sample one display move's fade-through (``move_display``) at a publication edge."""
@@ -2758,6 +2835,10 @@ class QuickDisplayVisualizerOwner:
             # owner on the worker normally has no logical runtime to join; one in process has no link).
             link.retire()
         self._release_frame_completion()          # its reader is closed (or there was none): nothing in flight
+        try:
+            self.release_prepared_display()        # a neighbour prepared ahead of a hop (1C.2)
+        except Exception:
+            logger.exception("[SPOTIFY_VIS] A prepared neighbour could not be released at retirement")
         joined = bool(self._controller.stop_logical_runtime())
         if not joined:
             return False

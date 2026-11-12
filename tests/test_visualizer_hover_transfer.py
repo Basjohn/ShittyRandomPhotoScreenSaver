@@ -44,8 +44,11 @@ def _manager_for_click(*, options=(True, True), moved=True, existing_edit=False)
     # DisplayManager's glyph route reads and the setter double refuses as an instance-only name.
     source = display_unit_double(display_runtime_double(scene_controller=SimpleNamespace(
         _input_state=state, custom_layout_overlay=SimpleNamespace(model=model))))
-    owner = SimpleNamespace(is_editing=existing_edit, session=session, _bindings={
-        "source": SimpleNamespace(identity="source", unit=source)}, visualizer_display_transfer_options=lambda _: options)
+    owner = SimpleNamespace(is_editing=existing_edit, is_active=existing_edit, session=session, _bindings={
+        "source": SimpleNamespace(identity="source", unit=source)}, visualizer_display_transfer_options=lambda _: options,
+        prepared=[], released=[])
+    owner.prepare_visualizer_display_transfer = lambda unit, direction: owner.prepared.append(direction) or True
+    owner.release_visualizer_display_preparation = lambda: owner.released.append(True) or True
     manager = bare_display_manager(_retired=False, displays=[source], _quick_visualizer_unit=source,
                                    _quick_custom_layout_owner=owner,
                                    _start_quick_custom_layout_session=lambda _entry: calls.append("start") or True,
@@ -58,6 +61,34 @@ def test_transfer_click_reuses_session_and_cancels_only_its_failed_new_edit(move
     manager, source, calls = _manager_for_click(moved=moved, existing_edit=existing_edit)
     assert DisplayManager._route_hover_edit_glyph(manager, source, "transfer_right", "spotify_visualizer") == moved
     assert calls == ["start", ("transfer", 0, "right")] + (["cancel"] if not moved and not existing_edit else [])
+    # A click that moved leaves the prepared display to the hop that adopted it; one that did not releases it once.
+    assert manager._quick_custom_layout_owner.released == ([] if moved else [True])
+
+
+def test_the_hover_arrows_edges_prepare_and_release_and_the_clicks_own_leave_is_held():
+    """1C.2: entering a hover transfer arrow prepares the display its click moves to, leaving releases it; the leave
+    the click's own Edit session causes (it retires the hover chrome) arrives while the click runs and is held, so
+    the hop adopts what was prepared. Negative control (pre-change): no route existed and the click's leave would
+    have released the prepared display before the hop."""
+    manager, source, calls = _manager_for_click()
+    owner = manager._quick_custom_layout_owner
+    assert DisplayManager._route_hover_transfer_preparation(manager, source, "transfer_right", True)
+    assert owner.prepared == ["right"]
+    assert DisplayManager._route_hover_transfer_preparation(manager, source, "transfer_right", False)
+    assert owner.released == [True]
+    model = source.runtime.scene_controller.custom_layout_overlay.model
+    held = []
+
+    def transfer(row, direction):
+        held.append(DisplayManager._route_hover_transfer_preparation(manager, source, "transfer_" + direction, False))
+        return True
+    model.transferItem = transfer
+    assert DisplayManager._route_hover_edit_glyph(manager, source, "transfer_right", "spotify_visualizer")
+    assert held == [False] and owner.released == [True]
+    # Not the Visualizer's display, or Edit already open: an entry prepares nothing.
+    owner.is_active = True
+    assert not DisplayManager._route_hover_transfer_preparation(manager, source, "transfer_left", True)
+    assert owner.prepared == ["right"]
 
 
 def test_transfer_exception_cancels_new_edit_and_remains_loud():
