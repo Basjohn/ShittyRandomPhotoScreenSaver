@@ -1721,6 +1721,13 @@ class SettingsDialog(QDialog):
         self._closing = True
         self._background_tab_queue.clear()
         self._background_build_scheduled = False
+        # Guided Setup's unsaved changes are resolved first: a source added there exists only once it is kept, so
+        # the no-sources prompt below must not judge the store before the user has chosen Keep or Discard.
+        panel = self._guided_setup_panel
+        if panel is not None and panel.has_unsaved_changes() and not panel.request_close():
+            self._closing = False
+            event.ignore()
+            return
         # Check if user has configured any image sources
         if not self._has_image_sources():
             if not self.isVisible():
