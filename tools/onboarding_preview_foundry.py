@@ -1153,15 +1153,42 @@ class _PreviewOnsets:
     def get_latest_authoritative_frame(self) -> tuple[float, int, int]:
         return 1.0, 1, 1
 _RENDERED_PREVIEW_SIZE: Final = (684, 418)
-# The curated preset a rendered preview shows, by its stable file-name identity (``preset_<n>_<name>.json``; the
-# first preset unless named), so a reindex or a new preset never silently swaps the look: Extruded Bubble's Ember
-# Drift reads at preview size, its first preset's bead streams do not (operator 2026-10-18).
-_PREVIEW_PRESETS: Final = {"extruded_bubble": "ember_drift"}
+# The generator seed of every rendered preview (Bubble's spawn draws; the other modes draw nothing at random), so a
+# rebuild renders the same frame.
+_PREVIEW_SEED: Final = 0x5B5B
 
 
 # ``--visualizer-preset MODE=N``: the preset a run renders, by the number Settings shows (1-based). It takes
-# precedence over ``_PREVIEW_PRESETS`` for that run only; nothing about it is stored.
+# precedence over the recorded runs for that run only; nothing about it is stored.
 _PRESET_NUMBERS: dict[str, int] = {}
+
+# The operator's chosen preview runs, recorded beside the manifest as data (never in code): per mode, the options
+# its committed preview was rendered with (``visualizer_mode``, ``visualizer_preset`` as the Settings number,
+# ``photo``). A rebuild renders those modes with them, and the sheet cut-outs leave them alone.
+PREVIEW_RUNS_FILE: Final = "preview_runs.json"
+
+
+def load_preview_runs(source: Path = DEFAULT_OUTPUT) -> dict[str, dict[str, object]]:
+    """The recorded Visualizer preview runs, by mode (empty when none are recorded)."""
+    path = Path(source) / PREVIEW_RUNS_FILE
+    if not path.is_file():
+        return {}
+    runs: dict[str, dict[str, object]] = {}
+    for run in json.loads(path.read_text(encoding="utf-8")).get("visualizer_previews", ()):
+        mode = str(run["visualizer_mode"])
+        runs[mode] = dict(run)
+    return runs
+
+
+def preview_run_arguments(run: dict[str, object]) -> list[str]:
+    """One recorded run as the command-line options it stands for (``--widgets-only --family visualizers`` runs)."""
+    mode = str(run["visualizer_mode"])
+    arguments = ["--visualizer-mode", mode]
+    if run.get("visualizer_preset") is not None:
+        arguments += ["--visualizer-preset", f"{mode}={int(run['visualizer_preset'])}"]
+    if run.get("photo"):
+        arguments += ["--photo", str(run["photo"])]
+    return arguments
 
 
 def parse_preset_numbers(values: list[str] | None) -> dict[str, int]:
@@ -1176,7 +1203,8 @@ def parse_preset_numbers(values: list[str] | None) -> dict[str, int]:
 
 
 def _preview_preset_index(mode: str) -> int:
-    """Runtime preset position of the operator's chosen preview look; loud when that preset is gone."""
+    """Runtime preset position a preview renders: this run's ``--visualizer-preset`` (loud past the catalogue),
+    else the recorded run's number (quietly the mode's default when that preset is gone), else the default."""
     from core.settings import visualizer_presets as vp
 
     number = _PRESET_NUMBERS.get(mode)
@@ -1184,23 +1212,19 @@ def _preview_preset_index(mode: str) -> int:
         if number - 1 >= vp.get_custom_preset_index(mode):
             raise LookupError(f"{mode} has no preset {number} in the curated catalogue")
         return number - 1
-    wanted = _PREVIEW_PRESETS.get(mode)
-    if wanted is None:
-        return 0
+    recorded = load_preview_runs().get(mode, {}).get("visualizer_preset")
+    if recorded is not None and 0 < int(recorded) <= vp.get_custom_preset_index(mode):
+        return int(recorded) - 1
+    return 0
 
-    found: list[str] = []
-    for index in range(vp.get_custom_preset_index(mode)):
-        path = vp.get_preset_file_path(mode, index)
-        if path is None:
-            continue
-        suffix = (vp._infer_suffix_from_name(path.stem) or "").replace(" ", "_").lower()
-        if suffix == wanted.lower():
-            return index
-        found.append(path.name)
-    raise LookupError(
-        f"onboarding preview preset {wanted!r} for {mode} is not in the curated catalogue ({', '.join(found)}); "
-        "update _PREVIEW_PRESETS to the operator's chosen preset"
-    )
+
+def _recorded_photo(mode: str) -> tuple[bool, Path | None]:
+    """(recorded, path): whether the recorded run puts a photo behind ``mode``, and the file when it exists."""
+    photo = load_preview_runs().get(mode, {}).get("photo")
+    if not photo:
+        return False, None
+    path = Path(str(photo))
+    return True, (path if path.is_file() else None)
 _GLOW_ON_BACKDROP: Final = frozenset({"oscilloscope"})
 _PREVIEW_BACKDROP: Final = (24, 26, 34)       # the gradient backdrop's middle shade
 
@@ -1219,15 +1243,33 @@ def photo_card_backdrop(photo: Path, size: tuple[int, int]) -> "Image.Image":
     return backdrop
 
 
+def default_rendered_modes() -> tuple[str, ...]:
+    """The modes a run without ``--visualizer-mode`` renders: the rendered set plus every recorded run."""
+    recorded = tuple(mode for mode in load_preview_runs() if mode not in _RENDERED_VISUALIZER_PREVIEWS)
+    return _RENDERED_VISUALIZER_PREVIEWS + recorded
+
+
 def _build_rendered_visualizer_previews(scene: "_HiddenQuickScene", art: Path, output: Path, *,
-                                        modes: tuple[str, ...] = _RENDERED_VISUALIZER_PREVIEWS,
+                                        modes: tuple[str, ...] | None = None,
                                         photo: Path | None = None) -> None:
     from PIL import Image
 
     from tools import onboarding_sheet_previews
 
     width, height = _RENDERED_PREVIEW_SIZE
-    for mode in modes:
+    run_photo = photo
+    for mode in modes or default_rendered_modes():
+        photo = run_photo
+        if photo is None:
+            recorded, photo = _recorded_photo(mode)
+            if recorded and photo is None:
+                # The recorded wallpaper is not on this machine: keep the committed preview rather than render
+                # another look over it.
+                name = f"visualizer_{mode}.png"
+                print(f"onboarding preview: {mode}'s recorded photo is missing; keeping the committed {name}")
+                if not (output / name).is_file() and (DEFAULT_OUTPUT / name).is_file():
+                    shutil.copy2(DEFAULT_OUTPUT / name, output / name)
+                continue
         bars_path = art.parent / f"{mode}_bars.png"
         if mode in _GLOW_ON_BACKDROP:
             if photo is not None:
@@ -1281,8 +1323,7 @@ def _build_widget_previews(output: Path, scratch: Path, *,
             width, height = _frame_preview(image, output / name)
             rows.append({"family_id": family_id, "path": name, "size": [width, height]})
         if not families or "visualizers" in families:
-            _build_rendered_visualizer_previews(scene, art, output, photo=photo,
-                                                modes=visualizer_modes or _RENDERED_VISUALIZER_PREVIEWS)
+            _build_rendered_visualizer_previews(scene, art, output, photo=photo, modes=visualizer_modes)
     finally:
         scene.close()
     return rows
@@ -1360,6 +1401,7 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
         # The audio-free replay engine takes the technical settings the real engine would.
         engine_factory=ReplayBeatEngine,
     )
+    controller.seed_mode_generators(_PREVIEW_SEED)
     state = controller.logical_tick_state
     install_default_logical_tick_state(state, bar_count=controller.bar_count)
     install_default_presentation_state(controller.presentation_state)
@@ -1781,8 +1823,11 @@ def _apply_operator_sheet(staging: Path) -> None:
     if onboarding_sheet_previews.VISUALIZER_SHEET.is_file():
         onboarding_sheet_previews.build_visualizers(onboarding_sheet_previews.VISUALIZER_SHEET, staging)
     else:
-        # Without the operator sheet, keep the committed mode previews.
+        # Without the operator sheet, keep the committed mode previews, except the recorded runs just rendered.
+        recorded = {f"visualizer_{mode}.png" for mode in load_preview_runs()}
         for existing in DEFAULT_OUTPUT.glob("visualizer_*.png"):
+            if existing.name in recorded and (staging / existing.name).is_file():
+                continue
             shutil.copy2(existing, staging / existing.name)
 
 

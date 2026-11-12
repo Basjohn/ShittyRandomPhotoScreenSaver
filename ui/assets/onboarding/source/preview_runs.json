@@ -1,0 +1,20 @@
+{
+  "about": "The operator's chosen Visualizer preview runs (plan 1D.1, 12 Nov 2026): tools/onboarding_preview_foundry.py renders each listed mode with these options on every rebuild (visualizer_preset is the 1-based number Settings shows), and tools/onboarding_sheet_previews.py leaves them alone. Edit this data to choose another look; not packed into the app.",
+  "visualizer_previews": [
+    {
+      "visualizer_mode": "extruded_bubble",
+      "visualizer_preset": 9,
+      "photo": "C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET/black_hole_on_earth_by_mp40overlord-d8aegq2.jpg"
+    },
+    {
+      "visualizer_mode": "bubble",
+      "visualizer_preset": 2,
+      "photo": "C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET/black_hole_on_earth_by_mp40overlord-d8aegq2.jpg"
+    },
+    {
+      "visualizer_mode": "extruded_spectrum",
+      "visualizer_preset": 1,
+      "photo": "C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET/black_hole_on_earth_by_mp40overlord-d8aegq2.jpg"
+    }
+  ]
+}

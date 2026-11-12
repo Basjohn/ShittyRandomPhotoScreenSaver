@@ -383,6 +383,52 @@ def test_a_watch_that_saw_no_repaint_reports_none_negative_control(probe, caplog
     watch.disarm()
 
 
+def test_a_reveal_of_a_settings_that_is_not_shown_arms_no_record():
+    """1D.0 flake: each Studio closed over a never-shown Settings left a 60 s record armed, whose expiry line then
+    landed in a later session's drag. Nothing can reach a Settings that is not shown, so nothing is armed."""
+    from PySide6.QtWidgets import QDialog
+    from ui.studio.presence import WindowPresence
+    dialog = QDialog()                                                 # never shown
+    presence = WindowPresence(dialog)
+    presence.conceal()
+    presence.reveal()
+    assert presence.watch is None
+    dialog.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.mark.parametrize("ending", ["hide", "close"])
+def test_the_record_ends_when_settings_is_hidden_or_closed(probe, caplog, ending):
+    """A Settings closed (or hidden) after the reveal can receive no input: its record ends there, with one line,
+    instead of lingering until it expires in unrelated work."""
+    import logging
+    window = probe()
+    with caplog.at_level(logging.INFO):
+        controller, surface = _studio_session(window)
+        _leave(controller, surface, "close()")
+        watch = controller.presence.watch
+        assert watch is not None and watch.active
+        getattr(window.dialog, ending)()
+        _pump()
+        assert not watch.active
+    assert "record ended: Settings" in watch.records[-1]
+
+
+def test_concealing_settings_again_ends_the_last_reveals_record(probe):
+    """A second Studio opened within the record's limit: the first reveal's record ends at the conceal, never left
+    filtering beside the next one."""
+    window = probe()
+    controller, surface = _studio_session(window)
+    _leave(controller, surface, "close()")
+    first = controller.presence.watch
+    assert first is not None and first.active
+    controller.presence.conceal()
+    assert not first.active and controller.presence.watch is None
+    controller.presence.reveal()
+    assert controller.presence.watch is not first and controller.presence.watch.active
+    controller.presence.watch.disarm()
+
+
 def _reveal_without_pumping(window):
     """Conceal natively, then reveal; the Paint count is read before any event processing after the reveal."""
     from ui.studio.presence import WindowPresence

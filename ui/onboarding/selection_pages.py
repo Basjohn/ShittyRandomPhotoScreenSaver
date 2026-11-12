@@ -173,6 +173,10 @@ class WidgetsPage(Page):
         self.refresh()
 
 
+VISUALIZER_STATUS_CHOOSE_MODE = "Choose at least one mode."
+VISUALIZER_STATUS_FAMILY_OFF = "Enable Media and Visualizers in the Widgets step to use the Visualizer."
+
+
 class VisualizerPage(Page):
     """A narrow mode list with the selected mode's real preview beside it."""
 
@@ -215,7 +219,7 @@ class VisualizerPage(Page):
         with QSignalBlocker(self.enabled): self.enabled.setChecked(bool(section["enabled"]))
         effective = is_widget_family_effective(widgets, "visualizers")
         self.enabled.setEnabled(effective)
-        self.status.setText("Choose at least one mode." if effective else "Enable Media and Visualizers in the Widgets step to use the Visualizer.")
+        self._update_status(effective, active)
         selected = self.rows.currentRow()
         with QSignalBlocker(self.rows):
             self.rows.clear()
@@ -233,6 +237,13 @@ class VisualizerPage(Page):
         widest = max((self.rows.itemWidget(self.rows.item(i)).sizeHint().width() for i in range(self.rows.count())), default=200)
         self.rows.setFixedWidth(min(360, max(220, widest + 2 * self.rows.frameWidth() + 44)))
         self._show(self.rows.currentItem(), None)
+
+    def _update_status(self, effective, active):
+        """The status line asks for a mode only while none is chosen; with one or more it is empty."""
+        if not effective:
+            self.status.setText(VISUALIZER_STATUS_FAMILY_OFF)
+        else:
+            self.status.setText("" if active else VISUALIZER_STATUS_CHOOSE_MODE)
 
     def _show(self, item, _previous):
         if item is None:
@@ -261,6 +272,8 @@ class VisualizerPage(Page):
             with QSignalBlocker(self.rows): item.setCheckState(Qt.CheckState.Checked)
             self.status.setText("Keep at least one Visualizer mode selected."); return
         self.settings.set("widgets.spotify_visualizer.mode_activation", activation)
+        self._update_status(is_widget_family_effective(self.settings.get("widgets"), "visualizers"),
+                            resolve_admissible_enabled_modes(activation))
 
 
 TRANSITION_COPY = {
