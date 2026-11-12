@@ -136,7 +136,19 @@ def retire(worktree: Path) -> int:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, destination)
             copied += 1
-    print(f"{worktree.name}: evidence and WebPs copied {copied} file(s), {kept} already present")
+    # The agent's handover folder (its journal and anything it parked there, e.g. a work-in-progress patch) is kept
+    # under this checkout's .artifacts/handover/retired/<worktree>/, so a parked change is never lost with it.
+    handover = worktree / JOURNAL.parent
+    if handover.is_dir():
+        target = ROOT / JOURNAL.parent / "retired" / worktree.name
+        for path in sorted(handover.rglob("*")):
+            if path.is_file():
+                destination = target / path.relative_to(handover)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if not destination.exists():
+                    shutil.copy2(path, destination)
+                    copied += 1
+    print(f"{worktree.name}: evidence, WebPs and handover files copied {copied} file(s), {kept} already present")
     for name in differing[:20]:
         print(f"   DIFFERS (kept this checkout's): {name}")
     if differing:
