@@ -709,14 +709,24 @@ def test_settings_going_away_closes_the_studio(qt_app, dialog_tab, no_gl_checks)
 
 
 def test_restoration_check_detects_a_concealed_settings_negative_control(qt_app, dialog_tab, no_gl_checks):
-    """Negative control: a retirement that skips the reveal (the mode-switch path) is caught by the check."""
+    """Negative control: a retirement that skips the reveal (the mode-switch path) is caught by the check.
+
+    It fakes the end of ``close_from`` by hand, so it also ends it as ``close_from`` does (``closed``): without that
+    the Settings link never unsubscribes the Studio's theme listener and it stays on every later theme change of the
+    process (seen in a long run before tests/test_waveform_studio_theme.py)."""
+    import ui.settings_theme_runtime as theme_runtime
     dialog, tab = dialog_tab()
+    listeners_before = list(theme_runtime._listeners)
     controller, _surface = _open_presented(tab)
     controller._retire(reveal=False)
     controller.state = "closed"
-    with pytest.raises(AssertionError, match="still concealed"):
-        _assert_settings_restored(controller, dialog)
-    controller.presence.reveal()
+    try:
+        with pytest.raises(AssertionError, match="still concealed"):
+            _assert_settings_restored(controller, dialog)
+    finally:
+        controller.presence.reveal()
+        controller.closed.emit()
+    assert theme_runtime._listeners == listeners_before
 
 
 # ------------------------------------------------------------------ header preset dropdown

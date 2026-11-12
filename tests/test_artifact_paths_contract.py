@@ -412,6 +412,39 @@ def test_the_layout_is_the_running_checkouts_own_even_in_a_linked_worktree(tmp_p
     assert artifact_paths.ARTIFACTS_ROOT == ROOT / ".artifacts"
 
 
+def test_a_script_outside_the_repository_takes_the_root_given_to_it_not_its_own_location(tmp_path):
+    """A kept evidence script finds the repository through ``repository_root(given)``: the root itself or any folder
+    in it, walked up lexically, so a folder reached through an evidence junction on another drive still names the
+    repository. Negative control: the script's own resolved location (``Path(__file__).resolve().parents[n]``) lands
+    on the junction's target drive, outside the repository."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (repo / "tools").mkdir()
+    (repo / "tools" / "artifact_paths.py").write_text("", encoding="utf-8")
+    (repo / ".artifacts").mkdir()
+    assert artifact_paths.repository_root() == artifact_paths.REPO_ROOT
+    assert artifact_paths.repository_root(repo) == repo.resolve()
+    assert artifact_paths.repository_root(str(repo / "tools")) == repo.resolve()
+    for outside in (tmp_path, tmp_path / "elsewhere"):
+        with pytest.raises(artifact_paths.ArtifactPathError):
+            artifact_paths.repository_root(outside)
+
+    target = tmp_path / "other_drive" / "srpss_evidence"
+    folder = target / "visualizers" / "spectrum" / "presets" / "20261112_run"
+    folder.mkdir(parents=True)
+    if not _junction(repo / ".artifacts" / "evidence", target):
+        pytest.skip("directory junctions are not available here")
+    try:
+        script_folder = repo / ".artifacts" / "evidence" / "visualizers" / "spectrum" / "presets" / "20261112_run"
+        script = script_folder / "render.py"
+        script.write_text("", encoding="utf-8")
+        own_guess = script.resolve().parents[5]
+        assert own_guess != repo.resolve() and not artifact_paths._is_checkout(own_guess)
+        assert artifact_paths.repository_root(script_folder) == repo.resolve()
+    finally:
+        (repo / ".artifacts" / "evidence").rmdir()        # removes the junction, never its target
+
+
 def test_pytest_never_pins_a_shared_basetemp():
     """A --basetemp in addopts would let concurrent runs (agents, chunked isolation) wipe each other's folders."""
     import configparser

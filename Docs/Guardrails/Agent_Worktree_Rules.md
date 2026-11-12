@@ -70,6 +70,9 @@ what it marked done really is (run its tests), then start your own journal by co
 
 ## Evidence: small, named, and removed once approved
 
+- A kept evidence script takes the repository root as an argument (`--repo`, default the current directory) through
+  `tools/artifact_paths.repository_root()`, never from its own location (`Path(__file__).parents[n]` lands on the
+  evidence junction's drive).
 - In your report, list evidence in two groups: **keep** (the few files the plan or a document cites: the
   open-first sheets, the tables, one showcase per effect) and **the rest**.
 - Before you report, delete raw frames, intermediate renders and anything that only you needed in order to make
