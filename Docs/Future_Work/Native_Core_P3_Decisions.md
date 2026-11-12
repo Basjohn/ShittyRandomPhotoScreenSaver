@@ -1468,6 +1468,9 @@ written, with these answers to their questions. "Nothing here is decided" in the
    GUI-thread build is rejected.
 2. The two new view floats (exact pixel aspect, exact aperture scale) change an internal message, not a persisted
    shape: no bridge; the message's version is raised.
+   *Amended 12 Nov (as built):* three numbers, not two: Extruded Bubble's renderer draws with the aperture scale of the
+   whole extent (`framed_aperture_scale(presentation)`, content=False) and Waveform Ribbon with the content's, so
+   `FramedView(pixel_aspect, aperture_scale, extent_aperture_scale)` (`core/framed_view.py`, `VIS_SET_VIEW` version 2).
 3. Neon Lake's camera axes move into the packet at its port (N5.5), not in N0.
 
 **D5.6, the dependency table (N0.2).** Accepted as written, every row to its chosen route, with these answers:

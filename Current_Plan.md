@@ -250,18 +250,13 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   zero until a new key succeeds: keep the old layout drawn until the new one exists.
 - [ ] A history carried into a window whose drift programs fail is released and that window draws without drift at
   once: fade the drift layer out instead (fade, never vanish).
-- [ ] N0.4 in the worker: `VIS_SET_VIEW` carries the exact pixel aspect and aperture scale (resolved by the
-  GUI-side functions the renderer calls today, sent at their edges), and `card_span`'s approximation
-  (`core/waveform_ribbon_view.py:59-60`) ends. Python first, so the worker's camera equals the renderer's before
-  any packet carries it.
-  Built (agent, 12 Nov, unproved on a real display): `VIS_SET_VIEW` version 2 carries `core/framed_view.FramedView`
-  (pixel aspect, `framed_aperture_scale` content=True, and content=False: Extruded Bubble draws with the latter), resolved
-  from the drawn card by `rendering/quick/visualizer/framed_view.py` at the scene's geometry edges; `card_span` and
-  `widgets/spotify_visualizer/framed_view_camera.py` build from it, bit for bit with the renderers. Edge sends (real
-  owner, stand-in worker): 0 across steady frames, 1 per Expanded enter or exit (instant or faded), 0 for an origin
-  move (`tests/test_framed_view_edges.py`). Worker camera cost, 5,000 laps, no window, development machine: `card_span`
-  at rest median 1.8 us / p99 2.9 us, at an edge 110 / 207 us; whole Waveform Ribbon camera 34.6 / 75.6 us; whole
-  Extruded Bubble camera 11.1 / 17.7 us.
+- N0.4 in the worker landed 12 Nov: `VIS_SET_VIEW` v2 carries the drawn card's pixel aspect and both aperture scales
+  (`core/framed_view.py`), resolved by the renderers' own functions and sent only when the drawn record's geometry
+  changes; the worker's Waveform Ribbon and Extruded Bubble cameras equal the renderer's bit for bit at three DPRs
+  (`tests/test_framed_view_camera.py`); `card_span`'s approximation ended; Expanded Waveform's pulse span fixed
+  (R-196). Worker tick camera cost: 1.8 us median per tick, 110 us after a view change, the whole Waveform camera
+  34.6 us, Extruded Bubble's 11.1 us (`.artifacts/evidence/performance/n04_worker_camera/`). Not checked on a real
+  display; the open R-192 axis case could move the renderer's pixel rect by one pixel.
 - N0.2 decided 12 Nov (`Native_Core_P3_Decisions.md` D5.6 and the lead's answers): eighteen dependencies to
   their routes, no service outside D5.3; the unused `glMultiDrawArraysIndirect` start-up requirement removed.
 - N0.9 done 12 Nov: the native module compiles on GitHub's Windows runner (`.github/workflows/native-module.yml`,
@@ -670,6 +665,14 @@ on a dark theme corrects its own ink; card roles under 4.5:1 on the materials we
 runs from 3-10 a frame to 0, light themes and Normal unchanged, no shader change. Two faults found in audit
 and fixed (the solver added the Glass sheen after the legibility limit; a hidden crossfade copy held a plate).
 58 dark themes change; the table is `changed_table.md` in the evidence folder.
+
+- [ ] Side defect (found 12 Nov, present at the session's start 3c5632cf, so not today's merges): the Waveform Studio's
+  chrome on the theme Matte Graphite [Single] puts white text on a derived `#a1b5c1` (contrast 2.1, the bar is 4.5):
+  `tests/test_waveform_studio_theme.py::test_every_theme_yields_readable_studio_chrome[Matte Graphite [Single]]`. Fix
+  where the Studio chrome derives its text ink (the same ink rule as M2b: correct the run's own ink), never by
+  editing the theme or pinning its colours.
+- [ ] Side defect: in one long run (22 files, 12 min) three tests of that parametrised file failed but only one fails
+  alone: find the order dependency (run the file after the camera and worker files of that run) and remove it.
 
 Side defects landed 12 Nov (merge of a7b877d4): the dead `context.menu.arrow` role retired with a load bridge
 (`RETIRED_WIDGET_THEME_COLOR_ROLES`, 115 theme files lose the key through the generator's `--drop-retired-roles`);
