@@ -631,15 +631,19 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
 def test_spectrum_shader_separates_fill_border_and_ghost_rainbow_participation() -> None:
     from widgets.spotify_visualizer.shaders import load_fragment_shader
 
+    from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl
+
     source = load_fragment_shader("spectrum")
     assert source is not None
-    assert "uniform int u_rainbow_fill" in source
+    # The switches are members of the shader's pass block (N1.6).
+    fields = block_layout_from_glsl(block_declaration(source, "SpectrumDraw")).fields
+    assert ("u_rainbow_fill", "int") in fields
     assert "? (u_rainbow_border == 1)" in source
     assert ": (u_rainbow_fill == 1)" in source
     # Ghost owns colour and opacity independently of bar fill/border controls.
     # In particular, no accidental second hue application and no border-alpha gate.
-    assert "uniform int u_rainbow_ghost" in source
-    assert "uniform float u_ghost_hue_offset" in source
+    assert ("u_rainbow_ghost", "int") in fields
+    assert ("u_ghost_hue_offset", "float") in fields
     # Ghost Colour Bar Fill may take the bar's own surface and Ghost Gradient may then shade it toward its tip
     # colour (both in bars and segments); nothing else recolours it.
     assert source.count(

@@ -43,13 +43,15 @@ class PassBlocks:
     one write into a small fenced stream ring (``stream.py``) and one bind, instead of a call per uniform. ``rebind``
     gives a later draw of the scope other values (each draw already submitted keeps its own copy). The point is left
     unbound afterwards: nothing is read back and nothing inherits it. Nothing is allocated until ``warm`` or the first
-    ``bound``; ``release`` returns it to zero. ``copies`` is the most draws one ``bound`` scope gives values to (64 KiB
-    a ring)."""
+    ``bound``; ``release`` returns it to zero. ``copies`` is the most draws one ``bound`` scope gives values to and
+    ``block_bytes`` the largest block (a slot holds 64 copies; four slots a ring)."""
 
-    def __init__(self, label: str, *, copies: int = 1) -> None:
+    def __init__(self, label: str, *, copies: int = 1, block_bytes: int = _PASS_COPY) -> None:
+        copy = -(-int(block_bytes) // _PASS_COPY) * _PASS_COPY
         # One more copy's room: a scope's first copy starts at the next aligned offset after the last scope's end.
-        self._ring = StreamRing(f"{label} pass blocks", slots=4, slot_bytes=_PASS_SLOT,
-                                hold_bytes=_PASS_COPY * (int(copies) + 1))
+        hold = copy * (int(copies) + 1)
+        self._ring = StreamRing(f"{label} pass blocks", slots=4, slot_bytes=max(_PASS_SLOT, 64 * copy),
+                                hold_bytes=hold)
 
     @property
     def has_resources(self) -> bool:

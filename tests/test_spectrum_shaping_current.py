@@ -90,8 +90,11 @@ class TestSpectrumShapeConfig:
         assert layout.bar_width > 24.0
 
     def test_shader_uses_full_span_bar_width_contract(self):
+        from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl
+
         src = (ROOT / "widgets" / "spotify_visualizer" / "shaders" / "spectrum.frag").read_text(encoding="utf-8")
-        assert "uniform float u_bars_left;" in src
+        # The value is a member of the shader's pass block (N1.6).
+        assert ("u_bars_left", "float") in block_layout_from_glsl(block_declaration(src, "SpectrumDraw")).fields
         assert "float bar_width = u_bar_width_px;" in src
         assert "float bars_left = u_bars_left;" in src
 

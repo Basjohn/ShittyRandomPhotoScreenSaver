@@ -8,7 +8,9 @@ from typing import Sequence
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl, pack_block
 from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.scene3d.uniforms import PassBlocks
 from widgets.spotify_visualizer.render_state import SpectrumFrame
 from widgets.spotify_visualizer.shaders import load_fragment_shader
 from widgets.spotify_visualizer.spectrum_display_bar_count import resample_levels, resolve_display_bar_count
@@ -18,14 +20,27 @@ from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
 )
 
 from ..render_contract import (
-    QUICK_VISUALIZER_VERTEX_SOURCE,
     QuickVisualizerRenderFrame,
+    quick_visualizer_vertex_source,
 )
 from ..implementation_values import parameter, rgba, safe_hue
 from rendering.gl_programs.spectrum_options import SPECTRUM_FLAG_PATTERNS, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS
 
 
 _MAX_BARS = 64
+
+
+def _spectrum_program_parts():
+    """(the quad's vertex stage, the block layout) from ``spectrum.frag``'s own ``SpectrumDraw`` declaration (N1.6):
+    one declaration for both stages and for the packing. (None, None) when the shader file is unavailable."""
+    fragment = load_fragment_shader("spectrum")
+    if fragment is None:
+        return None, None
+    declaration = block_declaration(fragment, "SpectrumDraw")
+    return quick_visualizer_vertex_source(declaration), block_layout_from_glsl(declaration)
+
+
+SPECTRUM_VERTEX_SOURCE, SPECTRUM_BLOCK = _spectrum_program_parts()
 # The space between bars in px at scale 1: the long-standing fixed value, and the most Bar Gap admits.
 DEFAULT_BAR_GAP = 2.0
 MAX_BAR_GAP = 4.0
@@ -225,7 +240,9 @@ class QuickSpectrumRenderer:
 
     def __init__(self) -> None:
         self._program = 0
-        self._uniforms: dict[str, int] = {}
+        # The block's values as the program's uniforms held them: zero at link, kept between frames (N1.6).
+        self._values: dict[str, object] = {}
+        self._blocks = PassBlocks("Quick Spectrum", block_bytes=SPECTRUM_BLOCK.size if SPECTRUM_BLOCK else 256)
         self._last_content_rotation_quarters: int | None = None
         self._last_placement: tuple | None = None
         self._last_decor: tuple | None = None
@@ -235,7 +252,7 @@ class QuickSpectrumRenderer:
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._program)
+        return bool(self._program) or self._blocks.has_resources
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot
@@ -308,125 +325,67 @@ class QuickSpectrumRenderer:
         else:
             hue = 0.0
 
-        uniforms = self._uniforms
+        # The program's values persist between frames as its uniforms did: a value is written when it changes
+        # (or every frame, as before) and the whole block is bound for the draw (N1.6).
+        values = self._values
         gl.glUseProgram(self._program)
-        gl.glUniformMatrix4fv(
-            uniforms["uMatrix"],
-            1,
-            gl.GL_FALSE,
-            frame.matrix_values,
-        )
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
+        values["uMatrix"] = frame.matrix_values
+        values["uItemSize"] = tuple(frame.logical_size)
         content_rotation_quarters = frame.content_rotation_quarters
         if content_rotation_quarters != self._last_content_rotation_quarters:
-            gl.glUniform1i(
-                uniforms["uContentRotationQuarters"],
-                content_rotation_quarters,
-            )
+            values["uContentRotationQuarters"] = content_rotation_quarters
             self._last_content_rotation_quarters = content_rotation_quarters
-        gl.glUniform2f(uniforms["u_resolution"], *frame.oriented_logical_size)
-        gl.glUniform1f(uniforms["u_dpr"], presentation.dpr)
-        gl.glUniform2f(uniforms["u_viewport_origin_px"], 0.0, 0.0)
-        gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
+        values["u_resolution"] = tuple(frame.oriented_logical_size)
+        values["u_dpr"] = presentation.dpr
+        values["u_viewport_origin_px"] = (0.0, 0.0)
+        values["u_quick_item_coords"] = 1
         # Coverage from one continuous coordinate (gl_FragCoord through the item's own affine map), resolved only when
         # the item's placement changes.
         placement = (frame.matrix_values, frame.viewport, frame.logical_size, content_rotation_quarters)
         if placement != self._last_placement:
             mapping = item_from_fragment(frame.matrix_values, frame.viewport, frame.logical_size,
                                          content_rotation_quarters, frame.oriented_logical_size)
-            gl.glUniform1i(uniforms["u_item_from_frag"], 0 if mapping is None else 1)
+            values["u_item_from_frag"] = 0 if mapping is None else 1
             if mapping is not None:
-                gl.glUniform3f(uniforms["u_item_from_frag_x"], *mapping[0])
-                gl.glUniform3f(uniforms["u_item_from_frag_y"], *mapping[1])
+                values["u_item_from_frag_x"] = mapping[0]
+                values["u_item_from_frag_y"] = mapping[1]
             self._last_placement = placement
-        gl.glUniform4f(uniforms["u_content_rect"], *layout.content_rect)
-        gl.glUniform1f(
-            uniforms["u_visual_scale"],
-            presentation.uniform_visual_scale,
-        )
-        gl.glUniform1i(uniforms["u_bar_count"], count)
-        gl.glUniform1i(uniforms["u_segments"], layout.segment_count)
-        gl.glUniform1fv(uniforms["u_bars"], _MAX_BARS, bars)
-        gl.glUniform1fv(uniforms["u_peaks"], _MAX_BARS, peaks)
-        gl.glUniform4f(uniforms["u_fill_color"], *fill)
-        gl.glUniform4f(uniforms["u_border_color"], *border)
-        gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
-        gl.glUniform1f(uniforms["u_bar_height_scale"], layout.height_scale)
-        gl.glUniform1i(
-            uniforms["u_single_piece"],
-            1 if bool(style["single_piece"]) else 0,
-        )
-        gl.glUniform1f(
-            uniforms["u_border_radius"],
-            max(0.0, float(style["border_radius"]))
-            * presentation.uniform_visual_scale,
-        )
+        values["u_content_rect"] = tuple(layout.content_rect)
+        values["u_visual_scale"] = presentation.uniform_visual_scale
+        values["u_bar_count"] = count
+        values["u_segments"] = layout.segment_count
+        values["u_bars"] = bars
+        values["u_peaks"] = peaks
+        values["u_fill_color"] = tuple(fill)
+        values["u_border_color"] = tuple(border)
+        values["u_fade"] = presentation.content_fade
+        values["u_bar_height_scale"] = layout.height_scale
+        values["u_single_piece"] = 1 if bool(style["single_piece"]) else 0
+        values["u_border_radius"] = max(0.0, float(style["border_radius"])) * presentation.uniform_visual_scale
         ghost_enabled = bool(
             parameter(parameters, "spectrum_ghosting_enabled")
         )
         ghost_alpha = float(
             parameter(parameters, "spectrum_ghost_alpha")
         )
-        gl.glUniform1f(
-            uniforms["u_ghost_alpha"],
-            max(0.0, min(1.0, ghost_alpha)) if ghost_enabled else 0.0,
-        )
-        gl.glUniform1i(
-            uniforms["u_spectrum_glow_enabled"],
-            1
-            if bool(parameter(parameters, "spectrum_glow_enabled"))
-            else 0,
-        )
-        gl.glUniform1f(
-            uniforms["u_spectrum_glow_intensity"],
-            max(
-                0.0,
-                min(
-                    1.5,
-                    float(
-                        parameter(
-                            parameters,
-                            "spectrum_glow_intensity",
-                        )
-                    ),
-                ),
-            ),
-        )
-        gl.glUniform4f(uniforms["u_spectrum_glow_color"], *glow_color)
-        gl.glUniform1f(uniforms["u_rainbow_hue_offset"], hue)
-        gl.glUniform1i(
-            uniforms["u_rainbow_ghost"],
-            1 if bool(parameter(parameters, "spectrum_rainbow_ghost")) else 0,
-        )
-        gl.glUniform1f(
-            uniforms["u_ghost_hue_offset"],
-            safe_hue(mode_state.animation_time * rainbow_speed * 0.1),
-        )
-        gl.glUniform1i(
-            uniforms["u_rainbow_per_bar"],
-            1 if rainbow_per_bar else 0,
-        )
-        gl.glUniform1i(
-            uniforms["u_rainbow_fill"],
-            1
-            if bool(parameter(parameters, "spectrum_rainbow_fill"))
-            else 0,
-        )
-        gl.glUniform1i(
-            uniforms["u_rainbow_border"],
-            1
-            if bool(
-                parameter(parameters, "spectrum_rainbow_border")
-            )
-            else 0,
-        )
-        if uniforms["u_time"] >= 0 and parameter(parameters, "spectrum_pattern_shown") in SPECTRUM_FLAG_PATTERNS:
+        values["u_ghost_alpha"] = max(0.0, min(1.0, ghost_alpha)) if ghost_enabled else 0.0
+        values["u_spectrum_glow_enabled"] = 1 if bool(parameter(parameters, "spectrum_glow_enabled")) else 0
+        values["u_spectrum_glow_intensity"] = max(
+            0.0, min(1.5, float(parameter(parameters, "spectrum_glow_intensity"))))
+        values["u_spectrum_glow_color"] = tuple(glow_color)
+        values["u_rainbow_hue_offset"] = hue
+        values["u_rainbow_ghost"] = 1 if bool(parameter(parameters, "spectrum_rainbow_ghost")) else 0
+        values["u_ghost_hue_offset"] = safe_hue(mode_state.animation_time * rainbow_speed * 0.1)
+        values["u_rainbow_per_bar"] = 1 if rainbow_per_bar else 0
+        values["u_rainbow_fill"] = 1 if bool(parameter(parameters, "spectrum_rainbow_fill")) else 0
+        values["u_rainbow_border"] = 1 if bool(parameter(parameters, "spectrum_rainbow_border")) else 0
+        if parameter(parameters, "spectrum_pattern_shown") in SPECTRUM_FLAG_PATTERNS:
             # Only a flag sheet's wave reads the clock (wrapped so a long session keeps float precision).
-            gl.glUniform1f(uniforms["u_time"], float(mode_state.animation_time) % 3600.0)
-        gl.glUniform1f(uniforms["u_bars_left"], layout.bars_left)
-        gl.glUniform1f(uniforms["u_bar_width_px"], layout.bar_width)
-        gl.glUniform1f(uniforms["u_bar_gap_px"], layout.bar_gap)
-        gl.glUniform1f(uniforms["u_bar_span_px"], layout.bar_span)
+            values["u_time"] = float(mode_state.animation_time) % 3600.0
+        values["u_bars_left"] = layout.bars_left
+        values["u_bar_width_px"] = layout.bar_width
+        values["u_bar_gap_px"] = layout.bar_gap
+        values["u_bar_span_px"] = layout.bar_span
         # Optional decoration: program state persists, so resolve and upload only when its inputs change. Each tick
         # carries a fresh but equal parameter mapping at rest: comparing it whole is one call (the frozen mapping's
         # entries compare in C); only when something changed are the decoration inputs fetched (one C call, though
@@ -447,100 +406,50 @@ class QuickSpectrumRenderer:
                 parameters, presentation.uniform_visual_scale,
             )
             if decor != self._last_decor:
-                for name, kind, values in decor:
-                    location = uniforms[name]
-                    if kind == "1f":
-                        gl.glUniform1f(location, *values)
-                    elif kind == "1i":
-                        gl.glUniform1i(location, *values)
-                    else:
-                        gl.glUniform4f(location, *values)
+                for name, _kind, decor_values in decor:
+                    values[name] = decor_values if len(decor_values) > 1 else decor_values[0]
                 self._last_decor = decor
             self._last_decor_inputs = inputs
-        playing_location = uniforms.get("u_playing", -1)
-        if playing_location >= 0:
-            gl.glUniform1i(playing_location, 1 if logical.playing else 0)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        values["u_playing"] = 1 if logical.playing else 0
+        with self._blocks.bound(pack_block(SPECTRUM_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     def release_resources(self) -> None:
-        if not self._program:
+        if not self._program and not self._blocks.has_resources:
             return
-        gl.glDeleteProgram(self._program)
+        if self._program:
+            gl.glDeleteProgram(self._program)
         self._program = 0
+        self._blocks.release()
         self._last_content_rotation_quarters = None
         self._last_placement = None
         self._last_decor = None
         self._last_decor_inputs = None
         self._last_decor_parameters = None
         self._last_decor_scale = None
-        self._uniforms.clear()
+        self._values = {}    # a new program's values start at zero, as its uniforms did
 
     def _initialize(self) -> None:
         fragment_source = load_fragment_shader("spectrum")
-        if fragment_source is None:
+        if fragment_source is None or SPECTRUM_VERTEX_SOURCE is None:
             raise RuntimeError("canonical Spectrum shader is unavailable")
-        program = compile_program(
-            QUICK_VISUALIZER_VERTEX_SOURCE,
-            fragment_source,
-            label="Quick Spectrum",
-        )
-        self._program = program
-        try:
-            required = (
-                "uMatrix",
-                "uItemSize",
-                "uContentRotationQuarters",
-                "u_resolution",
-                "u_dpr",
-                "u_viewport_origin_px",
-                "u_quick_item_coords",
-                "u_item_from_frag",
-                "u_item_from_frag_x",
-                "u_item_from_frag_y",
-                "u_content_rect",
-                "u_visual_scale",
-                "u_bar_count",
-                "u_segments",
-                "u_bars",
-                "u_peaks",
-                "u_fill_color",
-                "u_border_color",
-                "u_fade",
-                "u_ghost_alpha",
-                "u_bar_height_scale",
-                "u_single_piece",
-                "u_border_radius",
-                "u_spectrum_glow_enabled",
-                "u_spectrum_glow_intensity",
-                "u_spectrum_glow_color",
-                "u_rainbow_hue_offset",
-                "u_rainbow_ghost",
-                "u_ghost_hue_offset",
-                "u_rainbow_per_bar",
-                "u_rainbow_fill",
-                "u_rainbow_border",
-                "u_bars_left",
-                "u_bar_width_px",
-                "u_bar_gap_px",
-                "u_bar_span_px",
-                *_DECOR_UNIFORMS,
-            )
-            names = (*required, "u_playing", "u_time")
-            uniforms = {
-                name: int(gl.glGetUniformLocation(program, name))
-                for name in names
-            }
-            missing = [name for name in required if uniforms[name] < 0]
-            if missing:
-                raise RuntimeError(
-                    "Quick Spectrum uniforms are incomplete: "
-                    + ", ".join(missing)
-                )
-            self._uniforms = uniforms
-        except Exception:
-            self.release_resources()
-            raise
+        written = ("uMatrix", "uItemSize", "uContentRotationQuarters", "u_resolution", "u_dpr",
+                   "u_viewport_origin_px", "u_quick_item_coords", "u_item_from_frag", "u_item_from_frag_x",
+                   "u_item_from_frag_y", "u_content_rect", "u_visual_scale", "u_bar_count", "u_segments", "u_bars",
+                   "u_peaks", "u_fill_color", "u_border_color", "u_fade", "u_ghost_alpha", "u_bar_height_scale",
+                   "u_single_piece", "u_border_radius", "u_spectrum_glow_enabled", "u_spectrum_glow_intensity",
+                   "u_spectrum_glow_color", "u_rainbow_hue_offset", "u_rainbow_ghost", "u_ghost_hue_offset",
+                   "u_rainbow_per_bar", "u_rainbow_fill", "u_rainbow_border", "u_bars_left", "u_bar_width_px",
+                   "u_bar_gap_px", "u_bar_span_px", *_DECOR_UNIFORMS, "u_playing", "u_time")
+        held = {name for name, _kind in SPECTRUM_BLOCK.fields}
+        missing = [name for name in written if name not in held]
+        if missing:
+            raise RuntimeError("Quick Spectrum's block is incomplete: " + ", ".join(missing))
+        self._program = compile_program(SPECTRUM_VERTEX_SOURCE, fragment_source, label="Quick Spectrum")
+        self._values = {}
+        # The block's ring, allocated with the program (the first frame compiles it anyway).
+        self._blocks.warm()
 
 
 def create_visualizer_renderer() -> QuickSpectrumRenderer:

@@ -39,6 +39,34 @@ void main() {
 """
 
 
+def quick_visualizer_vertex_source(block_glsl: str) -> str:
+    """The visualizer quad for a mode whose values are one std140 block (N1.6): ``block_glsl`` is the mode's block
+    declaration (holding ``uMatrix``, ``uItemSize`` and ``uContentRotationQuarters``), so the vertex and fragment
+    stages declare the same block. The arithmetic is ``QUICK_VISUALIZER_VERTEX_SOURCE``'s, which the modes still on
+    loose uniforms keep until they convert."""
+    return """#version 460 core
+layout(location = 0) in vec2 aPosition;
+""" + block_glsl + """
+layout(location = 0) out vec2 v_uv;
+
+vec2 logicalUvFromPhysicalUv(vec2 physicalUv) {
+    int q = uContentRotationQuarters & 3;
+    if (q == 1)
+        return vec2(physicalUv.y, 1.0 - physicalUv.x);
+    if (q == 2)
+        return vec2(1.0 - physicalUv.x, 1.0 - physicalUv.y);
+    if (q == 3)
+        return vec2(1.0 - physicalUv.y, physicalUv.x);
+    return physicalUv;
+}
+
+void main() {
+    v_uv = logicalUvFromPhysicalUv(aPosition);
+    gl_Position = uMatrix * vec4(aPosition * uItemSize, 0.0, 1.0);
+}
+"""
+
+
 def snapshot_has_current_reactive_source(
     snapshot: VisualizerRenderSnapshot,
 ) -> bool:
@@ -190,6 +218,7 @@ class QuickVisualizerRenderer(Protocol):
 
 __all__ = [
     "QUICK_VISUALIZER_VERTEX_SOURCE",
+    "quick_visualizer_vertex_source",
     "QuickVisualizerRenderFrame",
     "QuickVisualizerRenderer",
     "VisualizerModeTraceContext",

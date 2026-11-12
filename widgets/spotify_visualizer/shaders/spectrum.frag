@@ -1,71 +1,78 @@
 #version 460 core
-in vec2 v_uv;
-out vec4 fragColor;
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 fragColor;
 
-uniform vec2 u_resolution;   // logical size in QWidget coordinates
-uniform float u_dpr;         // device pixel ratio of the backing FBO
-// Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is
-// WINDOW space, so when the compositor draws the visualizer into the
-// whole-display framebuffer at a non-zero viewport origin the raw value is
-// not card-local. Subtracting this origin restores card-local pixels.
-// A card-sized, origin-zero target simply passes (0, 0).
-uniform vec2 u_viewport_origin_px;
-// Qt Quick uses interpolated item-local coordinates. The old compositor keeps
-// the framebuffer-coordinate branch until Phase-I deletion.
-uniform int u_quick_item_coords;
-// 1: item-local coordinates from gl_FragCoord through the item's affine map (rows x and y of a 2 x 3 matrix, resolved
-// by the renderer from its matrix, viewport and rotation). One continuous coordinate over the whole full-field quad:
-// the interpolated v_uv is rounded differently in its two triangles, so a bar edge on a pixel centre stepped by a
-// pixel along their shared diagonal. 0: the interpolated v_uv (an item whose matrix is not affine).
-uniform int u_item_from_frag;
-uniform vec3 u_item_from_frag_x;
-uniform vec3 u_item_from_frag_y;
-uniform vec4 u_content_rect;  // item-local x, y, width, height
-uniform float u_visual_scale;
-uniform int u_bar_count;
-uniform int u_segments;
-uniform float u_bars[64];
-uniform float u_peaks[64];
-uniform vec4 u_fill_color;
-uniform vec4 u_border_color;
-uniform float u_fade;
-uniform int u_playing;
-uniform float u_ghost_alpha;
-uniform float u_bar_height_scale;  // visual boost for taller cards (1.0 = default height)
-uniform int u_single_piece;        // 1 = solid bars (no segment gaps)
-uniform float u_border_radius;     // border radius in px (0 = square, ~6 = rounded)
-uniform int u_spectrum_glow_enabled;
-uniform float u_spectrum_glow_intensity;
-uniform vec4 u_spectrum_glow_color;
-uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
-uniform int u_rainbow_per_bar;      // 1 = unique colour per bar, 0 = single shifting colour
-uniform int u_rainbow_fill;         // 1 = bar fill participates, 0 = preserve configured fill
-uniform int u_rainbow_border;       // 1 = borders participate in rainbow, 0 = borders keep base colour
-uniform int u_rainbow_ghost;        // independent spectral peak-trail colour
-uniform float u_ghost_hue_offset;   // existing Spectrum animation clock, no independent timer
-uniform float u_bars_left;
-uniform float u_bar_width_px;
-uniform float u_bar_gap_px;
-uniform float u_bar_span_px;
-// Optional decoration (all default off: every branch below is skipped at 0). Mixes are the presentation owner's
-// fade envelopes, so a toggled decoration fades instead of popping.
-uniform float u_ghost_custom_mix;   // 0 = ghosts in the border colour, 1 = the custom ghost colour
-uniform vec4 u_ghost_color;
-uniform float u_ghost_fill_mix;     // 0 = the colour above, 1 = Bar Fill: the bar's own fill surface where the ghost is
-uniform float u_ghost_gradient_mix; // ghost shades toward the tip colour at the peak
-uniform vec4 u_ghost_tip_color;
-uniform float u_gloss;              // glassy highlight across each bar
-uniform float u_fill_gradient_mix;  // fill shades toward the tip colour at the top of the field
-uniform vec4 u_fill_tip_color;
-uniform float u_peak_cap_mix;
-uniform vec4 u_peak_cap_color;
-uniform float u_peak_cap_thickness; // item px
-uniform int u_pattern;              // SPECTRUM_PATTERNS index (0 = Off)
-uniform int u_pattern_shared;       // 1 = one sheet over the whole bar field (SPECTRUM_PATTERN_ANCHORS "Shared")
-uniform float u_pattern_mix;        // strength x fade
-uniform vec4 u_pattern_color;
-uniform float u_pattern_scale;
-uniform float u_time;               // Spectrum's animation clock (seconds); only the flag sheets' wave reads it
+// Spectrum's pass block (N1.6): every value the renderer sets, one std140 block at the pass-block binding
+// (SCENE3D_PASS_BLOCK_BINDING). The quad's vertex stage declares the same block, taken from this file
+// (rendering.quick.visualizer.implementations.spectrum), and the renderer packs it from this declaration
+// (rendering.gl_programs.portable.block_layout_from_glsl), so the stages and the packing never disagree.
+layout(std140, binding = 18) uniform SpectrumDraw {
+    mat4 uMatrix;                 // the quad: Qt's item matrix
+    vec2 uItemSize;
+    int uContentRotationQuarters;
+    vec2 u_resolution;            // logical size in QWidget coordinates
+    float u_dpr;                  // device pixel ratio of the backing FBO
+    // Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is WINDOW space, so when the compositor
+    // draws the visualizer into the whole-display framebuffer at a non-zero viewport origin the raw value is not
+    // card-local. Subtracting this origin restores card-local pixels. A card-sized, origin-zero target passes (0, 0).
+    vec2 u_viewport_origin_px;
+    // Qt Quick uses interpolated item-local coordinates. The old compositor keeps the framebuffer-coordinate branch
+    // until Phase-I deletion.
+    int u_quick_item_coords;
+    // 1: item-local coordinates from gl_FragCoord through the item's affine map (rows x and y of a 2 x 3 matrix,
+    // resolved by the renderer from its matrix, viewport and rotation). One continuous coordinate over the whole
+    // full-field quad: the interpolated v_uv is rounded differently in its two triangles, so a bar edge on a pixel
+    // centre stepped by a pixel along their shared diagonal. 0: the interpolated v_uv (a matrix that is not affine).
+    int u_item_from_frag;
+    vec3 u_item_from_frag_x;
+    vec3 u_item_from_frag_y;
+    vec4 u_content_rect;          // item-local x, y, width, height
+    float u_visual_scale;
+    int u_bar_count;
+    int u_segments;
+    float u_bars[64];
+    float u_peaks[64];
+    vec4 u_fill_color;
+    vec4 u_border_color;
+    float u_fade;
+    int u_playing;
+    float u_ghost_alpha;
+    float u_bar_height_scale;     // visual boost for taller cards (1.0 = default height)
+    int u_single_piece;           // 1 = solid bars (no segment gaps)
+    float u_border_radius;        // border radius in px (0 = square, ~6 = rounded)
+    int u_spectrum_glow_enabled;
+    float u_spectrum_glow_intensity;
+    vec4 u_spectrum_glow_color;
+    float u_rainbow_hue_offset;   // 0..1 hue rotation (0 = disabled)
+    int u_rainbow_per_bar;        // 1 = unique colour per bar, 0 = single shifting colour
+    int u_rainbow_fill;           // 1 = bar fill participates, 0 = preserve configured fill
+    int u_rainbow_border;         // 1 = borders participate in rainbow, 0 = borders keep base colour
+    int u_rainbow_ghost;          // independent spectral peak-trail colour
+    float u_ghost_hue_offset;     // existing Spectrum animation clock, no independent timer
+    float u_bars_left;
+    float u_bar_width_px;
+    float u_bar_gap_px;
+    float u_bar_span_px;
+    // Optional decoration (all default off: every branch is skipped at 0). Mixes are the presentation owner's fade
+    // envelopes, so a toggled decoration fades instead of popping.
+    float u_ghost_custom_mix;     // 0 = ghosts in the border colour, 1 = the custom ghost colour
+    vec4 u_ghost_color;
+    float u_ghost_fill_mix;       // 0 = the colour above, 1 = Bar Fill: the bar's own fill surface under the ghost
+    float u_ghost_gradient_mix;   // ghost shades toward the tip colour at the peak
+    vec4 u_ghost_tip_color;
+    float u_gloss;                // glassy highlight across each bar
+    float u_fill_gradient_mix;    // fill shades toward the tip colour at the top of the field
+    vec4 u_fill_tip_color;
+    float u_peak_cap_mix;
+    vec4 u_peak_cap_color;
+    float u_peak_cap_thickness;   // item px
+    int u_pattern;                // SPECTRUM_PATTERNS index (0 = Off)
+    int u_pattern_shared;         // 1 = one sheet over the whole bar field (SPECTRUM_PATTERN_ANCHORS "Shared")
+    float u_pattern_mix;          // strength x fade
+    vec4 u_pattern_color;
+    float u_pattern_scale;
+    float u_time;                 // Spectrum's animation clock (seconds); only the flag sheets' wave reads it
+};
 
 // One framebuffer pixel in item coordinates, taken where control flow is still uniform (before any discard), so
 // the decoration's filters never see the derivative jumps at bar and segment boundaries.
