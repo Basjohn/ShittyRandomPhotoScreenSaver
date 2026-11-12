@@ -22,7 +22,7 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows 10/11 screensaver that 
 
 | Feature | Current source catalogue |
 | --- | ---: |
-| Image transitions | **25** registered effects |
+| Image transitions | **28** registered effects |
 | Audio-reactive visualizers | **9** modes |
 | Feed cards | **10** (4 custom + 6 news) |
 | Widget families | **10** |
