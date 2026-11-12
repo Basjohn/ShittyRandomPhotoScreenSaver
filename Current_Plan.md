@@ -1078,6 +1078,17 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   and check the wizard loads the new images.
 - Kept as designed (9b585e86): the Sources page opens its Folders bucket by default.
 
+### 1D.4 Guided Setup: the default Visualizer mode (operator, 12 Nov; Medium, after 1D.1's side defects)
+
+- [ ] The Visualizer page marks which enabled mode plays first. A small "Default" text sits next to that mode in
+  the list. The mode's preview pane has a circle (radio) checkbox, "Make Default", and only one mode can hold it.
+  Choosing it moves the "Default" text. It edits the wizard's draft (only Finish saves), writes the existing
+  setting that picks the starting mode (find its owner; never a new parallel key), and refuses or moves the default
+  when that mode is unticked.
+  - [ ] Test through the real wizard: exactly one default; it follows a change; unticking the default mode moves
+    it to an enabled mode (rule stated in the test); Finish saves it, Cancel does not; negative controls.
+- [ ] Image time, once the operator chooses its home (section 2).
+
 ### 1D.2 Fullscreen Visualizer: three display styles (one Opus High; the lead runs the D1 proof)
 
 The setting lives in the Fullscreen Visualizer settings. It is one value per profile, beside
@@ -1291,13 +1302,10 @@ Watchlist entry (operator, 11 Nov).
     and icons in the accent colour are unchanged.
   - Settings lists (12 Nov): the Themes, Folders and online lists share one style (12 pt, 32 px rows); the
     Sources list's heading reads "Pools and Custom Feeds"; the window's resize grip is three solid lines.
-- **Suggestions, Guided Setup (1D.1 audit; nothing built, approve any to plan it):**
-  - Image time on the Transitions page (`timing.interval`): how long each picture stays is among the first things
-    people change, and Guided Setup never asks it.
-  - Starting Visualizer mode on the Visualizer page: the page sets which modes are available, not which one plays
-    first, so a first run starts on whatever the profile holds.
-  - Preset choice beside each Visualizer preview: the preview shows one preset's look, and the page sends people to
-    full Settings for the rest.
+- **Guided Setup, image time (operator, 12 Nov):** wanted, but "I don't think it fits a card yet": either a new
+  page holding it with other useful quick settings, or an existing page it fits thematically without clutter.
+  The lead's proposal is waiting for the operator's choice. A preset choice was rejected: presets are mutable,
+  authored content, and no feature is built around them.
 
 ## 3. Lead and agents: active, paused and queued work
 

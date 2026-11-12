@@ -23,7 +23,9 @@ that never started.
 - Presets are authored, mutable, exchangeable content (`Docs/Guardrails/Visualizer_Presentation.md`, first
   section): never list, manifest, sign, count, guard or test their names, slots or contents anywhere (tests,
   product code, tools), never ask for a record when one is removed or renamed, never change a preset to make a
-  test pass. A stored selection that no longer resolves falls back quietly.
+  test pass. A stored selection that no longer resolves falls back quietly. Never propose or build a feature,
+  page, control or suggestion around specific presets (choosing, showing or recommending one): they can be
+  renamed or deleted at any time.
 - Tests never pin preset or default values or UI wording; assert structure and derive expectations from the canonical source. Every new test has a negative control you have seen fail on the pre-change code (say how you checked). Do not weaken or delete an assertion.
 - Standing product rules: fix at the owner, one contract and no exceptions; anything that appears or disappears fades (never vanishes); no teardown and rebuild where a live owner can be retargeted (a last resort); nothing costs per frame at rest; spec systems (`core/settings/visualizer_mode_settings.py`, `transition_settings.py`) are the single Settings owners; persisted ids are never renamed (Neon Lake is `shockwave_grid`, Spline Curve is `devcurve`); a changed stored shape loads old profiles through a bridge with a fixture (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 - A fixed bug that was long-lived, silent or costly gets its `Docs/Historical_Bugs/R-NNN_*.md` entry and its row in `Docs/Historical_Bugs.md` (the number is assigned by the lead: ask for one in your report as "R-NEW" and name the file `R-NEW_<title>.md`; three agents took the same "next free" number on 12 Nov 2026; the lead numbers it at merge).
