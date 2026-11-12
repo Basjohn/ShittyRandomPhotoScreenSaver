@@ -23,6 +23,7 @@ from typing import Callable, Iterator
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.scene3d import SCENE3D_COMPUTE_BLOCK_BINDING
 from rendering.quick import gl_query
 
 from .stream import StreamRing
@@ -31,7 +32,7 @@ from .stream import StreamRing
 # use for samplers, images and storage (Extruded Bubble's drift solver holds 8-14), and of the draws' scene block
 # (``SCENE3D_UNIFORM_BINDING``, 15) a pass may run inside; OpenGL 4.3 guarantees 36 points. The seam owns the point:
 # each pass binds its own block and leaves the point unbound, so nothing inherits it.
-COMPUTE_BLOCK_BINDING = 16
+COMPUTE_BLOCK_BINDING = SCENE3D_COMPUTE_BLOCK_BINDING
 # One bound scope (a build's dispatches, each with its own copy at the uniform offset alignment, at most 256) holds at
 # most this many bytes; a slot holds four scopes, so a fence falls every few frames at most.
 _BLOCK_HOLD = 8192

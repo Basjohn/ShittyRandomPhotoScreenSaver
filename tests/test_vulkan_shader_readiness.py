@@ -16,9 +16,6 @@ from tools.vulkan_shader_readiness import _compute_sources, _qsb, compile_source
 LEGACY_GL_ONLY = frozenset({
     "rendering.gl_programs.fog_volume.FOG_INTEGRATE_COMPUTE",
     "rendering.gl_programs.fog_volume._INJECT_HEAD",
-    "rendering.gl_programs.waveform_atmosphere.FIELD_COMPUTE",
-    "rendering.gl_programs.waveform_floor_give.FLOOR_GIVE_BLUR_COMPUTE",
-    "rendering.gl_programs.waveform_floor_give.FLOOR_GIVE_SECTION_COMPUTE",
 })
 
 

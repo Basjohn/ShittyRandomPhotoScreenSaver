@@ -1030,6 +1030,10 @@ def scene3d_particle_streak(matrix: tuple[float, ...], item_size: tuple[float, f
 
 # ---- std140 uniform blocks (pure layout; the GL buffer is rendering.quick.scene3d.uniforms) ----
 
+# The uniform-buffer binding every compute program declares its dispatch block at (``rendering.quick.scene3d.compute``
+# binds it; see ``COMPUTE_BLOCK_BINDING`` there for why this number).
+SCENE3D_COMPUTE_BLOCK_BINDING = 16
+
 # type -> (base alignment, size, struct format), per the std140 rules for these types.
 _STD140 = {
     "float": (4, 4, "f"), "int": (4, 4, "i"), "uint": (4, 4, "I"),

@@ -284,11 +284,68 @@ def pass_propagation_field(target):
     return outputs, calls
 
 
+def _ribbon_packet(lower: float):
+    """A fixed four-ribbon cloth history (as tests/test_waveform_atmosphere_field.py builds), ``lower`` world units
+    nearer the floor."""
+    from core.ribbon_ring import RibbonRing
+    ring = RibbonRing(4, colours=[(.1 + .1 * i, .5, .9, 1.) for i in range(4)])
+    for index in range(256):
+        x = -95.6 + .4 * index
+        ring.append(index / 6, [(x, 1.8 - lower + .6 * np.sin(x * .4 + i), i * .35) for i in range(4)],
+                    [.4] * 4, twists=[.07 * index + .4 * i for i in range(4)], emission=.5 + index / 256)
+    return ring.packet()
+
+
+def pass_waveform_fields(target):
+    """The Waveform world field (atmosphere) and the yielding floor's field (section + blur) from one packet."""
+    from dataclasses import replace
+    from core.waveform_ribbon_scene import FLOOR_CONTACT, Floor
+    from rendering.quick.scene3d.floor_give import FloorGiveField
+    from rendering.quick.scene3d.ribbon import RibbonPrimitive
+    from rendering.quick.scene3d.waveform_field import WaveformField
+    from rendering.gl_programs.waveform_atmosphere import FIELD_ROWS, FIELD_RIBBONS
+    from rendering.gl_programs.waveform_floor_give import FLOOR_GIVE_ROWS
+    outputs, calls = {}, {}
+    grade = (((0., (.1, .5, .9)), (.4, (.9, .3, .2)), (1., (.2, .9, .4))), (-60., 60.), 0., .6)
+    floor = replace(Floor(), give=.8)
+    for side, lower in ((1., 1.6), (-1., 2.2)):
+        packet = _ribbon_packet(lower)
+        field, give, primitive = WaveformField(), FloorGiveField(), RibbonPrimitive()
+        try:
+            with primitive.packet_scope(packet):
+                run_field = lambda: field.update(packet, translation=(.3, -.1, .2), span=(-80., 80., 1024),
+                                                 grade=grade, side=side, restore=False)
+                run_give = lambda: give.update(packet, translation=(.3, -.1, .2), floor=floor, contact=FLOOR_CONTACT,
+                                               camber=.35, side=side, restore=False)
+                run_field()
+                run_give()                                        # compiled and allocated
+                field_calls, give_calls = {}, {}
+                with counting(field_calls):
+                    run_field()
+                with counting(give_calls):
+                    run_give()
+            samples = int(floor.give_span[2])
+            outputs[f"world_field_side{side:+.0f}"] = _read_texture(field.texture, 1024, FIELD_ROWS, 4)
+            outputs[f"give_sections_side{side:+.0f}"] = _read_texture(give._sections, samples, FIELD_RIBBONS, 4)
+            outputs[f"give_field_side{side:+.0f}"] = _read_texture(give.texture, samples, FLOOR_GIVE_ROWS, 4)
+            if not calls:
+                calls = {**{f"field:{k}": v for k, v in field_calls.items()},
+                         **{f"give:{k}": v for k, v in give_calls.items()}}
+        finally:
+            from OpenGL import GL as gl
+            gl.glUseProgram(0)
+            field.release()
+            give.release()
+            primitive.release()
+    return outputs, calls
+
+
 PASSES = {
     "motion_tile_max": pass_motion_tile_max,
     "population_scan": pass_population_scan,
     "edge_field": pass_edge_field,
     "propagation_field": pass_propagation_field,
+    "waveform_fields": pass_waveform_fields,
 }
 
 
