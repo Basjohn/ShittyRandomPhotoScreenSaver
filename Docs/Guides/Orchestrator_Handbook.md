@@ -32,7 +32,7 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
 | Agent worktrees and branches | `.claude/worktrees/agent-<id>/`, branch `worktree-agent-<id>` |
 | Every tool and harness | `Docs/Reference/Harness_Index.md` |
 | Real-display proof (lead only, Display 1 only) | `tools/d1_run.py` (`--list-displays`, `--help` holds recipes) |
-| Evidence layout | `tools/artifact_paths.py`; kept evidence in `.artifacts/evidence/<area>/<YYYYMMDD>_<name>/` |
+| Evidence layout | `tools/artifact_paths.py`; kept evidence in `.artifacts/evidence/<area>/<topic>/<YYYYMMDD>_<label>/` (enforced; `areas` lists the vocabulary) |
 | Historical bugs | `Docs/Historical_Bugs.md` and `Docs/Historical_Bugs/R-NNN_*.md` |
 
 ## 3. The cycle, step by step
@@ -114,12 +114,13 @@ defaults, the installer script) are committed and pushed at once, silently.
 
 Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Core_P3_Decisions.md`, D5 to D11).
 
-- **Compiling the native module is not a build in the sense of section 7.** An agent on a native-core item
-  compiles the module in its own worktree with the project's scripted CMake step (foreground, with a timeout,
-  output under the worktree's build folder, never committed), against the Qt SDK under
-  `D:\Temp\Scratch\SRPSS\native_spike\qt` (read only; fetched per Qt version by the script of plan N2.1). Frozen
-  products and installers stay on GitHub and with the lead. `Docs/Guardrails/Agent_Worktree_Rules.md` forbids
-  "builds or installers": the lead adds this exception there before the first C++ dispatch.
+- **Compiling the native module goes through GitHub workflows** (operator, 12 Nov 2026: "you are allowed to
+  build as long as you use github workflows to do it. This is authoritive."). The audit proposed that agents
+  compile the module in their own worktrees with the scripted CMake step; that is *not* in force: no local
+  compile exception is added to `Docs/Guardrails/Agent_Worktree_Rules.md` without the operator's explicit yes.
+  Until then a C++ slice's module is compiled by a GitHub workflow for a pushed ref (plan N2.1 builds that
+  workflow first; the harness proofs N0.6 and N0.7 wait on it), the artefact is downloaded into the worktree, and
+  agents never start a build, remote included. Frozen products and installers stay on GitHub and with the lead.
 - **A port is audited on both backends.** Beside section 4's checks: the OpenGL parity record against the Python
   renderer, the Vulkan record against the native OpenGL result (hidden host), the thread probe (no call with a
   Python thread state), GPU time per pass, and the Python renderer deleted in the same change (a transition's at

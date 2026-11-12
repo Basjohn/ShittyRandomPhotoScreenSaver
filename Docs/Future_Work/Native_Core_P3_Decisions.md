@@ -333,6 +333,17 @@ its pass, so on the native core the source must change. Everything a card sees s
    the current artwork, with the Visualizer layer where a section overlaps it, through the same pyramid and the
    same card shader. That is document 04 section 5's "one backdrop capture shared by all panes" with no
    dependency on the desktop.
+   *Superseded for the dedicated SMP build by the operator, 12 Nov 2026:* "Artwork Backdrop if running MC or
+   Screensaver Profile/Builds. Desktop when running dedicated SMP builds. Material is meant to show what is
+   behind, and that is the consistent way to it." So: in the compositor host (saver and MC builds) the backdrop
+   stays the core's background layer as above; in the SMP build's desktop window the material shows the desktop
+   behind the window. The artwork-and-Visualizer layer above remains only as the fallback for a device or backend
+   on which the window cannot be made see-through, never the chosen look. Routes, in order, proved in N0.6 before
+   SMP depends on them: (1) the Qt Quick Vulkan window with a per-pixel alpha swapchain (composite alpha other
+   than opaque) and the DWM system backdrop behind it; (2) if the swapchain is opaque on Windows, presenting
+   through DirectComposition (the frame shared to a D3D11 swapchain for composition by external memory); (3) the
+   OpenGL backend for that one window. The desktop pixels are never captured by us: the window is see-through
+   and the system composes, so the cost is the system's.
 
 **During the migration.** The product's OpenGL window keeps today's blit until the whole background family is
 native in that window (D10); the native backdrop is built with the native presenter and runs from the start on
@@ -340,8 +351,9 @@ the Vulkan rehearsal path, so the blit is never needed on Vulkan. At the switch 
 compared with the blit on the same frames.
 
 *Where this differs from the lead's position:* (a) no saturation or luminosity in the build pass (rule 5);
-(b) fragment passes, not a compute pass, by default (rule 4); (c) dimming at sample time; (d) the SMP desktop
-window does not use the system backdrop: a Vulkan swapchain window on Windows cannot be relied on to be
+(b) fragment passes, not a compute pass, by default (rule 4); (c) dimming at sample time; (d) (superseded 12
+Nov by the operator, see point 8: the SMP build's window shows the desktop; this reasoning now only explains the
+fallback) the SMP desktop window does not use the system backdrop: a Vulkan swapchain window on Windows cannot be relied on to be
 per-pixel translucent over the desktop (*unverified*; composite alpha is commonly opaque only), so the look must
 not depend on it. Whether such a window can be see-through at all is a proof step (N0.6), and it matters before
 SMP: the Studio's window is translucent today (`ui/studio/surface.py:181,242`) and changes backend with
@@ -506,7 +518,7 @@ barrier, so D1 is written with both readers in mind.
 | The native module's build and distribution | A compiled extension in a Nuitka build, an MSVC runtime that must match what shiboken loads, an SDK that must be fetched per Qt version, builds that run only on GitHub | P1 proved the frozen probe; the first box of the substrate (N2.1) is the build itself: the exact-Qt guard, the `msvcp140` import guard, a scripted SDK fetch, the GitHub workflow building the module, and a check that fails the build when the module is missing from the artifact |
 | Driver variance on `precise` and `fma` (D4) | A compiler that contracts or reorders the two-product silently reintroduces drift on one vendor | D4.7's warm-up self-check on a known pair, logged and reported; the long-horizon test stays in the suite; the cross-backend parity record of the Extruded Bubble port includes the drift outputs |
 | Driver variance in general on Vulkan | Start-up crashes, swapchain behaviour on sleep and wake, device loss, differences between vendors; the project has one development GPU | D6 point 5: automatic start on OpenGL with the reason shown, and the remembered failed start; device loss rebuilt from the last packet; OpenGL kept selectable for good; GitHub's frozen build as the second environment; what cannot be run here is a Watchlist entry, never a claim |
-| Translucent windows on Vulkan | The Studio's window is translucent today and SMP's desktop window is planned; a Vulkan swapchain window may not be see-through on Windows | Proved in N0.6 before anything depends on it; D7 point 8 makes SMP's look independent of it; for the Studio the fallback is an opaque window with the system's own rounded corners, decided at the flip gate |
+| Translucent windows on Vulkan | The Studio's window is translucent today and SMP's desktop window is planned; a Vulkan swapchain window may not be see-through on Windows | Proved in N0.6 before anything depends on it; since the operator's 12 Nov answer (D7 point 8) the SMP build's look depends on it, with the artwork backdrop as the fallback only; for the Studio the fallback is an opaque window with the system's own rounded corners, decided at the flip gate |
 | Two forms of every service | Each native route doubles a test surface, and the less-used form rots | D5.3: the list is closed, each service must win a measurement to exist, the two forms are tested against each other, and QRhi stays the default |
 | Async work | Cross-queue synchronisation bugs are rare, late and hard to reproduce | D9: self-contained jobs, latched publication with no GPU-side wait, an in-frame form that always exists, validation layers as a gate, adversarial teardown in the proof |
 | Linux | Never run; best effort by the operator's decision | The core is one code path through QRhi with OpenGL as the selectable backend there; the conventions (N0.3) are tested per backend on Windows; what a first Linux run would show stays a Watchlist entry |

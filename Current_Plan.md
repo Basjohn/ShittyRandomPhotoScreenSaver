@@ -196,7 +196,8 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
 
 **What can start now, with no product C++:** all of N1 (in the OpenGL renderer; the Medium slots), the contracts
 of N0 (D1 to D3, the rest of D5, N0.3, N0.4; Sonnet drafts, the lead decides), and the two harness proofs N0.6
-and N0.7 (C++ in `native/spike_p1`'s harness, never shipped; one High slot).
+and N0.7 (C++ in `native/spike_p1`'s harness, never shipped; one High slot), once N0.9 compiles the module on
+GitHub.
 
 **Order.** N0 and N1 now. Then N2 (the substrate and Spectrum), N2b (the background layer and the first full
 rehearsal), N3 (the 3D substrate). From there two ordered tracks, one High slot each: the **modes track** (N5.1,
@@ -262,6 +263,16 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 - [ ] N0.4 The camera: `core/settings/framed_camera.py` stays the one owner; the core receives finished matrices
   and rays from the worker (no second camera to keep in step) unless a per-frame cost shows otherwise. Written
   into D5.
+- [ ] N0.9 The module compile on GitHub (operator, 12 Nov: builds only through GitHub workflows; handbook
+  section 8). No product C++; the two harness proofs below wait on it.
+  - [ ] A dispatch-only workflow that compiles `native/spike_p1` (later the core) for a pushed ref on GitHub's
+    Windows runner (MSVC, the pinned Qt SDK fetched by script, `qsb`), and uploads the `.pyd`, the baked shaders
+    and the build log with a manifest (commit, Qt version, sha256 per file).
+  - [ ] `tools/github_remote_build.py` (or a sibling sharing its source) gains a module target: push check,
+    dispatch, wait, download into a named worktree's build folder, manifest validated; refuses a ref that is not
+    pushed. Run by the lead only; agents never start it.
+  - [ ] Proved end to end by the lead on the current spike: the downloaded module imports in the venv and the
+    spike's hidden-host test passes; the time from dispatch to download recorded (it sets how C++ slices iterate).
 - [ ] N0.6 D6's proof, in the P1 harness (C++; nothing shipped):
   - [ ] The module creates the instance and a device at the baseline (Qt requires of it: a graphics queue that
     can present, the extensions `preferredExtensionsForImportedDevice()` names plus swapchain, the preferred
@@ -272,7 +283,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] The second queue is found on the development GPU; its absence is forced as a negative control. Record
     which features Qt's own device has enabled (the "feature bits" question of D6 point 3).
   - [ ] A translucent Vulkan Qt Quick window: can it be see-through to the desktop at all (the Studio's window
-    is translucent today, `ui/studio/surface.py:181`)? Hidden as far as possible; the visible part is the
+    is translucent today, `ui/studio/surface.py:181`; the dedicated SMP build's material shows the desktop, the
+    operator's 12 Nov answer, D7 point 8, so the three routes listed there are tried in order and the one that works
+    is recorded)? Hidden as far as possible; the visible part is the
     lead's, on Display 1.
   - [ ] Lead, Display 1, bounded: a real window on the module's device (swapchain, resize, DPI change, sleep and
     wake).
@@ -284,21 +297,19 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 **N1. Every shader portable, in the existing OpenGL renderer (no C++; can start now)**
 
-- [ ] D4, the Extruded Bubble drift solver without `double` (D4.1 to D4.3 merged 12 Nov, evidence
-  `.artifacts/evidence/native_core/20261112_d4/`; in flight, the same agent):
-  - [ ] D4.4 The largest displacement difference in pixels at 4K for the nearest bead the camera admits, stated.
-  - [ ] D4.5 Both drift programs pass `qsb` (loose uniforms into a block) and leave `LEGACY_GL_ONLY`; the
-    phase-boundary audit's "qsb compiles fp64 SPIR-V" claim and its `SOLVER:39-92` citation corrected; the solver
-    docstring corrected (the reference keeps float64 positions and narrows only when packing). Discovery of
-    sources is N1.3's.
-  - [ ] D4.6 Cost: GPU time per dispatch at Preset 1 and at 216,000 specks against today's, alternated in one
-    session; the worker's tick cost for the decisions; a frame with no new step still dispatches nothing. The
-    stream ring grew from about 0.4 MB to 3.1 MB of mapped memory (240 chains times the full history): size it to
-    the drawable chain count, or accept it with the reason.
-  - [ ] D4.7 A warm-up self-check of the two-product on a known pair (on the edge, never per frame): a compiler
-    that ignores `precise` is logged and reported, never silent drift.
-  - [ ] D4.8 What the user sees when the drift program fails to compile on a device is traced and stated (today:
-    a `RuntimeError` with no fallback), and the long-horizon test stays in the suite.
+- D4 landed (D4.1 to D4.8 merged 12 Nov, evidence `.artifacts/evidence/native_core/20261112_d4/`): no 64-bit type
+  in either drift program; exact Dekker products instead of `fma` (`qsb` turns `fma` into HLSL `mad`, which may round
+  twice); baked for SPIR-V, GLSL 430 and 310 es, HLSL 5.0 and MSL 1.2; the readiness check discovers compute sources
+  and bakes every target (`LEGACY_GL_ONLY` now 16); full specks 0.279 to 0.050 ms GPU and 3.89 to 0.34 ms CPU
+  submit; the worst 4K difference 1.4 px at the near plane (the old `double` path 1.3 px; both keep float32
+  displacement); the stream ring sized to the chain count; a warm-up self-check of the pair arithmetic.
+- [ ] A drift program that fails to compile leaves Extruded Bubble's card empty and recompiles every frame
+  (`MeshResources.compute_program` caches only successes, `rendering/quick/scene3d/resources.py:155`): cache the
+  failure at the shared owner, and draw the mode without drift (fade, never vanish) with one logged error.
+- [ ] The beads at the near plane: D4.4's 1.4 px bound is geometric; check the bead shader's near culling and the
+  near layer's defocus before the bound is quoted as visible error.
+- [ ] Verify the drift programs on a non-NVIDIA driver and through fxc/dxc and the Vulkan backend when the native
+  core first runs them (D4.7's self-check reports a compiler that breaks the pairs; Watchlist until then).
 - [ ] N1.2 The remaining 16 compute sources on `LEGACY_GL_ONLY` (`tests/test_vulkan_shader_readiness.py`: fog
   volume integrate and inject, Waveform atmosphere field, Waveform floor give blur and section, the five edge
   field passes and header, motion tile max, population scan, the propagation field's three) compile through
@@ -466,7 +477,8 @@ section 2)**
 - [ ] N5.8 The Studio's preview host and window, and the release-media and capture tools, render through the
   same core; no Python OpenGL node is left in any Qt Quick surface of the process.
 - [ ] The translucent-window question settled from N0.6 (the Studio's window: see-through if Vulkan can, else an
-  opaque window with the system's rounded corners).
+  opaque window with the system's rounded corners; the SMP build's window by D7 point 8's route, the artwork
+  backdrop only where no route works).
 - [ ] The flip gate of D10, item by item, as a record in the decisions document; then the backend setting in
   Settings (Vulkan by default; OpenGL the fallback, with the automatic start on OpenGL and its stated reason).
 - [ ] A frozen GitHub build on Vulkan on Display 1; one load session after the operator's yes, Vulkan against
@@ -615,13 +627,18 @@ runs from 3-10 a frame to 0, light themes and Normal unchanged, no shader change
 and fixed (the solver added the Glass sheen after the legibility limit; a hidden crossfade copy held a plate).
 58 dark themes change; the table is `changed_table.md` in the evidence folder.
 
-- [ ] Ink is judged against the card panel even where a run sits on another fill: Midnight Cobalt's System Stats
-  labels change (#668cff to #7e9eff, 4.95 to 8.17) though they read on their metric panel. Pass the underlying
-  fill into the ink solve (the legibility plate already has `underlayColor`), so a run that reads where it sits
-  is not touched.
-- [ ] 27 groups of runs that already read at 4.5:1 gain a few percent of alpha because the solver aims for 4.8
-  (its headroom): decide whether a run at or above 4.5 is left exactly as authored (the lead's rule was
-  byte-identical for passing runs) and make the solver do that.
+Follow-ups landed 12 Nov (evidence `.artifacts/evidence/materials/20261112_followups/`): ink is judged on the fill
+a run sits on (row lift included); passing runs stay byte-identical, headroom only for corrected runs; the
+Context Menu's arrows take the label ink; 1C.5's volume height is capped at its lane.
+
+- [ ] The theme role `context.menu.arrow` is dead since the arrows take the label ink (theme files,
+  `ui/widget_theme_spec.py`, `ui/widget_visual_roles.py`, `tools/generate_widget_theme_mirrors.py`; Theme Foundry
+  edits it with no effect): retire it with a load bridge for theme files that carry it
+  (`Docs/Architecture/Persisted_Input_Compatibility.md`), mirrors regenerated, the Foundry row removed.
+- [ ] `test_remaining_dense_and_grouped_families_keep_authored_baselines_out_of_role_models` pins role counts
+  (Weather 11, SystemStats 3, FriendPulse 6, AchievementPulse 8, AbandonmentIssues 7): derive them from the
+  declarations.
+
 - [ ] Accents whose corrected text ink collapses toward the card text: Royal Orchard most (#3e4f2c to #97a08d,
   48 % of its colour kept) and Smoke Quartz; Slate Lavender, Tungsten Blues, Lantern Grove and Riviera Dusk keep
   61-70 % (`accent_collapse_candidates_3x.png`). A theme-authoring matter: these six accents are too dark for a
@@ -629,8 +646,6 @@ and fixed (the solver added the Glass sheen after the legibility limit; a hidden
 - [ ] The accent as a graphic (bars, dividers, icons; not recoloured) is under 3:1 on eight dark themes: Royal
   Orchard 1.44, Tungsten Blues 2.27, Lantern Grove 2.32, Slate Lavender 2.35, Smoke Quartz 2.59, Riviera Dusk
   2.67, Forest Rose 2.89, Nordic Signal 2.89. The same theme-authoring note.
-- [ ] The Context Menu does not go through the ink rule: its submenu arrows are 1.7-3.6:1 on Polished Chrome and
-  Pearl Blush (2.3-3.0 on Normal too; older than M2b). Give the arrow the label's ink.
 - [ ] Mid-transition frames and a real display for M1, M2 and M2b: a D1 run (1B.14 harness), lead review.
 - [ ] M3. Widget border material: the remaining boxes of 1.7b (ring shading from the same backdrop, Border
   Material and Border Opacity Adjust in Style Overrides, Normal/Flat pixel-identical).
@@ -861,10 +876,10 @@ strip's clip now grows by the shadow's reach; guard `test_media_child_shadows_ar
 card`. Evidence `.artifacts/evidence/materials/20261111_m2b/before_after_*_4x.png` (the "before" matches the
 operator's crop).
 
+- [ ] A saved volume height scale above what the lane holds has a dead zone on its first Edit shrink (Edit
+  resizes from the saved scale, the cap from the lane): clamp the saved scale at the owner when the lane shrinks.
 - [ ] The agent could not reproduce the cut at the operator's stored Media layout (no volume edits in their
   settings): a D1 run with a copy of the operator's profile (1B.14), a 4x crop of the volume bar, lead review.
-- [ ] A volume track heightened past about 1.2x (the descriptor allows 2.5x) is taller than its strip and is cut
-  square itself: clamp the descriptor to what the strip can hold, or let the strip grow, at the owner.
 
 ### 1C.6 SMP full-player mock restored (operator, 11 Nov; `references/` is ignored by git)
 
@@ -1192,10 +1207,6 @@ Watchlist entry (operator, 11 Nov).
 - **Decision, Studio clip loops (section 9):** the clips now start and end mid-song at the chosen loop points (Human
   and Growing Pains on their groove) for a seamless wrap, not at the earlier quiet-to-hot windows. Keep the seam, or
   restore the quiet-to-hot arc?
-- **Decision, SMP's desktop window (long term; nothing waits on it):** its backdrop is the player's own artwork
-  and Visualizer, blurred (decided, `Native_Core_P3_Decisions.md` D7 point 8). If a Vulkan window can be made
-  see-through at all (item 8b, N0.6), should the desktop also show through it, or is the artwork backdrop the look
-  you want?
 
 - **Changed on 11 Nov (no action needed; say only if one should go back):**
   - Now Playing (corrected 12 Nov): side handles give or take the block's size and the artwork follows on X and
