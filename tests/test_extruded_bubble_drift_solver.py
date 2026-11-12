@@ -349,6 +349,58 @@ def test_a_handoff_whose_wait_fails_releases_the_carried_history_once_and_keeps_
         target_gl.close()
 
 
+@pytest.mark.parametrize('renderer_kind', ('adoption raises', 'cannot adopt'))
+def test_the_render_host_releases_a_taken_history_that_its_renderer_does_not_adopt(qt_app, renderer_kind):
+    """The host owns a display move's history from ``take`` until a renderer has adopted it: a renderer whose
+    adoption raises (without discarding it itself) or that has no adoption leaves no carried buffer alive."""
+    from types import SimpleNamespace
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost, VisualizerRenderCarryover
+    from tools.labs.render_target import OffscreenRenderTarget
+    log = list(_log(_controls('wander'), 30))
+    target_gl, resources, source = OffscreenRenderTarget(16, 16), MeshResources('drift host test'), \
+        module.DriftSolver('source')
+    host = None
+    try:
+        source.update(resources, *log[-1])
+        payload = source.export()
+        carried = [name for state in payload.families.values() for name in (state.geometry, state.state, state.aux)]
+        carried.append(payload.output)
+        assert carried and all(gl.glIsBuffer(name) for name in carried)
+        box = VisualizerRenderCarryover()
+        box.deposit('extruded_bubble', payload)
+        box.close()
+        adoptions = []
+
+        def adopt(carryover):
+            adoptions.append(carryover)
+            raise RuntimeError('injected adoption failure')
+        renderer = SimpleNamespace(mode_id='extruded_bubble', has_resources=False, render=lambda _frame: None,
+                                   release_resources=lambda: None)
+        if renderer_kind == 'adoption raises':
+            renderer.adopt_carryover = adopt
+        host = QuickVisualizerRenderHost(renderer_factory=lambda _mode: renderer)
+        host.expect_carryover(box)
+        snapshot = SimpleNamespace(logical=SimpleNamespace(mode_id='extruded_bubble', activation_id=1))
+        try:
+            host.render(snapshot=snapshot, viewport=(0, 0, 16, 16), logical_size=(16., 16.),
+                        matrix_values=(1.,) * 16)
+        except RuntimeError as exc:
+            assert 'injected' in str(exc)
+        assert adoptions == ([payload] if renderer_kind == 'adoption raises' else [])
+        gl.glFinish()
+        assert [name for name in carried if gl.glIsBuffer(name)] == []      # no carried name left without an owner
+        assert not payload.families and not payload.output and payload.fence is None
+    finally:
+        if host is not None:
+            host.release_resources()
+        source.release()
+        resources.release_resources()
+        target_gl.close()
+
+
 def test_an_output_that_cannot_be_allocated_draws_without_drift_and_is_not_retried(qt_app, monkeypatch, caplog):
     from rendering.quick.scene3d.resources import MeshResources
     from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
