@@ -7,6 +7,8 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 ## 0. Scope and rules
 
+**If you are the lead (orchestrator):** read `Docs/Guides/Orchestrator_Handbook.md` before anything else, and run `tools/agent_handover.py` to see every agent worktree, its journal and its unmerged work. Agents read `Docs/Guardrails/Agent_Worktree_Rules.md`, then their item here.
+
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake (`shockwave_grid`),
 Oscilloscope, Spectrum/Rainbow Ghost, Voxel Sphere (`sphere`), source routing, transitions and Foundry launch buttons. Reopen an accepted
 area only for a concrete new defect; deferred or unadmitted work belongs in `Future_Work.md`. Historical recovery
@@ -1281,8 +1283,11 @@ Watchlist entry (operator, 11 Nov).
 
 ## 3. Lead and agents: active, paused and queued work
 
-**Agents (operator, 11 Nov; replaces the 11 Nov roster):** the lead (Fable) is orchestrator, auditor and final
-reviewer; all agent results pass that review before acceptance, and the lead's audits (pixel review, regressions
+**Agents (operator, 12 Nov; replaces the 11 Nov roster):** the lead is Opus 5.5 High (orchestrator, auditor,
+planner and final reviewer); Fable 5.2 High only as a rare one-off audit at a major architectural milestone; agent
+slots are three Opus 5.5 High, two Opus 5.5 Medium and two Sonnet 5.5 Medium (documents and research only). The
+workflow is `Docs/Guides/Orchestrator_Handbook.md`. Earlier text of this paragraph, kept for its rules: the lead is
+orchestrator, auditor and final reviewer; all agent results pass that review before acceptance, and the lead's audits (pixel review, regressions
 re-run against the pre-change code, tests on the merge) are what keep the hand-overs sound. The other slots are
 Opus 5.5: two Opus High (complex, architectural and visual work), two Opus Medium (simpler and brute-force
 work), and one Sonnet 5.5 Medium for documents and research when needed. No Fable agents at all (operator, 11

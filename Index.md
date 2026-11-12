@@ -2,6 +2,8 @@
 
 ## Start here
 
+- **Orchestrating agents (the lead):** [Orchestrator Handbook](Docs/Guides/Orchestrator_Handbook.md): roles and roster, plan-first dispatch, the audit checklist, merging, and what to do after a usage cut-off or a session change (`tools/agent_handover.py`, agents' progress journals). The agents' side: [Agent Worktree Rules](Docs/Guardrails/Agent_Worktree_Rules.md).
+
 - **Settings editing-path persistence:** [durable ownership contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md).
   [Current Plan](Current_Plan.md) owns remaining work; accepted Settings-window, connector and Visualizer checks live in source control.
 

@@ -14,6 +14,16 @@ For any performance-motivated change also read `Docs/Guardrails/Performance_Opti
   authored values: never silently revert/overwrite a slot or freeze artistic values/images/hashes
   into regression oracles. Intentional, operator-authorized schema migration is allowed when it
   preserves current artistic intent. Test behavior using independent test-owned configurations.
+- **Presets are never manifested (operator, restated 12 Nov 2026).** Presets are authored, mutable and
+  exchangeable: the operator, users and strangers add, delete, rename, renumber and swap them all the time, and
+  the Studios exist to make that robust. So nothing in product code, tools or tests lists, records, signs,
+  counts, guards or compares the shipped presets' names, slots or contents: no manifest, no "known presets"
+  table, no compatibility record, no test that fails when a preset is removed, renamed or added. The preset
+  tree on disk is the only description of the presets, read at run time. A stored selection that no longer
+  resolves falls back quietly (the same preset by name if it still exists, else Preset 1) with one log line and
+  never an error. A file that cannot be read drops only that preset, and a moment's unreadable tree never fails
+  the catalogue (R-190). A guard of the forbidden kind was merged and removed on 12 Nov 2026; any change that
+  adds one is rejected at audit (the lead greps every preset-related diff for preset names).
 - CUSTOM is a **mode-owned user snapshot**, not the last viewed curated slot. Simple `Custom → curated → Custom` runtime cycling may not replace it or alter independent modes. Settings and runtime must use the shared snapshot/restore/slot ownership path; preserve authored values on Save/Cancel/Restore and after source/mode changes.
 - New Visualizer modes declare their actual shared settings capabilities in the canonical descriptor. Do not synthesize `{mode}_bar_*` or `{mode}_rainbow_*` keys in downstream consumers. Voxel Sphere (`sphere`) owns its mode-specific keys and acoustic analysis; Neon Lake (`shockwave_grid`) deliberately owns shaped Spectrum bars. Registry metadata never becomes a second default-value authority.
 - An assigned display that no longer participates suppresses its Visualizer until return or explicit reassignment. Never relocate it after a grace period or rewrite committed CUSTOM monitor/geometry. Only the current Quick topology coordinator can admit, retire or transfer an owner; stale monitor-generation callbacks and failed retirements cannot silently declare success. Previous fallback/grace implementations and durations are historical evidence, not current policy.
