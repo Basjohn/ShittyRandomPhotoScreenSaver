@@ -62,7 +62,8 @@ and N4.d's wet-surface masks) runs on the primitives track. N6 runs only on the 
 
 Status today (plan state line, `:206-208`, 12 Nov): N0's contracts decided; **N0.6 and N0.7 proved** (D6 and D9
 accepted); the rest of N1 in flight; **N2.1** (the product module's build) and the Python half of **N2.3**
-(Spectrum's native schema) in flight; N2.2 and N2.4 wait for N0.3's scenes. Every box of N2, N2b, N3, N4, N5, NF
+(Spectrum's native schema) in flight (both merged later on 12 Nov; N1.6 merged to ratchet 95 the same evening);
+N2.2 and N2.4 wait for N0.3's scenes. Every box of N2, N2b, N3, N4, N5, NF
 and N6 is open (unticked, lines 428-616); no native primitive exists in C++ yet. `native/spike_p1` is evidence, never
 a shipped renderer (`:426`). Step by step:
 
@@ -88,14 +89,16 @@ costs nothing; the first warm or use allocates.
 
 ### E1. Scene frame and item quad
 `rendering/quick/scene3d/frame.py` (pure, no GL). The frame protocol a render node supplies (viewport, logical size,
-Qt's item matrix, unit quad), `item_pixel_rect`, the quarter-turn orientation helpers (`orient_visualizer_scene_frame`,
-`scene_output_frame`) and the item-quad vertex source. Consumers: nearly every transition and Visualizer scene
-(`transitions/render_contract.py:8,13`, `visualizer/framed_view.py:22`, Beam, Blinds, Cube Turn, Disintegrate, Edge
+Qt's item matrix, unit quad), `item_pixel_rect` and the quarter-turn orientation helpers (`orient_visualizer_scene_frame`,
+`scene_output_frame`). The item-quad vertex stage moved to `rendering/gl_programs/item_quad.py` with N1.6 (12 Nov:
+`item_quad_vertex_source(block)` and `item_quad_program`, each program declaring the quad's values in its own pass
+block; the loose `ITEM_QUAD_VERTEX_SOURCE` and `QUICK_TRANSITION_VERTEX_SOURCE` are gone). Consumers: nearly every
+transition and Visualizer scene (`transitions/fullscreen_pass.py`, `visualizer/framed_view.py`, Beam, Blinds, Cube Turn, Disintegrate, Edge
 Bloom, Capillary Bloom, Chromatic Shear, Liquid Lens, Oscilloscope, Neon Lake, Extruded Bubble, Extruded Spectrum,
 Sphere, Waveform Ribbon, Page Curl, Surface Tension, VHS, Volumetric Dissolve and others). Tests:
 `test_scene3d_item_pixel_rect.py`, `test_scene3d_content_orientation.py`. Native: replaced by D5.2's texture-node
 composite and N3.7's orientation contract (`:505-506`). Notes: the item quad keeps "the bottom-up convention the
-transition fragments were authored in" (`frame.py:19-31`); the N0.3 rule 2 (core targets top-left, Y down) puts one
+transition fragments were authored in" (`gl_programs/item_quad.py`); the N0.3 rule 2 (core targets top-left, Y down) puts one
 flip at the substrate boundary (Decisions line 1353-1357).
 
 ### E2. Program, mesh and image-binding resources
@@ -547,6 +550,14 @@ so this agent did not edit `Current_Plan.md`. Suggested rewording for the lead: 
 note in `Docs/Reference/Primitives.md` (resource detail stays in `Scene3D_Resources.md`)."
 
 ### Contradictions and stale text found while writing (each to be settled by the lead)
+
+Settled by the night audit of 12 Nov (`Docs/Future_Work/Audit_2026-11-12_Night.md`): 1 (the plan says S3D-1/S3D-5), 2
+(the registry boxes were removed with R-198), 3 (D8 row 6 now lists N4.d's wet-surface masks), 4
+(`Scene3D_Resources.md` names all three framed-camera consumers), 5 (the decisions document says five), 6 (the plan
+explains N3.5 and N3.8 once under N3), 7 (`Index.md` points at item 8b), 9 (R-94's entry restored with its index
+row); the "Open point for the lead" above too (the standing rule now names this catalogue). 8 stays open until the
+flip. The `Current_Plan.md:NNN` line numbers in this catalogue are as of 12 Nov afternoon and drift with every plan
+edit: read them as pointers to the named item.
 1. `Current_Plan.md:2177` says Waveform Ribbon is the first consumer of S3D-1/S3D-2/S3D-5; S3D-2 is N4.c
    (populations, `:200`), and N5.4 states Waveform uses "not populations" (`:563`); the code agrees (Waveform imports
    no `population`).

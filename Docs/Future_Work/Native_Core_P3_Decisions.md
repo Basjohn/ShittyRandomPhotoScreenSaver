@@ -9,8 +9,9 @@ one in writing here; a superseded decision is kept with its date, never overwrit
 rule, the rest of D5 (N0.5), N0.3 and N0.4 (D5.5) were drafted as "proposed" and accepted by the lead on 12 Nov
 (section "Lead decisions on the N0 drafts"); their "proposed" headings are history, the decision is the lead's
 answers. Built so far: D4 and the two harness proofs N0.6 and N0.7 (in `native/spike_p1`, never shipped); the
-product module `native/core/` (D5.7) does not exist yet. The ordered work that carries these decisions out is
-`Current_Plan.md`, item 8b.
+product module `native/core/` (D5.7) and its one importer `rendering/native/` were merged on 12 Nov (N2.1: a
+version, Qt and ABI report and a no-op host adapter entry, nothing rendered and nothing in the product loading it).
+The ordered work that carries these decisions out is `Current_Plan.md`, item 8b.
 
 Inputs: `Native_Core_P2_Closeout_and_P3_Entry_2026-11-09.md` section 3, `Native_Core_P2_Phase_Boundary_Audit.md`,
 `Graphics_Backend_Decision_2026-11-05.md` (with its addendum of 12 Nov), `Native_Core_P1_Spike.md`, and the lead's
@@ -155,9 +156,10 @@ the wrong tick (their spans were float32). Beyond the design above: there are fo
 swish term grows too); the chain phase offset is a third decision made on the logical side (12 bytes per chain
 per step); the seed and the cloud phase offset are carried as pairs. The logical side's added work is 15 to 17
 microseconds a tick. The stream ring grew from about 0.4 MB to 3.1 MB of mapped memory (240 chains times the full
-history); sizing it is part of D4.6. Still open: D4.4 to D4.8 (`Current_Plan.md`, item 8b, N1).
+history); sizing it is part of D4.6. D4.4 to D4.8 were merged the same day (the plan's N1 note; what is left of
+them is two N1 boxes: the beads at the near plane and the drift programs on another driver).
 
-## D5. The core's shape (decided 12 Nov 2026; the full resource and lifetime contract is still owed, N0.5)
+## D5. The core's shape (decided 12 Nov 2026; the full resource and lifetime contract, N0.5, was drafted and accepted the same day: "D5, the rest" and "Lead decisions on the N0 drafts")
 
 Four rules. They are what keeps the ceiling high. Spectrum alone needs none of them. What would be expensive is
 adding the rules to the core itself after nine modes and twenty-eight transitions are built on a core without
@@ -480,7 +482,7 @@ rest and has an OpenGL form (D5.3). The gate is what admits it into the product.
 | 3 | Async GPU jobs: image upload, mips, derived maps and transition precompute off the frame (D9) | No hitch at an image change or a transition start while a Visualizer runs; the 14 ms image-change constraint goes | Moderate | Cross-queue synchronisation; devices with one queue | D9's proof: p99 frame time and late frames across image changes with a Visualizer running, async against in-frame |
 | 4 | Mixed-resolution soft layers (P4, N4.f) | Display-size and 4K budgets for fog, bloom, reflection blur and glows; the base for smoke; lines, dots and rims stay at full resolution | Moderate | Halos at depth edges | Per mode: stills side by side reviewed by the lead and GPU time before and after; never whole-frame upscaling |
 | 5 | The backdrop every transition frame with continuous blur levels; true glass over the Visualizer (D7) | Visible: materials that follow a transition instead of stepping, and overlays that are glass over live content | Small to moderate | Cost at 4K | D7's budgets and the lead's review |
-| 6 | High-potential 3D primitives without a consumer (N4.c, N4.h, N4.k, N4.m, N6.1 to N6.3) | What scenes can look like: populations, shadows, many lights, merged shafts, a reactive surface, places, smoke | Moderate each | Building what nobody uses well | Each on its harness with measured cost, lazy creation and a showcase; none blocks the flip |
+| 6 | High-potential 3D primitives without a consumer (N4.c, N4.d's wet-surface masks, N4.h, N4.k, N4.m, N6.1 to N6.3; the masks added 12 Nov night to match the class the lead wrote at the plan's N4.d) | What scenes can look like: populations, shadows, many lights, merged shafts, a reactive surface, places, smoke | Moderate each | Building what nobody uses well | Each on its harness with measured cost, lazy creation and a showcase; none blocks the flip |
 | 7 | GPU-driven populations with count draws | Populations of 10^5 to 10^6 with GPU culling and no readback, for droplets, debris, sprites | Moderate (smaller since Qt 6.12: the indirect draw is QRhi's own, no raw service) | No indirect draw in QRhi 6.11 (resolved by Qt 6.12, 12 Nov) | The population harness at one million sprites against "draw the maximum, cull in the vertex shader"; the two existing transitions port on the simple route |
 | 8 | Persistent high-rate rings | Larger histories and denser strands and particles at one copy per frame | Small | Low | D5.3's measurement; not built if QRhi's dynamic buffers are within 0.05 ms |
 | 9 | HDR output | Emissive scenes on an HDR display | Moderate | Window format and tone mapping per backend | Not admitted; reconsider after the flip |
@@ -1224,7 +1226,7 @@ a Python callback reports a Python thread state.
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided; it applies D5.2 (the frame driver records
 before Qt Quick's pass, the composite is a texture node, the clip is its coverage term) and D5.3 (the closed list of
-six services, each admitted by a measurement and shipping a raw Vulkan and a raw OpenGL form) to the eighteen
+six services, five since the indirect-draw service was retired on 12 Nov, each admitted by a measurement and shipping a raw Vulkan and a raw OpenGL form) to the eighteen
 dependencies of the research file's table A.2 (`native_core_qrhi_gaps_and_conventions.md`). Every "today"
 citation was re-read at commit `bdf9b246`; where source had moved, the research's citation is corrected in
 "Where source differed" below. The QRhi names are the Qt 6.11.2 header (`rhi/qrhi.h`, line numbers given) and the
