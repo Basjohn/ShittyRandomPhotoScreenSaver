@@ -166,6 +166,43 @@ def test_light_ink_white_pole_is_bounded_as_the_shader_bounds_it(solver, materia
     assert _luminance(poles[1]) > _luminance(poles[0])
 
 
+def _alpha_for(ink_rgb, poles, ratio) -> float:
+    """The ink alpha at which the worse pole reads exactly at ``ratio`` (test-side bisection)."""
+    low, high = 0.0, 1.0
+    for _ in range(40):
+        middle = (low + high) / 2
+        worst = min(_contrast([p + (c - p) * middle for p, c in zip(pole, ink_rgb)], pole) for pole in poles)
+        if worst >= ratio:
+            high = middle
+        else:
+            low = middle
+    return high
+
+
+@pytest.mark.parametrize("small", (True, False))
+@pytest.mark.parametrize("light", (True, False))
+def test_a_run_at_or_above_its_floor_is_kept_byte_for_byte_and_only_a_failing_run_gets_headroom(
+        solver, small, light) -> None:
+    # The lead's rule: a passing run (4.5:1 small, 3:1 large) stays exactly as authored; the
+    # solver's headroom (4.8 / 3.2) is only the target of a run it actually corrects.
+    floor, target = (4.5, 4.8) if small else (3.0, 3.2)
+    poles = ([[0.10, 0.10, 0.12], [0.22, 0.22, 0.25]] if light else [[0.80, 0.80, 0.82], [0.95, 0.95, 0.96]])
+    rgb = [1.0, 1.0, 1.0] if light else [0.0, 0.0, 0.0]
+    passing = _alpha_for(rgb, poles, (floor + target) / 2)          # between the floor and the headroom
+    at_floor = _alpha_for(rgb, poles, floor) + 1e-6
+    failing = _alpha_for(rgb, poles, floor - 0.4)
+    for alpha in (passing, at_floor):
+        ink = {"r": rgb[0], "g": rgb[1], "b": rgb[2], "a": alpha}
+        kept = solver(f"legibleInk({ink}, 1.0, {poles}, {str(small).lower()}, {str(light).lower()})".replace("'", ""))
+        assert kept == [rgb[0], rgb[1], rgb[2], alpha, True]
+    ink = {"r": rgb[0], "g": rgb[1], "b": rgb[2], "a": failing}
+    moved = solver(f"legibleInk({ink}, 1.0, {poles}, {str(small).lower()}, {str(light).lower()})".replace("'", ""))
+    assert moved[4] is True and moved[3] > failing
+    for pole in poles:
+        composed = [p + (c - p) * moved[3] for p, c in zip(pole, moved[:3])]
+        assert _contrast(composed, pole) >= target - 1e-3
+
+
 def test_a_run_on_a_fill_is_judged_through_the_fill_and_its_rows_lift(solver) -> None:
     # A run on a further fill (a tile, a metric panel) sees the card's poles through that fill,
     # then through the LegibilityRow on it, which lifts the surface until each of its colours

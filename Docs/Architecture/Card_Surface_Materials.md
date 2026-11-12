@@ -203,8 +203,10 @@ wallpaper (surviving wallpaper swing 0). The rule now, light ink (dark themes) u
 - *Corrected ink, not panel.* Each `ShadowedText` run on a dark-ink material card asks its card
   (`OverlayCard.surfaceInkSolution`) for its ink, judged at its real alpha (colour alpha x the run's opacity) over the
   composed panel on a black and a white wallpaper (`MaterialSurface.inkPoles`, the shader's terms evaluated once at
-  style edges; every wallpaper lies between the two). The Settings `_correct_ink` order: kept when it reads (4.8:1
-  small, 3.2:1 large), else its alpha rises, else it darkens toward black keeping its hue.
+  style edges; every wallpaper lies between the two). The Settings `_correct_ink` order: kept byte for byte when it
+  reads at its floor (4.5:1 small, 3:1 large; since 12 Nov, before it was the 4.8 / 3.2 headroom), else its alpha
+  rises, else it darkens toward black keeping its hue; a corrected run aims for the headroom (4.8:1 small, 3.2:1
+  large) for grain and 8-bit output.
 - *Text-local plate, only where ink cannot.* A run faded by its own item opacity (Media's PLAYING at 62 %) can stay
   short even as black; only then its `ShadowedText` loads one `TextLegibilityPlate` hugging the painted text (a pill),
   which lifts only where the surface under it misses the floor (`ownOpacity` keeps the run's fade off the plate).
@@ -329,7 +331,8 @@ wallpaper pole on 46 of the 98 material mirrors, all dark (worst Royal Orchard 1
 material mirror is under 4.5:1 (58 dark mirrors' accent changes; light mirrors unchanged). In rendered pixels (six worst
 dark mirrors plus Default Dark and Midnight Cobalt, main and list cards, both wallpapers) small runs under 4.5:1 on the
 material go from 3-10 per frame to 0, and no pixel changes outside the changed runs. Runs between 4.5 and the solver's
-4.8 headroom get a few percent more alpha; System Stats labels on their own metric fill were judged against the card
+4.8 headroom got a few percent more alpha (27 groups; since 12 Nov a run at or above 4.5 is left exactly as authored and
+the headroom is only the target of a run the solver corrects); System Stats labels on their own metric fill were judged against the card
 panel, not the fill (Midnight Cobalt's moved lighter although they read at 4.95 on the fill; since the 12 Nov
 follow-up above a run on a fill is judged on that fill and its row). The accents of Royal
 Orchard and Smoke Quartz lose most of their hue toward the card text (Royal Orchard keeps 48 % of its chroma).
