@@ -842,30 +842,24 @@ Contract: plan 01 M3c; evidence `.artifacts/evidence/visualizers/shared/expanded
 - [ ] Side defect (watch): `tests/test_visualizers_fullscreen_mode_pill.py` crashed once with an access violation
   when run after overlay_settings, fullscreen_edit and overlays in one process (not reproduced with two files).
 
-### 1C.4 Spline Curve's white lines show about one pixel into the card border (cause found on Display 1, 12 Nov; fix in flight, Opus High)
+### 1C.4 Spline Curve's white lines show about one pixel into the card border (fixed and proved on Display 1, 12 Nov; R-191, R-192)
 
-Merged: the transient case (R-188, the clip followed the retained snapshot's record after a resize or collapse).
+Merged: the transient case (R-188), then variant B (bf7add6a, R-191: the card drawn on whole device pixels, the clip
+ending exactly at the frame's inner edge; guard `tests/test_visualizer_card_clip_contract.py`). The lead's Display 1
+run then showed left and right exact but a blend on both sides of the bottom edge: the whole scene on that display
+was stretched vertically by an R-63 overscan of 2 device pixels (not a whole logical pixel at 150 %), fixed by a whole
+logical overscan (R-192, `rendering/quick/device_geometry.py`). After both, every edge of the card on Display 1 is 8
+solid border pixels with nothing blended, in the saver's frame and in the DWM composite (evidence
+`.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge/` before,
+`20261112_devcurve_card_edge_whole_logical/` after; `20261112_devcurve_card_edge_after/before_after_crops_x4.png`).
 
-Found by the lead's Display 1 run (`tools/d1_run.py --display 1 --mode devcurve`, the operator's profile copy;
-evidence `.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge/`): no content pixel lies inside the
-border band (1,947 rows, three frames, zero), but the border's inner edge pixel is anti-aliased and is an exact
-50/50 blend of the border colour and whatever content is under it: over dark content (50,50,50) it reads
-(130,114,153), over magenta fill it reads (191,132,218). Over Spline Curve's white lines it would read about
-(232,216,255): a near-white pixel that looks like the white line reaching one pixel into the border. Other modes
-leave the card's edges dark, so their blend pixel looks like part of the border. So the operator's "1px or so,
-the white lines" is the content showing through the border's anti-aliasing, for every mode, most visible with
-bright content at the edge.
-
-- [ ] Fix at the shared clip owner (`rendering/quick/visualizer/clip_host.py` and its SDF): the content's clip
-  ends far enough inside the border's inner edge that no content lies under the border's anti-aliased pixel
-  (about one device pixel at every DPR; derive it from the frame's own edge width, never a constant per mode);
-  the card's own background (Normal or the material) shows under that pixel, as on every other card. Rounded
-  corners follow the same inset. The protected clip commits (ce07b991, 07486d83, 985b9d53) are not retuned.
-- [ ] Guard in `tests/test_visualizer_card_clip_contract.py`: every mode with a full-brightness white line along
-  each edge; the border's inner edge pixels must equal the same frame with the Visualizer hidden (within the
-  run-to-run floor); negative control on the current clip.
-- [ ] Display 1 proof by the lead: the same `d1_run.py` recipe before and after, with a frame chosen while the
-  white lines touch the left edge (several grabs), 4x crops; the edge pixel no longer follows the content.
+- [ ] The Edit outline and handles follow the exact record, so they can sit up to half a device pixel from the
+  drawn card: draw them from `resolve_card_drawn_rect` too (one owner), with a test.
+- [ ] R-192 remainder: a monitor whose non-overscanned axis is not a whole number of logical pixels at its DPR (for
+  example 1366 px at 125 %) is still stretched on that axis; add a second exterior-edge overscan for that axis when
+  one exists (never on a shared edge), extend the durability sweep in `tests/test_qtquick_window.py`.
+- [ ] The tests that open windows were not run on the merge (`test_qtquick_visualizer_clip_smoke.py`, Neon Lake's
+  `actual_neon_qsg_pixels`): run them hidden at the next milestone run.
 
 ### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
 

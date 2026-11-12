@@ -44,8 +44,28 @@ def survives_logical_rounding(extent: int, dpr: float) -> bool:
     return _qt_round(_qt_round(extent / dpr) * dpr) == extent
 
 
+def is_whole_logical(extent: int, dpr: float) -> bool:
+    """True when ``extent`` device pixels are a whole number of logical pixels.
+
+    Qt Quick projects the window's logical size (whole pixels) onto its surface's device size. When the device
+    extent is not ``logical * dpr`` exactly, the scene is stretched along that axis (2162 device pixels drawn as
+    1441 logical at 150 % scale by 1.50035), so no edge drawn on the logical grid falls on a device pixel boundary:
+    every horizontal edge on the display gains a blended row (found on Display 1 by the 1C.4 D1 run, 12 Nov 2026).
+    """
+    logical = extent / dpr
+    return abs(logical - round(logical)) < 1e-6
+
+
 def overscan_amount(extent: int, dpr: float) -> int:
-    """Smallest overscan (>= 1 device px) whose extended extent Qt represents exactly."""
+    """Smallest overscan (>= 1 device px) after which the axis is a whole number of logical pixels.
+
+    A whole logical extent is also exactly what Qt's rounding represents (``survives_logical_rounding``), and the
+    overscan itself is then a whole device-pixel shift of the scene, so the monitor's pixels map 1:1. Where no
+    amount up to four logical pixels makes it whole (a DPR without a small whole multiple), the older rule applies.
+    """
+    for amount in range(1, 4 * math.ceil(dpr) + 1):
+        if is_whole_logical(extent + amount, dpr):
+            return amount
     for amount in range(1, 8):
         if survives_logical_rounding(extent + amount, dpr):
             return amount
@@ -110,6 +130,7 @@ def visible_rect_in_window(window: Rect, virtual: Rect, dpr: float) -> tuple[flo
 __all__ = [
     "Rect",
     "compat_native_rect",
+    "is_whole_logical",
     "overscan_amount",
     "survives_logical_rounding",
     "visible_rect_in_window",
