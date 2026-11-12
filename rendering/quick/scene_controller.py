@@ -29,6 +29,8 @@ from widgets.spotify_visualizer.render_bridge import (
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 from widgets.spotify_visualizer.presentation_geometry import (
     resize_visualizer_presentation,
+    resolve_card_drawn_rect,
+    snap_to_device_pixels,
 )
 
 from .bootstrap import quick_qml_root
@@ -81,6 +83,17 @@ from core.authored_clock import authored_now
 
 
 logger = get_logger(__name__)
+
+def _scene_device_pixel_ratio(window: object) -> float:
+    """Device pixels per logical pixel of the scene as rendered (the render target's, when it has one)."""
+
+    getter = getattr(window, "effectiveDevicePixelRatio", None) or getattr(window, "devicePixelRatio", None)
+    try:
+        ratio = float(getter()) if callable(getter) else 1.0
+    except (TypeError, ValueError, RuntimeError):
+        ratio = 1.0
+    return ratio if math.isfinite(ratio) and ratio > 0.0 else 1.0
+
 
 def _qobject_is_alive(value: object) -> bool:
     if not isinstance(value, QObject):
@@ -811,12 +824,16 @@ class QuickSceneController(QObject):
         # Do not notify the retained scene about unrelated auxiliary state
         # edges (including the native cursor). Read actual root properties,
         # not a parallel cache that could survive a scene reconstruction.
+        # Pixel shift moves the cards by whole device pixels (1C.4): a card drawn on the device-pixel grid stays on it,
+        # so its frame never gains a blended edge pixel. The shift is a few logical pixels; at 125 % and 150 % each
+        # step lands within half a device pixel of the logical one.
+        shift_dpr = _scene_device_pixel_ratio(self._window)
         backdrop_changed = False
         for name, value in (
             ("dimmingEnabled", state.dimming_enabled),
             ("dimmingOpacity", state.dimming_opacity),
-            ("pixelShiftX", float(state.pixel_shift_x)),
-            ("pixelShiftY", float(state.pixel_shift_y)),
+            ("pixelShiftX", snap_to_device_pixels(float(state.pixel_shift_x), shift_dpr)),
+            ("pixelShiftY", snap_to_device_pixels(float(state.pixel_shift_y), shift_dpr)),
         ):
             if root.property(name) != value:
                 root.setProperty(name, value)
@@ -2475,7 +2492,9 @@ class QuickSceneController(QObject):
         if loader is None or root is None:
             raise RuntimeError("visualizer presentation ownership is incomplete")
 
-        outer_x, outer_y, outer_width, outer_height = presentation.outer_rect
+        # The card is drawn on whole device pixels (1C.4): its frame then has no edge pixel that is part frame, part
+        # content. The record stays exact; the content moves rigidly with the drawn card (at most half a pixel).
+        outer_x, outer_y, outer_width, outer_height = resolve_card_drawn_rect(presentation)
         # Steady publications (~90 Hz) usually carry an equal record. The
         # retained item's record plus the live shell geometry/visibility are the
         # only "already applied" truth (no parallel cache): CUSTOM sync can move

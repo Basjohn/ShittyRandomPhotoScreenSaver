@@ -23,7 +23,10 @@ from rendering.quick.render.gl_resources import compile_program
 from rendering.quick import gl_query
 
 from .gl_state import InheritedGlState
-from widgets.spotify_visualizer.presentation_geometry import resolve_card_clip_path
+from widgets.spotify_visualizer.presentation_geometry import (
+    resolve_card_clip_path,
+    resolve_card_drawn_rect,
+)
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 
 
@@ -78,14 +81,17 @@ class VisualizerClipFrame:
     def local_geometry(
         presentation: ResolvedVisualizerPresentation,
     ) -> tuple[tuple[float, float], tuple[float, float, float, float], float]:
-        """(item size, item-local clip rect, clip corner radius) of one record.
+        """(drawn card size, item-local clip rect, clip corner radius) of one record.
 
-        The clip follows the card frame as Qt Quick draws it (1C.4); the canonical resolver derives that path from
-        the frame's own geometry. A record is immutable, so its owner computes this once per record (the render node
-        at sync, when the record changes), never per frame.
+        The clip follows the card frame as Qt Quick draws it (1C.4): the card is drawn on whole device pixels
+        (``resolve_card_drawn_rect``, where the scene places the item) and the canonical resolver derives the path
+        from the frame's own geometry. A record is immutable, so its owner computes this once per record (the render
+        node at sync, when the record changes), never per frame.
         """
 
-        outer_x, outer_y, outer_width, outer_height = presentation.outer_rect
+        outer_x, outer_y, outer_width, outer_height = resolve_card_drawn_rect(
+            presentation
+        )
         (clip_x, clip_y, clip_width, clip_height), clip_radius = (
             resolve_card_clip_path(presentation)
         )

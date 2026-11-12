@@ -9,12 +9,16 @@ suppressed (``QuickVisualizerRenderHost.render`` returns without drawing), the s
 Visualizer hidden. Against the hidden read:
 
 * every pixel whose centre lies more than 0.71 device pixel outside the card's inner edge (the rounded inner path the
-  card draws: content rect and inner corner radius, so the corners are included) is unchanged in both reads;
-* every pixel the card frame covers at all (the frame's green shows in the hidden read: its anti-aliased inner and
-  outer edge pixels and the band between) is unchanged in both reads (1C.4: content under the frame's blended edge
-  pixel shows through it, and over bright content it reads as the content reaching into the border);
-* the white lines reach the frame on all four sides: at most one device pixel (the frame's anti-aliasing width) of
-  card surface lies between the frame's last pixel and the content.
+  card draws: the card item where the scene put it, inset by the frame as Qt draws it, so the corners are included)
+  is unchanged in both reads;
+* along the straight edges, every pixel the card frame covers at all (the frame's green shows in the hidden read: its
+  anti-aliased inner and outer edge pixels and the band between) is unchanged in both reads (1C.4: content under the
+  frame's blended edge pixel shows through it, and over bright content it reads as the content reaching into the
+  border). The card sits on whole device pixels, so a straight edge has no blended pixel to hide content under;
+* in the corners, where Qt anti-aliases the frame's inner arc against whatever lies beneath it as any rounded edge,
+  content lies only under pixels the frame covers by at most half (``CORNER_BLEND``), never under its body;
+* the white lines touch the frame on all four sides: no card surface shows between the frame's last pixel and the
+  content (no seam).
 
 Each within 2 levels per channel, the run-to-run floor.
 
@@ -27,10 +31,11 @@ Checks, on the card as drawn now (the item's own record):
 * ``collapsed``: the ordinary card taken back from the display-wide one before a coherent snapshot exists (the
   retained snapshot's record is display-wide).
 
-Each runs with Normal and with Glass card material, at 100 %, 125 % and 150 %, on a card placed off the device-pixel
-grid (its edges fall inside pixels, as on a real display). Before R-188 the node built its stencil clip from the
-retained snapshot's record, so ``shrunk`` and ``collapsed`` let Spline Curve's fill and lines cross the card's rounded
-corners; before 1C.4 the clip ended at the frame's inner edge, so the white lines lay under its anti-aliased pixel.
+Each runs with Normal and with Glass card material, at 100 %, 125 % and 150 %, on a card the layout requests off the
+device-pixel grid (as pixel shift, CUSTOM scale and centred layouts put it; the resolver snaps it). Before R-188 the
+node built its stencil clip from the retained snapshot's record, so ``shrunk`` and ``collapsed`` let Spline Curve's
+fill and lines cross the card's rounded corners; before 1C.4 the card sat where the layout put it and the clip ended
+at the record's border width, so the white lines lay under the frame's anti-aliased edge pixel.
 """
 from __future__ import annotations
 
@@ -59,18 +64,34 @@ CARD = {
     "shadow_offset": (0.0, 0.0), "shadow_spread": 0.0, "shadow_extensions": (0.0, 0.0, 0.0, 0.0),
 }
 WHITE_LINE_REACH = 3.0     # logical px the white lines reach past the border into the content
+CORNER_BLEND = 0.5         # the most frame coverage a corner pixel with content under it may have (the arc's own AA)
 MODES = [descriptor.mode_id for descriptor in iter_all_visualizer_mode_descriptors()]
 
 
-def _outside_inner_edge(presentation, shape, dpr):
+def _drawn_inner_path(scene, presentation, dpr):
+    """The card's rounded inner path as the scene draws it: the card item's own geometry (where the scene put it),
+    inset by the frame's width as Qt Quick draws it (rounded to whole device pixels, half up); a frameless shell's is
+    its content rect."""
+    import math
+
+    if presentation.shell_policy is not VisualizerShellPolicy.CARD:
+        return tuple(presentation.content_rect), float(presentation.shell_style["inner_corner_radius"])
+    loader = scene._visualizer_loader
+    x, y, w, h = loader.x(), loader.y(), loader.width(), loader.height()
+    inset = math.floor(presentation.border_width * dpr + 0.5) / dpr
+    radius = max(0.0, float(presentation.shell_style["corner_radius"]) - inset)
+    return (x + inset, y + inset, w - 2 * inset, h - 2 * inset), radius
+
+
+def _outside_inner_edge(path, shape, dpr):
     """Device pixels lying wholly outside the card's rounded inner path."""
     import numpy
 
     height, width = shape
     ys, xs = numpy.mgrid[0:height, 0:width].astype(numpy.float64)
     lx, ly = (xs + 0.5) / dpr, (ys + 0.5) / dpr
-    x, y, w, h = presentation.content_rect
-    radius = min(float(presentation.shell_style["inner_corner_radius"]), w / 2.0, h / 2.0)
+    (x, y, w, h), radius = path
+    radius = min(radius, w / 2.0, h / 2.0)
     qx = numpy.abs(lx - (x + w / 2.0)) - (w / 2.0 - radius)
     qy = numpy.abs(ly - (y + h / 2.0)) - (h / 2.0 - radius)
     distance = (numpy.sqrt(numpy.maximum(qx, 0.0) ** 2 + numpy.maximum(qy, 0.0) ** 2)
@@ -78,19 +99,38 @@ def _outside_inner_edge(presentation, shape, dpr):
     return distance * dpr > OUTSIDE_PX
 
 
-def _frame_pixels(hidden):
-    """Pixels the card frame covers at all: its green shows over the card surface and the backdrop (neither green)."""
+def _frame_coverage(hidden):
+    """How much of each pixel the card frame covers: its half-transparent green over the surface (neither green)."""
     import numpy
 
     rgb = hidden[..., :3].astype(int)
-    return rgb[..., 1] - numpy.maximum(rgb[..., 0], rgb[..., 2]) > TOLERANCE
+    return (rgb[..., 1] - numpy.maximum(rgb[..., 0], rgb[..., 2])) / float(CARD["border_color"][3])
 
 
-def _surface_gaps(frame, white, presentation, dpr):
+def _frame_pixels(hidden):
+    """Pixels the card frame covers at all."""
+    return _frame_coverage(hidden) * CARD["border_color"][3] > TOLERANCE
+
+
+def _corner_zones(card_rect, corner_radius, shape, dpr):
+    """Device pixels in the four corner squares of the card (the arc and a pixel either side of where it meets an edge)."""
+    import numpy
+
+    zones = numpy.zeros(shape, bool)
+    x, y, w, h = card_rect
+    reach = int(corner_radius * dpr) + 2
+    left, top = int(x * dpr) - 1, int(y * dpr) - 1
+    right, bottom = int((x + w) * dpr) + 1, int((y + h) * dpr) + 1
+    for x0, y0 in ((left, top), (right - reach, top), (left, bottom - reach), (right - reach, bottom - reach)):
+        zones[max(0, y0):max(0, y0 + reach), max(0, x0):max(0, x0 + reach)] = True
+    return zones
+
+
+def _surface_gaps(frame, white, card_rect, dpr):
     """Device pixels of card surface between the frame's last pixel and the white line, on each side (middle row/col)."""
     import numpy
 
-    ox, oy, ow, oh = presentation.outer_rect
+    ox, oy, ow, oh = card_rect
     height, width = frame.shape
     row, col = int((oy + oh / 2.0) * dpr), int((ox + ow / 2.0) * dpr)
     left, right = max(0, int(ox * dpr) - 2), min(width, int((ox + ow) * dpr) + 3)
@@ -261,13 +301,18 @@ def test_no_visualizer_pixel_lands_outside_the_cards_inner_edge(host, mode, mate
             return numpy.abs(read[..., :3].astype(int) - hidden[..., :3].astype(int)).max(axis=2) > TOLERANCE
 
         drawn_changed, white_changed = changed(drawn), changed(white)
-        outside = _outside_inner_edge(card, drawn_changed.shape, dpr)
+        outside = _outside_inner_edge(_drawn_inner_path(scene, card, dpr), drawn_changed.shape, dpr)
         escapes[name] = int((drawn_changed & outside).sum() + (white_changed & outside).sum())
         lit[name] = int((drawn_changed & ~outside).sum())
         if carded:
             frame = _frame_pixels(hidden)
-            under_frame[name] = int((drawn_changed & frame).sum() + (white_changed & frame).sum())
-            gaps[name] = _surface_gaps(frame, white_changed, card, dpr)
+            loader = scene._visualizer_loader
+            card_rect = (loader.x(), loader.y(), loader.width(), loader.height())
+            corners = _corner_zones(card_rect, float(card.shell_style["corner_radius"]), frame.shape, dpr)
+            # Straight edges: no content under any frame pixel. Corners: only under the arc's own blend.
+            forbidden = (frame & ~corners) | (corners & (_frame_coverage(hidden) > CORNER_BLEND))
+            under_frame[name] = int((drawn_changed & forbidden).sum() + (white_changed & forbidden).sum())
+            gaps[name] = _surface_gaps(frame, white_changed, card_rect, dpr)
 
     clip = shipped_clip(4.0)
     with deterministic_clock() as clock:
@@ -334,5 +379,5 @@ def test_no_visualizer_pixel_lands_outside_the_cards_inner_edge(host, mode, mate
     assert under_frame == {name: 0 for name in under_frame}, (
         f"{mode} ({material}, {dpr}) changed pixels the card frame covers (content under its edge): {under_frame}")
     for name, sides in gaps.items():
-        assert all(gap is not None and gap <= 1 for gap in sides.values()), (
-            f"{mode} ({material}, {dpr}, {name}): the white lines do not reach the frame (surface pixels): {sides}")
+        assert all(gap == 0 for gap in sides.values()), (
+            f"{mode} ({material}, {dpr}, {name}): card surface between the frame and the white lines (a seam): {sides}")

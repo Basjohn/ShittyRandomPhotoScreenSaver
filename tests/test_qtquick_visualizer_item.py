@@ -81,26 +81,28 @@ def test_visualizer_item_returns_one_inline_render_node() -> None:
 @pytest.mark.parametrize("dpr", (1.0, 1.25, 1.5))
 @pytest.mark.parametrize("border", (3.0, 4.0))
 def test_clip_frame_uses_item_local_inner_chrome_geometry(dpr, border) -> None:
-    # 1C.4: the clip ends one device pixel (the frame's anti-aliasing width) inside the frame's inner edge, which Qt
-    # Quick draws with its pen rounded to whole device pixels (border.pixelAligned, half away from zero).
+    # 1C.4: the card sits on whole device pixels and the clip ends exactly at the frame's inner edge, which Qt Quick
+    # draws with its pen rounded to whole device pixels (border.pixelAligned, half away from zero): no pixel is part
+    # frame, part content, and no card surface shows between them.
     import math
 
     presentation = resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy("spectrum"), display_size=(1920.0, 1080.0),
-        outer_origin=(530.0, 240.0), dpr=dpr, border_width=border, corner_radius=8.0)
+        outer_origin=(530.3, 240.3), dpr=dpr, border_width=border, corner_radius=8.0)
     frame = VisualizerClipFrame.from_presentation(
         presentation,
         matrix_values=tuple(float(index) for index in range(16)),
         viewport=(0, 0, 2880, 1620),
     )
 
-    assert frame.logical_size == (420.0, 280.0)
+    # The card is drawn (and its item placed) on whole device pixels; the clip is local to that drawn card.
+    drawn = tuple(math.floor(value * dpr + 0.5) / dpr for value in presentation.outer_rect)
+    outer_width, outer_height = drawn[2:]
+    assert frame.logical_size == pytest.approx((outer_width, outer_height))
     frame_inner_edge = math.floor(border * dpr + 0.5) / dpr
     inset_x, inset_y, width, height = frame.local_content_rect
-    assert inset_x == pytest.approx(inset_y)
-    # Past the half-pixel ramp of a straight edge, never more than one anti-aliasing width inside the frame.
-    assert frame_inner_edge + 0.5 / dpr < inset_x <= frame_inner_edge + 1.0 / dpr
-    assert (width, height) == pytest.approx((420.0 - 2.0 * inset_x, 280.0 - 2.0 * inset_x))
+    assert (inset_x, inset_y) == pytest.approx((frame_inner_edge, frame_inner_edge))
+    assert (width, height) == pytest.approx((outer_width - 2.0 * inset_x, outer_height - 2.0 * inset_x))
     # The corner is the parallel curve of the frame's inner corner (the same centre).
     assert frame.inner_corner_radius == pytest.approx(8.0 - inset_x)
     # The authored content geometry is unchanged (R-21): only the clip moves.
