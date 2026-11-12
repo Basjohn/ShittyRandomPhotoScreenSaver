@@ -259,6 +259,53 @@ def resolve_visualizer_presentation(
     )
 
 
+# The card frame's anti-aliasing width: Qt Quick's smooth Rectangle ramps its edges over one device pixel.
+_CARD_FRAME_ANTIALIAS_DEVICE_PX = 1.0
+# A pixel centre this close to the clip's edge is kept, never decided by float noise in the clip's SDF (which would
+# leave a dotted line along a straight edge); it lies more than half a device pixel inside the frame, so uncovered.
+_CARD_CLIP_EDGE_GUARD_DEVICE_PX = 1.0 / 64.0
+
+
+def resolve_card_clip_path(
+    presentation: ResolvedVisualizerPresentation,
+) -> tuple[tuple[float, float, float, float], float]:
+    """The rounded path Visualizer content is clipped to: (rect, corner radius), display-logical (1C.4).
+
+    The card's frame is a Qt Quick ``Rectangle`` (``cardFrame`` in ``VisualizerPresentation.qml``) drawn from this
+    record: ``border.width`` is ``border_width`` and ``radius`` the record's ``corner_radius``. Qt draws it with its
+    pen pixel-aligned (``border.pixelAligned``: the width is rounded to whole device pixels, half away from zero) and,
+    the radius being non-zero, anti-aliased. So the frame's inner edge lies ``round(border_width * dpr)`` device
+    pixels inside the outer edge, and the pixels along it are a blend of the frame and whatever is beneath it:
+    content there shows through the frame's edge (bright content reads as reaching into the border). Measured on the
+    hidden production host (1C.4): on a straight edge the ramp is one device pixel centred on the edge, so pixels
+    whose centre lies less than half a device pixel inside it blend; on the rounded corners Qt's tessellated ramp
+    reaches further (up to 18 % frame coverage at 0.56 device pixel inside the arc). The clip therefore ends one
+    anti-aliasing width (one device pixel) inside the frame's inner edge, on the straight edges and, as their
+    parallel curve, on the corners, so only the card's own surface (Normal fill or material) lies under the frame's
+    edge pixels, as on every other card. ``content_rect`` (the authored content geometry, R-21) is unchanged; a larger
+    authored content inset is kept as it is. A frameless shell draws no frame: its clip is its content rect.
+    """
+
+    content_rect = tuple(float(value) for value in presentation.content_rect)
+    inner_radius = float(presentation.shell_style["inner_corner_radius"])
+    if presentation.shell_policy is not VisualizerShellPolicy.CARD:
+        return content_rect, inner_radius
+    dpr = float(presentation.dpr)
+    outer_x, outer_y, outer_width, outer_height = (float(value) for value in presentation.outer_rect)
+    device_border = math.floor(float(presentation.border_width) * dpr + 0.5)
+    frame_clear = (device_border + _CARD_FRAME_ANTIALIAS_DEVICE_PX - _CARD_CLIP_EDGE_GUARD_DEVICE_PX) / dpr
+    inset = max(content_rect[0] - outer_x, frame_clear)
+    inset = min(inset, outer_width / 2.0, outer_height / 2.0)
+    rect = (
+        outer_x + inset,
+        outer_y + inset,
+        max(0.0, outer_width - 2.0 * inset),
+        max(0.0, outer_height - 2.0 * inset),
+    )
+    radius = max(0.0, float(presentation.shell_style["corner_radius"]) - inset)
+    return rect, radius
+
+
 def resize_visualizer_presentation(
     baseline: ResolvedVisualizerPresentation,
     *,
@@ -496,6 +543,7 @@ __all__ = [
     "CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE",
     "EXPANDED_CARD_EDGE_GAP",
     "expanded_card_inset",
+    "resolve_card_clip_path",
     "resize_visualizer_presentation",
     "resolve_expanded_visualizer_presentation",
     "resize_visualizer_presentation_uniformly",

@@ -23,6 +23,7 @@ from rendering.quick.render.gl_resources import compile_program
 from rendering.quick import gl_query
 
 from .gl_state import InheritedGlState
+from widgets.spotify_visualizer.presentation_geometry import resolve_card_clip_path
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 
 
@@ -82,8 +83,10 @@ class VisualizerClipFrame:
         viewport: tuple[int, int, int, int],
     ) -> "VisualizerClipFrame":
         outer_x, outer_y, outer_width, outer_height = presentation.outer_rect
-        content_x, content_y, content_width, content_height = (
-            presentation.content_rect
+        # The clip ends where the card frame's anti-aliased inner edge stops covering pixels, so no content lies
+        # under it (1C.4); the canonical resolver derives that path from the frame's own geometry.
+        (clip_x, clip_y, clip_width, clip_height), clip_radius = (
+            resolve_card_clip_path(presentation)
         )
         if len(matrix_values) != 16:
             raise ValueError("visualizer clip matrix must contain 16 values")
@@ -92,14 +95,12 @@ class VisualizerClipFrame:
         return cls(
             logical_size=(outer_width, outer_height),
             local_content_rect=(
-                content_x - outer_x,
-                content_y - outer_y,
-                content_width,
-                content_height,
+                clip_x - outer_x,
+                clip_y - outer_y,
+                clip_width,
+                clip_height,
             ),
-            inner_corner_radius=float(
-                presentation.shell_style["inner_corner_radius"]
-            ),
+            inner_corner_radius=clip_radius,
             matrix_values=tuple(float(value) for value in matrix_values),
             viewport=tuple(int(value) for value in viewport),
         )

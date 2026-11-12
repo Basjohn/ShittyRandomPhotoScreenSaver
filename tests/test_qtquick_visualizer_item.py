@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
 from PySide6.QtQuick import QQuickItem, QSGRenderNode
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
@@ -76,8 +78,16 @@ def test_visualizer_item_returns_one_inline_render_node() -> None:
     assert isinstance(node.clip_host, VisualizerClipHost)
 
 
-def test_clip_frame_uses_item_local_inner_chrome_geometry() -> None:
-    presentation = _presentation(origin=(530.0, 240.0))
+@pytest.mark.parametrize("dpr", (1.0, 1.25, 1.5))
+@pytest.mark.parametrize("border", (3.0, 4.0))
+def test_clip_frame_uses_item_local_inner_chrome_geometry(dpr, border) -> None:
+    # 1C.4: the clip ends one device pixel (the frame's anti-aliasing width) inside the frame's inner edge, which Qt
+    # Quick draws with its pen rounded to whole device pixels (border.pixelAligned, half away from zero).
+    import math
+
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"), display_size=(1920.0, 1080.0),
+        outer_origin=(530.0, 240.0), dpr=dpr, border_width=border, corner_radius=8.0)
     frame = VisualizerClipFrame.from_presentation(
         presentation,
         matrix_values=tuple(float(index) for index in range(16)),
@@ -85,10 +95,35 @@ def test_clip_frame_uses_item_local_inner_chrome_geometry() -> None:
     )
 
     assert frame.logical_size == (420.0, 280.0)
-    assert frame.local_content_rect == (4.0, 4.0, 412.0, 272.0)
-    assert frame.inner_corner_radius == 4.0
+    frame_inner_edge = math.floor(border * dpr + 0.5) / dpr
+    inset_x, inset_y, width, height = frame.local_content_rect
+    assert inset_x == pytest.approx(inset_y)
+    # Past the half-pixel ramp of a straight edge, never more than one anti-aliasing width inside the frame.
+    assert frame_inner_edge + 0.5 / dpr < inset_x <= frame_inner_edge + 1.0 / dpr
+    assert (width, height) == pytest.approx((420.0 - 2.0 * inset_x, 280.0 - 2.0 * inset_x))
+    # The corner is the parallel curve of the frame's inner corner (the same centre).
+    assert frame.inner_corner_radius == pytest.approx(8.0 - inset_x)
+    # The authored content geometry is unchanged (R-21): only the clip moves.
+    assert presentation.content_rect[0] - presentation.outer_rect[0] == border
     assert len(frame.matrix_values) == 16
     assert frame.viewport == (0, 0, 2880, 1620)
+
+
+def test_frameless_clip_is_its_content_rect() -> None:
+    from core.settings.visualizer_mode_registry import (
+        VisualizerClipPolicy, VisualizerModePresentationPolicy, VisualizerShellPolicy,
+    )
+
+    presentation = resolve_visualizer_presentation(
+        policy=VisualizerModePresentationPolicy(
+            shell_policy=VisualizerShellPolicy.FRAMELESS, clip_policy=VisualizerClipPolicy.VIEWPORT_RECT,
+            viewport_resize_capable=True),
+        display_size=(1920.0, 1080.0), outer_origin=(530.0, 240.0), dpr=1.5, border_width=4.0, corner_radius=8.0)
+    frame = VisualizerClipFrame.from_presentation(
+        presentation, matrix_values=tuple(float(index) for index in range(16)), viewport=(0, 0, 2880, 1620))
+
+    assert frame.local_content_rect == (0.0, 0.0, 420.0, 280.0)
+    assert frame.inner_corner_radius == 0.0
 
 
 def test_item_consumes_exact_bridge_identity_once_and_resets_on_replacement() -> None:
