@@ -286,18 +286,11 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 - [ ] N0.7 D9's proof, in the same harness: the job thread, its queue and the latch; the six measurements of D9
   ("How it is proved"), with system conditions recorded. The verdict (jobs for compute on this vendor, or
   uploads only) is written into D9.
-- [ ] N0.8 D11 decided 12 Nov: the core starts on PySide6/Qt 6.12 (6.12.0 released 8 Oct; QRhi gains
-  `drawIndirect`/`drawIndexedIndirect` and `ShaderDrawParameters`, which retires D5.3's indirect-draw row; every
-  QRhi call of the P1 spike still exists). The lead's checkpoint, before N2.1 and when no agent is running tests
-  (the venv is shared):
-  - [ ] Take the newest 6.12 patch release then: `requirements.txt` pin, the venv, and the Qt version's one value
-    in N0.9's fetch/workflow/guard (with its archives' sha256).
-  - [ ] The whole suite (`tests/run_chunked.py --isolated`) and the tests that open hidden windows; reds triaged
-    (fix, or record with the cause).
-  - [ ] A GitHub frozen build of Standard and MC from the pushed commit, and a D1 run on Display 1 of each.
-  - [ ] The protected QSG/clip optimisations (ce07b991, 07486d83, 985b9d53) and R-191/R-192's card-edge D1 check
-    re-run on 6.12; a regression from Qt is fixed at our owner or the version waits for the next patch.
-  - [ ] Fallback if 6.12 regresses for a reason not ours: 6.11.3, recorded in D11.
+- [ ] N0.8 D11 decided 12 Nov: the core starts on PySide6/Qt 6.12 (QRhi gains `drawIndirect`/`drawIndexedIndirect`
+  and `ShaderDrawParameters`, retiring D5.3's indirect-draw row). Operator, 12 Nov: "just bump" (no checkpoint
+  ceremony). Bump `requirements.txt` and the venv to 6.12.0 as soon as nothing holds the venv's PySide6 DLLs (the
+  first try failed with WinError 5 while `tools/godzip_foundry.py` was open; the venv was restored to 6.11.2),
+  run the focused Qt Quick tests, push; N0.9's single Qt value follows.
 
 **N1. Every shader portable, in the existing OpenGL renderer (no C++; can start now)**
 
