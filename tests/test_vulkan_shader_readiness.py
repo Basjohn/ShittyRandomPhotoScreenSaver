@@ -317,11 +317,6 @@ _RATCHET = {
         "rendering.gl_programs.jigsaw_program.JIGSAW_SHADOW_VERTEX_SOURCE",
         "rendering.gl_programs.membrane_program.MEMBRANE_FRAGMENT_SOURCE",
         "rendering.gl_programs.membrane_program.MEMBRANE_VERTEX_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_FRAGMENT_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_MOTION_VERTEX_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_VERTEX_SOURCE",
         "rendering.quick.scene3d.motion._GATHER_FRAGMENT",
         "rendering.quick.scene3d.propagation_field.PropagationField('Quick Capillary Bloom', 'capillary', "
         "CAPILLARY_COST_GLSL)[propagation_seed_capillary]",
