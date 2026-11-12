@@ -156,8 +156,8 @@ anything is extracted; cached per Qt version and script hash); runs `<source>\bu
 (every source takes the same four arguments; MSVC found with `vswhere`, Ninja, Release, Qt Quick part on); runs
 `<source>\python\import_check.py`, the GPU-free part (the runner has no GPU device): for the core it loads the module
 through `rendering.native` (the exact-Qt guard, the Qt and ABI checks, the MSVC runtime origin check of
-`rendering/native/runtime_check.py`: no `msvcp140` import, the loaded `vcruntime140` copies at least as new as the
-compiler) and checks the Qt DLLs came from PySide6's folder; for the spike, the import, `runtime_info()` and the Qt
+`rendering/native/runtime_check.py`, read from the module file before the import: no `msvcp140` import, the loaded
+`vcruntime140` copies at least as new as the compiler) and checks the Qt DLLs came from PySide6's folder; for the spike, the import, `runtime_info()` and the Qt
 DLLs' origin. Then it stages (refused when the module, or a baked shader for any shader source in `<source>\shaders\`,
 is missing) and uploads.
 

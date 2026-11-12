@@ -3,8 +3,8 @@ includes and QML prune (scripts/venv/build_native_core_probe.ps1), never the pro
 imports the module yet).
 
 Frozen, it loads the module the way the product will: ``rendering.native.load()`` from the package location, where the
-probe build placed it, with every check the importer makes (exact Qt, ABI, the MSVC runtime origin check against the
-runtime DLLs the frozen build actually carries). On top it records where Qt and the module were loaded from (inside
+probe build placed it, with every check the importer makes (the MSVC runtime origin check against the runtime DLLs the
+frozen build actually carries, read from the module file before the import; exact Qt; ABI). On top it records where Qt and the module were loaded from (inside
 the frozen build's own folder, one copy each), and hands an unshown QQuickWindow to the host adapter's entry. No
 window is ever shown; no GPU device is opened.
 

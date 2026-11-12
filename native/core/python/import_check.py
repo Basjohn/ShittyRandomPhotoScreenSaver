@@ -2,7 +2,8 @@
 
 The same check runs on GitHub's runner after the compile (the workflow's "Import check" step; the runner has no GPU)
 and on any machine with a built module. Everything goes through ``rendering.native.load`` (the module's only
-importer): the exact-Qt guard, the Qt and ABI checks and the MSVC runtime origin check. On top it records where the
+importer): the MSVC runtime origin check from the module file before the import, then the exact-Qt guard, the Qt and
+ABI checks and the runtime check again with the compiler version the module reports. On top it records where the
 Qt DLLs were loaded from (PySide6's own folder, one copy each). No QGuiApplication, no window.
 
     python native/core/python/import_check.py --module-dir <build dir> --expect-qt 6.12.0 --json <file>

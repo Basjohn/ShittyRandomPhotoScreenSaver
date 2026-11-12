@@ -120,6 +120,30 @@ def test_a_vcruntime_the_process_has_not_loaded_is_refused():
     assert problems and "has not loaded it" in problems[0]
 
 
+def test_the_file_alone_gives_the_linker_toolset_and_the_rule(tmp_path):
+    extension = _cpython_extension()
+    toolset = rc.linker_toolset(extension)
+    assert toolset[0] == 14
+    import PySide6
+
+    qtcore = next(Path(PySide6.__file__).parent.glob("QtCore*.pyd"))
+    assert any("msvcp140" in problem for problem in rc.check_file(qtcore))
+    data = bytearray(extension.read_bytes())
+    optional = int.from_bytes(data[0x3C:0x40], "little") + 24
+    data[optional + 3] = rc.file_version(_loaded_vcruntime())[1] + 1
+    newer = tmp_path / "newer.pyd"
+    newer.write_bytes(bytes(data))
+    problems = rc.check_file(newer)
+    assert problems and "older than the module's toolset" in problems[0] and "(link 14." in problems[0]
+    data[optional + 2] = 12                                                  # not an MSVC 14.x linker
+    newer.write_bytes(bytes(data))
+    with pytest.raises(ValueError, match="link 12"):
+        rc.check_file(newer)
+    (tmp_path / "short.pyd").write_bytes(b"MZ")
+    with pytest.raises(rc.PeFormatError):
+        rc.check_file(tmp_path / "short.pyd")
+
+
 def test_the_toolset_reads_from_msc_full_ver():
     assert rc.toolset_of(194435227) == (14, 44)
     assert rc.toolset_of(195136231) == (14, 51)

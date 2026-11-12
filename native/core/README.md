@@ -15,7 +15,8 @@ never ships.
 The guards: CMake refuses a Qt SDK other than `requirements.txt`'s PySide6 pin; the module refuses to import under
 any Qt but the one it was compiled for; `rendering.native` refuses a module whose Qt, ABI or MSVC runtime arrangement
 does not match this process (`rendering/native/runtime_check.py`: no `msvcp140` import, the loaded `vcruntime140` at
-least as new as the compiler). Tests: `tests/test_native_core_*.py`.
+least as new as the compiler), the MSVC runtime rule read from the module file before it is imported. Tests:
+`tests/test_native_core_*.py`.
 
 Build and fetch it (the lead; agents never build):
 
