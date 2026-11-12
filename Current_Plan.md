@@ -661,9 +661,6 @@ and fixed (the solver added the Glass sheen after the legibility limit; a hidden
   2.67, Forest Rose 2.89, Nordic Signal 2.89. The same theme-authoring note.
 - [ ] The Context Menu does not go through the ink rule: its submenu arrows are 1.7-3.6:1 on Polished Chrome and
   Pearl Blush (2.3-3.0 on Normal too; older than M2b). Give the arrow the label's ink.
-- [ ] Side defect: `tests/test_live_normalization_role_lifetime_contract.py::test_card_and_accessory_
-  normalization_changes_cannot_rebuild_role_lists` fails for Reddit (5 against an expected 2), unrelated to the
-  material work; reproduce with that file alone.
 - [ ] Mid-transition frames and a real display for M1, M2 and M2b: a D1 run (1B.14 harness), lead review.
 - [ ] M3. Widget border material: the remaining boxes of 1.7b (ring shading from the same backdrop, Border
   Material and Border Opacity Adjust in Style Overrides, Normal/Flat pixel-identical).
@@ -838,9 +835,6 @@ manifests them) and was removed the same hour (d226af58). The rule is now explic
 `Docs/Guardrails/Visualizer_Presentation.md` (first section), the agent rules and the orchestrator handbook's audit
 checklist; the lead greps every preset-related diff for preset names before merging.
 
-- [ ] Side defect: importing `core.settings.normalization` before anything else raises a circular `ImportError`
-  (`normalization.py:28` -> `models/__init__.py:27` -> `models/_core.py:16`, then `_core.py:367-373` at class
-  definition); the enum parsing must leave `normalization` (Opus Medium, bounded).
 
 ### 1C.2 Diagonal fullscreen glyphs tear the Visualizer down and rebuild it (owner: Opus High, Expanded Visualizer)
 
@@ -1104,16 +1098,6 @@ Each box: reproduce on main first (the command given), decide whether the produc
 architecture is authoritative; a stale test is repaired to derive from the canonical source, never weakened), fix
 at the owner, negative control, one commit per cause.
 
-- [ ] `tests/test_godzip_foundry_core.py::test_run_auto_logzip_waits_for_process_exit_without_polling` fails:
-  `create_logzip(` no longer appears in `godzip_foundry.py` (run the file alone).
-- [ ] Four tests in `tests/test_studio_exit_every_mode.py` fail with `KeyError: 'Unknown visualizer mode:
-  toy_mode'` from `ui/studio/framed.py:114` `orbit_save_route` (run the file alone).
-- [ ] `tests/test_live_normalization_role_lifetime_contract.py::test_card_and_accessory_normalization_changes_
-  cannot_rebuild_role_lists` fails for Reddit (5 against an expected 2) (run the file alone).
-- [ ] The circular import of `core.settings.normalization` (1C.1's side defect: the enum parsing moves out of
-  `normalization` so `models/_core.py` no longer imports it at class definition); prove with a fresh-interpreter
-  import of each settings module first, in a test.
-- [ ] Report anything else found red in the files touched, with its command.
 
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
