@@ -104,6 +104,36 @@ fade-through. Frames on Display 1 across the move; one hidden frame on Display 0
       --step 13.6:grab@0:d0_fading --step 13.7:grab:d1_a --step 13.9:grab:d1_b --step 14.1:grab:d1_c
       --step 14.3:grab:d1_d --step 14.6:grab:d1_e --step 15.0:grab:d1_f --step 16.0:grab:d1_g --step 20:grab:d1_steady
 
+Recipe: the Fullscreen Visualizer's display styles (Current_Plan 1D.2). One run per style on Display 1, the
+Visualizer display-wide from the reveal, the card frame's edges read at native pixels as in R-192 (``--setting`` and
+``set`` take a member of a mapping setting as a dotted key). For STYLE in default, borders_to_edge, hide_borders:
+
+  .venv\Scripts\python.exe tools\d1_run.py --display 1 --profile <profile copy> --mode extruded_bubble
+      --setting widgets.spotify_visualizer.monitor=\"1\"
+      --setting widgets.spotify_visualizer.expanded_display_requested=true
+      --setting widgets.spotify_visualizer.fullscreen_overlays.display_style=\"STYLE\"
+      --clip logs\visualizer_recordings\anything_mixed2.jsonl --seconds 30 --label 1d2_STYLE
+      --step 12:grab:steady_a --step 16:grab:steady_b
+      --crop top-left --crop left-mid --crop right-mid --crop bottom-mid --crop bottom-right --zoom 4
+
+(the same with --mode devcurve for a 2D mode). Then a switch while expanded: the ``set`` steps write the style
+through the running saver's own SettingsManager, as Settings would; the product's settings route retargets the card
+in place with one fade-through (0.25 s out, 0.25 s in; nothing rebuilt):
+
+  .venv\Scripts\python.exe tools\d1_run.py --display 1 --profile <profile copy> --mode extruded_bubble
+      --setting widgets.spotify_visualizer.monitor=\"1\"
+      --setting widgets.spotify_visualizer.expanded_display_requested=true
+      --setting widgets.spotify_visualizer.fullscreen_overlays.display_style=\"default\"
+      --clip logs\visualizer_recordings\anything_mixed2.jsonl --seconds 40 --label 1d2_switch
+      --step 12:grab:default_steady
+      --step 13:set:widgets.spotify_visualizer.fullscreen_overlays.display_style=\"borders_to_edge\"
+      --step 13.1:grab:edge_out --step 13.25:grab:edge_swap --step 13.4:grab:edge_in --step 15:grab:edge_steady
+      --step 17:set:widgets.spotify_visualizer.fullscreen_overlays.display_style=\"hide_borders\"
+      --step 17.25:grab:hide_swap --step 19:grab:hide_steady
+      --step 21:set:widgets.spotify_visualizer.fullscreen_overlays.display_style=\"default\"
+      --step 21.25:grab:back_swap --step 23:grab:back_steady
+      --crop top-left --crop right-mid --crop bottom-mid --zoom 4
+
 Agents prove it only with --hidden added (every window invisible); never without it, and never with --allow-primary.
 Frames land in frames/: <step>.png (the whole window), <step>__<crop>_x4.png, and d1_state.json records each item's
 exact scene rectangle (logical and device pixels), the window's DPR and screen. List the displays first:
@@ -223,7 +253,10 @@ POINTER_KINDS = ("move", "click", "rclick", "dblclick")
 # In-process input (1C.2): delivered to the window through Qt's own event queue (QCoreApplication.postEvent), the
 # route for the always-invisible window of --with-hidden-display, whose empty region makes Qt drop posted pointers.
 IN_PROCESS_KINDS = ("hover", "press")
-STEP_KINDS = ("grab", "screen", "key", *POINTER_KINDS, *IN_PROCESS_KINDS)
+# A live setting change (1D.2): ``set:DOTTED.KEY=JSON`` writes one persisted setting through the running saver's own
+# SettingsManager (the copied profile's), as a Settings write would, so the product's live settings route reacts.
+SETTING_KIND = "set"
+STEP_KINDS = ("grab", "screen", "key", *POINTER_KINDS, *IN_PROCESS_KINDS, SETTING_KIND)
 
 
 @dataclass(frozen=True)
@@ -283,6 +316,8 @@ def parse_step(text: str) -> Step:
             arg = artifact_paths.slug(arg)
         elif kind == "key":
             virtual_key(arg)
+        elif kind == SETTING_KIND:
+            parse_key_value(arg)
         else:
             parse_target(arg)
     except (ValueError, artifact_paths.ArtifactPathError) as exc:
@@ -300,10 +335,59 @@ def parse_key_value(text: str) -> tuple[str, object]:
         raise argparse.ArgumentTypeError(f"{key}: the value must be JSON (e.g. 5, true, \"text\"), got {raw!r}") from None
 
 
-def check_plan(args) -> None:
-    """Refusals that need no display: the steps fit inside the self-exit, ``screen`` only when visible, known keys."""
+def setting_target(key: str, application: str) -> tuple[str, tuple[str, ...]] | None:
+    """``(persisted key, member path)`` for a ``set`` step's key: the key itself, or a member inside a mapping-valued
+    setting (``widgets.spotify_visualizer.fullscreen_overlays.display_style``); None when it is neither."""
+    from collections.abc import Mapping
+
     from core.settings.default_contract import require_canonical_default
 
+    parts = str(key).split(".")
+    for cut in range(len(parts), 0, -1):
+        try:
+            default = require_canonical_default(".".join(parts[:cut]), application)
+        except KeyError:
+            continue
+        members = tuple(parts[cut:])
+        node = default
+        for member in members:
+            if not isinstance(node, Mapping) or member not in node:
+                return None
+            node = node[member]
+        return ".".join(parts[:cut]), members
+    return None
+
+
+def write_setting(manager, key: str, value: object) -> tuple[object, object]:
+    """Write one setting, or one member of a mapping-valued setting merged into a copy of it, through ``manager``;
+    returns (before, after) of what ``key`` names, read back."""
+    from copy import deepcopy
+
+    target = setting_target(key, manager.get_application_name())
+    if target is None:
+        raise KeyError(f"{key} is neither a persisted setting nor a member of one")
+    persisted, members = target
+
+    def member_of(stored):
+        for member in members:
+            stored = stored[member] if isinstance(stored, dict) and member in stored else None
+        return stored
+
+    stored = manager.get(persisted)
+    before = member_of(stored)
+    written = value
+    if members:
+        written = deepcopy(dict(stored)) if isinstance(stored, dict) else {}
+        node = written
+        for member in members[:-1]:
+            node = node.setdefault(member, {})
+        node[members[-1]] = value
+    manager.set(persisted, written)
+    return before, member_of(manager.get(persisted))
+
+
+def check_plan(args) -> None:
+    """Refusals that need no display: the steps fit inside the self-exit, ``screen`` only when visible, known keys."""
     for step in args.step:
         if step.at + 3.0 > args.seconds:
             raise Refusal(f"step {step.text()} is not at least 3 s before the self-exit (--seconds {args.seconds:g}; "
@@ -318,14 +402,16 @@ def check_plan(args) -> None:
             if step.kind not in ("grab", *IN_PROCESS_KINDS):
                 raise Refusal(f"step {step.text()}: the always-invisible display takes only grab, hover and press "
                               "(posted input is dropped by its empty region; its desktop shows something else)")
+        if step.kind == SETTING_KIND:
+            key, _value = parse_key_value(step.arg)
+            if setting_target(key, ENTRIES[args.entry][1]) is None:
+                raise Refusal(f"step {step.text()}: {key} is neither a persisted setting nor a member of one")
     if args.crop and not any(step.kind in ("grab", "screen") for step in args.step):
         raise Refusal("--crop needs a grab or screen step")
     application = ENTRIES[args.entry][1]
     for key, _value in args.setting:
-        try:
-            require_canonical_default(key, application)
-        except KeyError:
-            raise Refusal(f"--setting {key}: not a persisted setting of {application}") from None
+        if setting_target(key, application) is None:
+            raise Refusal(f"--setting {key}: not a persisted setting of {application} (nor a member of one)")
         if key.startswith("widgets.spotify_visualizer.") and args.mode and key.split(".")[-1].startswith(f"{args.mode}_"):
             raise Refusal(f"--setting {key}: a {args.mode} mode setting goes through --viz-set (the curated preset "
                           "would overwrite it at activation)")
@@ -387,10 +473,9 @@ def apply_settings(settings: list[tuple[str, object]], *, application: str, stor
     manager = SettingsManager(application=application, storage_base_dir=storage_base_dir)
     applied = {}
     for key, value in settings:
-        require_canonical_default(key, application)
-        before = manager.get(key)
-        manager.set(key, value)
-        after = manager.get(key)
+        if setting_target(key, application) is None:
+            require_canonical_default(key, application)          # the refusal names the key
+        before, after = write_setting(manager, key, value)
         if after != value:
             raise ValueError(f"setting {key}={value!r} read back as {after!r}")
         applied[key] = {"before": before, "after": after}
@@ -666,6 +751,11 @@ class D1Driver:
         step = self.steps[index]
         record = {"index": index, "step": step.text(), "fired_at": self._now()}
         try:
+            if step.kind == SETTING_KIND:
+                record.update(self._set_setting(step.arg))
+                record["ok"] = True
+                self._complete(record)
+                return
             window = self._window(step.display)
             if step.kind in IN_PROCESS_KINDS:
                 record.update(self._send_pointer(window, step.kind, parse_target(step.arg)))
@@ -787,6 +877,20 @@ class D1Driver:
         with contextlib.suppress(Exception):
             facts["covered_screen"] = manager._expanded_display_coordinator.covered_unit.screen_index
         return facts
+
+    # live settings -----------------------------------------------------------------------------------------------
+
+    def _set_setting(self, text: str) -> dict:
+        """``set`` (1D.2): one setting written through the running saver's own SettingsManager (the copied profile),
+        a member of a mapping-valued setting merged into a copy of it; read back (fail closed)."""
+        manager = getattr(self._engine, "settings_manager", None)
+        if manager is None:
+            raise RuntimeError("the saver has no settings manager")
+        key, value = parse_key_value(text)
+        before, after = write_setting(manager, key, value)
+        if after != value:
+            raise RuntimeError(f"setting {key}={value!r} read back as {after!r}")
+        return {"setting": key, "before": before, "value": value}
 
     # posted input -------------------------------------------------------------------------------------------------
 
@@ -1124,7 +1228,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="an experiment-flag token for the saver's argv, e.g. --app-arg=--viz-in-process")
     parser.add_argument("--step", action="append", default=[], type=parse_step, metavar="AT:KIND:ARG",
                         help="AT s after the first reveal: grab:LABEL, screen:LABEL, key:NAME, move|click|rclick|"
-                             "dblclick:X,Y (device px) or :@objectName")
+                             "dblclick:X,Y (device px) or :@objectName, set:DOTTED.KEY=JSON (a setting, or a member "
+                             "of a mapping setting, written live through the saver's own SettingsManager)")
     parser.add_argument("--crop", action="append", default=[], choices=CROP_NAMES,
                         help="crop every grab around this point of --item (repeat)")
     parser.add_argument("--item", default=DEFAULT_ITEM, help="scene item objectName the crops follow")
