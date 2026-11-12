@@ -85,13 +85,14 @@ def test_sources_page_is_two_large_buckets_and_adds_custom_feeds(qapp, settings)
         page.add_custom_feed()
         assert settings.get("sources.rss_feeds") == ["https://example.org/wallpapers.rss"]
         assert page.can_continue()
-        custom = next(page.feeds.item(i) for i in range(page.feeds.count())
-                      if page.feeds.item(i).data(Qt.ItemDataRole.UserRole) == "https://example.org/wallpapers.rss")
-        custom.setCheckState(Qt.CheckState.Unchecked)
+        from ui.tabs import online_source_rows as rows
+        custom = next(item for item in rows.rows_of_kind(page.feeds, rows.FEED)
+                      if item.data(rows.KEY_ROLE) == "https://example.org/wallpapers.rss")
+        # Removing is Settings' Remove Selected (the shared online sources list), staged in the wizard's draft.
+        page.feeds.setCurrentItem(custom)
+        page.remove_custom_feed()
         assert settings.get("sources.rss_feeds") == []
-        # Unticked custom feeds stay listed so they can be ticked again.
-        assert any(page.feeds.item(i).data(Qt.ItemDataRole.UserRole) == "https://example.org/wallpapers.rss"
-                   for i in range(page.feeds.count()))
+        assert not rows.rows_of_kind(page.feeds, rows.FEED)
         page.custom_feed.setText("not a feed")
         page.add_custom_feed()
         assert settings.get("sources.rss_feeds") == []
@@ -220,6 +221,30 @@ def test_display_diagram_click_toggles_a_display(qapp, settings, monkeypatch):
         assert settings.get("display.show_on_monitors") == [1]
         page.diagram.displayClicked.emit(2)
         assert settings.get("display.show_on_monitors") == [1, 2]
+    finally:
+        page.deleteLater()
+
+
+def test_widgets_page_names_a_required_family_by_its_label(qapp, settings):
+    """A family that needs another one says so with that family's label (what the list shows), never its id."""
+    from core.settings.capability_activation import set_widget_family_activated
+    from core.settings.widget_family_catalog import get_widget_family_descriptors
+    from ui.onboarding.selection_pages import WidgetsPage
+    families = {family.family_id: family for family in get_widget_family_descriptors()}
+    dependent = next(family for family in families.values() if family.required_family_ids)
+    for required in dependent.required_family_ids:
+        set_widget_family_activated(settings.values["widgets"], required, False)
+    page = WidgetsPage(settings)
+    try:
+        page.refresh()
+        row = next(page.rows.item(i) for i in range(page.rows.count())
+                   if page.rows.item(i).data(Qt.ItemDataRole.UserRole) == dependent.family_id)
+        tooltip = page.rows.itemWidget(row).toolTip()
+        assert all(families[required].label in tooltip for required in dependent.required_family_ids)
+        page.rows.setCurrentItem(row)
+        from PySide6.QtWidgets import QLabel
+        shown = " ".join(label.text() for label in page.panel.findChildren(QLabel)).casefold()
+        assert all(families[required].label.casefold() in shown for required in dependent.required_family_ids)
     finally:
         page.deleteLater()
 

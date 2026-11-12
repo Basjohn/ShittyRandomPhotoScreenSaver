@@ -11,7 +11,8 @@ from core.sources.folder_paths import contains_folder, display_folder_path, with
 from core.sources.readiness import has_image_sources
 from ui.onboarding.state import is_media_center_profile
 from sources.rss.pools import read_pool_selection, write_pool_selection, WallpaperPoolSelection, online_source_count
-from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, CheckList, silence_check, text_label, SILENCE_TEXT, font_with_point_delta
+from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, silence_check, text_label, SILENCE_TEXT, font_with_point_delta
+from ui.tabs.online_source_rows import build_online_source_list, refresh_online_source_list, selected_feed_url
 from ui.settings_theme_runtime import get_active_settings_theme
 from ui.styled_popup import StyledPopup
 
@@ -90,9 +91,8 @@ class SourcesPage(Page):
         self.feeds_enabled.setToolTip("Enable the selected pools. Custom feeds below are independent and are never replaced by this switch.")
         self.feeds_enabled.toggled.connect(self.toggle_feeds)
         feed_layout.addWidget(self.feeds_enabled)
-        self.feeds = CheckList()
-        self.feeds.setMinimumHeight(150)
-        self.feeds.itemChanged.connect(self.change_feed)
+        # The list Settings' Sources tab shows (one owner): active pools as JMIT POOL rows, then custom feeds.
+        self.feeds = build_online_source_list(150)
         feed_layout.addWidget(self.feeds)
         custom = QHBoxLayout()
         self.custom_feed = QLineEdit()
@@ -100,11 +100,11 @@ class SourcesPage(Page):
         self.custom_feed.setToolTip("An RSS/Atom feed, a Reddit subreddit address, or a site that publishes one.")
         self.custom_feed.returnPressed.connect(self.add_custom_feed)
         custom.addWidget(self.custom_feed, 1)
-        custom.addWidget(action("Add feed", self.add_custom_feed))
+        custom.addWidget(action("Add Feed", self.add_custom_feed))
+        custom.addWidget(action("Remove Selected", self.remove_custom_feed))
         feed_layout.addLayout(custom)
         self.custom_message = text_label("")
         feed_layout.addWidget(self.custom_message)
-        self._custom_feeds = []
         self.reason = text_label("")
         self.body.addWidget(self.reason)
         shortcuts = QHBoxLayout()
@@ -115,24 +115,12 @@ class SourcesPage(Page):
         self.refresh()
 
     def refresh(self):
-        from PySide6.QtWidgets import QListWidgetItem
         self.folders.clear()
         self.folders.addItems([display_folder_path(folder) for folder in self.settings.get("sources.folders") or []])
-        current = list(self.settings.get("sources.rss_feeds") or [])
-        for url in current:
-            if url not in self._custom_feeds:
-                self._custom_feeds.append(url)
         with QSignalBlocker(self.feeds_enabled):
             self.feeds_enabled.setChecked(read_pool_selection(self.settings).enabled)
-        with QSignalBlocker(self.feeds):
-            self.feeds.clear()
-            for url in self._custom_feeds:
-                item = QListWidgetItem(url)
-                item.setData(Qt.ItemDataRole.UserRole, url)
-                item.setToolTip(url)
-                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                item.setCheckState(Qt.CheckState.Checked if url in current else Qt.CheckState.Unchecked)
-                self.feeds.addItem(item)
+        # The draft's pools and custom feeds, read exactly as Settings' Sources tab reads the store.
+        refresh_online_source_list(self.feeds, self.settings)
         folders = self.folders.count()
         self.folders_toggle.setText(f"Folders  ·  {folders}" if folders else "Folders")
         count = online_source_count(self.settings)
@@ -163,14 +151,13 @@ class SourcesPage(Page):
         write_pool_selection(self.settings, WallpaperPoolSelection(bool(enabled), current.selected, current.discovery_order))
         self.refresh()
 
-    def change_feed(self, item):
-        url = item.data(Qt.ItemDataRole.UserRole)
-        feeds = list(self.settings.get("sources.rss_feeds") or [])
-        if item.checkState() == Qt.CheckState.Checked and url not in feeds:
-            feeds.append(url)
-        elif item.checkState() != Qt.CheckState.Checked:
-            feeds = [value for value in feeds if value != url]
-        self.settings.set("sources.rss_feeds", feeds)
+    def remove_custom_feed(self):
+        """Remove the selected custom feed (pool rows belong to the Just Make It Work chooser, as in Settings)."""
+        url = selected_feed_url(self.feeds)
+        if url is None:
+            return
+        self.settings.set("sources.rss_feeds", [value for value in self.settings.get("sources.rss_feeds") or [] if value != url])
+        self.custom_message.setText(f"Removed {url}")
         self.refresh()
 
     def add_custom_feed(self):
@@ -185,8 +172,6 @@ class SourcesPage(Page):
         feeds = list(self.settings.get("sources.rss_feeds") or [])
         if url not in feeds:
             self.settings.set("sources.rss_feeds", [*feeds, url])
-        if url not in self._custom_feeds:
-            self._custom_feeds.append(url)
         self.custom_feed.clear()
         self.custom_message.setText(f"Added {url}" + ("" if url == raw else " (corrected from what you typed)."))
         self.refresh()

@@ -252,3 +252,41 @@ def test_regeneration_keeps_an_asset_whose_pixels_only_drift(tmp_path: Path) -> 
     changed.reshape(-1, 3)[:allowed + 1] = 140                  # one speckle more than allowed
     assert save_png_stable(Image.fromarray(changed), path)
     assert save_png_stable(Image.fromarray(numpy.zeros((100, 101, 3), dtype=numpy.uint8)), path)  # resized
+
+
+def test_foundry_selects_a_preview_preset_by_its_settings_number(monkeypatch) -> None:
+    """``--visualizer-preset MODE=N``: N is the 1-based number Settings shows; past the catalogue is loud."""
+    import pytest
+
+    from core.settings import visualizer_presets as vp
+    from tools import onboarding_preview_foundry as foundry
+
+    assert foundry.parse_preset_numbers(["spectrum=3", " bubble = 1 "]) == {"spectrum": 3, "bubble": 1}
+    for bad in ("spectrum", "spectrum=0", "=2", "spectrum=x"):
+        with pytest.raises(ValueError):
+            foundry.parse_preset_numbers([bad])
+    mode = "spectrum"
+    last = vp.get_custom_preset_index(mode)  # the trailing Custom position: one past the authored presets
+    monkeypatch.setattr(foundry, "_PRESET_NUMBERS", {mode: last})
+    assert foundry._preview_preset_index(mode) == last - 1
+    monkeypatch.setattr(foundry, "_PRESET_NUMBERS", {mode: last + 1})
+    with pytest.raises(LookupError):
+        foundry._preview_preset_index(mode)
+
+
+def test_foundry_photo_backdrop_is_the_photo_under_the_card_surface(tmp_path) -> None:
+    """``--photo``: the wallpaper cover-cropped to the card, under the theme's card surface, fully opaque."""
+    from PIL import Image
+
+    from tools.onboarding_preview_foundry import photo_card_backdrop
+    from ui.widget_theme_spec import DEFAULT_DARK_WIDGET_THEME
+
+    photo = tmp_path / "wall.png"
+    Image.new("RGB", (400, 100), (250, 250, 250)).save(photo)  # wider than the card: cropped, never stretched
+    backdrop = photo_card_backdrop(photo, (120, 80))
+    assert backdrop.size == (120, 80)
+    red, green, blue, alpha = backdrop.getpixel((60, 40))
+    assert alpha == 255
+    surface = DEFAULT_DARK_WIDGET_THEME.color("card.background").as_tuple()
+    expected = round(250 + (surface[0] - 250) * surface[3] / 255)
+    assert abs(red - expected) <= 1

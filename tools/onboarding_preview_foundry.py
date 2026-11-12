@@ -1061,7 +1061,8 @@ _PREVIEW_ONSETS: Final = {"shockwave_grid": ((0.2, "kick", 3.0, 1.5), (0.55, "sn
                            "oscilloscope": ((0.95, "kick", 2.4, 1.1),)}
 # Modes that prepare a retained history before their first ready frame (Waveform Ribbon fills its
 # path ring, then travels): seconds of fixture passage captured at 30 Hz before the settled captures.
-_PREVIEW_PRIMING_SECONDS: Final = {"waveform_ribbon": 6.0}
+# Bubble steps its simulation on that clock too (as production's tick does), so its field has filled.
+_PREVIEW_PRIMING_SECONDS: Final = {"waveform_ribbon": 6.0, "bubble": 6.0}
 
 
 def preview_audio(count: int = 4096) -> "numpy.ndarray":
@@ -1117,6 +1118,16 @@ class _PreviewOnsets:
         high = 0.42 + 0.24 * math.sin(5.2 * t + 2.0)
         return EnergyBands(bass=bass, mid=mid, high=high, overall=(bass + mid + high) / 3.0)
 
+    # Bubble reads its own energy feed (the same moving fixture passage); no transient bus or event scheduler.
+    def get_bubble_energy_bands(self):
+        return self.get_waveform_ribbon_body_bands()
+
+    def get_transient_energy_bands(self):
+        return None
+
+    def get_event_scheduler(self):
+        return None
+
     # A drawn-audio capture (Oscilloscope) also reads the audio, the level and the spectrum,
     # and takes the stand-in's frame as current live source.
     def get_musical_level(self) -> tuple[float, float]:
@@ -1148,12 +1159,34 @@ _RENDERED_PREVIEW_SIZE: Final = (684, 418)
 _PREVIEW_PRESETS: Final = {"extruded_bubble": "ember_drift"}
 
 
+# ``--visualizer-preset MODE=N``: the preset a run renders, by the number Settings shows (1-based). It takes
+# precedence over ``_PREVIEW_PRESETS`` for that run only; nothing about it is stored.
+_PRESET_NUMBERS: dict[str, int] = {}
+
+
+def parse_preset_numbers(values: list[str] | None) -> dict[str, int]:
+    """``MODE=N`` arguments -> {mode: N}; N is the preset number Settings shows (1-based)."""
+    result: dict[str, int] = {}
+    for value in values or ():
+        mode, separator, number = value.partition("=")
+        if not separator or not mode.strip() or not number.strip().isdigit() or int(number) < 1:
+            raise ValueError(f"--visualizer-preset expects MODE=N with N >= 1, got {value!r}")
+        result[mode.strip()] = int(number)
+    return result
+
+
 def _preview_preset_index(mode: str) -> int:
     """Runtime preset position of the operator's chosen preview look; loud when that preset is gone."""
+    from core.settings import visualizer_presets as vp
+
+    number = _PRESET_NUMBERS.get(mode)
+    if number is not None:
+        if number - 1 >= vp.get_custom_preset_index(mode):
+            raise LookupError(f"{mode} has no preset {number} in the curated catalogue")
+        return number - 1
     wanted = _PREVIEW_PRESETS.get(mode)
     if wanted is None:
         return 0
-    from core.settings import visualizer_presets as vp
 
     found: list[str] = []
     for index in range(vp.get_custom_preset_index(mode)):
@@ -1172,32 +1205,61 @@ _GLOW_ON_BACKDROP: Final = frozenset({"oscilloscope"})
 _PREVIEW_BACKDROP: Final = (24, 26, 34)       # the gradient backdrop's middle shade
 
 
-def _build_rendered_visualizer_previews(scene: "_HiddenQuickScene", art: Path, output: Path) -> None:
+def photo_card_backdrop(photo: Path, size: tuple[int, int]) -> "Image.Image":
+    """A real wallpaper behind the card as the saver shows it: the photo cover-cropped (centred) to the card's
+    content, under the Widget Theme's card surface (the default dark theme the presentation above resolves)."""
+    from PIL import Image, ImageOps
+
+    from ui.widget_theme_spec import DEFAULT_DARK_WIDGET_THEME
+
+    with Image.open(photo) as source:
+        backdrop = ImageOps.fit(source.convert("RGB"), size, Image.Resampling.LANCZOS).convert("RGBA")
+    surface = Image.new("RGBA", size, DEFAULT_DARK_WIDGET_THEME.color("card.background").as_tuple())
+    backdrop.alpha_composite(surface)
+    return backdrop
+
+
+def _build_rendered_visualizer_previews(scene: "_HiddenQuickScene", art: Path, output: Path, *,
+                                        modes: tuple[str, ...] = _RENDERED_VISUALIZER_PREVIEWS,
+                                        photo: Path | None = None) -> None:
     from PIL import Image
 
     from tools import onboarding_sheet_previews
 
     width, height = _RENDERED_PREVIEW_SIZE
-    for mode in _RENDERED_VISUALIZER_PREVIEWS:
+    for mode in modes:
         bars_path = art.parent / f"{mode}_bars.png"
         if mode in _GLOW_ON_BACKDROP:
+            if photo is not None:
+                raise ValueError(f"--photo is not supported for {mode}: its glow renders onto an opaque colour")
             _render_spectrum_preview(bars_path, width=width, height=height, mode=mode, backdrop=_PREVIEW_BACKDROP)
             with Image.open(bars_path) as bars:
                 backdrop = bars.convert("RGBA")
         else:
             _render_spectrum_preview(bars_path, width=width, height=height, mode=mode)
-            backdrop = Image.new("RGBA", (width, height))
-            for row in range(height):
-                shade = int(16 + 20 * row / max(1, height - 1))
-                backdrop.paste((shade, shade + 2, shade + 8, 255), (0, row, width, row + 1))
+            if photo is not None:
+                backdrop = photo_card_backdrop(photo, (width, height))
+            else:
+                backdrop = Image.new("RGBA", (width, height))
+                for row in range(height):
+                    shade = int(16 + 20 * row / max(1, height - 1))
+                    backdrop.paste((shade, shade + 2, shade + 8, 255), (0, row, width, row + 1))
             with Image.open(bars_path) as bars:
                 backdrop.alpha_composite(bars.convert("RGBA"))
+            if photo is not None:
+                # The card's own border band, where the product draws its border over the wallpaper: the drawn
+                # frame stands in for it, so the photo never shows between the frame and the mode's content.
+                from core.settings.default_contract import require_canonical_default
+                border = int(round(float(require_canonical_default("widgets.global.card_border_width_px"))))
+                backdrop = backdrop.crop((border, border, width - border, height - border))
         framed = onboarding_sheet_previews._framed(backdrop, (255, 255, 255))
         save_png_stable(onboarding_sheet_previews._with_shadow(framed), output / f"visualizer_{mode}.png")
 
 
 def _build_widget_previews(output: Path, scratch: Path, *,
-                           families: list[str] | None = None) -> list[dict[str, object]]:
+                           families: list[str] | None = None,
+                           visualizer_modes: tuple[str, ...] | None = None,
+                           photo: Path | None = None) -> list[dict[str, object]]:
     from PySide6.QtGui import QGuiApplication
 
     app = QGuiApplication.instance() or QGuiApplication(["onboarding-preview-foundry"])
@@ -1219,7 +1281,8 @@ def _build_widget_previews(output: Path, scratch: Path, *,
             width, height = _frame_preview(image, output / name)
             rows.append({"family_id": family_id, "path": name, "size": [width, height]})
         if not families or "visualizers" in families:
-            _build_rendered_visualizer_previews(scene, art, output)
+            _build_rendered_visualizer_previews(scene, art, output, photo=photo,
+                                                modes=visualizer_modes or _RENDERED_VISUALIZER_PREVIEWS)
     finally:
         scene.close()
     return rows
@@ -1376,18 +1439,23 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     # tick: step it the same way before each capture.
     # A history-preparing mode is primed through the same production capture, then its settled
     # captures follow on the same clock.
+    advance = None
+    if mode == "devcurve":
+        from widgets.spotify_visualizer.tick_pipeline import dispatch_devcurve_field as advance
+    elif mode == "bubble":
+        from widgets.spotify_visualizer.tick_pipeline import dispatch_bubble_simulation as advance
     base = _PREVIEW_PRIMING_SECONDS.get(mode, 0.0)
     if base:
         engine = state._engine if isinstance(getattr(state, "_engine", None), _PreviewOnsets) else _PreviewOnsets()
         state._engine = engine
         for step in range(round(base * 30)):
             engine.now = step / 30.0
+            if advance is not None:
+                advance(state, engine.now)
             capture_visualizer_logical_frame(state, now_ts=engine.now, changed=True, mode_reveal_ready=True)
         engine.now = base + 1.0
-    advance = None
-    if mode == "devcurve":
-        from widgets.spotify_visualizer.tick_pipeline import dispatch_devcurve_field as advance
-        advance(state, 1.0)
+    if advance is not None:
+        advance(state, base + 1.0)
     first = capture_visualizer_logical_frame(
         state,
         now_ts=base + 1.0,
@@ -1399,7 +1467,7 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     state._has_pushed_first_frame = True
     state._display_bars = list(current_bars)
     if advance is not None:
-        advance(state, 1.12)
+        advance(state, base + 1.12)
     if base:
         state._engine.now = base + 1.12
     logical = capture_visualizer_logical_frame(
@@ -1731,6 +1799,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--widgets-only", action="store_true")
     parser.add_argument("--family", action="append", help="limit --widgets-only to these families")
     parser.add_argument("--assemble-manifest", action="store_true")
+    parser.add_argument("--visualizer-mode", action="append", metavar="MODE",
+                        help="with --widgets-only: render these Visualizer modes' previews (any registered mode) "
+                             "instead of the default rendered set")
+    parser.add_argument("--visualizer-preset", action="append", metavar="MODE=N",
+                        help="with --widgets-only: render MODE with the preset numbered N in Settings (1-based)")
+    parser.add_argument("--photo", type=Path,
+                        help="with --widgets-only: a real wallpaper behind the Visualizer cards (cover-cropped, "
+                             "under the card surface) instead of the drawn gradient")
     parser.add_argument("--audit-log", type=Path, help=argparse.SUPPRESS)
     parser.add_argument(
         "--guard-probe",
@@ -1738,6 +1814,17 @@ def main(argv: list[str] | None = None) -> int:
         help=argparse.SUPPRESS,
     )
     args = parser.parse_args(argv)
+    _PRESET_NUMBERS.update(parse_preset_numbers(args.visualizer_preset))
+    if (args.visualizer_mode or args.visualizer_preset or args.photo) and not args.widgets_only:
+        parser.error("--visualizer-mode, --visualizer-preset and --photo apply to --widgets-only runs")
+    if args.photo is not None and not args.photo.is_file():
+        parser.error(f"--photo is not a file: {args.photo}")
+    if args.visualizer_mode:
+        from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+        known = {descriptor.mode_id for descriptor in iter_visualizer_mode_descriptors()}
+        unknown = [mode for mode in args.visualizer_mode if mode not in known]
+        if unknown:
+            parser.error(f"unknown Visualizer mode(s): {', '.join(unknown)}")
     if args.assemble_manifest:
         print(json.dumps(assemble_manifest(args.output.resolve()), indent=2))
         return 0
@@ -1773,7 +1860,10 @@ def main(argv: list[str] | None = None) -> int:
             output = args.output.resolve()
             output.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(prefix="srpss-onboarding-preview-") as temporary:
-                widgets = _build_widget_previews(output, Path(temporary), families=args.family)
+                widgets = _build_widget_previews(
+                    output, Path(temporary), families=args.family,
+                    visualizer_modes=tuple(args.visualizer_mode) if args.visualizer_mode else None,
+                    photo=args.photo.resolve() if args.photo else None)
             if args.widgets_only:
                 print(json.dumps({"widgets": widgets}, indent=2))
         _raise_if_guard_attempts(audit_log)

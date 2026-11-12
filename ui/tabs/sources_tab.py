@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPainter, QPen, QPalette
 from ui.widgets.continuous_border import OutlinedListWidget
 from ui.tabs import shared_styles
-from ui.tabs.online_source_rows import FEED, KEY_ROLE, KIND_ROLE, OnlineSourceRowDelegate, populate_online_source_rows
+from ui.tabs.online_source_rows import build_online_source_list, refresh_online_source_list, selected_feed_url
 from ui.tabs.shared_styles import (
     NoWheelSlider,
     add_aligned_row,
@@ -232,12 +232,8 @@ class SourcesTab(QWidget):
         rss_layout.addWidget(self.custom_feeds_label)
 
         # Online sources: active Just Make It Work pools, then custom feeds, each with its status mark.
-        self.rss_list = OutlinedListWidget()
-        self.rss_list.setMinimumHeight(212)  # six rows of the shared list style without a scrollbar
-        # Long URLs elide in the middle inside the row (as theme names do), never scroll sideways.
-        self.rss_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        shared_styles.apply_settings_list_style(self.rss_list)
-        self.rss_list.setItemDelegate(OnlineSourceRowDelegate(self.rss_list))
+        # Built and filled by the owner Guided Setup shares; six rows without a scrollbar, URLs elide in the row.
+        self.rss_list = build_online_source_list(212)
         rss_layout.addWidget(self.rss_list)
 
         # RSS input
@@ -528,11 +524,9 @@ class SourcesTab(QWidget):
         URL text being desynchronised from the persisted list; the rows are
         then rebuilt from what is stored.
         """
-        current_item = self.rss_list.currentItem()
-        if not current_item or current_item.data(KIND_ROLE) != FEED:
+        url = selected_feed_url(self.rss_list)
+        if url is None:
             return
-
-        url = current_item.data(KEY_ROLE)
 
         try:
             rss_feeds = self._settings.get('sources.rss_feeds')
@@ -698,15 +692,13 @@ class SourcesTab(QWidget):
     def _update_ratio_control_state(self) -> None:
         """Update ratio control enabled state based on source availability."""
         folders = self._settings.get('sources.folders')
-        from sources.rss.pools import online_source_count, read_pool_selection, WALLPAPER_POOLS
-        selection = read_pool_selection(self._settings)
+        from sources.rss.pools import online_source_count
         count = online_source_count(self._settings)
-        active = [pool for pool in WALLPAPER_POOLS if pool.pool_id in selection.active_ids]
+        # The tab's one refresh edge (load and every source change): rows and their stored status, no fetch.
+        active = refresh_online_source_list(self.rss_list, self._settings)
         labels = [pool.label for pool in active]
         self.pool_status_label.setText(f"Pools: {len(labels)} enabled" if labels else "Pools: off")
         self.pool_status_label.setToolTip("\n".join(labels) if labels else "Custom feeds below remain independent.")
-        # The tab's one refresh edge (load and every source change): rows and their stored status, no fetch.
-        populate_online_source_rows(self.rss_list, active, list(self._settings.get('sources.rss_feeds') or ()))
         has_folders = len(folders) > 0
         has_rss = count > 0
         both_available = has_folders and has_rss

@@ -1297,6 +1297,13 @@ Watchlist entry (operator, 11 Nov).
     and icons in the accent colour are unchanged.
   - Settings lists (12 Nov): the Themes, Folders and online lists share one style (12 pt, 32 px rows); the
     Sources list's heading reads "Pools and Custom Feeds"; the window's resize grip is three solid lines.
+- **Suggestions, Guided Setup (1D.1 audit; nothing built, approve any to plan it):**
+  - Image time on the Transitions page (`timing.interval`): how long each picture stays is among the first things
+    people change, and Guided Setup never asks it.
+  - Starting Visualizer mode on the Visualizer page: the page sets which modes are available, not which one plays
+    first, so a first run starts on whatever the profile holds.
+  - Preset choice beside each Visualizer preview: the preview shows one preset's look, and the page sends people to
+    full Settings for the rest.
 
 ## 3. Lead and agents: active, paused and queued work
 
