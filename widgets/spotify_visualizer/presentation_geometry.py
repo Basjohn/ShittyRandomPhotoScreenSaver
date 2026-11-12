@@ -515,20 +515,16 @@ def resolve_expanded_visualizer_presentation(
         return float(value) / scale
 
     shadow_offset = style["shadow_offset"]
+    border_width = float(style["authored_border_width"])
+    corner_radius = float(style["authored_corner_radius"])
+    shadow_enabled = bool(style["shadow_enabled"])
     if edge_to_edge:
-        # The style's frame: the border (Borders To Edge) or none (Hide Borders), square corners, no shadow.
-        border_width = 0.0 if display_style == DISPLAY_STYLE_HIDE_BORDERS else float(style["authored_border_width"])
+        # The style's frame: the border (Borders To Edge) or none (Hide Borders), square corners, and no card shadow
+        # (its values stay as the card draws them: a renderer reading the shadow's direction sees the same light).
+        if display_style == DISPLAY_STYLE_HIDE_BORDERS:
+            border_width = 0.0
         corner_radius = 0.0
-        shadow = {"shadow_enabled": False, "shadow_blur": 0.0, "shadow_offset": (0.0, 0.0), "shadow_spread": 0.0,
-                  "shadow_extensions": (0.0, 0.0, 0.0, 0.0)}
-    else:
-        border_width = float(style["authored_border_width"])
-        corner_radius = float(style["authored_corner_radius"])
-        shadow = {"shadow_enabled": bool(style["shadow_enabled"]),
-                  "shadow_blur": _as_drawn(style["shadow_blur"]),
-                  "shadow_offset": (_as_drawn(shadow_offset[0]), _as_drawn(shadow_offset[1])),
-                  "shadow_spread": _as_drawn(style["shadow_spread"]),
-                  "shadow_extensions": tuple(_as_drawn(value) for value in style["shadow_extensions"])}
+        shadow_enabled = False
     record = resolve_visualizer_presentation(
         policy=VisualizerModePresentationPolicy(
             shell_policy=ordinary.shell_policy,
@@ -551,8 +547,12 @@ def resolve_expanded_visualizer_presentation(
         content_inset=_authored("content_inset"),
         background_color=style["background_color"],
         border_color=style["border_color"],
+        shadow_enabled=shadow_enabled,
         shadow_color=style["shadow_color"],
-        **shadow,
+        shadow_blur=_as_drawn(style["shadow_blur"]),
+        shadow_offset=(_as_drawn(shadow_offset[0]), _as_drawn(shadow_offset[1])),
+        shadow_spread=_as_drawn(style["shadow_spread"]),
+        shadow_extensions=tuple(_as_drawn(value) for value in style["shadow_extensions"]),
     )
     if not edge_to_edge:
         return record
@@ -565,6 +565,19 @@ def resolve_expanded_visualizer_presentation(
         "shadow_blur": float(style["shadow_blur"]),
         "shadow_offset": (float(shadow_offset[0]), float(shadow_offset[1])),
     }))
+
+
+def renderer_overflow_held(presentation: ResolvedVisualizerPresentation | None) -> bool:
+    """Whether a renderer's declared overflow (Sphere's, Extruded Spectrum's) is held to the card's clip (1D.2).
+
+    A display-wide card in a non-Default display style is the whole display: past it lies only the window's
+    off-desktop overscan (an exterior edge) or nothing (a shared edge), so no style draws past the visible rect (lead,
+    12 Nov). The render node then takes its clipped path, whose clip is the card's (the display rect). Every other
+    record keeps the mode's own overflow choice exactly as before.
+    """
+
+    return bool(presentation is not None and presentation.expanded_display
+                and presentation.display_style != "default")
 
 
 def framed_aperture_scale(presentation: ResolvedVisualizerPresentation, *, content: bool = False) -> float:
@@ -618,4 +631,5 @@ __all__ = [
     "resize_visualizer_presentation_uniformly",
     "resolve_visualizer_presentation",
     "framed_aperture_scale",
+    "renderer_overflow_held",
 ]

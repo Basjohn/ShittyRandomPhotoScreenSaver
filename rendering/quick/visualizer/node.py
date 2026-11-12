@@ -19,6 +19,7 @@ from core.performance.frame_trace import (
 )
 from widgets.spotify_visualizer.render_bridge import VisualizerRenderIdentity
 from widgets.spotify_visualizer import mode_capabilities
+from widgets.spotify_visualizer.presentation_geometry import renderer_overflow_held
 from widgets.spotify_visualizer.render_state import (
     ResolvedVisualizerPresentation,
     VisualizerRenderSnapshot,
@@ -168,12 +169,21 @@ class VisualizerRenderNode(QSGRenderNode):
         self._screen_index = int(screen_index)
         self._telemetry.note_sync()
 
+    @staticmethod
+    def _overflow_admitted(snapshot: VisualizerRenderSnapshot,
+                           card: ResolvedVisualizerPresentation | None) -> bool:
+        """The mode's declared overflow, unless the card drawn now holds it (a non-Default display-wide card is the
+        whole display; ``renderer_overflow_held``): then the clipped path clips it to the display rect."""
+
+        return (mode_capabilities.requests_unclipped_renderer_overflow(snapshot)
+                and not renderer_overflow_held(card))
+
     def rect(self) -> QRectF:
         return QRectF(0.0, 0.0, *self._logical_size)
 
     def flags(self) -> QSGRenderNode.RenderingFlag:
         snapshot = self._snapshot
-        if snapshot is not None and mode_capabilities.requests_unclipped_renderer_overflow(snapshot):
+        if snapshot is not None and self._overflow_admitted(snapshot, self._presentation):
             # Any descriptor-admitted overflow renderer must not advertise bounded
             # rendering to Qt's scene-graph damage tracker. Clipped modes retain
             # the exact previous BoundedRectRendering contract.
@@ -289,7 +299,7 @@ class VisualizerRenderNode(QSGRenderNode):
                     ),
                     auxiliary=int(snapshot.logical.runtime_generation),
                 )
-            overflow = mode_capabilities.requests_unclipped_renderer_overflow(snapshot)
+            overflow = self._overflow_admitted(snapshot, card)
             clip_trace: VisualizerClipTraceContext | None = None
             mode_trace: VisualizerModeTraceContext | None = None
             if trace is not None:

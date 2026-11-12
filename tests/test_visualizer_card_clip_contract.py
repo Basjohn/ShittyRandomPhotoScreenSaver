@@ -27,9 +27,11 @@ Checks, on the card as drawn now (the item's own record):
 * ``steady``: the ordinary card, coherent snapshot.
 * ``shrunk``: the card takes a smaller record (a wheel resize) before a coherent snapshot exists, so the node draws
   the retained snapshot, whose record is larger than the card.
-* ``expanded``: the display-wide card (Expanded Visualizer) for every mode that supports it.
-* ``collapsed``: the ordinary card taken back from the display-wide one before a coherent snapshot exists (the
-  retained snapshot's record is display-wide).
+* ``expanded_<style>``: the display-wide card (Expanded Visualizer) for every mode that supports it, in each display
+  style (1D.2): Default, Borders To Edge (the frame's outer edge on the display's, square corners) and Hide Borders
+  (no frame: the clip is the whole display, so nothing may change outside it).
+* ``collapsed_<style>``: the ordinary card taken back from that display-wide one before a coherent snapshot exists
+  (the retained snapshot's record is display-wide).
 
 Each runs with Normal and with Glass card material, at 100 %, 125 % and 150 %, on a card the layout requests off the
 device-pixel grid (as pixel shift, CUSTOM scale and centred layouts put it; the resolver snaps it). Before R-188 the
@@ -43,6 +45,7 @@ import ctypes
 
 import pytest
 
+from core.settings.fullscreen_overlays import DISPLAY_STYLES
 from core.settings.visualizer_mode_registry import (
     VisualizerShellPolicy,
     get_visualizer_mode_descriptor,
@@ -312,7 +315,9 @@ def test_no_visualizer_pixel_lands_outside_the_cards_inner_edge(host, mode, mate
             # Straight edges: no content under any frame pixel. Corners: only under the arc's own blend.
             forbidden = (frame & ~corners) | (corners & (_frame_coverage(hidden) > CORNER_BLEND))
             under_frame[name] = int((drawn_changed & forbidden).sum() + (white_changed & forbidden).sum())
-            gaps[name] = _surface_gaps(frame, white_changed, card_rect, dpr)
+            if card.border_width > 0.0:
+                # A frame to meet (Hide Borders has none: its coverage is the display, checked above).
+                gaps[name] = _surface_gaps(frame, white_changed, card_rect, dpr)
 
     clip = shipped_clip(4.0)
     with deterministic_clock() as clock:
@@ -363,17 +368,25 @@ def test_no_visualizer_pixel_lands_outside_the_cards_inner_edge(host, mode, mate
             step()
 
         if descriptor.supports_expanded_display:
-            route["record"] = resolve_expanded_visualizer_presentation(ordinary(), display_size=DISPLAY, dpr=dpr)
-            for _ in range(8):
-                step()
-            check("expanded")
-            # The ordinary card comes back before a coherent snapshot does.
-            route["record"] = ordinary()
-            scene.apply_visualizer_presentation(route["record"], active=True)
-            check("collapsed")
+            # Every display style (1D.2): Default, Borders To Edge (the frame on the display's edges) and Hide
+            # Borders (no frame: the coverage is the whole display).
+            for style in DISPLAY_STYLES:
+                route["record"] = resolve_expanded_visualizer_presentation(ordinary(), display_size=DISPLAY, dpr=dpr,
+                                                                           display_style=style)
+                for _ in range(8):
+                    step()
+                check(f"expanded_{style}")
+                # The ordinary card comes back before a coherent snapshot does.
+                route["record"] = ordinary()
+                scene.apply_visualizer_presentation(route["record"], active=True)
+                check(f"collapsed_{style}")
+                for _ in range(4):
+                    step()
         controller.close_render_admission()
 
     assert lit["steady"] > 0, f"{mode} drew nothing inside the card: the check would be vacuous"
+    if descriptor.supports_expanded_display:
+        assert all(lit.get(f"expanded_{style}", 0) > 0 for style in DISPLAY_STYLES), lit
     assert escapes == {name: 0 for name in escapes}, (
         f"{mode} ({material}, {dpr}) changed pixels outside the card's inner edge: {escapes}")
     assert under_frame == {name: 0 for name in under_frame}, (
@@ -381,3 +394,119 @@ def test_no_visualizer_pixel_lands_outside_the_cards_inner_edge(host, mode, mate
     for name, sides in gaps.items():
         assert all(gap == 0 for gap in sides.values()), (
             f"{mode} ({material}, {dpr}, {name}): card surface between the frame and the white lines (a seam): {sides}")
+
+
+OVERFLOW_MODES = [d.mode_id for d in iter_all_visualizer_mode_descriptors() if d.renderer_overflow_setting]
+OVERFLOW_REACH = {
+    "sphere": {"sphere_shadow_enabled": True, "sphere_shadow_distance": 2.5, "sphere_shadow_size": 1.6,
+               "sphere_particle_distance": 1.0, "sphere_fragment_strength": 1.0},
+    "extruded_spectrum": {"extruded_spectrum_tilt": 1.0, "extruded_spectrum_turn": 1.0,
+                          "extruded_spectrum_depth": 4.0, "extruded_spectrum_reflection": 1.0},
+}
+
+
+def _overflow_escapes(host, mode: str, dpr: float, display: tuple[float, float], *, held: bool) -> tuple[int, int]:
+    """(pixels changed outside ``display`` -- the window's part past the display, as the R-63 overscan lies --, pixels
+    changed inside it), Hide Borders card on ``display``, the mode's overflow ON."""
+    import numpy
+    from unittest.mock import patch
+
+    from core.settings.fullscreen_overlays import DISPLAY_STYLE_HIDE_BORDERS
+    from rendering.quick.visualizer import node as node_module
+    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+    from tools.expanded_visualizer_evidence import shipped_clip
+    from tools.visualizer_replay.engine import ReplayBeatEngine
+    from widgets.spotify_visualizer.feature_replay import configure_offline_controller, deterministic_clock
+    from widgets.spotify_visualizer.presentation_geometry import (
+        resolve_expanded_visualizer_presentation,
+        resolve_visualizer_presentation,
+    )
+    from widgets.spotify_visualizer.quick_presentation_sync import QuickVisualizerPresentationSync
+    from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
+    from widgets.spotify_visualizer.tick_pipeline import logical_tick
+
+    scene = host.scene
+    settings = _settings(mode)
+    settings[get_visualizer_mode_descriptor(mode).renderer_overflow_setting] = True
+    # Test-owned settings that push the overflow's reach as far as they go (a long shadow; a deep, tilted and turned
+    # bar field).
+    for key, value in OVERFLOW_REACH.get(mode, {}).items():
+        assert key in settings, key
+        settings[key] = value
+    ordinary = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy(mode), display_size=display, outer_origin=(24.0, 24.0), dpr=dpr,
+        **CARD)
+    record = resolve_expanded_visualizer_presentation(ordinary, display_size=display, dpr=dpr,
+                                                      display_style=DISPLAY_STYLE_HIDE_BORDERS)
+    clip = shipped_clip(3.0)
+    held_patch = patch.object(node_module, "renderer_overflow_held", lambda _card: False) if not held else None
+    admitted = node_module.VisualizerRenderNode._overflow_admitted
+    decisions: list[bool] = []
+
+    def recorded(snapshot, card):
+        decisions.append(bool(admitted(snapshot, card)))
+        return decisions[-1]
+    with deterministic_clock() as clock:
+        engine = ReplayBeatEngine(32)
+        controller = VisualizerRuntimeController(runtime_generation=1, initial_mode=mode,
+                                                 engine_factory=lambda _count: engine)
+        controller.engine = engine
+        configure_offline_controller(controller, mode, settings=settings)
+        identity = controller.begin_render_activation(
+            engine_generation=engine.get_generation_id(), activation_id=engine.get_activation_id())
+        scene.set_visualizer_render_source(controller.render_bridge, identity)
+        sync = QuickVisualizerPresentationSync(
+            controller, resolve_presentation=lambda: record,
+            commit_presentation=lambda presentation: scene.apply_visualizer_presentation(presentation, active=True),
+            request_present=scene.request_visualizer_present)
+        spy = patch.object(node_module.VisualizerRenderNode, "_overflow_admitted", staticmethod(recorded))
+        try:
+            spy.start()
+            if held_patch is not None:
+                held_patch.start()
+            for feature in clip.frames[:120]:
+                clock[0] = feature.timestamp_us / 1_000_000.0
+                controller.playing = feature.playing
+                engine.set_playback_state(feature.playing)
+                engine.accept_feature_frame(feature)
+                assert logical_tick(controller.logical_tick_state) is not None
+                assert sync.sync_latest()
+                host.render()
+            drawn = host.read()
+            with patch.object(QuickVisualizerRenderHost, "render", lambda self, *, snapshot, **_kw:
+                              snapshot.logical.mode_id):
+                scene.request_visualizer_present()
+                host.render()
+                hidden = host.read()
+        finally:
+            if held_patch is not None:
+                held_patch.stop()
+            spy.stop()
+            controller.close_render_admission()
+    changed = numpy.abs(drawn[..., :3].astype(int) - hidden[..., :3].astype(int)).max(axis=2) > TOLERANCE
+    inside = numpy.zeros(changed.shape, bool)
+    inside[:round(display[1] * dpr), :round(display[0] * dpr)] = True
+    return int((changed & ~inside).sum()), int((changed & inside).sum()), set(decisions)
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("dpr", [1.25])
+@pytest.mark.parametrize("mode", OVERFLOW_MODES)
+def test_hide_borders_holds_a_renderers_overflow_to_the_display_rect(host, mode, dpr):
+    """1D.2, lead's decision 3: no style draws past the visible rect. A Hide Borders card is the whole display; a
+    renderer whose overflow is on (Sphere, Extruded Spectrum) is held to it (the render node's clipped path, its clip
+    the display rect), never into the window's part past the display (the overscan). The display here is the
+    window's top-left quarter, so the rest of the window stands for what lies past it.
+
+    Neither mode can expand today (``supports_expanded_display``), so this binds the rule ahead of them. With these
+    test-owned settings neither reaches past a whole-display card even unheld (measured: 0 pixels outside), so the
+    pixels alone cannot discriminate; the bar is the render node's decision on every frame (the clipped path, held)
+    plus nothing drawn outside. Negative control: the pre-1D.2 decision (overflow never held) takes the unclipped
+    path on every frame."""
+    display = (DISPLAY[0] / 4.0, DISPLAY[1] / 2.0)
+    outside, inside, decisions = _overflow_escapes(host, mode, dpr, display, held=True)
+    _outside, _inside, control = _overflow_escapes(host, mode, dpr, display, held=False)
+    assert inside > 0, f"{mode} drew nothing on the display: the check would be vacuous"
+    assert decisions == {False}, f"{mode}'s overflow was not held on every frame: {decisions}"
+    assert control == {True}, f"the control did not take the unclipped path: {control}"
+    assert outside == 0, f"{mode}'s overflow drew {outside} pixels past the display rect"
