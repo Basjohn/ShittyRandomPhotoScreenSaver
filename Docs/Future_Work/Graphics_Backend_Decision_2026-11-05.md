@@ -135,6 +135,10 @@ the default"). Binding for P3:
    (`tests/test_vulkan_shader_readiness.py`, `tools/vulkan_shader_readiness.py`): the 18 compute sources written
    before it use loose uniforms (rule 1) and sit on a legacy list that only shrinks as P3 ports each mode; every other
    compute shader must compile. Vertex/fragment programs: extend the same test when P3's first port lands.
+   *Superseded on 12 Nov 2026 by N1.2 and N1.3 (`Current_Plan.md` item 8b):* the legacy list no longer exists (it
+   is gone from `tests/test_vulkan_shader_readiness.py`), and the check discovers every shader the product renders
+   with (files, module-level and program-class sources, runtime compositions) and bakes each for the shipped
+   backends' targets (SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2; N1.7 removed GLSL ES).
 
 ## Addendum, 7 Nov 2026: a universal visualizer performance architecture (operator direction)
 

@@ -18,8 +18,9 @@ Source URL prefixes used below (append the file path):
 What the spike already does (`native/spike_p1/src/`): `gui_helpers.cpp::attachVulkanInstance` creates one
 `QVulkanInstance` with `QRhiVulkanInitParams::preferredInstanceExtensions()` and sets it on the window;
 `quick_offscreen.cpp::QuickOffscreenSession` drives a `QQuickRenderControl` with `initialize()`, an offscreen
-`QQuickRenderTarget::fromRhiRenderTarget`, `beginFrame/sync/render/endFrame`, on its own render thread. Nothing creates a
-`VkDevice`, a real swapchain window, a second queue or validation layers yet.
+`QQuickRenderTarget::fromRhiRenderTarget`, `beginFrame/sync/render/endFrame`, on its own render thread. At the time of writing nothing created a
+`VkDevice`, a real swapchain window, a second queue or validation layers; N0.6 and N0.7 built them in the harness
+the same day (merged 12 Nov; section I and `Native_Core_P3_Decisions.md` D6/D9 record what was measured).
 
 ---
 

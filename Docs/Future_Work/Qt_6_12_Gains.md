@@ -104,6 +104,6 @@ Missing required QML properties now error; `QSoundEffect.sourceChanged` always e
 - Full `dist/changes-6.12.0` files for qtbase and qtdeclarative (code.qt.io returned 404 for both tried URLs): so threaded render loop, layers, ShaderEffect, QQuickRenderControl, D3D12, Windows platform-plugin, DPI and DWM changelog items are unread. Only What's New, class pages, the PySide changelog and the release post were read.
 - Why the GL array-buffer binding changed in 6.12.
 - The `IndirectDrawBuffer` enum/usage flag exact location and `QRhiIndirectDrawCommand` field layout (S3/S4 link but did not show them).
-- Python 3.14 status for PySide6 6.12, startup-time changes, and per-backend `DrawIndirectMulti` actual support on this hardware.
+- Python 3.14 status for PySide6 6.12 (resolved 12 Nov 2026, commit 655b04bf: the repo venv on CPython 3.14 imports PySide6/Qt 6.12.0), startup-time changes, and per-backend `DrawIndirectMulti` actual support on this hardware.
 - Any 6.12 change to HDR swapchains, translucent/alpha swapchains, DirectComposition, mipmap/readback, compute, formats or multiview (none tagged 6.12 on the pages read).
 - The Phoronix beta article (403) and Qt 6.9 vblank-thread note (secondary source only).
