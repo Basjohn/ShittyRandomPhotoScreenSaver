@@ -34,7 +34,15 @@ QByteArray n06VulkanFactsJson();
 // D9's in-frame form runs), created at a lower priority and proved with an empty submit and a fence;
 // "force_absent" = the negative control: the same finder is given a forced shape (the graphics family with one
 // queue, no other family), must report none, and the device is created with the graphics queue only.
-QByteArray n06ContextCreateJson(bool wantValidation, const QString &queueMode = QStringLiteral("one"));
+// parts (round 5, attributing growth to its owner): "full" = our instance, Qt's adoption, our device and the
+// reference instance (rounds 2 to 4); "raw_instance" = our VkInstance and messenger only; "instance" = plus Qt's
+// adoption; "device" = plus our device; "reference" = only the reference QVulkanInstance (Qt's own device then).
+// The process handle count after every create step is returned ("create_handles"), and destroy returns it after
+// every teardown step ("teardown_handles").
+QByteArray n06ContextCreateJson(bool wantValidation, const QString &queueMode = QStringLiteral("one"),
+                                const QString &parts = QStringLiteral("full"));
+// The process handle count alone (cheap: no GPU query, no snapshot), for step deltas in the driver.
+qint64 n06HandleCount();
 // Process counters for the create/destroy cycles: handles, GDI and USER objects, threads, private bytes, working
 // set, and per memory heap the process's GPU usage (VK_EXT_memory_budget, read through a small probe instance of
 // its own that lives until process exit, so it is part of every reading alike). GUI thread.

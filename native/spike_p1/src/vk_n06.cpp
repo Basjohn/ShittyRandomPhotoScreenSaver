@@ -56,6 +56,15 @@ struct Loader
     HMODULE library = nullptr;
     PFN_vkGetInstanceProcAddr getInstanceProcAddr = nullptr;
 
+    Loader() = default;
+    Loader(const Loader &) = delete;
+    Loader &operator=(const Loader &) = delete;
+    ~Loader()
+    {
+        if (library)
+            FreeLibrary(library); // balances LoadLibraryW (one reference per context; Qt holds its own)
+    }
+
     bool load(QString *error)
     {
         library = LoadLibraryW(L"vulkan-1.dll"); // the loader the driver installed; Qt loads the same one
@@ -78,6 +87,23 @@ struct Loader
         return reinterpret_cast<F>(getInstanceProcAddr(instance, name));
     }
 };
+
+qint64 processHandles()
+{
+    DWORD n = 0;
+    GetProcessHandleCount(GetCurrentProcess(), &n);
+    return qint64(n);
+}
+
+// The process handle count after a named step: create and teardown steps side by side show which one keeps
+// handles (N0.6 round 5, attribution of the growth seen in rounds 3 and 4).
+void markHandles(QJsonArray *steps, const QString &name)
+{
+    QJsonObject s;
+    s.insert(QStringLiteral("step"), name);
+    s.insert(QStringLiteral("handles"), processHandles());
+    steps->append(s);
+}
 
 QString versionString(uint32_t v)
 {
@@ -744,6 +770,7 @@ struct Context
     std::unique_ptr<QVulkanInstance> ours;      // adopts `instance`
     std::unique_ptr<QVulkanInstance> reference; // Qt creates its own instance and, per window, its own device
     MessageStats stats;                         // outlives the messengers (deleted with the context)
+    QJsonArray createHandles;                   // process handle count after each create step
 };
 
 Context *g_context = nullptr;
@@ -793,7 +820,7 @@ std::vector<const char *> pointers(const QByteArrayList &list)
 }
 
 // Our VkInstance (route ii) and the QVulkanInstance that adopts it. Fills `o`; false on failure with o["error"].
-bool createOurInstance(Context *ctx, bool wantValidation, QJsonObject *o)
+bool createOurInstance(Context *ctx, bool wantValidation, bool adopt, QJsonObject *o)
 {
     auto createInstance = ctx->loader.get<PFN_vkCreateInstance>(nullptr, "vkCreateInstance");
     if (!createInstance) {
@@ -886,6 +913,7 @@ bool createOurInstance(Context *ctx, bool wantValidation, QJsonObject *o)
         o->insert(QStringLiteral("error"), QStringLiteral("vkCreateInstance: ") + vkResultName(created));
         return false;
     }
+    markHandles(&ctx->createHandles, QStringLiteral("vkCreateInstance"));
     ctx->destroyInstance = ctx->loader.get<PFN_vkDestroyInstance>(ctx->instance, "vkDestroyInstance");
     if (debugUtils) {
         auto createMessenger = ctx->loader.get<PFN_vkCreateDebugUtilsMessengerEXT>(
@@ -895,8 +923,11 @@ bool createOurInstance(Context *ctx, bool wantValidation, QJsonObject *o)
         messengerInfo.pNext = nullptr;
         if (createMessenger)
             createMessenger(ctx->instance, &messengerInfo, nullptr, &ctx->messenger);
+        markHandles(&ctx->createHandles, QStringLiteral("vkCreateDebugUtilsMessengerEXT"));
     }
     o->insert(QStringLiteral("messenger"), ctx->messenger != VK_NULL_HANDLE);
+    if (!adopt)
+        return true;
 
     // Adopt: the exact lists we enabled (Qt does not query an adopted instance) and the API version, without
     // which QRhi treats the device as Vulkan 1.0 (facts A3, A4).
@@ -916,6 +947,7 @@ bool createOurInstance(Context *ctx, bool wantValidation, QJsonObject *o)
     adopted.insert(QStringLiteral("extensions"), byteArrayList(ctx->ours->extensions()));
     adopted.insert(QStringLiteral("layers"), byteArrayList(ctx->ours->layers()));
     o->insert(QStringLiteral("adopted"), adopted);
+    markHandles(&ctx->createHandles, QStringLiteral("QVulkanInstance adopt"));
     return true;
 }
 
@@ -1212,8 +1244,11 @@ bool createOurDevice(Context *ctx, const QString &queueMode, QJsonObject *o)
     }
     o->insert(QStringLiteral("vk_device"), qint64(reinterpret_cast<quintptr>(ctx->device)));
     o->insert(QStringLiteral("vk_physical_device"), qint64(reinterpret_cast<quintptr>(ctx->physDev)));
-    if (ctx->hasSecondQueue)
+    markHandles(&ctx->createHandles, QStringLiteral("vkCreateDevice"));
+    if (ctx->hasSecondQueue) {
         secondRecord.insert(QStringLiteral("proof"), proveSecondQueue(ctx));
+        markHandles(&ctx->createHandles, QStringLiteral("second queue proof (fence, submit, wait)"));
+    }
     o->insert(QStringLiteral("second_queue"), secondRecord);
     return true;
 }
@@ -1237,31 +1272,49 @@ QByteArray n06VulkanFactsJson()
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
 
-QByteArray n06ContextCreateJson(bool wantValidation, const QString &queueMode)
+QByteArray n06ContextCreateJson(bool wantValidation, const QString &queueMode, const QString &parts)
 {
     QJsonObject root;
     root.insert(QStringLiteral("round"), QStringLiteral("device"));
+    root.insert(QStringLiteral("parts"), parts);
     if (g_context) {
         root.insert(QStringLiteral("ok"), false);
         root.insert(QStringLiteral("error"), QStringLiteral("a context exists already"));
         return QJsonDocument(root).toJson(QJsonDocument::Compact);
     }
+    const bool full = parts == QLatin1String("full");
+    const bool wantInstance = full || parts == QLatin1String("raw_instance") || parts == QLatin1String("instance")
+        || parts == QLatin1String("device");
+    const bool adopt = full || parts == QLatin1String("instance") || parts == QLatin1String("device");
+    const bool wantDevice = full || parts == QLatin1String("device");
+    const bool wantReference = full || parts == QLatin1String("reference");
+    if (!wantInstance && !wantReference) {
+        root.insert(QStringLiteral("ok"), false);
+        root.insert(QStringLiteral("error"), QStringLiteral("unknown parts ") + parts);
+        return QJsonDocument(root).toJson(QJsonDocument::Compact);
+    }
     auto ctx = std::make_unique<Context>();
+    markHandles(&ctx->createHandles, QStringLiteral("start"));
     QString error;
     if (!ctx->loader.load(&error)) {
         root.insert(QStringLiteral("ok"), false);
         root.insert(QStringLiteral("error"), error);
         return QJsonDocument(root).toJson(QJsonDocument::Compact);
     }
-    QJsonObject instance;
-    const bool instanceOk = createOurInstance(ctx.get(), wantValidation, &instance);
-    root.insert(QStringLiteral("instance"), instance);
-    QJsonObject device;
-    const bool deviceOk = instanceOk && createOurDevice(ctx.get(), queueMode, &device);
-    root.insert(QStringLiteral("device"), device);
-
-    QJsonObject reference;
-    if (deviceOk) {
+    markHandles(&ctx->createHandles, QStringLiteral("LoadLibraryW vulkan-1"));
+    bool ok = true;
+    if (wantInstance) {
+        QJsonObject instance;
+        ok = createOurInstance(ctx.get(), wantValidation, adopt, &instance);
+        root.insert(QStringLiteral("instance"), instance);
+    }
+    if (ok && wantDevice) {
+        QJsonObject device;
+        ok = createOurDevice(ctx.get(), queueMode, &device);
+        root.insert(QStringLiteral("device"), device);
+    }
+    if (ok && wantReference) {
+        QJsonObject reference;
         ctx->reference.reset(new QVulkanInstance);
         ctx->reference->setApiVersion(QVersionNumber(1, 2));
         ctx->reference->setExtensions(QRhiVulkanInitParams::preferredInstanceExtensions());
@@ -1271,13 +1324,20 @@ QByteArray n06ContextCreateJson(bool wantValidation, const QString &queueMode)
         } else {
             reference.insert(QStringLiteral("error"), QStringLiteral("QVulkanInstance::create failed (VkResult %1)")
                                                           .arg(int(ctx->reference->errorCode())));
+            ok = false;
         }
+        markHandles(&ctx->createHandles, QStringLiteral("reference QVulkanInstance"));
+        root.insert(QStringLiteral("reference_instance"), reference);
     }
-    root.insert(QStringLiteral("reference_instance"), reference);
-    const bool ok = deviceOk && !reference.contains(QStringLiteral("error"));
+    root.insert(QStringLiteral("create_handles"), ctx->createHandles);
     root.insert(QStringLiteral("ok"), ok);
     g_context = ctx.release(); // kept even on failure so that destroy() releases whatever was created
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
+}
+
+qint64 n06HandleCount()
+{
+    return processHandles();
 }
 
 void n06SetPhase(const QString &phase)
@@ -1297,16 +1357,22 @@ QByteArray n06ContextDestroyJson()
     Context *ctx = g_context;
     ctx->stats.setPhase(QStringLiteral("teardown"));
     QJsonArray steps;
+    QJsonArray handles;
+    markHandles(&handles, QStringLiteral("teardown start"));
+    auto step = [&](const QString &name) {
+        steps.append(name);
+        markHandles(&handles, name);
+    };
     if (ctx->device != VK_NULL_HANDLE) {
         // The windows are gone; this wait also covers any queue Qt's QRhi never waited on (facts A7).
         const VkResult idle = ctx->deviceWaitIdle(ctx->device);
-        steps.append(QStringLiteral("vkDeviceWaitIdle: ") + (idle == VK_SUCCESS ? QStringLiteral("VK_SUCCESS")
-                                                                               : vkResultName(idle)));
+        step(QStringLiteral("vkDeviceWaitIdle: ") + (idle == VK_SUCCESS ? QStringLiteral("VK_SUCCESS")
+                                                                        : vkResultName(idle)));
         ctx->destroyDevice(ctx->device, nullptr);
-        steps.append(QStringLiteral("vkDestroyDevice"));
+        step(QStringLiteral("vkDestroyDevice"));
         if (ctx->ours) {
             ctx->ours->resetDeviceFunctions(ctx->device); // QRhi cached them; it never resets an imported device's
-            steps.append(QStringLiteral("resetDeviceFunctions"));
+            step(QStringLiteral("resetDeviceFunctions"));
         }
         root.insert(QStringLiteral("device_wait_idle_ok"), idle == VK_SUCCESS);
         ctx->device = VK_NULL_HANDLE;
@@ -1314,28 +1380,30 @@ QByteArray n06ContextDestroyJson()
     if (ctx->reference) {
         ctx->reference->destroy();
         ctx->reference.reset();
-        steps.append(QStringLiteral("reference QVulkanInstance destroyed"));
+        step(QStringLiteral("reference QVulkanInstance destroyed"));
     }
     if (ctx->ours) {
         ctx->ours->destroy(); // an adopted VkInstance is not destroyed by Qt
         ctx->ours.reset();
-        steps.append(QStringLiteral("adopting QVulkanInstance destroyed"));
+        step(QStringLiteral("adopting QVulkanInstance destroyed"));
     }
     if (ctx->messenger != VK_NULL_HANDLE && ctx->destroyMessenger) {
         ctx->destroyMessenger(ctx->instance, ctx->messenger, nullptr);
         ctx->messenger = VK_NULL_HANDLE;
-        steps.append(QStringLiteral("vkDestroyDebugUtilsMessengerEXT"));
+        step(QStringLiteral("vkDestroyDebugUtilsMessengerEXT"));
     }
     if (ctx->instance != VK_NULL_HANDLE && ctx->destroyInstance) {
         ctx->destroyInstance(ctx->instance, nullptr);
         ctx->instance = VK_NULL_HANDLE;
-        steps.append(QStringLiteral("vkDestroyInstance"));
+        step(QStringLiteral("vkDestroyInstance"));
     }
     root.insert(QStringLiteral("steps"), steps);
     root.insert(QStringLiteral("messages"), ctx->stats.toJson());
     root.insert(QStringLiteral("ok"), true);
-    delete ctx;
+    delete ctx; // the context's loader reference (FreeLibrary) goes with it
     g_context = nullptr;
+    markHandles(&handles, QStringLiteral("context deleted"));
+    root.insert(QStringLiteral("teardown_handles"), handles);
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
 
@@ -1439,10 +1507,11 @@ struct BudgetProbe
 
 BudgetProbe &budgetProbe()
 {
-    static BudgetProbe probe;
-    if (!probe.initialised)
-        probe.init();
-    return probe;
+    // Never destroyed: no FreeLibrary or vkDestroyInstance at DLL unload (loader-lock rules).
+    static BudgetProbe *probe = new BudgetProbe;
+    if (!probe->initialised)
+        probe->init();
+    return *probe;
 }
 
 int processThreadCount()
@@ -1494,8 +1563,11 @@ QByteArray n06ProcessCountersJson()
 #ifdef SPIKE_WITH_QUICK
 bool n06AttachQuickWindow(QQuickWindow *window, bool ours, QString *error)
 {
-    if (!window || !g_context || !g_context->ours || !g_context->reference || g_context->device == VK_NULL_HANDLE) {
-        *error = QStringLiteral("no window, or no complete N0.6 context");
+    const bool ready = g_context
+        && (ours ? (g_context->ours && g_context->device != VK_NULL_HANDLE) : bool(g_context->reference));
+    if (!window || !ready) {
+        *error = ours ? QStringLiteral("no window, or no N0.6 context with our instance and device")
+                      : QStringLiteral("no window, or no N0.6 context with the reference instance");
         return false;
     }
     if (ours) {

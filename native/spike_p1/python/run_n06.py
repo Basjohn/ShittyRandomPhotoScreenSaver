@@ -19,11 +19,17 @@ Rounds (one per GitHub build of the module):
           and is pixel-compared before and after the resize. Handles, threads, GDI/USER objects, private bytes and
           the GPU heap usage are read after every teardown and must return to the first cycle's values; a last
           cycle forces the second queue's absence (negative control; --force-no-second-queue forces it always).
+  owners  round 5: whose growth. Seven cycle kinds, each adding one owner to the one before (our raw
+          VkInstance; Qt's adoption; our device; the reference instance; Qt's own device under the host; our host
+          without readback; the full cycle), --cycles each (the full kind --long-cycles, for plateau versus linear
+          growth). After every teardown: gc, then handles, threads, private bytes, GPU heaps and the Python gc
+          object count; the handle count after every create, host and teardown step attributes the growth.
 
 Usage (repository venv, the module built on GitHub):
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round facts --label n06_facts
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round device --label n06_device
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round lifecycle --label n06_lifecycle
+  python native/spike_p1/python/run_n06.py --module-dir release/native_module --round owners --cycles 12 --label n06_owners
 Evidence: .artifacts/evidence/native_core/n06/<date>_<label>/summary.json. Exit 0 whenever the probe ran; the
 verdict is in the JSON and the last printed lines ("N06 VERDICT ...").
 """
@@ -213,23 +219,33 @@ def compare_pngs(a: Path, b: Path) -> dict:
             "differing_pixels": int((diff.reshape(diff.shape[0], -1, 4).max(axis=2) > 0).sum())}
 
 
-def _quick_host(native, ours: bool, png: Path, next_frame_png: Path | None, *, frames_count: int = FRAMES,
-                resize_to: tuple[int, int] | None = None, resized_png: Path | None = None) -> dict:
+def _quick_host(native, ours: bool, png: Path | None, next_frame_png: Path | None, *, frames_count: int = FRAMES,
+                resize_to: tuple[int, int] | None = None, resized_png: Path | None = None,
+                steps: list | None = None) -> dict:
     """The spike scene in a hidden Qt Quick host (QQuickRenderControl, never shown), on our device (ours) or on
     the device Qt creates (the reference instance); with resize_to, the target is then replaced at that size and
-    the scene rendered again. Everything is destroyed before returning: the render control (and with it Qt's
-    QRhi), the scene, the window, the engine."""
+    the scene rendered again. png None: no readback at all. Everything is destroyed before returning: the render
+    control (and with it Qt's QRhi), the scene, the window, the engine. steps, when given, receives the process
+    handle count after each step (round 5's attribution)."""
+    import gc
+
     import shiboken6
     from PySide6.QtCore import QCoreApplication, QEvent, QSizeF, QUrl
     from PySide6.QtGui import QImage, QRhi
     from PySide6.QtQml import QQmlComponent, QQmlEngine
     from PySide6.QtQuick import QQuickRenderControl, QQuickWindow
 
+    def mark(name: str) -> None:
+        if steps is not None and hasattr(native, "n06_handle_count"):
+            steps.append([name, native.n06_handle_count()])
+
+    mark("host start")
     result: dict = {"host": "our_device" if ours else "qt_own_device", "ok": False}
     control = QQuickRenderControl()
     window = QQuickWindow(control)  # never shown
     engine = QQmlEngine()
     component = QQmlComponent(engine)
+    mark("control, window, engine created")
     root = None
     handle = None
     try:
@@ -243,25 +259,29 @@ def _quick_host(native, ours: bool, png: Path, next_frame_png: Path | None, *, f
         window.setGeometry(0, 0, WIDTH, HEIGHT)
         window.contentItem().setSize(QSizeF(WIDTH, HEIGHT))
         root.setSize(QSizeF(WIDTH, HEIGHT))
+        mark("scene created")
         try:
             session = native.quick_session_begin(_ptr(control), _ptr(window), WIDTH, HEIGHT, True)
         except RuntimeError as exc:
             result["error"] = f"quick_session_begin: {exc}"
             return result
+        mark("session begun (render thread, QRhi, target)")
         handle = session["handle"]
         result.update(backend=session["backend"], device=session["device"], vk_device=session.get("vk_device", 0),
                       vk_queue_family=session.get("vk_queue_family", -1),
                       vk_queue_index=session.get("vk_queue_index", -1))
-        frames = native.quick_session_frames(handle, _ptr(root), frames_count, str(png))
+        frames = native.quick_session_frames(handle, _ptr(root), frames_count, str(png) if png else "")
+        mark("frames rendered" + (" with readback" if png else ""))
         result.update(frames_ok=frames["ok"], frames_error=frames["error"], lit_pixels=frames["lit_pixels"],
                       pixel_checksum=frames["pixel_checksum"], timing=_frame_summary(frames["frame_ms"]),
-                      png=str(png) if frames["ok"] else None)
+                      png=str(png) if (frames["ok"] and png) else None)
         rhi = control.rhi()
         result["rhi_feature_flags"] = {f.name: bool(rhi.isFeatureSupported(f)) for f in QRhi.Feature} if rhi else {}
+        del rhi
         if next_frame_png is not None:
             nxt = native.quick_session_frames(handle, _ptr(root), 1, str(next_frame_png))
             result["next_frame_png"] = str(next_frame_png) if nxt["ok"] else None
-        result["ok"] = bool(frames["ok"]) and frames["lit_pixels"] > 0
+        result["ok"] = bool(frames["ok"]) and (frames["lit_pixels"] > 0 or not png)
         if resize_to is not None and resized_png is not None:
             w2, h2 = resize_to
             resize: dict = {"size": [w2, h2], "ok": False}
@@ -274,22 +294,31 @@ def _quick_host(native, ours: bool, png: Path, next_frame_png: Path | None, *, f
                 read = QImage(str(resized_png)) if again["ok"] else QImage()
                 resize.update(frames_ok=again["ok"], frames_error=again["error"], lit_pixels=again["lit_pixels"],
                               read_size=[read.width(), read.height()], png=str(resized_png) if again["ok"] else None)
+                del read
                 resize["ok"] = bool(again["ok"]) and again["lit_pixels"] > 0 and resize["read_size"] == [w2, h2]
             except RuntimeError as exc:
                 resize["error"] = str(exc)
+            mark("resized and rendered with readback")
             result["resize"] = resize
             result["ok"] = result["ok"] and resize["ok"]
         return result
     finally:
         if handle is not None:
             native.quick_session_end(handle)  # invalidates the scene graph on the render thread, which then quits
+            mark("session ended (render thread quit)")
         shiboken6.delete(control)  # Qt's QRhi on this window goes with it (Qt's render-control examples' order)
+        mark("render control deleted (Qt's QRhi)")
         if root is not None:
             root.setParentItem(None)
             root.deleteLater()
             QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            root = None
         shiboken6.delete(window)
-        del component, engine
+        mark("scene and window deleted")
+        del component
+        del engine
+        gc.collect()
+        mark("engine deleted, gc")
 
 
 def round_device(native, out: Path) -> dict:
@@ -543,10 +572,183 @@ def round_lifecycle(native, out: Path, cycles: int = 10, force_absent_all: bool 
     }
 
 
-ROUNDS = {"facts": round_facts, "device": round_device, "lifecycle": round_lifecycle}
+# --------------------------------------------------------------------- round 5: whose growth (owners)
+
+# (kind, context parts, queue mode, host): each kind adds one owner to the one before it, so differences attribute
+# growth.
+OWNER_KINDS = (
+    ("raw_instance", "raw_instance", "one", None),            # our VkInstance and messenger (loader and driver)
+    ("instance_adopted", "instance", "one", None),            # + Qt's adopting QVulkanInstance
+    ("device_one_queue", "device", "one", None),              # + our VkDevice, graphics queue only
+    ("device", "device", "second", None),                     # + the second queue and its fence proof
+    ("context_no_host", "full", "second", None),              # + the reference QVulkanInstance (Qt's vkCreateInstance)
+    ("qt_host_only", "reference", "one", "qt_full"),          # Qt's own device under the same host, readback, resize
+    ("our_host_no_readback", "full", "second", "ours_plain"),  # our host, frames only, no readback, no resize
+    ("our_host_full", "full", "second", "ours_full"),         # the rounds 3-4 cycle (also the long series)
+)
+OWNER_WARMUP = 2
+FLAT_HANDLES_PER_CYCLE = 0.05
+
+
+def _slope(values: list[float]) -> float | None:
+    n = len(values)
+    if n < 2:
+        return None
+    mean_x = (n - 1) / 2.0
+    mean_y = sum(values) / n
+    num = sum((i - mean_x) * (v - mean_y) for i, v in enumerate(values))
+    den = sum((i - mean_x) ** 2 for i in range(n))
+    return round(num / den, 4) if den else None
+
+
+def _step_deltas(steps: list) -> list:
+    """[[name, handles], ...] -> [[name, delta from the previous step], ...]"""
+    return [[steps[i][0], steps[i][1] - steps[i - 1][1]] for i in range(1, len(steps))]
+
+
+def _owner_cycle(native, out: Path, kind: str, parts: str, queue_mode: str, host: str | None) -> str:
+    """One cycle of a kind; returned as a JSON string, so the kept records add no gc-tracked object and the
+    Python gc object count measures what the cycle itself leaves behind."""
+    import gc
+
+    record: dict = {"kind": kind}
+    ctx = json.loads(native.n06_context_create(True, queue_mode, parts))
+    record["context_ok"] = bool(ctx.get("ok"))
+    record["create_steps"] = _step_deltas([[s["step"], s["handles"]] for s in ctx.get("create_handles", [])])
+    if host and ctx.get("ok"):
+        steps: list = []
+        scratch, scratch_resized = out / "n06_owner_scratch.png", out / "n06_owner_scratch_resized.png"
+        if host == "qt_full":
+            r = _quick_host(native, False, scratch, None, frames_count=CYCLE_FRAMES, resize_to=RESIZED,
+                            resized_png=scratch_resized, steps=steps)
+        elif host == "ours_plain":
+            r = _quick_host(native, True, None, None, frames_count=CYCLE_FRAMES, steps=steps)
+        else:
+            r = _quick_host(native, True, scratch, None, frames_count=CYCLE_FRAMES, resize_to=RESIZED,
+                            resized_png=scratch_resized, steps=steps)
+        record["host_ok"] = bool(r.get("ok"))
+        record["host_on_expected_device"] = (r.get("vk_device") == ctx.get("device", {}).get("vk_device")
+                                             if host != "qt_full" else bool(r.get("vk_device")))
+        record["host_steps"] = _step_deltas(steps)
+        del r
+    teardown = json.loads(native.n06_context_destroy())
+    record["teardown_ok"] = bool(teardown.get("ok")) and teardown.get("device_wait_idle_ok", True) is True
+    record["teardown_steps"] = _step_deltas([[s["step"], s["handles"]] for s in teardown.get("teardown_handles", [])])
+    record["messenger_errors"] = teardown.get("messages", {}).get("errors", -1)
+    record["validation_layer_loaded"] = bool(ctx.get("instance", {}).get("validation_layer_loaded"))
+    del ctx, teardown
+    gc.collect()
+    record["counters_after"] = json.loads(native.n06_process_counters())
+    record["python_gc_objects"] = len(gc.get_objects())
+    return json.dumps(record)
+
+
+def _mean_steps(records: list, key: str) -> list:
+    """The mean handle delta of each named step over the measured (post warm-up) cycles."""
+    totals: dict = {}
+    order: list = []
+    for r in records:
+        for name, delta in r.get(key, []):
+            if name not in totals:
+                totals[name] = []
+                order.append(name)
+            totals[name].append(delta)
+    return [[name, round(sum(totals[name]) / len(totals[name]), 3)] for name in order]
+
+
+def _owner_summary(records: list) -> dict:
+    measured = records[OWNER_WARMUP - 1:]  # the warm-up's last cycle is the baseline
+    handles = [r["counters_after"]["handles"] for r in measured]
+    private = [r["counters_after"].get("private_mib", 0.0) for r in measured]
+    threads = [r["counters_after"]["threads"] for r in measured]
+    gc_objects = [r["python_gc_objects"] for r in measured]
+    heaps = [[h.get("usage_mib", 0.0) for h in r["counters_after"].get("gpu_heaps", [])] for r in measured]
+    cycles = max(1, len(measured) - 1)
+    return {
+        "cycles": len(records),
+        "handles_per_cycle": round((handles[-1] - handles[0]) / cycles, 3),
+        "handles_series": [r["counters_after"]["handles"] for r in records],
+        "private_mib_slope_per_cycle": _slope(private),
+        "private_mib_series": [round(r["counters_after"].get("private_mib", 0.0), 1) for r in records],
+        "threads_delta": threads[-1] - threads[0],
+        "python_gc_objects_per_cycle": round((gc_objects[-1] - gc_objects[0]) / cycles, 2),
+        "gpu_heap_delta_mib": [round(b - a, 3) for a, b in zip(heaps[0], heaps[-1])] if heaps else [],
+        "mean_create_step_deltas": _mean_steps(measured[1:], "create_steps"),
+        "mean_host_step_deltas": _mean_steps(measured[1:], "host_steps"),
+        "mean_teardown_step_deltas": _mean_steps(measured[1:], "teardown_steps"),
+    }
+
+
+def round_owners(native, out: Path, cycles: int = 12, long_cycles: int = 40) -> dict:
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
+
+    QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.Vulkan)
+    app = QGuiApplication([sys.argv[0]])  # no window is ever shown
+    start = json.loads(native.n06_process_counters())
+    kept: dict = {}
+    for kind, parts, queue_mode, host in OWNER_KINDS:
+        count = long_cycles if kind == "our_host_full" else cycles
+        kept[kind] = [_owner_cycle(native, out, kind, parts, queue_mode, host) for _ in range(count)]
+    del app
+    kinds = {kind: [json.loads(text) for text in texts] for kind, texts in kept.items()}
+    for scratch in ("n06_owner_scratch.png", "n06_owner_scratch_resized.png"):
+        (out / scratch).unlink(missing_ok=True)
+
+    summaries = {kind: _owner_summary(records) for kind, records in kinds.items()}
+    per = {kind: s["handles_per_cycle"] for kind, s in summaries.items()}
+    attribution = {
+        "vkCreateInstance_and_destroy (loader, driver; ours)": per["raw_instance"],
+        "Qt adopting QVulkanInstance": round(per["instance_adopted"] - per["raw_instance"], 3),
+        "our VkDevice (graphics queue only)": round(per["device_one_queue"] - per["instance_adopted"], 3),
+        "second queue and its fence proof": round(per["device"] - per["device_one_queue"], 3),
+        "reference QVulkanInstance (Qt's own vkCreateInstance)": round(per["context_no_host"] - per["device"], 3),
+        "our hidden host (Quick, render thread, Qt's QRhi on our device)":
+            round(per["our_host_no_readback"] - per["context_no_host"], 3),
+        "readback and resize": round(per["our_host_full"] - per["our_host_no_readback"], 3),
+        "Qt's own device under the same host (with its instance)": per["qt_host_only"],
+    }
+    long_series = summaries["our_host_full"]["handles_series"][OWNER_WARMUP - 1:]
+    half = len(long_series) // 2
+    second_half_rate = round((long_series[-1] - long_series[half]) / max(1, len(long_series) - 1 - half), 3)
+    private_long = summaries["our_host_full"]["private_mib_series"][OWNER_WARMUP - 1:]
+    third = max(1, len(private_long) // 3)
+    private_plateau = {"min_first_third": min(private_long[:third]), "min_last_third": min(private_long[-third:])}
+    all_records = [r for records in kinds.values() for r in records]
+    checks = {
+        "every_cycle_created_and_tore_down": all(r["context_ok"] and r["teardown_ok"] for r in all_records),
+        "every_host_rendered_on_its_device": all(r.get("host_ok", True) and r.get("host_on_expected_device", True)
+                                                 for r in all_records),
+        "no_messenger_errors": all(r["messenger_errors"] == 0 for r in all_records),
+        "environment_clean": environment_record()["clean"],
+        "our_host_adds_no_handles": abs(attribution["our hidden host (Quick, render thread, Qt's QRhi on our device)"])
+        <= FLAT_HANDLES_PER_CYCLE and abs(attribution["readback and resize"]) <= FLAT_HANDLES_PER_CYCLE,
+        "our_host_full_handles_flat_in_second_half": second_half_rate <= FLAT_HANDLES_PER_CYCLE,
+        "our_host_full_private_bytes_plateau": private_plateau["min_last_third"]
+        <= private_plateau["min_first_third"] + 16.0,
+    }
+    owed = [] if all(r["validation_layer_loaded"] for r in all_records) else ["validation owed (layer not installed)"]
+    return {
+        "round": "owners",
+        "checks": checks,
+        "pass": all(checks.values()),
+        "owed": owed,
+        "handles_per_cycle_by_kind": per,
+        "attribution_handles_per_cycle": attribution,
+        "long_series": {"second_half_handles_per_cycle": second_half_rate, "private_mib": private_plateau},
+        "summaries": summaries,
+        "start_counters": start,
+        "records": kinds,
+        "environment": environment_record(),
+    }
+
+
+ROUNDS = {"facts": round_facts, "device": round_device, "lifecycle": round_lifecycle, "owners": round_owners}
 REQUIRED = {"facts": ("n06_facts",), "device": ("n06_facts", "n06_context_create", "n06_attach_window"),
             "lifecycle": ("n06_facts", "n06_context_create", "n06_attach_window", "n06_process_counters",
-                          "quick_session_resize")}
+                          "quick_session_resize"),
+            "owners": ("n06_context_create", "n06_attach_window", "n06_process_counters", "quick_session_resize",
+                       "n06_handle_count")}
 
 
 def main() -> int:
@@ -556,6 +758,8 @@ def main() -> int:
     parser.add_argument("--label", default="n06")
     parser.add_argument("--cycles", type=int, default=10, help="lifecycle: create/destroy cycles (the first is the "
                         "warm-up and the baseline; one forced-absence cycle always follows)")
+    parser.add_argument("--long-cycles", type=int, default=40,
+                        help="owners: cycles of the full kind (plateau or linear growth)")
     parser.add_argument("--force-no-second-queue", action="store_true",
                         help="lifecycle: force the second queue's absence in every cycle (the negative control as "
                              "a switch; never an environment variable)")
@@ -570,6 +774,13 @@ def main() -> int:
     summary = {"runtime": native.runtime_info(), "python": sys.version}
     if args.round == "lifecycle":
         summary.update(round_lifecycle(native, out, max(2, args.cycles), args.force_no_second_queue))
+    elif args.round == "owners":
+        summary.update(round_owners(native, out, max(4, args.cycles), max(4, args.long_cycles)))
+        print(json.dumps({k: summary[k] for k in ("handles_per_cycle_by_kind", "attribution_handles_per_cycle",
+                                                   "long_series")}, indent=2))
+        print(json.dumps({kind: {k: s[k] for k in ("private_mib_slope_per_cycle", "threads_delta",
+                                                   "python_gc_objects_per_cycle", "gpu_heap_delta_mib")}
+                          for kind, s in summary["summaries"].items()}, indent=2))
     else:
         summary.update(ROUNDS[args.round](native, out))
     (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

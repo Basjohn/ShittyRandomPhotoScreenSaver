@@ -289,6 +289,15 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     `resetDeviceFunctions`, both QVulkanInstances, messenger, instance) clean. Messenger: 0 errors and 0 warnings in
     render and teardown; one loader warning at create ("Registry lookup failed to get layer manifest files", no
     layers installed). Validation still owed.
+  - Rounds 3 and 4, lifecycle and the second queue (347e7d62, built first time; `run_n06.py --round lifecycle`,
+    FAIL on two of 18 checks, evidence `.artifacts/evidence/native_core/n06/20261112_n06_lifecycle/`): 10 cycles of
+    create, render, resize (960x540 to 1280x720), render, teardown on our device all clean, teardown order exact,
+    pixel-identical to Qt's own device before and after the resize; the second queue is found every cycle in family
+    0 at index 1 (D9's same-family rule) and executes (distinct handle, empty submit, fence signalled); the forced
+    absence (negative control) reports none and the device still renders. Threads and GPU heap usage return to
+    baseline (delta 0). Failed: handles grow exactly +3 per cycle (444 after the warm-up, 471 after cycle 10), and
+    private bytes swing 295 to 399 MiB with no trend (the last-minus-first metric read 2.3 MiB per cycle). Round 5
+    (`--round owners`) attributes the growth.
   - [ ] The Vulkan validation layer (with synchronisation validation) on the lead's machine: today there is no Vulkan
     SDK here (the spike used the driver's loader and Vulkan-Headers only). Its download and install is the
     operator's approval (a download); without it N0.6 and N0.7 run their functional parts and record validation as

@@ -433,9 +433,15 @@ PyObject *n06_context_create(PyObject *, PyObject *args)
 {
     int validation = 1;
     const char *queueMode = "one";
-    if (!PyArg_ParseTuple(args, "|ps", &validation, &queueMode))
+    const char *parts = "full";
+    if (!PyArg_ParseTuple(args, "|pss", &validation, &queueMode, &parts))
         return nullptr;
-    return pyJson(n06ContextCreateJson(validation != 0, QString::fromUtf8(queueMode)));
+    return pyJson(n06ContextCreateJson(validation != 0, QString::fromUtf8(queueMode), QString::fromUtf8(parts)));
+}
+
+PyObject *n06_handle_count(PyObject *, PyObject *)
+{
+    return PyLong_FromLongLong(n06HandleCount());
 }
 
 PyObject *n06_process_counters(PyObject *, PyObject *)
@@ -602,6 +608,7 @@ PyMethodDef methods[] = {
     { "n06_context_create", n06_context_create, METH_VARARGS,
       "([validation=True[, queue_mode='one'|'second'|'force_absent']]) -> JSON str: N0.6 our VkInstance (adopted "
       "by Qt) and VkDevice, and a reference instance" },
+    { "n06_handle_count", n06_handle_count, METH_NOARGS, "() -> int: the process handle count" },
     { "n06_process_counters", n06_process_counters, METH_NOARGS,
       "() -> JSON str: handles, GDI/USER objects, threads, private bytes, GPU heap usage" },
     { "n06_set_phase", n06_set_phase, METH_VARARGS, "(phase) attributes later debug messages to it" },
