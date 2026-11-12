@@ -47,6 +47,7 @@ from OpenGL import GL as gl
 
 from core.constants.extruded_bubble_world import WORLD_UNIT
 from rendering.quick import gl_query
+from rendering.quick.scene3d.resources import ProgramUnavailable
 from rendering.quick.scene3d.stream import StreamRing
 from widgets.spotify_visualizer import extruded_bubble_drift as drift
 from widgets.spotify_visualizer.extruded_bubble_drift_log import (
@@ -430,6 +431,9 @@ class DriftSolver:
         # stays drawn and unchanged; the same key is never retried, a new one is (D3, failed swap).
         self._failed: dict[str, tuple[int, int]] = {}
         self._output_failed = 0                # the output size (vec4s) that could not be allocated: not retried
+        # Whether both drift programs exist in this context: None until the first frame with work asks (or the
+        # warm-up compiled them), False when one failed (the mode then draws without drift, never retried here).
+        self._programs: bool | None = None
         self._ring: StreamRing | None = None   # sized to the most chain rows a step has carried (_ring_for)
         # The warm-up check of the pair arithmetic: None until run, then whether this device computes it exactly.
         self.pairs_exact: bool | None = None
@@ -450,6 +454,28 @@ class DriftSolver:
             self._ring.release()
             self._ring = None
         self.pairs_exact = self.pairs_report = None   # a new context checks again
+        self._programs = None
+
+    def _programs_ready(self, resources) -> bool:
+        """Both drift programs, asked for together before anything is allocated (so drift never appears for one
+        family and is then taken away). One that failed (its compile error logged once by ``resources``, which
+        caches it) leaves this solver without output for the context: the mode draws without drift."""
+        if self._programs is None:
+            try:
+                for key, source in PROGRAMS[:2]:
+                    resources.compute_program(key, source)
+            except ProgramUnavailable:
+                self._programs = False
+                # Only a history carried here from another window can exist yet; it cannot advance in this context.
+                for family in self._families.values():
+                    _delete(family.geometry, family.state, family.aux)
+                self._families.clear()
+                _delete(self.output)
+                self.output, self._output_vec4s = 0, 0
+                logger.warning("%s: a drift program is unavailable on this device; drawn without drift", self.label)
+                return False
+            self._programs = True
+        return self._programs
 
     def export(self) -> DriftCarryover | None:
         """Source render thread, its context current: give up the history (not deleted here) behind a fence."""
@@ -492,8 +518,19 @@ class DriftSolver:
         left"), False when it ran now."""
         if self.pairs_exact is not None:
             return True
+        try:
+            program = resources.compute_program(*PROGRAMS[2])
+        except ProgramUnavailable:
+            # Logged once by the resources; drift itself does not need the check (it is never silent: that log).
+            self.pairs_exact, self.pairs_report = False, {"program_unavailable": PROGRAMS[2][0]}
+            return False
         cases, expected = pair_check_cases()
-        source, target = _buffer(cases.nbytes), _buffer(16 * _CHECK_CASES)
+        source = _buffer(cases.nbytes)
+        try:
+            target = _buffer(16 * _CHECK_CASES)
+        except BaseException:
+            _delete(source)
+            raise
         gl.glNamedBufferSubData(source, 0, cases.nbytes, cases)
         prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         saved = [(binding, gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING, binding),
@@ -502,7 +539,7 @@ class DriftSolver:
         generic = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING)
         results = np.empty((_CHECK_CASES, 4), dtype=np.float32)
         try:
-            gl.glUseProgram(resources.compute_program(*PROGRAMS[2]))
+            gl.glUseProgram(program)
             gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _STEPS, source)
             gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _OUT, target)
             gl.glDispatchCompute(1, 1, 1)
@@ -565,8 +602,8 @@ class DriftSolver:
             if name not in live or self._failed[name] != (live[name].revision, live[name].capacity):
                 del self._failed[name]          # gone, or a new key: that one is tried
         offsets = self.layout(families)
-        if not live:
-            return offsets
+        if not live or self._programs is False:
+            return offsets      # nothing live, or no drift program in this context: drawn without drift
         records = unpack_steps(steps)
         serials = records[:, _R["serial"]].astype(np.int64)
         needed = []
@@ -582,6 +619,8 @@ class DriftSolver:
                 needed.append(int(pending[0]))
         if not needed:
             return offsets      # no new logical step since the last frame: nothing to integrate
+        if not self._programs_ready(resources):
+            return offsets      # no output: the mode draws without drift
         self.check(resources)   # once, if the warm-up did not already (an edge, never per frame)
         if offsets["_total"] > self._output_vec4s:
             # Every dispatch rewrites its family's whole output from its state: a new buffer loses nothing.

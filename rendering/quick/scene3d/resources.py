@@ -10,10 +10,18 @@ from array import array
 
 from OpenGL import GL as gl
 
+from core.logging.logger import get_logger
 from rendering.gl_programs.scene3d import SCENE3D_GLSL
 from rendering.quick import gl_query as _query
 from rendering.quick.render.gl_resources import compile_compute_program, compile_program
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame
+
+logger = get_logger(__name__)
+
+
+class ProgramUnavailable(RuntimeError):
+    """A program that failed to compile or link in this context: the failure is cached by its owner
+    (``MeshResources``) and raised again at once, never recompiled, until the resources are released."""
 
 
 _IMAGE_FRAGMENT = """#version 460 core
@@ -77,14 +85,19 @@ def warm_programs(entries) -> bool:
     compiled, and only that one. True once all are compiled.
 
     An ordinary synchronous compile on the calling (render) thread: no driver compile threads,
-    no status polling, nothing left running between steps."""
+    no status polling, nothing left running between steps. A program that fails is settled
+    too: its owner logged it once and cached the failure, and the program's consumer decides
+    what to draw without it (``ProgramUnavailable`` where it asks for it)."""
     for resources, key, *sources in entries:
-        if resources.has_program(key):
+        if resources.has_program(key) or resources.program_failed(key):
             continue
-        if len(sources) == 1:
-            resources.compute_program(key, sources[0])
-        else:
-            resources.program(key, *sources)
+        try:
+            if len(sources) == 1:
+                resources.compute_program(key, sources[0])
+            else:
+                resources.program(key, *sources)
+        except ProgramUnavailable:
+            pass                # this step's unit was the failed compile
         return False
     return True
 
@@ -134,11 +147,16 @@ def bind_frame(program: int, uniforms: _UniformLocations, frame: SceneFrame) -> 
 
 
 class MeshResources:
-    """Finite named programs/meshes; failed deletions retain their handles."""
+    """Finite named programs/meshes; failed deletions retain their handles.
+
+    A program that fails to compile or link is cached as failed (one logged error per program and
+    context) and raises ``ProgramUnavailable`` at once on every later request, never recompiling,
+    until ``release_resources`` (a new context tries again)."""
 
     def __init__(self, label: str) -> None:
         self.label = label
         self._programs: dict[str, int] = {}
+        self._failed_programs: dict[str, str] = {}
         self._uniforms: dict[str, _UniformLocations] = {}
         self._meshes: dict[str, tuple[int, int, int]] = {}
         self._instance_buffers: dict[str, int] = {}
@@ -147,15 +165,35 @@ class MeshResources:
     def has_resources(self) -> bool:
         return bool(self._programs or self._meshes)
 
+    def _compiled(self, key: str, compile_) -> int:
+        failed = self._failed_programs.get(key)
+        if failed is not None:
+            raise ProgramUnavailable(failed)
+        try:
+            program = compile_()
+        except Exception as exc:
+            message = f"{self.label} {key} is unavailable in this context: {exc}"
+            self._failed_programs[key] = message
+            logger.error("%s (not compiled again until the context's resources are released)", message)
+            raise ProgramUnavailable(message) from exc
+        self._programs[key] = program
+        return program
+
     def program(self, key: str, vertex_source: str, fragment_source: str) -> int:
-        if key not in self._programs:
-            self._programs[key] = compile_program(vertex_source, fragment_source, label=f"{self.label} {key}")
-        return self._programs[key]
+        program = self._programs.get(key)
+        if program is not None:
+            return program
+        return self._compiled(key, lambda: compile_program(vertex_source, fragment_source,
+                                                           label=f"{self.label} {key}"))
 
     def compute_program(self, key: str, source: str) -> int:
-        if key not in self._programs:
-            self._programs[key] = compile_compute_program(source, label=f"{self.label} {key}")
-        return self._programs[key]
+        program = self._programs.get(key)
+        if program is not None:
+            return program
+        return self._compiled(key, lambda: compile_compute_program(source, label=f"{self.label} {key}"))
+
+    def program_failed(self, key: str) -> bool:
+        return key in self._failed_programs
 
     def has_mesh(self, key: str) -> bool:
         return key in self._meshes
@@ -331,6 +369,7 @@ class MeshResources:
         gl.glDepthFunc(gl.GL_LESS)
 
     def release_resources(self) -> None:
+        self._failed_programs.clear()          # a new context compiles again
         errors: list[str] = []
         for key in tuple(self._meshes):
             try:
