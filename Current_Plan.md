@@ -440,6 +440,10 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   audit rerun on it.
 - [ ] N3.7 The orientation and quarter-turn contract (the scene frame's rotation in the composite) and the
   Expanded Visualizer's display-size targets at 4K (the M6 budget).
+- [ ] N3.9 A display move keeps a mode's GPU-held history (1C.2, plan 01 M3c "Display moves retarget the live
+  owner"): with one device per window (D6) nothing is shared, so the handoff is a copy through the job thread (D9)
+  from the source device to the target's before the target integrates again; a test equal to an uninterrupted run
+  (Extruded Bubble's drift first, N5.6).
 
 **N4. Shared primitives, each against its Python harness, each ported just before its first consumer below
 (the unconsumed ones on the primitives track)**

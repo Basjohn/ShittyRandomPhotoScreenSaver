@@ -1261,6 +1261,9 @@ can most geometry normally."
        Reducer: `BeginTransfer` says whether the target ends expanded; the user's "full display there" persists the
        intent at the transfer's commit (as the glyph's enter does at its commit) instead of a second enter; a refused
        move fades the view back in on the source in its own route.
+  - **Native core (a contract it keeps):** the cross-window move of a mode's GPU-held history survives the native
+    core: with one device per window (D6) the handoff there is a copy through the job thread (D9), not a shared
+    name (Current_Plan item 8b, N3.9).
   - **Teardown remains only for:** the owning display's loss and a display arrangement change while that is still a
     topology replacement (windows are replaced; 1C.2 box 6 decides whether the owner can be retargeted across it);
     Settings (§0.5); classified retained-runtime corruption; and Extruded Bubble's drift history only if the windows'
