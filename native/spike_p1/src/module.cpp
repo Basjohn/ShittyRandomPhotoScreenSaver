@@ -500,11 +500,12 @@ QHash<qint64, QuickOffscreenSession *> &sessions()
 PyObject *quick_session_begin(PyObject *, PyObject *args)
 {
     unsigned long long rcPtr = 0, windowPtr = 0;
-    int w = 0, h = 0, threaded = 1;
-    if (!PyArg_ParseTuple(args, "KKii|p", &rcPtr, &windowPtr, &w, &h, &threaded))
+    int w = 0, h = 0, threaded = 1, preserveColor = 0;
+    if (!PyArg_ParseTuple(args, "KKii|pp", &rcPtr, &windowPtr, &w, &h, &threaded, &preserveColor))
         return nullptr;
     auto *session = new QuickOffscreenSession(ptr<QQuickRenderControl>(rcPtr),
-                                              ptr<QQuickWindow>(windowPtr), w, h, threaded != 0);
+                                              ptr<QQuickWindow>(windowPtr), w, h, threaded != 0,
+                                              preserveColor != 0);
     bool ok = false;
     Py_BEGIN_ALLOW_THREADS
     ok = session->begin();
@@ -749,7 +750,7 @@ PyMethodDef methods[] = {
     { "n06_window_surface", n06_window_surface, METH_VARARGS,
       "(quick_window_ptr) -> JSON str: the shown Vulkan window's surface capabilities (composite alpha, ...)" },
     { "quick_session_begin", quick_session_begin, METH_VARARGS,
-      "(rc, window, w, h[, threaded]) -> dict with handle" },
+      "(rc, window, w, h[, threaded[, preserve_color]]) -> dict with handle" },
     { "quick_session_frames", quick_session_frames, METH_VARARGS,
       "(handle, animated, count[, png]) -> dict" },
     { "quick_session_resize", quick_session_resize, METH_VARARGS, "(handle, w, h) new offscreen target size" },

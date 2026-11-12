@@ -23,6 +23,7 @@ struct N06DeviceHandles
     bool hasSecondQueue = false;
     quint32 secondFamily = 0;
     quint32 secondIndex = 0;
+    bool validationLoaded = false;       // our instance has the validation layer (job QRhi: debug markers)
 };
 // False when there is no context with our instance and device.
 bool n06DeviceHandles(N06DeviceHandles *out);

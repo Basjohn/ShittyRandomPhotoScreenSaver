@@ -38,6 +38,10 @@ Usage (repository venv, the module built on GitHub):
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round lifecycle --label n06_lifecycle
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round owners --cycles 12 --label n06_owners
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round translucent --label n06_translucent
+With the Khronos validation layer installed outside the registry, add --layer-path <folder with
+VkLayer_khronos_validation.json>: VK_ADD_LAYER_PATH is set for this process only and reported as allowed. With the
+layer the reference instance is validated too, Qt's QRhi names its objects (debug markers), every error is kept
+with its phase, instance, thread and caller stack, and the summary groups them ("attribution").
 Evidence: .artifacts/evidence/native_core/n06/<date>_<label>/summary.json. Exit 0 whenever the probe ran; the
 verdict is in the JSON and the last printed lines ("N06 VERDICT ...").
 """
@@ -63,6 +67,19 @@ CONTAMINATING_PREFIXES = ("QT_VULKAN", "QT_VK_", "QSG_", "QT_QUICK_BACKEND", "QT
 RECORDED_PREFIXES = CONTAMINATING_PREFIXES + ("QT_QPA", "QT_OPENGL", "QT_D3D", "QT_QUICK", "VULKAN_SDK")
 
 VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation"
+# The one variable a harness may set, for its own process (and its child) only, when the lead passes --layer-path:
+# the Vulkan loader finds the Khronos validation layer through it (the layer is installed without registry entries).
+LAYER_PATH_VARIABLE = "VK_ADD_LAYER_PATH"
+_ALLOWED_ENV: set[str] = set()
+
+
+def use_layer_path(path: Path | None) -> None:
+    """--layer-path: VK_ADD_LAYER_PATH for this process (and the children it starts), set before the module or Qt
+    touches the Vulkan loader; reported by environment_record() as allowed, never hidden."""
+    if path is None:
+        return
+    os.environ[LAYER_PATH_VARIABLE] = str(path)
+    _ALLOWED_ENV.add(LAYER_PATH_VARIABLE)
 
 
 def _evidence_dir(label: str) -> Path:
@@ -76,8 +93,48 @@ def _evidence_dir(label: str) -> Path:
 
 def environment_record() -> dict:
     found = {k: v for k, v in sorted(os.environ.items()) if k.upper().startswith(RECORDED_PREFIXES)}
-    contaminating = sorted(k for k in found if k.upper().startswith(CONTAMINATING_PREFIXES))
-    return {"recorded": found, "contaminating_set": contaminating, "clean": not contaminating}
+    contaminating = sorted(k for k in found if k.upper().startswith(CONTAMINATING_PREFIXES)
+                           and k.upper() not in _ALLOWED_ENV)
+    allowed = sorted(k for k in found if k.upper() in _ALLOWED_ENV)
+    return {"recorded": found, "contaminating_set": contaminating, "allowed_set_by_argument": allowed,
+            "clean": not contaminating}
+
+
+# Frames of the layer, the loader and our messenger callback sit on top of the caller's stack in a message entry.
+_NOT_CALLER = ("VkLayer_", "vulkan-1.dll")
+
+
+def validation_warnings(messages: dict) -> int:
+    """Warnings that are validation findings: the loader's own general messages (for example "Registry lookup
+    failed to get layer manifest files" when the layer is found through VK_ADD_LAYER_PATH, not the registry) are
+    reported in the record and not counted. Errors are always counted."""
+    loader = sum(1 for e in messages.get("entries", []) if e.get("severity") == "warning"
+                 and e.get("id") == "Loader Message")
+    return messages.get("warnings", 0) - loader
+
+
+def message_groups(messages: dict) -> list:
+    """Validation errors and warnings grouped by (id, phase, source instance): count, the thread, the objects (with
+    their debug names) and the caller chain (the modules below the layer and the loader, consecutive repeats
+    collapsed), which says whose call the layer reported on."""
+    groups: dict = {}
+    for e in messages.get("entries", []):
+        stack = e.get("stack", [])
+        last_layer = max((i for i, f in enumerate(stack) if f.startswith(_NOT_CALLER)), default=-1)
+        chain: list = []
+        for frame in stack[last_layer + 1:]:
+            module = frame.split("+0x")[0]
+            if not chain or chain[-1] != module:
+                chain.append(module)
+        key = (e.get("id"), e.get("phase"), e.get("source"))
+        g = groups.setdefault(key, {"id": e.get("id"), "phase": e.get("phase"), "source": e.get("source"),
+                                    "severity": e.get("severity"), "count": 0, "threads": [], "caller_modules": chain,
+                                    "caller_frames": stack[last_layer + 1:last_layer + 13],
+                                    "objects": e.get("objects", []), "message": e.get("message", "")[:1500]})
+        g["count"] += 1
+        if e.get("thread") not in g["threads"]:
+            g["threads"].append(e.get("thread"))
+    return sorted(groups.values(), key=lambda g: (g["phase"] or "", g["id"] or ""))
 
 
 def decode_driver_version(vendor_id: int, raw: int) -> str:
@@ -229,7 +286,7 @@ def compare_pngs(a: Path, b: Path) -> dict:
 
 def _quick_host(native, ours: bool, png: Path | None, next_frame_png: Path | None, *, frames_count: int = FRAMES,
                 resize_to: tuple[int, int] | None = None, resized_png: Path | None = None,
-                steps: list | None = None) -> dict:
+                steps: list | None = None, preserve_color: bool = False) -> dict:
     """The spike scene in a hidden Qt Quick host (QQuickRenderControl, never shown), on our device (ours) or on
     the device Qt creates (the reference instance); with resize_to, the target is then replaced at that size and
     the scene rendered again. png None: no readback at all. Everything is destroyed before returning: the render
@@ -269,7 +326,9 @@ def _quick_host(native, ours: bool, png: Path | None, next_frame_png: Path | Non
         root.setSize(QSizeF(WIDTH, HEIGHT))
         mark("scene created")
         try:
-            session = native.quick_session_begin(_ptr(control), _ptr(window), WIDTH, HEIGHT, True)
+            session = (native.quick_session_begin(_ptr(control), _ptr(window), WIDTH, HEIGHT, True, True)
+                       if preserve_color else
+                       native.quick_session_begin(_ptr(control), _ptr(window), WIDTH, HEIGHT, True))
         except RuntimeError as exc:
             result["error"] = f"quick_session_begin: {exc}"
             return result
@@ -345,6 +404,15 @@ def round_device(native, out: Path) -> dict:
         native.n06_set_phase("render_our_device")
         hosts["ours"] = _quick_host(native, True, out / "n06_quick_our_device.png",
                                     out / "n06_quick_our_device_next_frame.png")
+        if ctx.get("instance", {}).get("validation_layer_loaded"):
+            # N0.7 attribution: the same host whose offscreen target keeps its contents between frames
+            # (PreserveColorContents; gui_helpers.h says why), on our device and on Qt's own.
+            native.n06_set_phase("render_qt_own_device_preserve")
+            hosts["qt_preserve"] = _quick_host(native, False, out / "n06_quick_qt_own_device_preserve.png", None,
+                                               preserve_color=True)
+            native.n06_set_phase("render_our_device_preserve")
+            hosts["ours_preserve"] = _quick_host(native, True, out / "n06_quick_our_device_preserve.png", None,
+                                                 preserve_color=True)
     teardown = json.loads(native.n06_context_destroy())  # windows are gone: device, then instances
     del app
 
@@ -358,6 +426,9 @@ def round_device(native, out: Path) -> dict:
     if our_host.get("png") and our_host.get("next_frame_png"):
         comparisons["negative_control_next_frame"] = compare_pngs(Path(our_host["png"]),
                                                                   Path(our_host["next_frame_png"]))
+    for name in ("qt_preserve", "ours_preserve"):
+        if our_host.get("png") and hosts.get(name, {}).get("png"):
+            comparisons[f"our_device_vs_{name}"] = compare_pngs(Path(our_host["png"]), Path(hosts[name]["png"]))
     identical = comparisons.get("qt_own_device_vs_our_device", {})
     negative = comparisons.get("negative_control_next_frame", {})
 
@@ -399,7 +470,14 @@ def round_device(native, out: Path) -> dict:
     owed = []
     if layer_loaded:
         checks["synchronisation_validation_on"] = bool(inst.get("synchronisation_validation"))
-        checks["validation_clean"] = messages.get("errors", -1) == 0 and messages.get("warnings", -1) == 0
+        checks["reference_instance_validated"] = "validated" in ctx.get("reference_instance", {}).get("route", "")
+        checks["preserve_hosts_pixel_identical"] = all(
+            comparisons.get(f"our_device_vs_{n}", {}).get("max_abs") == 0 for n in ("qt_preserve", "ours_preserve"))
+        per_phase = messages.get("per_phase", {})
+        checks["preserve_hosts_validation_clean"] = all(
+            per_phase.get(p, {}).get("errors", 0) == 0 and per_phase.get(p, {}).get("warnings", 0) == 0
+            for p in ("render_qt_own_device_preserve", "render_our_device_preserve"))
+        checks["validation_clean"] = messages.get("errors", -1) == 0 and validation_warnings(messages) == 0
     else:
         owed.append(inst.get("validation", "validation owed"))
     return {
@@ -407,7 +485,8 @@ def round_device(native, out: Path) -> dict:
         "checks": checks,
         "pass": all(checks.values()),
         "owed": owed,
-        "validation": {"status": inst.get("validation"), "messages": messages},
+        "validation": {"status": inst.get("validation"), "messages": messages,
+                       "attribution": message_groups(messages)},
         "comparisons": comparisons,
         "feature_set_vs_qt_rule": feature_diff,
         "context": ctx,
@@ -568,7 +647,7 @@ def round_lifecycle(native, out: Path, cycles: int = 10, force_absent_all: bool 
                                               and s.get("proof", {}).get("handle_distinct") is True for s in sq)
     owed = []
     if layer_loaded:
-        checks["validation_clean"] = all(m.get("errors", -1) == 0 and m.get("warnings", -1) == 0
+        checks["validation_clean"] = all(m.get("errors", -1) == 0 and validation_warnings(m) == 0
                                          for m in all_messages)
     else:
         owed.append(first.get("validation") or "validation owed")
@@ -596,7 +675,9 @@ def round_lifecycle(native, out: Path, cycles: int = 10, force_absent_all: bool 
                                     "gpu_heap_mib": GPU_HEAP_TOLERANCE_MIB,
                                     "private_plateau_mib": PRIVATE_PLATEAU_TOLERANCE_MIB}},
         "comparisons": comparisons,
-        "validation": {"status": first.get("validation"), "messenger_warning_texts": warnings},
+        "validation": {"status": first.get("validation"), "messenger_warning_texts": warnings,
+                       "attribution": [dict(g, cycle=r["cycle"]) for r in records + [negative]
+                                       for g in message_groups(r["messages"])]},
         "records": records,
         "negative_control": negative,
         "environment": environment_record(),
@@ -873,6 +954,7 @@ def _window_variant(native, out: Path, name: str, *, api: str, ours: bool | None
         window.contentItem().setSize(QSizeF(w, h))
         root.setSize(QSizeF(w, h))
         window.frameSwapped.connect(counter.on_frame, Qt.ConnectionType.QueuedConnection)
+        native.n06_set_phase(f"{name}_show_and_present")  # N0.7: per-step phases attribute validation messages
         window.show()
         nw.pump(lambda: counter.count >= 30, 10.0)
         result["frames_after_show"] = counter.count
@@ -895,7 +977,12 @@ def _window_variant(native, out: Path, name: str, *, api: str, ours: bool | None
             result["surface"] = surface
             result["qt_composite_alpha_derived"] = qt_composite_alpha(surface.get("supported_composite_alpha", []),
                                                                       flags)
+        native.n06_set_phase(f"{name}_grab_and_printwindow")
         result["readings"] = {"shown": _window_readings(window, hwnd, out, name)}
+        native.n06_set_phase(f"{name}_present_after_grab")
+        after_grab = counter.count
+        nw.pump(lambda: counter.count >= after_grab + 10, 3.0)
+        result["frames_after_grab"] = counter.count - after_grab
         if backdrop:
             before = counter.count
             result["backdrop"] = {"kind": backdrop, **(nw.dwm_system_backdrop(hwnd) if backdrop == "dwm_system"
@@ -903,10 +990,12 @@ def _window_variant(native, out: Path, name: str, *, api: str, ours: bool | None
             nw.pump(lambda: counter.count >= before + 30, 5.0)
             result["frames_after_backdrop"] = counter.count - before
             result["exstyle_after_backdrop"] = nw.extended_style(hwnd)
+            native.n06_set_phase(f"{name}_grab_after_backdrop")
             result["readings"]["after_backdrop"] = _window_readings(window, hwnd, out, name + "_after_backdrop")
         result["ok"] = result["frames_after_show"] >= 10  # a real swapchain presenting continuously
         return result
     finally:
+        native.n06_set_phase(f"{name}_hide_and_teardown")
         window.hide()
         nw.pump(lambda: False, 0.2)
         if root is not None:
@@ -1046,6 +1135,9 @@ def round_translucent(native, out: Path, module_dir: Path, label: str) -> dict:
         "opengl": opengl,
         "context": {"device": ctx.get("device", {}).get("vk_device"), "ok": ctx.get("ok")},
         "teardown": teardown,
+        "validation": {"status": ctx.get("instance", {}).get("validation"),
+                       "messages": teardown.get("messages", {}),
+                       "attribution": message_groups(teardown.get("messages", {}))},
         "environment": environment_record(),
     }
 
@@ -1072,10 +1164,15 @@ def main() -> int:
     parser.add_argument("--force-no-second-queue", action="store_true",
                         help="lifecycle: force the second queue's absence in every cycle (the negative control as "
                              "a switch; never an environment variable)")
+    parser.add_argument("--layer-path", type=Path, default=None,
+                        help="the folder holding VkLayer_khronos_validation.json: sets VK_ADD_LAYER_PATH for this "
+                             "process (and the translucent round's child) only; reported, allowed by the "
+                             "environment check")
     parser.add_argument("--child-api", choices=("opengl",), help=argparse.SUPPRESS)
     parser.add_argument("--child-json", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
 
+    use_layer_path(args.layer_path)  # before the module or Qt loads the Vulkan loader
     native = _import_native(args.module_dir.resolve())
     if args.child_api:  # translucent round's OpenGL comparison, in its own process
         out = _evidence_dir(args.label)

@@ -25,7 +25,13 @@ struct OffscreenTarget
     QRhiTextureRenderTarget *renderTarget = nullptr;
 };
 
-bool createOffscreenTarget(QRhi *rhi, int width, int height, OffscreenTarget *out, QString *error);
+// preserveColor (N0.7, validation): QRhiTextureRenderTarget::PreserveColorContents. Without it QRhiVulkan's
+// offscreen render pass begins with initialLayout UNDEFINED and has no external subpass dependency
+// (createOffscreenRenderPass, Qt 6.12), so a target rendered every frame shows SYNC-HAZARD-WRITE-AFTER-WRITE at
+// vkCmdBeginRenderPass under synchronisation validation; with it the pass keeps COLOR_ATTACHMENT_OPTIMAL and the
+// resource tracker's barrier orders the frames. The scene covers the whole target, so the pixels are the same.
+bool createOffscreenTarget(QRhi *rhi, int width, int height, OffscreenTarget *out, QString *error,
+                           bool preserveColor = false);
 void destroyOffscreenTarget(OffscreenTarget *target);
 
 } // namespace srpss_spike

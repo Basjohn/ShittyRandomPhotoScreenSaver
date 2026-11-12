@@ -36,6 +36,14 @@ Rounds (one GitHub build of the module serves all of them):
   rest     D9 (vi): the job thread at rest for --rest-seconds while the host renders at the display's period (the
            frame driver reads the latch every frame): zero wake-ups and zero CPU cycles on the job thread; one
            upload job afterwards as the negative control (one wake-up, cycles spent).
+  owners   whose handles (D9 v, N0.6 round 5's method): --cycles cycles of each kind (host; + job service; + jobs;
+           + abandon through n07_retire; + abandon through the teardown hook), the handle count after every step
+           and a census after every cycle (handles by kernel object type, threads by start module and name,
+           python/n07_census.py) diffed cycle to cycle; the retire round records the same per cycle.
+
+With the Khronos validation layer installed outside the registry, add --layer-path <folder with
+VkLayer_khronos_validation.json> (VK_ADD_LAYER_PATH for this process only, reported as allowed): D9 (iv) is then
+checked in every round, each error grouped by id, phase, instance, thread and caller modules ("attribution").
 
 Usage (repository venv, the module built on GitHub):
   python native/spike_p1/python/run_n07.py --module-dir release/native_module --round jobs --label n07_jobs
@@ -64,6 +72,7 @@ REPO_ROOT = HERE.parents[2]
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+import n07_census  # noqa: E402
 from run_n06 import (  # noqa: E402
     DRIVER_HANDLES_PER_DEVICE,
     EXPECTED_TEARDOWN,
@@ -75,6 +84,9 @@ from run_n06 import (  # noqa: E402
     _delta,
     _slope,
     environment_record,
+    message_groups,
+    use_layer_path,
+    validation_warnings,
 )
 from run_spike import HEIGHT, NATIVE_QML, WIDTH, _import_native, _ptr  # noqa: E402
 
@@ -285,7 +297,11 @@ class Host:
         self.window.contentItem().setSize(QSizeF(WIDTH, HEIGHT))
         self.root.setSize(QSizeF(WIDTH, HEIGHT))
         try:
-            self.session = self.native.quick_session_begin(_ptr(self.control), _ptr(self.window), WIDTH, HEIGHT, True)
+            # The offscreen target keeps its contents between frames (PreserveColorContents): without it Qt 6.12's
+            # offscreen render pass (initialLayout UNDEFINED, no external subpass dependency) is a WRITE_AFTER_WRITE
+            # hazard between frames under synchronisation validation (src/gui_helpers.h). Same pixels.
+            self.session = self.native.quick_session_begin(_ptr(self.control), _ptr(self.window), WIDTH, HEIGHT, True,
+                                                           True)
         except RuntimeError as exc:
             self.error = f"quick_session_begin: {exc}"
             return False
@@ -343,6 +359,27 @@ def _field_size(text: str) -> tuple[int, int]:
 def _validation(ctx: dict) -> tuple[bool, str]:
     inst = ctx.get("instance", {})
     return bool(inst.get("validation_layer_loaded")), inst.get("validation") or "validation owed"
+
+
+def _validation_record(ctx: dict, teardowns: list[dict]) -> dict:
+    """D9 (iv): the layer's status and, per context torn down, the messages grouped (whose call, which phase)."""
+    layer, status = _validation(ctx)
+    messages = [t.get("messages", {}) for t in teardowns]
+    return {"layer_loaded": layer, "status": status,
+            "synchronisation_validation": bool(ctx.get("instance", {}).get("synchronisation_validation")),
+            "errors": sum(m.get("errors", 0) for m in messages),
+            "warnings": sum(validation_warnings(m) for m in messages),
+            "loader_messages": sum(m.get("warnings", 0) - validation_warnings(m) for m in messages),
+            "per_phase": [m.get("per_phase", {}) for m in messages],
+            "attribution": [g for m in messages for g in message_groups(m)]}
+
+
+def _validation_checks(record: dict, checks: dict, owed: list) -> None:
+    if record["layer_loaded"]:
+        checks["synchronisation_validation_on"] = record["synchronisation_validation"]
+        checks["validation_clean"] = record["errors"] == 0 and record["warnings"] == 0
+    else:
+        owed.append(f"D9 (iv): {record['status']}")
 
 
 def _run_until_swap(host: Host, period: float, config: dict, kind: str, frames: int = 60, rounds: int = 8) -> dict:
@@ -455,7 +492,6 @@ def round_jobs(native, out: Path, args) -> dict:
 
     job_runs = steps.get("upload_job", {}).get("analysis", []) + steps.get("field_job", {}).get("analysis", [])
     latch_max = max((a.get("latch_us", {}).get("max", 0.0) for a in job_runs), default=None)
-    layer, validation = _validation(ctx)
     driver_probes = [r.get("raw", {}).get("driver", {}).get("frame_driver_probe", {})
                      for r in (steps.get("upload_inframe_run", {}), steps.get("field_inframe_run", {}))]
     checks = {
@@ -493,19 +529,16 @@ def round_jobs(native, out: Path, args) -> dict:
         "no_messenger_errors": teardown.get("messages", {}).get("errors", -1) == 0,
         "environment_clean": environment_record()["clean"],
     }
-    owed = []
-    if layer:
-        checks["validation_clean"] = (teardown.get("messages", {}).get("errors", -1) == 0
-                                      and teardown.get("messages", {}).get("warnings", -1) == 0)
-    else:
-        owed.append(f"D9 (iv): {validation}")
+    owed: list = []
+    validated = _validation_record(ctx, [teardown])
+    _validation_checks(validated, checks, owed)
     record.update({"round": "jobs", "checks": checks, "pass": all(checks.values()), "owed": owed,
                    "probe": probe, "bodies": start.get("start", {}).get("bodies"),
                    "hashes": {"photo": steps.get("photo_hash"), "upload_inframe": up_in, "upload_job": up_job,
                               "upload_negative": up_neg, "field_inframe": f_in, "field_job": f_job,
                               "field_negative": f_neg},
                    "latch_us_max_in_job_runs": latch_max, "short_rest": steps.get("short_rest"),
-                   "validation": {"status": validation, "messages": teardown.get("messages", {})},
+                   "validation": validated,
                    "steps": steps, "service_start": start, "service_stop": stop, "teardown": teardown,
                    "context": {"device": ctx.get("device", {}).get("vk_device"),
                                "second_queue": ctx.get("device", {}).get("second_queue")},
@@ -621,7 +654,7 @@ def round_measure(native, out: Path, args) -> dict:
             and inframe["late_frames"] > 0 and job["late_frames"] <= max(none.get("late_frames", 0),
                                                                         inframe["late_frames"] // 4)
             and (p99(job, "completion_latency_ms") or 1e9) < (p99(inframe, "completion_latency_ms") or 0.0))
-    layer, validation = _validation(ctx)
+    validated = _validation_record(ctx, [teardown])
     checks = {
         "context_and_service": bool(ctx.get("ok")) and bool(start.get("ok")),
         "all_passes_ran": len(passes) == args.passes * len(MODES) and all(p["raw"].get("ok") for p in passes),
@@ -633,9 +666,12 @@ def round_measure(native, out: Path, args) -> dict:
         "no_messenger_errors": teardown.get("messages", {}).get("errors", -1) == 0,
         "environment_clean": environment_record()["clean"],
     }
+    owed: list = []
+    _validation_checks(validated, checks, owed)
     record.update({
-        "round": "measure", "checks": checks, "pass": all(checks.values()),
-        "owed": [] if layer else [f"D9 (iv): {validation}"],
+        "round": "measure", "checks": checks, "pass": all(checks.values()), "owed": owed, "validation": validated,
+        "timing_caveat": ("validation layer loaded: the layer's own CPU and GPU work is in every figure; the timing "
+                          "verdict comes from a run without the layer") if validated["layer_loaded"] else None,
         "settings": {"field_size": [w, h], "repeat": args.repeat, "every": args.every, "first": args.first,
                      "frames_per_pass": args.frames, "passes": args.passes},
         "by_mode": by_mode, "comparison": comparison,
@@ -649,41 +685,147 @@ def round_measure(native, out: Path, args) -> dict:
 
 # --------------------------------------------------------------------- round 3: retirement mid-job (D9 v)
 
-def _retire_cycle(native, index: int, args, via_teardown: bool) -> dict:
-    app_period = args.period_value
+CYCLE_KINDS = ("host", "service_idle", "service_jobs", "retire_api", "retire_hook")
+
+
+def _service_cycle(native, index: int, args, kind: str, before: dict | None = None) -> dict:
+    """One create/use/destroy cycle of a kind (owners style: each kind adds one owner to the one before):
+    host          our context (second queue) and the hidden host, 20 frames; no job service;
+    service_idle  + the job service started and stopped (the job thread, the second QRhi, the bodies);
+    service_jobs  + an upload job and an edge-field job published and swapped, then a normal stop;
+    retire_api    + a heavy job running, then retirement through n07_retire (render side, quiesce, abandon);
+    retire_hook   + a heavy job running, the render side released, the host ended and the context's teardown
+                    quiescing the job thread (the hook before vkDeviceWaitIdle).
+    The process handle count after every step, the counters after the teardown, and a census (handles by type,
+    threads by start module) diffed against `before` (the previous cycle's census)."""
+    import gc
+
+    period = args.period_value
     w, h = args.field_size
-    rec: dict = {"cycle": index, "via": "context_teardown_hook" if via_teardown else "n07_retire"}
+    rec: dict = {"cycle": index, "kind": kind, "via": {"retire_api": "n07_retire",
+                                                      "retire_hook": "context_teardown_hook"}.get(kind)}
+    steps: list = []
+
+    def mark(name: str) -> None:
+        steps.append([name, native.n06_handle_count()])
+
+    mark("cycle start")
     ctx = json.loads(native.n06_context_create(True, "second"))
+    mark("context created (instance, device with the second queue)")
     rec["context_ok"] = bool(ctx.get("ok"))
     host = Host(native)
     devices = int(bool(ctx.get("device", {}).get("vk_device")))
+    rec["service_ok"] = kind == "host"
+    rec["frames_while_job_ran_ok"] = kind in ("host", "service_idle", "service_jobs")
     if ctx.get("ok") and host.begin():
-        native.n06_set_phase(f"n07_retire_{index:02d}")
-        start = json.loads(native.n07_service_start(w, h))
-        rec["service_ok"] = bool(start.get("ok"))
-        if start.get("ok"):
-            host.run(5, app_period, {"mode": "none"})
-            heavy = {"kind": "field", "repeat": args.retire_repeat, "low": LOW, "high": HIGH}
-            busy = host.run(4, app_period, {"mode": "job", "count": 1, **heavy})
-            rec["frames_while_job_ran_ok"] = bool(busy.get("ok"))
-            if via_teardown:
-                # A heavy job submitted, then the host goes and the context's teardown quiesces the job thread.
-                host.run(1, app_period, {"mode": "job", "count": 1, **heavy})
-                rec["render_side"] = host.release_render_side()
-            else:
-                rec["retire"] = json.loads(native.n07_retire(host.handle, args.retire_repeat))
+        mark("host begun (render thread, Qt's QRhi on our device)")
+        native.n06_set_phase(f"n07_{kind}_{index:02d}")
+        host.run(20, period, {"mode": "none"})
+        mark("20 frames")
+        if kind != "host":
+            start = json.loads(native.n07_service_start(w, h))
+            mark("job service started (thread, second QRhi, probe, bodies)")
+            rec["service_ok"] = bool(start.get("ok"))
+            rec["service_start_handles"] = start.get("start", {}).get("handles")
+            if start.get("ok"):
+                host.run(5, period, {"mode": "none"})
+                heavy = {"kind": "field", "repeat": args.retire_repeat, "low": LOW, "high": HIGH}
+                if kind == "service_jobs":
+                    up = _run_until_swap(host, period, {"mode": "job", "kind": "upload", "seed": UPLOAD_SEED,
+                                                        "count": 1}, "upload", frames=30)
+                    fj = _run_until_swap(host, period, {"mode": "job", "kind": "field", "repeat": 1, "low": LOW,
+                                                        "high": HIGH, "count": 1}, "field", frames=30)
+                    rec["jobs_swapped"] = up["swapped"] and fj["swapped"]
+                    mark("an upload job and an edge-field job published and swapped")
+                elif kind in ("retire_api", "retire_hook"):
+                    busy = host.run(4, period, {"mode": "job", "count": 1, **heavy})
+                    rec["frames_while_job_ran_ok"] = bool(busy.get("ok"))
+                    mark("a heavy job running")
+                if kind == "retire_hook":
+                    host.run(1, period, {"mode": "job", "count": 1, **heavy})
+                    rec["render_side"] = host.release_render_side()
+                    mark("another heavy job submitted, render side released")
+                elif kind == "retire_api":
+                    rec["retire"] = json.loads(native.n07_retire(host.handle, args.retire_repeat))
+                    rec["service_stop_handles"] = rec["retire"].get("stop", {}).get("handles")
+                    mark("retired through n07_retire (render side, quiesce, abandon)")
+                else:
+                    host.release_render_side()
+                    stop = json.loads(native.n07_service_stop(False))
+                    rec["service_stop_handles"] = stop.get("handles")
+                    rec["service_stopped"] = stop.get("state_after") == "stopped"
+                    mark("render side released, job service stopped")
     if getattr(host, "control", None) is not None:
         host.end()
+        mark("host ended (session, render control and Qt's QRhi, window)")
     teardown = json.loads(native.n06_context_destroy())
+    mark("context destroyed" + (" (the hook quiesced the job thread)" if teardown.get("job_quiesce") else ""))
+    rec["service_stop_handles"] = rec.get("service_stop_handles") or (teardown.get("job_quiesce") or {}).get("handles")
     rec["teardown_steps"] = teardown.get("steps", [])
+    rec["teardown_handles"] = teardown.get("teardown_handles")
     rec["job_quiesce"] = teardown.get("job_quiesce")
     rec["teardown_ok"] = bool(teardown.get("ok")) and teardown.get("device_wait_idle_ok") is True
     rec["messages"] = teardown.get("messages", {})
     rec["validation_layer_loaded"] = bool(ctx.get("instance", {}).get("validation_layer_loaded"))
     rec["validation"] = ctx.get("instance", {}).get("validation")
+    rec["synchronisation_validation"] = bool(ctx.get("instance", {}).get("synchronisation_validation"))
     rec["devices_created"] = devices
+    del ctx, teardown
+    gc.collect()
+    mark("gc")
+    rec["steps"] = [[steps[i][0], steps[i][1] - steps[i - 1][1]] for i in range(1, len(steps))]
     rec["counters_after"] = _counters(native)
+    census = n07_census.census()  # after the counters: the census opens thread handles while it runs
+    rec["census_diff"] = n07_census.diff(before, census) if before else None
+    rec["_census"] = census
     return rec
+
+
+def _attribution(records: list) -> dict:
+    """Owners-style figures over a list of cycles of one kind: handles per cycle (the first cycle is the warm-up
+    and the baseline), the cycles whose growth was not the driver's 3 per device, with their census diff, the
+    mean handle delta of every step, the handle kinds and threads gained over the measured cycles."""
+    measured = records[1:]
+    handles = [r["counters_after"]["handles"] for r in records]
+    deltas = [handles[i] - handles[i - 1] for i in range(1, len(handles))]
+    expected = [DRIVER_HANDLES_PER_DEVICE * r["devices_created"] for r in measured]
+    off = [{"cycle": r["cycle"], "delta": d, "expected": e, "census_diff": r.get("census_diff")}
+           for r, d, e in zip(measured, deltas, expected) if d != e]
+    type_totals: dict = {}
+    for r in measured:
+        for k, v in ((r.get("census_diff") or {}).get("handles_by_type") or {}).items():
+            type_totals[k] = type_totals.get(k, 0) + v
+    first, last = records[0].get("_census", {}), records[-1].get("_census", {})
+    persistent = n07_census.diff(first, last) if first and last else {}
+    step_names: list = []
+    step_sum: dict = {}
+    for r in measured:
+        for name, d in r.get("steps", []):
+            if name not in step_sum:
+                step_names.append(name)
+                step_sum[name] = []
+            step_sum[name].append(d)
+    half = len(handles) // 2
+    return {"handles_series": handles, "per_cycle_deltas": deltas,
+            "expected_per_cycle": expected,
+            "second_half_handles_per_cycle": round((handles[-1] - handles[half]) / max(1, len(handles) - 1 - half), 3),
+            "cycles_off_driver_cost": off,
+            "handle_types_gained_over_measured_cycles": {k: v for k, v in sorted(type_totals.items()) if v},
+            "first_to_last_census_diff": {"handles_by_type": persistent.get("handles_by_type"),
+                                          "threads_new": persistent.get("threads_new"),
+                                          "threads_gone": persistent.get("threads_gone")},
+            "mean_step_deltas": [[n, round(sum(step_sum[n]) / len(step_sum[n]), 3)] for n in step_names],
+            "threads_series": [r["counters_after"]["threads"] for r in records]}
+
+
+def _run_cycles(native, args, kinds: list) -> list:
+    records: list = []
+    census_before = None
+    for i, kind in enumerate(kinds):
+        r = _service_cycle(native, i, args, kind, census_before)
+        census_before = r["_census"]
+        records.append(r)
+    return records
 
 
 def round_retire(native, out: Path, args) -> dict:
@@ -691,8 +833,9 @@ def round_retire(native, out: Path, args) -> dict:
     timing = _display_period(app, args.period_ms)
     args.period_value = timing["period_ms"]
     start = _counters(native)
-    records = [_retire_cycle(native, i, args, via_teardown=(i % 2 == 1)) for i in range(args.cycles)]
+    records = _run_cycles(native, args, ["retire_hook" if i % 2 else "retire_api" for i in range(args.cycles)])
     del app
+    attribution = _attribution(records)
     after = [r["counters_after"] for r in records]  # after[0] is the baseline (the warm-up cycle)
     baseline, last = after[0], after[-1]
     devices_after_baseline = sum(r["devices_created"] for r in records[1:])
@@ -722,7 +865,6 @@ def round_retire(native, out: Path, args) -> dict:
 
     in_flight_via_hook = [(r.get("job_quiesce") or {}).get("state_at_stop") for r in records
                           if r["via"] == "context_teardown_hook"]
-    layer = all(r["validation_layer_loaded"] for r in records)
     checks = {
         "every_cycle_retired_mid_job_and_tore_down": all(cycle_ok(r) for r in records),
         "teardown_hook_found_the_job_in_flight": bool(in_flight_via_hook)
@@ -736,12 +878,19 @@ def round_retire(native, out: Path, args) -> dict:
         "no_messenger_errors": all(r["messages"].get("errors", -1) == 0 for r in records),
         "environment_clean": environment_record()["clean"],
     }
-    if layer:
-        checks["validation_clean"] = all(r["messages"].get("errors", -1) == 0 and r["messages"].get("warnings", -1) == 0
-                                         for r in records)
+    validated = _validation_record({"instance": {"validation_layer_loaded": all(r["validation_layer_loaded"]
+                                                                                for r in records),
+                                                 "validation": records[0].get("validation") if records else None,
+                                                 "synchronisation_validation": all(
+                                                     r["synchronisation_validation"] for r in records)}},
+                                   [{"messages": r["messages"]} for r in records])
+    owed: list = []
+    _validation_checks(validated, checks, owed)
+    for r in records:
+        r.pop("_census", None)
     return {
-        "round": "retire", "checks": checks, "pass": all(checks.values()),
-        "owed": [] if layer else [f"D9 (iv): {records[0].get('validation') if records else 'validation owed'}"],
+        "round": "retire", "checks": checks, "pass": all(checks.values()), "owed": owed, "validation": validated,
+        "attribution": attribution,
         "cycles": args.cycles, "retire_repeat": args.retire_repeat,
         "counters": {"start": start, "after_each_cycle": after,
                      "handles_expected_delta": {"devices_after_baseline": devices_after_baseline,
@@ -753,6 +902,49 @@ def round_retire(native, out: Path, args) -> dict:
                                  or (r.get("job_quiesce") or {}).get("state_at_stop")) for r in records],
         "records": records, "display": timing, "environment": environment_record(),
     }
+
+
+# --------------------------------------------------------------------- whose handles (owners style, for D9 v)
+
+def round_owners(native, out: Path, args) -> dict:
+    """The retire round's extra handles attributed: --cycles cycles of each kind in CYCLE_KINDS, each kind adding
+    one owner (the job service and its second QRhi, jobs, the abandon path through either route)."""
+    app = _app()
+    timing = _display_period(app, args.period_ms)
+    args.period_value = timing["period_ms"]
+    start = _counters(native)
+    kinds: dict = {}
+    for kind in CYCLE_KINDS:
+        kinds[kind] = _run_cycles(native, args, [kind] * args.cycles)
+    del app
+    summaries = {kind: _attribution(records) for kind, records in kinds.items()}
+    rate = {kind: s["second_half_handles_per_cycle"] for kind, s in summaries.items()}
+    attribution = {
+        "context and host (the driver's 3 per device expected)": rate["host"],
+        "job service: thread, second QRhi, probe, bodies": round(rate["service_idle"] - rate["host"], 3),
+        "jobs published and swapped": round(rate["service_jobs"] - rate["service_idle"], 3),
+        "abandon through n07_retire": round(rate["retire_api"] - rate["service_idle"], 3),
+        "abandon through the context teardown hook": round(rate["retire_hook"] - rate["service_idle"], 3),
+    }
+    all_records = [r for records in kinds.values() for r in records]
+    for r in all_records:
+        r.pop("_census", None)
+    checks = {
+        "every_cycle_created_and_tore_down": all(r["context_ok"] and r["teardown_ok"] and r["service_ok"]
+                                                 for r in all_records),
+        "jobs_swapped": all(r.get("jobs_swapped") for r in kinds["service_jobs"]),
+        "no_messenger_errors": all(r["messages"].get("errors", -1) == 0 for r in all_records),
+        "environment_clean": environment_record()["clean"],
+        "host_only_driver_cost": abs(rate["host"] - DRIVER_HANDLES_PER_DEVICE) <= 0.05,
+        "service_adds_no_handles": abs(attribution["job service: thread, second QRhi, probe, bodies"]) <= 0.05,
+        "jobs_add_no_handles": abs(attribution["jobs published and swapped"]) <= 0.05,
+        "abandon_adds_no_handles": abs(attribution["abandon through n07_retire"]) <= 0.05
+        and abs(attribution["abandon through the context teardown hook"]) <= 0.05,
+    }
+    return {"round": "owners", "checks": checks, "pass": all(checks.values()), "owed": [],
+            "cycles_per_kind": args.cycles, "handles_per_cycle_by_kind": rate, "attribution": attribution,
+            "summaries": summaries, "start_counters": start, "records": kinds, "display": timing,
+            "environment": environment_record()}
 
 
 # --------------------------------------------------------------------- round 4: rest (D9 vi)
@@ -801,7 +993,7 @@ def round_rest(native, out: Path, args) -> dict:
     teardown = json.loads(native.n06_context_destroy())
     del app
     rest, neg = rec.get("rest", {}), rec.get("negative_control", {})
-    layer, validation = _validation(ctx)
+    validated = _validation_record(ctx, [teardown])
     checks = {
         "context_and_service": bool(ctx.get("ok")) and bool(start.get("ok")),
         "job_thread_used_before_rest": rec.get("used_before_rest") is True,
@@ -815,19 +1007,23 @@ def round_rest(native, out: Path, args) -> dict:
         "no_messenger_errors": teardown.get("messages", {}).get("errors", -1) == 0,
         "environment_clean": environment_record()["clean"],
     }
-    rec.update({"round": "rest", "checks": checks, "pass": all(checks.values()),
-                "owed": [] if layer else [f"D9 (iv): {validation}"], "rest_seconds": args.rest_seconds,
+    owed: list = []
+    _validation_checks(validated, checks, owed)
+    rec.update({"round": "rest", "checks": checks, "pass": all(checks.values()), "validation": validated,
+                "owed": owed, "rest_seconds": args.rest_seconds,
                 "service_start": start, "service_stop": stop, "teardown": teardown,
                 "environment": environment_record()})
     return rec
 
 
-ROUNDS = {"jobs": round_jobs, "measure": round_measure, "retire": round_retire, "rest": round_rest}
+ROUNDS = {"jobs": round_jobs, "measure": round_measure, "retire": round_retire, "rest": round_rest,
+          "owners": round_owners}
 SHOWN = {
     "jobs": ("probe", "hashes", "latch_us_max_in_job_runs", "short_rest"),
     "measure": ("settings", "by_mode", "comparison", "draft_verdict", "other_processes_using_gpu_during_run"),
-    "retire": ("counters", "state_at_retirement"),
+    "retire": ("counters", "state_at_retirement", "attribution"),
     "rest": ("rest", "negative_control", "rest_wall_s"),
+    "owners": ("handles_per_cycle_by_kind", "attribution"),
 }
 
 
@@ -844,11 +1040,16 @@ def main() -> int:
     parser.add_argument("--every", type=int, default=30, help="measure: frames between heavy jobs")
     parser.add_argument("--first", type=int, default=15, help="measure: the frame of a pass's first heavy job")
     parser.add_argument("--passes", type=int, default=2, help="measure: passes of none, in-frame and job in turn")
-    parser.add_argument("--cycles", type=int, default=6, help="retire: cycles (the first is the baseline)")
+    parser.add_argument("--cycles", type=int, default=6,
+                        help="retire: cycles (the first is the baseline); owners: cycles per kind")
+    parser.add_argument("--layer-path", type=Path, default=None,
+                        help="the folder holding VkLayer_khronos_validation.json: sets VK_ADD_LAYER_PATH for this "
+                             "process only; reported, allowed by the environment check")
     parser.add_argument("--retire-repeat", type=int, default=32, help="retire: edge-field builds of the retired job")
     parser.add_argument("--rest-seconds", type=float, default=60.0, help="rest: seconds at rest")
     args = parser.parse_args()
 
+    use_layer_path(args.layer_path)  # before the module or Qt loads the Vulkan loader
     native = _import_native(args.module_dir.resolve())
     missing = [name for name in REQUIRED if not hasattr(native, name)]
     if missing:
@@ -861,6 +1062,13 @@ def main() -> int:
     summary.update(ROUNDS[args.round](native, out, args))
     (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps({k: summary[k] for k in SHOWN[args.round] if k in summary}, indent=2))
+    validated = summary.get("validation") or {}
+    if validated.get("layer_loaded"):
+        print(json.dumps({"validation": {k: validated.get(k) for k in ("status", "errors", "warnings",
+                                                                        "loader_messages")},
+                          "groups": [{k: g.get(k) for k in ("id", "phase", "source", "count", "threads",
+                                                            "caller_modules")}
+                                     for g in validated.get("attribution", [])]}, indent=2))
     print(json.dumps({k: summary[k] for k in ("round", "checks", "pass", "owed") if k in summary}, indent=2))
     failed = [k for k, v in summary["checks"].items() if not v]
     print(f"\nevidence: {out / 'summary.json'}")

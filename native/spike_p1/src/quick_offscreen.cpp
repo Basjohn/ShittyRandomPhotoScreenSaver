@@ -76,9 +76,9 @@ private:
 };
 
 QuickOffscreenSession::QuickOffscreenSession(QQuickRenderControl *control, QQuickWindow *window,
-                                             int width, int height, bool threaded)
+                                             int width, int height, bool threaded, bool preserveColor)
     : m_control(control), m_window(window), m_width(width), m_height(height),
-      m_host(new RenderThreadHost(threaded))
+      m_host(new RenderThreadHost(threaded)), m_preserveColor(preserveColor)
 {
     m_guiThread = quintptr(QThread::currentThreadId());
     if (threaded)
@@ -114,7 +114,7 @@ bool QuickOffscreenSession::begin()
                 m_vkQueueIndex = int(handles->gfxQueueIdx);
             }
         }
-        if (!createOffscreenTarget(rhi, m_width, m_height, &m_target, &m_error))
+        if (!createOffscreenTarget(rhi, m_width, m_height, &m_target, &m_error, m_preserveColor))
             return;
         m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));
         m_begun = true;
@@ -178,7 +178,7 @@ bool QuickOffscreenSession::resize(int width, int height)
         // The old target is released through QRhi's deferred release (a frame in flight keeps it alive).
         m_window->setRenderTarget(QQuickRenderTarget());
         destroyOffscreenTarget(&m_target);
-        if (!createOffscreenTarget(m_control->rhi(), width, height, &m_target, &m_error))
+        if (!createOffscreenTarget(m_control->rhi(), width, height, &m_target, &m_error, m_preserveColor))
             return;
         m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));
         ok = true;

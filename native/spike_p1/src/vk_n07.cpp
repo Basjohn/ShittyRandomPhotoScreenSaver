@@ -61,6 +61,17 @@ double nowMs()
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - epoch).count();
 }
 
+// The process handle count after a named step (attribution of handle growth, as N0.6's owners round).
+void markHandles(QJsonArray *steps, const QString &name)
+{
+    DWORD n = 0;
+    GetProcessHandleCount(GetCurrentProcess(), &n);
+    QJsonObject s;
+    s.insert(QStringLiteral("step"), name);
+    s.insert(QStringLiteral("handles"), qint64(n));
+    steps->append(s);
+}
+
 quint64 fnv1a(const char *data, qsizetype size)
 {
     quint64 h = 1469598103934665603ull;
@@ -682,6 +693,8 @@ private:
     bool m_started = false;
     QJsonObject m_startRecord;
     QJsonObject m_teardownRecord;
+    QJsonArray m_startHandles; // GUI thread before the start, then the job thread until the handshake
+    QJsonArray m_stopHandles;  // the job thread's teardown, then the GUI thread after the join
 
     std::mutex m_logMutex;
     std::vector<JobRecord> m_log;
@@ -694,18 +707,22 @@ private:
 
 QJsonObject JobService::start()
 {
+    markHandles(&m_startHandles, QStringLiteral("before the job thread"));
     m_thread.reset(new JobThread([this]() { threadMain(); }));
     m_thread->setObjectName(QStringLiteral("srpss-n07-job"));
     m_thread->start();
     std::unique_lock<std::mutex> lock(m_startMutex);
     m_startCv.wait(lock, [this]() { return m_started; });
-    return m_startRecord;
+    QJsonObject record = m_startRecord;
+    record.insert(QStringLiteral("handles"), m_startHandles); // the job thread's own marks are in it, in order
+    return record;
 }
 
 void JobService::threadMain()
 {
     m_threadId.store(GetCurrentThreadId());
     m_probe.hit();
+    markHandles(&m_startHandles, QStringLiteral("job thread running"));
     QJsonObject record;
     const bool ok = setUp(&record);
     record.insert(QStringLiteral("ok"), ok);
@@ -756,9 +773,14 @@ bool JobService::setUp(QJsonObject *record)
     probe.insert(QStringLiteral("requested_family"), qint64(m_handles.secondFamily));
     probe.insert(QStringLiteral("requested_index"), qint64(m_handles.secondIndex));
     const double t0 = nowMs();
-    m_rhi.reset(QRhi::create(QRhi::Vulkan, &params, QRhi::EnableTimestamps, &imported));
+    QRhi::Flags flags = QRhi::EnableTimestamps;
+    if (m_handles.validationLoaded)
+        flags |= QRhi::EnableDebugMarkers; // our resources' names reach the validation messages
+    m_rhi.reset(QRhi::create(QRhi::Vulkan, &params, flags, &imported));
+    markHandles(&m_startHandles, QStringLiteral("second QRhi created"));
     probe.insert(QStringLiteral("create_ms"), nowMs() - t0);
     probe.insert(QStringLiteral("created"), bool(m_rhi));
+    probe.insert(QStringLiteral("debug_markers"), m_handles.validationLoaded);
     if (!m_rhi) {
         probe.insert(QStringLiteral("second_qrhi_works"), false);
         record->insert(QStringLiteral("probe"), probe);
@@ -809,6 +831,7 @@ bool JobService::setUp(QJsonObject *record)
         executes = readback.data.size() == 64 * 64 * 4
             && std::memcmp(readback.data.constData(), pattern.constBits(), 64 * 64 * 4) == 0;
     }
+    markHandles(&m_startHandles, QStringLiteral("probe upload and readback on the job queue"));
     probe.insert(QStringLiteral("upload_readback_identical"), executes);
     const bool works = probe.value(QStringLiteral("on_our_device")).toBool()
         && probe.value(QStringLiteral("job_queue_distinct_from_qt_queue")).toBool()
@@ -852,6 +875,7 @@ bool JobService::setUp(QJsonObject *record)
         fieldSlots.image[i].store(fi.object);
         fieldSlots.layout[i].store(fi.layout);
     }
+    markHandles(&m_startHandles, QStringLiteral("job bodies created (upload slots, edge field, photo)"));
     QJsonObject bodies;
     bodies.insert(QStringLiteral("size"), QJsonArray { m_width, m_height });
     bodies.insert(QStringLiteral("slots"), SlotSet::kSlots);
@@ -928,11 +952,14 @@ void JobService::tearDown()
 {
     QJsonObject t;
     const double t0 = nowMs();
+    markHandles(&m_stopHandles, QStringLiteral("job thread teardown starts"));
     m_field.reset();
     m_upload.reset();
+    markHandles(&m_stopHandles, QStringLiteral("job bodies released"));
     // QRhiVulkan::destroy waits on its own queue (vkQueueWaitIdle) and releases its pools and allocator; the
     // imported VkDevice stays (it is never destroyed by an importing QRhi).
     m_rhi.reset();
+    markHandles(&m_stopHandles, QStringLiteral("second QRhi destroyed"));
     t.insert(QStringLiteral("release_ms"), nowMs() - t0);
     m_teardownRecord = t;
 }
@@ -957,6 +984,7 @@ QJsonObject JobService::stop(bool abandon)
     o.insert(QStringLiteral("state_at_stop"), stateName(m_state.load()));
     o.insert(QStringLiteral("abandon"), abandon);
     o.insert(QStringLiteral("wakeups_before_stop"), qint64(m_wakeups.load()));
+    markHandles(&m_stopHandles, QStringLiteral("stop requested"));
     if (abandon)
         m_abandon.store(true);
     int dropped = 0;
@@ -968,7 +996,10 @@ QJsonObject JobService::stop(bool abandon)
     }
     m_cv.notify_all();
     m_thread->wait();
+    markHandles(&m_stopHandles, QStringLiteral("job thread joined"));
     m_thread.reset();
+    markHandles(&m_stopHandles, QStringLiteral("QThread object deleted"));
+    o.insert(QStringLiteral("handles"), m_stopHandles);
     o.insert(QStringLiteral("quiesce_ms"), nowMs() - t0);
     o.insert(QStringLiteral("queued_jobs_dropped"), dropped);
     o.insert(QStringLiteral("published"), qint64(m_published.load()));

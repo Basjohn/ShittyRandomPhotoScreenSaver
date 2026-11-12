@@ -62,8 +62,9 @@ struct QuickFramesResult
 class QuickOffscreenSession
 {
 public:
+    // preserveColor: the offscreen target is created with PreserveColorContents (gui_helpers.h says why).
     QuickOffscreenSession(QQuickRenderControl *control, QQuickWindow *window, int width,
-                          int height, bool threaded);
+                          int height, bool threaded, bool preserveColor = false);
     ~QuickOffscreenSession();
 
     bool begin();
@@ -95,6 +96,7 @@ private:
     int m_width;
     int m_height;
     std::unique_ptr<RenderThreadHost> m_host;
+    bool m_preserveColor = false;
     OffscreenTarget m_target;
     bool m_begun = false;
     int m_frameIndex = 0;
