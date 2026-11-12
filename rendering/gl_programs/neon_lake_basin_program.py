@@ -813,8 +813,13 @@ void main() {
                      +0.45*sin(-rq.x*4.9+rq.y*4.1+0.06*uTime));
         float wa=max(fwidth(fa),1e-5), wb=max(fwidth(fb),1e-5);
         float width=(0.8+1.2*uWaterReact)*uEdgePx;
-        float la=(1.0-smoothstep(0.0,width,abs(fa)/wa))*(1.0-smoothstep(0.35,0.7,wa));
-        float lb=(1.0-smoothstep(0.0,width,abs(fb)/wb))*(1.0-smoothstep(0.35,0.7,wb));
+        // The net's thin line cores are water face lines: Water Lines fades them (and their whitening where they
+        // cross) and skips them at 0; the soft light either side and the body's lift stay.
+        float la=0.0, lb=0.0;
+        if (uWaterLines.x>0.0) {
+            la=(1.0-smoothstep(0.0,width,abs(fa)/wa))*(1.0-smoothstep(0.35,0.7,wa))*uWaterLines.x;
+            lb=(1.0-smoothstep(0.0,width,abs(fb)/wb))*(1.0-smoothstep(0.35,0.7,wb))*uWaterLines.x;
+        }
         // A soft light either side of each line: light on the water, not hairlines.
         float ga=exp(-abs(fa)/(4.0*wa))*(1.0-smoothstep(0.25,0.55,wa));
         float gb=exp(-abs(fb)/(4.0*wb))*(1.0-smoothstep(0.25,0.55,wb));
