@@ -40,23 +40,20 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 **Now (in flight):** 1D.2 (High), 1D.1's side defects (Medium).
 
-**Next, by slot (lead, 12 Nov night audit, `Docs/Future_Work/Audit_2026-11-12_Night.md`):**
+**Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
+at the size asked.
 - High:
-  1. 1D.2 (design note approved 12 Nov: plan 01, "Display styles of the expanded card").
-  2. N2.2, the host interface and frame driver (unblocked by N0.3, proved 12 Nov).
-  3. 1C.10.
-  4. The 1C.2 Save stall.
+  1. 1D.2 (in flight; the operator's request).
+  2. N2.2, the host interface and frame driver (unblocked by N0.3).
+  3. Then N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
+  4. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.1's side defects.
-  2. The 1D.0 test-order flake.
-  3. The native runtime check before import.
-  4. 1B.10.
-- Docs (Sonnet):
-  1. The audit's fix-soon plan and document edits (N4.f split, N2.5's order, the re-baseline box's home, N3.8's
-     re-measure and warm-up jobs, the handbook's installer line, the N1.6 remainder's single home).
-  2. The 1D.2 design note in plan 01 M3c.
-  3. Item 6's narrative cleanup.
-  4. `Primitives.md` cited by section, not by line.
+  1. 1D.1's side defects and the 1D.0 flake (in flight).
+  2. The native runtime check before import (N2.1 leftover).
+  3. The N1.6 remainder (the motion and trail family, then its transitions; no C++).
+  4. 1D.4 (the default-mode marker and the image-time row; small, as asked).
+  5. 1B.10.
+- Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
