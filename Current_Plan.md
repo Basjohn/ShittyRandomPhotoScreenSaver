@@ -706,9 +706,8 @@ gradients, the rim glow cap, Bar Fill ghosts; `Docs/Reference/Visualizer_Referen
   `.artifacts/evidence/visualizers/spectrum/presets/20261112_flaws_7_8/`): fine borderless filaments with a field
   gradient; the level-colour one is a vertical gradient through its colours. Fill Gradient spans the whole field,
   not the bar, so a tip colour must be set past the colour wanted at a normal bar height.
-- [ ] The level-colour look stays teal to green in quiet and mid music; its warm end shows only on the biggest
-  peaks (taller bars pinned more than the default look). Lead judges it on the showcase WebP; drop it if it does
-  not hold up.
+- The level-colour look was dropped 12 Nov (lead's verdict on its showcase: seven of eight frames a saturated green
+  bar chart, the warm end only on one peak; fewer looks over filler). A profile that selected it falls back quietly.
 - [ ] Side defect (renderer, not a preset): in every thin-bar still one bar edge steps sideways by 1 px along the
   diagonal of the full-field quad (about (123,478), (325,345), (525,208) in the 840x560 stills), likely the seam
   between the quad's two triangles in `spectrum.frag`'s bar coverage; reproduce with the round's
