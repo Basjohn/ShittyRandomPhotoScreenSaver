@@ -46,6 +46,15 @@ void main() {
         assert np.array_equal(output[0],output[2])
         assert np.allclose(output[1][:,:3]-output[0][:,:3],(1.25,0,-.75),atol=2e-6)
         assert np.array_equal(output[0][:,3],output[1][:,3])
+        # A layer fading out (uDriftFadeOut): its contribution scales by what is left of it, down to none.
+        gl.glUniform1i(gl.glGetUniformLocation(program,'uChainDriftEnabled'),1)
+        for fade in (.25,.5,1.):
+            gl.glUniform1f(gl.glGetUniformLocation(program,'uDriftFadeOut'),fade)
+            gl.glDrawArraysInstanced(gl.GL_POINTS,0,1,160)
+            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT|gl.GL_SHADER_STORAGE_BARRIER_BIT)
+            rows=np.empty((160,4),dtype='f4');gl.glGetNamedBufferSubData(result,0,rows.nbytes,rows)
+            assert np.allclose(rows[:,:3]-output[0][:,:3],(1.-fade)*np.array((1.25,0,-.75)),atol=2e-6), fade
+        gl.glUniform1f(gl.glGetUniformLocation(program,'uDriftFadeOut'),0.)
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
@@ -133,6 +142,63 @@ def test_a_drift_program_that_fails_to_compile_is_logged_once_and_the_mode_draws
     assert np.array_equal(capture.render(host,snap),base)   # no drift: Extruded Bubble draws exactly as before
 
 
+def test_a_history_carried_into_a_window_whose_drift_programs_fail_fades_out_instead_of_vanishing(target,monkeypatch):
+    """A display move carries a drift history into a window whose drift programs do not compile: the history cannot
+    advance there, so its drift layer fades out over the mode's fade-out length (counted in the logical steps' time),
+    decreasing frame by frame, and only then is the mode drawn without drift (fade, never vanish)."""
+    from dataclasses import replace
+    from rendering.quick.visualizer.implementations import extruded_bubble as eb
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as solver
+    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost,VisualizerRenderCarryover
+    from widgets.spotify_visualizer.extruded_bubble_simulation import (
+        ExtrudedBubbleControls, ExtrudedBubbleSimulation, FADE_OUT_SECONDS, MusicInput)
+    capture,host=target
+    snap=_snapshot(extruded_bubble_bead_chains=[2.,2.],extruded_bubble_particles=[0.,0.])
+    snap=replace(snap,logical=replace(snap.logical,mode_state=replace(snap.logical.mode_state,chain_activity=1.)))
+    capture.render(host,snap);base=capture.render(host,snap)       # the picture without drift
+    controls=ExtrudedBubbleControls(large_count=(0,0),mid_count=(0,0),bead_chains=(2.,2.),emission=(0.,0.),
+        stream_path=(0.,-1.,0.,0.,1.,0.),drift=(1.,1.),drift_chains=(2.,2.),drift_direction='swirl_cw',
+        stream_speed=(.1,.1))
+    sim=ExtrudedBubbleSimulation(7);frames=[]
+    for _ in range(90+int(1.5*FADE_OUT_SECONDS*60)):
+        logical=sim.advance(MusicInput(1/60,True,1.,(),(.6,.5,.3)),controls)
+        frames.append(replace(snap,logical=replace(snap.logical,mode_state=replace(
+            snap.logical.mode_state,drift_families=logical.drift_families,drift_steps=logical.drift_steps,
+            drift_knots=logical.drift_knots))))
+    for frame in frames[:90]:
+        moved=capture.render(host,frame)
+    assert np.abs(moved-base).mean()>.01                            # the source draws a strong drift
+    payload=host._implementations['extruded_bubble'].export_carryover()
+    assert payload is not None
+    # The target window's context cannot compile the drift programs (its own shared resources, as on another device).
+    broken=(('drift_chains_broken',solver.CHAIN_COMPUTE+'\nthis is not GLSL;\n'),*solver.PROGRAMS[1:])
+    monkeypatch.setattr(solver,'PROGRAMS',broken)
+    monkeypatch.setattr(eb,'_DRIFT_PROGRAMS',broken)
+    second=QuickVisualizerRenderHost()
+    try:
+        box=VisualizerRenderCarryover();box.deposit('extruded_bubble',payload);box.close()
+        second.expect_carryover(box)
+        drift,fades=[],[]
+        for frame in frames[90:]:
+            drift.append(float(np.abs(capture.render(second,frame)-base).mean()))
+            renderer=second._implementations['extruded_bubble']
+            # The fade the draws were given this frame (what scales the drift layer's contribution in the shaders).
+            uploaded={value for (_program,name),value in renderer._uniforms._values.items() if name=='uDriftFadeOut'}
+            assert len(uploaded)==1, uploaded
+            fades.append((uploaded.pop(),bool(renderer._drift.output)))
+        fading=[i for i,(fade,held) in enumerate(fades) if 0.<fade<1. and held]
+        # The drawn contribution is (1 - fade) of the carried drift: it decreases on every frame of about the mode's
+        # fade-out length (the shaders' scaling is pinned by the generator tests above and below).
+        assert fading==list(range(len(fading))) and len(fading)>=int(.8*FADE_OUT_SECONDS*60), fades
+        assert all(later[0]>earlier[0] for earlier,later in zip(fades[:len(fading)],fades[1:len(fading)]))
+        assert drift[0]>.5*np.abs(moved-base).mean()                 # the first frame still draws the carried drift
+        assert all(value>0. for value in drift[:len(fading)])         # drawn with drift on every fading frame
+        assert drift[-1]==0. and fades[-1]==(0.,False)                # then drawn without drift, the output released
+        assert not second._implementations['extruded_bubble']._drift.has_resources
+    finally:
+        second.release_resources()
+
+
 @pytest.mark.parametrize('family',('snow','specks'))
 @pytest.mark.parametrize('coverage',('BEAM','SCENE'))
 def test_production_cloud_generators_read_nonuniform_stable_id_offsets_without_resizing_motes(qt_app,family,coverage):
@@ -193,6 +259,14 @@ gl_Position=vec4(0.0,0.0,0.0,1.0);}
         # activation difference in pixels, not a weakened relative world error.
         assert np.abs(output[1][:,:3]-output[0][:,:3]-data[:,:3]).max()*350.<.03
         assert np.array_equal(output[0][:,3],output[1][:,3])
+        # A layer fading out (uDriftFadeOut): half its displacement, on the procedural progress it converges to.
+        gl.glUniform1i(gl.glGetUniformLocation(program,control),1)
+        gl.glUniform1f(gl.glGetUniformLocation(program,'uDriftFadeOut'),.5)
+        gl.glDrawArraysInstanced(gl.GL_POINTS,0,1,160)
+        gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT|gl.GL_SHADER_STORAGE_BARRIER_BIT)
+        rows=np.empty((160,4),dtype='f4');gl.glGetNamedBufferSubData(result,0,rows.nbytes,rows)
+        assert np.abs(rows[:,:3]-output[0][:,:3]-.5*data[:,:3]).max()*350.<.03
+        gl.glUniform1f(gl.glGetUniformLocation(program,'uDriftFadeOut'),0.)
         owner=ProceduralOffsets();travel=2./geometry[3]
         for i in range(3):
             travel+=1/60

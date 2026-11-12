@@ -58,6 +58,7 @@ from widgets.spotify_visualizer.extruded_bubble_drift_log import (
 )
 from core.logging.logger import get_logger
 from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES
+from widgets.spotify_visualizer.extruded_bubble_simulation import FADE_OUT_SECONDS
 
 # Storage bindings used only inside the solver's dispatches (each restored afterwards), and the uniform block's
 # (apart from them: one binding namespace on Vulkan).
@@ -441,6 +442,9 @@ class DriftSolver:
         # Whether both drift programs exist in this context: None until the first frame with work asks (or the
         # warm-up compiled them), False when one failed (the mode then draws without drift, never retried here).
         self._programs: bool | None = None
+        # A held output whose history cannot advance here (a history carried into a context whose drift programs
+        # failed) fades out instead of vanishing: (last step serial counted, logical seconds faded), None otherwise.
+        self._fade: tuple[int, float] | None = None
         self._ring: StreamRing | None = None   # sized to the most chain rows a step has carried (_ring_for)
         # The warm-up check of the pair arithmetic: None until run, then whether this device computes it exactly.
         self.pairs_exact: bool | None = None
@@ -450,13 +454,18 @@ class DriftSolver:
     def has_resources(self) -> bool:
         return bool(self.output or self._families or (self._ring is not None and self._ring.has_resources))
 
+    @property
+    def fade_out(self) -> float:
+        """How far the drawn drift layer has faded out (0: as integrated; the draws' ``uDriftFadeOut``)."""
+        return 0.0 if self._fade is None else min(1.0, self._fade[1] / FADE_OUT_SECONDS)
+
     def release(self) -> None:
         for family in self._families.values():
             _delete(family.geometry, family.state, family.aux)
         self._families.clear()
         self._failed.clear()
         _delete(self.output)
-        self.output, self._output_vec4s, self._output_failed, self._drawn = 0, 0, 0, {}
+        self.output, self._output_vec4s, self._output_failed, self._drawn, self._fade = 0, 0, 0, {}, None
         if self._ring is not None:
             self._ring.release()
             self._ring = None
@@ -466,28 +475,51 @@ class DriftSolver:
     def _programs_ready(self, resources) -> bool:
         """Both drift programs, asked for together before anything is allocated (so drift never appears for one
         family and is then taken away). One that failed (its compile error logged once by ``resources``, which
-        caches it) leaves this solver without output for the context: the mode draws without drift."""
+        caches it) leaves this solver without drift for the context: the mode draws without drift, after a history
+        carried here from another window has faded out (``_fade_frame``)."""
         if self._programs is None:
             try:
                 for key, source in PROGRAMS[:2]:
                     resources.compute_program(key, source)
             except ProgramUnavailable:
                 self._programs = False
-                # Only a history carried here from another window can exist yet; it cannot advance in this context.
-                for family in self._families.values():
-                    _delete(family.geometry, family.state, family.aux)
-                self._families.clear()
-                _delete(self.output)
-                self.output, self._output_vec4s, self._drawn = 0, 0, {}
                 logger.warning("%s: a drift program is unavailable on this device; drawn without drift", self.label)
                 return False
             self._programs = True
         return self._programs
 
+    def _fade_frame(self, families, steps: bytes) -> dict[str, int]:
+        """A frame of a held drift layer that cannot advance in this context (only a history carried here from
+        another window can exist when the programs fail): its states are released at once (nothing can integrate
+        them), and its output stays drawn while it fades out over the mode's fade-out length, counted in the logical
+        steps' own time (no clock here), then is released and the mode draws without drift."""
+        if self._fade is None:
+            through = max((family.serial for family in self._families.values()), default=0)
+            for family in self._families.values():
+                _delete(family.geometry, family.state, family.aux)
+            self._families.clear()
+            self._failed.clear()
+            if not self.output:
+                return self.layout(families)
+            self._fade = (through, 0.0)
+        through, elapsed = self._fade
+        records = unpack_steps(steps)
+        if len(records):
+            serials = records[:, _R["serial"]].astype(np.int64)
+            elapsed += float(records[serials > through, _R["dt"]].sum())
+            through = max(through, int(serials.max()))
+        self._fade = (through, elapsed)
+        if elapsed >= FADE_OUT_SECONDS or not families:
+            _delete(self.output)
+            self.output, self._output_vec4s, self._drawn, self._fade = 0, 0, {}, None
+            logger.info("%s: the carried drift history has faded out; drawn without drift", self.label)
+            return self.layout(families)
+        return self._held_layout(families)
+
     def export(self) -> DriftCarryover | None:
         """Source render thread, its context current: give up the history (not deleted here) behind a fence."""
-        if not self._families and not self.output:
-            return None
+        if self._fade is not None or (not self._families and not self.output):
+            return None         # a layer fading out has no history to continue: it is released with this solver
         fence = gl.glFenceSync(gl.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
         gl.glFlush()                           # the fence must reach the GPU before another context waits on it
         carryover = DriftCarryover(dict(self._families), self.output, self._output_vec4s, fence, dict(self._failed),
@@ -516,6 +548,7 @@ class DriftSolver:
         self.output, self._output_vec4s, self._output_failed = carryover.output, carryover.output_vec4s, 0
         self._drawn = dict(carryover.drawn)
         carryover.families, carryover.output, carryover.failed, carryover.drawn = {}, 0, {}, {}
+        self._fade = None       # a layer that was fading here is replaced (its output released above)
         logger.info("%s: drift history carried over from another window (%s)", self.label,
                     {name: family.serial for name, family in self._families.items()})
 
@@ -655,6 +688,8 @@ class DriftSolver:
             if name not in live or self._failed[name] != (live[name].revision, live[name].capacity):
                 del self._failed[name]          # gone, or a new key: that one is tried
         offsets = self.layout(families)
+        if self._fade is not None or (self._programs is False and (self.output or self._families)):
+            return self._fade_frame(families, steps)     # a held layer that cannot advance here: fading out
         if not live or self._programs is False:
             return offsets      # nothing live, or no drift program in this context: drawn without drift
         records = unpack_steps(steps)
@@ -681,7 +716,7 @@ class DriftSolver:
         if not needed:
             return offsets      # no new logical step since the last frame: nothing to integrate
         if not self._programs_ready(resources):
-            return offsets      # no output: the mode draws without drift
+            return self._fade_frame(families, steps)     # a carried history fades out; with none, without drift
         self.check(resources)   # once, if the warm-up did not already (an edge, never per frame)
         if not self.output and not self._relayout(families, offsets):
             # The first output (cleared: a family with no state is drawn from it as zero drift, never undefined).
