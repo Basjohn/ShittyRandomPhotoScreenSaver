@@ -661,6 +661,18 @@ Required properties include:
 
 These are permanent/future-integration gates, not instructions to rerun closed architecture-selection work.
 
+### Native frame schemas (N2.3)
+
+```powershell
+# Spectrum's fixed-layout native record on real frames: the shipped clip replayed through the production owner, every
+# frame published through a native PacketMailbox loopback (payload_schema stamp, slot-head check, reference decoder)
+# and compared bit for bit with the tagged codec's decode; writes the layout table (the C++ reader's reference)
+python tools/native_schema_check.py [--seconds 1.5] [--clip growing_pains] [--label check]
+```
+
+Tests: `tests/test_visualizer_engine_native_schema.py` (round trip, layout pin, namespaces, every slot-head refusal
+with its unchecked-reader control, the owner's failure edge).
+
 ## 7. Qt Quick runtime checks
 
 The Qt Quick presenter is accepted architecture. Use focused runtime evidence for the seam being changed rather than rerunning old architecture-selection experiments.

@@ -14,6 +14,7 @@ from rendering.quick.scene3d.uniforms import PassBlocks
 from widgets.spotify_visualizer.render_state import SpectrumFrame
 from widgets.spotify_visualizer.shaders import load_fragment_shader
 from widgets.spotify_visualizer.spectrum_display_bar_count import resample_levels, resolve_display_bar_count
+from widgets.spotify_visualizer.spectrum_frame_inputs import DEFAULT_BAR_GAP, MAX_LEVELS, input_names, read_style
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     SPECTRUM_SHADER_INPUT_SCALE,
     compute_spectrum_height_scale,
@@ -27,7 +28,7 @@ from ..implementation_values import parameter, rgba, safe_hue
 from rendering.gl_programs.spectrum_options import SPECTRUM_FLAG_PATTERNS, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS
 
 
-_MAX_BARS = 64
+_MAX_BARS = MAX_LEVELS
 
 
 def _spectrum_program_parts():
@@ -41,8 +42,8 @@ def _spectrum_program_parts():
 
 
 SPECTRUM_VERTEX_SOURCE, SPECTRUM_BLOCK = _spectrum_program_parts()
-# The space between bars in px at scale 1: the long-standing fixed value, and the most Bar Gap admits.
-DEFAULT_BAR_GAP = 2.0
+# The space between bars in px at scale 1: the long-standing fixed value (``DEFAULT_BAR_GAP``, declared with the
+# frame inputs), and the most Bar Gap admits.
 MAX_BAR_GAP = 4.0
 
 
@@ -87,14 +88,21 @@ def resolve_spectrum_decor_uniforms(
 
 # Every frame parameter ``resolve_spectrum_decor_uniforms`` reads, fetched in ONE C call so a frame whose decoration
 # did not change costs no per-option Python work (the options are default-off; at rest they must cost nothing).
-_DECOR_SOURCES = (
-    "spectrum_ghost_custom_mix", "spectrum_ghost_color", "spectrum_ghost_fill_mix", "spectrum_ghost_gradient_mix",
-    "spectrum_ghost_tip_color", "spectrum_gloss", "spectrum_fill_gradient_mix", "spectrum_fill_tip_color", "spectrum_peak_caps_mix",
-    "spectrum_peak_cap_color", "spectrum_peak_cap_thickness", "spectrum_pattern_shown",
-    "spectrum_pattern_anchor_shown", "spectrum_pattern_mix", "spectrum_pattern_strength", "spectrum_pattern_color",
-    "spectrum_pattern_scale",
-)
+# The names are the frame-input declaration's (``spectrum_frame_inputs``), the one list the native schema is built
+# from (N2.3).
+_DECOR_SOURCES = input_names(source="parameters", decor=True)
 _decor_sources = operator.itemgetter(*_DECOR_SOURCES)
+# The parameters read on every frame, likewise fetched in one call and only through the declaration.
+_PER_FRAME_PARAMETERS = input_names(source="parameters", per_frame=True)
+_per_frame_parameters = operator.itemgetter(*_PER_FRAME_PARAMETERS)
+
+
+def _read_per_frame_parameters(parameters) -> dict[str, object]:
+    try:
+        return dict(zip(_PER_FRAME_PARAMETERS, _per_frame_parameters(parameters)))
+    except KeyError:
+        # The required-parameter contract names the missing one.
+        return {name: parameter(parameters, name) for name in _PER_FRAME_PARAMETERS}
 
 
 _DECOR_UNIFORMS = (
@@ -284,19 +292,21 @@ class QuickSpectrumRenderer:
             bar_count=count,
         )
 
+        # Style and per-frame parameters are read only through the frame-input declaration (``spectrum_frame_inputs``).
+        style = read_style(logical.common.style)
         local_content_rect = frame.logical_content_rect
         layout = compute_quick_spectrum_layout(
             local_content_rect=local_content_rect,
             viewport_extent=presentation.logical_viewport_extent,
             visual_scale=presentation.uniform_visual_scale,
             bar_count=count,
-            bar_gap=logical.common.style.get("bar_gap", DEFAULT_BAR_GAP),
+            bar_gap=style["bar_gap"],
         )
         if not self._program:
             self._initialize()
 
         parameters = mode_state.parameters
-        style = logical.common.style
+        inputs = _read_per_frame_parameters(parameters)
         fill = rgba(
             style["fill_color"],
         )
@@ -304,17 +314,17 @@ class QuickSpectrumRenderer:
             style["border_color"],
         )
         glow_color = rgba(
-            parameter(parameters, "spectrum_glow_color"),
+            inputs["spectrum_glow_color"],
         )
         rainbow_enabled = bool(
-            parameter(parameters, "rainbow_enabled")
+            inputs["rainbow_enabled"]
         )
         rainbow_per_bar = bool(
-            parameter(parameters, "rainbow_per_bar")
+            inputs["rainbow_per_bar"]
         )
         rainbow_speed = max(
             0.01,
-            min(5.0, float(parameter(parameters, "rainbow_speed"))),
+            min(5.0, float(inputs["rainbow_speed"])),
         )
         if rainbow_enabled:
             hue = safe_hue(
@@ -363,23 +373,23 @@ class QuickSpectrumRenderer:
         values["u_single_piece"] = 1 if bool(style["single_piece"]) else 0
         values["u_border_radius"] = max(0.0, float(style["border_radius"])) * presentation.uniform_visual_scale
         ghost_enabled = bool(
-            parameter(parameters, "spectrum_ghosting_enabled")
+            inputs["spectrum_ghosting_enabled"]
         )
         ghost_alpha = float(
-            parameter(parameters, "spectrum_ghost_alpha")
+            inputs["spectrum_ghost_alpha"]
         )
         values["u_ghost_alpha"] = max(0.0, min(1.0, ghost_alpha)) if ghost_enabled else 0.0
-        values["u_spectrum_glow_enabled"] = 1 if bool(parameter(parameters, "spectrum_glow_enabled")) else 0
+        values["u_spectrum_glow_enabled"] = 1 if bool(inputs["spectrum_glow_enabled"]) else 0
         values["u_spectrum_glow_intensity"] = max(
-            0.0, min(1.5, float(parameter(parameters, "spectrum_glow_intensity"))))
+            0.0, min(1.5, float(inputs["spectrum_glow_intensity"])))
         values["u_spectrum_glow_color"] = tuple(glow_color)
         values["u_rainbow_hue_offset"] = hue
-        values["u_rainbow_ghost"] = 1 if bool(parameter(parameters, "spectrum_rainbow_ghost")) else 0
+        values["u_rainbow_ghost"] = 1 if bool(inputs["spectrum_rainbow_ghost"]) else 0
         values["u_ghost_hue_offset"] = safe_hue(mode_state.animation_time * rainbow_speed * 0.1)
         values["u_rainbow_per_bar"] = 1 if rainbow_per_bar else 0
-        values["u_rainbow_fill"] = 1 if bool(parameter(parameters, "spectrum_rainbow_fill")) else 0
-        values["u_rainbow_border"] = 1 if bool(parameter(parameters, "spectrum_rainbow_border")) else 0
-        if parameter(parameters, "spectrum_pattern_shown") in SPECTRUM_FLAG_PATTERNS:
+        values["u_rainbow_fill"] = 1 if bool(inputs["spectrum_rainbow_fill"]) else 0
+        values["u_rainbow_border"] = 1 if bool(inputs["spectrum_rainbow_border"]) else 0
+        if inputs["spectrum_pattern_shown"] in SPECTRUM_FLAG_PATTERNS:
             # Only a flag sheet's wave reads the clock (wrapped so a long session keeps float precision).
             values["u_time"] = float(mode_state.animation_time) % 3600.0
         values["u_bars_left"] = layout.bars_left

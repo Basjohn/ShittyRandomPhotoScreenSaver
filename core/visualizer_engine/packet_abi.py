@@ -16,7 +16,8 @@ header (HEADER_BYTES):
    48  u64 rejected_payload_bytes (writer: 0 until a terminal capacity violation, before wake-pipe EOF)
 slot i at HEADER_BYTES + i * slot_bytes:
     0  u64 sequence_begin        (seqlock: odd while the writer fills the slot)
-    8  u32 payload_bytes         12 u32 payload_schema (the mode codec's own version)
+    8  u32 payload_bytes         12 u32 payload_schema (1: the tagged Python codec; a native fixed-layout schema:
+                                    ``native_schema``; checked at the head by a reader given ``admit``)
    16  f64 logical_timestamp     24 f64 source_timestamp (NaN: none)
    32  u32 flags (FLAG_*)        36 u32 protected_edge_mask
    40  u32 runtime_generation    44 u32 engine_generation    48 u32 activation_id   52 u32 mode_code
@@ -63,6 +64,7 @@ import math
 import struct
 from dataclasses import dataclass
 from multiprocessing.shared_memory import SharedMemory
+from typing import Callable
 
 MAGIC = b"SRVZ"
 ABI_VERSION = 2
@@ -261,9 +263,15 @@ class FramePacketWriter:
 
 
 class FramePacketReader:
-    """The main-process side: copies the newest whole frame at sync and acknowledges what it accepted."""
+    """The main-process side: copies the newest whole frame at sync and acknowledges what it accepted.
 
-    def __init__(self, buffer) -> None:
+    ``admit`` (native core N2.3, transport rule 5): ``admit(payload_schema, mode_code, payload_bytes)`` runs on the
+    newest slot's head, after the head's seqlock check and before any payload byte is copied, and raises a
+    ``PacketAbiError`` (``native_schema.PayloadRefused``) to refuse the slot. A refused slot is counted
+    (``refused``), never accepted and never acknowledged, the refusal is raised to the caller, and the reader is
+    failed from then on (``refusal``: it reads nothing more, the stream reports failed). None: no head check."""
+
+    def __init__(self, buffer, *, admit: Callable[[int, int, int], None] | None = None) -> None:
         self._view = memoryview(buffer)
         fields = _validate(self._view)
         self._slot_bytes = fields[7]
@@ -271,6 +279,9 @@ class FramePacketReader:
         self.mode_code = fields[8]
         self.accepted = 0
         self.torn_reads = 0
+        self._admit = admit
+        self.refused = 0
+        self.refusal: PacketAbiError | None = None
 
     def read_identity(self) -> tuple[int, int, int, int]:
         """The header's configure-time identity: (runtime generation, engine generation, activation id, mode code)."""
@@ -285,6 +296,8 @@ class FramePacketReader:
     def read_latest(self) -> FramePacket | None:
         """The newest whole frame newer than the last accepted one, or None (nothing new, or torn: keep the previous
         frame). A torn read is counted, never retried in a loop: the next sync reads again."""
+        if self.refusal is not None:
+            return None                       # a refused stream is failed: nothing after the refusal is read
         view = self._view
         latest = _U64.unpack_from(view, _LATEST_OFFSET)[0]
         if latest <= self.accepted:
@@ -300,7 +313,18 @@ class FramePacketReader:
                 break
             # ``identity_and_stamp``: the slot's four identity fields, then publish_ns (FramePacket's last fields).
             head, size, schema, logical, source, flags, edges, *identity_and_stamp = _SLOT_HEAD.unpack_from(view, base)
-            payload = bytes(view[base+SLOT_PAYLOAD_OFFSET:base+SLOT_PAYLOAD_OFFSET+min(size, self._slot_bytes-SLOT_OVERHEAD)])
+            if self._admit is not None:
+                # The head alone, whole under its seqlock, decides admission before any payload byte is copied.
+                if head != latest or _U64.unpack_from(view, base)[0] != latest or latest % 2:
+                    break
+                try:
+                    self._admit(schema, identity_and_stamp[3], size)
+                except PacketAbiError as refusal:
+                    self.refused += 1
+                    self.refusal = refusal
+                    refusal.sequence = latest         # which slot was refused (it is never acknowledged)
+                    raise
+            payload =bytes(view[base+SLOT_PAYLOAD_OFFSET:base+SLOT_PAYLOAD_OFFSET+min(size, self._slot_bytes-SLOT_OVERHEAD)])
             begin = _U64.unpack_from(view, base)[0]
             if head != latest or begin != latest or latest % 2 or size > self._slot_bytes-SLOT_OVERHEAD:
                 break
@@ -311,8 +335,9 @@ class FramePacketReader:
         return None
 
     def has_unread(self) -> bool:
-        """Whether a frame newer than the last accepted one has been published (no copy, nothing accepted)."""
-        return _U64.unpack_from(self._view, _LATEST_OFFSET)[0] > self.accepted
+        """Whether a frame newer than the last accepted one has been published (no copy, nothing accepted); never
+        after a refusal (the stream failed)."""
+        return self.refusal is None and _U64.unpack_from(self._view, _LATEST_OFFSET)[0] > self.accepted
 
     def acknowledge(self, sequence: int) -> None:
         """Mark protected edges up to ``sequence`` as delivered (they stop being carried into later slots)."""
