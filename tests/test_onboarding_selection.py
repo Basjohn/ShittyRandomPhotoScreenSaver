@@ -140,6 +140,40 @@ def test_visualizer_selection_offers_standard_sphere_and_can_enable_it(qapp, set
         page.deleteLater()
 
 
+def test_visualizer_status_asks_for_a_mode_only_while_none_is_chosen(qapp, settings) -> None:
+    """With modes chosen the status line is empty (it used to ask for a mode regardless, 1D.1); with the
+    Visualizer family off it still says why."""
+    from core.settings.visualizer_mode_registry import resolve_admissible_enabled_modes
+
+    widgets = settings.values["widgets"]
+    widgets["family_activation"]["media"] = True
+    widgets["family_activation"]["visualizers"] = True
+    widgets["spotify_visualizer"]["enabled"] = True
+    assert resolve_admissible_enabled_modes(widgets["spotify_visualizer"]["mode_activation"])
+    page = VisualizerPage(settings)
+    try:
+        page.refresh()
+        assert page.status.text() == ""
+        rows = [page.rows.item(index) for index in range(page.rows.count())]
+        unchecked = next(row for row in rows if row.checkState() == Qt.CheckState.Unchecked)
+        unchecked.setCheckState(Qt.CheckState.Checked)
+        assert page.status.text() == ""
+        # Unchecking down to the last mode is refused with its own message, which a later toggle clears.
+        for row in rows:
+            row.setCheckState(Qt.CheckState.Unchecked)
+        assert page.status.text()
+        next(row for row in rows if row.checkState() == Qt.CheckState.Unchecked).setCheckState(Qt.CheckState.Checked)
+        assert page.status.text() == ""
+
+        widgets = settings.get("widgets")
+        widgets["family_activation"]["visualizers"] = False
+        settings.values["widgets"] = widgets
+        page.refresh()
+        assert page.status.text()
+    finally:
+        page.deleteLater()
+
+
 def test_every_offered_mode_is_listed_and_can_be_enabled(qapp, settings) -> None:
     from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
     offered_ids = [d.mode_id for d in iter_visualizer_mode_descriptors() if d.guided_setup_offered]
