@@ -1,5 +1,7 @@
 # Shared scene3d GPU resources
 
+The catalogue of every primitive and shared service (consumers, harnesses, native-ladder ids, potential classes, planned ones) is `Docs/Reference/Primitives.md`; this file keeps the resource-level detail.
+
 The retained Quick transition and visualizer hosts remain their scenes' render owners. `rendering/quick/scene3d/` supplies context-local,
 lazy resources; it does not create a clock, scheduler, global texture cache or alternate renderer. All admitted
 operations require the validated OpenGL 4.6 context. PyOpenGL DSA creation calls use explicit output arrays.
