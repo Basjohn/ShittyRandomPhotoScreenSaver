@@ -1376,6 +1376,122 @@ can most geometry normally."
   its return is the operator's call, §3). The rotate glyph itself is Edit's and now on the expanded card in Fullscreen
   Edit ("Rotate Widget Content" above).
 
+**Display styles of the expanded card (design note for `Current_Plan.md` 1D.2; PROPOSED, FOR THE LEAD'S APPROVAL; written 12 Nov, no code until approved)**
+
+Operator request (12 Nov): the Fullscreen Visualizer gets three display styles, one setting per profile, beside
+`expanded_display_requested`: **Default** (today, unchanged pixel for pixel), **Borders To Edge** (the card's frame
+and border sit on the display's edges) and **Fullscreen (Hide Borders)** (the content fills the display with no frame
+or border). This note decides geometry, coverage, glyphs, Now Playing and Edit per style, and how R-63/R-192's overscan
+and 1C.4's device-pixel card are kept. It changes no decision above (§0.6's "not edge to edge" stays the Default).
+
+*What the source does today (read 12 Nov).*
+- The window is the monitor plus one whole-logical overscan past an exterior edge (`rendering/quick/device_geometry.py`
+  `compat_native_rect`, `overscan_amount`; a second overscan on the other axis when that axis is not whole logical,
+  R-192); a shared edge is never overscanned. The scene is laid out on the on-desktop part only
+  (`visible_rect_in_window`, published by `QuickDisplayWindow._refresh_scene_rect`), which is exactly the monitor.
+- The expanded record is `resolve_expanded_visualizer_presentation(ordinary, display_size, dpr)`
+  (`widgets/spotify_visualizer/presentation_geometry.py`): `display_size` is that visible rect (never the window);
+  `margin = min(expanded_card_inset(ordinary), shorter side / 4)`, the card is `display - 2 * margin` at origin
+  `(margin, margin)`, and the chrome (border width, corner radius, colours, shadow, surface) is the ordinary record's.
+  `expanded_card_inset` = border width + the shadow's displaced body + `EXPANDED_CARD_EDGE_GAP` (2 px).
+- The card is drawn on whole device pixels (`resolve_card_drawn_rect`, R-191) and content is clipped to the frame's
+  inner edge (`resolve_card_clip_path`, `rendering/quick/visualizer/clip_host.py`); a FRAMELESS shell draws no frame
+  and its clip is its content rect. Clip policy is the mode's (`CARD_INTERIOR`, `VIEWPORT_RECT`), never flipped here.
+- Glyphs: one row anchored at `glyphRowInset = max(12, cardBorderWidth + 6)` from the card's bottom-right
+  (`VisualizerPresentation.qml:102`); the overlays' safe area is `max(24, 2.5 % of the shorter side) + borderWidth`
+  inside the card (`ExpandedVisualizerOverlays.qml:120`). Both are relative to the card, not the display.
+- The setting's home: `core/settings/fullscreen_overlays.py` (a global Visualizer setting with a canonical default, no
+  mode prefix, so presets and the Custom snapshot exclude it by construction).
+
+*The one rule that serves all three styles.* A style changes only two inputs of the display-wide resolver: the
+**margin** (the card's inset from the display's visible rect) and the **frame** (the border width and corner radius the
+resolver is handed). Everything else is the existing path: the same function, the same world/extent rule (contained,
+never cropped or stretched; the long axis grows), the same `resolve_card_drawn_rect` and `resolve_card_clip_path`, the
+same framed-camera aperture (`framed_aperture_scale`; the pixel aspect and aperture follow the extent through
+`VIS_SET_VIEW` as at every size). A style is not a new renderer, window, overscan or clip source.
+
+| | Default | Borders To Edge | Fullscreen (Hide Borders) |
+| --- | --- | --- | --- |
+| Margin | `expanded_card_inset` (today) | 0 | 0 |
+| Frame handed to the resolver | the ordinary record's border width, radius, colour | the same border width and colour; radius proposed 0 (below) | border width 0, radius 0 (no frame drawn) |
+| Card = | display minus margin | the whole visible rect | the whole visible rect |
+| Shadow | as the card draws it | off (nothing of it can reach the display; it would be clipped at the window) | off |
+| Content clip | frame's inner edge (R-191) | frame's inner edge at the display's edge | the whole display rect (the coverage is the display) |
+
+*Geometry.* Borders To Edge: `margin = 0`; the card's outer rect is the visible rect, so its outer edge is the
+monitor's pixel edge and the border's width runs inward from it. Hide Borders: `margin = 0`, border width 0, so the
+content rect is the visible rect. In both, `display_size` stays the visible rect and never the window (the same
+single stage authority as today: `committed_outer_size` is the exact rect, never re-derived). The card then uses the
+shorter-side quarter cap unchanged.
+
+*Coverage and clip contract (1C.4).* Default and Borders To Edge: nothing is drawn outside the card nor under the
+border's anti-aliased edge (the clip ends exactly at the frame's inner edge on a device-pixel boundary; guard
+`tests/test_visualizer_card_clip_contract.py` run per style). Hide Borders: there is no frame, so the coverage is the
+whole display rect and the clip is that rect; content may not leave it. The Sphere and Extruded Spectrum overflow
+setting (the one admitted exception, which skips the coverage term) stays as today in Default and Borders To Edge; in
+Hide Borders its overflow would reach past the display, where the window ends (a shared edge) or the overscan lies (an
+exterior edge, off-desktop): it is held to the display rect, and the lead confirms that. No neighbour's pixels can
+change in any style, because the window never extends past a shared edge and the card is derived from the visible rect.
+
+*Rounded corners at the display's corners.* A radius-8 frame whose outer edge is the display's corner leaves four
+tiny wallpaper wedges and an anti-aliased ramp half of which falls outside the monitor. Proposed: Borders To Edge draws
+square outer corners (radius 0 handed to the resolver; the border's inner arc follows through `inner_corner_radius`
+as the resolver already derives it); the ordinary card and Default are untouched. This is the one point where the
+operator's words ("frame and border sit on the display's edges") leave room: the lead decides square or rounded.
+
+*R-63 / R-192 (whole-logical overscan).* Kept by construction, with no style-specific code: the window rect comes only
+from `compat_native_rect` and is never read by the style resolver; the card is derived from `visible_rect_in_window`.
+The overscan stays off an exterior edge and out of every card, content and clip. Test: for a monitor beside a
+neighbour at 100 %, 125 % and 150 %, each style's drawn rect lies inside the visible rect and the window's off-desktop
+part carries no card pixel (hidden second host; the neighbour's pixels are byte-identical before and after).
+
+*1C.4 (the device-pixel card).* A card whose outer edge is the display edge has x = 0 and an extent of
+`device / dpr` logical (1706.67 at 2560 px and 150 %), which `snap_to_device_pixels` maps to a whole device pixel
+(1706.67 x 1.5 = 2560): every edge falls on a boundary and no frame pixel is part frame, part content. Hide Borders has
+no frame, so no edge pixel needs the rule. Open risk, named: R-192's "Still open" (an axis with no exterior edge whose
+extent is not whole at its DPR keeps Qt Quick's stretch) is currently invisible under Default's gap; Borders To Edge
+puts a frame on that edge, so the blended row R-192 describes would show on the middle display of three in a row. The
+open box under 1C.4 (Watchlist with the layouts named, or a whole-logical sub-rectangle of the window) is therefore
+decided before Borders To Edge ships.
+
+*Glyphs.* The row's inset is relative to the card, so it needs no change in Default (byte-identical), keeps
+`max(12, border + 6)` in Borders To Edge (the controls stay 12 to 14 px from the display edge, clear of a corner that
+may be a bezel), and in Hide Borders uses its floor (12; the border is 0). The tips already clamp to 3 px. The
+collapse glyph, side-transfer glyphs, Reset Camera and the 3D hint are unchanged in function and place. The glyph
+row's backing is as it is; bright content under it in Hide Borders is the lead's visual judgment at the D1 run.
+
+*Now Playing and the preset toast.* They sit in the safe area, which stays "inset by the card's border plus
+`max(24, 2.5 %)`". Stored offsets are fractions of the safe area, so changing style moves an overlay by at most the
+margin difference (Default's inset is about 14 logical px at 2560 x 1440, 150 %; Borders To Edge and Hide Borders gain
+that room); placements are never rewritten by a style change. Proposed: no per-style offsets and no new placement
+members (one stored placement, three renderings), so Edit, Restore Size and the presets of placement keep one meaning.
+The 45 % width cap, stacking, the OSD priority rule and the Volume OSD's lane (`volume_osd`, a fraction of the same
+safe area) follow the new card unchanged.
+
+*Edit.* Fullscreen Edit's frames, snapping and guides use the safe area as the edit frame and read their geometry back
+from the live QML (`expanded_overlay_edit_geometry`), so under any style they are what is drawn and nothing in the
+session's draft depends on the style. The setting is Settings'; Gate 3c lists "Settings held by an unsaved draft" as a
+thing to look at, and the implementer verifies it before relying on it. If a style change does arrive mid-session, the
+frames re-read at the next geometry event and the draft is untouched (a test with a negative control says so). Edit entered on another display is unchanged.
+
+*Switching while expanded.* Retarget in place, never rebuild: the style is read by the owner's presentation route
+(`QuickDisplayVisualizerOwner`, the display-wide record of `_resolve_takeover_presentation`), so a change re-resolves the
+record and runs the existing expanded-to-expanded fade-through (`set_expanded_display` machinery: out at the old
+geometry, swap at zero, in at the new), at a publication edge and with no timer. Nothing vanishes and nothing is
+created: the engine, the controller, the render item and the overlays stay. A change while collapsed is stored and
+applies at the next expansion; the collapsed card is untouched (the ordinary record is never changed by a style).
+
+*Persistence.* One value per profile in the record `fullscreen_overlays` (a member `display_style`, canonical
+`"default"`, unknown values fall back to it), normalised in `core/settings/fullscreen_overlays.py` and declared through
+the spec system. A profile saved before it loads as Default with no bridge, and the canonical-default guard covers it.
+The lead decides member versus a sibling key beside `expanded_display_requested`; the proposal is the member, because
+the record already holds every fullscreen option and Settings' Fullscreen Mode page already edits it.
+
+*Proof (as the 1D.2 boxes state).* Per style, at 100 %, 125 % and 150 % on both axes: geometry against the display
+(whole logical), the clip contract, the neighbour guard on the hidden second host, the style round-trip through the real
+`SettingsDialog`, and Default reproducing today's pixels (negative control: a margin of 1 px must fail it); then the
+lead's D1 run per style with edges read at native pixels as in R-192, and a switch while expanded.
+
 **Milestone 4 | Wallpaper transition policy and GPU savings**
 
 - [x] Complete E0 diagram ([02_E0](02_E0_Covered_Display_Admission.md)). - [x] Exclusion at admission built 8 Nov
