@@ -245,17 +245,18 @@ class FakeCli:
         self.dispatched.append((key, branch, sha, token))
         self.ids[f"{key}-{token}"] = 100 + len(self.ids)
 
-    def find_run(self, request_id, *, after_stop=False):
+    def find_run(self, request_id, *, after_stop=False, workflow=remote.WORKFLOW_FILE):
+        self.lookups = getattr(self, "lookups", []) + [(request_id, workflow)]
         if not self.appear and not after_stop:
             return None
         run_id = self.ids.get(request_id)
         return None if run_id is None else (run_id, f"https://github.invalid/runs/{run_id}")
 
-    def startup_failure(self, since, sha):
+    def startup_failure(self, since, sha, workflow=remote.WORKFLOW_FILE):
         return self.refused
 
     def _key(self, run_id):
-        return next(request.split("-")[0] for request, value in self.ids.items() if value == run_id)
+        return next(request.rsplit("-", 1)[0] for request, value in self.ids.items() if value == run_id)
 
     def run_state(self, run_id):
         states = self.states[self._key(run_id)]
@@ -396,9 +397,10 @@ def test_the_github_tab_offers_the_remote_products_and_local_steps(tmp_path):
     github = {job.key: job for job in build_runner.jobs_for_mode("github", tmp_path)}
     venv = {job.key: job for job in build_runner.jobs_for_mode("venv", tmp_path)}
     # The remote products and local steps, then the optional Linux jobs: the other tabs' own Linux job, and Linux
-    # Media Center, which only this tab offers (its own contract: tests/test_linux_mc_build_contract.py).
+    # Media Center, which only this tab offers (its own contract: tests/test_linux_mc_build_contract.py); last the
+    # optional native module (its own contract: tests/test_native_module_build.py).
     assert list(github) == ["standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer",
-                            "linux", "linux_mc"]
+                            "linux", "linux_mc", "native_module"]
     assert github["linux"] == venv["linux"] and not github["linux"].default_selected     # the other tabs' own job
     assert "linux_mc" not in venv and not github["linux_mc"].default_selected
     assert github["linux_mc"].kind == github["linux"].kind and github["linux_mc"].script == github["linux"].script
@@ -818,7 +820,7 @@ def test_preflight_reports_the_actions_policy(monkeypatch):
         "main", "d" * 40, "s", "d" * 40))
     monkeypatch.setattr(build_runner.shutil, "which", lambda name: f"C:/bin/{name}.exe")
     monkeypatch.setattr(remote.GitHubCli, "signed_in", lambda self: True)
-    monkeypatch.setattr(remote.GitHubCli, "workflow_registered", lambda self: True)
+    monkeypatch.setattr(remote.GitHubCli, "workflow_registered", lambda self, *_workflow: True)
     monkeypatch.setattr(remote.GitHubCli, "actions_policy_problem", lambda self: "only its own actions")
     result = build_runner.PreflightResult()
     build_runner._github_preflight(result, build_runner.jobs_for_mode("github"), build_runner.REPO_ROOT)

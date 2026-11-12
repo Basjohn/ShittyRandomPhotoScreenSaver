@@ -12,6 +12,12 @@ exactly one pushed commit. This module owns the remote contract on both sides:
   manifest, the requested commit and its version, and only then replaces the published release directories. Any
   failure leaves the previous payload exactly where it was.
 
+The native module (``native_module``, ``.github/workflows/native-module.yml``) is a target of the same contract: its
+own workflow compiles it, ``stage-native`` places it under ``release/native_module`` on the runner, its manifest also
+records the Qt, PySide6 and MSVC it was built with, and locally it is validated against the pinned Qt
+(``tools/native_sdk_fetch.py``) and published into ``release/native_module`` with that manifest beside it. It is
+built only when the local HEAD is the pushed commit.
+
 Nothing here compiles anything locally. Docs/Guides/GitHub_Remote_Build.md is the operator guide.
 
     python tools/github_remote_build.py run --target standard --target media_center
@@ -40,9 +46,17 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.build_evidence import RUN_TOKEN, evidence_files, sha256_file, write_build_evidence  # noqa: E402
+from tools.native_sdk_fetch import SdkFetchError, pinned_qt_version, qt_version_from_requirements  # noqa: E402
 
 WORKFLOW_FILE = "windows-build.yml"
 WORKFLOW_PATH = Path(".github") / "workflows" / WORKFLOW_FILE
+# The native module (Current_Plan.md item 8b, N0.9): compiled by its own reusable workflow, published like a product.
+NATIVE_WORKFLOW_FILE = "native-module.yml"
+NATIVE_WORKFLOW_PATH = Path(".github") / "workflows" / NATIVE_WORKFLOW_FILE
+NATIVE_SOURCE = "native/spike_p1"
+NATIVE_MODULE = "_srpss_native_spike"
+NATIVE_BUILD_LOG = "native_module_build_{token}.log"
+NATIVE_IMPORT_REPORT = "native_module_import_{token}.json"
 MANIFEST_NAME = "remote_build_manifest.json"
 MANIFEST_SCHEMA = 1
 POLL_SECONDS = 15.0
@@ -66,6 +80,12 @@ class RemoteTarget:
     payload_dirs: tuple[str, ...]
     primary: str
     companions: tuple[str, ...] = ()
+    workflow: str = WORKFLOW_FILE
+    # A native module: compiled against PySide6's exact Qt (requirements.txt's pin at the built commit), which its
+    # manifest records with the PySide6 and MSVC versions.
+    module: bool = False
+    # Report names (``{token}`` filled in) the runner must upload beside the payload, beyond build_evidence's.
+    reports: tuple[str, ...] = ()
 
     @property
     def artifact(self) -> str:
@@ -75,6 +95,14 @@ class RemoteTarget:
     def artifacts(self) -> tuple[str, ...]:
         return (self.primary, *self.companions)
 
+    def report_names(self, token: str) -> tuple[str, ...]:
+        return (*evidence_files(self.key, token), *(name.format(token=token) for name in self.reports))
+
+    def dispatch_inputs(self, sha: str, token: str) -> tuple[str, ...]:
+        """The workflow inputs: the product workflow also takes the product (one workflow, two targets)."""
+        inputs = (f"commit={sha}", f"token={token}")
+        return (f"target={self.key}", *inputs) if self.workflow == WORKFLOW_FILE else inputs
+
 
 TARGETS: dict[str, RemoteTarget] = {
     # One compile publishes the screensaver and the same binary as the diagnostic flavour (core/build_profile.py).
@@ -83,6 +111,16 @@ TARGETS: dict[str, RemoteTarget] = {
     ),
     "media_center": RemoteTarget("media_center", ("media_center",), "media_center/SRPSS_Media_Center.exe"),
 }
+# Modules the products will load (N2.1 folds the native module into both product builds through the same reusable
+# workflow). Published into ``release/<payload dir>`` like a product, never selected by default, never packaged.
+MODULE_TARGETS: dict[str, RemoteTarget] = {
+    "native_module": RemoteTarget(
+        "native_module", ("native_module",), f"native_module/{NATIVE_MODULE}.pyd", workflow=NATIVE_WORKFLOW_FILE,
+        module=True, reports=(NATIVE_BUILD_LOG, NATIVE_IMPORT_REPORT),
+    ),
+}
+ALL_TARGETS: dict[str, RemoteTarget] = {**TARGETS, **MODULE_TARGETS}
+SHADERS_DIR = "shaders"
 
 class RemoteBuildError(RuntimeError):
     """A remote build, its retrieval or its validation failed; the published payload is untouched."""
@@ -126,6 +164,14 @@ def parse_app_version(text: str) -> str:
 
 def version_at_commit(repo_root: Path, sha: str) -> str:
     return parse_app_version(_git(repo_root, "show", f"{sha}:versioning.py"))
+
+
+def qt_version_at_commit(repo_root: Path, sha: str) -> str:
+    """The Qt a commit's native module must be built against: its requirements.txt's PySide6 pin."""
+    try:
+        return qt_version_from_requirements(_git(repo_root, "show", f"{sha}:requirements.txt"))
+    except SdkFetchError as exc:
+        raise RemoteBuildError(str(exc)) from exc
 
 
 @dataclass(frozen=True)
@@ -174,12 +220,72 @@ def _file_entry(path: Path) -> dict[str, Any]:
     return {"bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 
+def msvc_version(msc_full_ver: object) -> str:
+    """``_MSC_FULL_VER`` (194435227) as cl prints it (19.44.35227)."""
+    value = int(msc_full_ver)          # type: ignore[call-overload]
+    if value < 10_000_000:
+        raise RemoteBuildError(f"not an _MSC_FULL_VER: {msc_full_ver!r}")
+    return f"{value // 10_000_000}.{value // 100_000 % 100}.{value % 100_000}"
+
+
+def stage_native_module(root: Path, build_dir: Path, target_key: str = "native_module") -> tuple[Path, ...]:
+    """(Runner) Place the compiled module and its baked shaders where the target publishes them:
+    ``release/<payload dir>/<module>.pyd`` and ``release/<payload dir>/shaders/*.qsb``."""
+
+    target = MODULE_TARGETS[target_key]
+    module = build_dir / Path(target.primary).name
+    if not module.is_file():
+        raise RemoteBuildError(f"the build produced no {module.name} in {build_dir}")
+    shaders = sorted((build_dir / "generated").glob("*.qsb"))
+    if not shaders:
+        raise RemoteBuildError(f"the build baked no shaders (.qsb) in {build_dir / 'generated'}")
+    payload = root / "release" / target.payload_dirs[0]
+    shutil.rmtree(payload, ignore_errors=True)
+    (payload / SHADERS_DIR).mkdir(parents=True)
+    placed = [Path(shutil.copy2(module, payload / module.name))]
+    placed += [Path(shutil.copy2(shader, payload / SHADERS_DIR / shader.name)) for shader in shaders]
+    return tuple(placed)
+
+
+def _module_fields(root: Path, target: RemoteTarget, token: str, pyside6_version: str | None) -> dict[str, Any]:
+    """(Runner) What a module was built against, from the import check the runner ran on it."""
+
+    report_path = root / REPORTS_DIR / NATIVE_IMPORT_REPORT.format(token=token)
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RemoteBuildError(f"no readable import check {report_path.name}: {exc}") from exc
+    if not report.get("ok"):
+        raise RemoteBuildError(f"the module failed its import check: {report.get('checks')}")
+    try:
+        pinned = pinned_qt_version(root / "requirements.txt")        # the checkout is the built commit
+    except SdkFetchError as exc:
+        raise RemoteBuildError(str(exc)) from exc
+    runtime = report.get("runtime_info") or {}
+    compiled, running = runtime.get("qt_compiled"), runtime.get("qt_runtime")
+    if compiled != pinned or running != pinned:
+        raise RemoteBuildError(f"the module was built for Qt {compiled} and runs on {running}; "
+                               f"requirements.txt pins Qt {pinned}")
+    if pyside6_version is None:
+        from importlib.metadata import version as distribution_version
+
+        pyside6_version = distribution_version("PySide6")
+    return {
+        "qt_version": compiled,
+        "pyside6_version": pyside6_version,
+        "msvc_version": msvc_version(runtime.get("msc_full_ver")),
+        "with_quick": bool(runtime.get("with_quick")),
+    }
+
+
 def build_manifest(
     root: Path, target_key: str, commit: str, token: str, *, run_id: str = "", run_attempt: str = "",
+    pyside6_version: str | None = None,
 ) -> dict[str, Any]:
-    """What the runner built: every published payload file and the worker's reports, hashed."""
+    """What the runner built: every published payload file and the worker's reports, hashed (a module's manifest
+    also records the Qt, PySide6 and MSVC it was built with)."""
 
-    target = TARGETS[target_key]
+    target = ALL_TARGETS[target_key]
     if not _SHA.match(commit):
         raise RemoteBuildError(f"commit must be a full SHA, got {commit!r}")
     if not RUN_TOKEN.match(token):
@@ -198,11 +304,13 @@ def build_manifest(
     for relative in target.artifacts:
         if f"release/{relative}" not in files:
             raise RemoteBuildError(f"the worker published no release/{relative}")
-    for name in evidence_files(target.key, token):
+    for name in target.report_names(token):
         report = root / REPORTS_DIR / name
         if report.is_file():
             files[REPORTS_PREFIX + name] = _file_entry(report)
-    return {
+        elif target.module:
+            raise RemoteBuildError(f"the runner wrote no {REPORTS_PREFIX}{name}")
+    manifest = {
         "schema": MANIFEST_SCHEMA,
         "target": target.key,
         "commit": commit,
@@ -212,6 +320,9 @@ def build_manifest(
         "github_run_attempt": run_attempt,
         "files": files,
     }
+    if target.module:
+        manifest.update(_module_fields(root, target, token, pyside6_version))
+    return manifest
 
 
 # ------------------------------------------------------------------------------------------- validation (local)
@@ -257,10 +368,16 @@ def _safe_relative(relative: str, target: RemoteTarget) -> None:
         raise RemoteBuildError(f"the manifest names a file outside the product: {relative}")
 
 
-def validate_staging(staging: Path, target_key: str, *, commit: str, version: str, token: str) -> dict[str, Any]:
-    """Refuse a downloaded artifact unless it is exactly the requested commit's build, whole and unaltered."""
+def validate_staging(
+    staging: Path, target_key: str, *, commit: str, version: str, token: str, qt_version: str | None = None,
+) -> dict[str, Any]:
+    """Refuse a downloaded artifact unless it is exactly the requested commit's build, whole and unaltered (and, for
+    a native module, built against ``qt_version``, the commit's pinned Qt, and the PySide6 that ships it, with its
+    baked shaders)."""
 
-    target = TARGETS[target_key]
+    target = ALL_TARGETS[target_key]
+    if target.module and not qt_version:
+        raise RemoteBuildError(f"{target.key} is validated against the built commit's pinned Qt; none was given")
     manifest_path = staging / MANIFEST_NAME
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -296,10 +413,28 @@ def validate_staging(staging: Path, target_key: str, *, commit: str, version: st
         for companion in target.companions:
             if files[f"release/{companion}"]["sha256"] != primary_hash:
                 raise RemoteBuildError(f"release/{companion} is not the same binary as release/{target.primary}")
+    if target.module:
+        _validate_module(manifest, target, str(qt_version))
     pe_version = pe_product_version(staging / "release" / target.primary)
     if pe_version is not None and not _same_version(pe_version, version):
         raise RemoteBuildError(f"{target.primary} carries product version {pe_version}, expected {version}")
     return manifest
+
+
+def _validate_module(manifest: dict[str, Any], target: RemoteTarget, qt_version: str) -> None:
+    """A module binds to PySide6's own Qt DLLs and refuses any other Qt: built against anything but the pinned Qt
+    (and the PySide6 release that ships it) it would never load."""
+
+    if manifest.get("qt_version") != qt_version:
+        raise RemoteBuildError(f"manifest qt_version is {manifest.get('qt_version')!r}, expected {qt_version!r}")
+    pyside6 = str(manifest.get("pyside6_version") or "")
+    if pyside6.split(".")[:3] != qt_version.split("."):
+        raise RemoteBuildError(f"manifest pyside6_version is {pyside6!r}, expected PySide6 {qt_version}")
+    if not re.fullmatch(r"\d+\.\d+\.\d+", str(manifest.get("msvc_version") or "")):
+        raise RemoteBuildError(f"manifest msvc_version is {manifest.get('msvc_version')!r}")
+    shaders = f"release/{target.payload_dirs[0]}/{SHADERS_DIR}/"
+    if not any(name.startswith(shaders) and name.endswith(".qsb") for name in manifest["files"]):
+        raise RemoteBuildError(f"the build published no baked shaders under {shaders}")
 
 
 # --------------------------------------------------------------------------------------------- publish (local)
@@ -308,7 +443,7 @@ def validate_staging(staging: Path, target_key: str, *, commit: str, version: st
 def publish_payload(staging: Path, release_dir: Path, target_key: str) -> tuple[Path, ...]:
     """Swap the validated payload directories into ``release_dir``; on any failure restore the previous ones."""
 
-    target = TARGETS[target_key]
+    target = ALL_TARGETS[target_key]
     release_dir.mkdir(parents=True, exist_ok=True)
     tag = uuid.uuid4().hex[:8]
     steps: list[list[Any]] = []          # [final, staged, backup or None, placed]
@@ -383,9 +518,9 @@ class GitHubCli:
     def signed_in(self) -> bool:
         return self._run(["gh", "auth", "status"], 30.0).returncode == 0
 
-    def workflow_registered(self) -> bool:
+    def workflow_registered(self, workflow: str = WORKFLOW_FILE) -> bool:
         """GitHub dispatches a workflow only once its file is on the default branch."""
-        return self._run(["gh", "workflow", "view", WORKFLOW_FILE], 60.0).returncode == 0
+        return self._run(["gh", "workflow", "view", workflow], 60.0).returncode == 0
 
     def actions_policy_problem(self) -> str | None:
         """Why the repository's Actions policy would refuse to start the workflow (None: it can start).
@@ -412,11 +547,11 @@ class GitHubCli:
         return ("the repository allows only its own actions; enable 'Allow actions created by GitHub' "
                 "(Settings > Actions > General)")
 
-    def startup_failure(self, since: datetime, sha: str) -> str | None:
-        """The URL of a run of this workflow that GitHub refused to start after ``since`` (its custom name is never
+    def startup_failure(self, since: datetime, sha: str, workflow: str = WORKFLOW_FILE) -> str | None:
+        """The URL of a run of ``workflow`` that GitHub refused to start after ``since`` (its custom name is never
         applied, so the request id cannot find it)."""
         listed = json.loads(self._call(
-            "run", "list", "--workflow", WORKFLOW_FILE, "--event", "workflow_dispatch", "--limit", "30",
+            "run", "list", "--workflow", workflow, "--event", "workflow_dispatch", "--limit", "30",
             "--json", "conclusion,createdAt,headSha,url",
         ) or "[]")
         for run in listed:
@@ -430,11 +565,13 @@ class GitHubCli:
         return None
 
     def dispatch(self, target_key: str, branch: str, sha: str, token: str) -> None:
-        self._call("workflow", "run", WORKFLOW_FILE, "--ref", branch,
-                   "-f", f"target={target_key}", "-f", f"commit={sha}", "-f", f"token={token}")
+        target = ALL_TARGETS[target_key]
+        fields = [argument for value in target.dispatch_inputs(sha, token) for argument in ("-f", value)]
+        self._call("workflow", "run", target.workflow, "--ref", branch, *fields)
 
-    def find_run(self, request_id: str, *, after_stop: bool = False) -> tuple[int, str] | None:
-        args = ["gh", "run", "list", "--workflow", WORKFLOW_FILE, "--event", "workflow_dispatch", "--limit", "30",
+    def find_run(self, request_id: str, *, after_stop: bool = False,
+                 workflow: str = WORKFLOW_FILE) -> tuple[int, str] | None:
+        args = ["gh", "run", "list", "--workflow", workflow, "--event", "workflow_dispatch", "--limit", "30",
                 "--json", "databaseId,displayTitle,url"]
         if after_stop:      # the operator stopped: look it up anyway, so the run can be cancelled on GitHub
             try:
@@ -539,15 +676,18 @@ def run_remote_builds(
     results: dict[str, RemoteResult] = {}
     logs: dict[str, _RunLog] = {}
     for key in keys:
-        target = TARGETS[key]
+        target = ALL_TARGETS[key]
         logs[key] = _RunLog(
             log_dir / f"build_runner_{key}_{token}.log",
             f"SRPSS Build Runner · GitHub Remote\nProduct: {key}\nCommit: {commit.describe()}\nRun token: {token}\n"
-            f"Workflow: {WORKFLOW_PATH.as_posix()} (artifact {target.artifact})\n{'=' * 72}\n",
+            f"Workflow: .github/workflows/{target.workflow} (artifact {target.artifact})\n{'=' * 72}\n",
         )
 
+    def workflow(key: str) -> str:
+        return ALL_TARGETS[key].workflow
+
     def finish(key: str, returncode: int, detail: str, *, aborted: bool = False, url: str | None = None) -> None:
-        target = TARGETS[key]
+        target = ALL_TARGETS[key]
         logs[key].write(f"Result: {detail} (exit {returncode})")
         evidence = None
         if returncode == 0:
@@ -589,10 +729,15 @@ def run_remote_builds(
         if cancelled():
             finish(key, 130, "Aborted by operator before dispatch", aborted=True)
             continue
+        if ALL_TARGETS[key].module and not current.matches_local_head:
+            # A module is built for the work it is tested with: never the pushed tip in place of a local commit.
+            finish(key, 1, f"Local HEAD {current.local_head[:8]} is not origin/{current.branch} ({current.short}): "
+                           "push it first; GitHub builds only pushed commits")
+            continue
         emit("status", key, "Dispatching")
         try:
             cli.dispatch(key, commit.branch, commit.sha, token)
-            logs[key].write(f"Dispatched {WORKFLOW_FILE} on {commit.branch} for {commit.sha} ({version})")
+            logs[key].write(f"Dispatched {workflow(key)} on {commit.branch} for {commit.sha} ({version})")
             pending.append(key)
         except (RemoteBuildError, RemoteCancelled) as exc:
             finish(key, 1, f"Dispatch failed: {exc}", aborted=isinstance(exc, RemoteCancelled))
@@ -603,7 +748,7 @@ def run_remote_builds(
             if key in runs:
                 continue
             try:
-                found = cli.find_run(f"{key}-{token}")
+                found = cli.find_run(f"{key}-{token}", workflow=workflow(key))
             except (RemoteBuildError, RemoteCancelled) as exc:
                 logs[key].write(f"Run lookup failed: {exc}")
                 found = None
@@ -613,20 +758,24 @@ def run_remote_builds(
                 emit("link", key, found[1])
                 emit("status", key, "Queued")
         if len(runs) < len(pending):
-            try:
-                refused = cli.startup_failure(dispatched_at, commit.sha)
-            except (RemoteBuildError, RemoteCancelled, ValueError):
-                refused = None
-            if refused:
-                for key in [key for key in pending if key not in runs]:
-                    pending.remove(key)
-                    finish(key, 1, f"GitHub could not start the workflow (startup failure: repository Actions "
-                                   f"policy or workflow file): {refused}", url=refused)
+            any_refused = False
+            for name in dict.fromkeys(workflow(key) for key in pending if key not in runs):
+                try:
+                    refused = cli.startup_failure(dispatched_at, commit.sha, workflow=name)
+                except (RemoteBuildError, RemoteCancelled, ValueError):
+                    refused = None
+                if refused:
+                    any_refused = True
+                    for key in [key for key in pending if key not in runs and workflow(key) == name]:
+                        pending.remove(key)
+                        finish(key, 1, f"GitHub could not start the workflow (startup failure: repository Actions "
+                                       f"policy or workflow file): {refused}", url=refused)
+            if any_refused:
                 continue
             _wait(4.0, cancelled, sleep)
     for key in [key for key in pending if key not in runs]:
         if cancelled():
-            found = cli.find_run(f"{key}-{token}", after_stop=True)
+            found = cli.find_run(f"{key}-{token}", after_stop=True, workflow=workflow(key))
             if found is not None:
                 runs[key] = found          # cancelled on GitHub below, with the runs already being followed
                 continue
@@ -690,7 +839,7 @@ def _wait(seconds: float, cancelled: Callable[[], bool], sleep: Callable[[float]
 
 
 def _retrieve(repo_root, cli, key, run_id, url, commit, version, token, log_dir, release_dir, log, emit, finish) -> None:
-    target = TARGETS[key]
+    target = ALL_TARGETS[key]
     staging = repo_root / STAGING_DIR / token / key
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True)
@@ -699,8 +848,15 @@ def _retrieve(repo_root, cli, key, run_id, url, commit, version, token, log_dir,
         cli.download(run_id, target.artifact, staging)
         log.write(f"Downloaded {target.artifact} to staging {staging}")
         emit("status", key, "Validating")
-        manifest = validate_staging(staging, key, commit=commit.sha, version=version, token=token)
+        qt_version = qt_version_at_commit(repo_root, commit.sha) if target.module else None
+        manifest = validate_staging(staging, key, commit=commit.sha, version=version, token=token,
+                                    qt_version=qt_version)
         log.write(f"Validated {len(manifest['files'])} files against the manifest (commit {commit.sha}, {version})")
+        if target.module:
+            # A module keeps its validated manifest beside it: what it was built from and against (Qt, MSVC).
+            shutil.copy2(staging / MANIFEST_NAME, staging / "release" / target.payload_dirs[0] / MANIFEST_NAME)
+            log.write(f"Built against Qt {manifest['qt_version']}, PySide6 {manifest['pyside6_version']}, "
+                      f"MSVC {manifest['msvc_version']}")
         emit("status", key, "Publishing")
         published = publish_payload(staging, release_dir, key)
         for relative in manifest["files"]:
@@ -775,22 +931,32 @@ def _run_command(args: argparse.Namespace) -> int:
     return 0 if results and all(result.ok for result in results.values()) else 1
 
 
+def _stage_native_command(args: argparse.Namespace) -> int:
+    placed = stage_native_module(REPO_ROOT, Path(args.build_dir).resolve(), args.target)
+    print(f"[REMOTE-BUILD] Staged {len(placed)} files into release/{MODULE_TARGETS[args.target].payload_dirs[0]}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     manifest = sub.add_parser("manifest", help="(workflow step) record what the runner built")
-    manifest.add_argument("--target", choices=sorted(TARGETS), required=True)
+    manifest.add_argument("--target", choices=sorted(ALL_TARGETS), required=True)
     manifest.add_argument("--commit", required=True)
     manifest.add_argument("--token", required=True)
     manifest.add_argument("--run-id", default="")
     manifest.add_argument("--run-attempt", default="")
     manifest.add_argument("--out", required=True)
+    stage = sub.add_parser("stage-native", help="(workflow step) place a compiled module under release/")
+    stage.add_argument("--target", choices=sorted(MODULE_TARGETS), default="native_module")
+    stage.add_argument("--build-dir", required=True)
     run = sub.add_parser("run", help="build products on GitHub and publish them into release/")
-    run.add_argument("--target", choices=sorted(TARGETS), action="append", required=True)
+    run.add_argument("--target", choices=sorted(ALL_TARGETS), action="append", required=True)
     run.add_argument("--branch", default=None)
     args = parser.parse_args(argv)
+    commands = {"manifest": _manifest_command, "stage-native": _stage_native_command, "run": _run_command}
     try:
-        return _manifest_command(args) if args.command == "manifest" else _run_command(args)
+        return commands[args.command](args)
     except RemoteBuildError as exc:
         print(f"[REMOTE-BUILD] {exc}", file=sys.stderr)
         return 1

@@ -5,6 +5,7 @@ Usage:
     python tools/build_runner.py --mode venv
     python tools/build_runner.py --mode github
     python tools/build_runner.py --mode github --run [--select standard media_center ...]
+    python tools/build_runner.py --mode github --run --select native_module
     python tools/build_runner.py --smoke-test --mode normal
 
 The GUI intentionally uses only the Python standard library. Build workers keep
@@ -812,9 +813,17 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
     ``release/`` holds, exactly as on the venv tab (operator, 8 Nov: "It's supposed to be local, github has no say"),
     after this run's GitHub products are published when they are selected. The optional Linux screensaver and
     GitHub-only Linux Media Center jobs each use the same ``scripts/linux/build_from_windows.ps1`` with a separate
-    profile, artifact and GitHub run, on the pre-flight's pinned commit (``_job_arguments``)."""
+    profile, artifact and GitHub run, on the pre-flight's pinned commit (``_job_arguments``).
+
+    The native module (``native_module``, Current_Plan.md item 8b) compiles on GitHub through its own workflow and is
+    validated and published into ``release/native_module`` like a product; it is never pre-selected and no installer
+    packages it (until N2.1 folds it into the product builds)."""
+    from tools import github_remote_build as remote
+
     by_key = {job.key: job for job in jobs_for_mode("venv", repo_root)}
     workflow = repo_root / ".github" / "workflows" / "windows-build.yml"
+    native = remote.MODULE_TARGETS["native_module"]
+    native_dir = repo_root / "release" / native.payload_dirs[0]
     return (
         replace(by_key["standard"], name="Standard + Diagnostic (GitHub)", kind="github", script=workflow),
         replace(by_key["media_center"], name="Media Center (GitHub)", kind="github", script=workflow),
@@ -829,6 +838,15 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
             repo_root / "scripts" / "linux" / "build_from_windows.ps1",
             repo_root / "release" / "linux",
             repo_root / "release" / "linux" / f"SRPSS-{APP_VERSION}-linux-mc-x86_64.tar.gz",
+            default_selected=False,
+        ),
+        Job(
+            native.key,
+            "Native Module (GitHub)",
+            "github",
+            repo_root / remote.NATIVE_WORKFLOW_PATH,
+            native_dir,
+            repo_root / "release" / native.primary,
             default_selected=False,
         ),
     )
@@ -952,6 +970,7 @@ def _github_preflight(result: PreflightResult, jobs: Sequence[Job], repo_root: P
 
     # The Linux build is a GitHub run too (its worker follows it): the same CLI, sign-in, policy and commit apply.
     remote_jobs = {job.key for job in jobs if job.kind == "github" or job.key in {"linux", "linux_mc"}}
+    native_keys = {job.key for job in jobs if job.key in remote.MODULE_TARGETS}
     if shutil.which("gh") is None:
         result.errors.append("GitHub Remote: GitHub CLI (gh) not found; winget install GitHub.cli, then gh auth login")
         result.unavailable_jobs.update(remote_jobs)
@@ -968,6 +987,11 @@ def _github_preflight(result: PreflightResult, jobs: Sequence[Job], repo_root: P
         elif problem := cli.actions_policy_problem():
             result.errors.append(f"GitHub Remote: GitHub would refuse to start the workflow: {problem}")
             result.unavailable_jobs.update(remote_jobs)
+        elif native_keys and not cli.workflow_registered(remote.NATIVE_WORKFLOW_FILE):
+            # Optional and never pre-selected: only its own row is unavailable.
+            result.warnings.append(f"Native Module: GitHub does not list {remote.NATIVE_WORKFLOW_FILE} yet; it must "
+                                   "be on the default branch")
+            result.unavailable_jobs.update(native_keys)
     try:
         commit = remote.resolve_pushed_commit(repo_root)
     except remote.RemoteBuildError as exc:
@@ -976,6 +1000,11 @@ def _github_preflight(result: PreflightResult, jobs: Sequence[Job], repo_root: P
         return
     result.remote_commit = commit
     result.notes.append(f"GitHub builds {commit.describe()}")
+    if native_keys and not commit.matches_local_head:
+        # A module is tested against the work it was built from: refused, never the pushed tip in its place.
+        result.warnings.append(f"Native Module: local HEAD {commit.local_head[:8]} is not pushed (origin/"
+                               f"{commit.branch} is {commit.short}); push it to build the module")
+        result.unavailable_jobs.update(native_keys)
     if not commit.matches_local_head:
         result.warnings.append(
             f"Local HEAD {commit.local_head[:8]} is not origin/{commit.branch}: GitHub builds the pushed commit "
@@ -3313,7 +3342,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--select",
         nargs="+",
         metavar="JOB",
-        help="with --run: job keys (standard media_center reddit_helper standard_installer media_center_installer)",
+        help="with --run: job keys (standard media_center reddit_helper standard_installer media_center_installer "
+             "linux linux_mc native_module)",
     )
     parser.add_argument(
         "--iscc",

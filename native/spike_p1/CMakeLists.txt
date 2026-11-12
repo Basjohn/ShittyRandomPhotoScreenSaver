@@ -8,7 +8,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Must equal the Qt that PySide6 ships (PySide6.QtCore.qVersion()): QRhi has
 # limited compatibility guarantees, so the module is rebuilt per Qt release.
-set(SPIKE_QT_VERSION "6.11.2" CACHE STRING "Qt version PySide6 ships")
+# One value for the whole repository: requirements.txt's PySide6==x.y.z pin
+# (tools/native_sdk_fetch.py fetches that Qt; the build manifest records it).
+set(_requirements "${CMAKE_CURRENT_SOURCE_DIR}/../../requirements.txt")
+file(STRINGS "${_requirements}" _pyside6_pin REGEX "^PySide6==")
+string(REGEX MATCH "^PySide6==([0-9]+\\.[0-9]+\\.[0-9]+)" _pyside6_match "${_pyside6_pin}")
+if(NOT CMAKE_MATCH_1)
+    message(FATAL_ERROR "${_requirements} pins no PySide6==x.y.z")
+endif()
+set(SPIKE_QT_VERSION "${CMAKE_MATCH_1}")
 option(SPIKE_WITH_QUICK "Build part B: the C++ QSGRenderNode + QML type (needs Qt Quick/Qml SDK)" ON)
 set(SPIKE_QSB "" CACHE FILEPATH "qsb.exe shipped in the PySide6 package")
 set(SPIKE_VULKAN_INCLUDE "" CACHE PATH "Vulkan-Headers include dir (vulkan/vulkan.h)")

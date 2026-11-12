@@ -258,6 +258,10 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] A dispatch-only workflow that compiles `native/spike_p1` (later the core) for a pushed ref on GitHub's
     Windows runner (MSVC, the pinned Qt SDK fetched by script, `qsb`), and uploads the `.pyd`, the baked shaders
     and the build log with a manifest (commit, Qt version, sha256 per file).
+    Built (agent, 12 Nov, unproved): `.github/workflows/native-module.yml` (dispatch and reusable `workflow_call`;
+    SDK by `tools/native_sdk_fetch.py`, sha256 before extraction, cached; `build.cmd` with vswhere is the one CMake
+    call; GPU-free `native/spike_p1/python/import_check.py` on the runner; manifest adds Qt, PySide6, MSVC; the Qt
+    version is one value, requirements.txt's PySide6 pin, with archives per version in `QT_SDKS`).
   - [ ] `tools/build_runner.py`'s GitHub mode (operator, 12 Nov: it has workflow builds and a usable CLI) gains the
     native module as a selectable target, with `tools/github_remote_build.py` as the shared source beneath; never in
     the default selection or the installer chain until N2.1. It publishes into `release/` (its own folder, with its
@@ -265,8 +269,15 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     module build is a stage N2.1 folds into the Standard and MC workflows. The target: push check,
     dispatch, wait, download, manifest validated; refuses a ref that is not
     pushed. Run by the lead only; agents never start it.
+    Built (agent, 12 Nov, unproved): target `native_module` in `tools/github_remote_build.py`, job "Native Module
+    (GitHub)" in `tools/build_runner.py` (never pre-selected, no installer); published into the running checkout's
+    `release/native_module/` with its manifest; an unpushed HEAD is refused. Lead's command and the slice loop:
+    `Docs/Guides/GitHub_Remote_Build.md`, "The native module".
   - [ ] Proved end to end by the lead on the current spike: the downloaded module imports in the venv and the
     spike's hidden-host test passes; the time from dispatch to download recorded (it sets how C++ slices iterate).
+    Ready for the lead (agent, 12 Nov): merge to `main` and push (GitHub lists the workflow only from `main`), then
+    `tools/build_runner.py --mode github --run --select native_module`, then `run_spike.py --module-dir
+    release/native_module`.
 - [ ] N0.6 D6's proof, in the P1 harness (C++; nothing shipped):
   - [ ] The module creates the instance and a device at the baseline (Qt requires of it: a graphics queue that
     can present, the extensions `preferredExtensionsForImportedDevice()` names plus swapchain, the preferred
