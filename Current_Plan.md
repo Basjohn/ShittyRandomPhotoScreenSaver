@@ -1255,7 +1255,8 @@ Watchlist entry (operator, 11 Nov).
 
 **Agents (operator, 12 Nov; replaces the 11 Nov roster):** the lead is Opus 5.5 High (orchestrator, auditor,
 planner and final reviewer); Fable 5.2 High only as a rare one-off audit at a major architectural milestone; agent
-slots are three Opus 5.5 High, two Opus 5.5 Medium and two Sonnet 5.5 Medium (documents and research only). The
+slots (the cap on agents running at once) are two Opus 5.5 High, two Opus 5.5 Medium and one Sonnet 5.5 Medium
+(documents and research only). The
 workflow is `Docs/Guides/Orchestrator_Handbook.md`. Earlier text of this paragraph, kept for its rules: the lead is
 orchestrator, auditor and final reviewer; all agent results pass that review before acceptance, and the lead's audits (pixel review, regressions
 re-run against the pre-change code, tests on the merge) are what keep the hand-overs sound. The other slots are

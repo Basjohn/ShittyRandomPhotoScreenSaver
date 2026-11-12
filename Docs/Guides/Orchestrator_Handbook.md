@@ -12,9 +12,10 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
 - **Fable 5.2 High** is used rarely, as a one-off audit at a major architectural milestone (for example a native
   core stage closing, a backend switch). The lead asks for it by spawning one agent with `model: "fable"`, a
   read-only brief and a fixed question; nothing else runs on Fable.
-- **Agent slots** (operator, 12 Nov 2026): three Opus 5.5 High (architecture, shaders, visual work), two Opus 5.5
-  Medium (bounded repairs, test work, preset touch-ups at low priority), two Sonnet 5.5 Medium (documents and
-  research only; they never change product code or tests).
+- **Agent slots, the cap** (operator, 12 Nov 2026): two Opus 5.5 High (architecture, shaders, visual work), two
+  Opus 5.5 Medium (bounded repairs, test work, preset touch-ups at low priority), one Sonnet 5.5 Medium (documents
+  and research only; never product code or tests), plus the lead. The cap counts agents running at once; when it
+  shrinks, nobody busy is stopped unless their work is safely handed over (journal current, work committed).
 - **Closing before opening:** a slot takes no new work while its last report is unreviewed or unmerged. A dispatch
   is one plan item, or one step of a large one, sized to finish and report well inside a usage window.
 
