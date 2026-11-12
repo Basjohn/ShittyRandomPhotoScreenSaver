@@ -405,10 +405,10 @@ found on 12 Nov 2026, counting an import or a path mention as a caller. "Newer" 
 
 | Document (file:line) | Says | Code (file:line) |
 |---|---|---|
-| `Docs/Reference/Harness_Index.md:95` | `mode_audit` audits "Spectrum, Oscilloscope, Sine Wave, DevCurve and Shockwave Grid" | `tools/visualizer_replay/mode_audit.py:33`: `MODES = ("spectrum", "oscilloscope", "devcurve", "shockwave_grid", "bubble")` (Sine Wave is retired; Bubble is in) |
-| `Docs/Reference/Harness_Index.md:864` | `agent_handover.py` offers state and `--commit` | `tools/agent_handover.py` also has `--retire` (copy the named worktrees' evidence here, then remove them; `Docs/Guides/Orchestrator_Handbook.md:51,98` uses it) |
-| `Docs/Reference/Harness_Index.md:909` | `generate_widget_theme_mirrors.py` lists `--fill-materials`, `--regenerate-all`, `--overwrite-authored`, `--delete-unlinked` | `tools/generate_widget_theme_mirrors.py:496,512` also has `--drop-retired-roles` |
-| `Docs/Reference/Harness_Index.md:28-29` | the area vocabulary ends at `...themes`, `tests`, `architecture` | `tools/artifact_paths.py:126-146` also declares `native_core` and `materials` (`run_n06.py:72` writes `native_core/n06`; `qtquick_sphere_smoke.py:280` writes `visualizers/sphere/materials`) |
+| `Docs/Reference/Harness_Index.md:95` | `mode_audit` audits "Spectrum, Oscilloscope, Sine Wave, DevCurve and Shockwave Grid" | `tools/visualizer_replay/mode_audit.py:33`: `MODES = ("spectrum", "oscilloscope", "devcurve", "shockwave_grid", "bubble")` (Sine Wave is retired; Bubble is in). Fixed 12 Nov: the line now names `MODES` and its five modes |
+| `Docs/Reference/Harness_Index.md:864` | `agent_handover.py` offers state and `--commit` | `tools/agent_handover.py` also has `--retire` (copy the named worktrees' evidence here, then remove them; `Docs/Guides/Orchestrator_Handbook.md:51,98` uses it). Fixed 12 Nov: the entry now states what `--retire` copies and what it refuses |
+| `Docs/Reference/Harness_Index.md:909` | `generate_widget_theme_mirrors.py` lists `--fill-materials`, `--regenerate-all`, `--overwrite-authored`, `--delete-unlinked` | `tools/generate_widget_theme_mirrors.py:496,512` also has `--drop-retired-roles`. Fixed 12 Nov: the entry now lists it |
+| `Docs/Reference/Harness_Index.md:28-29` | the area vocabulary ends at `...themes`, `tests`, `architecture` | `tools/artifact_paths.py:126-146` also declares `native_core` and `materials` (`run_n06.py:72` writes `native_core/n06`; `qtquick_sphere_smoke.py:280` writes `visualizers/sphere/materials`). Fixed 12 Nov: the list now ends with `native_core`, `materials` (the full `AREAS` set) |
 | `Docs/Reference/Harness_Index.md:865` | `visualizer_live_check.py` "`--load game60\|none`" without saying which is the default | Fixed 12 Nov: the default was `game60` (an agent omitting the flag started the lead-only load); it is now `none`, and both docs say so |
 
 ## Counts
