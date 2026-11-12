@@ -25,7 +25,6 @@ LEGACY_GL_ONLY = frozenset({
     "rendering.quick.scene3d.edge_field._HEADER",
     "rendering.quick.scene3d.edge_field._LUMA_COMPUTE",
     "rendering.quick.scene3d.edge_field._RESOLVE_COMPUTE",
-    "rendering.quick.scene3d.population.POPULATION_SCAN_SOURCE",
     "rendering.quick.scene3d.propagation_field._EXTENT_COMPUTE",
     "rendering.quick.scene3d.propagation_field._HEADER",
     "rendering.quick.scene3d.propagation_field._RELAX_COMPUTE",

@@ -30,15 +30,19 @@ from typing import Callable, Iterator
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.scene3d import Scene3DBlockLayout
 from rendering.quick import gl_query
 
-from .compute import dispatch
+from .compute import COMPUTE_BLOCK_BINDING, DispatchBlocks, dispatch
 
 POPULATION_GROUP = 256
 _SCAN_INVOCATIONS = 1024
 # Storage binding points used while a population is bound (restored afterwards).
 POPULATION_FIRST_BINDING = 3
 _COUNTS, _OFFSETS, _COMMAND, _IDS, _STATES = range(POPULATION_FIRST_BINDING, POPULATION_FIRST_BINDING + 5)
+# The population's own values, one block for its three dispatches (the hooks' uniforms belong to the consumer).
+_DISPATCH_BLOCK = Scene3DBlockLayout.of("PopulationDispatch", (("uPopulation", "uint"), ("uGroups", "uint"),
+                                                               ("uVertices", "uint")))
 
 _BUFFERS_GLSL = f"""
 layout(std430, binding = {_COUNTS}) buffer PopulationCounts {{ uint populationCounts[]; }};
@@ -46,7 +50,7 @@ layout(std430, binding = {_OFFSETS}) buffer PopulationOffsets {{ uint population
 layout(std430, binding = {_COMMAND}) buffer PopulationCommand {{ uint populationCommand[4]; }};
 layout(std430, binding = {_IDS}) buffer PopulationIds {{ uint populationIds[]; }};
 layout(std430, binding = {_STATES}) buffer PopulationStates {{ vec4 populationStates[]; }};
-"""
+""" + _DISPATCH_BLOCK.glsl(COMPUTE_BLOCK_BINDING)
 
 # For the consumer's draw: the live members in id order.
 POPULATION_DRAW_GLSL = f"""
@@ -58,7 +62,7 @@ layout(std430, binding = {_STATES}) readonly buffer PopulationStates {{ vec4 pop
 @lru_cache(maxsize=16)
 def population_count_source(hooks: str) -> str:
     return (f"#version 460 core\nlayout(local_size_x = {POPULATION_GROUP}) in;\n" + _BUFFERS_GLSL
-            + "uniform uint uPopulation;\n" + hooks + """
+            + hooks + """
 shared uint groupLive;
 void main() {
     if (gl_LocalInvocationIndex == 0u) groupLive = 0u;
@@ -73,9 +77,7 @@ void main() {
 
 POPULATION_SCAN_SOURCE = (
     f"#version 460 core\nlayout(local_size_x = {_SCAN_INVOCATIONS}) in;\n" + _BUFFERS_GLSL
-    + f"""uniform uint uGroups;
-uniform uint uVertices;
-shared uint sums[{_SCAN_INVOCATIONS}];
+    + f"""shared uint sums[{_SCAN_INVOCATIONS}];
 void main() {{
     uint i = gl_LocalInvocationIndex;
     uint per = (uGroups + {_SCAN_INVOCATIONS - 1}u) / {_SCAN_INVOCATIONS}u;
@@ -109,7 +111,7 @@ void main() {{
 @lru_cache(maxsize=16)
 def population_scatter_source(hooks: str) -> str:
     return (f"#version 460 core\nlayout(local_size_x = {POPULATION_GROUP}) in;\n" + _BUFFERS_GLSL
-            + "uniform uint uPopulation;\n" + hooks + f"""
+            + hooks + f"""
 shared uint before[{POPULATION_GROUP}];
 void main() {{
     uint i = gl_LocalInvocationIndex;
@@ -147,14 +149,11 @@ class CompactedPopulation:
         self._capacity = 0
         self._groups = 0
         self._population = 0
-        # The population's own uniform locations, per linked program (the hooks' belong to the consumer).
-        self._locations: dict[tuple[int, str], int] = {}
-        # Values those uniforms hold: constant through a run, so set only when they change.
-        self._values: dict[tuple[int, str], int] = {}
+        self._blocks = DispatchBlocks(f"{label} population")
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._names)
+        return bool(self._names) or self._blocks.has_resources
 
     @property
     def capacity(self) -> int:
@@ -165,7 +164,7 @@ class CompactedPopulation:
         if capacity < 1:
             raise ValueError(f"{self.label}: a population needs at least one member")
         if self._names and self._capacity == capacity:
-            return True
+            return self._blocks.warm()
         self.release()
         groups = -(-capacity // POPULATION_GROUP)
         sizes = {_COUNTS: 4 * groups, _OFFSETS: 4 * groups, _COMMAND: 16, _IDS: 4 * capacity, _STATES: 16 * capacity}
@@ -177,6 +176,7 @@ class CompactedPopulation:
                     raise RuntimeError(f"{self.label} population buffer allocation failed")
                 self._names[binding] = int(name[0])
                 gl.glNamedBufferStorage(self._names[binding], size, None, 0)
+            self._blocks.warm()   # the dispatch blocks belong to the same allocation
         except Exception:
             self.release()
             raise
@@ -223,37 +223,20 @@ class CompactedPopulation:
         self._population = population
         groups = -(-population // POPULATION_GROUP)
         (count_key, count), (scan_key, scan), (scatter_key, scatter) = population_programs(key, hooks)
-        # Each pass's reader: the next pass's storage reads; the draw's storage and command reads.
-        for program_key, source, barrier in (
-                (count_key, count, gl.GL_SHADER_STORAGE_BARRIER_BIT),
-                (scan_key, scan, gl.GL_SHADER_STORAGE_BARRIER_BIT),
-                (scatter_key, scatter, gl.GL_SHADER_STORAGE_BARRIER_BIT | gl.GL_COMMAND_BARRIER_BIT)):
-            program = resources.compute_program(program_key, source)
-            gl.glUseProgram(program)
-            if program_key == scan_key:
-                self._set(program, "uGroups", groups)
-                self._set(program, "uVertices", vertices)
-                dispatch((1, 1, 1), barrier)
-                continue
-            self._set(program, "uPopulation", population)
-            configure(program_key, program)
-            dispatch((groups, 1, 1), barrier)
-
-    def _set(self, program: int, name: str, value: int) -> None:
-        """Set one of the population's own uints on the program in use, unless it already holds it."""
-        if self._values.get((program, name)) != value:
-            gl.glUniform1ui(self._location(program, name), value)
-            self._values[(program, name)] = value
-
-    def _location(self, program: int, name: str) -> int:
-        key = (program, name)
-        location = self._locations.get(key)
-        if location is None:
-            location = int(gl.glGetUniformLocation(program, name))
-            if location < 0:
-                raise RuntimeError(f"{self.label}: population program lacks {name}")
-            self._locations[key] = location
-        return location
+        block = _DISPATCH_BLOCK.pack({"uPopulation": population, "uGroups": groups, "uVertices": vertices})
+        with self._blocks.bound(block):
+            # Each pass's reader: the next pass's storage reads; the draw's storage and command reads.
+            for program_key, source, barrier in (
+                    (count_key, count, gl.GL_SHADER_STORAGE_BARRIER_BIT),
+                    (scan_key, scan, gl.GL_SHADER_STORAGE_BARRIER_BIT),
+                    (scatter_key, scatter, gl.GL_SHADER_STORAGE_BARRIER_BIT | gl.GL_COMMAND_BARRIER_BIT)):
+                program = resources.compute_program(program_key, source)
+                gl.glUseProgram(program)
+                if program_key == scan_key:
+                    dispatch((1, 1, 1), barrier)
+                    continue
+                configure(program_key, program)
+                dispatch((groups, 1, 1), barrier)
 
     def draw(self, mode: int) -> None:
         """Draw the live members with the program in use (inside ``bound``, after ``update``)."""
@@ -265,5 +248,4 @@ class CompactedPopulation:
             gl.glDeleteBuffers(1, [name])
             del self._names[binding]
         self._capacity = self._groups = self._population = 0
-        self._locations.clear()   # program names may be reused after their owner releases them
-        self._values.clear()
+        self._blocks.release()
