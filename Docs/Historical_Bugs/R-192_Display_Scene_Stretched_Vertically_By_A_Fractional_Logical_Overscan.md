@@ -50,7 +50,10 @@ horizontally by 2560 / 1707 = 0.99980 and now goes from `(0,-3)` 2560 × 1443 to
 its shared right edge unchanged. Overscan still only goes past an edge on the virtual desktop's boundary, at most one
 edge per axis. Regression bar: the durability sweep in `tests/test_qtquick_window.py` now requires every axis with an
 exterior edge to be whole (red on the one-edge rule, first at `row 1280x720|1280x720 top` at 150 %), and
-`test_native_compat_window_overscans_both_axes_when_neither_is_whole_logical`. Not yet seen on a real display.
+`test_native_compat_window_overscans_both_axes_when_neither_is_whole_logical`. Seen on the real Display 0 afterwards
+(12 Nov, one bounded run by the lead with the operator's leave): window `(-2,-3)` 2562 × 1443 device pixels, every card
+edge 8 solid border pixels with nothing blended, in the saver's frame and in the DWM composite (evidence
+`.artifacts/evidence/display/d1_run/20261112_msi_second_axis_edges/`).
 
 ## Still open
 

@@ -1,6 +1,6 @@
 # Rendering primitives and shared services (catalogue)
 
-Written 12 Nov 2026 from `Current_Plan.md` item 8b (line numbers below are that file at this commit), the decisions
+Written 12 Nov 2026 from `Current_Plan.md` item 8b (cited below by item and box name, never by line), the decisions
 document `Docs/Future_Work/Native_Core_P3_Decisions.md` ("Decisions"), `Docs/Reference/Scene3D_Resources.md`
 ("Resources"), `Docs/Reference/Transitions.md` ("Lessons" = its section "3D foundation lessons", line 149) and the
 code. Anything not checked against code or a document is marked **unverified**. This file is the catalogue and the
@@ -17,18 +17,18 @@ code** is what a single Visualizer mode or transition draws with its own shaders
 `rendering/quick/transitions/implementations/`) and anything in `scene3d/` that only one mode imports. The
 borderline cases are listed in section 3, entry E26.
 
-Rules (all from item 8b's standing rules, `Current_Plan.md:175-201`):
+Rules (all from item 8b's "Standing rules of this item"):
 
-1. **Proved on its own off-screen harness** (`:183-185`): GPU time median and p90, lazy creation, no work when
+1. **Proved on its own off-screen harness** (item 8b, standing rules): GPU time median and p90, lazy creation, no work when
    dormant, clean retirement. A primitive never becomes a second renderer, clock or camera. Read the Lessons before a
    3D slice and append after it.
-2. **High potential is built without a consumer; low potential only when a consumer is admitted** (`:189-192`;
+2. **High potential is built without a consumer; low potential only when a consumer is admitted** (item 8b, standing rules;
    operator, 12 Nov: "High potential primitives should be built regardless, low potential only when a consumer. We
    can always improve."). The lead classifies and writes the class at each item. The class is given below where the
    plan gives it; where it gives none the entry says "no class stated".
 3. **No new 3D primitive in the Python OpenGL renderer** unless an open defect needs it; new modes are built on the
-   native core only (`:187-188`).
-4. **A landed primitive gets one showcase WebP and a "what this makes possible" note** (`:191-192`). The plan names
+   native core only (item 8b, standing rules).
+4. **A landed primitive gets one showcase WebP and a "what this makes possible" note** (item 8b, standing rules). The plan names
    `Scene3D_Resources.md` as the place for the note; that file now points here, and the note goes into the entry of
    this catalogue as well (see the open point in section 7).
 5. **Dormancy at rest**: nothing allocates before a consumer warms it, nothing costs per frame at rest, everything is
@@ -36,49 +36,49 @@ Rules (all from item 8b's standing rules, `Current_Plan.md:175-201`):
    allocations"). Diagnostic instrumentation is opt-in (memory: no recurring work at rest).
 6. **A port is done** only with single-sampled pixel parity against the Python renderer, the Vulkan result within a
    stated tolerance, trace figures, GPU time per pass and a bounded rehearsal, and then the Python renderer is
-   deleted in the same change (`:176-182`). Never two permanent renderers.
+   deleted in the same change (item 8b, standing rules, first bullet). Never two permanent renderers.
 7. **A native route beside QRhi is one of D5.3's services**, wins a measurement first and ships its OpenGL twin
-   (`:186`; Decisions D5.3, line 206).
-8. **Ids**: the old `S3D-n` ids map to N-ids as in section 5's table (`:200-201`).
+   (item 8b, standing rules; Decisions D5.3, line 206).
+8. **Ids**: the old `S3D-n` ids map to N-ids as in section 5's table (item 8b, standing rules).
 
 ## 2. When primitive work happens
 
-The native ladder (`Current_Plan.md:210-215`): **N0** (decisions, contracts, proofs) and **N1** (every shader
+The native ladder (`Current_Plan.md` item 8b, "Order" paragraph): **N0** (decisions, contracts, proofs) and **N1** (every shader
 portable, in the existing OpenGL renderer, no C++) now; then **N2** (the 2D half and Spectrum), **N2b** (the
 background layer and the first full rehearsal), **N3** (the 3D substrate core, harness scenes, no mode yet). From
 there three tracks, one High slot each:
 
-- the **modes track** (N5.1, N5.4, N5.6, N5.5, N5.3; lines 559-571);
-- the **background track** (N5.2 a to h, N5.9; lines 573-589);
+- the **modes track** (N5.1, N5.4, N5.6, N5.5, N5.3; item 8b, the N5.1, N5.4, N5.6, N5.5 and N5.3 boxes);
+- the **background track** (N5.2 a to h, N5.9; item 8b, the N5.2 and N5.9 boxes);
 - the **primitives track** (N4's unconsumed items and N6) "whenever a High slot is free and never holds the flip"
-  (`:214-215`).
+  (item 8b, "Order" paragraph).
 
-Then **NF** (the flip, lines 591-601), then item 9: SMP foundations, then new modes (`:618-632`).
+Then **NF** (the flip, item 8b, NF), then item 9: SMP foundations, then new modes (item 9).
 
-**N4 items are ported just before their first consumer** (heading at `:511`: "each ported just before its first
+**N4 items are ported just before their first consumer** (item 8b, the heading above the N4 boxes: "each ported just before its first
 consumer below (the unconsumed ones on the primitives track)"). An N4 item whose consumer is on the modes or the
 background track therefore moves with that consumer; an unconsumed one (the N4.c, N4.h, N4.m high-potential items,
 and N4.d's wet-surface masks) runs on the primitives track. N6 runs only on the primitives track, native only.
 
-Status today (plan state line, `:206-208`, 12 Nov): N0's contracts decided; **N0.6 and N0.7 proved** (D6 and D9
+Status today (item 8b, "State" paragraph, 12 Nov): N0's contracts decided; **N0.6 and N0.7 proved** (D6 and D9
 accepted); the rest of N1 in flight; **N2.1** (the product module's build) and the Python half of **N2.3**
 (Spectrum's native schema) in flight (both merged later on 12 Nov; N1.6 merged to ratchet 95 the same evening);
 N2.2 and N2.4 wait for N0.3's scenes. Every box of N2, N2b, N3, N4, N5, NF
-and N6 is open (unticked, lines 428-616); no native primitive exists in C++ yet. `native/spike_p1` is evidence, never
-a shipped renderer (`:426`). Step by step:
+and N6 is open (unticked); no native primitive exists in C++ yet. `native/spike_p1` is evidence, never
+a shipped renderer (item 8b, N2's heading). Step by step:
 
 | Step | State (plan, 12 Nov) | Primitive relevance |
 |---|---|---|
-| N0.3 conventions, three scenes | decided; scenes owed (`:289-299`) | the conventions include is proved on OpenGL only until they run |
-| N0.4 camera | decided (D5.5); remainder built with N5.4 then N5.6 (`:244-252`) | one camera owner, see section 7 |
-| N0.6 Vulkan device | proved; validation clean apart from Qt 6.12.0 defects A, B, D (`:261-288`) | the device the core runs on |
-| N0.7 async jobs | proved; verdict "jobs for compute on this vendor, and uploads" (Decisions line 569-612) | D9 service; AMD and Intel unmeasured (`:303-304`) |
-| N1 portable shaders | in flight: D4 landed; N1.4 include remainder, N1.6 uniform blocks, N1.8 resolve-first all open (`:332-424`) | what makes existing primitives bakeable |
-| N2.1 to N2.8 | N2.1 and N2.3 (Python half) in flight; N2.6 timer and N2.7 backend owner open (`:428-464`) | host adapter, frame driver, timer, rehearsal path |
-| N2b: N4.a, N3.8 jobs, N5.7a/b/c | open (`:466-482`) | fullscreen pass, job service, background layer, backdrop pyramid |
-| N3.1 to N3.9 | open (`:484-509`); there is no N3.5 in the plan (numbering skips from N3.4 to N3.6) | targets, meshes, compute, post stages, lifetime, orientation, display move |
-| N4.b to N4.m | open (`:514-550`) | ported with first consumer, or on the primitives track |
-| N6.1 to N6.6 | open (`:605-616`) | never built, native only |
+| N0.3 conventions, three scenes | decided; scenes owed (N0.3's three-scenes box) | the conventions include is proved on OpenGL only until they run |
+| N0.4 camera | decided (D5.5); remainder built with N5.4 then N5.6 (N0.4's remainder box) | one camera owner, see section 7 |
+| N0.6 Vulkan device | proved; validation clean apart from Qt 6.12.0 defects A, B, D (N0.6's box) | the device the core runs on |
+| N0.7 async jobs | proved; verdict "jobs for compute on this vendor, and uploads" (Decisions line 569-612) | D9 service; AMD and Intel unmeasured (N0.7's box) |
+| N1 portable shaders | in flight: D4 landed; N1.4 include remainder, N1.6 uniform blocks, N1.8 resolve-first all open (the N1 boxes) | what makes existing primitives bakeable |
+| N2.1 to N2.8 | N2.1 and N2.3 (Python half) in flight; N2.6 timer and N2.7 backend owner open (the N2 boxes) | host adapter, frame driver, timer, rehearsal path |
+| N2b: N4.a, N3.8 jobs, N5.7a/b/c | open (the N2b boxes) | fullscreen pass, job service, background layer, backdrop pyramid |
+| N3.1 to N3.9 | open (the N3 boxes); there is no N3.5 in the plan (numbering skips from N3.4 to N3.6) | targets, meshes, compute, post stages, lifetime, orientation, display move |
+| N4.b to N4.m | open (the N4 boxes) | ported with first consumer, or on the primitives track |
+| N6.1 to N6.6 | open (the N6 boxes) | never built, native only |
 
 ## 3. Existing primitives (Python OpenGL renderer today)
 
@@ -97,7 +97,7 @@ transition and Visualizer scene (`transitions/fullscreen_pass.py`, `visualizer/f
 Bloom, Capillary Bloom, Chromatic Shear, Liquid Lens, Oscilloscope, Neon Lake, Extruded Bubble, Extruded Spectrum,
 Sphere, Waveform Ribbon, Page Curl, Surface Tension, VHS, Volumetric Dissolve and others). Tests:
 `test_scene3d_item_pixel_rect.py`, `test_scene3d_content_orientation.py`. Native: replaced by D5.2's texture-node
-composite and N3.7's orientation contract (`:505-506`). Notes: the item quad keeps "the bottom-up convention the
+composite and N3.7's orientation contract (N3.7's box). Notes: the item quad keeps "the bottom-up convention the
 transition fragments were authored in" (`gl_programs/item_quad.py`); the N0.3 rule 2 (core targets top-left, Y down) puts one
 flip at the substrate boundary (Decisions line 1353-1357).
 
@@ -121,18 +121,18 @@ Dissolve (transitions); Oscilloscope, Neon Lake, Extruded Bubble, Extruded Spect
 Tests: `test_scene3d_target.py` (G1, G3A, shafts, scale, lifetime), `test_scene3d_dsa_targets.py`. Native: N3.1
 (targets, sampled depth, background capture, one sampling-policy owner) and N3.4 (OIT, bloom, HDR as opt-in stages);
 the eight composites in `target.py:125-286` keep raw `gl_FragCoord` and are never converted (D5.2 replaces them;
-`:389-390`). Notes: allocation rounds to 64 px; no `glBlitFramebuffer` resolves (about 0.5 ms at 1440p; Lessons line
+item 8b, N1.4's remainder). Notes: allocation rounds to 64 px; no `glBlitFramebuffer` resolves (about 0.5 ms at 1440p; Lessons line
 176-177); per-sample reads (`sampler2DMS`, `gl_SampleID`) are the N1.8 resolve-first set and the one thing QRhi
 cannot sample (Decisions D5.6 rows 7 and 15); the multisampled velocity attachment is the only listed use of D5.3's
-formats service (`:406-409`); Waveform hard-codes 4 samples (`scene3d/waveform.py:381`) and the Oscilloscope 1
-(`:423-424`); a 1-sample multisampled renderbuffer does not rasterise like a direct draw (Lessons line 178-179).
+formats service (N1.7's box); Waveform hard-codes 4 samples (`scene3d/waveform.py:381`) and the Oscilloscope 1
+(N1.8's box); a 1-sample multisampled renderbuffer does not rasterise like a direct draw (Lessons line 178-179).
 
 ### E4. Bloom chain
 `rendering/quick/scene3d/post.py` (`BloomChain`, `FULLSCREEN_VERTEX_SOURCE`, `BLOOM_PROGRAMS`). Four halvings of
 emitted light then tent upsamples, RGBA16F, about a third of a full-screen pass; only emitted light glows (alpha in a
 bloom target). Consumers: through `SceneTarget` (every bloom-enabled consumer in E3). The full-screen vertex source is
 also used by Environment, Motion, Shafts and Trails: it is the Python seed of **N4.a** (the fullscreen pass and image
-sampling, `Current_Plan.md:468`). Test: `test_scene3d_dsa_targets.py:97`, `test_transition_warmup.py:54`. Native: N3.4.
+sampling, `Current_Plan.md` item 8b, N4.a's box). Test: `test_scene3d_dsa_targets.py:97`, `test_transition_warmup.py:54`. Native: N3.4.
 Notes: photographs write 0 emitted light so endpoints stay exact (Lessons line 180-181).
 
 ### E5. Motion blur (velocity plus tile max)
@@ -140,7 +140,7 @@ Notes: photographs write 0 emitted light so endpoints stay exact (Lessons line 1
 compute tile max (one workgroup per K x K tile, K = target height / 40) and a bounded 3 x 3 neighbourhood gather;
 Off compiles and dispatches nothing. Consumers: Block Spins, Crumble, Glass Shatter, Pixel Accretion (all import
 `scene3d.motion` directly); Exploding Tiles also measured with it (`Scene3D_Resources.md:323-325`; no direct import). Tests: `test_scene3d_compute.py`, `test_scene3d_target.py`,
-`tools/compute_pass_identity.py`. Native: **N4.i** ("five transitions", `:541`), N5.2d. Notes: it was the first
+`tools/compute_pass_identity.py`. Native: **N4.i** ("five transitions", N4.i's box), N5.2d. Notes: it was the first
 compute consumer because it removed passes (Scene3D_Resources "Compute seam", tile max: -14 GL calls per frame with
 motion blur, byte-identical output); the barrier order is tested, not pixels (NVIDIA hid a missing barrier,
 Lessons line 232-233); a target needing tiles over about 10,000 px high is a loud error.
@@ -168,7 +168,7 @@ allocates the complete mip chain; allocation or copy failure invalidates the cac
 Consumers: Extruded Spectrum, Extruded Bubble's drift solver, Oscilloscope, Neon Lake, Sphere, the ribbon primitive and
 bursts, Disintegrate, Exploding Tiles, Volumetric Dissolve, and every `UniformBlock` / `PassBlocks` (E9). Test:
 `test_scene3d_stream.py`. Native: one of D5.3's services ("Stream ring"), built **only if** it beats QRhi dynamic
-buffers by 0.05 ms at the product's ring sizes (N3.2, `:493-494`; Decisions D8 row 8). Notes: a new transport earns its
+buffers by 0.05 ms at the product's ring sizes (N3.2, N3.2's box; Decisions D8 row 8). Notes: a new transport earns its
 place by removed calls, not by being modern (Lessons line 221-222); never rewrite bytes a submitted draw may still
 read (line 220); `restore=False` is for scenes that own their whole frame's state (`Scene3D_Resources.md:269-282`).
 
@@ -197,7 +197,7 @@ storage-image formats are the shipped backends' (SPIR-V, GLSL 430, HLSL 5.0, MSL
 `glDrawArraysIndirect`; no readback; slots follow id order (prefix sum, not atomic append), so blending order is
 stable; fixed capacity, five immutable buffers. Consumers: **Disintegrate and Volumetric Dissolve only**. Test:
 `test_scene3d_population.py` (exact against a CPU reference from 1 to 300,000 members). Native: **N4.c, high
-potential, built without a consumer** (`:517-524`): both transitions port 1:1 on QRhi's own `drawIndirect` (Qt 6.12);
+potential, built without a consumer** (N4.c's box): both transitions port 1:1 on QRhi's own `drawIndirect` (Qt 6.12);
 "draw the maximum, cull in the vertex shader" only for a backend without `QRhi::DrawIndirect`; the harness runs at one
 million sprites (Decisions D8 row 7). Notes: measured against per-vertex evaluation, compaction saved 29 to 49 percent
 GPU at a fixed cost of about 0.1 ms CPU submit (about 20 calls); the two paths are close in total on the development
@@ -211,7 +211,7 @@ centripetal interpolation, camera-facing width) and the GLSL in `rendering/gl_pr
 strip with a body pass (inside `transparent_writes`) and a light pass (inside `emission_writes`), strays, cohorts and
 sparks. Consumer: Waveform Ribbon (through `scene3d/waveform.py`). Tests: `test_ribbon_gpu.py`,
 `test_ribbon_material.py`, `test_ribbon_bursts.py`, `test_ribbon_continuation*.py`, `tools/labs/ribbon_material_probe.py`.
-Native: **N4.b** (S3D-1; `:514-515`), ported with Waveform Ribbon (N5.4). No class stated. Notes: OIT, defocus,
+Native: **N4.b** (S3D-1; N4.b's box), ported with Waveform Ribbon (N5.4). No class stated. Notes: OIT, defocus,
 broader normal and precision proof and scene composition "remain open" in `Scene3D_Resources.md:611-619`; history
 carried shape needs band-limiting and monotone-cubic knot interpolation (Lessons lines 264-268); thin emissive sheets
 scale light by path length and widen sub-pixel stretches (lines 271-275); clamp interpolants before `exp` (lines
@@ -224,12 +224,12 @@ scale light by path length and widen sub-pixel stretches (lines 271-275); clamp 
 depth renderbuffer; the receiver integrates a roughness footprint (long streaks split into up to eight abutting
 Gaussian-weighted segments); emitters opt in by writing luminance times world height into alpha. Consumer: Waveform
 Ribbon (floor). Test: `test_scene3d_reflection.py`. Native: **N4.d, planar reflections and rough receivers, wet-surface
-masks (the plan calls the item "high potential", `:525-527`)**. Notes: the primitive does **not** yet clip geometry
+masks (the plan calls the item "high potential", N4.d's box)**. Notes: the primitive does **not** yet clip geometry
 crossing the plane; it is "a bounded directional filter, not a full microfacet ray-traced reflection"; the lab
 measured 0.162 to 0.222 ms median for the wet floor draw at 820 x 718 on an RTX 4090 with an unexplained spiky p90;
 consumer inclusion, clipping, resize, failure-path and whole-scene cost remain open in the Waveform lab plan
 (`Scene3D_Resources.md:197-205`). Neon Lake's water reflection is analytic in its own basin shader and needs none of
-this (`:526-527`).
+this (N4.d's box).
 
 ### E14. Scene probe
 `rendering/quick/scene3d/probe.py` (`SceneProbe`). One RGBA16F cube with a full mip chain, rendered in six faces and
@@ -245,11 +245,11 @@ first capture; `warm()` allocates on a hidden frame.
 RGBA16F 3D texture (plus an R16F steady share) that the mist functions sample. `FogMarch`: a reduced-resolution
 detail march that erodes the non-steady coverage with a baked 3D noise. Consumers: `FogVolume`: Waveform Ribbon;
 **`FogMarch` has no production consumer** (only `tools/compute_pass_identity.py:484`, `tests/test_scene3d_fog_volume.py`
-use it), as the plan says (`:530-533`). Test: `test_scene3d_fog_volume.py`. Native: **N4.f1** (the fog volume port, before N5.4) and **N4.f2** (reduced-resolution
-volumes and mixed-resolution soft layers, "after N5.6, before Expanded Visualizer M6"; `:530-535`) and the base of
+use it), as the plan says (N4.f2's box). Test: `test_scene3d_fog_volume.py`. Native: **N4.f1** (the fog volume port, before N5.4) and **N4.f2** (reduced-resolution
+volumes and mixed-resolution soft layers, "after N5.6, before Expanded Visualizer M6"; N4.f1 and N4.f2's boxes) and the base of
 **N6.3**. Notes: the march is "too costly at full size in the Python path" (0.4 to 1.2 ms main march, 0.2 to 0.7 ms
 mirrored, at 820 x 718 on an RTX 4090; `Scene3D_Resources.md:167-173`); it has open lifecycle defects in the plan
-(raw `glDeleteProgram` that never hands back a conventions hold, `scene3d/fog_volume.py:424`, `Current_Plan.md:368-373`);
+(raw `glDeleteProgram` that never hands back a conventions hold, `scene3d/fog_volume.py:424`, `Current_Plan.md` item 8b, N1.4's remainder);
 the steady share must never be eroded; Lessons "Volume mist" (lines 290-301).
 
 ### E16. Edge field
@@ -267,7 +267,7 @@ to RGBA32F by N1.7 (bit-identical; QRhi lacks RG formats).
 arrival from a few sources over a consumer's `propagationCost`; 192 in-place relaxation passes on a 16-neighbour
 stencil and a reduction; three R32F textures at 256 px. Consumer: Capillary Bloom only. Test:
 `test_propagation_field.py`. Native: **N4.g**, N5.2g (the first transition preparation run as an async job, D9
-consumer class a, `:584-586`). No class stated. Notes: fingering needs the true cheapest way, a geodesic arrival map,
+consumer class a, N5.2g's box). No class stated. Notes: fingering needs the true cheapest way, a geodesic arrival map,
 not a point or line average (Lessons lines 366-368).
 
 ### E18. Sphere impostors, optics and water
@@ -280,7 +280,7 @@ waves, caustics, Snell's window and medium absorption. Consumers: Extruded Bubbl
 `test_scene3d_glsl_mirrors.py`. Native: **N4.g** ("sphere impostors, shared optics and underwater light (Extruded
 Bubble)"). No class stated. Notes: rough transmission and dispersion were evaluated and recorded unnecessary for the
 target (`Scene3D_Resources.md:511`); `scene3d_spheres.py:197` assumes OpenGL's -1..1 depth and is an open side defect
-(`Current_Plan.md:377-378`); the vertex-stage variant compiles out the `fwidth` coverage overload because strict
+(`Current_Plan.md` item 8b, N1.4's remainder); the vertex-stage variant compiles out the `fwidth` coverage overload because strict
 compilers reject derivatives in a vertex shader.
 
 ### E19. Defocus layer
@@ -295,8 +295,8 @@ index once dropped every circle); the RG16F circle storage was widened by N1.7.
 `rendering/quick/scene3d/shafts.py` (`LightShafts`, `ShaftLight`) through `SceneTarget(shafts=True)`: a half-size
 R16F downsample and two 16-tap radial gathers (256 effective taps). Consumer: Neon Lake. Test:
 `test_scene3d_target.py` (shafts). Native: **N4.k, high potential, "ported with Extruded Bubble, then used by Neon
-Lake"** (`:544-545`): Extruded Bubble has its **own second implementation** of shafts that the item merges onto one
-owner. Notes: the shaft source downsample reads `sampler2DMS` (an N1.8 resolve-first use, `Current_Plan.md:420`).
+Lake"** (N4.k's box): Extruded Bubble has its **own second implementation** of shafts that the item merges onto one
+owner. Notes: the shaft source downsample reads `sampler2DMS` (an N1.8 resolve-first use, `Current_Plan.md` item 8b, N1.8's box).
 
 ### E21. Shadows (planar and directional silhouettes)
 `rendering/quick/scene3d/shadows.py` (`draw_planar_shadows`, `directional_shadow_vector`, `directional_shadow_pass`,
@@ -305,10 +305,10 @@ directional silhouette of the Extruded Spectrum. Consumers: Exploding Tiles (pla
 Sphere has its own projected-shadow pass in its program and renderer. Tests: `test_extruded_shadow_reach.py`,
 `test_qtquick_extruded_spectrum.py`. Native: **N4.l** (silhouette shadows as one shared primitive, distinct from N4.h)
 and **N4.h** (a real fitted shadow map, **high potential: built without a consumer**, "not a revival of the rejected
-Extruded cast shadows, and no mode turns it on without its own review"; `:537-539`). Notes: the E8-era Extruded cast
+Extruded cast shadows, and no mode turns it on without its own review"; N4.h's box). Notes: the E8-era Extruded cast
 shadow receiver is rejected and stays disabled (R-120, R-121 audits `Docs/Audits/`, R-125 to R-128
 `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md`; `Scene3D_Resources.md:12-14`); G2 "none" in the
-capability inventory, no fitted depth-map foundation exists (`:510`).
+capability inventory, no fitted depth-map foundation exists (N4.h's box).
 
 ### E22. Bendable grid
 `rendering/quick/scene3d/grid.py` (`draw_grid`) with `scene3d_grid_vertex_source`, `scene3d_grid_vertices` in
@@ -332,16 +332,16 @@ upload on change) with `rendering/gl_programs/heightfield.py`, `heightfield_glsl
 resource; Neon Lake's tile-refined basin; the grid a dynamic surface field shares). No class stated. Notes: no shared
 simulation, clock or global texture cache; the volume is "not a shadow map or a fluid simulation" and may miss thin
 ridges between taps (`Scene3D_Resources.md:118-123`); Neon Lake's driver memory at its first draw (about +280 MB
-committed) is unattributed (`Current_Plan.md:227-228`, a P2 remainder).
+committed) is unattributed (`Current_Plan.md` item 8b, P2 remainders, a P2 remainder).
 
 ### E25. Soft-light array
 `rendering/gl_programs/lighting.py` (`MAX_SOFT_LIGHTS = 96`, `SOFT_LIGHT_GLSL`). Bounded unshadowed soft-source
 irradiance from caller-supplied positions, radii and flux, no resources. Consumers: **none in production** (the only
 importers are `tools/labs/ribbon_lighting.py:11` and `tests/test_scene3d_lighting.py:8`), matching the plan ("written,
 tested, used by a lab only"). Test: `test_scene3d_lighting.py`, `test_ribbon_lighting.py`. Native: **N4.m, high
-potential, built without a consumer** (`:549-550`). Notes: it uses loose `uLightCount` / `uLightPosition[96]` /
+potential, built without a consumer** (N4.m's box). Notes: it uses loose `uLightCount` / `uLightPosition[96]` /
 `uLightFlux[96]` uniforms, so it needs an N1.6 conversion into a block before it can be baked (**unverified** whether
-the conversion is scheduled; N1.6's group list `:397-405` does not name it); it is "a low-frequency lighting
+the conversion is scheduled; N1.6's group list item 8b, N1.6 does not name it); it is "a low-frequency lighting
 approximation, not area-light visibility or specular reflection".
 
 ### E26. Waveform's own fields (borderline: mode code in a shared folder)
@@ -386,25 +386,25 @@ round (`native/spike_p1`) verified it.
 
 | Service | Source | Status (12 Nov) | What it enables |
 |---|---|---|---|
-| **Host adapter** (D5.1) | Decisions line 168-176 | decided; built in N2.2 (`:437`) | the core never names Qt Quick's frame; a second window kind or a Qt upgrade changes one small file. Hosts: the Qt Quick window, the hidden host, a reserved swapchain-owning host |
+| **Host adapter** (D5.1) | Decisions line 168-176 | decided; built in N2.2 (N2.2's box) | the core never names Qt Quick's frame; a second window kind or a Qt upgrade changes one small file. Hosts: the Qt Quick window, the hidden host, a reserved swapchain-owning host |
 | **Frame driver** (D5.2) | Decisions line 178-204 | decided; N2.2 | all core work recorded in dependency order on `beforeRendering` through a C++ connection (no Python slot) |
-| **Texture-node composite** (D5.2) | line 185-199; N2.4 (`:449-452`) | decided; owed proof: one-to-one texels, the 1C.4 clip contract as the coverage term | each surface reaches the window as a texture provider a `ShaderEffect` can sample at no cost; Qt applies clip, opacity, batching |
+| **Texture-node composite** (D5.2) | line 185-199; N2.4 (N2.4's box) | decided; owed proof: one-to-one texels, the 1C.4 clip contract as the coverage term | each surface reaches the window as a texture provider a `ShaderEffect` can sample at no cost; Qt applies clip, opacity, batching |
 | **No Python on the core's threads** (D5.4) | line 232-234 | decided; rechecked at every port | frame pacing independent of the GIL (D8 plus 1) |
 | **Module location** (D5.7) | line 236-238 | decided; `native/core/`, module `_srpss_native_core`; N2.1 in flight | exact-Qt import guard, one Python importer (`rendering/native/`) |
-| **GPU timer per pass** (D5.3 row 1) | line 217; N2.6 (`:458-459`) | decided, unbuilt | per-pass figures in the frame trace; off means no query objects; every later port measured per pass |
+| **GPU timer per pass** (D5.3 row 1) | line 217; N2.6 (N2.6's box) | decided, unbuilt | per-pass figures in the frame trace; off means no query objects; every later port measured per pass |
 | **Stream ring service** (D5.3 row 2) | line 218; N3.2 | built only if it wins by 0.05 ms | larger histories and denser strands at one copy per frame |
-| **Indirect and count draws** (D5.3 row 3) | line 219 | **retired 12 Nov**: QRhi 6.12 has `drawIndirect` and `DrawIndirectMulti`; N4.c queries support at runtime (`:520-523`) | GPU-driven populations of 10^5 to 10^6 without a raw service |
+| **Indirect and count draws** (D5.3 row 3) | line 219 | **retired 12 Nov**: QRhi 6.12 has `drawIndirect` and `DrawIndirectMulti`; N4.c queries support at runtime (N4.c's box) | GPU-driven populations of 10^5 to 10^6 without a raw service |
 | **Per-sample reads** (D5.3 row 4) | line 220; N1.8 | built only if resolve-first fails a mode's look or cost | Extruded Bubble's nearest-depth `background()` if the A/B fails |
-| **Formats service** (D5.3 row 5) | line 221; N1.7 widened first | one listed use, the multisampled velocity attachment (`:406-409`) | RG16F, RG32F, R11G11B10F without doubling memory |
-| **Async GPU jobs** (D9, row 6) | line 498-622; N3.8 (`:469-470`) | **proved N0.7** (second QRhi on our VkDevice, queue index 1 of family 0; latched publication; in-frame form always exists); built in N3.8 | no late frame at an image change or a transition's preparation while a Visualizer runs (4K edge-field build in frame: 40 late of 1200, as a job: 0 late) |
+| **Formats service** (D5.3 row 5) | line 221; N1.7 widened first | one listed use, the multisampled velocity attachment (N1.7's box) | RG16F, RG32F, R11G11B10F without doubling memory |
+| **Async GPU jobs** (D9, row 6) | line 498-622; N3.8 (N3.8's box) | **proved N0.7** (second QRhi on our VkDevice, queue index 1 of family 0; latched publication; in-frame form always exists); built in N3.8 | no late frame at an image change or a transition's preparation while a Visualizer runs (4K edge-field build in frame: 40 late of 1200, as a job: 0 late) |
 | **Vulkan device ownership** (D6) | line 240+ | **proved N0.6** (our instance and device host Qt Quick pixel-identical; teardown, resize, second queue) | one device per window; Vulkan by default at NF |
 | **Backdrop pyramid** (D7) | line 383+; N5.7b | decided; unbuilt | materials that follow a transition frame; true glass over the Visualizer (N5.9) |
-| **Conventions include** `srpss_conventions.glsl` (N0.3) | `rendering/gl_programs/conventions.py`; Decisions line 1358-1371 | built in Python (N1.4: OpenGL values make it an identity); three backend scenes owed (`:289-299`) | the only place a shader learns a backend convention: `fragPixel/fragTexel/fragUv`, `ndcToUv/uvToNdc`, `viewDepthFromDepthTexture`; `SrpssConventions` block at binding 17, written once per context |
-| **Portable programs / pass blocks** (N1.6) | `rendering/gl_programs/portable.py`; `scene3d/uniforms.py` `PassBlocks` | built, converting group by group; `LEGACY_GL_ONLY` was 16 after D4 (`:335`) | loose uniforms become one std140 block at binding 18, samplers get `binding = unit`, varyings get locations; arithmetic untouched so OpenGL pixels are identical (`tools/conventions_identity.py`) |
-| **Shader readiness ratchet** | `tests/test_vulkan_shader_readiness.py`; `qsb` bakes | active; "discovers compute sources and bakes every target" (`:335`) | no non-bakeable shader can be added silently |
-| **Pipeline and warm-up policy** (N3.6) | `:499-503` | decided; unbuilt | every state combination is a pre-built pipeline warmed gradually; `VK_EXT_device_fault` logged once |
-| **Rehearsal path** (D10, N2.7) | line 624+; `:460-463` | decided; unbuilt | a diagnostic switch for Vulkan on Display 1 before the flip; unported modes not offered |
-| **Framed camera** (D5.5, N0.4) | `core/settings/framed_camera.py`; Decisions line 1466+ | decided; the worker publishes the finished camera, built with N5.4 then N5.6 (`:244-252`) | one camera for every framed 3D mode (section 7) |
+| **Conventions include** `srpss_conventions.glsl` (N0.3) | `rendering/gl_programs/conventions.py`; Decisions line 1358-1371 | built in Python (N1.4: OpenGL values make it an identity); three backend scenes owed (N0.3's three-scenes box) | the only place a shader learns a backend convention: `fragPixel/fragTexel/fragUv`, `ndcToUv/uvToNdc`, `viewDepthFromDepthTexture`; `SrpssConventions` block at binding 17, written once per context |
+| **Portable programs / pass blocks** (N1.6) | `rendering/gl_programs/portable.py`; `scene3d/uniforms.py` `PassBlocks` | built, converting group by group; `LEGACY_GL_ONLY` was 16 after D4 (N1.6's box) | loose uniforms become one std140 block at binding 18, samplers get `binding = unit`, varyings get locations; arithmetic untouched so OpenGL pixels are identical (`tools/conventions_identity.py`) |
+| **Shader readiness ratchet** | `tests/test_vulkan_shader_readiness.py`; `qsb` bakes | active; "discovers compute sources and bakes every target" (N1.6's box) | no non-bakeable shader can be added silently |
+| **Pipeline and warm-up policy** (N3.6) | N3.6's box | decided; unbuilt | every state combination is a pre-built pipeline warmed gradually; `VK_EXT_device_fault` logged once |
+| **Rehearsal path** (D10, N2.7) | line 624+; N2.7's box | decided; unbuilt | a diagnostic switch for Vulkan on Display 1 before the flip; unported modes not offered |
+| **Framed camera** (D5.5, N0.4) | `core/settings/framed_camera.py`; Decisions line 1466+ | decided; the worker publishes the finished camera, built with N5.4 then N5.6 (N0.4's remainder box) | one camera for every framed 3D mode (section 7) |
 
 Quick-side services that stay as they are until the native presenter replaces them: the program cache (E27), the
 render-node telemetry (`rendering/quick/render/telemetry.py`, proof telemetry, no thread, timer or context), the
@@ -413,7 +413,7 @@ query helpers (`rendering/quick/gl_query.py`, raw getters for CPU-cheap reads; L
 
 ## 5. Planned primitives (never built)
 
-### The old id map (`Current_Plan.md:200-201`)
+### The old id map (`Current_Plan.md` item 8b, standing rules)
 
 | Old | New | Meaning |
 |---|---|---|
@@ -425,12 +425,12 @@ query helpers (`rendering/quick/gl_query.py`, raw getters for CPU-cheap reads; L
 | S3D-6 | N4.h | shared shadows |
 | S3D-7 | N4.f1, N4.f2 | reduced-resolution volumes; its smoke is N6.3, its lightning N6.6 |
 
-### N6 (primitives track, native only; `Current_Plan.md:603-616`)
+### N6 (primitives track, native only; `Current_Plan.md` item 8b, the N6 boxes)
 
 | Id | What it is | Class | What it makes possible (the plan's words) | Dependencies | Candidate consumers |
 |---|---|---|---|---|---|
-| **N6.1** | Dynamic surface field: a bounded GPU height-and-velocity grid with impulse injection and damping, a displaced mesh with true normals, reflection distortion driven by it | **High** | "water, ripples, pools, melt, any reactive surface" | N4.d (reflection distortion), N4.e (the grid it shares), N3.3 compute, N3.2 meshes | Reactive Liquid / Melt Pool (S3D-4, plan `:2234`), Concrete Rain (ripples, `:2248`), Neon Lake's water (named by the plan, but its reflection is analytic today), SMP surfaces |
-| **N6.2** | Static scene geometry and materials, built once and kept (floors, walls, wells, simple skyline and tunnel slices; roughness, bevel, contact shading) | **High** | "what turns a mode into a place" | N3.2 meshes, N4.d | Melt Pool's chamber (`:2234`), Concrete Rain's street (`:2248`), SMP surfaces |
+| **N6.1** | Dynamic surface field: a bounded GPU height-and-velocity grid with impulse injection and damping, a displaced mesh with true normals, reflection distortion driven by it | **High** | "water, ripples, pools, melt, any reactive surface" | N4.d (reflection distortion), N4.e (the grid it shares), N3.3 compute, N3.2 meshes | Reactive Liquid / Melt Pool (S3D-4, plan section 7.2), Concrete Rain (ripples, section 7.3), Neon Lake's water (named by the plan, but its reflection is analytic today), SMP surfaces |
+| **N6.2** | Static scene geometry and materials, built once and kept (floors, walls, wells, simple skyline and tunnel slices; roughness, bevel, contact shading) | **High** | "what turns a mode into a place" | N3.2 meshes, N4.d | Melt Pool's chamber (section 7.2), Concrete Rain's street (section 7.3), SMP surfaces |
 | **N6.3** | Advected smoke and haze on the volume primitive | **High** | "atmosphere for every 3D scene" | N4.f2 (shares its reduced-resolution path; the fog detail march is its base), N3.3 | every 3D mode, Waveform's atmosphere, Melt Pool, Concrete Rain |
 | **N6.4** | Photo-textured shells and planes with real depth | **Low until a consumer** | none stated; "a transition or a mode built round the user's photos" | N3.1 targets, N4.j environments | none admitted |
 | **N6.5** | The opt-in deformable sheet | **Low until a consumer** | none stated | N4.l's bendable grid, N4.e | none admitted |
@@ -444,29 +444,29 @@ the plan: high potential for N4.c, N4.d's wet-surface masks, N4.h, N4.k, N4.m (D
 N6.1 to N6.3, so it omits N4.d; see contradictions).
 
 Never built in any form:
-- **N4.a, the fullscreen pass and image sampling as a primitive** (`:468`, in N2b). Seeds exist as
+- **N4.a, the fullscreen pass and image sampling as a primitive** (N4.a's box, in N2b). Seeds exist as
   `FULLSCREEN_VERTEX_SOURCE` (E4) and the background node, not as one primitive. Consumers: the seven fullscreen
   transitions of N5.2a (Crossfade, Burn, Particle, Ripple, Slide, Warp, Wipe) and the background layer (N5.7a). No
   class stated.
 - **Mixed-resolution soft layers with depth-aware upsampling** (N4.f2, D8 plus 4): bloom, reflection blur, wide glows
   and fog at reduced resolution; "lines, dots, rims, particles and UI stay at full resolution"; never whole-frame
   upscaling. Gate: stills reviewed by the lead and GPU time before and after; halos at depth edges are the risk.
-- **Instanced screen-space quads in place of `gl_PointSize`** (N3.2, `:491-492`): Bubble ambient, Neon Lake's marks and
+- **Instanced screen-space quads in place of `gl_PointSize`** (N3.2, N3.2's box): Bubble ambient, Neon Lake's marks and
   Waveform's sparks use point sprites today; the Oscilloscope already draws instanced quads (Decisions D5.6 row 11).
   QRhi's `VertexShaderPointSize` is not portable (D3D has none).
 - **Single draw with `ShaderDrawParameters`** (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) for a mode's small
-  batches (plan note at `:554-557`); D3D11 support is not stated.
+  batches (plan note at item 8b, N3.2's box); D3D11 support is not stated.
 - **Not admitted** (D8 rows 9 and 10): HDR output, per-pass temporal upscaling, descriptor indexing, mesh shaders, ray
   tracing. Low potential until a consumer exists; the door stays open (D6).
 
 ### Candidate consumers beyond today's modes (item 9 and SMP)
 
-New modes (`Current_Plan.md:631-632`) are built on the native core only: Reactive Liquid / Melt Pool (`:2230-2242`,
-S3D-3, S3D-4, S3D-5, S3D-2: N6.2, N6.1, N4.d, N4.c), Concrete Rain (`:2244-2256`, same four), Usu Moonscape (`:2258-2265`,
+New modes (`Current_Plan.md` item 9) are built on the native core only: Reactive Liquid / Melt Pool (section 7.2,
+S3D-3, S3D-4, S3D-5, S3D-2: N6.2, N6.1, N4.d, N4.c), Concrete Rain (section 7.3, same four), Usu Moonscape (section 7.4,
 "plus S3D-6", i.e. N4.h, with character and world foundations S19 to S27 that are not primitives of this catalogue).
-Expanded Visualizer M6 (4K acceptance) waits on N4.f2 for Waveform Ribbon and Extruded Bubble (`:567`). SMP surfaces
-(item 9, `:623-630`): the plan says "one Visualizer owner, any surface"; the plan names Neon Lake and SMP surfaces as
-candidate users of N6.1 (`:605-607`). Which other SMP surface uses which primitive is **unverified**: no SMP document
+Expanded Visualizer M6 (4K acceptance) waits on N4.f2 for Waveform Ribbon and Extruded Bubble (item 8b, N4.f2's box). SMP surfaces
+(item 9, SMP foundations): the plan says "one Visualizer owner, any surface"; the plan names Neon Lake and SMP surfaces as
+candidate users of N6.1 (N6.1's box). Which other SMP surface uses which primitive is **unverified**: no SMP document
 was read for this catalogue.
 
 ## 6. How to read an entry's numbers
@@ -508,9 +508,9 @@ Per-pass attribution on the native side needs the N2.6 timer.
   (`Scene3D_Resources.md:14`; R-125 to R-128).
 
 ### Portability (what a primitive must satisfy to bake)
-- **Bake targets**: SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2 (`Scene3D_Resources.md:300-301`; `Current_Plan.md:333-334`).
+- **Bake targets**: SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2 (`Scene3D_Resources.md:300-301`; `Current_Plan.md` item 8b, N1's boxes).
   GLSL ES is **not** a target (removed by N1.7, 12 Nov). `.qsb` bakes for every backend, not `--glsl 460` only
-  (`:393-394`). A scalar half-float storage image is `r16f`.
+  (item 8b, N1's boxes). A scalar half-float storage image is `r16f`.
 - **No 64-bit types** in any shader on any backend (D4).
 - **Reserved block bindings**: 16 `SCENE3D_COMPUTE_BLOCK_BINDING`, 17 `SCENE3D_CONVENTIONS_BLOCK_BINDING`, 18
   `SCENE3D_PASS_BLOCK_BINDING` (`rendering/gl_programs/scene3d.py:1035,1040,1046`); the per-frame uniform block sits
@@ -540,11 +540,11 @@ registered in `core/settings/visualizer_mode_registry.py:400,441,473`. Perspecti
 removed 5 Nov 2026). The horizontal view is capped at 90 degrees by reducing the vertical view, never stretching edge
 content (`framed_camera.py:32`). No per-mode cameras and no copied controllers (memory "Framed camera standard";
 `Scene3D_Resources.md:16-25`). The native core takes one camera owner: the worker publishes the finished camera and
-the renderer builds none (D5.5; N0.4's remainder `:244-252`; test "no perspective or tangent construction in the native
+the renderer builds none (D5.5; N0.4's remainder N0.4's remainder box; test "no perspective or tangent construction in the native
 sources").
 
 ### Open point for the lead
-The plan's standing rule (`Current_Plan.md:191-192`) puts the per-primitive "what this makes possible" note in
+The plan's standing rule (`Current_Plan.md` item 8b, standing rules) puts the per-primitive "what this makes possible" note in
 `Scene3D_Resources.md`. That wording sits inside a standing-rule bullet, not a checkbox, but it is the plan's own text,
 so this agent did not edit `Current_Plan.md`. Suggested rewording for the lead: "...and a 'what this makes possible'
 note in `Docs/Reference/Primitives.md` (resource detail stays in `Scene3D_Resources.md`)."
@@ -556,27 +556,26 @@ Settled by the night audit of 12 Nov (`Docs/Future_Work/Audit_2026-11-12_Night.m
 (`Scene3D_Resources.md` names all three framed-camera consumers), 5 (the decisions document says five), 6 (the plan
 explains N3.5 and N3.8 once under N3), 7 (`Index.md` points at item 8b), 9 (R-94's entry restored with its index
 row); the "Open point for the lead" above too (the standing rule now names this catalogue). 8 stays open until the
-flip. The `Current_Plan.md:NNN` line numbers in this catalogue are as of 12 Nov afternoon and drift with every plan
-edit: read them as pointers to the named item.
-1. `Current_Plan.md:2177` says Waveform Ribbon is the first consumer of S3D-1/S3D-2/S3D-5; S3D-2 is N4.c
-   (populations, `:200`), and N5.4 states Waveform uses "not populations" (`:563`); the code agrees (Waveform imports
+flip. The catalogue cites the plan by item and box name (line numbers were replaced on 12 Nov night because they drift).
+1. `Current_Plan.md` section 7.1's "Chosen first" line says Waveform Ribbon is the first consumer of S3D-1/S3D-2/S3D-5; S3D-2 is N4.c
+   (populations, item 8b, standing rules), and N5.4 states Waveform uses "not populations" (N5.4's box); the code agrees (Waveform imports
    no `population`).
-2. `Current_Plan.md:342-367` still lists the conventions-buffer registry defect (and its guard and R-NEW boxes) as open,
+2. `Current_Plan.md` item 8b, N1's boxes (now removed) still lists the conventions-buffer registry defect (and its guard and R-NEW boxes) as open,
    but `rendering/quick/render/gl_resources.py:147-196` keys by `shiboken6.getCppPointer` and connects
    `aboutToBeDestroyed`, and `Docs/Historical_Bugs.md:127` plus
    `Docs/Historical_Bugs/R-198_Conventions_Buffer_Registry_Keyed_By_A_Wrapper_That_Did_Not_Live.md` exist.
 3. `Docs/Future_Work/Native_Core_P3_Decisions.md:483` (D8 row 6) lists the high-potential unconsumed primitives as N4.c,
-   N4.h, N4.k, N4.m, N6.1 to N6.3; `Current_Plan.md:525-527` also calls N4.d's wet-surface masks "high potential".
+   N4.h, N4.k, N4.m, N6.1 to N6.3; `Current_Plan.md` N4.d's box also calls N4.d's wet-surface masks "high potential".
 4. `Scene3D_Resources.md:20` names Neon Lake and Extruded Bubble as the framed-camera consumers; the registry also
    declares it for Waveform Ribbon (`core/settings/visualizer_mode_registry.py:473`, `core/waveform_ribbon_scene.py:10`),
    and `Scene3D_Resources.md:508` says Neon Lake, Sphere and Extruded Spectrum orbit through the view-orbit
    declarations (a related but different owner).
 5. The decisions document calls D5.3 "the closed list of six services" (Decisions line 1226-1227, and "closed" at
    line 213); with the indirect-draw service retired on 12 Nov (line 219) five remain.
-6. `Current_Plan.md` item 8b has N4.a through N4.m and N3 has no N3.5 (numbering jumps from `:497` N3.4 to `:499` N3.6);
-   N3.8 sits under the N2b heading (`:469`) rather than under N3.
+6. `Current_Plan.md` item 8b has N4.a through N4.m and N3 has no N3.5 (numbering jumps from N3.4 to N3.6);
+   N3.8 sits under the N2b heading (N3.8's box) rather than under N3.
 7. `Index.md:150` and `Scene3D_Resources.md` historical notes cite "`Current_Plan.md` §6" as the live checklist; §6
-   is a pointer stub (`Current_Plan.md:1853-1855`); the live items are in 8b.
+   is a pointer stub (`Current_Plan.md` section 6); the live items are in 8b.
 8. `Scene3D_Resources.md:3-5` ("All admitted operations require the validated OpenGL 4.6 context") and the opening
    "retained Quick transition and visualizer hosts remain their scenes' render owners" describe the Python path only;
    the native core's host adapter (D5.1) changes that at N2.2, so the sentence needs a "today" qualifier at the flip.
