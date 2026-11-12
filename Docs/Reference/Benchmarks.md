@@ -5,6 +5,8 @@ machine, and what results to expect. Everything here runs headless: one offscree
 no window, no runtime. Related: `Docs/Guardrails/Performance_Optimization_Contract.md` (when a
 baseline is required), `Docs/Reference/Harness_Index.md` (all harnesses), `Docs/TestSuite.md`.
 
+**Note (12 Nov 2026): baselines predate Qt 6.12.0 (12 Nov); re-baseline before comparing.**
+
 | Tool | Answers | Typical run |
 |---|---|---|
 | `tools/overhead_baseline.py` | What every showcase transition and Visualizer mode costs, before and after a change | 4-8 min (all), seconds (`--match`) |
