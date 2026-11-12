@@ -222,7 +222,7 @@ comes from the mirror's authored card alpha (232-242, the light mirrors' high ru
 calibration. Reading the linked Settings theme at runtime would make cards depend on Settings window state, so the
 card keeps its own authored alpha as the input; the difference is the mirrors' deliberately denser runtime card.
 
-Evidence (`.artifacts/evidence/materials/20261112_m1/`, PERSONALSET `Usu_Underwater_Lab_1440p.png` dark and
+Evidence (`.artifacts/evidence/materials/20261111_m1/`, PERSONALSET `Usu_Underwater_Lab_1440p.png` dark and
 `uwyTD.jpg` bright; Weather, Media, Reddit, System Stats, Clock and Gmail, Feed, Friend Pulse, System Stats): the
 surviving wallpaper swing inside the card (mean luminance change across the two wallpapers over the wallpaper's own)
 went from 0 to 0.12-0.25 on the main cards (Frosted/Mica 0.22-0.25, Acrylic 0.13-0.16, Glass 0.14, Smoked 0.12) and

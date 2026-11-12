@@ -246,7 +246,7 @@ them like the other amounts):
   reach (`INDENT_EYE_CLEAR` 0.25..0.75 world units), not Growth's 0.8..2.0, which left every default view's near
   dunes untouched. Never below 8% of the authored height (land never reaches the water plane; the water's edge
   never moves: zero on water, faded in over the shore band). Evidence:
-  `.artifacts/evidence/visualizers/shockwave_grid/20261112_refine/indents_staged_drives_sheet.png`.
+  `.artifacts/evidence/visualizers/shockwave_grid/20261111_refine/indents_staged_drives_sheet.png`.
 - **Growth Density** (`shockwave_grid_terrain_growth_density`, 0..1, 0.5 the usual; 2026-11-12) scales Growth's
   site cell by `growth_cell_scale` = 2^(1 - 2 x density) for both forms: fewer, wider mounds or spires toward 0,
   more and narrower toward 1. At 0.5 the scale is exactly 1, so the usual Growth is untouched.
@@ -255,7 +255,7 @@ them like the other amounts):
   the authored terrain's edge (`basinOutside`, in over `GROWTH_FAR_LAND` 0.05..0.40 of the basin), By Elevation
   weighs it by the Reaction Shaper's curve at the land's height (`reactionBiasAt`, the same table and cubic filter
   as the reaction's own bias). Everywhere weighs nothing (the branch is skipped). Both are authored neutral in every
-  shipped preset (repair fill); the presets render as before (`20261112_refine/new_controls_neutral_*`).
+  shipped preset (repair fill); the presets render as before (`20261111_refine/new_controls_neutral_*`).
 - Both are terms of the one height owner (`basinLandHeight`): vertices, normals, skyline, depth and reflections
   follow; zero on water, faded at the shore and with distance like the rest of the reaction.
 
@@ -276,7 +276,7 @@ tables are packed once per bake), GL calls 359 -> 361 (two uniforms).
 
 **Measured again in one session (2026-11-12 refinement;** the old renderer, program and reaction GLSL loaded beside
 the current ones under alias names, each drawn by its own host, cases alternated in one PairedBench; RTX 4090,
-1300x750, GPU 37-50% busy with other work, 2775 MHz; evidence `20261112_refine/gpu_ab_*.json`): against 6aaeda50
+1300x750, GPU 37-50% busy with other work, 2775 MHz; evidence `20261111_refine/gpu_ab_*.json`): against 6aaeda50
 (1B.5 done, before the smooth reaction), React to Music off 1.73 -> 1.77 ms (Preset 3), 0.89 -> 0.88 (Preset 1);
 on with the preview's drives 1.79 -> 1.95 (+9%), 0.87 -> 0.98 (+12%); driven 1.76 -> 1.91, 0.87-0.91 -> 0.99-1.06;
 Growth + Indents driven 2.08 (Preset 3) and 1.24-1.30 (Preset 1) against the old driven land. Against main
@@ -288,7 +288,7 @@ alternated rounds, wall time): wave ring only 9.5 us, lane drives 34.7 us (34.9 
 24.1 us, lanes + Growth + Indents 38.9 us. Per frame (`tools/overhead_baseline.py`, default settings): Python calls
 5339 -> 5145 with the camera floor resolved on its edges, GL calls 363 (361 + `uGrowthPlace` in two programs).
 Continuous play across three recorded songs back to back (`neon_lake_music_response --continuous`, evidence
-`20261112_refine/continuous_play/`): every song's kicks still lift Growth and Indents mid-song (median rise over the
+`20261111_refine/continuous_play/`): every song's kicks still lift Growth and Indents mid-song (median rise over the
 0.2 s after a wave's birth 3-20%, 30-92 kicks per third); against each song played fresh the drives differ only in
 the first seconds after a boundary (the passage follower and the lanes' 4 s level are warm instead of cold), by
 under 0.02 after 10 s and 0.0006 after that. Contracts:
