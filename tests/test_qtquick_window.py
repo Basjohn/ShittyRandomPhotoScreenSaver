@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import ast
 from pathlib import Path
 
@@ -111,8 +113,11 @@ def test_native_compat_window_overscans_one_exterior_edge_in_device_pixels():
     virtual = (0, 0, 6400, 2160)
     left_display = compat_native_rect((0, 0, 2560, 1440), virtual, 1.5)
     right_display = compat_native_rect((2560, 0, 6400, 2160), virtual, 1.5)
-    assert left_display == (0, -2, 2560, 1440)  # shared right edge now exact
-    assert right_display == (2560, -2, 6400, 2160)
+    assert left_display[1:] == (-3, 2560, 1440) and left_display[0] == 0  # shared right edge now exact
+    # 3 device px at 150% is 2 logical: the window's height is a whole number of logical pixels, so Qt Quick maps the
+    # scene 1:1 (2 device px gave 1441 logical over 2162 device, a 1.00023 vertical stretch: every horizontal edge
+    # on the display blended, the 1C.4 D1 run of 12 Nov 2026).
+    assert right_display == (2560, -3, 6400, 2160)
 
 
 def _layouts():
@@ -135,7 +140,7 @@ def _layouts():
 def test_native_compat_window_is_durable_across_layouts_resolutions_and_dprs():
     """R-63 invariants for every layout x DPR, from real device rects only (nothing hard-coded)."""
     from rendering.quick.device_geometry import (
-        compat_native_rect, survives_logical_rounding, visible_rect_in_window,
+        compat_native_rect, is_whole_logical, survives_logical_rounding, visible_rect_in_window,
     )
 
     checked = 0
@@ -150,10 +155,13 @@ def test_native_compat_window_is_durable_across_layouts_resolutions_and_dprs():
                 assert len(changed) == 1, case  # never exact cover; one edge only
                 edge = changed[0]
                 amount = abs(rect[edge] - monitor[edge])
-                assert 1 <= amount <= 4, case
+                assert 1 <= amount <= 4 * math.ceil(dpr), case
                 assert (rect[edge] < monitor[edge]) if edge < 2 else (rect[edge] > monitor[edge]), case
                 extent = (rect[3] - rect[1]) if edge in (1, 3) else (rect[2] - rect[0])
                 assert survives_logical_rounding(extent, dpr), case
+                if is_whole_logical(monitor[3] - monitor[1] if edge in (1, 3) else monitor[2] - monitor[0], dpr):
+                    # The monitor's own axis is whole, so the overscanned one must be too (no Qt Quick stretch).
+                    assert is_whole_logical(extent, dpr), case
                 on_boundary = (monitor[0] <= virtual[0] or monitor[1] <= virtual[1]
                                or monitor[2] >= virtual[2] or monitor[3] >= virtual[3])
                 if not on_boundary:

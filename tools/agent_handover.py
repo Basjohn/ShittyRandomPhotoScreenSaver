@@ -3,6 +3,7 @@
     .venv/Scripts/python tools/agent_handover.py                 # report every worktree, change nothing
     .venv/Scripts/python tools/agent_handover.py --commit        # also save uncommitted work as a handover commit
     .venv/Scripts/python tools/agent_handover.py --commit agent-a1b2c3   # only the named worktrees
+    .venv/Scripts/python tools/agent_handover.py --retire agent-a1b2c3   # after the merge: keep evidence, remove
 
 An agent can stop at any moment (a usage limit, a crash), and an agent of an earlier session cannot be resumed. What
 it leaves is its branch, whatever it had not committed, and its progress journal
@@ -12,11 +13,19 @@ files, the journal, and any process still running from the worktree. With ``--co
 "WIP (handover)" commit on the agent's branch, so nothing depends on the worktree surviving. It then prints the lines
 a successor's brief needs: the branch to merge first and where the journal and evidence are.
 
-It never pushes, never merges, never deletes a worktree and never stops a process: those stay the lead's decisions.
+It never pushes, never merges and never stops a process. ``--retire`` is the one way the lead removes a merged
+agent's worktree: it refuses a branch that is not merged into ``main`` or a worktree with uncommitted work or a
+running process, copies the worktree's whole ``.artifacts/evidence`` tree into this checkout's (a file that already
+exists here is never overwritten; a differing one is reported), and only then removes the worktree and deletes the
+branch. A bare ``git worktree remove --force`` deletes untracked evidence for good (12 Nov 2026: the 1C.4 comparison
+sheets were lost that way), so the handbook's merge steps use this instead. Trimming kept evidence to what the
+report cites is done afterwards in this checkout, where nothing is lost by mistake.
 """
 from __future__ import annotations
 
 import argparse
+import filecmp
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -86,11 +95,71 @@ def report(worktree: Path, commit: bool) -> None:
     print(f"     {journal if journal.is_file() else '(none)'} and its evidence under {evidence} (both read only).")
 
 
+def retire(worktree: Path) -> int:
+    """Copy a merged agent's evidence into this checkout, then remove its worktree and branch."""
+    if not (worktree / ".git").exists():
+        print(f"{worktree.name}: not a worktree")
+        return 1
+    branch = git(worktree, "rev-parse", "--abbrev-ref", "HEAD")
+    # Merged means merged by the lead: the branch tip is a merged-in parent of a merge commit on main. A branch with
+    # no commits of its own (an agent that has just started) is an ancestor of main too, and must never be retired.
+    tip = git(worktree, "rev-parse", "HEAD")
+    merged_in = {parent for line in git(ROOT, "log", "main", "--merges", "-n", "2000", "--format=%P").splitlines()
+                 for parent in line.split()[1:]}
+    if tip not in merged_in:
+        print(f"{worktree.name}: REFUSED, {branch} is not merged into main by a merge commit")
+        return 1
+    dirty = [line for line in git(worktree, "status", "--short").splitlines() if not line.endswith(".rcc")]
+    if dirty:
+        print(f"{worktree.name}: REFUSED, {len(dirty)} uncommitted file(s); commit or discard them deliberately first")
+        return 1
+    if running_from(worktree):
+        print(f"{worktree.name}: REFUSED, a process is still running from it")
+        return 1
+    source = worktree / ARTIFACTS_NAME / EVIDENCE_NAME
+    target = ROOT / ARTIFACTS_NAME / EVIDENCE_NAME
+    copied, kept, differing = 0, 0, []
+    if source.is_dir():
+        for path in sorted(source.rglob("*")):
+            if not path.is_file():
+                continue
+            destination = target / path.relative_to(source)
+            if destination.exists():
+                kept += 1
+                if not filecmp.cmp(path, destination, shallow=False):
+                    differing.append(str(destination.relative_to(ROOT)))
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
+            copied += 1
+    print(f"{worktree.name}: evidence copied {copied} file(s), {kept} already present")
+    for name in differing[:20]:
+        print(f"   DIFFERS (kept this checkout's): {name}")
+    if differing:
+        print(f"{worktree.name}: REFUSED to remove, {len(differing)} evidence file(s) differ; resolve them first")
+        return 1
+    subprocess.run(["git", "-C", str(ROOT), "worktree", "unlock", str(worktree)], capture_output=True)
+    done = subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(worktree)],
+                          capture_output=True, text=True)
+    if done.returncode:
+        print(f"{worktree.name}: worktree remove failed: {done.stderr.strip()}")
+        return 1
+    git(ROOT, "branch", "-D", branch)
+    print(f"{worktree.name}: removed; branch {branch} deleted")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("worktrees", nargs="*", help="worktree folder names (default: all)")
     parser.add_argument("--commit", action="store_true", help="save uncommitted work as a WIP (handover) commit")
+    parser.add_argument("--retire", action="store_true",
+                        help="after the merge: copy the named worktrees' evidence here, then remove them")
     args = parser.parse_args()
+    if args.retire:
+        if not args.worktrees:
+            parser.error("--retire needs the worktree names")
+        return max(retire(WORKTREES / name) for name in args.worktrees)
     if not WORKTREES.is_dir():
         print("no agent worktrees")
         return 0

@@ -4571,6 +4571,7 @@
           120,
           255
         ],
+        "shockwave_grid_water_lines": 1.0,
         "shockwave_grid_water_reaction": 0.24236252545824846,
         "shockwave_grid_water_reflection": 1.0,
         "shockwave_grid_water_shine": 0.2966734555329259,
