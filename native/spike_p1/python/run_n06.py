@@ -516,7 +516,7 @@ def round_lifecycle(native, out: Path, cycles: int = 10, force_absent_all: bool 
     # Devices created after the baseline: ours in every cycle, plus Qt's own in a cycle with the reference host.
     devices_after_baseline = sum(r["devices_created"] for r in records[1:])
     expected_handle_delta = DRIVER_HANDLES_PER_DEVICE * devices_after_baseline
-    handle_delta = _delta(after, "handles") or 0
+    handle_delta = _delta(after, "handles")  # None (a missing reading) fails the check below
     measured_private = [a.get("private_mib", 0.0) for a in after]
     third = max(1, len(measured_private) // 3)
     private_plateau = {"min_first_third": round(min(measured_private[:third]), 1),
@@ -547,8 +547,10 @@ def round_lifecycle(native, out: Path, cycles: int = 10, force_absent_all: bool 
         "qt_reference_host_ok": bool(qt_host.get("ok")),
         "pixel_identical_before_resize": comparisons.get("before_resize_qt_vs_ours", {}).get("max_abs") == 0,
         "pixel_identical_after_resize": comparisons.get("after_resize_qt_vs_ours", {}).get("max_abs") == 0,
-        "handles_baseline_plus_driver_cost": abs(handle_delta - expected_handle_delta) <= HANDLE_TOLERANCE,
-        "threads_back_to_baseline": abs(_delta(after, "threads") or 0) <= THREAD_TOLERANCE,
+        "handles_baseline_plus_driver_cost": handle_delta is not None
+        and abs(handle_delta - expected_handle_delta) <= HANDLE_TOLERANCE,
+        "threads_back_to_baseline": _delta(after, "threads") is not None
+        and abs(_delta(after, "threads")) <= THREAD_TOLERANCE,
         "gpu_heaps_back_to_baseline": bool(baseline.get("gpu_budget_supported"))
         and all(abs(d) <= GPU_HEAP_TOLERANCE_MIB for d in heap_deltas),
         "private_bytes_plateau": private_plateau["min_last_third"]
@@ -924,6 +926,14 @@ def _region_alpha(variant: dict, source: str, region: str, stage: str = "shown")
             .get(region, {}).get("rgba", [None] * 4)[3])
 
 
+def _at_most(value: float | None, bound: float) -> bool:
+    return value is not None and value <= bound
+
+
+def _at_least(value: float | None, bound: float) -> bool:
+    return value is not None and value >= bound
+
+
 def translucent_child(native, out: Path, api: str) -> dict:
     """The OpenGL comparison (route 3 of D7 point 8), in a child process because the graphics API is process-wide."""
     from PySide6.QtGui import QGuiApplication
@@ -1010,10 +1020,11 @@ def round_translucent(native, out: Path, module_dir: Path, label: str) -> dict:
         "premultiplied_flag_follows_alpha": all(
             ("SurfaceHasPreMulAlpha" in ((variants[n].get("swapchain") or {}).get("flags") or []))
             == ("translucent" in n) for n in variants),
-        "qt_scene_alpha_translucent": all((_region_alpha(variants[n], "grabwindow", "empty_top_left") or 255) <= 2
-                                          for n in translucent_names),
-        "qt_scene_alpha_opaque_negative_control": (_region_alpha(variants.get("ours_opaque", {}), "grabwindow",
-                                                                 "empty_top_left") or 0) >= 253,
+        # A missing reading fails; an alpha of 0.0 is the pass value (round 6's first run read `0.0 or 255`).
+        "qt_scene_alpha_translucent": bool(translucent_names) and all(
+            _at_most(_region_alpha(variants[n], "grabwindow", "empty_top_left"), 2) for n in translucent_names),
+        "qt_scene_alpha_opaque_negative_control": _at_least(
+            _region_alpha(variants.get("ours_opaque", {}), "grabwindow", "empty_top_left"), 253),
         "teardown_ok": bool(teardown.get("ok")) and teardown.get("device_wait_idle_ok") is True,
         "no_messenger_errors": teardown.get("messages", {}).get("errors", -1) == 0,
         "opengl_comparison_ran": bool(opengl.get("opengl_translucent", {}).get("ok"))

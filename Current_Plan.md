@@ -312,6 +312,21 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     For the decisions document's long-term risk table, driver variance row (the lead moves it): on NVIDIA 617.42 a
     device rebuild costs 3 process handles that are never returned, so the product never rebuilds a device except
     on device loss or window replacement (D6 point 4 already says so).
+  - Round 6, translucent Vulkan window, hidden (a32e18cd, built first time; `run_n06.py --round translucent`,
+    evidence `.artifacts/evidence/native_core/n06/20261112_n06_translucent/`): real Qt Quick windows kept invisible
+    by `tests/_invisible_windows.py`'s pattern presented continuously on our device and on Qt's own (30 frames
+    each). The finding that keeps D7 point 8's first route in play: NVIDIA 617.42 on Windows reports
+    `supportedCompositeAlpha` OPAQUE and PRE_MULTIPLIED for an alpha window (OPAQUE only for an opaque one), so Qt's
+    rule picks PRE_MULTIPLIED (Qt's source comment says NVIDIA reports OPAQUE only); `SurfaceHasPreMulAlpha` is set
+    exactly on the alpha windows; Qt's grab reads alpha 0 in the empty region, 128 in the half-red one, 255 in the
+    opaque one, identical to the OpenGL comparison window, and 255 everywhere on the opaque window (negative
+    control). The DWM system backdrop (with the frame extended) and the project's AccentPolicy glass both applied
+    and the window kept presenting (30 frames after each). Every hidden window is WS_EX_LAYERED (the pattern's
+    opacity 0), none uses WS_EX_NOREDIRECTIONBITMAP, and PrintWindow reads opaque black (alpha 255) from Vulkan and
+    OpenGL alike: the composed alpha cannot be read hidden, so see-through to the desktop is the lead's visible run
+    on Display 1. The run's one FAIL (`qt_scene_alpha_translucent`) was the driver's check reading `0.0 or 255`;
+    fixed in Python (missing readings now fail, 0.0 passes; checked on the same summary, old expression False, new
+    True); a rerun needs no build.
   - [ ] The Vulkan validation layer (with synchronisation validation) on the lead's machine: today there is no Vulkan
     SDK here (the spike used the driver's loader and Vulkan-Headers only). Its download and install is the
     operator's approval (a download); without it N0.6 and N0.7 run their functional parts and record validation as
