@@ -2384,3 +2384,80 @@ def test_edit_geometry_reads_never_invalidate_another_holders_overlay_wrappers(d
     _run(display, 30)
     assert slot.objectName() == "expandedOverlayNowPlaying"
     assert edit.owner.cancel()
+
+
+def _edit_frames(display) -> dict[str, tuple[float, float, float, float]]:
+    """Each overlay's Edit frame (scene coordinates) and where it sits against the overlay it frames: (frame x,
+    frame y, frame x minus overlay x, frame y minus overlay y). Edit's layer lies outside ``pixelShiftLayer``, the
+    overlays inside it."""
+    layer = display.scene.custom_layout_overlay.item
+    frames = {}
+    for part, slot_name in zip(PARTS, SLOTS):
+        frame = next(item for item in _visual_items(layer)
+                     if item.objectName() == f"customLayoutEditFrame-fullscreen_overlay.{part}")
+        frame_origin = frame.mapToScene(QPointF(0.0, 0.0))
+        slot_origin = _slot(display, slot_name).mapToScene(QPointF(0.0, 0.0))
+        frames[part] = (frame_origin.x(), frame_origin.y(),
+                        frame_origin.x() - slot_origin.x(), frame_origin.y() - slot_origin.y())
+    return frames
+
+
+@pytest.mark.qt
+def test_fullscreen_edit_suspends_pixel_shift_so_its_frames_sit_on_the_overlays(display, tmp_path, monkeypatch):
+    """1C.2 (with 1C.4): Fullscreen Edit, like ordinary Edit, suspends pixel shift on its display while its chrome is
+    open. The card and the overlays sit at their unshifted place (where Fullscreen Edit edits and saves them: the
+    frames are where they are with no shift at all), each frame on its overlay; a shift step during Edit moves nothing;
+    the latest shift returns when Edit ends. Negative control (the same run with the scene's suspension disabled, as
+    before 1C.4): under Edit the overlays and their frames stand the shift away from the unshifted layout."""
+    from rendering.quick.auxiliary import QuickAuxiliaryState
+    from rendering.quick.scene_controller import QuickSceneController
+
+    scene = display.scene
+
+    def shift(x: int, y: int) -> QuickAuxiliaryState:
+        return QuickAuxiliaryState(screen_index=display.window.screen_index,
+                                   runtime_generation=display.window.runtime_generation,
+                                   pixel_shift_enabled=True, pixel_shift_x=x, pixel_shift_y=y)
+
+    def layer_origin() -> tuple[float, float]:
+        origin = scene.scene_root.findChild(QQuickItem, "pixelShiftLayer").mapToScene(QPointF(0.0, 0.0))
+        return origin.x(), origin.y()
+
+    settings = _manager(tmp_path)
+    config = _seed(settings, preset={"always_show": True}, now_playing={"always_show": True})
+    _draw(display, media=_Media(), config=_projection(config))
+    _open(display)
+    _shown_and_settled(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()                                       # the unshifted layout Fullscreen Edit edits
+    _shown_and_settled(display)
+    unshifted = _edit_frames(display)
+    assert edit.owner.cancel()
+    _run(display, 60)
+
+    assert scene.apply_auxiliary_state(shift(3, -2))
+    _run(display, 30)
+    assert layer_origin() != (0.0, 0.0)                       # the shift is live before Edit
+    assert edit.start()
+    _shown_and_settled(display)
+    assert layer_origin() == (0.0, 0.0)
+    assert _edit_frames(display) == pytest.approx(unshifted, abs=0.01)
+    assert scene.apply_auxiliary_state(shift(2, -1))          # a shift step while Fullscreen Edit is open
+    _run(display, 30)
+    assert layer_origin() == (0.0, 0.0)
+    assert _edit_frames(display) == pytest.approx(unshifted, abs=0.01)
+    assert edit.owner.cancel()
+    _run(display, 60)
+    latest = layer_origin()
+    assert latest == pytest.approx((scene.scene_root.property("pixelShiftX"), scene.scene_root.property("pixelShiftY")))
+    assert latest != (0.0, 0.0) and abs(latest[0] - 2.0) <= 1.0 and abs(latest[1] + 1.0) <= 1.0
+
+    # Negative control: without the suspension the overlays, and the frames on them, keep the shift under Edit.
+    monkeypatch.setattr(QuickSceneController, "_suspend_pixel_shift", lambda self, suspended: None)
+    assert edit.start()
+    _shown_and_settled(display)
+    assert layer_origin() == pytest.approx(latest)
+    for part, (x, y, *_on_overlay) in _edit_frames(display).items():
+        moved = (x - unshifted[part][0], y - unshifted[part][1])
+        assert max(abs(moved[0]), abs(moved[1])) >= 1.0, part  # off the unshifted layout Edit saves
+    assert edit.owner.cancel()
