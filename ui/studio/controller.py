@@ -121,6 +121,22 @@ class StudioValueMap(QQmlPropertyMap):
         return changed
 
 
+def _attached(method: Callable) -> Callable:
+    """A QML entry point of ``StudioBridge`` acts only while its bridge is the controller's: a retiring shell keeps its
+    bridge until its engine is destroyed (R-200), and from retirement on nothing it calls may reach the session the
+    controller holds then (the next mode's after a switch, a closed one after a close)."""
+    import functools
+
+    @functools.wraps(method)
+    def call(self, *args) -> None:
+        if self._detached:
+            logger.debug("[STUDIO] %s ignored: called on a retired shell's bridge", method.__name__)
+            return None
+        return method(self, *args)
+    call.studio_attached = True
+    return call
+
+
 class StudioBridge(QObject):
     headerChanged = Signal()
     workspaceChanged = Signal()
@@ -142,6 +158,8 @@ class StudioBridge(QObject):
     def __init__(self, controller: "StudioController") -> None:
         super().__init__()
         self._c = controller
+        # Set once, at the controller's retirement of this bridge's shell (``detach``): every slot is inert from then.
+        self._detached = False
         schema = controller.session.schema
         self._schema = schema
         self._workspace = schema.workspaces[0].id
@@ -184,6 +202,15 @@ class StudioBridge(QObject):
         self._rebuild_inspector()
         self._rebuild_values()
 
+    def detach(self) -> None:
+        """The controller retired this bridge's shell. Its slots do nothing from now on; its properties still read
+        (the retiring shell's bindings may re-evaluate until its engine is destroyed, and must never read null)."""
+        self._detached = True
+
+    @property
+    def detached(self) -> bool:
+        return self._detached
+
     # ------------------------------------------------------------ header
     def _title(self) -> str:
         return self._schema.title
@@ -209,6 +236,7 @@ class StudioBridge(QObject):
     savePresetTarget = Property(str, _save_preset_target, notify=headerChanged)      # "": not offered
 
     @Slot(int)
+    @_attached
     def selectPreset(self, index: int) -> None:
         self._c.select_preset(int(index))
 
@@ -220,6 +248,7 @@ class StudioBridge(QObject):
     includeView = Property(int, _include_view, notify=headerChanged)      # -1: not offered
 
     @Slot(bool)
+    @_attached
     def setIncludeView(self, include: bool) -> None:
         setter = getattr(self._c.store, "set_include_view", None)
         if callable(setter):
@@ -227,12 +256,14 @@ class StudioBridge(QObject):
             self.headerChanged.emit()
 
     @Slot()
+    @_attached
     def moveToCustom(self) -> None:
         action = getattr(self._c.store, "move_to_custom", None)
         if callable(action):
             self._c.store_switched(action)
 
     @Slot()
+    @_attached
     def saveToPreset(self) -> None:
         """Save To <Preset>: the store confirms, writes the curated preset's file and reloads presets."""
         action = getattr(self._c.store, "save_to_preset", None)
@@ -256,10 +287,12 @@ class StudioBridge(QObject):
     orbitSaveHint = Property(str, lambda self: self._c.orbit_save_hint(), notify=headerChanged)
 
     @Slot()
+    @_attached
     def saveCurrent(self) -> None:
         self._save_action("save_current")
 
     @Slot()
+    @_attached
     def saveCamera(self) -> None:
         self._save_action("save_camera", camera=True)
 
@@ -329,6 +362,7 @@ class StudioBridge(QObject):
                                        notify=contentRotationChanged)
 
     @Slot()
+    @_attached
     def rotateContent(self) -> None:
         self._c.rotate_content()
 
@@ -338,9 +372,14 @@ class StudioBridge(QObject):
     modes = Property("QVariantList", _modes, constant=True)
     modeId = Property(str, _mode_id, constant=True)
 
+    # The mode picker asks for a switch; the controller acts on it as its own edge (``StudioController.open``), never
+    # inside the picker's handler, whose shell the switch retires.
+    modeSwitchRequested = Signal(str)
+
     @Slot(str)
+    @_attached
     def switchMode(self, mode_id: str) -> None:
-        self._c.request_mode_switch(mode_id)
+        self.modeSwitchRequested.emit(str(mode_id))
     presetLabel = Property(str, _preset, notify=headerChanged)
     presets = Property("QVariantList", _presets, notify=headerChanged)
     dirty = Property(bool, _dirty, notify=headerChanged)
@@ -360,6 +399,7 @@ class StudioBridge(QObject):
     workspace = Property(str, _current_workspace, notify=workspaceChanged)
 
     @Slot(str)
+    @_attached
     def setWorkspace(self, workspace_id: str) -> None:
         if workspace_id == self._workspace or workspace_id not in {w.id for w in self._schema.workspaces}:
             return
@@ -396,6 +436,7 @@ class StudioBridge(QObject):
     canAddObject = Property(bool, _can_add, notify=objectsChanged)
 
     @Slot(str, bool)
+    @_attached
     def setObjectVisible(self, object_id: str, visible: bool) -> None:
         edit = self._c.adapter.set_object_visible(self._c.session.values, object_id, bool(visible))
         if edit is not None:
@@ -403,12 +444,14 @@ class StudioBridge(QObject):
                                                     + self._schema.object_noun))
 
     @Slot()
+    @_attached
     def addObject(self) -> None:
         edit = self._c.adapter.add_object(self._c.session.values)
         if edit is not None:
             self._guard(lambda: self._c.session.set(edit[0], edit[1], "Add " + self._schema.object_noun))
 
     @Slot(str)
+    @_attached
     def selectObject(self, object_id: str) -> None:
         if object_id == self._selected:
             return
@@ -419,6 +462,7 @@ class StudioBridge(QObject):
         self._c.refresh_preset_previews()
 
     @Slot(int)
+    @_attached
     def stepObject(self, step: int) -> None:
         """Select the previous / next scene object (the per-object panel's header arrows), wrapping."""
         ids = [o["id"] for o in self._objects]
@@ -431,6 +475,7 @@ class StudioBridge(QObject):
     frameCopied = Signal(str)
 
     @Slot()
+    @_attached
     def copyFrame(self) -> None:
         """Copy the presented frame (production render, no overlays) to the clipboard as an image."""
         self._c.copy_frame()
@@ -636,6 +681,7 @@ class StudioBridge(QObject):
     activePresets = Property("QVariantMap", _presets_active, notify=valuesChanged)
 
     @Slot(str, str)
+    @_attached
     def applyPreset(self, group: str, preset_id: str) -> None:
         presets = dict(self._schema.group_presets).get(group, ())
         preset = next((p for p in presets if p.id == preset_id), None)
@@ -648,6 +694,7 @@ class StudioBridge(QObject):
                                                          f"{preset.label}"))
 
     @Slot(str, str)
+    @_attached
     def previewGradient(self, property_id: str, nodes: str) -> None:
         self._queue_preview(property_id, 0, "gradient", nodes)
 
@@ -709,6 +756,7 @@ class StudioBridge(QObject):
     shapeSelected = Signal(str, str, int)
 
     @Slot(str, str, int)
+    @_attached
     def shapePress(self, property_id: str, part: str, index: int) -> None:
         """The pointer took hold of a node ("node"), a lane's tag ("lane"), a lane's strength marker ("strength")
         or empty space ("add"). Nothing changes until ``shapeDrag``."""
@@ -719,6 +767,7 @@ class StudioBridge(QObject):
         self._guard(lambda: self.shapes.press(str(property_id), str(part), int(index)))
 
     @Slot(str, float, float)
+    @_attached
     def shapeDrag(self, property_id: str, x: float, y: float) -> None:
         """The held pointer (position along the axis, value; both 0..1): applied at the next frame start, the
         newest only."""
@@ -727,17 +776,20 @@ class StudioBridge(QObject):
             self._queue_preview(property_id, 0, "shape", (float(x), float(y)))
 
     @Slot()
+    @_attached
     def shapeRelease(self) -> None:
         """The gesture ends at the last held position: one save and one undo entry when anything changed."""
         self.apply_pending_previews()
         self._guard(self.shapes.release)
 
     @Slot()
+    @_attached
     def shapeCancel(self) -> None:
         self._pending.clear()
         self.shapes.cancel()
 
     @Slot(str, str, int, float, float)
+    @_attached
     def shapeStep(self, property_id: str, part: str, index: int, dx: float, dy: float) -> None:
         """A keyboard step of a node ("node") or a lane ("lane": dx its position, dy its strength): one committed
         edit per step."""
@@ -756,6 +808,7 @@ class StudioBridge(QObject):
             self.shapeSelected.emit(property_id, part, moved)
 
     @Slot(str, str, int, int, str)
+    @_attached
     def shapeCommitText(self, property_id: str, part: str, index: int, axis: int, text: str) -> None:
         """An exact value typed for a node or a lane (axis 0: its position; 1: its value or strength)."""
         self.apply_pending_previews()
@@ -805,6 +858,7 @@ class StudioBridge(QObject):
             self.notify(notice)
 
     @Slot(bool)
+    @_attached
     def setBrushActive(self, active: bool) -> None:
         if self.brush is None:
             return
@@ -813,12 +867,14 @@ class StudioBridge(QObject):
         self.brushCursorChanged.emit()
 
     @Slot(str, "QVariant")
+    @_attached
     def setBrushValue(self, name: str, value: Any) -> None:
         """A brush setting (mode, radius, strength, falloff, flatten_height): tool state, never saved."""
         if self.brush is not None and self.brush.set_value(str(name), value):
             self.brushChanged.emit()
 
     @Slot(float, float)
+    @_attached
     def brushPress(self, x: float, y: float) -> None:
         """A stroke starts at (x, y) in presented-frame pixels; the paint follows at the next frame start."""
         if self.brush is None or not self.brush.active:
@@ -830,16 +886,19 @@ class StudioBridge(QObject):
         self.brushChanged.emit()
 
     @Slot(float, float)
+    @_attached
     def brushMove(self, x: float, y: float) -> None:
         if self.brush is not None and self.brush.active:
             self.brush.move((x, y))
 
     @Slot(float, float)
+    @_attached
     def brushHover(self, x: float, y: float) -> None:
         if self.brush is not None and self.brush.active:
             self.brush.hover((x, y))
 
     @Slot()
+    @_attached
     def brushLeave(self) -> None:
         if self.brush is not None:
             refused = self.brush.refused
@@ -849,6 +908,7 @@ class StudioBridge(QObject):
                 self.brushChanged.emit()
 
     @Slot()
+    @_attached
     def brushRelease(self) -> None:
         """The stroke ends: the held points are painted and the record is saved once (one undo entry)."""
         if self.brush is None:
@@ -858,6 +918,7 @@ class StudioBridge(QObject):
         self.brushCursorChanged.emit()
 
     @Slot()
+    @_attached
     def brushCancel(self) -> None:
         if self.brush is None:
             return
@@ -865,6 +926,7 @@ class StudioBridge(QObject):
         self.brushChanged.emit()
 
     @Slot(str, str)
+    @_attached
     def commitGradient(self, property_id: str, nodes: str) -> None:
         self.apply_pending_previews()
 
@@ -901,6 +963,7 @@ class StudioBridge(QObject):
     cardEndpoints = Property("QVariantMap", _card_endpoints_map, notify=cardEndpointsChanged)
 
     @Slot(str, int)
+    @_attached
     def setCardEndpoint(self, group: str, endpoint: int) -> None:
         endpoints = dict(getattr(self, "_card_endpoints", {}))
         if endpoints.get(group) == int(endpoint):
@@ -979,6 +1042,7 @@ class StudioBridge(QObject):
             self.notify(f"Not applied: {exc}")
 
     @Slot(str, str)
+    @_attached
     def beginEdit(self, property_id: str, label: str) -> None:
         prop = self._schema.find(property_id)
         if prop.view_pose:
@@ -987,6 +1051,7 @@ class StudioBridge(QObject):
         self._c.session.begin_gesture(label or prop.label)
 
     @Slot(str, int, float)
+    @_attached
     def previewValue(self, property_id: str, endpoint: int, value: float) -> None:
         self.note_endpoint_edit(property_id, endpoint)
         self._queue_preview(property_id, endpoint, "value", float(value))
@@ -999,6 +1064,7 @@ class StudioBridge(QObject):
         self._c.session.preview(path, self._coerce(prop, value))
 
     @Slot()
+    @_attached
     def endEdit(self) -> None:
         self.apply_pending_previews()          # the release position is the committed one
         if getattr(self, "_pose_edit", False):
@@ -1008,6 +1074,7 @@ class StudioBridge(QObject):
         self._guard(self._c.session.end_gesture)
 
     @Slot(str, str)
+    @_attached
     def previewColour(self, property_id: str, hex_text: str) -> None:
         """Live colour preview while a picker is dragged (one gesture; endEdit commits it)."""
         self._queue_preview(property_id, 0, "colour", str(hex_text))
@@ -1021,6 +1088,7 @@ class StudioBridge(QObject):
     revealed = Signal(str, int)
 
     @Slot(str, int)
+    @_attached
     def revealProperty(self, property_id: str, endpoint: int = 0) -> None:
         """Open the property's group in the inspector and focus its exact-entry field."""
         prop = self._schema.find(property_id)
@@ -1031,11 +1099,13 @@ class StudioBridge(QObject):
         self.revealed.emit(property_id, int(endpoint))
 
     @Slot()
+    @_attached
     def cancelEdit(self) -> None:
         self.drop_pending_previews()
         self._c.session.cancel_gesture()
 
     @Slot(str, int, "QVariant")
+    @_attached
     def commitValue(self, property_id: str, endpoint: int, value: Any) -> None:
         self.apply_pending_previews()
         self.note_endpoint_edit(property_id, endpoint)
@@ -1050,6 +1120,7 @@ class StudioBridge(QObject):
         self._guard(run)
 
     @Slot(str, int, str)
+    @_attached
     def commitText(self, property_id: str, endpoint: int, text: str) -> None:
         """Exact numeric/hex entry; out-of-range numbers are clamped and the clamp is reported."""
         self.apply_pending_previews()
@@ -1077,25 +1148,30 @@ class StudioBridge(QObject):
         self._guard(run)
 
     @Slot(str)
+    @_attached
     def resetProperty(self, property_id: str) -> None:
         prop = self._schema.find(property_id)
         self._guard(lambda: self._c.session.reset_property(prop.path, f"Reset {prop.label}"))
 
     @Slot()
+    @_attached
     def undo(self) -> None:
         self.drop_pending_previews()
         self._guard(self._c.session.undo)
 
     @Slot()
+    @_attached
     def redo(self) -> None:
         self.drop_pending_previews()
         self._guard(self._c.session.redo)
 
     @Slot()
+    @_attached
     def revertAll(self) -> None:
         self._guard(self._c.session.revert_all)
 
     @Slot()
+    @_attached
     def savePresetAs(self) -> None:
         save = getattr(self._c.store, "save_preset_as", None)
         if callable(save):
@@ -1104,10 +1180,12 @@ class StudioBridge(QObject):
             self.notify("Save As is not available for this store")
 
     @Slot()
+    @_attached
     def requestClose(self) -> None:
         self.requestCloseFrom("close request")
 
     @Slot(str)
+    @_attached
     def requestCloseFrom(self, source: str) -> None:
         """A close asked for by the shell; ``source`` names the path (the Close button, Esc) for the log."""
         self.close_source = str(source) or "close request"
@@ -1176,19 +1254,23 @@ class StudioBridge(QObject):
     time = Property(float, _time, notify=timeChanged)
 
     @Slot()
+    @_attached
     def togglePlay(self) -> None:
         self._c.set_playing(not self._c.transport.playing)
 
     @Slot(float)
+    @_attached
     def seek(self, seconds: float) -> None:
         self._c.seek(seconds)
 
     @Slot(bool)
+    @_attached
     def setLoop(self, enabled: bool) -> None:
         self._c.transport.loop = bool(enabled)
         self.transportChanged.emit()
 
     @Slot(str)
+    @_attached
     def selectFixture(self, fixture_id: str) -> None:
         self._c.select_fixture(fixture_id)
 
@@ -1208,34 +1290,42 @@ class StudioBridge(QObject):
             self.viewportChanged.emit()
 
     @Slot(int, bool, bool)
+    @_attached
     def navigationKey(self, key: int, pressed: bool, shifted: bool) -> None:
         self._c.navigation_key(key, pressed, shifted)
 
     @Slot()
+    @_attached
     def releaseNavigationKeys(self) -> None:
         self._c.release_navigation_keys()
 
     @Slot(float, float)
+    @_attached
     def orbitBy(self, dx: float, dy: float) -> None:
         self._c.orbit_by(dx, dy)
 
     @Slot()
+    @_attached
     def endOrbit(self) -> None:
         self._guard(self._c.end_orbit)
 
     @Slot()
+    @_attached
     def resetCamera(self) -> None:
         self._c.reset_camera()
 
     @Slot(float, bool)
+    @_attached
     def zoomBy(self, steps: float, dolly: bool) -> None:
         self._c.zoom_by(steps, dolly=dolly)
 
     @Slot(float, float, float, float)
+    @_attached
     def panBy(self, dx: float, dy: float, width: float, height: float) -> None:
         self._c.pan_by(dx, dy, width, height)
 
     @Slot()
+    @_attached
     def keepView(self) -> None:
         self._guard(self._c.keep_view)
 
@@ -1260,6 +1350,7 @@ class StudioBridge(QObject):
     framingId = Property(str, _framing, notify=framingChanged)
 
     @Slot(str)
+    @_attached
     def selectFraming(self, framing_id: str) -> None:
         self._c.select_framing(framing_id)
 
@@ -1315,6 +1406,7 @@ class StudioBridge(QObject):
                  "enabled": self._c.adapter.structure_edit(a.id, values) is not None} for a in actions]
 
     @Slot(str)
+    @_attached
     def runAction(self, action_id: str) -> None:
         """Run a structural edit (add / remove / reorder) as ONE undoable edit through the session."""
         edit = self._c.adapter.structure_edit(str(action_id), self._c.session.values)
@@ -1373,6 +1465,7 @@ class StudioBridge(QObject):
         return max(target.cells, key=gain).source
 
     @Slot(str)
+    @_attached
     def selectTarget(self, target_id: str) -> None:
         if target_id != self._target:
             self._target = target_id
@@ -1380,6 +1473,7 @@ class StudioBridge(QObject):
             self.responseChanged.emit()
 
     @Slot(str)
+    @_attached
     def selectSource(self, source_id: str) -> None:
         if source_id != self._source:
             self._source = source_id
@@ -1403,6 +1497,7 @@ class StudioBridge(QObject):
         self.messageChanged.emit()
 
     @Slot()
+    @_attached
     def runMessageAction(self) -> None:
         _label, callback = getattr(self, "_message_action", ("", None))
         self.notify("")
@@ -1410,6 +1505,7 @@ class StudioBridge(QObject):
             callback()
 
     @Slot()
+    @_attached
     def dismissMessage(self) -> None:
         self.notify("")
 
@@ -1436,20 +1532,24 @@ class StudioBridge(QObject):
     windowMaximized = Property(bool, _window_maximized, notify=windowStateChanged)
 
     @Slot()
+    @_attached
     def startWindowMove(self) -> None:
         self._surface_call("start_move")
         self.windowStateChanged.emit()          # a drag from maximised restores first
 
     @Slot(int)
+    @_attached
     def startWindowResize(self, edges: int) -> None:
         self._surface_call("start_resize", int(edges))
 
     @Slot()
+    @_attached
     def toggleMaximize(self) -> None:
         self._surface_call("toggle_maximize")
         self.windowStateChanged.emit()
 
     @Slot()
+    @_attached
     def minimizeWindow(self) -> None:
         self._surface_call("minimize")
 
@@ -1581,6 +1681,10 @@ class StudioController(QObject):
                 self.bridge.set_theme(self._theme_provider())
             self._unsubscribe = self.session.subscribe(self._on_session_changed)
             self.bridge.closeRequested.connect(self._on_bridge_close)
+            # Queued: the picker's ``onActivated`` returns, and the ComboBox finishes its activation, before the
+            # switch retires that shell and opens the next. Run inside the handler, the retiring shell's own signal
+            # handler was still on the stack while its bridge was cut off and its window queued for destruction.
+            self.bridge.modeSwitchRequested.connect(self.request_mode_switch, Qt.ConnectionType.QueuedConnection)
             self.surface = self._surface_factory(self)
             self.viewport = self.surface.viewport
             self.viewport.rendered.connect(self._on_rendered, Qt.ConnectionType.QueuedConnection)
@@ -2708,6 +2812,20 @@ class StudioController(QObject):
             if unsubscribe is not None:
                 unsubscribe()
 
+        def cut_off_bridge() -> None:
+            # The shell keeps its bridge until its engine is destroyed (R-200); from here nothing it calls reaches the
+            # controller, whose session is the next mode's after a switch.
+            bridge = self.bridge
+            if bridge is None:
+                return
+            bridge.detach()
+            for signal, slot in ((bridge.closeRequested, self._on_bridge_close),
+                                 (bridge.modeSwitchRequested, self.request_mode_switch)):
+                try:
+                    signal.disconnect(slot)
+                except (RuntimeError, TypeError):
+                    pass
+
         def retire_surface() -> None:
             nonlocal awaiting_window
             surface, self.surface = self.surface, None
@@ -2747,6 +2865,7 @@ class StudioController(QObject):
 
         try:
             session = self.session
+            step("bridge", cut_off_bridge)              # first: nothing the retiring shell calls acts from here
             step("gesture", session.cancel_gesture if session is not None else None)   # a drag is not a save
             step("transport", self.transport.stop)
             step("settings", reveal_settings if reveal else None)                       # Settings back first
