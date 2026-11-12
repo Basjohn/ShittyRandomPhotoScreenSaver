@@ -264,92 +264,19 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   no Python thread state), backends within 3/255 (`.artifacts/evidence/architecture/native_core_p1/20261112_n09/`).
   A C++ slice iterates: the agent commits, the lead pushes its branch and runs
   `tools/build_runner.py --mode github --run --select native_module` from that worktree.
-- [ ] N0.6 D6's proof, in the P1 harness (C++; nothing shipped). Facts and build order:
-  `Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md` (sections A to E, the order in H); D6 and D9 carry the lead's
-  12 Nov amendments from them. Read from Qt's 6.12 branch head: line-level details are checked against the
-  `v6.12.0` tag as the harness meets them.
-  - Round 1, facts (29bdd8f1, built on GitHub first time; `run_n06.py --round facts`, PASS, evidence
-    `.artifacts/evidence/native_core/n06/20261112_n06_facts/summary.json`): loader 1.4.341
-    (`C:\WINDOWS\SYSTEM32\vulkan-1.dll`); RTX 4090, API 1.4.351, NVIDIA 617.42; queue families 0 graphics+compute+
-    transfer x16 (presents), 1 transfer x2, 2 compute+transfer x8 (presents), 3 video decode x1, 4 video encode x2, 5
-    optical flow x1: a second queue in the graphics family exists (15 spare) and a compute-only family too. Qt's own
-    device (API 1.2) takes family 0 queue 0; all five `preferredExtensionsForImportedDevice()` names are available;
-    by Qt's rule it enables 109 features (1.0, 1.1, 1.2 structures; only `robustBufferAccess` of the supported ones is
-    left out; unsupported: ETC2, ASTC LDR/HDR, protectedMemory, storageInputOutput16); its QRhi reports every feature
-    flag except RenderBufferImport. Qt's route-(i) instance also enables `VK_KHR_portability_enumeration`,
-    `VK_EXT_debug_utils` and the two surface extensions beside the preferred two. No validation layer installed
-    (implicit layers present: NV optimus, NV present, WEOBS hook, Steam overlay and fossilize); no Qt or loader
-    environment variable set.
-  - Round 2, our instance and device (731faf28, built first time; `run_n06.py --round device`, PASS, 16 of 16
-    checks, evidence `.artifacts/evidence/native_core/n06/20261112_n06_device/`): our VkInstance at API 1.2 (surface,
-    win32 surface, the two preferred instance extensions, debug utils) adopted by a QVulkanInstance with the same
-    lists; our VkDevice on family 0, one queue, the five imported-device extensions plus `VK_EXT_device_fault`, the
-    1.0/1.1/1.2 features equal to Qt's rule name for name (plus the shading-rate, divisor and fault structures);
-    the hidden Qt Quick host (the spike's QuadField, 120 frames) ran on our device (QRhi's native handle = ours,
-    family 0 queue 0) and is pixel-identical to the same host on Qt's own device (max difference 0; negative control,
-    the next frame: max 186, 108,748 pixels); QRhi feature flags equal. Teardown (device idle, destroy,
-    `resetDeviceFunctions`, both QVulkanInstances, messenger, instance) clean. Messenger: 0 errors and 0 warnings in
-    render and teardown; one loader warning at create ("Registry lookup failed to get layer manifest files", no
-    layers installed). Validation still owed.
-  - Rounds 3 and 4, lifecycle and the second queue (347e7d62, built first time; `run_n06.py --round lifecycle`,
-    FAIL on two of 18 checks, evidence `.artifacts/evidence/native_core/n06/20261112_n06_lifecycle/`): 10 cycles of
-    create, render, resize (960x540 to 1280x720), render, teardown on our device all clean, teardown order exact,
-    pixel-identical to Qt's own device before and after the resize; the second queue is found every cycle in family
-    0 at index 1 (D9's same-family rule) and executes (distinct handle, empty submit, fence signalled); the forced
-    absence (negative control) reports none and the device still renders. Threads and GPU heap usage return to
-    baseline (delta 0). Failed: handles grow exactly +3 per cycle (444 after the warm-up, 471 after cycle 10), and
-    private bytes swing 295 to 399 MiB with no trend (the last-minus-first metric read 2.3 MiB per cycle). Round 5
-    (`--round owners`) attributes the growth.
-  - Round 5, whose growth (94426903, built first time; `run_n06.py --round owners --cycles 12`, evidence
-    `.artifacts/evidence/native_core/n06/20261112_n06_owners/summary.json`): the driver's, not ours. Handles per
-    cycle by kind: our raw VkInstance 0, Qt's adoption 0, our device with one queue 3, plus the second queue and its
-    fence 3 (0 added), plus the reference instance 3 (0 added), our host without readback 3 (0 added), the full
-    cycle 3 (readback and resize 0 added; 40 cycles, linear at 3.0 in the second half), Qt's own device under the
-    same host 3. So NVIDIA 617.42 keeps 3 process handles per VkDevice create and destroy, whoever creates it; our
-    code adds none. Threads, GPU heaps and Python gc objects 0 per cycle everywhere; private bytes plateau (lowest
-    of the first third 304.3 MiB, of the last third 295.8). The lifecycle round now checks handles as the baseline
-    plus 3 per device the run created (counted from the run) and private bytes as that plateau: rerun on the round-5
-    module, 16 of 16 PASS (9 devices after the baseline, expected and measured +27;
-    `.artifacts/evidence/native_core/n06/20261112_n06_lifecycle_rerun/`).
-    For the decisions document's long-term risk table, driver variance row (the lead moves it): on NVIDIA 617.42 a
-    device rebuild costs 3 process handles that are never returned, so the product never rebuilds a device except
-    on device loss or window replacement (D6 point 4 already says so).
-  - Round 6, translucent Vulkan window, hidden (a32e18cd, built first time; `run_n06.py --round translucent`,
-    evidence `.artifacts/evidence/native_core/n06/20261112_n06_translucent/`): real Qt Quick windows kept invisible
-    by `tests/_invisible_windows.py`'s pattern presented continuously on our device and on Qt's own (30 frames
-    each). The finding that keeps D7 point 8's first route in play: NVIDIA 617.42 on Windows reports
-    `supportedCompositeAlpha` OPAQUE and PRE_MULTIPLIED for an alpha window (OPAQUE only for an opaque one), so Qt's
-    rule picks PRE_MULTIPLIED (Qt's source comment says NVIDIA reports OPAQUE only); `SurfaceHasPreMulAlpha` is set
-    exactly on the alpha windows; Qt's grab reads alpha 0 in the empty region, 128 in the half-red one, 255 in the
-    opaque one, identical to the OpenGL comparison window, and 255 everywhere on the opaque window (negative
-    control). The DWM system backdrop (with the frame extended) and the project's AccentPolicy glass both applied
-    and the window kept presenting (30 frames after each). Every hidden window is WS_EX_LAYERED (the pattern's
-    opacity 0), none uses WS_EX_NOREDIRECTIONBITMAP, and PrintWindow reads opaque black (alpha 255) from Vulkan and
-    OpenGL alike: the composed alpha cannot be read hidden, so see-through to the desktop is the lead's visible run
-    on Display 1. The run's one FAIL (`qt_scene_alpha_translucent`) was the driver's check reading `0.0 or 255`;
-    fixed in Python (missing readings now fail, 0.0 passes; checked on the same summary, old expression False, new
-    True); a rerun needs no build.
+- [ ] N0.6 D6's proof (harness rounds 1 to 6 merged 12 Nov; the record is D6's "As proved" in the decisions document;
+  evidence `.artifacts/evidence/native_core/n06/`): our instance and device (Qt's feature set, API 1.2) host Qt Quick
+  pixel-identical to Qt's own device; teardown order, resize and the second queue in Qt's family proved over cycles;
+  the driver keeps 3 handles per VkDevice (ours add none); a translucent Vulkan window gets PRE_MULTIPLIED on NVIDIA
+  with alpha intact in Qt's grab. Owed:
   - [ ] The Vulkan validation layer (with synchronisation validation) on the lead's machine: today there is no Vulkan
     SDK here (the spike used the driver's loader and Vulkan-Headers only). Its download and install is the
     operator's approval (a download); without it N0.6 and N0.7 run their functional parts and record validation as
-    owed.
-  - [ ] The module creates the instance and a device at the baseline (Qt requires of it: a graphics queue that
-    can present, the extensions `preferredExtensionsForImportedDevice()` names plus swapchain, the preferred
-    instance extensions, API 1.1 or later, objects that outlive the windows); a hidden Qt Quick host on that
-    device renders the spike scene pixel-identical to the same host on Qt's own device.
-  - [ ] Validation layers clean through create, render, resize and teardown (windows, then devices, then the
-    instance).
-  - [ ] The second queue is found on the development GPU; its absence is forced as a negative control. Record
-    which features Qt's own device has enabled (the "feature bits" question of D6 point 3).
-  - [ ] A translucent Vulkan Qt Quick window: can it be see-through to the desktop at all (the Studio's window
-    is translucent today, `ui/studio/surface.py:181`; the dedicated SMP build's material shows the desktop, the
-    operator's 12 Nov answer, D7 point 8, so the three routes listed there are tried in order and the one that works
-    is recorded)? Qt 6.12 has no system-backdrop API: the Windows backdrop (Mica/Acrylic) is a project-owned
-    `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)` on `QWindow::winId()`; a report of a "phantom white box"
-    with Mica under Qt Quick exists (`Docs/Future_Work/Qt_6_12_Gains.md`), so the harness tries it early, hidden. Hidden as far as possible; the visible part is the
-    lead's, on Display 1.
-  - [ ] Lead, Display 1, bounded: a real window on the module's device (swapchain, resize, DPI change, sleep and
-    wake).
+    owed. Then: validation clean through every N0.6 round (`run_n06.py --round device|lifecycle|translucent`).
+  - [ ] Lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
+    module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
+    alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
+    sleep and wake. If it is not see-through, D7's second route (DirectComposition) is tried next.
 - [ ] N0.7 D9's proof, in the same harness: the job thread, its queue and the latch; the six measurements of D9
   ("How it is proved"), with system conditions recorded. The verdict (jobs for compute on this vendor, or
   uploads only) is written into D9.
