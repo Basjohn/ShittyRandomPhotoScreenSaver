@@ -131,6 +131,19 @@ without the safe path below.
   meaningful. The Sep 2026 keys stay stripped and are never mapped onto the
   current `surface_material` values (Docs/Architecture/Card_Surface_Materials.md),
   which are a different design, not "cleanup compatibility."
+- **Retired Widget Theme colour roles** (`ui/widget_theme_io.py`, `RETIRED_WIDGET_THEME_COLOR_ROLES`, applied in
+  `widget_theme_from_payload`, the one input seam for `.srwtheme` files, Theme Foundry imports and the stored Custom
+  snapshot `widget_theme.custom`; 12 Nov 2026). `context.menu.arrow` retired when the Context Menu's submenu arrow took
+  its label's ink (Card_Surface_Materials.md, "Context Menu submenu arrows"): the role had no reader. A theme that
+  still carries a retired role loads and drops it silently; every other role is kept exactly; nothing declares,
+  generates or writes it again, so a second load does nothing. The shipped pack was repaired by
+  `tools/generate_widget_theme_mirrors.py --drop-retired-roles` (changes nothing else; refuses a non-canonical file).
+  Fixture: the raw old file `tests/fixtures/widget_theme_retired_context_menu_arrow.srwtheme`; tests:
+  `tests/test_widget_theme_retired_roles.py` (load, Custom snapshot, idempotence, the generator's repair, and no
+  declaration left in the core/optional sets, Default Dark, the mirror projection, the Foundry or the shipped files).
+  *Horizon:* until the operator closes it (user-exported themes and Custom snapshots from before 12 Nov 2026).
+  *Blocked:* re-declaring the role to read old files, or rejecting the file whole (a user theme would fall back to
+  Default Dark).
 - **Ordinary Widget family colour bridge** (old per-family colour persistence,
   superseded by Widget Theme `header.*` + Style Overrides → Header Fill).
   *Blocked:* flattening durable per-family colour customization to make the

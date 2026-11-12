@@ -348,8 +348,8 @@ Normal is outside the material rule.
 material panel carries; the submenu arrow ("▸") had its own tone, the theme's `context.menu.arrow` role (by default the
 menu border), and read 1.7-3.6:1 on Polished Chrome and Pearl Blush (2.3-3.0 on Normal too). The arrow is part of its
 row's label and now takes the label's ink on every theme and material (10.4-13.2:1 there; dark themes unchanged where the
-two were equal). The `context.menu.arrow` role stays in the theme schema so every theme file still loads, but nothing reads
-it. Evidence `.artifacts/evidence/materials/20261112_followups/box3_menu_arrow/`.
+two were equal). The `context.menu.arrow` role is retired from the theme schema (same day): a theme file that still
+carries it loads and drops it (Persisted_Input_Compatibility.md, "Retired Widget Theme colour roles"). Evidence `.artifacts/evidence/materials/20261112_followups/box3_menu_arrow/`.
 
 **Style sweep fixes outside the materials (6 Nov evening; they change Normal pixels on purpose, nowhere else):**
 

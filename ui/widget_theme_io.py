@@ -50,6 +50,13 @@ _TOP_LEVEL_KEYS = frozenset(
 # Optional within schema v3: a theme written before 6 Nov 2026 simply names no material.
 _OPTIONAL_TOP_LEVEL_KEYS = frozenset({"surface_material"})
 
+# Load bridge (Docs/Architecture/Persisted_Input_Compatibility.md): colour roles the
+# schema no longer declares. A theme file or stored Custom snapshot that still carries
+# one loads and drops it silently; nothing writes it again. ``context.menu.arrow``
+# retired 12 Nov 2026 when the Context Menu's submenu arrow took its label's ink.
+# A retired role is never also declared (core or optional).
+RETIRED_WIDGET_THEME_COLOR_ROLES = frozenset({"context.menu.arrow"})
+
 
 class WidgetThemeFileError(ValueError):
     """A ``.srwtheme`` file is readable but not a valid Widget theme."""
@@ -205,7 +212,11 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
             raise _error("theme.surface_material", f"must be one of {list(SURFACE_MATERIALS)!r} or absent")
         surface_material = normalize_surface_material(surface_material)
 
-    raw_colors = _expect_mapping(obj["colors"], "colors")
+    raw_colors = {
+        role: value
+        for role, value in _expect_mapping(obj["colors"], "colors").items()
+        if role not in RETIRED_WIDGET_THEME_COLOR_ROLES
+    }
     # Core card/context roles remain whole-or-reject. Schema v3 retains the sparse
     # optional role vocabulary introduced for specialized Widget semantics.
     _require_role_set(
@@ -343,6 +354,7 @@ def discover_widget_theme_files(
 
 
 __all__ = [
+    "RETIRED_WIDGET_THEME_COLOR_ROLES",
     "WIDGET_THEME_FILE_EXTENSION",
     "WIDGET_THEME_FILE_FORMAT",
     "WidgetThemeFileError",

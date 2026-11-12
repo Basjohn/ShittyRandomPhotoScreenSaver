@@ -48,7 +48,9 @@ WIDGET_VISUAL_ROLE_PARENTS: Mapping[str, str] = {
     # themes stay valid; they inherit from the closest menu semantic when omitted.
     "context.menu.indicator.border": "context.menu.border",
     "context.menu.indicator.fill": "context.menu.selected_surface",
-    "context.menu.arrow": "context.menu.border",
+    # No arrow role: the submenu arrow takes its label's ink (retired 12 Nov 2026;
+    # theme files that still carry ``context.menu.arrow`` drop it on load, see
+    # ``ui.widget_theme_io.RETIRED_WIDGET_THEME_COLOR_ROLES``).
     "context.submenu.indicator.border": "context.submenu.checked_text",
     "context.submenu.indicator.fill": "context.menu.indicator.fill",
 
