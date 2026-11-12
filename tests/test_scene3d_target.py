@@ -346,6 +346,18 @@ def test_an_overlay_refuses_motion_blur(capture):
         resources.release_resources()
 
 
+@pytest.mark.parametrize("samples", (1, 4))
+def test_the_warm_up_list_of_a_turned_motion_blurred_scene_lists_every_program(samples):
+    """A scene turned on its output (rotation) with motion blur lists the motion programs (one of them a compute
+    entry, with no fragment) and the turned composite, rather than failing on the compute entry."""
+    from rendering.quick.scene3d.motion import MOTION_BLUR_PROGRAMS
+    from rendering.quick.scene3d.target import scene_target_programs
+
+    keys = [key for key, *_ in scene_target_programs(samples, False, True, rotation=1)]
+    assert {key for key, *_ in MOTION_BLUR_PROGRAMS} <= set(keys)
+    assert "scene_composite_oriented" in keys
+
+
 def _emitting_program(emit: bool):
     """A quad over the middle of the card: dim grey, emitting warm light into location 1."""
     from rendering.quick.render.gl_resources import compile_program

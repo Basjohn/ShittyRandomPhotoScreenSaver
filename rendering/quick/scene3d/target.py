@@ -372,7 +372,8 @@ def scene_target_programs(samples: int, bloom: bool, motion: bool,
     for entry in _end_programs(multisampled, bloom, motion, overlay, shafts):
         if hdr and entry[0].startswith(("scene_overlay_bloom", "scene_overlay_shafts")):
             entry = (entry[0] + "_hdr", *entry[1:])
-        if rotation and entry[2] in _ORIENTED_COMPOSITES:
+        # A (key, compute source) entry (the motion tile max) has no fragment to orient.
+        if rotation and len(entry) == 3 and entry[2] in _ORIENTED_COMPOSITES:
             entry = (entry[0] + "_oriented", entry[1], _ORIENTED_COMPOSITES[entry[2]])
         programs.append(entry)
     return tuple(programs)
