@@ -307,30 +307,12 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
     sleep and wake. If it is not see-through, D7's second route (DirectComposition) is tried next.
-- [ ] N0.3's three scenes (decisions document, "The three test scenes"), in the harness, on OpenGL, Vulkan, D3D11
-  and D3D12; before N2.4. Until they pass, the include's flip, the matrix correction and the winding rule are
-  proved on OpenGL only.
-  - [ ] Checkerboard with a gradient: texel (0,0) top-left on every backend; `fragUv`, `fragTexel`, `ndcToUv` agree
-    with the pass that wrote the texture; upload row order; the sRGB strip; the std140 block from reflected offsets.
-    Negative controls: no Y correction in the include; no `clipSpaceCorrMatrix()`; hand-computed offsets.
-    - Run 1 (harness 63f0e75e, `native/spike_p1/python/run_n03.py`; evidence
-      `.artifacts/evidence/native_core/n0_3/20261112_n03_scenes_reanalysed/`): every check holds on all four backends
-      except F2 (`ndcToUv`/`uvToNdc` on D3D11 and D3D12) and F4 (Qt 6.12.0's OpenGL ignores the sRGB flag), both
-      proposed in the decisions document ("Run 1's findings"); F1 (OpenGL's correction flips Y) waits for the same
-      answer. A rerun after the lead's decision needs the include changed for F2, and the strip's route for F4.
-    - F1 to F4 decided by the lead 12 Nov and built: the include (3a2e2e51; product pixels identical across every mode,
-      transition and changed fragment source), the floor's shader decode (25688bbf; Waveform Ribbon's floor moves at
-      most one 8-bit step on 0.5 % of pixels), the harness for run 2 (block `y`, the clip-NDC flip's negative
-      control, the shader's sRGB decode gated). Run 2 owed: build round 2.
-  - [ ] Known-depth plane through `framed_camera.perspective_matrix` corrected at upload:
-    `viewDepthFromDepthTexture` equals the analytical window depth on every backend. Negative controls: skip the
-    depth part of the correction; upload an uncorrected matrix.
-    - Run 1: passes on Vulkan (our device, validation clean), OpenGL, D3D11 and D3D12 (worst 1.6e-7 from the
-      analytical depth); both negative controls fail where they change anything.
-  - [ ] One culled triangle with `front_face_clockwise`'s rule, Quick's Y-down matrix and an up-facing one;
-    `gl_FrontFacing` agrees. Negative control: front face fixed to counter-clockwise.
-    - Run 1: passes on all four with the rule on the uploaded matrix; fixed CCW and the rule on the uncorrected
-      matrix (F3) cull the wrong triangle where they change anything.
+- N0.3's three scenes: proved 12 Nov on Vulkan (our device, validated), OpenGL, D3D11 and D3D12 (run 2, harness
+  29816002, `N03 VERDICT PASS`; the record and the decided F1 to F4 are the decisions document's N0.3 "As proved"
+  sections; evidence `.artifacts/evidence/native_core/n0_3/`). Owed:
+  - [ ] The clip-NDC flip (block `y`, decision F2) through the native core itself on a real D3D11/D3D12 backend, when
+    N2 first runs a pass that maps NDC there (the harness proved the include, not the core's block writer).
+  - [ ] Metal: the three scenes on Metal (Watchlist; no Metal machine).
 - N0.7 D9's proof: proved in the harness and accepted 12 Nov (the verdict, jobs for compute on this vendor and
   uploads, is D9's "Accepted by the lead"). Owed, with the Qt 6.12 checks filed here:
   - [ ] AMD and Intel unmeasured: the same measure round on another vendor before a mode moves compute to a job by

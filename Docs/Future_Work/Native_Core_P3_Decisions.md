@@ -1511,6 +1511,27 @@ D3D11, D3D12 (RTX 4090, NVIDIA 617.42). Validation clean: 10 errors, all Qt defe
   1e-3, but the hardware decode carries 8 significant bits (below); and it compared the other backends with OpenGL's
   decode, which does not exist (F4).
 
+### As proved (run 2, 12 Nov 2026): all three scenes pass on all four backends
+
+Harness 29816002 (the decided include: F1's correction, F2's block `y` in the core's form, F4's `srgbToLinear`),
+built on GitHub and run by the lead with the layer and `--require-validation`: `N03 VERDICT PASS`
+(`.artifacts/evidence/native_core/n0_3/20261112_n03_scenes_run2/`). Validation clean: 10 errors, all Qt defect A by
+ID, 0 unexplained.
+- Scene 1: every check on Vulkan (our device), OpenGL, D3D11 and D3D12. `ndcToUv` against the writer's uv within
+  1.2e-7 per axis and `uvToNdc` against the clip NDC within 3.0e-7 on all four, D3D included (run 1: 0.982 and 1.964);
+  the module wrote the backend's `y` (1 on D3D11 and D3D12, 0 elsewhere). `srgbToLinear` against the exact curve
+  within 2.6e-7 on all four, against OpenGL's within 1.8e-7; the sampler's own decode stays a record (OpenGL none,
+  defect E; the other three bit-identical). The checker identical to OpenGL's on every backend (max 0).
+- Scene 2: window depth within 1.6e-7 of the analytical value, backends within 1.2e-7 of OpenGL.
+- Scene 3: the authored-front triangle kept and `gl_FrontFacing` right on all four, with both matrices; images
+  identical to OpenGL's (max 0, edge-masked).
+- Negative controls fail wherever they change anything: the fragment flip inverted and the clip-NDC flip inverted
+  (all four), no correction (Vulkan, OpenGL; changes nothing in 2D on D3D), the hand-packed probe (all four), the
+  depth part skipped (Vulkan, D3D11, D3D12), no depth correction (all four), CCW fixed (up-facing on Vulkan and D3D;
+  Quick's on OpenGL), rule 4 on the uncorrected matrix (Vulkan, OpenGL). Each control is vacuous only where its
+  correction or front face equals the right one.
+Left open: the y path through the native core itself, on a real D3D backend, when N2 runs it; Metal (Watchlist).
+
 ### Run 1's findings (decided by the lead 12 Nov 2026; drafted as proposals, kept below with their evidence)
 
 All four accepted. Each decision follows its finding; the proposal's text stays as drafted.
