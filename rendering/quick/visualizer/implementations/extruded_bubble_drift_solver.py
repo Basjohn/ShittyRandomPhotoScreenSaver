@@ -23,7 +23,9 @@ lost context or a retired family restarts that family's history from zero (lifec
 
 Every replacement of a family's state (a new revision, a geometry edit, a capacity change) allocates the new state
 before the old is released (D3's failed swap): an allocation that fails leaves the current state current and drawn,
-is logged once and its (revision, capacity) is not tried again; a new key is.
+is logged once and its (revision, capacity) is not tried again; a new key is. A layout edge (a family's rows or the
+family set changed) moves every held region of the output to where the draws now read it, in a new output allocated
+before the old is released, so a family whose own replacement failed keeps drawing its rows (rows it gained read zero).
 
 A family's state is keyed on its revision alone, and that is a whole stream identity, not a per-process count: every
 engine session numbers its revisions from its own label namespace (``engine_worker``: ``namespace << 32``; the main
@@ -395,6 +397,7 @@ class DriftCarryover:
     output_vec4s: int
     fence: object
     failed: dict = field(default_factory=dict)   # the source's failed keys (``DriftSolver._failed``): not retried
+    drawn: dict = field(default_factory=dict)    # the output's layout (``DriftSolver._drawn``)
 
     def wait(self) -> None:
         """The taker's GPU waits for the source's last dispatch; the fence is deleted whatever the wait does."""
@@ -431,6 +434,10 @@ class DriftSolver:
         # stays drawn and unchanged; the same key is never retried, a new one is (D3, failed swap).
         self._failed: dict[str, tuple[int, int]] = {}
         self._output_failed = 0                # the output size (vec4s) that could not be allocated: not retried
+        # The output's layout as it holds today: family -> (first vec4, rows). A layout change (a capacity or a family
+        # set edge) moves every held region into a new output before the old one is released, so a family whose own
+        # replacement failed keeps its rows drawn where the draws now read them.
+        self._drawn: dict[str, tuple[int, int]] = {}
         # Whether both drift programs exist in this context: None until the first frame with work asks (or the
         # warm-up compiled them), False when one failed (the mode then draws without drift, never retried here).
         self._programs: bool | None = None
@@ -449,7 +456,7 @@ class DriftSolver:
         self._families.clear()
         self._failed.clear()
         _delete(self.output)
-        self.output, self._output_vec4s, self._output_failed = 0, 0, 0
+        self.output, self._output_vec4s, self._output_failed, self._drawn = 0, 0, 0, {}
         if self._ring is not None:
             self._ring.release()
             self._ring = None
@@ -471,7 +478,7 @@ class DriftSolver:
                     _delete(family.geometry, family.state, family.aux)
                 self._families.clear()
                 _delete(self.output)
-                self.output, self._output_vec4s = 0, 0
+                self.output, self._output_vec4s, self._drawn = 0, 0, {}
                 logger.warning("%s: a drift program is unavailable on this device; drawn without drift", self.label)
                 return False
             self._programs = True
@@ -483,9 +490,10 @@ class DriftSolver:
             return None
         fence = gl.glFenceSync(gl.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
         gl.glFlush()                           # the fence must reach the GPU before another context waits on it
-        carryover = DriftCarryover(dict(self._families), self.output, self._output_vec4s, fence, dict(self._failed))
+        carryover = DriftCarryover(dict(self._families), self.output, self._output_vec4s, fence, dict(self._failed),
+                                   dict(self._drawn))
         self._families, self._failed = {}, {}
-        self.output, self._output_vec4s, self._output_failed = 0, 0, 0
+        self.output, self._output_vec4s, self._output_failed, self._drawn = 0, 0, 0, {}
         return carryover
 
     def adopt(self, carryover: DriftCarryover) -> None:
@@ -506,7 +514,8 @@ class DriftSolver:
         _delete(self.output)
         self._families, self._failed = dict(carryover.families), dict(carryover.failed)
         self.output, self._output_vec4s, self._output_failed = carryover.output, carryover.output_vec4s, 0
-        carryover.families, carryover.output, carryover.failed = {}, 0, {}
+        self._drawn = dict(carryover.drawn)
+        carryover.families, carryover.output, carryover.failed, carryover.drawn = {}, 0, {}, {}
         logger.info("%s: drift history carried over from another window (%s)", self.label,
                     {name: family.serial for name, family in self._families.items()})
 
@@ -582,14 +591,58 @@ class DriftSolver:
         return self._ring
 
     @staticmethod
-    def layout(families) -> dict[str, int]:
+    def rows(family) -> int:
+        """The output rows (vec4s) ``family`` occupies."""
+        return family.capacity * (PATH_NODES if family.family == "chains" else 1)
+
+    @classmethod
+    def layout(cls, families) -> dict[str, int]:
         """Each live family's first vec4 in the output (chain rows, then snow, then specks), and the total."""
         offsets, cursor = {}, 0
         for family in families:
             offsets[family.family] = cursor
-            cursor += family.capacity * (PATH_NODES if family.family == "chains" else 1)
+            cursor += cls.rows(family)
         offsets["_total"] = cursor
         return offsets
+
+    def _held_layout(self, families) -> dict[str, int]:
+        """The layout the output holds, for a frame whose new layout could not be allocated: each family whose held
+        region still covers its rows, at its held offset (one that grew past it is drawn without drift until its
+        region exists: past its rows lies another family's)."""
+        offsets = {family.family: self._drawn[family.family][0] for family in families
+                   if family.family in self._drawn and self.rows(family) <= self._drawn[family.family][1]}
+        offsets["_total"] = max((offset + rows for offset, rows in self._drawn.values()), default=0)
+        return offsets
+
+    def _relayout(self, families, offsets: dict[str, int]) -> bool:
+        """Move every held region into a new output laid out as ``offsets`` (allocated before the old one is released;
+        rows a region gains are zero drift). False when the new output cannot be allocated: the old one stays, logged
+        once per size and not retried for it."""
+        vec4s = max(256, 1 << (offsets["_total"] - 1).bit_length())
+        if self._output_failed == vec4s:
+            return False
+        output = 0
+        try:
+            output = _buffer(16 * vec4s)
+            gl.glClearNamedBufferData(output, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
+            if self.output:
+                gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)    # the dispatches' writes, before the copies
+                for family in families:
+                    held = self._drawn.get(family.family)
+                    keep = min(held[1], self.rows(family)) if held is not None else 0
+                    if keep:
+                        gl.glCopyNamedBufferSubData(self.output, output, 16 * held[0], 16 * offsets[family.family],
+                                                    16 * keep)
+        except Exception as exc:
+            _delete(output)
+            self._output_failed = vec4s
+            logger.error("%s: the drift output for %s rows could not be allocated (%s); the current drift stays "
+                         "as it is", self.label, vec4s, exc)
+            return False
+        _delete(self.output)
+        self.output, self._output_vec4s, self._output_failed = output, vec4s, 0
+        self._drawn = {family.family: (offsets[family.family], self.rows(family)) for family in families}
+        return True
 
     def update(self, resources, families, steps: bytes, knots: bytes) -> dict[str, int]:
         """Apply every published step not yet applied to each live family; returns the output layout."""
@@ -617,31 +670,22 @@ class DriftSolver:
             pending = np.flatnonzero(serials > after)
             if len(pending):
                 needed.append(int(pending[0]))
+        if self.output and {family.family: (offsets[family.family], self.rows(family))
+                            for family in families} != self._drawn:
+            # A layout edge (a capacity or the family set changed): every held region moves to where the draws now
+            # read it, so a family that is not dispatched this frame (its own replacement failed, or no new step)
+            # keeps drawing its rows. Allocated before the old output is released; a failure keeps the old output
+            # and its layout drawn, and nothing is integrated until a new output can be had.
+            if not self._relayout(families, offsets):
+                return self._held_layout(families)
         if not needed:
             return offsets      # no new logical step since the last frame: nothing to integrate
         if not self._programs_ready(resources):
             return offsets      # no output: the mode draws without drift
         self.check(resources)   # once, if the warm-up did not already (an edge, never per frame)
-        if offsets["_total"] > self._output_vec4s:
-            # Every dispatch rewrites its family's whole output from its state: a new buffer loses nothing.
-            # Allocated before the old is released: a failure keeps the current output and state as they are (logged
-            # once per size, not retried for it), and nothing is integrated until a size that fits can be had.
-            vec4s = max(256, 1 << (offsets["_total"] - 1).bit_length())
-            if self._output_failed == vec4s:
-                return offsets
-            output = 0
-            try:
-                output = _buffer(16 * vec4s)
-                # A family with no state (its allocation failed) is drawn from here: zero drift, never undefined.
-                gl.glClearNamedBufferData(output, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
-            except Exception as exc:
-                _delete(output)
-                self._output_failed = vec4s
-                logger.error("%s: the drift output for %s rows could not be allocated (%s); the current drift stays "
-                             "as it is", self.label, vec4s, exc)
-                return offsets
-            _delete(self.output)
-            self.output, self._output_vec4s, self._output_failed = output, vec4s, 0
+        if not self.output and not self._relayout(families, offsets):
+            # The first output (cleared: a family with no state is drawn from it as zero drift, never undefined).
+            return offsets      # none to be had: drawn without drift, nothing integrated
         base = min(needed)
         starts = knot_starts(records)
         if len(knots) != int(starts[-1]) * KNOT_DECISION_BYTES:

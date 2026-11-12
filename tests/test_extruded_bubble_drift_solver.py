@@ -23,12 +23,14 @@ def _controls(kind, **extra):
                                   drift_direction=kind, stream_speed=(.05, .2), collision_scope='off', **extra)
 
 
-def _log(controls, ticks, seed=11, edit_at=None):
+def _log(controls, ticks, seed=11, edit_at=None, resize_at=None):
     sim = ExtrudedBubbleSimulation(seed)
     for tick in range(ticks):
         body = .8 if tick % 30 < 12 else .3
         if edit_at is not None and tick == edit_at:
             controls = replace(controls, stream_path=(.1, -1., .1, -.2, 1., .2), particle_spread=1.2)
+        if resize_at is not None and tick == resize_at:
+            controls = replace(controls, bead_chains=(3., 4.))       # more chain rows, the same revision
         state = sim.advance(MusicInput(1 / 60, True, body, (('kick', 1.),) if tick % 20 == 0 else (),
                                        (body, body * .8, .5)), controls)
         yield state.drift_families, state.drift_steps, state.drift_knots
@@ -257,6 +259,59 @@ def test_a_failed_allocation_keeps_the_current_state_drawn_logs_once_and_retries
         solver.release()
         resources.release_resources()
         target.close()
+
+
+def test_a_capacity_growth_whose_allocation_fails_keeps_the_held_rows_drawn_where_the_draws_read_them(
+        qt_app, caplog):
+    """The chains grow (same revision, more rows) and their new state cannot be allocated: the chain rows the draws
+    read stay exactly the rows drawn before the growth (rows the growth adds read zero drift, never another family's),
+    frame after frame, while the other families advance exactly as in a solver whose growth succeeded."""
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    log = [frame for frame in _log(_controls('wander'), 60, resize_at=30) if frame[0]]
+    capacity = [next(f.capacity for f in families if f.family == 'chains') for families, _s, _k in log]
+    grow = next(i for i in range(1, len(log)) if capacity[i] > capacity[i - 1])
+    revisions = [next(f.revision for f in log[i][0] if f.family == 'chains') for i in (grow - 1, grow)]
+    assert revisions[0] == revisions[1]                                   # a capacity growth, not a new revision
+    target_gl, resources = OffscreenRenderTarget(16, 16), MeshResources('drift growth test')
+    solver, reference = module.DriftSolver('growth'), module.DriftSolver('growth reference')
+    try:
+        for frame in log[:grow]:
+            offsets = solver.update(resources, *frame)
+            reference.update(resources, *frame)
+        held = capacity[grow - 1] * module.PATH_NODES
+        before = _read_output(solver, offsets['_total']).reshape(-1, 4)
+        before = before[offsets['chains']:offsets['chains'] + held]
+        original, refused = solver._allocate, []
+
+        def refuse(family, previous=None):
+            if previous is not None and family.family == 'chains':
+                refused.append(family.capacity)
+                raise RuntimeError('injected allocation failure')
+            return original(family, previous)
+        solver._allocate = refuse
+        with caplog.at_level('ERROR'):
+            for frame in log[grow:grow + 4]:
+                offsets = solver.update(resources, *frame)
+                expected = reference.update(resources, *frame)
+                assert offsets == expected                                # the layout the draws read
+                data = _read_output(solver, offsets['_total']).reshape(-1, 4)
+                wanted = _read_output(reference, expected['_total']).reshape(-1, 4)
+                chains = data[offsets['chains']:offsets['chains'] + capacity[grow] * module.PATH_NODES]
+                assert np.array_equal(chains[:held], before)              # drawn as before the failure
+                assert not chains[held:].any()                            # added rows: zero drift
+                for name in ('snow', 'specks'):
+                    rows = next(f.capacity for f in frame[0] if f.family == name)
+                    assert np.array_equal(data[offsets[name]:offsets[name] + rows],
+                                          wanted[expected[name]:expected[name] + rows]), name
+        assert refused == [capacity[grow]]                                # tried once, not per frame
+        assert solver._families['chains'].capacity == capacity[grow - 1]
+    finally:
+        solver.release()
+        reference.release()
+        resources.release_resources()
+        target_gl.close()
 
 
 def _counted_deletes(monkeypatch, module):
