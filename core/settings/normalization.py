@@ -25,6 +25,9 @@ import logging
 from enum import Enum
 from typing import Any, Optional, TypeVar, Type, Union, List
 
+# The strict parser lives below both this module and the models (which parse their canonical enum defaults at
+# class definition); it stays importable from here for existing callers.
+from core.settings.enum_parsing import parse_enum_strict  # noqa: F401
 from core.settings.models import (
     WidgetPosition,
     DisplayMode,
@@ -34,36 +37,6 @@ from core.settings.models import (
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound=Enum)
-
-
-def parse_enum_strict(value: Any, enum_type: Type[T]) -> T:
-    """Parse one enum value without inventing a fallback.
-
-    Canonical schema values use this path: if the authority itself contains an
-    unsupported enum representation, fail loudly. Persisted/migration values
-    should use ``SettingsNormalizer.to_enum`` with the already-parsed canonical
-    enum as their repair value.
-    """
-
-    if isinstance(value, enum_type):
-        return value
-    if value is None:
-        raise ValueError(f"Missing {enum_type.__name__} value")
-
-    text = str(value)
-    if "." in text:
-        text = text.split(".")[-1]
-    text = text.strip().lower().replace(" ", "_").replace("-", "_")
-    if not text:
-        raise ValueError(f"Empty {enum_type.__name__} value")
-
-    try:
-        return enum_type(text)
-    except ValueError:
-        for member in enum_type:
-            if member.name.lower() == text:
-                return member
-    raise ValueError(f"Unsupported {enum_type.__name__} value: {value!r}")
 
 
 class SettingsNormalizer:

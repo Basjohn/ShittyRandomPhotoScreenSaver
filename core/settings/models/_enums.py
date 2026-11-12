@@ -4,6 +4,8 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
+from core.settings.enum_parsing import parse_enum_strict
+
 
 class DisplayMode(Enum):
     """Display scaling mode."""
@@ -61,7 +63,15 @@ class WidgetPosition(Enum):
 def parse_widget_position(value: Any) -> WidgetPosition:
     """Parse a canonical widget position and fail if the schema is invalid."""
 
-    # Import lazily to avoid the models <-> normalization module cycle.
-    from core.settings.normalization import parse_enum_strict
-
     return parse_enum_strict(value, WidgetPosition)
+
+
+def normalize_widget_position(value: Any, fallback: WidgetPosition) -> WidgetPosition:
+    """Repair a persisted widget position through ``core.settings.normalization`` (logging, statistics).
+
+    The models are the lower layer: ``normalization`` imports them at module level, so the models reach it only
+    when a persisted value is repaired, never at import or class definition."""
+
+    from core.settings.normalization import normalize_widget_position as repair
+
+    return repair(value, fallback)

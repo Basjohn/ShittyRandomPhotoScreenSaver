@@ -11,9 +11,9 @@ from core.settings.models._enums import (
     DisplayMode,
     TransitionType,
     WidgetPosition,
+    normalize_widget_position,
     parse_widget_position,
 )
-from core.settings.normalization import normalize_widget_position
 
 if TYPE_CHECKING:
     from core.settings.settings_manager import SettingsManager
