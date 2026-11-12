@@ -72,6 +72,34 @@ def main_checkout(repo: Path = REPO_ROOT) -> Path:
     return repo
 
 
+def _is_checkout(folder: Path) -> bool:
+    return (folder / ".git").exists() and (folder / "tools" / "artifact_paths.py").is_file()
+
+
+def repository_root(given: str | Path | None = None) -> Path:
+    """The repository root for a script that lives outside the repository (a kept evidence script).
+
+    Such a script never takes the root from its own location: an evidence folder can sit behind a junction on another
+    drive, where ``Path(__file__).resolve().parents[n]`` lands outside the repository (12 Nov 2026: a presets-round
+    script resolved to ``D:\\TEMP\\Scratch\\SRPSS``). It takes the root as an explicit argument (``--repo``, default
+    the current directory), puts it on ``sys.path``, imports this module and passes the argument here::
+
+        sys.path.insert(0, os.path.abspath(args.repo))
+        from tools.artifact_paths import repository_root
+        ROOT = repository_root(args.repo)
+
+    ``given`` may be the root or any folder inside it (walked up without following junctions); a folder in no
+    SRPSS checkout raises ``ArtifactPathError``. With no argument: the checkout this module runs from (``REPO_ROOT``).
+    """
+    if given is None:
+        return REPO_ROOT
+    start = Path(given).absolute()
+    for folder in (start, *start.parents):
+        if _is_checkout(folder):
+            return folder.resolve()
+    raise ArtifactPathError(f"{start} is not inside an SRPSS checkout (no .git with tools/artifact_paths.py above it)")
+
+
 ARTIFACTS_ROOT = REPO_ROOT / ".artifacts"
 WEBP_ROOT = ARTIFACTS_ROOT / "webp"
 EVIDENCE_ROOT = ARTIFACTS_ROOT / "evidence"
@@ -537,6 +565,7 @@ __all__ = [
     "output_dir",
     "output_webp",
     "prune_scratch",
+    "repository_root",
     "scan",
     "run_label",
     "scratch",

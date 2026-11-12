@@ -234,7 +234,7 @@ class WakeOwnershipTests(unittest.TestCase):
     def test_micro_glass_stays_lit_by_scene_without_radius_dependent_random_switch(self):
         shader = (ROOT / 'rendering/gl_programs/extruded_bubble_program.py').read_text()
         self.assertIn('textureLod(uProbe, uViewToWorld * reflect(ray, normalV)', shader)
-        self.assertIn('texture(uBackground, gl_FragCoord.xy / uTargetSize)', shader)
+        self.assertIn('texture(uBackground, fragUv(uTargetSize))', shader)   # this pixel's background (N1.4 include)
         self.assertIn('if (vExtra.y > 2.5 && vExtra.y < 3.5)', shader)
         self.assertIn('fract(vExtra.x * 17.31)', shader)
         self.assertIn('aExtra = vec2(beadRandom(seed, 23u), 3.0)', shader)

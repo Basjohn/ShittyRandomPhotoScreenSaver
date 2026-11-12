@@ -32,8 +32,9 @@ import math
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.quick import gl_query
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 
 DEFOCUS_TAPS = 64
 _FINE_TAPS = 32
@@ -83,14 +84,14 @@ uniform sampler2D uCircle;
 uniform float uMaxRadius;
 const int TAPS = %d;
 const int FINE_TAPS = %d;
-""" + _CIRCLE_BANDS + """
+""" + _CIRCLE_BANDS + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 float circleAt(vec2 uv, float level) {
     vec2 c = textureLod(uCircle, uv, level).rg;
     return c.y > 1e-4 ? c.x / c.y : 0.0;
 }
 void main() {
     vec2 size = vec2(textureSize(uColour, 0));
-    ivec2 here = ivec2(gl_FragCoord.xy);
+    ivec2 here = fragTexel(textureSize(uColour, 0));   // the gather draws over a target of the layer's size
     vec4 own = texelFetch(uColour, here, 0);
     vec2 ownCircle = texelFetch(uCircle, here, 0).rg;
     float ownRadius = ownCircle.y > 1e-4 ? ownCircle.x / ownCircle.y : 0.0;
@@ -103,7 +104,7 @@ void main() {
     for (int i = 0; i < TAPS; ++i) {
         float r = sqrt((float(i) + 0.5) / float(TAPS)) * uMaxRadius;
         float a = float(i) * 2.39996323;
-        vec2 uv = (gl_FragCoord.xy + vec2(cos(a), sin(a)) * r) / size;
+        vec2 uv = (fragPixel(size) + vec2(cos(a), sin(a)) * r) / size;
         if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) continue;
         float circle = circleAt(uv, level);
         if (circle < 0.5) continue;
@@ -116,7 +117,7 @@ void main() {
     for (int i = 0; i < FINE_TAPS; ++i) {
         float r = sqrt((float(i) + 0.5) / float(FINE_TAPS)) * smallRadius;
         float a = float(i) * 2.39996323;
-        vec2 uv = (gl_FragCoord.xy + vec2(cos(a), sin(a)) * r) / size;
+        vec2 uv = (fragPixel(size) + vec2(cos(a), sin(a)) * r) / size;
         if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) continue;
         float circle = circleAt(uv, 0.0);
         if (circle < 0.5) continue;
@@ -139,7 +140,7 @@ uniform sampler2D uCircle;
 uniform int uLevel;
 uniform float uHighlight;
 uniform float uMaxRadius;
-""" + _CIRCLE_BANDS + """
+""" + _CIRCLE_BANDS + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 // A highlight is light above its surroundings (the mean two levels coarser) and above the floor.
 float sceneHighlightAt(sampler2D colour, ivec2 texel, int level, float floorLevel) {
     vec2 uv = (vec2(texel) + 0.5) / vec2(textureSize(colour, level));
@@ -147,10 +148,11 @@ float sceneHighlightAt(sampler2D colour, ivec2 texel, int level, float floorLeve
     return max(floorLevel, local);
 }
 void main() {
-    vec4 c = texelFetch(uColour, ivec2(gl_FragCoord.xy), uLevel);
+    ivec2 here = fragTexel(textureSize(uColour, uLevel));   // the clip draws the read level at its own size
+    vec4 c = texelFetch(uColour, here, uLevel);
     float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
-    float limit = sceneHighlightAt(uColour, ivec2(gl_FragCoord.xy), uLevel, uHighlight);
-    vec2 circleData = texelFetch(uCircle, ivec2(gl_FragCoord.xy), uLevel).rg;
+    float limit = sceneHighlightAt(uColour, here, uLevel, uHighlight);
+    vec2 circleData = texelFetch(uCircle, here, uLevel).rg;
     float circle = circleData.y > 1e-4 ? circleData.x / circleData.y : 0.0;
     float share = spriteShare(circle, uMaxRadius, uLevel);
     FragColor = l > limit ? vec4(c.rgb * mix(1.0, limit / l, share), c.a) : c;
@@ -449,7 +451,7 @@ class DefocusLayer:
             gl.glDeleteVertexArrays(1, [self._vao])
         for program in (self._program, self._sprites, self._clip):
             if program:
-                gl.glDeleteProgram(program)
+                delete_program(program)
         self._program = self._sprites = self._clip = self._vao = 0
         self._locations.clear()
 

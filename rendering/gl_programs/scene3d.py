@@ -1033,6 +1033,11 @@ def scene3d_particle_streak(matrix: tuple[float, ...], item_size: tuple[float, f
 # The uniform-buffer binding every compute program declares its dispatch block at (``rendering.quick.scene3d.compute``
 # binds it; see ``COMPUTE_BLOCK_BINDING`` there for why this number).
 SCENE3D_COMPUTE_BLOCK_BINDING = 16
+# The uniform-buffer binding reserved in every shader for the conventions block (``SrpssConventions``,
+# ``rendering.gl_programs.conventions``, N0.3 rule 3): written once per context when the first program that declares
+# it links, never per frame, and never bound by anything else. Clear of the other uniform-buffer points the renderer
+# uses (the draws' scene block 15, the dispatch block 16) and of the ones Qt Quick's own shaders use (the low ones).
+SCENE3D_CONVENTIONS_BLOCK_BINDING = 17
 
 # type -> (base alignment, size, struct format), per the std140 rules for these types.
 _STD140 = {

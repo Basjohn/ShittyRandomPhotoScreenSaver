@@ -19,8 +19,19 @@ def _modes():
 GENERATION = 9001
 
 
-def _in_process_digests(evidence, clip, mode):
-    return evidence.owner_replay(clip, mode, generation=GENERATION)["digests"]
+def _in_process(evidence, clip, mode):
+    """The owner's digests, and the view its main side would send after each frame (applied before the next tick)."""
+    replay = evidence.owner_replay(clip, mode, generation=GENERATION)
+    return replay["digests"], replay["views"]
+
+
+def _views_before_ticks(views):
+    """For each tick index, the view message to apply first (None when it did not change), as the link sends it."""
+    out, sent = [None], None
+    for snapshot in views[:-1]:
+        out.append(None if snapshot == sent else snapshot)
+        sent = snapshot if snapshot != sent else sent
+    return out
 
 
 @pytest.mark.qt
@@ -29,12 +40,14 @@ def test_the_engine_session_ticks_the_owners_frames_through_the_abi(qt_app, mode
     import tools.expanded_visualizer_evidence as evidence
 
     clip = evidence.shipped_clip(1.5)
-    expected = _in_process_digests(evidence, clip, mode)
+    expected, views = _in_process(evidence, clip, mode)
     reader = PacketMailbox(role="reader")
     session = EngineSession(mapping=reader.mapping_name, mode=mode, runtime_generation=GENERATION)
     try:
         seen = []
-        for feature in clip.frames:
+        for feature, view in zip(clip.frames, _views_before_ticks(views)):
+            if view is not None:
+                session.set_view(**evidence.view_message(view))
             session.tick(feature)
             seen.append(evidence.frame_digest(reader.take().state))
     finally:
@@ -53,7 +66,7 @@ def test_the_worker_process_ticks_identical_frames_for_every_mode(qt_app):
     assert supervisor.start(WorkerType.VISUALIZER)
     try:
         for mode in _modes():
-            expected = _in_process_digests(evidence, clip, mode)
+            expected, views = _in_process(evidence, clip, mode)
             reader = PacketMailbox(role="reader")
             try:
                 configured = supervisor.send_request_and_await_response(
@@ -62,7 +75,12 @@ def test_the_worker_process_ticks_identical_frames_for_every_mode(qt_app):
                     timeout_ms=60_000)
                 assert configured is not None and configured.success, (mode, configured and configured.error)
                 seen = []
-                for feature in clip.frames:
+                for feature, view in zip(clip.frames, _views_before_ticks(views)):
+                    if view is not None:
+                        viewed = supervisor.send_request_and_await_response(
+                            WorkerType.VISUALIZER, MessageType.VIS_SET_VIEW, evidence.view_message(view),
+                            timeout_ms=30_000)
+                        assert viewed is not None and viewed.success, (mode, viewed and viewed.error)
                     response = supervisor.send_request_and_await_response(
                         WorkerType.VISUALIZER, MessageType.VIS_INPUT, {"frame": feature}, timeout_ms=30_000)
                     assert response is not None and response.success, (mode, response and response.error)

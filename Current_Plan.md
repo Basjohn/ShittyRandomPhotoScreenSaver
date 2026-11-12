@@ -334,10 +334,20 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   Qt 6.12 through `tools/compute_pass_identity.py` (the propagation relaxation within its own documented race
   spread); GL calls per run fell for the edge field, propagation, Waveform's fields and fog (motion and population
   +1 and +2, a bind replacing a uniform). Evidence `.artifacts/evidence/architecture/native_core_n1_2/`.
-- [ ] N1.3 The readiness check discovers every shader source in `rendering/` (today it scans module-level compute
-  strings in eight modules; the population count and scatter sources and the composed fog medium program are
-  never checked), vertex and fragment included, compiles each through `qsb` and ratchets the failures down, mode
-  by mode in N5's order.
+- N1.3 and N1.4 landed 12 Nov (974ab910): the readiness check discovers all 218 shader sources (files, module
+  strings, program attributes, runtime compositions at their call sites) and bakes each for the four targets; 197
+  failures ratcheted in N5's order (substrate 30, Waveform Ribbon 20, Extruded Bubble 24, Neon Lake 9, Extruded
+  Spectrum 2, Sphere 3, 2D modes 13, transitions 89, Quick hosts 7; causes: in/out without location 185 sources,
+  loose uniforms 155, missing binding 128, OpenGL-only built-ins 33). The conventions include
+  (`rendering/gl_programs/conventions.py`, block binding 17, one buffer per context) applied across the scene
+  substrate, Waveform and Extruded Bubble, every frame and shader pair bit-identical in OpenGL, GL calls per frame
+  unchanged; Sphere's winding from `front_face_clockwise`. Broad run on the merge: 2542 of 2543 (the one red fixed
+  since). Evidence `.artifacts/evidence/native_core/n1_3_readiness/`, `n1_4_conventions/`.
+- [ ] Side defect: `tools/gl_object_ledger.py:84` records only names a create call returns; objects created through
+  out-parameters (`glCreateBuffers(1, arr)` in `scene3d/stream.py`, `population.py`, the defocus targets) are
+  invisible to the lifecycle tests: record those too, with a test.
+- [ ] Side defect: `waveform_ribbon.py:54` (`0.5*(clip.z/clip.w+1.0)`) and `scene3d_spheres.py:197` assume OpenGL's
+  -1..1 depth: route both through `viewDepthFromDepthTexture`/the include before matrices are corrected at upload.
 - [ ] N1.4 Shaders stop assuming OpenGL's conventions (N0.3's include): one helper for `gl_FragCoord` used as a
   texel or uv; projection matrices (`framed_camera.py` perspective, depth -1..1) corrected at upload; the winding
   rule (Sphere picks `glFrontFace` from the matrix sign) tested once per backend.
@@ -650,13 +660,10 @@ runs from 3-10 a frame to 0, light themes and Normal unchanged, no shader change
 and fixed (the solver added the Glass sheen after the legibility limit; a hidden crossfade copy held a plate).
 58 dark themes change; the table is `changed_table.md` in the evidence folder.
 
-- [ ] Side defect (found 12 Nov, present at the session's start 3c5632cf, so not today's merges): the Waveform Studio's
-  chrome on the theme Matte Graphite [Single] puts white text on a derived `#a1b5c1` (contrast 2.1, the bar is 4.5):
-  `tests/test_waveform_studio_theme.py::test_every_theme_yields_readable_studio_chrome[Matte Graphite [Single]]`. Fix
-  where the Studio chrome derives its text ink (the same ink rule as M2b: correct the run's own ink), never by
-  editing the theme or pinning its colours.
-- [ ] Side defect: in one long run (22 files, 12 min) three tests of that parametrised file failed but only one fails
-  alone: find the order dependency (run the file after the camera and worker files of that run) and remove it.
+- Landed 12 Nov: the Studio chrome's `accentText` is corrected on its accent fill by the M2b rule (Matte Graphite
+  [Single] only; 99 themes byte-identical); a Studio lifecycle test leaked a theme listener (fixed in the test).
+- [ ] Watch: the "three failures in one long run" were not reproduced in any order of that run's 21 files; the
+  long run's other two failures may have been the engine worker gate (red since 438790f7, fixed 4a805fe6).
 
 Side defects landed 12 Nov (merge of a7b877d4): the dead `context.menu.arrow` role retired with a load bridge
 (`RETIRED_WIDGET_THEME_COLOR_ROLES`, 115 theme files lose the key through the generator's `--drop-retired-roles`);
