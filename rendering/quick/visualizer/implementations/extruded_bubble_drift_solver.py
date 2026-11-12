@@ -30,7 +30,7 @@ from __future__ import annotations
 import ctypes
 import math
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from OpenGL import GL as gl
@@ -383,18 +383,28 @@ class DriftCarryover:
     output: int
     output_vec4s: int
     fence: object
+    failed: dict = field(default_factory=dict)   # the source's failed keys (``DriftSolver._failed``): not retried
+
+    def wait(self) -> None:
+        """The taker's GPU waits for the source's last dispatch; the fence is deleted whatever the wait does."""
+        fence, self.fence = self.fence, None
+        if fence:
+            try:
+                gl.glWaitSync(fence, 0, _TIMEOUT_IGNORED)
+            finally:
+                gl.glDeleteSync(fence)
 
     def discard(self) -> None:
-        """Delete what was never adopted, in any context that shares with the source's (its own current)."""
-        if self.fence:
-            gl.glWaitSync(self.fence, 0, _TIMEOUT_IGNORED)
-            gl.glDeleteSync(self.fence)
-            self.fence = None
-        for family in self.families.values():
-            _delete(family.geometry, family.state, family.aux)
-        self.families = {}
-        _delete(self.output)
-        self.output = 0
+        """Delete what was never adopted, in any context that shares with the source's (its own current). Each name
+        is deleted once, even when the wait raises (then the error is raised after the names are gone)."""
+        families, output = self.families, self.output
+        self.families, self.output = {}, 0
+        try:
+            self.wait()
+        finally:
+            for family in families.values():
+                _delete(family.geometry, family.state, family.aux)
+            _delete(output)
 
 
 class DriftSolver:
@@ -409,6 +419,7 @@ class DriftSolver:
         # A family whose new state could not be allocated: the (revision, capacity) that failed. Its current state
         # stays drawn and unchanged; the same key is never retried, a new one is (D3, failed swap).
         self._failed: dict[str, tuple[int, int]] = {}
+        self._output_failed = 0                # the output size (vec4s) that could not be allocated: not retried
         self._ring: StreamRing | None = None   # sized to the most chain rows a step has carried (_ring_for)
         # The warm-up check of the pair arithmetic: None until run, then whether this device computes it exactly.
         self.pairs_exact: bool | None = None
@@ -424,7 +435,7 @@ class DriftSolver:
         self._families.clear()
         self._failed.clear()
         _delete(self.output)
-        self.output, self._output_vec4s = 0, 0
+        self.output, self._output_vec4s, self._output_failed = 0, 0, 0
         if self._ring is not None:
             self._ring.release()
             self._ring = None
@@ -436,26 +447,30 @@ class DriftSolver:
             return None
         fence = gl.glFenceSync(gl.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
         gl.glFlush()                           # the fence must reach the GPU before another context waits on it
-        carryover = DriftCarryover(dict(self._families), self.output, self._output_vec4s, fence)
-        self._families = {}
-        self.output, self._output_vec4s = 0, 0
+        carryover = DriftCarryover(dict(self._families), self.output, self._output_vec4s, fence, dict(self._failed))
+        self._families, self._failed = {}, {}
+        self.output, self._output_vec4s, self._output_failed = 0, 0, 0
         return carryover
 
     def adopt(self, carryover: DriftCarryover) -> None:
         """Target render thread, its context current (sharing with the source's): continue the source's history.
 
         Whatever this solver integrated meanwhile (a target that drew before the source let go) is replaced: the
-        adopted families resume from their own last step, and the step log brings them up to date."""
-        if carryover.fence:
-            gl.glWaitSync(carryover.fence, 0, _TIMEOUT_IGNORED)
-            gl.glDeleteSync(carryover.fence)
-            carryover.fence = None
+        adopted families resume from their own last step, and the step log brings them up to date. A handoff that
+        fails (the wait on the source's fence) releases the carried history once and keeps this solver's own; the
+        error is raised to the host. Adopting allocates nothing; a later replacement of an adopted family allocates
+        before it releases, as any other (``_replace``)."""
+        try:
+            carryover.wait()
+        except BaseException:
+            carryover.discard()
+            raise
         for family in self._families.values():
             _delete(family.geometry, family.state, family.aux)
         _delete(self.output)
-        self._families = dict(carryover.families)
-        self.output, self._output_vec4s = carryover.output, carryover.output_vec4s
-        carryover.families, carryover.output = {}, 0
+        self._families, self._failed = dict(carryover.families), dict(carryover.failed)
+        self.output, self._output_vec4s, self._output_failed = carryover.output, carryover.output_vec4s, 0
+        carryover.families, carryover.output, carryover.failed = {}, 0, {}
         logger.info("%s: drift history carried over from another window (%s)", self.label,
                     {name: family.serial for name, family in self._families.items()})
 
@@ -560,13 +575,24 @@ class DriftSolver:
         self.check(resources)   # once, if the warm-up did not already (an edge, never per frame)
         if offsets["_total"] > self._output_vec4s:
             # Every dispatch rewrites its family's whole output from its state: a new buffer loses nothing.
-            _delete(self.output)
-            self.output, self._output_vec4s = 0, 0
+            # Allocated before the old is released: a failure keeps the current output and state as they are (logged
+            # once per size, not retried for it), and nothing is integrated until a size that fits can be had.
             vec4s = max(256, 1 << (offsets["_total"] - 1).bit_length())
-            self.output = _buffer(16 * vec4s)
-            self._output_vec4s = vec4s
-            # A family with no state (its allocation failed) is drawn from here: zero drift, never undefined.
-            gl.glClearNamedBufferData(self.output, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
+            if self._output_failed == vec4s:
+                return offsets
+            output = 0
+            try:
+                output = _buffer(16 * vec4s)
+                # A family with no state (its allocation failed) is drawn from here: zero drift, never undefined.
+                gl.glClearNamedBufferData(output, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
+            except Exception as exc:
+                _delete(output)
+                self._output_failed = vec4s
+                logger.error("%s: the drift output for %s rows could not be allocated (%s); the current drift stays "
+                             "as it is", self.label, vec4s, exc)
+                return offsets
+            _delete(self.output)
+            self.output, self._output_vec4s, self._output_failed = output, vec4s, 0
         base = min(needed)
         starts = knot_starts(records)
         if len(knots) != int(starts[-1]) * KNOT_DECISION_BYTES:

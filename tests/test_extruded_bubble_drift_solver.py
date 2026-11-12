@@ -259,6 +259,123 @@ def test_a_failed_allocation_keeps_the_current_state_drawn_logs_once_and_retries
         target.close()
 
 
+def _counted_deletes(monkeypatch, module):
+    deleted = []
+    original = module._delete
+    monkeypatch.setattr(module, '_delete', lambda *names: (deleted.extend(n for n in names if n), original(*names)))
+    return deleted
+
+
+def test_a_carried_history_whose_target_allocation_fails_stays_drawn_and_is_released_once(qt_app, monkeypatch, caplog):
+    """A display move (1C.2) hands the drift history to another window's solver; the target's next allocation (a new
+    key) fails: the carried state stays current and drawn, the failure is logged once, and every carried name is
+    released exactly once with the target."""
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    first, second = (list(_log(_controls('wander'), 30, seed=seed)) for seed in (11, 12))
+    target_gl, resources = OffscreenRenderTarget(16, 16), MeshResources('drift carryover test')
+    source, target = module.DriftSolver('source'), module.DriftSolver('target')
+    try:
+        offsets = source.update(resources, *first[-1])
+        before = _read_output(source, offsets['_total'])
+        carryover = source.export()
+        carried = dict(carryover.families)
+        names = [name for state in carried.values() for name in (state.geometry, state.state, state.aux)]
+        names.append(carryover.output)
+        target.check(resources)
+        target.adopt(carryover)
+        deleted = _counted_deletes(monkeypatch, module)
+        attempts = []
+
+        def refuse(size):
+            attempts.append(size)
+            raise RuntimeError('injected allocation failure')
+        monkeypatch.setattr(module, '_buffer', refuse)
+        with caplog.at_level('ERROR'):
+            for frame in second[-3:]:
+                target.update(resources, *frame)
+        assert all(target._families[name] is state for name, state in carried.items())
+        assert all(gl.glIsBuffer(name) for name in names) and not deleted
+        assert np.array_equal(_read_output(target, offsets['_total']), before)
+        assert len(attempts) == len(carried)
+        assert len([r for r in caplog.records if 'could not be allocated' in r.getMessage()]) == len(carried)
+        target.release()
+        source.release()
+        assert sorted(deleted) == sorted(names)                     # each carried name released exactly once
+        assert not any(gl.glIsBuffer(name) for name in names)
+    finally:
+        monkeypatch.undo()
+        source.release()
+        target.release()
+        resources.release_resources()
+        target_gl.close()
+
+
+def test_a_handoff_whose_wait_fails_releases_the_carried_history_once_and_keeps_the_targets_own(qt_app, monkeypatch):
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    first, second = (list(_log(_controls('wander'), 30, seed=seed)) for seed in (11, 12))
+    target_gl, resources = OffscreenRenderTarget(16, 16), MeshResources('drift handoff wait test')
+    source, target = module.DriftSolver('source'), module.DriftSolver('target')
+    try:
+        source.update(resources, *first[-1])
+        target.update(resources, *second[-1])
+        own = dict(target._families)
+        own_output = target.output
+        carryover = source.export()
+        carried = [name for state in carryover.families.values() for name in (state.geometry, state.state, state.aux)]
+        carried.append(carryover.output)
+        deleted = _counted_deletes(monkeypatch, module)
+
+        def broken_wait(*args):
+            raise RuntimeError('injected wait failure')
+        monkeypatch.setattr(module.gl, 'glWaitSync', broken_wait)
+        with pytest.raises(RuntimeError, match='injected'):
+            target.adopt(carryover)
+        assert sorted(deleted) == sorted(carried) and carryover.fence is None and not carryover.families
+        assert target._families == own and target.output == own_output
+        assert all(gl.glIsBuffer(state.geometry) for state in own.values())
+        carryover.discard()                                         # a second discard deletes nothing again
+        assert sorted(deleted) == sorted(carried)
+    finally:
+        monkeypatch.undo()
+        source.release()
+        target.release()
+        resources.release_resources()
+        target_gl.close()
+
+
+def test_an_output_that_cannot_be_allocated_draws_without_drift_and_is_not_retried(qt_app, monkeypatch, caplog):
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    log = list(_log(_controls('wander'), 30))
+    target_gl, resources, solver = OffscreenRenderTarget(16, 16), MeshResources('drift output test'), \
+        module.DriftSolver('output')
+    try:
+        solver.check(resources)
+        attempts = []
+
+        def refuse(size):
+            attempts.append(size)
+            raise RuntimeError('injected allocation failure')
+        monkeypatch.setattr(module, '_buffer', refuse)
+        with caplog.at_level('ERROR'):
+            for frame in log[-3:]:
+                solver.update(resources, *frame)
+        assert solver.output == 0 and not solver._families and len(attempts) == 1
+        assert len([r for r in caplog.records if 'drift output' in r.getMessage()]) == 1
+    finally:
+        monkeypatch.undo()
+        solver.release()
+        resources.release_resources()
+        target_gl.close()
+
+
 def test_a_dispatch_that_raises_at_a_geometry_edit_leaks_no_buffer(qt_app, monkeypatch):
     """The geometry edit continues the old rows onto the new geometry; a raise inside that dispatch still releases
     the old rows (counted: every buffer the solver created is gone after its release)."""
