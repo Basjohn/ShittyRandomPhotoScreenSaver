@@ -1041,8 +1041,8 @@ arrangement change, a display added or removed, the owning display lost, Setting
     deferral); before/after on the hidden run.
 - [ ] Defect (tool): `d1_run.py:440-475` reads 4K frames back and copies them on the render thread, costing the other
   display one 57-92 ms frame per 4K grab; move the copies off the render thread (the read-back itself stays).
-- [ ] Lead: visible rerun on Display 1 with the recipe in R-199 (profile `D:/Temp/Scratch/SRPSS/profile_move/`),
-  frames across the fade reviewed (no blank card, no pop, music continuous); then Spectrum, both directions.
+- Visible move confirmed by the operator's own two-display logs, 12 Nov (after R-199). A lead rerun with Display 0
+  hidden cannot prove it: the card's starting display must be visible too.
 - [ ] The 1.5 s preparation bound on a cold shader cache (34 units land at 1.22-1.28 s warm, close to the bound).
 - Landed 12 Nov: the neighbouring display prepares on the transfer arrows' hover (Edit's and the hover glyph's) and
   on a Visualizer drag within one card width of the seam, released on leave, turn-back, drag end, Edit end or
