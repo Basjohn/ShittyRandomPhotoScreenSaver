@@ -693,6 +693,10 @@ Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us afte
 
 ### 1B.14 Lead verification harnesses (operator, 11 Nov: "why can you not make tests that exercise these?")
 
+Built 12 Nov: `--only-display <index>` (RUN only, fails closed) and `tools/d1_run.py` (the real saver on one
+display, bounded, frames read back from the saver's own window and from the desktop, crops, logs; refuses the
+primary display; `--help` holds the recipes). Both in `Docs/Reference/Harness_Index.md`. The boxes below use it.
+
 The lead's lapse: these were filed as operator checks. They are testable: a frozen build through GitHub, the
 real product run on Display 1 (the second monitor) for diagnostics, and real audio endpoints. **Permissions
 (operator, 11 Nov):** bounded runs on Display 1 are permitted; Display 0 is never taken without permission;
@@ -700,13 +704,6 @@ builds run only through GitHub's workflows, never on this machine's resources. L
 harnesses and prove them hidden; the lead runs the visible part); each visible run is short, bounded, fails
 closed and always tears down. Queued for the next free Opus High slot.
 
-- [ ] A CLI flag that tells the saver which display to use (operator: better than editing diagnostics settings),
-  RUN-only like the existing `--exit-after <seconds>` self-exit flag, which bounds every run. One owner for the
-  display choice; with the flag absent nothing changes; a Linux path or an explicit inert one.
-- [ ] D1 run harness: start the real saver from source on Display 1 only (that flag), with diagnostic flags,
-  recorded music and `--exit-after`, driven by messages posted to the saver's own windows (never global input);
-  collect its logs, frame trace and grabbed frames; a watchdog ends it if the self-exit does not. A tool under
-  `tools/`, opt-in, zero product cost.
 - [ ] Cursor after exit (R-183) on D1 with `tools/cursor_exit_observer.py`: key, click, mouse-move, link click
   (browser launch stubbed), Settings and Media Center exits, the pointer placed over the saver on D1 for the
   run and put back after; a verdict per path. Then R-183 is accepted, or the failing path is fixed at the
@@ -749,26 +746,24 @@ an agent's brief is its plan item, and its report is checked against the boxes, 
 in the lead's memory. Each item below starts with a root-cause box: the cause is established on the real product
 path (an off-screen reproduction or a Display 1 run), with a negative control, before anything is changed.
 
-### 1C.1 "Spectrum presets did not exist" on first open; the second open worked (owner: Opus Medium)
+### 1C.1 "Spectrum presets did not exist" on first open (fixed and merged 12 Nov, R-190)
 
-Likely cause to prove or refute: Spectrum's curated presets were replaced today (slots 2-15 of 7 Nov became 2-10,
-then round 2 renumbers again), so a stored slot or path in the operator's profile no longer resolves; the first
-open raises, something then rewrites the stored slot, and the second open succeeds.
+Cause: the preset catalogue was read once, at its module's first import; if no Spectrum file could be read at that
+moment (a file held open by another process or being replaced), the import raised "visualizer mode 'spectrum' has
+no authored presets", and Python retried the import on the next open. The import now never fails; a mode that could
+not be read is read again on use; one unreadable file drops only that preset. A stored selection follows its preset
+by name when the folder changes and otherwise falls back quietly to Preset 1. Test
+`tests/test_visualizer_preset_unreadable_folder.py` (reproduces the operator's exact message on the old code).
 
-- [ ] Root cause: reproduce off-screen with the real `SettingsDialog` and the real Studio (never a stub host) on a
-  profile copy whose stored Spectrum preset is each of: a retired slot (11-15), a slot whose file was renamed, a
-  user-authored preset, Preset 1. Record the exact message, who raises it and who shows it.
-- [ ] Check the registry too: the test-order fault fixed in batch 3 (`missing authored preset path: spectrum:1`
-  after a save-over-curated round trip) may be the same owner failing in the product after a Save To Preset.
-- [ ] Contract (write it in `Docs/Architecture/Persisted_Input_Compatibility.md`): a stored preset reference that
-  no longer resolves falls back at the owner (the same name if a preset of that name exists, else Preset 1),
-  logs one line, shows no error, and repairs the stored reference once; never a dialog, never a failed open.
-- [ ] The same rule checked for every mode with curated presets (one parametrised test over the mode registry,
-  derived from the canonical preset tree; no preset values or wording pinned).
-- [ ] Removing or renumbering curated presets gets a guard: the preset tree's own test fails when a curated slot
-  disappears without a compatibility entry (so round 2's renumbering cannot repeat this).
-- [ ] Negative control: the reproduction fails on the pre-fix code with the operator's message.
-- [ ] R-NNN entry if the fault predates today (it would then have been silent for every past preset removal).
+The agent also built a guard that listed the shipped preset names in product code and failed a test when a preset
+was removed or renamed. That broke a foundational rule (presets are authored, mutable, exchangeable; nothing
+manifests them) and was removed the same hour (d226af58). The rule is now explicit in
+`Docs/Guardrails/Visualizer_Presentation.md` (first section), the agent rules and the orchestrator handbook's audit
+checklist; the lead greps every preset-related diff for preset names before merging.
+
+- [ ] Side defect: importing `core.settings.normalization` before anything else raises a circular `ImportError`
+  (`normalization.py:28` -> `models/__init__.py:27` -> `models/_core.py:16`, then `_core.py:367-373` at class
+  definition); the enum parsing must leave `normalization` (Opus Medium, bounded).
 
 ### 1C.2 Diagonal fullscreen glyphs tear the Visualizer down and rebuild it (owner: Opus High, Expanded Visualizer)
 
@@ -824,59 +819,30 @@ corner). Those changes are withdrawn: the Media widget's behaviour is the contra
 - [ ] Proof: before/after sheets for the three gestures and the four sides; a D1 run with a real player session;
   section 2's "Changed on 11 Nov" entry for Now Playing corrected to what ships.
 
-### 1C.4 Spline Curve's lines escape the card border (owner: Opus Medium, lead pixel review)
+### 1C.4 Spline Curve's white lines show about one pixel into the card border (cause found on Display 1, 12 Nov)
 
-Operator: "Lines from Spline Curve slightly escape our borders, nothing from any visualizer should be capable of
-that. Most seen in full but its there in small/normal mode too. No other visualizer mode shows this weakness."
-The mode id is `devcurve`. The operator's crop shows a magenta band crossing the left border near its foot.
+Merged: the transient case (R-188, the clip followed the retained snapshot's record after a resize or collapse).
 
-- [ ] Root cause: render `devcurve` off-screen on a card with a contrasting border at 1x and at display size,
-  drive it hard (recorded music, its widest line and glow settings), and find which pass writes outside the
-  card's inner edge: line width or glow expanding past the scissor, a pass drawn without the shared clip, a
-  multisample resolve, or the rounded-corner mask.
-- [ ] Fix at the shared owner, not in the mode: whatever clip every Visualizer is given must bound every pass of
-  every mode (so no mode can escape), without retuning the protected QSG/clip optimisations (ce07b991,
-  07486d83, 985b9d53); if the shared clip is already correct and only `devcurve` bypasses it, the bypass goes.
-- [ ] A structural guard: one parametrised off-screen test over every registered mode that no pixel outside the
-  card's inner edge differs from the same frame with the Visualizer hidden (tolerance stated; rounded corners
-  included); negative control: the pre-fix `devcurve` fails it.
-- [ ] The same check at display size (Expanded Visualizer) and with Glass card material on.
-- [ ] Before/after 4x crops of the left and bottom border for `devcurve`; lead pixel review.
-- [ ] R-NNN entry (a contract every mode relied on was not enforced).
+Found by the lead's Display 1 run (`tools/d1_run.py --display 1 --mode devcurve`, the operator's profile copy;
+evidence `.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge/`): no content pixel lies inside the
+border band (1,947 rows, three frames, zero), but the border's inner edge pixel is anti-aliased and is an exact
+50/50 blend of the border colour and whatever content is under it: over dark content (50,50,50) it reads
+(130,114,153), over magenta fill it reads (191,132,218). Over Spline Curve's white lines it would read about
+(232,216,255): a near-white pixel that looks like the white line reaching one pixel into the border. Other modes
+leave the card's edges dark, so their blend pixel looks like part of the border. So the operator's "1px or so,
+the white lines" is the content showing through the border's anti-aliasing, for every mode, most visible with
+bright content at the edge.
 
-Lead's audit note, 12 Nov: the agent's first fix (0e01e147, R-187: the clip was built from the retained
-snapshot's record, so content could cross the rounded corners between a geometry change and the next coherent
-publication) is right in itself but is a transient, and steady frames were reported clean; the operator described
-a standing condition and their crop shows lines inside the border band along the left edge. Not closed until:
-
-- [ ] Steady frames proved under the operator's own setup: theme `Amethyst Night [Single] [Glass]` (translucent
-  border), `card_border_width_px` 5, CUSTOM layout with slots, Spline Curve's own white bar border on, a 3840 x
-  2160 display at 150 %, ordinary and display-wide card; pixels counted in the border band (between the card's
-  outer edge and the drawn border's inner edge) and outside the card, before and after the fix.
-- [ ] If the band shows content: the wrong geometry named (clip inset against the configured border width, DPR
-  rounding, a translucent border over an outer-path clip, the CUSTOM record, a generous scissor) and fixed at
-  the shared owner; why Spline Curve shows it and the others do not, with one other mode beside it.
-- [ ] The clip contract test's steady check runs with a non-default border width, a Glass border and the CUSTOM
-  route, over every mode, counting the border band.
-- [ ] Operator, 12 Nov, on their crop: "I see 1px or so escaping there ... It's the white lines." The target is
-  Spline Curve's own white bar-border lines reaching about one pixel past the content's bound in steady frames:
-  measured with fills transparent and only the bar border on, all four sides, at 100 %, 125 % and 150 %; the
-  one-pixel disagreement named (border rounding against the clip's inner edge, the clip's soft edge, the line's
-  width or fringe, a scissor wider than the stencil) and fixed at the shared bound; a full-brightness line along
-  each edge added to the clip contract test.
-- [ ] Not reproduced off-screen (12 Nov): with a 5 px half-transparent border in Amethyst Night's colours,
-  Glass, fills transparent and only the white lines drawn, at 100, 125 and 150 %, card origins shifted by
-  fractions of a pixel, ordinary and display-wide: zero pixels in the border band or outside the card; the
-  outermost white pixel sits 0 to 1 device pixel inside the inner edge (evidence in the agent's branch,
-  `visualizers/devcurve/20261112_white_lines/`). What was not covered: the real window on the 150 % display
-  with its overscan, the operator's own card positions and slots, pixel shift, the engine-worker path, the
-  operator's own Spline Curve preset. So it is the lead's on Display 1: the harness of 1B.14 is being built
-  (Opus Medium) with this as its first recipe.
-- [ ] Side defect, red on main: `test_3d_curated_preset_ownership[shockwave_grid-1]`, `[shockwave_grid-2]` and
-  `test_neon_experimental_presets::test_each_current_neon_art_file_has_owned_schema_roundtrip_and_independent_
-  view` fail on camera position values since the operator's preset edit (bc74cefe) or the Neon Lake merge: the
-  tests pin authored values; make them derive from the canonical source (with the 1C.1 agent).
-- [ ] Side defect: importing `core.settings.normalization` before anything else raises a circular `ImportError`.
+- [ ] Fix at the shared clip owner (`rendering/quick/visualizer/clip_host.py` and its SDF): the content's clip
+  ends far enough inside the border's inner edge that no content lies under the border's anti-aliased pixel
+  (about one device pixel at every DPR; derive it from the frame's own edge width, never a constant per mode);
+  the card's own background (Normal or the material) shows under that pixel, as on every other card. Rounded
+  corners follow the same inset. The protected clip commits (ce07b991, 07486d83, 985b9d53) are not retuned.
+- [ ] Guard in `tests/test_visualizer_card_clip_contract.py`: every mode with a full-brightness white line along
+  each edge; the border's inner edge pixels must equal the same frame with the Visualizer hidden (within the
+  run-to-run floor); negative control on the current clip.
+- [ ] Display 1 proof by the lead: the same `d1_run.py` recipe before and after, with a frame chosen while the
+  white lines touch the left edge (several grabs), 4x crops; the edge pixel no longer follows the content.
 
 ### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
 
@@ -939,6 +905,10 @@ significant work". Opus and Sonnet agents resume as the lead sees fit.
 - [ ] Small boxes batch 4 (`worktree-agent-a4e50f79894c549ec`; WIP edf2100a: six sibling test files moved onto
   the shared doubles; not started: the framed-view negative control, Bubble Random Group Drift): resumes when
   a Medium slot is free after 1C.1 and 1C.4.
+- [ ] Native core D4 (`worktree-agent-a2e34d3d2dc0079ee`, stopped by the usage limit 12 Nov; its uncommitted
+  work saved as a "WIP (handover)" commit; journal in its worktree): resumed by the same agent (same session).
+- [ ] Now Playing 1C.3 (`worktree-agent-a4fad866a60eddb36`, twelve commits, stopped mid first-touch fix, saved
+  as a handover commit): resumed by the same agent; merge after the lead's review, then 1C.2.
 
 ### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; step b of round 3, 1C.10)
 
