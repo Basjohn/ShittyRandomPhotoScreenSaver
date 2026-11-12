@@ -1012,7 +1012,7 @@ a Python callback reports a Python thread state.
 
 ### D5.6 The dependency table: what OpenGL gives that QRhi does not, and the route for each (N0.2)
 
-*Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided; it applies D5.2 (the frame driver records
+*Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided; it applies D5.2 (the frame driver records
 before Qt Quick's pass, the composite is a texture node, the clip is its coverage term) and D5.3 (the closed list of
 six services, each admitted by a measurement and shipping a raw Vulkan and a raw OpenGL form) to the eighteen
 dependencies of the research file's table A.2 (`native_core_qrhi_gaps_and_conventions.md`). Every "today"
@@ -1391,6 +1391,19 @@ written, with these answers to their questions. "Nothing here is decided" in the
 2. The two new view floats (exact pixel aspect, exact aperture scale) change an internal message, not a persisted
    shape: no bridge; the message's version is raised.
 3. Neon Lake's camera axes move into the packet at its port (N5.5), not in N0.
+
+**D5.6, the dependency table (N0.2).** Accepted as written, every row to its chosen route, with these answers:
+1. Overflow modes (Sphere, Extruded Spectrum) keep today's look: their target covers the painted overflow footprint
+   the stencil allows today, and the composite's coverage term clips to that footprint, not to the item rectangle.
+2. The anti-aliased coverage edge replaces the hard `discard` edge, provided the card-clip contract of R-191 holds on
+   the native composite (no content under a straight-edge frame pixel; in the corners only under pixels the frame
+   covers by at most half): `tests/test_visualizer_card_clip_contract.py`'s rules are the native port's parity bar.
+3. A multisampled `background()` stays resolve-first; the per-sample service (D5.3) is admitted for Extruded Bubble
+   only if the A/B at its port shows a visible or cost loss (N1.8's rule).
+4. The per-pass timer service's form is provisional until the N0.7 harness shows a timestamp around a whole pass
+   from where the core records it; until then only the whole-frame time is relied on.
+The `glMultiDrawArraysIndirect` start-up requirement is removed (nothing calls it; the only indirect draw is
+`glDrawArraysIndirect` in `scene3d/population.py`, which row 14 routes).
 
 ## Long-term risks of this direction, and what holds each (audit, 12 Nov 2026)
 

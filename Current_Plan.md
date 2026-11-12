@@ -251,19 +251,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   GUI-side functions the renderer calls today, sent at their edges), and `card_span`'s approximation
   (`core/waveform_ribbon_view.py:59-60`) ends. Python first, so the worker's camera equals the renderer's before
   any packet carries it.
-- [ ] N0.2 The dependency table accepted into D5: for each of the eighteen OpenGL dependencies of the research
-  file, the QRhi route, the native pair if a D5.3 service applies, and the one chosen (the research's table A.2 as
-  amended by D5.2 for the clip and D5.3 for the services).
-  - Draft in the decisions document (lead to decide).
-  - [ ] `rendering/quick/bootstrap.py:66` requires `glMultiDrawArraysIndirect`, which nothing calls: drop the
-    requirement (a small change in the OpenGL renderer, now).
-    - Confirmed by grep (12 Nov, `bdf9b246`): no call of `glMultiDrawArraysIndirect` exists anywhere in the
-      repository's Python, QML or C++; the only indirect draw is `glDrawArraysIndirect` at `scene3d/population.py:260`.
-      The only other reader of the `multi_draw_indirect` capability is `tests/test_qtquick_bootstrap.py:315-322`,
-      which pins the full capability dict: remove the key there with the requirement. The capability list is
-      otherwise only logged (`bootstrap.py:197-201,261`); no other code branches on it. The requirement is a startup
-      gate (`bootstrap.py:202-208`), so today a context lacking the entry point is refused for a function nobody
-      uses.
+- N0.2 decided 12 Nov (`Native_Core_P3_Decisions.md` D5.6 and the lead's answers): eighteen dependencies to
+  their routes, no service outside D5.3; the unused `glMultiDrawArraysIndirect` start-up requirement removed.
 - [ ] N0.9 The module compile on GitHub (operator, 12 Nov: builds only through GitHub workflows; handbook
   section 8). No product C++; the two harness proofs below wait on it.
   - [ ] A dispatch-only workflow that compiles `native/spike_p1` (later the core) for a pushed ref on GitHub's
