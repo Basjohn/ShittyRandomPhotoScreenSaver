@@ -103,7 +103,8 @@ def test_the_legibility_layer_is_the_whole_face_in_every_surface_shader() -> Non
 
 def test_a_list_line_gets_one_even_row_that_holds_the_floor_for_every_run(material_scene) -> None:
     import numpy
-    from PySide6.QtCore import QUrl
+    from PySide6.QtCore import QPointF, QUrl
+    from PySide6.QtGui import QColor
     from PySide6.QtQml import QQmlComponent
     from PySide6.QtQuick import QQuickItem
     from rendering.quick.image_state import PresentationImage
@@ -140,6 +141,27 @@ Item { x: 10; y: 40; width: 260; height: 24
         normal = numpy.asarray(scene.read(), numpy.int16)
         row = line.findChild(QQuickItem, "testRow")
         assert row.property("active") is False                    # Normal: nothing loaded
+        # Glass corrects the ink of a run that misses its ratio (M2b, every theme), and Qt Quick draws a
+        # distance-field Text whose colour was changed in place with glyph edges a level or so off a freshly built
+        # one, for good (measured 12 Nov: a plain Text recoloured and restored, no material, differs the same way;
+        # Native and Curve rendering do not). So the Normal reference is Normal with each run's colour changed
+        # and restored first, taken before Glass: it differs from the untouched frame only inside the runs.
+        texts = [item for item in line.childItems() if item.objectName() == "shadowedText"]
+        for text in texts:
+            authored = QColor(text.property("color"))
+            text.setProperty("color", QColor(255, 0, 0))
+            scene.render(1)
+            text.setProperty("color", authored)
+        scene.render(4)
+        reference = numpy.asarray(scene.read(), numpy.int16)
+        changed = numpy.argwhere(numpy.any(reference != normal, axis=2))
+        boxes, pad = [], 2.0                                      # a glyph's antialiased edge may cross its box
+        for text in texts:
+            corner = text.mapToScene(QPointF(0.0, 0.0))
+            boxes.append((corner.x() - pad, corner.y() - pad, corner.x() + text.width() + pad,
+                          corner.y() + text.height() + pad))
+        assert all(any(x0 <= x < x1 and y0 <= y < y1 for x0, y0, x1, y1 in boxes)
+                                    for y, x in changed), (boxes, changed.min(axis=0), changed.max(axis=0))
         scene.set_material("glass")
         scene.render(4)
         assert row.property("active") is True
@@ -147,7 +169,8 @@ Item { x: 10; y: 40; width: 260; height: 24
         assert len(runs) == 2 and all(r["p5"] >= 4.5 for r in runs), runs
         scene.set_material("normal")
         scene.render(3)
-        assert numpy.array_equal(numpy.asarray(scene.read(), numpy.int16), normal)
+        assert all(text.property("inkColor") == text.property("color") for text in texts)
+        assert numpy.array_equal(numpy.asarray(scene.read(), numpy.int16), reference)
     finally:
         out.unlink(missing_ok=True)
         line.deleteLater()
