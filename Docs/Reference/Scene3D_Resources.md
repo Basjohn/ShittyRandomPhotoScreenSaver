@@ -154,8 +154,11 @@ captures matched the preceding implementation byte-for-byte.
   - It stops at an optional analytic ground plane and composites `dst x T + S`, plus a bloom share.
   - The steady share, smooth haze for example, is never eroded.
 - **Resources and lifecycle:**
-  - Three 3D textures per volume, plus one 2D target and the noise per march. All allocate at first use, are reused
-    at a size, and are released in the owning context.
+  - Three RGBA16F 3D textures per volume (medium, integral, steady share), plus one 2D target and the noise per
+    march. All allocate at first use, are reused at a size, and are released in the owning context. The steady share
+    was R16F until N1.2 (GLSL ES 3.1 has no `r16f` storage image; RGBA16F holds the same half value in .r, and the
+    medium, integral and march stayed bit-identical): at Waveform's largest grid (128 x 72 x 128) it went from 2.4 to
+    9.4 MB, and the reflected volume (80 x 45 x 96 at 1440p) from 0.7 to 2.8 MB; the update stayed about 0.05 ms GPU.
   - A mirrored reflection camera uses its own instances.
 - **Proof:** `tests/test_scene3d_fog_volume.py` proves exact slab transmittance and in-scatter in both projections,
   world anchoring (a moved clear sphere; a moved eye), the steady share surviving full erosion with erodible coverage

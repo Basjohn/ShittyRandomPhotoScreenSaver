@@ -340,12 +340,75 @@ def pass_waveform_fields(target):
     return outputs, calls
 
 
+_FOG_MEDIUM = """
+uniform vec4 uSphere;   // clear-air centre xyz, radius
+uniform float uSteady;  // the steady share
+void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float steady) {
+    float lump=0.5+0.5*sin(world.x*1.3)*cos(world.y*0.9+world.z*0.4);
+    bool slab=world.z<-4.0 && world.z>-30.0 && length(world-uSphere.xyz)>uSphere.w;
+    extinction=slab?0.35*lump:0.0;
+    radiance=vec3(0.2,0.4,0.8)*(0.5+lump);
+    steady=uSteady*extinction*(1.0-lump);
+}
+"""
+
+
+def _read_texture_3d(texture, grid, channels):
+    from OpenGL import GL as gl
+    out = np.zeros((grid[2], grid[1], grid[0], channels), np.float32)
+    gl.glMemoryBarrier(gl.GL_TEXTURE_UPDATE_BARRIER_BIT | gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+    gl.glGetTextureImage(texture, 0, gl.GL_RED if channels == 1 else gl.GL_RGBA, gl.GL_FLOAT, out.nbytes, out)
+    return out
+
+
+def pass_fog_volume(target):
+    """The fog volume's inject (the volume's own head with a fixed medium) and integrate, and the detail march that
+    samples the medium, the steady share and the camera mapping."""
+    from OpenGL import GL as gl
+    from rendering.gl_programs.fog_volume import fog_inject_source
+    from rendering.quick.render.gl_resources import compile_compute_program
+    from rendering.quick.scene3d.fog_volume import FogMarch, FogVolume
+    outputs, calls = {}, {}
+    program = compile_compute_program(fog_inject_source(_FOG_MEDIUM), label="identity fog medium")
+    medium = lambda p: (gl.glUniform4f(gl.glGetUniformLocation(p, "uSphere"), .5, .2, -9., 2.5),
+                        gl.glUniform1f(gl.glGetUniformLocation(p, "uSteady"), .6))
+    view = np.identity(4)
+    view[:3, :3] = [[.96, 0., .28], [.05, .98, -.17], [-.27, .18, .94]]
+    view[:3, 3] = (-.4, -1.1, .3)
+    try:
+        for grid, focus in (((128, 72, 128), 0.), ((80, 45, 96), 9.)):
+            volume, march = FogVolume("identity"), FogMarch("identity")
+            try:
+                run = lambda *_: volume.update(program, view=view, lens=(.7, .4), depth_range=(1., 60.), grid=grid,
+                                               medium=medium, focus_depth=focus, restore=False)
+                run()
+                counter = {}
+                with counting(counter):
+                    run()
+                label = "x".join(map(str, grid))
+                outputs[f"medium_{label}"] = _read_texture_3d(volume.medium_texture, grid, 4)
+                outputs[f"steady_{label}"] = _read_texture_3d(volume.steady_texture, grid, 1)
+                outputs[f"integrated_{label}"] = _read_texture_3d(volume.texture, grid, 4)
+                march.march(volume, size=(320, 180), steps=64, ground=-1.5)
+                outputs[f"march_{label}"] = _read_texture(march.texture, 320, 180, 4)
+                calls = calls or counter
+                calls[f"gpu_ms:{label}"] = gpu_ms(run)
+            finally:
+                gl.glUseProgram(0)
+                volume.release()
+                march.release()
+    finally:
+        gl.glDeleteProgram(program)
+    return outputs, calls
+
+
 PASSES = {
     "motion_tile_max": pass_motion_tile_max,
     "population_scan": pass_population_scan,
     "edge_field": pass_edge_field,
     "propagation_field": pass_propagation_field,
     "waveform_fields": pass_waveform_fields,
+    "fog_volume": pass_fog_volume,
 }
 
 
