@@ -501,6 +501,11 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 - [ ] N4.a The fullscreen pass and image sampling as a primitive.
 - [ ] N3.8 The async job service (D9), built to N0.7's verdict: the job thread, self-contained jobs, the latch,
   the in-frame form; first job: a photo's upload and mips.
+  - [ ] D8 row 3's gate (the contention measurement under a heavy Visualizer frame, the one limit of N0.7's proof,
+    D9 point 2): p99 frame time and late frames across image changes with a Visualizer running, async against
+    in-frame (Vulkan only; OpenGL runs in-frame).
+  - [ ] D9 point 2b, the warm-up class: warm-up jobs (consumer class b) run on this service, scheduled with N3.6's
+    gradual warm-up (one unit per spaced frame). Transition preparation (class a) is N5.2g's.
 - [ ] N5.7a The image presenter and background as the core's background layer (D7 point 1): image ownership,
   covered-display admission and timing kept; the photo textures are the core's (the wrapped-texture bridge is
   OpenGL only and retires with the Python presenter); at rest nothing is drawn again. Proved in the hidden host
