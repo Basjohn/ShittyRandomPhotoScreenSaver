@@ -109,7 +109,7 @@ defaults, the installer script) are committed and pushed at once, silently.
 
 ## 7. Hard limits the lead keeps
 
-- Display 0 (the operator's primary): the lead may use it when a check needs it (operator, 12 Nov: "you can use Display 0 again when you need to"), through `tools/d1_run.py --allow-primary`, bounded, with the reason in the run's label; agents never take it. Bounded runs on Display 1 are the lead's, through `tools/d1_run.py`; agents never show
+- Display 0 (the operator's primary): rare. The lead may use it only for a specific check nothing else can make (operator, 12 Nov: "you can use Display 0 again when you need to", then "The permission is still rare. Do not make display 0 part of automated tests and use it rarely as possible"), through `tools/d1_run.py --allow-primary`, bounded, the reason in the run's label; never in a test, recipe or automated run; agents never take it. Bounded runs on Display 1 are the lead's, through `tools/d1_run.py`; agents never show
   a window on a real screen.
 - Load runs (game60) only after the operator's yes, at most 10 minutes, lead only, with nothing else running.
 - Builds only through GitHub workflows (`tools/github_remote_build.py`), never on this machine; agents never build.
