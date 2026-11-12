@@ -251,10 +251,44 @@ def pass_edge_field(target):
     return outputs, calls
 
 
+_PROPAGATION_COST = ("uniform float uChannel;\n"
+                     "float propagationCost(vec2 p) { return abs(p.y) < 0.03 ? uChannel : 2.0 + sin(9.0 * p.x); }\n")
+
+
+def pass_propagation_field(target):
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.propagation_field import PropagationField
+    from rendering.quick.scene3d.resources import MeshResources
+    outputs, calls = {}, {}
+    sources = [(-0.7, 0.0, 0.0), (0.5, 0.3, 0.2), (0.1, -0.35, 0.05)]
+    set_cost = lambda locate: gl.glUniform1f(locate("uChannel"), 0.3)
+    for size in ((1920, 1080), (300, 700)):
+        resources = MeshResources("identity")
+        field = PropagationField("identity", "identity", _PROPAGATION_COST)
+        try:
+            field.textures(resources, size, ("warm",), sources, 2.6, set_cost)   # compiles and allocates
+            counter = {}
+            with counting(counter):
+                while not field.build_step(resources, size, ("run",), sources, 2.6, set_cost):
+                    pass
+            fw, fh = field._size
+            for role in ("cost", "arrival"):
+                outputs[f"{role}_{size[0]}x{size[1]}"] = _read_texture(field._textures[role], fw, fh, 1)
+            outputs[f"extent_{size[0]}x{size[1]}"] = _read_texture(field._textures["extent"], 1, 1, 1)
+            calls = calls or counter
+            build = lambda index: field.textures(resources, size, ("time", index), sources, 2.6, set_cost)
+            calls[f"gpu_ms:{size[0]}x{size[1]}"] = gpu_ms(build, repeats=5)
+        finally:
+            field.release()
+            resources.release_resources()
+    return outputs, calls
+
+
 PASSES = {
     "motion_tile_max": pass_motion_tile_max,
     "population_scan": pass_population_scan,
     "edge_field": pass_edge_field,
+    "propagation_field": pass_propagation_field,
 }
 
 
@@ -262,7 +296,8 @@ def record(out: Path, names) -> int:
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     out.mkdir(parents=True, exist_ok=True)
     target = OffscreenRenderTarget(64, 64, label="compute pass identity")
-    summary = {"driver": target.driver, "passes": {}}
+    from PySide6 import QtCore
+    summary = {"driver": target.driver, "qt": QtCore.qVersion(), "passes": {}}
     try:
         with target.current():
             for name in names:
@@ -283,8 +318,10 @@ def record(out: Path, names) -> int:
 
 
 def compare(before: Path, after: Path) -> int:
-    a = json.loads((before / "summary.json").read_text(encoding="utf-8"))["passes"]
-    b = json.loads((after / "summary.json").read_text(encoding="utf-8"))["passes"]
+    a_summary = json.loads((before / "summary.json").read_text(encoding="utf-8"))
+    b_summary = json.loads((after / "summary.json").read_text(encoding="utf-8"))
+    print(f"Qt {a_summary.get('qt', '?')} -> {b_summary.get('qt', '?')}; driver {a_summary['driver']}")
+    a, b = a_summary["passes"], b_summary["passes"]
     for name in sorted(set(a) & set(b)):
         old, new = np.load(before / f"{name}.npz"), np.load(after / f"{name}.npz")
         for key in sorted(set(old.files) | set(new.files)):
