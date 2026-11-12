@@ -159,8 +159,11 @@ history); sizing it is part of D4.6. Still open: D4.4 to D4.8 (`Current_Plan.md`
 
 ## D5. The core's shape (decided 12 Nov 2026; the full resource and lifetime contract is still owed, N0.5)
 
-Four rules. They are what keeps the ceiling high: none of them is needed for Spectrum, all of them are expensive
-to retrofit once nine modes and twenty-eight transitions sit on the core.
+Four rules. They are what keeps the ceiling high. Spectrum alone needs none of them. What would be expensive is
+adding the rules to the core itself after nine modes and twenty-eight transitions are built on a core without
+them: every mode would then be reworked. Built in from the start, they make each new mode cheaper. A new mode
+only declares its passes and resources and takes the host, the jobs, the targets and the lifetime from the core;
+it never touches Qt Quick or another mode.
 
 **D5.1 The core does not know Qt Quick's frame; a host adapter does.** The core is a C++ library that renders
 into targets it owns and hands its results out as textures. A *host* gives it a device, a place to record this
