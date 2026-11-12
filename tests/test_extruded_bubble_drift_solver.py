@@ -165,6 +165,44 @@ def test_a_frame_with_no_new_step_dispatches_and_uploads_nothing_and_the_ring_fo
         target.close()
 
 
+def test_the_pair_check_runs_once_and_reports_a_compiler_that_breaks_the_pairs(qt_app, monkeypatch, caplog):
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    target = OffscreenRenderTarget(16, 16)
+    resources, solver = MeshResources('pair check test'), module.DriftSolver('check')
+    broken_resources, broken = MeshResources('broken pair check test'), module.DriftSolver('broken')
+    try:
+        assert solver.check(resources) is False and solver.pairs_exact is True, solver.pairs_report
+        assert solver.pairs_report == {'fraction_error': solver.pairs_report['fraction_error'],
+                                       'product_mismatches': 0, 'sum_mismatches': 0}
+        dispatches = []
+        monkeypatch.setattr(module.gl, 'glDispatchCompute', lambda *args: dispatches.append(args))
+        assert solver.check(resources) is True and not dispatches     # done once, never again
+        monkeypatch.undo()
+        # What a compiler that ignores ``precise`` may do: reassociate the error terms away (and plain products).
+        name, source = module.PROGRAMS[2]
+        source = (source.replace("precise float e = (a - (s - v)) + (b - v);", "precise float e = 0.0;")
+                  .replace("precise float e = ((x.x * y.x - p) + x.x * y.y + x.y * y.x) + x.y * y.y;",
+                           "precise float e = 0.0;"))
+        assert source != module.PROGRAMS[2][1]
+        monkeypatch.setattr(module, 'PROGRAMS', (*module.PROGRAMS[:2], (name, source)))
+        with caplog.at_level('ERROR'):
+            broken.check(broken_resources)
+        assert broken.pairs_exact is False
+        assert broken.pairs_report['sum_mismatches'] and broken.pairs_report['product_mismatches']
+        assert broken.pairs_report['fraction_error'] > 1e-6
+        assert 'does not keep the drift solver' in caplog.text
+        gl.glFinish()
+    finally:
+        solver.release()
+        broken.release()
+        resources.release_resources()
+        broken_resources.release_resources()
+        target.close()
+
+
 def test_no_compute_program_declares_a_64_bit_float():
     import re
     from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import PROGRAMS

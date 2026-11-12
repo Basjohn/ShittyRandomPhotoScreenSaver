@@ -37,8 +37,9 @@ from rendering.quick.scene3d.stream import StreamRing
 from widgets.spotify_visualizer import extruded_bubble_drift as drift
 from widgets.spotify_visualizer.extruded_bubble_drift_log import (
     CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES, KNOT_DECISION_BYTES, STEP_FLOATS, STEP_HISTORY, STEP_INDEX,
-    knot_starts, unpack_steps,
+    float_pair, knot_starts, unpack_steps,
 )
+from core.logging.logger import get_logger
 from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES
 
 # Storage bindings used only inside the solver's dispatches (each restored afterwards), and the uniform block's
@@ -48,6 +49,7 @@ _STEPS, _GEOMETRY, _STATE, _AUX, _OUT, _OLD_GEOMETRY, _BLOCK = 8, 9, 10, 11, 12,
 _DISPATCH_BLOCK = struct.Struct("<11if2f8x")
 _CLOUD_GROUP = 256
 _R = STEP_INDEX
+logger = get_logger(__name__)
 # The uploaded steps are float32 copies of the float64 records (every field the programs read is exactly a float32
 # value or a small count); in the serial's place each carries where its knot decisions begin in the upload.
 _KNOT_START = _R["serial"]
@@ -281,7 +283,24 @@ void main() {{
 }}
 """
 
-PROGRAMS = (("drift_chains", CHAIN_COMPUTE), ("drift_clouds", CLOUD_COMPUTE))
+_CHECK_CASES = 64
+# The pair arithmetic on known inputs, run once at warm-up (``DriftSolver.check``): a compiler that ignores ``precise``
+# (reorders, contracts or reassociates) shows here, not as silent drift. Inputs come from a buffer, never constants
+# the compiler could fold.
+PAIR_CHECK_COMPUTE = f"""#version 460 core
+layout(local_size_x = {_CHECK_CASES}) in;
+layout(std430, binding = {_STEPS}) readonly buffer CheckCases {{ vec4 cases[]; }};  // (travel, ratio), (seed head, a, b, 0)
+layout(std430, binding = {_OUT}) writeonly buffer CheckResults {{ vec4 results[]; }};
+{_PAIRS_GLSL}
+void main() {{
+    int i = int(gl_GlobalInvocationID.x);
+    vec4 quotient = cases[i * 2], extra = cases[i * 2 + 1];
+    float fraction = fractSum(mulPair(quotient.xy, quotient.zw), vec2(extra.x, extra.x * {2.0 ** -24!r}), vec2(0.0)).x;
+    results[i] = vec4(fraction, twoProd(extra.y, extra.z).y, twoSum(extra.y, extra.z).y, 0.0);
+}}
+"""
+
+PROGRAMS = (("drift_chains", CHAIN_COMPUTE), ("drift_clouds", CLOUD_COMPUTE), ("drift_pair_check", PAIR_CHECK_COMPUTE))
 _CLOUD_FIELDS = {"snow": (_R["count_snow"], _R["amount_snow"]), "specks": (_R["count_specks"], _R["amount_specks"])}
 
 
@@ -296,6 +315,29 @@ def _delete(*buffers: int) -> None:
     names = [b for b in buffers if b]
     if names:
         gl.glDeleteBuffers(len(names), names)
+
+
+def pair_check_cases() -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """The check's inputs (an hour to a day of travel at any carry and span, seed heads, products and sums whose
+    rounding error is nonzero) and what exact arithmetic gives for them."""
+    rng = np.random.default_rng(20261112)
+    travel_high, travel_low = float_pair(rng.uniform(1e3, 8e5, _CHECK_CASES))
+    ratio_high, ratio_low = float_pair(rng.uniform(1e-3, .45, _CHECK_CASES))
+    head = (rng.integers(0, 1 << 24, _CHECK_CASES) * 2.0 ** -24).astype(np.float32)
+    a = rng.uniform(1., 3e5, _CHECK_CASES).astype(np.float32)
+    b = rng.uniform(1e-3, 300., _CHECK_CASES).astype(np.float32)
+    a[0], b[0] = 1., 2.0 ** -30                  # a sum whose whole low part a reassociating compiler drops
+    cases = np.zeros((_CHECK_CASES, 2, 4), dtype=np.float32)
+    cases[:, 0] = np.stack((travel_high, travel_low, ratio_high, ratio_low), axis=-1)
+    cases[:, 1, :3] = np.stack((head, a, b), axis=-1)
+    wide = lambda values: values.astype(np.float64)
+    quotient = (wide(travel_high) + wide(travel_low)) * (wide(ratio_high) + wide(ratio_low))
+    expected = {
+        "fraction": np.mod(quotient + wide(head) * (1. + 2.0 ** -24), 1.),
+        "product": (wide(a) * wide(b) - wide(a * b)).astype(np.float32),
+        "sum": ((wide(a) + wide(b)) - wide(a + b)).astype(np.float32),
+    }
+    return cases, expected
 
 
 def _upload(records: np.ndarray, starts: np.ndarray, knots: bytes, first: int, last: int) -> bytes:
@@ -327,6 +369,9 @@ class DriftSolver:
         self._output_vec4s = 0
         self._families: dict[str, _Family] = {}
         self._ring: StreamRing | None = None   # sized to the most chain rows a step has carried (_ring_for)
+        # The warm-up check of the pair arithmetic: None until run, then whether this device computes it exactly.
+        self.pairs_exact: bool | None = None
+        self.pairs_report: dict | None = None
 
     @property
     def has_resources(self) -> bool:
@@ -341,6 +386,57 @@ class DriftSolver:
         if self._ring is not None:
             self._ring.release()
             self._ring = None
+        self.pairs_exact = self.pairs_report = None   # a new context checks again
+
+    def check(self, resources) -> bool:
+        """One warm-up unit (the reveal's hidden frames, or the first frame with work): run the pair arithmetic on
+        known inputs and compare with exact arithmetic, once per solver lifetime, never per frame. A device whose
+        compiler ignores ``precise`` is logged as an error with what it got; drift still runs (with an error about
+        that of plain float32), but never silently. True when it was already done (a warm-up step's "nothing
+        left"), False when it ran now."""
+        if self.pairs_exact is not None:
+            return True
+        cases, expected = pair_check_cases()
+        source, target = _buffer(cases.nbytes), _buffer(16 * _CHECK_CASES)
+        gl.glNamedBufferSubData(source, 0, cases.nbytes, cases)
+        prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
+        saved = [(binding, gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING, binding),
+                  gl_query.get_indexed_int64(gl.GL_SHADER_STORAGE_BUFFER_START, binding),
+                  gl_query.get_indexed_int64(gl.GL_SHADER_STORAGE_BUFFER_SIZE, binding)) for binding in (_STEPS, _OUT)]
+        generic = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING)
+        results = np.empty((_CHECK_CASES, 4), dtype=np.float32)
+        try:
+            gl.glUseProgram(resources.compute_program(*PROGRAMS[2]))
+            gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _STEPS, source)
+            gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _OUT, target)
+            gl.glDispatchCompute(1, 1, 1)
+            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+            gl.glGetNamedBufferSubData(target, 0, results.nbytes, results)   # the one readback, at this edge only
+        finally:
+            for binding, buffer, start, size in saved:
+                if buffer and size:
+                    gl.glBindBufferRange(gl.GL_SHADER_STORAGE_BUFFER, binding, buffer, start, size)
+                else:
+                    gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, binding, buffer)
+            gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER, generic)
+            gl.glUseProgram(prior_program)
+            _delete(source, target)
+        fraction = np.abs(results[:, 0].astype(np.float64) - expected["fraction"])
+        fraction = np.minimum(fraction, 1. - fraction)          # a fraction near 0 and one near 1 are neighbours
+        report = {"fraction_error": float(fraction.max()),
+                  "product_mismatches": int((results[:, 1] != expected["product"]).sum()),
+                  "sum_mismatches": int((results[:, 2] != expected["sum"]).sum())}
+        # The pairs keep about 1e-9 of a span at a day's travel; plain float32 is about 1e-3 off.
+        self.pairs_exact = report["fraction_error"] < 1e-6 and not report["product_mismatches"] \
+            and not report["sum_mismatches"]
+        self.pairs_report = report
+        if self.pairs_exact:
+            logger.info("%s: drift pair arithmetic exact on this device (%s)", self.label, report)
+        else:
+            logger.error("%s: this device's shader compiler does not keep the drift solver's pair arithmetic exact "
+                         "(precise ignored?): %s. Extruded Bubble drift runs with plain float32 error.", self.label,
+                         report)
+        return False
 
     def _ring_for(self, chain_rows: int) -> StreamRing:
         """The step ring, grown (never shrunk) when a step carries more chain rows than it was sized for: an edge of
@@ -385,6 +481,7 @@ class DriftSolver:
                 needed.append(int(pending[0]))
         if not needed:
             return offsets      # no new logical step since the last frame: nothing to integrate
+        self.check(resources)   # once, if the warm-up did not already (an edge, never per frame)
         if offsets["_total"] > self._output_vec4s:
             # Every dispatch rewrites its family's whole output from its state: a new buffer loses nothing.
             _delete(self.output)
