@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.2 (High), 1D.5 (Medium).
+**Now (in flight):** N2.2 (High), 1D.4 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,10 +47,9 @@ at the size asked.
   2. Then N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
   3. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.5's two reds and the Extruded Spectrum tolerance.
-  2. 1D.4 (the default-mode marker and the image-time row; small, as asked).
-  3. The N1.6 remainder (the motion and trail family, then its transitions; no C++).
-  4. 1B.10.
+  1. 1D.4 (the default-mode marker and the image-time row; small, as asked).
+  2. The N1.6 remainder (the motion and trail family, then its transitions; no C++).
+  3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -1057,23 +1056,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   Settings and Studio box.
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
-
-### 1D.5 Reds and flakes found 12 Nov (Medium; each is a side defect, fix at the owner)
-
-- [ ] `tests/test_visualizer_expansion_geometry.py::test_published_logical_frames_are_identical_ordinary_and_expanded[waveform_ribbon]`
-  is red at main (digest differs at index 69). It is likely stale since R-196/N0.4, when Waveform's pulse began
-  reading the drawn card's framed view, so ordinary and expanded frames now legitimately differ. Root cause first.
-  If the difference is the framed view, the test replays each owner's `VIS_SET_VIEW` (as
-  `test_visualizer_engine_worker.py` does) or compares only view-independent fields. If not, fix the product.
-- [ ] `tests/test_surface_material_style.py:150`
-  (`test_a_list_line_gets_one_even_row_that_holds_the_floor_for_every_run`) is red at main: Normal after Glass is
-  not byte-equal. Root cause at its owner (state carried from Glass into Normal?).
-- [ ] Extruded Spectrum at High 3D Detail with Smooth Edges (8x multisampling, `fwidth` edges,
-  `rendering/gl_programs/extruded_spectrum_program.py:382-391`) is not bit-repeatable on the RTX 4090: one edge
-  pixel toggles by one level between identical frames (41 of 240). It is invisible. Decided (lead, 12 Nov): exact-
-  equality pixel tests at that setting compare within one 8-bit step, with the reason in the test. Every other
-  setting stays exact. `test_qtquick_extruded_spectrum.py::test_optional_directional_shadow_uses_canonical_direction_without_an_extra_target`
-  is the known case.
 
 ### 1D.4 Guided Setup: the default Visualizer mode (operator, 12 Nov; Medium, after 1D.1's side defects)
 
