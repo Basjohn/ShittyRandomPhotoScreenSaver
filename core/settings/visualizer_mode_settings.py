@@ -914,6 +914,10 @@ _SHOCKWAVE_GRID = ModeSettings(
                "How fast musical waves propagate across the water.", bucket="waves"),
         Slider("shockwave_grid_water_detail", "Water Detail:", 0.0, 1.0,
                "Small surface details on the lake, separate from musical wave height.", bucket="waves"),
+        Slider("shockwave_grid_water_lines", "Water Lines:", 0.0, 1.0,
+               "The lines on the water and along its edge, with their glow. Lower fades them; 0 hides them "
+               "completely, leaving the water's colour, reflection, shine, Sun / Moon path and Water Reaction.",
+               bucket="waves"),
         Slider("shockwave_grid_scroll", "Water Flow:", 0.0, 1.0,
                "Slow surface flow across the water, without moving authored terrain.", bucket="waves"),
         Slider("shockwave_grid_idle", "Idle Swell:", 0.0, 1.0,

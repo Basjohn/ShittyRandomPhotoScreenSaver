@@ -837,6 +837,32 @@ Overhead baseline against 9897d4f8 (visualizers): only Neon Lake moves (+1 GL ca
 the drive); Extruded Bubble's +51 Python calls come from main's EB work, every other mode unchanged. Evidence
 `.artifacts/evidence/visualizers/shockwave_grid/fidelity/20261106_fidelity/pass7/`.
 
+## Water Lines (2026-11-12, plan 1C.8)
+
+Operator: the water's edge and face lines can be hidden completely. **Water Lines** (`shockwave_grid_water_lines`,
+Water bucket after Water Detail, 0..1, 1 = as authored; every preset authored at 1 by the repair fill) scales the
+fragment program's `uWaterLines` (vec2: face, edge; the one slider sets both).
+
+What it owns (inventory, `.artifacts/evidence/visualizers/shockwave_grid/water_lines/20261112_inventory/`):
+- **Face lines** (`line`, alpha `uLineColor.a`): the wave curves (resting and crest-lit,
+  `sceneHeightfieldWaterCurves`), the ripple network, the rings lapping from every shore and the sheen hairlines,
+  over the water and its wet fringe; their glow is Water Line Glow (`lineGlow * lineAlpha`). Before this, Water
+  Detail 0 removed the network, rings and sheen but not the wave curves; Ripple / Shore Colour alpha 0 removed them all.
+- **Edge line**: the shoreline (`basinShoreLight`, alpha `uCrestColor.a`) and its Shore Glow. Before this nothing
+  removed it alone: Wave / Ridge Glow alpha 0 also removes the land's ridge lines.
+- **The mirrored surface pass** (pass 0 triangles) draws only those lines' reflections (fringe lines, shoreline).
+
+Fading: the face coverage, the shoreline's alpha (after its clamp) and the Shore Glow's alpha and emission are
+multiplied by the amount, so glow fades with its line. At 0 the ripple field, the curves/network/rings/sheen block,
+the shoreline contour and the Shore Glow are skipped by branches on the uniform, and the renderer does not issue
+the pass-0 triangle draw (reflected land marks still draw). At 1 the frame equals the earlier one (max 1/255 on
+Presets 1-3, rest and driven). A dead per-fragment `sceneHeightfieldCurveWire` call (its result was always
+overwritten or zeroed) was removed on the way.
+
+Stays at 0: the water's colour, reflection and mirrored land/skyline, shine and its glints, the Sun / Moon path,
+the crest wash on the body, Water Reaction (its net, lift and the ridge breath) and every land line (ridges,
+Contour Lines, marks). Contracts: `tests/test_neon_water_lines.py`.
+
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
 These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored

@@ -844,6 +844,11 @@ attack/release envelopes from the resolved bars; paused Spectrum idle bars never
 consumes immutable events and growth rather than owning another simulation or clock. Current visual acceptance and
 cost work remain in the live plan, not the retired flat-grid acceptance description.
 
+**Water Lines** (`shockwave_grid_water_lines`, Water bucket, 0..1, 1 as authored; 12 Nov 2026) fades the water's face
+lines and its shoreline, with the glow that belongs to them, and at 0 skips them (a branch on the `uWaterLines`
+uniform, and the mirrored-line pass is not issued); the water's body, Water Reaction and the land's own lines stay.
+See [Neon Lake](Neon_Lake_Basin.md), "Water Lines".
+
 ## 16A. Extruded Spectrum
 
 The first Visualizer on the shared foundation (`rendering/quick/visualizer/implementations/extruded_spectrum.py`,

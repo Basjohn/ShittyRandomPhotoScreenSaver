@@ -13,7 +13,7 @@ def test_neon_buckets_group_existing_glow_wave_and_material_controls():
     controls = {entry.key: entry for entry in spec.controls}
     expected = {
         "glow": ("glow", "horizon", "water_line_glow_color", "water_line_glow", "shore_glow", "shore_glow_color"),
-        "waves": ("water_color", "line_color", "crest_color", "wave_height", "wave_speed", "water_detail", "scroll",
+        "waves": ("water_color", "line_color", "crest_color", "wave_height", "wave_speed", "water_detail", "water_lines", "scroll",
                   "idle", "water_reflection", "water_shine", "water_glint", "water_reaction"),
         "reaction": ("terrain_reaction_enabled", "terrain_reaction_strength", "terrain_pulses", "terrain_peaks",
                      "terrain_swell", "terrain_growth", "terrain_growth_shape", "terrain_growth_density",
