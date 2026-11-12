@@ -7,6 +7,8 @@ from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QSignalSpy, QTest
 
+from tests._invisible_windows import keep_off_screen
+
 
 def _wait(ms):
     loop = QEventLoop()
@@ -44,6 +46,7 @@ def test_transfer_glyphs_are_absent_when_ineligible_and_use_real_native_hits(qt_
     item.setProperty("admitted", True)
     item.setProperty("hovered", True)
     spy = QSignalSpy(item.actionRequested)
+    keep_off_screen(window)
     window.show()
     try:
         _wait(750)

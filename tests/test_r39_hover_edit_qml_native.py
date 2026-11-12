@@ -9,6 +9,8 @@ from PySide6.QtCore import QUrl, Qt
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 
+from tests._invisible_windows import keep_off_screen
+
 QML = Path(__file__).resolve().parents[1] / 'rendering' / 'quick' / 'qml'
 
 
@@ -32,6 +34,7 @@ def test_hover_edit_glyph_component_constructs_and_admits_lock(qt_app):
     item.setParentItem(window.contentItem())
     item.setWidth(180)
     item.setHeight(110)
+    keep_off_screen(window)
     window.show()
     qt_app.processEvents()
     try:

@@ -9,6 +9,7 @@ from PySide6.QtTest import QTest
 
 from rendering.custom_layout_session import CustomLayoutSession
 from rendering.quick.custom_layout_overlay import CustomLayoutOverlayModel
+from tests._invisible_windows import keep_off_screen
 from tests.test_qtquick_custom_layout_overlay import _item, _quick_items_named
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,7 @@ def test_preset_glyphs_click_both_directions_and_delay_tooltips(qt_app, qtbot, e
                                         content_envelope_item_resolver=lambda _: root)
         overlay.setProperty("sessionModel", model)
         overlay.setProperty("editActive", True)
+    keep_off_screen(window)
     window.show()
     assert QTest.qWaitForWindowExposed(window)
     def button(direction):
@@ -104,6 +106,7 @@ def test_studio_and_rotate_glyph_clicks_use_one_shared_qml_signal(qt_app, qtbot)
     root.setParentItem(window.contentItem())
     actions = []
     root.hoverEditGlyphRequested.connect(actions.append)
+    keep_off_screen(window)
     window.show()
     assert QTest.qWaitForWindowExposed(window)
     try:
