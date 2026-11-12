@@ -15,11 +15,14 @@ engine worker (work order 4) owns the writer side; nothing here runs at rest.
 """
 from __future__ import annotations
 
+import logging
 import sys
 import threading
 import time
 import uuid
+import weakref
 import zlib
+from functools import partial
 from multiprocessing.shared_memory import SharedMemory
 from typing import Any, Callable, Literal, Optional
 
@@ -27,6 +30,13 @@ from core.authored_clock import authored_now
 from core.performance.frame_trace import FrameTraceEvent, logical_timestamp_ns
 from core.visualizer_engine import frame_codec
 from core.visualizer_engine.frame_capacity import BASE_SLOT_BYTES
+from core.visualizer_engine.native_schema import (
+    PayloadKind,
+    PayloadRefused,
+    admit_slot_head,
+    decode_native_payload,
+    schema_for_mode,
+)
 from core.visualizer_engine.packet_abi import (
     FIRST_SEQUENCE,
     FLAG_CHANGED,
@@ -46,6 +56,13 @@ from widgets.spotify_visualizer.logical_runtime import (
 
 #: Base non-geometry envelope; production admission adds active EB families before creating/attaching a mapping.
 DEFAULT_SLOT_BYTES = BASE_SLOT_BYTES
+
+logger = logging.getLogger(__name__)
+
+
+def _identity(value: int) -> int:
+    """A slot identity as stored (u32) back to the frame's value (0xFFFFFFFF: -1, none)."""
+    return -1 if int(value) == 0xFFFFFFFF else int(value)
 
 
 def publication_flags(state: Any) -> int:
@@ -110,12 +127,32 @@ class PacketMailbox(LatestStateMailbox):
     otherwise the slot carries 0 and nothing reads a clock. Reader side, with ``--frame-trace`` admitted in this
     process: every frame taken that carries a stamp is recorded as the trace's ``LOGICAL_PUBLISH`` at its publish time
     (the in-process mailbox records it at publish; across processes the main side sees a frame first when it takes it).
+
+    ``payload`` (native core N2.3, transport rule 3 to 5): what the stream carries. ``codec`` (the product's, and the
+    default): the tagged Python codec, ``payload_schema`` 1. ``native``: each frame as its mode's fixed-layout native
+    schema (``native_schema``; Spectrum only; a frame of a mode without one is refused at publish), with the native
+    schema's id stamped; read here by the pure-Python reference reader, whose publication's state is the decoded
+    record (tests and harnesses only: nothing in the product makes a native stream yet). Either reader admits a slot
+    by its head before copying its payload (``native_schema.admit_slot_head``): a slot of the other kind, an unknown
+    schema or mode code, a newer version or a size disagreeing with the layout is refused, counted
+    (``refused_payloads``), logged once, never acknowledged, and the stream is failed (``payload_failure``; the
+    reader takes nothing more) and reported through ``listen_for_wakes``' ``on_closed``, the owner's session-end
+    edge (the link names the refusal as the reason).
     """
 
     def __init__(self, *, slot_bytes: int = DEFAULT_SLOT_BYTES, generation: int = 0, engine_generation: int = 0,
                  activation_id: int = 0, mode_code: int = 0, role: Literal["both", "reader", "writer"] = "both",
-                 attach: str | None = None, wake_sender: Any = None, publish_stamps: bool = False) -> None:
+                 attach: str | None = None, wake_sender: Any = None, publish_stamps: bool = False,
+                 payload: PayloadKind = "codec") -> None:
         super().__init__()
+        if payload not in ("codec", "native"):
+            raise ValueError(f"a frame stream carries codec or native payloads, not {payload!r}")
+        self._payload = payload
+        self._admit = partial(admit_slot_head, accept=payload)
+        self._payload_failure: dict | None = None     # reader side: the refusal that failed the stream
+        self._refused_payloads = 0
+        self._failure_pending = False                 # the refusal not yet reported through ``on_closed``
+        self._on_stream_failed: Callable[[], Callable[[], None] | None] | None = None   # () -> on_closed (weak)
         self._publish_stamps = bool(publish_stamps)
         self._peeked_publish_ns = 0                  # reader side: the peeked frame's publish stamp (0: none) ...
         self._peeked_logical = 0.0                   # ... and its logical timestamp (the slot head's)
@@ -141,7 +178,7 @@ class PacketMailbox(LatestStateMailbox):
         self._owner = attach is None
         self._staged_memory: SharedMemory | None = None
         self._writer = FramePacketWriter(self._memory.buf) if role in ("both", "writer") else None
-        self._reader = FramePacketReader(self._memory.buf) if role in ("both", "reader") else None
+        self._reader = FramePacketReader(self._memory.buf, admit=self._admit) if role in ("both", "reader") else None
         # Producer side: the newest publication not yet acknowledged (its edges carry into the next one).
         self._unread: tuple[Any, int, int, int] | None = None     # (state, generation, activation, sequence)
         self._peeked: LogicalPublication | None = None
@@ -166,10 +203,17 @@ class PacketMailbox(LatestStateMailbox):
                 if previous[1] == int(generation) and previous[2] == int(activation_id):
                     state = _coalesce_protected_state(previous[0], state)
             produced = float(now_ts if now_ts is not None else authored_now())
-            payload = frame_codec.encode((int(generation), int(activation_id), produced, state))
+            if self._payload == "native":
+                # The mode's fixed-layout record (its identity and timing travel in the slot head); a mode without
+                # a native schema raises here, before anything is published.
+                schema = schema_for_mode(getattr(state, "mode_id", None))
+                payload, payload_schema = schema.encode(state), schema.schema_id
+            else:
+                payload = frame_codec.encode((int(generation), int(activation_id), produced, state))
+                payload_schema = frame_codec.CODEC_SCHEMA
             source = getattr(state, "source_timestamp", None)
             sequence = self._writer.publish(
-                payload, payload_schema=frame_codec.CODEC_SCHEMA,
+                payload, payload_schema=payload_schema,
                 logical_timestamp=float(getattr(state, "logical_timestamp", 0.0) or 0.0),
                 source_timestamp=None if source is None else float(source),
                 flags=publication_flags(state),
@@ -240,10 +284,25 @@ class PacketMailbox(LatestStateMailbox):
             return None                               # a closed reader has nothing (its views are released)
         if self._peeked is not None:
             return self._peeked
-        packet = self._reader.read_latest()
-        if packet is None:
+        if self._payload_failure is not None:
+            return None                               # the stream failed on a refused payload: nothing more
+        try:
+            packet = self._reader.read_latest()       # admits the slot by its head before any payload copy
+            if packet is None:
+                return None
+            if self._payload == "native":
+                try:
+                    state = decode_native_payload(packet.payload_schema, packet.payload)
+                except PayloadRefused as refusal:
+                    refusal.sequence = packet.sequence      # a malformed record: refused as its head would be
+                    raise
+                generation, activation_id = _identity(packet.runtime_generation), _identity(packet.activation_id)
+                produced = packet.logical_timestamp
+            else:
+                generation, activation_id, produced, state = frame_codec.decode(packet.payload)
+        except PayloadRefused as refusal:
+            self._refuse(refusal)
             return None
-        generation, activation_id, produced, state = frame_codec.decode(packet.payload)
         completion = self._frame_completion
         if completion is not None:
             state = completion(state)
@@ -255,6 +314,41 @@ class PacketMailbox(LatestStateMailbox):
         self._peeked_publish_ns = packet.publish_ns
         self._peeked_logical = packet.logical_timestamp
         return self._peeked
+
+    def _refuse(self, refusal: PayloadRefused) -> None:
+        """Under the lock: the stream fails on its first refused payload (counted, logged once, never acknowledged)."""
+        self._refused_payloads += 1
+        if self._payload_failure is not None:
+            return
+        self._payload_failure = {'sequence': int(getattr(refusal, 'sequence', 0)), 'cause': refusal.cause,
+                                 'reason': str(refusal), 'payload': self._payload}
+        self._failure_pending = True
+        logger.error("[SPOTIFY_VIS][ENGINE_WORKER] Frame payload REFUSED at the slot head (%s stream, sequence %d, "
+                     "%s): %s; the stream is failed", self._payload, self._payload_failure['sequence'],
+                     refusal.cause, refusal)
+
+    def _report_failure(self) -> None:
+        """Outside the lock: a refusal not yet reported goes to the owner's session-end edge, once."""
+        with self._lock:
+            if not self._failure_pending:
+                return
+            self._failure_pending = False
+            reference = None if self._closed else self._on_stream_failed
+        callback = reference() if reference is not None else None
+        if callback is not None:
+            callback()
+
+    @property
+    def payload_failure(self) -> dict | None:
+        """Reader side: the refusal that failed this stream (sequence, cause, reason, payload kind), or None."""
+        with self._lock:
+            return None if self._payload_failure is None else dict(self._payload_failure)
+
+    @property
+    def refused_payloads(self) -> int:
+        """Reader side: slots refused at their head (or as a malformed record)."""
+        with self._lock:
+            return self._refused_payloads
 
     def _consume(self) -> LogicalPublication | None:
         publication = self._read()
@@ -296,18 +390,23 @@ class PacketMailbox(LatestStateMailbox):
 
     def peek(self) -> Optional[LogicalPublication]:
         with self._lock:
-            return self._read()
+            publication = self._read()
+        self._report_failure()
+        return publication
 
     def take(self) -> Optional[LogicalPublication]:
         with self._lock:
-            return self._consume()
+            publication = self._consume()
+        self._report_failure()
+        return publication
 
     def take_for_generation(self, generation: int) -> Optional[LogicalPublication]:
         with self._lock:
             publication = self._consume()
-            if publication is None or int(publication.generation) != int(generation):
-                return None
-            return publication
+        self._report_failure()
+        if publication is None or int(publication.generation) != int(generation):
+            return None
+        return publication
 
     def set_wake_callback(self, callback: Optional[Callable[[], None]]) -> None:
         with self._lock:
@@ -326,12 +425,20 @@ class PacketMailbox(LatestStateMailbox):
         each byte. It blocks, never polls; closing the mailbox closes the pipe and ends it. ``on_closed`` runs once
         (on the listener thread) when the pipe ends while this mailbox is still open: every writer end is closed, so
         the session that held it ended (closed after a failure, or its process died; work order 5 slice 5.2). The
-        reader must have closed its own copy of the writer end for that edge to exist."""
+        reader must have closed its own copy of the writer end for that edge to exist. ``on_closed`` is also the edge a
+        refused payload reports the failed stream on (once, on the thread that took; ``payload_failure`` says why)."""
         if self._reader is None or self._wake_thread is not None:
             raise RuntimeError("only a reader listens for wakes, once")
         if on_closed is not None and not callable(on_closed):
             raise TypeError("on_closed must be callable or None")
         self._wake_receiver = receiver
+        # Held weakly when it is a bound method (the link's): a retired link must not be kept alive by its mailbox.
+        if on_closed is not None and getattr(on_closed, "__self__", None) is not None:
+            failed = weakref.WeakMethod(on_closed)
+        else:
+            failed = (lambda: on_closed) if on_closed is not None else None
+        with self._lock:
+            self._on_stream_failed = failed
 
         def listen() -> None:
             while True:
@@ -365,6 +472,7 @@ class PacketMailbox(LatestStateMailbox):
                 return
             self._consume()
             self._peeked = None
+        self._report_failure()
 
     # ----------------------------------------------------------------------------------------------- lifetime
 
@@ -427,7 +535,7 @@ class PacketMailbox(LatestStateMailbox):
             if (self._closed or memory is None or memory.name != change['mapping']
                     or self.mapping_name != change['previous_mapping']):
                 raise ValueError('stale capacity commit')
-            reader = FramePacketReader(memory.buf)
+            reader = FramePacketReader(memory.buf, admit=self._admit)
             old = self._memory
             self._reader.release()
             self._memory, self._reader, self._staged_memory = memory, reader, None

@@ -818,8 +818,14 @@ class EngineWorkerLink:
     # -------------------------------------------------------------------------------------- session's end
 
     def _session_ended(self) -> None:
-        """The listener thread saw the wake pipe end while the reader was open: the session is gone."""
+        """The listener thread saw the wake pipe end while the reader was open: the session is gone. Also the edge
+        the reader reports a refused frame payload on (N2.3: the stream failed at a slot head; the GUI thread's take)."""
         if not self._stopping:
+            refused = getattr(self._mailbox, 'payload_failure', None)
+            if refused is not None:
+                self._emit('ended', f"frame payload refused ({refused['cause']}, sequence {refused['sequence']}): "
+                                    f"{refused['reason']}")
+                return
             failure = self._mailbox.capacity_failure if self._mailbox is not None else None
             if failure is not None:
                 self.capacity_failure_report = failure
