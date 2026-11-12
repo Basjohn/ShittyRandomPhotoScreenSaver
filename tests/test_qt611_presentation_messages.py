@@ -145,10 +145,24 @@ for kind in (StyledFontComboBox, StyledComboBox):
         metrics.append([kind.__name__, size, info.pixelSize(), fm.height(), fm.horizontalAdvance("Jost Inter")])
         if sys.argv[1] == "new":
             assert font.pointSizeF() > 0
+# Never on screen (tests/_invisible_windows.py, inline for this subprocess): the parent and the combo's popup window
+# are real native windows, fully transparent and click-through; the popup's roll/fade effects would draw a separate
+# visible copy, so they are off.
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
+QApplication.setEffectEnabled(Qt.UIEffect.UI_AnimateCombo, False)
+QApplication.setEffectEnabled(Qt.UIEffect.UI_FadeMenu, False)
+parent.setWindowOpacity(0.0)
+parent.setWindowFlag(Qt.WindowType.WindowTransparentForInput, True)
+parent.setWindowFlag(Qt.WindowType.Tool, True)
+popup = control.view().window()
+popup.setWindowOpacity(0.0)
+popup.setWindowFlag(Qt.WindowType.WindowTransparentForInput, True)
 parent.show()
 app.processEvents()
 control.showPopup()
 app.processEvents()
+assert popup.isVisible() and popup.windowOpacity() == 0.0
 control.hidePopup()
 parent.close()
 app.processEvents()
