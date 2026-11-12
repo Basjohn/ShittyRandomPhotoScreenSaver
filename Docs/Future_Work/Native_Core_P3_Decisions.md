@@ -502,6 +502,46 @@ the lead takes the upgrade first, through the whole suite and a GitHub frozen bu
 disappears. Otherwise the core starts on 6.11.2. After that, Qt is upgraded only between stages of the ladder,
 through a scripted step: fetch the matching SDK, rebuild, both backends' parity gates, a frozen build.
 
+*Proposed (draft for the lead), 12 Nov 2026 (N0.8, researched from pypi.org and doc.qt.io only).* **Facts.**
+PyPI lists PySide6 6.12.0 (uploaded 8 Oct 2026, `Requires-Python >=3.10,<3.16`, classifier "Python :: 3.14",
+wheel `pyside6-6.12.0-cp310-abi3-win_amd64.whl`, so CPython 3.14 x64 Windows is covered) as the newest minor and
+6.11.3 (26 Oct 2026) as the newest 6.11; 6.11.2 was 18 Aug 2026. The Qt 6.12.0 class reference and "What's New in
+Qt 6.12" give QRhi: `QRhiCommandBuffer::drawIndirect(QRhiBuffer *indirectBuffer, quint32 indirectBufferOffset,
+quint32 drawCount, quint32 stride = sizeof(QRhiIndirectDrawCommand))` and `drawIndexedIndirect(...)` (both "since
+6.12"), the buffer usage `IndirectDrawBuffer`, and the features `QRhi::DrawIndirect`, `QRhi::DrawIndirectMulti`
+(drawCount > 1 natively supported by the backend) and `QRhi::ShaderDrawParameters` (`gl_BaseInstance`,
+`gl_BaseVertex`, `gl_DrawID`). The Vulkan backend also uses `VK_EXT_device_fault` for device-lost detail. Nothing
+else D5.3 or D5.6 lists is gained: `QRhiTexture::Format` in 6.12 still has no RG16F, RG32F or R11G11B10F;
+sampling a resolved multisample colour texture is still not offered (`ResolveDepthStencil` is since 6.8, so it
+is already in 6.11.2); `VertexShaderPointSize` and `Timestamps` (whole command buffer) are unchanged. So the one
+D5.3 row that disappears is "Indirect and count draws", and D5.6 row 14 (the dead-tail cull) could use
+`drawIndirect` instead of the restructured pass. Compatibility: the class reference still says QRhi has "no source
+or binary compatibility guarantees" (Qt GuiPrivate). Every QRhi call `native/spike_p1/src/` makes (`QRhi::create`,
+`beginOffscreenFrame`/`endOffscreenFrame`, `nextResourceUpdateBatch`, `newBuffer`, `newTexture`,
+`newTextureRenderTarget`, `newShaderResourceBindings`, `newGraphicsPipeline`, `driverInfo`, `isYUpInFramebuffer`,
+`nativeHandles`, `QRhiVulkanInitParams::preferredInstanceExtensions`, `QRhiGles2InitParams::newFallbackSurface`,
+and on the command buffer `beginPass`, `endPass`, `setGraphicsPipeline`, `setViewport`, `setShaderResources`,
+`setVertexInput`, `draw`, `resourceUpdate`) is still documented in 6.12.0 with no obsolete or removed marker.
+
+**Recommendation: take 6.12.0 first, before N2.1.** One paragraph of reason: the core is compiled against the
+exact Qt, so every later upgrade reruns both backends' parity gates against native code; today nothing native
+exists, so the move costs only what D11 already names (the suite and a GitHub frozen build, which the lead runs)
+and the first C++ slice starts on the final API. Waiting pays the same cost later with C++ in the way, and the
+version we would then adopt has `drawIndirect`, which lets the dead-tail cull and the population harness's
+"draw the maximum" comparison in D5.3 be decided on the API that will ship. The gain is modest (one service row,
+and "indirect" is a measured admission anyway), so the recommendation rests on the timing, not on the feature. If
+the suite or the frozen build shows a regression that is not ours, the fallback is 6.11.3 or 6.11.2 with D5.3's
+row kept, and nothing native has been lost. **Risks:** 6.12.0 is a `.0` five weeks old (a 6.12.1 is likely
+soon); a Qt Quick scene-graph or clip behaviour change could touch the protected optimisations (ce07b991, 07486d83,
+985b9d53), which the suite and the clip oracles must show unchanged; PySide6 6.12 behaviour on Python 3.14 is
+unverified here; `DrawIndirectMulti` backend coverage (D3D11 in particular) is not stated in what I read, so the
+count-draw form may need a per-backend feature check or a fallback loop. **Not confirmed:** the exact Qt 6.12.0
+release date (taken from the PyPI upload date), that the 6.12.0 wheel bundles Qt 6.12.0 (assumed from the version
+match), whether PySide6 exposes any of the new names (the core is C++ against the SDK, so it does not need to),
+the fields of `QRhiIndirectDrawCommand`/`QRhiIndexedIndirectDrawCommand`, `QRhi::create` and
+`beginOffscreenFrame`/`clipSpaceCorrMatrix`/`backendName` signatures (the pages' text I read did not define them),
+and any 6.12 changelog entry beyond "What's New".
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. Nothing in this section is decided. Drafted by a Sonnet agent from
