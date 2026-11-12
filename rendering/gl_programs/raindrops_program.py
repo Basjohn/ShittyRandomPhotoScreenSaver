@@ -44,15 +44,21 @@ void main() {
     @property
     def fragment_source(self) -> str:
         return """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform int u_ripple_count;  // 1-8, default 3
-uniform float u_ripple_seed;  // per-transition random seed for position variety
+layout(binding = 0) uniform sampler2D uOldTex;
+layout(binding = 1) uniform sampler2D uNewTex;
+// The pass block (N1.6): the item quad's values and this program's, one std140 block at the pass-block binding
+// (SCENE3D_PASS_BLOCK_BINDING); the quad's vertex stage declares the same block (quick/transitions/fullscreen_pass).
+layout(std140, binding = 18) uniform RipplePass {
+    mat4 uMatrix;
+    vec2 uItemSize;
+    float u_progress;
+    vec2 u_resolution;
+    int u_ripple_count;  // 1-8, default 3
+    float u_ripple_seed;  // per-transition random seed for position variety
+};
 
 float hash1(float n) {
     return fract(sin(n) * 43758.5453123);

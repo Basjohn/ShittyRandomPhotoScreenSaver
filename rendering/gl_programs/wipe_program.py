@@ -46,13 +46,19 @@ void main() {
         # Optimized: Uses precomputed axis value instead of mode branching.
         # The Python side computes the axis transformation, shader just applies it.
         return """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform int u_mode;  // 0=L2R, 1=R2L, 2=T2B, 3=B2T, 4=Diag TL-BR, 5=Diag TR-BL
+layout(binding = 0) uniform sampler2D uOldTex;
+layout(binding = 1) uniform sampler2D uNewTex;
+// The pass block (N1.6): the item quad's values and this program's, one std140 block at the pass-block binding
+// (SCENE3D_PASS_BLOCK_BINDING); the quad's vertex stage declares the same block (quick/transitions/fullscreen_pass).
+layout(std140, binding = 18) uniform WipePass {
+    mat4 uMatrix;
+    vec2 uItemSize;
+    float u_progress;
+    int u_mode;  // 0=L2R, 1=R2L, 2=T2B, 3=B2T, 4=Diag TL-BR, 5=Diag TR-BL
+};
 
 void main() {
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);

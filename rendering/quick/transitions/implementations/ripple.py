@@ -5,10 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 import math
 
-from OpenGL import GL as gl
-
 from rendering.gl_programs.raindrops_program import raindrops_program
-from ..fullscreen_pass import FullscreenPassRenderer
+from ..fullscreen_pass import FullscreenPassRenderer, fullscreen_pass_parts
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -35,17 +33,17 @@ class QuickRippleRenderer(FullscreenPassRenderer):
     transition_id = "ripple"
     label = "Quick Ripple"
     fragment_source = raindrops_program.fragment_source
-    uniform_names = ("u_resolution", "u_ripple_count", "u_ripple_seed")
+    vertex_source, block = fullscreen_pass_parts(fragment_source, "RipplePass")
+    value_names = ("u_resolution", "u_ripple_count", "u_ripple_seed")
 
     def resolve(self, frame: QuickTransitionRenderFrame) -> tuple[int, float]:
         parameters = frame.run.request.parameter_dict()
         return _ripple_count(parameters), _ripple_seed(parameters)
 
-    def apply(self, values, uniforms, frame: QuickTransitionRenderFrame) -> None:
-        count, seed = values
-        gl.glUniform2f(uniforms["u_resolution"], float(frame.viewport[2]), float(frame.viewport[3]))
-        gl.glUniform1i(uniforms["u_ripple_count"], count)
-        gl.glUniform1f(uniforms["u_ripple_seed"], seed)
+    def values(self, resolved, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        count, seed = resolved
+        return {"u_resolution": (float(frame.viewport[2]), float(frame.viewport[3])),
+                "u_ripple_count": count, "u_ripple_seed": seed}
 
 
 def create_transition_renderer() -> QuickRippleRenderer:

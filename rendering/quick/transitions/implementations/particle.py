@@ -6,10 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import math
 
-from OpenGL import GL as gl
-
 from rendering.gl_programs.particle_program import particle_program
-from ..fullscreen_pass import FullscreenPassRenderer
+from ..fullscreen_pass import FullscreenPassRenderer, fullscreen_pass_parts
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -119,7 +117,8 @@ class QuickParticleRenderer(FullscreenPassRenderer):
     transition_id = "particle"
     label = "Quick Particle"
     fragment_source = particle_program.fragment_source
-    uniform_names = (
+    vertex_source, block = fullscreen_pass_parts(fragment_source, "ParticlePass")
+    value_names = (
         "u_resolution", "u_seed", "u_mode", "u_direction",
         "u_particle_radius", "u_overlap", "u_trail_length",
         "u_trail_strength", "u_swirl_strength", "u_swirl_turns",
@@ -130,23 +129,25 @@ class QuickParticleRenderer(FullscreenPassRenderer):
     def resolve(self, frame: QuickTransitionRenderFrame) -> _ParticleParameters:
         return _particle_parameters(frame.run.request.parameter_dict())
 
-    def apply(self, params: _ParticleParameters, uniforms, frame: QuickTransitionRenderFrame) -> None:
-        gl.glUniform2f(uniforms["u_resolution"], float(frame.viewport[2]), float(frame.viewport[3]))
-        gl.glUniform1f(uniforms["u_seed"], params.seed)
-        gl.glUniform1f(uniforms["u_mode"], float(params.mode))
-        gl.glUniform1f(uniforms["u_direction"], float(params.direction))
-        gl.glUniform1f(uniforms["u_particle_radius"], params.particle_radius)
-        gl.glUniform1f(uniforms["u_overlap"], params.overlap)
-        gl.glUniform1f(uniforms["u_trail_length"], params.trail_length)
-        gl.glUniform1f(uniforms["u_trail_strength"], params.trail_strength)
-        gl.glUniform1f(uniforms["u_swirl_strength"], params.swirl_strength)
-        gl.glUniform1f(uniforms["u_swirl_turns"], params.swirl_turns)
-        gl.glUniform1f(uniforms["u_use_3d"], 1.0 if params.use_3d_shading else 0.0)
-        gl.glUniform1f(uniforms["u_texture_map"], 1.0 if params.texture_mapping else 0.0)
-        gl.glUniform1f(uniforms["u_wobble"], 1.0 if params.wobble else 0.0)
-        gl.glUniform1f(uniforms["u_gloss_size"], params.gloss_size)
-        gl.glUniform1f(uniforms["u_light_dir"], float(params.light_direction))
-        gl.glUniform1f(uniforms["u_swirl_order"], float(params.swirl_order))
+    def values(self, params: _ParticleParameters, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        return {
+            "u_resolution": (float(frame.viewport[2]), float(frame.viewport[3])),
+            "u_seed": params.seed,
+            "u_mode": float(params.mode),
+            "u_direction": float(params.direction),
+            "u_particle_radius": params.particle_radius,
+            "u_overlap": params.overlap,
+            "u_trail_length": params.trail_length,
+            "u_trail_strength": params.trail_strength,
+            "u_swirl_strength": params.swirl_strength,
+            "u_swirl_turns": params.swirl_turns,
+            "u_use_3d": 1.0 if params.use_3d_shading else 0.0,
+            "u_texture_map": 1.0 if params.texture_mapping else 0.0,
+            "u_wobble": 1.0 if params.wobble else 0.0,
+            "u_gloss_size": params.gloss_size,
+            "u_light_dir": float(params.light_direction),
+            "u_swirl_order": float(params.swirl_order),
+        }
 
 
 def create_transition_renderer() -> QuickParticleRenderer:

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from OpenGL import GL as gl
-
 from rendering.gl_programs.wipe_program import wipe_program
-from ..fullscreen_pass import FullscreenPassRenderer
+from ..fullscreen_pass import FullscreenPassRenderer, fullscreen_pass_parts
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -33,13 +31,14 @@ class QuickWipeRenderer(FullscreenPassRenderer):
     transition_id = "wipe"
     label = "Quick Wipe"
     fragment_source = wipe_program.fragment_source
-    uniform_names = ("u_mode",)
+    vertex_source, block = fullscreen_pass_parts(fragment_source, "WipePass")
+    value_names = ("u_mode",)
 
     def resolve(self, frame: QuickTransitionRenderFrame) -> int:
         return _wipe_mode(frame.run.request.direction)
 
-    def apply(self, mode, uniforms, frame: QuickTransitionRenderFrame) -> None:
-        gl.glUniform1i(uniforms["u_mode"], mode)
+    def values(self, mode, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        return {"u_mode": mode}
 
 
 def create_transition_renderer() -> QuickWipeRenderer:

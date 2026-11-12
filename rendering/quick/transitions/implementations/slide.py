@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import math
 
-from OpenGL import GL as gl
-
-from ..fullscreen_pass import FullscreenPassRenderer
+from ..fullscreen_pass import FullscreenPassRenderer, fullscreen_pass_parts
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -26,15 +24,20 @@ _MOTION_STYLE_CODES = {
 
 
 _SLIDE_FRAGMENT_SOURCE = """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_direction;
-uniform int u_motionStyle;
-uniform vec2 uItemSize;
+layout(binding = 0) uniform sampler2D uOldTex;
+layout(binding = 1) uniform sampler2D uNewTex;
+// The pass block (N1.6): the item quad's values and this program's, one std140 block at the pass-block binding
+// (SCENE3D_PASS_BLOCK_BINDING); the quad's vertex stage declares the same block (quick/transitions/fullscreen_pass).
+layout(std140, binding = 18) uniform SlidePass {
+    mat4 uMatrix;
+    vec2 uItemSize;
+    float u_progress;
+    vec2 u_direction;
+    int u_motionStyle;
+};
 
 float settledSegment(float q) {
     return q*q*q*(q*(6.0*q - 15.0) + 10.0);
@@ -302,17 +305,17 @@ class QuickSlideRenderer(FullscreenPassRenderer):
     transition_id = "slide"
     label = "Quick Slide"
     fragment_source = _SLIDE_FRAGMENT_SOURCE
-    uniform_names = ("u_direction", "u_motionStyle")
+    vertex_source, block = fullscreen_pass_parts(fragment_source, "SlidePass")
+    value_names = ("u_direction", "u_motionStyle")
 
     def resolve(self, frame: QuickTransitionRenderFrame) -> tuple[tuple[float, float], int]:
         direction = _slide_direction_vector(frame.run.request.direction)
         motion_style = _slide_motion_style(frame.run.request.parameter_dict()["motion_style"])
         return direction, _MOTION_STYLE_CODES[motion_style]
 
-    def apply(self, values, uniforms, frame: QuickTransitionRenderFrame) -> None:
-        direction, style = values
-        gl.glUniform2f(uniforms["u_direction"], *direction)
-        gl.glUniform1i(uniforms["u_motionStyle"], style)
+    def values(self, resolved, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        direction, style = resolved
+        return {"u_direction": direction, "u_motionStyle": style}
 
 
 def create_transition_renderer() -> QuickSlideRenderer:

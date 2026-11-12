@@ -46,14 +46,17 @@ void main() {
         # Optimized: Uses branchless bounds checking with step() for better GPU performance.
         # This eliminates thread divergence from if-statements.
         return """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec4 u_oldRect; // xy = pos, zw = size, in normalised viewport coords
-uniform vec4 u_newRect; // xy = pos, zw = size, in normalised viewport coords
+layout(binding = 0) uniform sampler2D uOldTex;
+layout(binding = 1) uniform sampler2D uNewTex;
+// The pass block (N1.6): one std140 block at the pass-block binding (SCENE3D_PASS_BLOCK_BINDING).
+layout(std140, binding = 18) uniform SlideRectsPass {
+    float u_progress;
+    vec4 u_oldRect; // xy = pos, zw = size, in normalised viewport coords
+    vec4 u_newRect; // xy = pos, zw = size, in normalised viewport coords
+};
 
 void main() {
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);

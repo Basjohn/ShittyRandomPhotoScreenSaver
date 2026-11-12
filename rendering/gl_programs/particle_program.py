@@ -62,28 +62,34 @@ void main() {
     @property
     def fragment_source(self) -> str:
         return """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform float u_seed;
-uniform float u_mode;           // 0=Directional, 1=Swirl, 2=Converge
-uniform float u_direction;      // 0-7=directions, 8=random, 9=random placement
-uniform float u_particle_radius; // Base radius in pixels
-uniform float u_overlap;        // Overlap in pixels
-uniform float u_trail_length;   // Trail length fraction
-uniform float u_trail_strength; // Trail opacity
-uniform float u_swirl_strength; // Swirl angular component
-uniform float u_swirl_turns;    // Spiral turns
-uniform float u_use_3d;         // 3D shading flag
-uniform float u_texture_map;    // Texture mapping flag
-uniform float u_wobble;         // Per-particle wobble enable
-uniform float u_gloss_size;     // Specular highlight size (higher = smaller/sharper)
-uniform float u_light_dir;      // Light direction: 0=TL, 1=TR, 2=Center, 3=BL, 4=BR
-uniform float u_swirl_order;    // 0=Typical, 1=Center Outward, 2=Edges Inward
+layout(binding = 0) uniform sampler2D uOldTex;
+layout(binding = 1) uniform sampler2D uNewTex;
+// The pass block (N1.6): the item quad's values and this program's, one std140 block at the pass-block binding
+// (SCENE3D_PASS_BLOCK_BINDING); the quad's vertex stage declares the same block (quick/transitions/fullscreen_pass).
+layout(std140, binding = 18) uniform ParticlePass {
+    mat4 uMatrix;
+    vec2 uItemSize;
+    float u_progress;
+    vec2 u_resolution;
+    float u_seed;
+    float u_mode;           // 0=Directional, 1=Swirl, 2=Converge
+    float u_direction;      // 0-7=directions, 8=random, 9=random placement
+    float u_particle_radius; // Base radius in pixels
+    float u_overlap;        // Overlap in pixels
+    float u_trail_length;   // Trail length fraction
+    float u_trail_strength; // Trail opacity
+    float u_swirl_strength; // Swirl angular component
+    float u_swirl_turns;    // Spiral turns
+    float u_use_3d;         // 3D shading flag
+    float u_texture_map;    // Texture mapping flag
+    float u_wobble;         // Per-particle wobble enable
+    float u_gloss_size;     // Specular highlight size (higher = smaller/sharper)
+    float u_light_dir;      // Light direction: 0=TL, 1=TR, 2=Center, 3=BL, 4=BR
+    float u_swirl_order;    // 0=Typical, 1=Center Outward, 2=Edges Inward
+};
 
 // Constants
 const float PI = 3.14159265359;

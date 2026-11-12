@@ -5,17 +5,22 @@ program between the old picture (unit 0) and the new one (unit 1). They used to 
 lifecycle by hand, and one shared gap (no warm-up: their programs compiled on the first visible
 frame, 3-18 ms at 1440p) followed. This base owns that lifecycle once:
 
-* ``warm()`` compiles the program in the warm-up's one step, so the run's first frame compiles
-  nothing (``tests/test_transition_lifecycle_contract.py``);
-* every instance owns its own program and uniform locations: never a shared or class-level GL
-  handle (``Docs/Historical_Bugs/R-51_Shared_Shader_Cache_Deletion_Ownership.md``);
-* the required uniforms are looked up at compile and any missing one fails loudly;
-* ``render()`` validates the run's parameters (``resolve``) before any GL state changes, then sets
-  the common uniforms (matrix, item size, progress), the transition's own (``apply``), binds both
-  pictures and draws, in that order.
+* ``warm()`` compiles the program in one warm-up step and, given the render size, allocates its
+  pass block's ring in the next, so the run's first frame compiles and allocates nothing
+  (``tests/test_transition_lifecycle_contract.py``);
+* every instance owns its own program and pass blocks: never a shared or class-level GL handle
+  (``Docs/Historical_Bugs/R-51_Shared_Shader_Cache_Deletion_Ownership.md``);
+* every value the program reads is one std140 pass block (N1.6), which the fragment declares
+  (at ``SCENE3D_PASS_BLOCK_BINDING``) and the item quad's vertex stage declares
+  identically (``item_quad_vertex_source``); the block's members are checked at compile and a
+  missing one fails loudly, and the samplers carry their units in the source (0 old, 1 new);
+* ``render()`` validates the run's parameters (``resolve``) before any GL state changes, then
+  packs the common values (matrix, item size, progress) and the transition's own (``values``),
+  binds both pictures and draws inside the bound block, in that order.
 
-A transition gives its ``transition_id``, ``label``, ``fragment_source`` and extra
-``uniform_names``, and overrides ``resolve`` / ``apply`` when it has parameters.
+A transition gives its ``transition_id``, ``label``, ``fragment_source`` and the parts
+``fullscreen_pass_parts`` makes from it, and overrides ``resolve`` / ``values`` when it has
+parameters.
 """
 
 from __future__ import annotations
@@ -24,76 +29,84 @@ from collections.abc import Mapping
 
 from OpenGL import GL as gl
 
-from rendering.quick.render.gl_resources import compile_program
-from .render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
+from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl, pack_block
+from rendering.gl_programs.scene3d import Scene3DBlockLayout
+from rendering.quick.render.gl_resources import compile_program, delete_program
+from rendering.quick.scene3d.frame import item_quad_vertex_source
+from rendering.quick.scene3d.uniforms import PassBlocks
+from .render_contract import QuickTransitionRenderFrame
 
-COMMON_UNIFORMS = ("uMatrix", "uItemSize", "u_progress", "uOldTex", "uNewTex")
+COMMON_VALUES = ("uMatrix", "uItemSize", "u_progress")
+
+
+def fullscreen_pass_parts(fragment_source: str, block_name: str):
+    """(the item quad's vertex stage, the block layout) from the fragment's own ``block_name`` declaration: one
+    declaration for both stages and for the packing."""
+    declaration = block_declaration(fragment_source, block_name)
+    return item_quad_vertex_source(declaration), block_layout_from_glsl(declaration)
 
 
 class FullscreenPassRenderer:
     transition_id: str = ""
     label: str = ""
     fragment_source: str = ""
-    uniform_names: tuple[str, ...] = ()      # beyond COMMON_UNIFORMS
+    # ``fullscreen_pass_parts(fragment_source, <its block's name>)``, in the class body (so the readiness check reads
+    # the vertex stage the transition draws with).
+    vertex_source: str = ""
+    block: Scene3DBlockLayout | None = None
+    value_names: tuple[str, ...] = ()        # beyond COMMON_VALUES
 
     def __init__(self) -> None:
         self._program = 0
-        self._uniforms: dict[str, int] = {}
+        self._layout = self.block
+        self._blocks = PassBlocks(self.label, block_bytes=self._layout.size)
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._program)
+        return bool(self._program) or self._blocks.has_resources
 
     def resolve(self, frame: QuickTransitionRenderFrame) -> object:
-        """The run's validated values for ``apply`` (no GL); raise on an unresolved parameter."""
+        """The run's validated values for ``values`` (no GL); raise on an unresolved parameter."""
         return None
 
-    def apply(self, values: object, uniforms: Mapping[str, int], frame: QuickTransitionRenderFrame) -> None:
-        """Set the transition's own uniforms (its program is in use)."""
+    def values(self, resolved: object, frame: QuickTransitionRenderFrame) -> Mapping[str, object]:
+        """The transition's own block values (beyond the common ones) for this frame."""
+        return {}
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         if not self._program:
             self._initialize()
-        values = self.resolve(frame)
-        uniforms = self._uniforms
+        resolved = self.resolve(frame)
+        values = {"uMatrix": frame.matrix_values, "uItemSize": frame.logical_size,
+                  "u_progress": float(frame.sample.eased_progress)}
+        values.update(self.values(resolved, frame))
+        data = pack_block(self._layout, values)
         gl.glUseProgram(self._program)
-        gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform1f(uniforms["u_progress"], float(frame.sample.eased_progress))
-        self.apply(values, uniforms, frame)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
-        gl.glUniform1i(uniforms["uOldTex"], 0)
         gl.glActiveTexture(gl.GL_TEXTURE1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
-        gl.glUniform1i(uniforms["uNewTex"], 1)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        with self._blocks.bound(data):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """The gradual warm-up's one step (render thread, between runs): compile the program so
-        the run's first frame compiles nothing."""
+        """The gradual warm-up's steps (render thread, between runs): compile the program, then, given the render
+        ``size``, allocate the pass block's ring, so the run's first frame compiles and allocates nothing."""
         if not self._program:
             self._initialize()
-        return True
+            return size is None
+        return size is None or self._blocks.warm()
 
     def release_resources(self) -> None:
-        if not self._program:
-            return
-        gl.glDeleteProgram(self._program)
-        self._program = 0
-        self._uniforms.clear()
+        if self._program:
+            delete_program(self._program)
+            self._program = 0
+        self._blocks.release()
 
     def _initialize(self) -> None:
-        program = compile_program(QUICK_TRANSITION_VERTEX_SOURCE, self.fragment_source, label=self.label)
-        self._program = program
-        try:
-            names = COMMON_UNIFORMS + tuple(name for name in self.uniform_names if name not in COMMON_UNIFORMS)
-            uniforms = {name: int(gl.glGetUniformLocation(program, name)) for name in names}
-            missing = [name for name in names if uniforms[name] < 0]
-            if missing:
-                raise RuntimeError(f"{self.label} uniforms are incomplete: " + ", ".join(missing))
-            self._uniforms = uniforms
-        except Exception:
-            self.release_resources()
-            raise
+        held = {name for name, _kind in self._layout.fields}
+        missing = [name for name in COMMON_VALUES + self.value_names if name not in held]
+        if missing:
+            raise RuntimeError(f"{self.label} pass block is incomplete: " + ", ".join(missing))
+        self._program = compile_program(self.vertex_source, self.fragment_source, label=self.label)
