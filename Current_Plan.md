@@ -38,14 +38,13 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.2 (High; build round 2), the N1.6 remainder (Medium).
+**Now (in flight):** the N1.6 remainder (Medium); N2.4 next in the High slot.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
-  1. N2.2, the host interface and frame driver (unblocked by N0.3).
-  2. Then N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
-  3. The 1C.2 Save stall, and 1C.10, as defects between N steps.
+  1. N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
+  2. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
   1. The N1.6 remainder (the motion and trail family, then its transitions; no C++).
   2. 1B.10.
@@ -408,9 +407,17 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 **N2. The substrate's 2D half and Spectrum (C++; `native/spike_p1` stays evidence, never a shipped renderer)**
 
-- [ ] N2.2 The host interface and the frame driver (D5.1, D5.2): the Qt Quick host and the hidden host; all core
-  work recorded on `beforeRendering` through a C++ connection; the thread probe reports zero Python thread
-  states.
+- [ ] N2.2 leftovers (N2.2 proved 12-13 Nov: `native/core/python/host_check.py`, N22 VERDICT PASS on all four
+  backends; lifecycle facts J1 to J4 in `Native_Core_N06_N07_Qt_Facts.md`):
+  - [ ] An OpenGL hidden host is created once and kept (Qt's threaded render control keeps 2 handles and 1 USER
+    object per create and destroy, J1). The N2.7 backend owner and every hidden-host user hold this rule, with a
+    test that counts creations.
+  - [ ] The hidden host's Qt Quick target keeps its contents between frames (defect B). A hidden host with
+    transparent content must clear what Qt Quick does not cover; decide that when the first such host exists.
+  - [ ] The `QT_DEFECTS` rule is copied in `native/core/python/vk_validation.py` and the spike's `run_n06.py`:
+    one source, or both edited when defect A's excuse goes at the next Qt patch.
+  - [ ] The two depth side defects (`waveform_ribbon.py:54`, `scene3d_spheres.py:197`), Python-renderer shader
+    edits proved by identity renders.
 - [ ] N2.3 The packet reader with D1's barrier, D2's single consumer and the drop edge; the adversarial tests of
   P3.0.
   - [ ] The C++ reader matches the Python reference decoder (`core/visualizer_engine/spectrum_native_schema.py`,
