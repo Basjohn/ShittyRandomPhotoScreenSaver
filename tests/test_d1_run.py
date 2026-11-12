@@ -277,6 +277,29 @@ def test_a_grabbed_frame_is_encoded_off_the_gui_thread_and_recorded_on_it(qt_app
     assert completed_on == [threading.main_thread()] * 2
 
 
+def test_steps_are_armed_on_precise_timers_and_fire_in_order(qt_app, tmp_path):
+    """Qt's default single-shot is coarse (5 %: about 1 s at 22 s) and reordered steps planned 0.1 s apart (12 Nov: a
+    grab fired before the press it was meant to follow). Every step is armed precise and fires in plan order.
+    Control: the pre-fix harness armed coarse timers."""
+    import time
+
+    from PySide6.QtCore import QObject, Qt, QTimer
+
+    steps = [d1_run.Step(0.05, "key", "esc"), d1_run.Step(0.06, "key", "esc"), d1_run.Step(0.08, "key", "esc")]
+    driver = d1_run.D1Driver(steps, display=1, out=tmp_path)
+    fired = []
+    driver.fire = lambda index: fired.append(index)
+    engine = QObject()
+    driver._on_reveal(engine)
+    armed = [timer for timer in engine.findChildren(QTimer) if timer.isActive()]
+    assert len(armed) == 3 and all(timer.timerType() == Qt.TimerType.PreciseTimer for timer in armed)
+    deadline = time.monotonic() + 5.0
+    while len(fired) < 3 and time.monotonic() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.002)
+    assert fired == [0, 1, 2]
+
+
 # -- teardown ---------------------------------------------------------------------------------------------------------
 
 def _child(tmp_path, body: str) -> list[str]:

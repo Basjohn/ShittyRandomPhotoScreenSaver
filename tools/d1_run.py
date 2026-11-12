@@ -587,6 +587,7 @@ class D1Driver:
         self._receipt_window = None
         self._grabs: list[_FrameGrab] = []
         self._writer: _FrameWriter | None = None
+        self._step_timers: list = []
 
     def install(self, *, engine_class=None, patch=setattr) -> None:
         if engine_class is None:
@@ -625,10 +626,17 @@ class D1Driver:
         if self._scheduled:
             return
         self._scheduled = True
-        from PySide6.QtCore import QTimer
+        from PySide6.QtCore import Qt, QTimer
 
+        # Precise: Qt's default coarse single-shot may fire 5 % early or late (about 1 s at 22 s), which reordered
+        # steps a tenth of a second apart (12 Nov: a grab planned 0.6 s after a press fired before it).
         for index, step in enumerate(self.steps):
-            QTimer.singleShot(int(round(step.at * 1000.0)), engine, partial(self.fire, index))
+            timer = QTimer(engine)                       # parented: lives as long as the engine
+            timer.setSingleShot(True)
+            timer.setTimerType(Qt.TimerType.PreciseTimer)
+            timer.timeout.connect(partial(self.fire, index))
+            timer.start(int(round(step.at * 1000.0)))
+            self._step_timers.append(timer)
         self._event("armed", steps=[step.text() for step in self.steps])
 
     def _window_census(self, engine) -> list[dict]:
