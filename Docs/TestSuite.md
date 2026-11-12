@@ -1120,12 +1120,12 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   animates again after uncover. Negative controls: no host call at the cover edge (3 red), the Clock not bound to
   the cover (2 red), refresh edges animating while covered (1 red), a transfer ignoring the target's cover (1 red).
 - `tests/test_vulkan_shader_readiness.py` — port-readiness rule 5: every GLSL compute shader the tool discovers in
-  the product compiles with PySide6's `qsb` for every target (SPIR-V, GLSL 430 and 310 es, HLSL 5.0, MSL 1.2),
-  except the shrinking legacy list of 16 loose-uniform sources (P3 converts them per mode; EB's drift solver left
-  it with D4); a listed shader that now compiles must leave the list. Further tests pin the rule's two sides on a
-  tiny program (loose uniform fails, std140 block compiles), that discovery finds every listed module, and that a
-  64-bit float, which SPIR-V alone accepts, fails the full target set. Negative control: dropping a legacy entry
-  fails it.
+  the product compiles with PySide6's `qsb` for every target (SPIR-V, GLSL 430 and 310 es, HLSL 5.0, MSL 1.2), with
+  no exception list (the legacy list emptied with D4 and N1.2 and was removed: nothing can be added back). Further
+  tests pin the rule's two sides on a tiny program (loose uniform fails, std140 block compiles), that discovery still
+  finds the converted modules, that a 64-bit float, which SPIR-V alone accepts, fails the full target set, and that
+  an `r16f` storage image fails GLSL ES while `rgba16f` compiles (why the scalar half images widened). Negative
+  control: any of the pre-N1.2 sources (e.g. `git show 7ac980d7:rendering/quick/scene3d/motion.py`) fails it.
 - `tests/test_visualizer_glyph_row.py` — the Visualizer card's one bottom-right glyph row (operator, 8 Nov) on the
   hidden production scene: on the ordinary, a narrow and the display-wide card, every combination of Reset Camera and
   the expand glyph lays the offered glyphs in one row (one bottom edge and size, preset steps then Reset Camera then
