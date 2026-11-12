@@ -15,9 +15,7 @@
 #include <QtCore/QList>
 #include <QtCore/QStringList>
 #include <QtCore/QThread>
-#include <QtGui/QColor>
 #include <QtGui/QImage>
-#include <QtGui/QPainter>
 #include <QtGui/QVulkanFunctions>
 #include <QtGui/QVulkanInstance>
 #include <QtQuick/QQuickGraphicsConfiguration>
@@ -113,6 +111,10 @@ QShader shaderFrom(const unsigned char *data, unsigned int size)
 
 // The upload job's input and the edge field's photograph: deterministic for a seed, generated on whichever thread
 // runs the job (the job thread, or the render thread in the in-frame form), so both forms see the same pixels.
+// Written pixel by pixel, never with QPainter: Qt's raster engine splits large antialiased fills into a
+// non-premultiplied format across Qt GUI's thread pool (qdrawhelper.cpp QT_THREAD_PARALLEL_FILLS, from 2^17
+// pixels), which started pooled threads ("Thread (pooled)", Qt6Core.dll) from the job thread: the owners round's
+// +1 thread / +4 handles steps (N0.7 build round 2). A job uses its own thread only.
 QImage makePhoto(int width, int height, quint32 seed)
 {
     QImage image(width, height, QImage::Format_RGBA8888);
@@ -130,30 +132,42 @@ QImage makePhoto(int width, int height, quint32 seed)
             row[4 * x + 3] = 255;
         }
     }
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
     quint32 state = seed * 2654435761u + 0x9e3779b9u;
     auto next = [&state]() {
         state = state * 1664525u + 1013904223u;
         return state >> 8;
     };
     for (int i = 0; i < 64; ++i) {
-        const int r = int(next() % 256u);
-        const int g = int(next() % 256u);
-        const int b = int(next() % 256u);
+        const uchar r = uchar(next() % 256u);
+        const uchar g = uchar(next() % 256u);
+        const uchar b = uchar(next() % 256u);
         const int cx = int(next() % quint32(width));
         const int cy = int(next() % quint32(height));
         const int rw = 16 + int(next() % quint32(std::max(1, width / 5)));
         const int rh = 16 + int(next() % quint32(std::max(1, height / 5)));
-        painter.setBrush(QColor(r, g, b));
-        const QRect rect(cx - rw / 2, cy - rh / 2, rw, rh);
-        if (i % 2)
-            painter.drawEllipse(rect);
-        else
-            painter.drawRect(rect);
+        const int x0 = std::max(0, cx - rw / 2);
+        const int x1 = std::min(width, cx - rw / 2 + rw);
+        const int y0 = std::max(0, cy - rh / 2);
+        const int y1 = std::min(height, cy - rh / 2 + rh);
+        const bool ellipse = (i % 2) != 0;
+        // The ellipse test in integers (twice the coordinates, pixel centres): exact and identical on every thread.
+        const qint64 ax = rw;
+        const qint64 by = rh;
+        for (int y = y0; y < y1; ++y) {
+            uchar *row = image.scanLine(y);
+            const qint64 dy = 2 * qint64(y) + 1 - 2 * qint64(cy);
+            for (int x = x0; x < x1; ++x) {
+                if (ellipse) {
+                    const qint64 dx = 2 * qint64(x) + 1 - 2 * qint64(cx);
+                    if (dx * dx * by * by + dy * dy * ax * ax > ax * ax * by * by)
+                        continue;
+                }
+                row[4 * x + 0] = r;
+                row[4 * x + 1] = g;
+                row[4 * x + 2] = b;
+            }
+        }
     }
-    painter.end();
     return image;
 }
 

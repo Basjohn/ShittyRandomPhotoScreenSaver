@@ -529,6 +529,7 @@ PyObject *quick_session_begin(PyObject *, PyObject *args)
     put(d, "vk_device", PyLong_FromUnsignedLongLong(session->vkDevice()));
     put(d, "vk_queue_family", PyLong_FromLong(session->vkQueueFamily()));
     put(d, "vk_queue_index", PyLong_FromLong(session->vkQueueIndex()));
+    put(d, "target_prime", pyStr(session->primeNote()));
     return d;
 }
 

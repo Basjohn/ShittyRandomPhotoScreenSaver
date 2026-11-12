@@ -84,8 +84,9 @@ from run_n06 import (  # noqa: E402
     _delta,
     _slope,
     environment_record,
-    message_groups,
+    messenger_errors_unexplained,
     use_layer_path,
+    validation_summary,
     validation_warnings,
 )
 from run_spike import HEIGHT, NATIVE_QML, WIDTH, _import_native, _ptr  # noqa: E402
@@ -365,19 +366,29 @@ def _validation_record(ctx: dict, teardowns: list[dict]) -> dict:
     """D9 (iv): the layer's status and, per context torn down, the messages grouped (whose call, which phase)."""
     layer, status = _validation(ctx)
     messages = [t.get("messages", {}) for t in teardowns]
+    summaries = [validation_summary(m) for m in messages]
+    recorded: dict = {}
+    for s in summaries:
+        for k, v in s["recorded_qt_defects_excused"].items():
+            recorded[k] = recorded.get(k, 0) + v
     return {"layer_loaded": layer, "status": status,
             "synchronisation_validation": bool(ctx.get("instance", {}).get("synchronisation_validation")),
             "errors": sum(m.get("errors", 0) for m in messages),
             "warnings": sum(validation_warnings(m) for m in messages),
             "loader_messages": sum(m.get("warnings", 0) - validation_warnings(m) for m in messages),
+            "recorded_qt_defects_excused": recorded,
+            "unexplained_errors": sum(s["unexplained_errors"] for s in summaries),
+            "unexplained_warnings": sum(s["unexplained_warnings"] for s in summaries),
             "per_phase": [m.get("per_phase", {}) for m in messages],
-            "attribution": [g for m in messages for g in message_groups(m)]}
+            "attribution": [g for s in summaries for g in s["groups"]]}
 
 
 def _validation_checks(record: dict, checks: dict, owed: list) -> None:
+    """D9 (iv): synchronisation validation on, and no error or warning apart from the recorded Qt 6.12.0 defects
+    excused where they are (run_n06.QT_DEFECTS; their counts are in the record)."""
     if record["layer_loaded"]:
         checks["synchronisation_validation_on"] = record["synchronisation_validation"]
-        checks["validation_clean"] = record["errors"] == 0 and record["warnings"] == 0
+        checks["validation_clean"] = record["unexplained_errors"] == 0 and record["unexplained_warnings"] == 0
     else:
         owed.append(f"D9 (iv): {record['status']}")
 
@@ -500,6 +511,7 @@ def round_jobs(native, out: Path, args) -> dict:
         "host_rendered_on_our_device": host.error is None and bool(host.session.get("vk_device"))
         and host.session.get("vk_device") == ctx.get("device", {}).get("vk_device")
         and host.session.get("vk_queue_index") == 0,
+        "host_target_primed_for_load": str(host.session.get("target_prime", "")).startswith("primed"),
         "service_started": bool(start.get("ok")),
         "second_qrhi_works": probe.get("second_qrhi_works") is True,
         "second_qrhi_on_queue_family_0_index_1": probe.get("queue_family") == 0 and probe.get("queue_index") == 1,
@@ -526,7 +538,8 @@ def round_jobs(native, out: Path, args) -> dict:
         "service_stopped": stop.get("state_after") == "stopped",
         "teardown_ok": bool(teardown.get("ok")) and teardown.get("device_wait_idle_ok") is True
         and teardown.get("steps") == EXPECTED_TEARDOWN,
-        "no_messenger_errors": teardown.get("messages", {}).get("errors", -1) == 0,
+        "no_messenger_errors": bool(teardown.get("messages"))
+        and messenger_errors_unexplained(teardown["messages"]) == 0,
         "environment_clean": environment_record()["clean"],
     }
     owed: list = []
@@ -663,7 +676,8 @@ def round_measure(native, out: Path, args) -> dict:
         "jobs_published": job.get("job_gpu_wait_ms", {}).get("n", 0) > 0,
         "high_resolution_timer": all(p["analysis"].get("high_resolution_timer") for p in passes),
         "teardown_ok": bool(teardown.get("ok")) and teardown.get("device_wait_idle_ok") is True,
-        "no_messenger_errors": teardown.get("messages", {}).get("errors", -1) == 0,
+        "no_messenger_errors": bool(teardown.get("messages"))
+        and messenger_errors_unexplained(teardown["messages"]) == 0,
         "environment_clean": environment_record()["clean"],
     }
     owed: list = []
@@ -777,16 +791,32 @@ def _service_cycle(native, index: int, args, kind: str, before: dict | None = No
     rec["counters_after"] = _counters(native)
     census = n07_census.census()  # after the counters: the census opens thread handles while it runs
     rec["census_diff"] = n07_census.diff(before, census) if before else None
+    rec["census_threads"] = len(census.get("threads", []))
+    by_start: dict = {}
+    for t in census.get("threads", []):
+        key = f"{t.get('start_module', '?')} | {t.get('description') or ''}"
+        by_start[key] = by_start.get(key, 0) + 1
+    rec["threads_by_start"] = dict(sorted(by_start.items()))
     rec["_census"] = census
     return rec
 
 
+# Cycles before the baseline. Build round 2's retire run: threads appeared asynchronously after the first cycle's
+# counters were read (the counters said 18 threads, the census taken a moment later already had 41, and the next
+# cycle's counters 41; private bytes 345 then 1061 MiB), so the first cycle's reading is not yet a baseline; the
+# second cycle's is (N0.6 round 5 also warms up twice).
+WARMUP_CYCLES = 2
+
+
 def _attribution(records: list) -> dict:
-    """Owners-style figures over a list of cycles of one kind: handles per cycle (the first cycle is the warm-up
-    and the baseline), the cycles whose growth was not the driver's 3 per device, with their census diff, the
-    mean handle delta of every step, the handle kinds and threads gained over the measured cycles."""
-    measured = records[1:]
-    handles = [r["counters_after"]["handles"] for r in records]
+    """Owners-style figures over a list of cycles of one kind: handles per cycle (the first WARMUP_CYCLES are the
+    warm-up, the last of them the baseline), the cycles whose growth was not the driver's 3 per device, with their
+    census diff, the mean handle delta of every step, the handle kinds and threads gained over the measured
+    cycles."""
+    base = min(WARMUP_CYCLES, len(records)) - 1
+    measured = records[base + 1:]
+    handles_all = [r["counters_after"]["handles"] for r in records]
+    handles = handles_all[base:]
     deltas = [handles[i] - handles[i - 1] for i in range(1, len(handles))]
     expected = [DRIVER_HANDLES_PER_DEVICE * r["devices_created"] for r in measured]
     off = [{"cycle": r["cycle"], "delta": d, "expected": e, "census_diff": r.get("census_diff")}
@@ -795,7 +825,7 @@ def _attribution(records: list) -> dict:
     for r in measured:
         for k, v in ((r.get("census_diff") or {}).get("handles_by_type") or {}).items():
             type_totals[k] = type_totals.get(k, 0) + v
-    first, last = records[0].get("_census", {}), records[-1].get("_census", {})
+    first, last = records[base].get("_census", {}), records[-1].get("_census", {})
     persistent = n07_census.diff(first, last) if first and last else {}
     step_names: list = []
     step_sum: dict = {}
@@ -806,7 +836,11 @@ def _attribution(records: list) -> dict:
                 step_sum[name] = []
             step_sum[name].append(d)
     half = len(handles) // 2
-    return {"handles_series": handles, "per_cycle_deltas": deltas,
+    pooled = [r.get("threads_by_start", {}).get("Qt6Core.dll | Thread (pooled)", 0) for r in records]
+    return {"handles_series": handles_all, "baseline_cycle": base, "per_cycle_deltas": deltas,
+            "qt_pooled_threads_series": pooled,
+            "threads_by_start_first_and_last": [records[base].get("threads_by_start"),
+                                                records[-1].get("threads_by_start")],
             "expected_per_cycle": expected,
             "second_half_handles_per_cycle": round((handles[-1] - handles[half]) / max(1, len(handles) - 1 - half), 3),
             "cycles_off_driver_cost": off,
@@ -836,9 +870,10 @@ def round_retire(native, out: Path, args) -> dict:
     records = _run_cycles(native, args, ["retire_hook" if i % 2 else "retire_api" for i in range(args.cycles)])
     del app
     attribution = _attribution(records)
-    after = [r["counters_after"] for r in records]  # after[0] is the baseline (the warm-up cycle)
+    base = min(WARMUP_CYCLES, len(records)) - 1
+    after = [r["counters_after"] for r in records][base:]  # after[0] is the baseline (the last warm-up cycle)
     baseline, last = after[0], after[-1]
-    devices_after_baseline = sum(r["devices_created"] for r in records[1:])
+    devices_after_baseline = sum(r["devices_created"] for r in records[base + 1:])
     expected = DRIVER_HANDLES_PER_DEVICE * devices_after_baseline
     handle_delta = _delta(after, "handles")
     heap_deltas = [round(b.get("usage_mib", 0.0) - a.get("usage_mib", 0.0), 3)
@@ -875,7 +910,8 @@ def round_retire(native, out: Path, args) -> dict:
         "gpu_heaps_back_to_baseline": bool(baseline.get("gpu_budget_supported"))
         and all(abs(d) <= GPU_HEAP_TOLERANCE_MIB for d in heap_deltas),
         "private_bytes_plateau": plateau["min_last_third"] <= plateau["min_first_third"] + PRIVATE_PLATEAU_TOLERANCE_MIB,
-        "no_messenger_errors": all(r["messages"].get("errors", -1) == 0 for r in records),
+        "no_messenger_errors": all(messenger_errors_unexplained(r["messages"]) == 0 for r in records),
+        "no_qt_pooled_threads_started": len(set(attribution["qt_pooled_threads_series"][base:])) <= 1,
         "environment_clean": environment_record()["clean"],
     }
     validated = _validation_record({"instance": {"validation_layer_loaded": all(r["validation_layer_loaded"]
@@ -933,11 +969,13 @@ def round_owners(native, out: Path, args) -> dict:
         "every_cycle_created_and_tore_down": all(r["context_ok"] and r["teardown_ok"] and r["service_ok"]
                                                  for r in all_records),
         "jobs_swapped": all(r.get("jobs_swapped") for r in kinds["service_jobs"]),
-        "no_messenger_errors": all(r["messages"].get("errors", -1) == 0 for r in all_records),
+        "no_messenger_errors": all(messenger_errors_unexplained(r["messages"]) == 0 for r in all_records),
         "environment_clean": environment_record()["clean"],
         "host_only_driver_cost": abs(rate["host"] - DRIVER_HANDLES_PER_DEVICE) <= 0.05,
         "service_adds_no_handles": abs(attribution["job service: thread, second QRhi, probe, bodies"]) <= 0.05,
         "jobs_add_no_handles": abs(attribution["jobs published and swapped"]) <= 0.05,
+        "no_qt_pooled_threads_started": all(
+            len(set(s["qt_pooled_threads_series"][s["baseline_cycle"]:])) <= 1 for s in summaries.values()),
         "abandon_adds_no_handles": abs(attribution["abandon through n07_retire"]) <= 0.05
         and abs(attribution["abandon through the context teardown hook"]) <= 0.05,
     }
@@ -1004,7 +1042,8 @@ def round_rest(native, out: Path, args) -> dict:
         "negative_control_wakes_and_spends_cycles": neg.get("swapped") is True and neg.get("wakeups", 0) >= 1
         and neg.get("cpu_cycles", 0) > 0,
         "teardown_ok": bool(teardown.get("ok")) and teardown.get("device_wait_idle_ok") is True,
-        "no_messenger_errors": teardown.get("messages", {}).get("errors", -1) == 0,
+        "no_messenger_errors": bool(teardown.get("messages"))
+        and messenger_errors_unexplained(teardown["messages"]) == 0,
         "environment_clean": environment_record()["clean"],
     }
     owed: list = []
@@ -1041,7 +1080,8 @@ def main() -> int:
     parser.add_argument("--first", type=int, default=15, help="measure: the frame of a pass's first heavy job")
     parser.add_argument("--passes", type=int, default=2, help="measure: passes of none, in-frame and job in turn")
     parser.add_argument("--cycles", type=int, default=6,
-                        help="retire: cycles (the first is the baseline); owners: cycles per kind")
+                        help="retire: cycles (the first two warm up, the second is the baseline); owners: cycles per "
+                             "kind (the same warm-up per kind)")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json: sets VK_ADD_LAYER_PATH for this "
                              "process only; reported, allowed by the environment check")

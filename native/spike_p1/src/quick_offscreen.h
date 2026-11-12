@@ -81,6 +81,8 @@ public:
     void end();
 
     QString error() const { return m_error; }
+    // With preserveColor on Vulkan: what the first-use transition of the target did (quick_offscreen.cpp).
+    QString primeNote() const { return m_primeNote; }
     QString backendName() const { return m_backendName; }
     QString deviceName() const { return m_deviceName; }
     quintptr guiThread() const { return m_guiThread; }
@@ -97,6 +99,7 @@ private:
     int m_height;
     std::unique_ptr<RenderThreadHost> m_host;
     bool m_preserveColor = false;
+    QString m_primeNote;
     OffscreenTarget m_target;
     bool m_begun = false;
     int m_frameIndex = 0;

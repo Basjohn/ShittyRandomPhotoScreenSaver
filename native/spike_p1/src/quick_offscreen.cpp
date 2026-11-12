@@ -11,6 +11,8 @@
 #include <QtCore/QObject>
 #include <QtCore/QThread>
 #include <QtGui/QOpenGLContext>
+#include <QtGui/QVulkanFunctions>
+#include <QtGui/QVulkanInstance>
 #include <QtQuick/QQuickRenderControl>
 #include <QtQuick/QQuickRenderTarget>
 #include <QtQuick/QQuickWindow>
@@ -75,6 +77,57 @@ private:
     QObject *m_context = nullptr;
 };
 
+namespace {
+
+// N0.7, validation (Qt 6.12.0 finding C, Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md section I): a target
+// whose render pass loads its contents (PreserveColorContents, loadOp LOAD) is moved to
+// COLOR_ATTACHMENT_OPTIMAL by QRhi's resource tracker with dstAccessMask COLOR_ATTACHMENT_WRITE only (the
+// TexColorOutput access), so the pass's load reads after that layout transition without a dependency
+// (SYNC-HAZARD-READ-AFTER-WRITE, the first frame). The harness records that first transition itself, with READ and
+// WRITE in the second scope, in an offscreen frame of the same QRhi before Qt Quick renders, and tells QRhi the
+// layout (setNativeLayout); from then on the layout never changes. Vulkan only; returns what was done.
+QString primeColorTargetForLoad(QRhi *rhi, QRhiTexture *texture)
+{
+    if (!rhi || !texture || rhi->backend() != QRhi::Vulkan)
+        return QStringLiteral("not Vulkan");
+    const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+    if (!handles || !handles->inst || !handles->dev)
+        return QStringLiteral("no native handles");
+    QVulkanDeviceFunctions *df = handles->inst->deviceFunctions(handles->dev);
+    QRhiCommandBuffer *cb = nullptr;
+    if (!df || rhi->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess || !cb)
+        return QStringLiteral("no offscreen frame");
+    const QRhiTexture::NativeTexture native = texture->nativeTexture();
+    cb->beginExternal();
+    const auto *cbHandles = static_cast<const QRhiVulkanCommandBufferNativeHandles *>(cb->nativeHandles());
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.oldLayout = VkImageLayout(native.layout); // PREINITIALIZED on Qt 6.12.0 (finding A), else UNDEFINED
+    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = reinterpret_cast<VkImage>(quintptr(native.object));
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+    if (cbHandles && cbHandles->commandBuffer) {
+        df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1,
+                                 &barrier);
+    }
+    cb->endExternal();
+    rhi->endOffscreenFrame();
+    rhi->finish();
+    if (!cbHandles || !cbHandles->commandBuffer)
+        return QStringLiteral("no native command buffer");
+    texture->setNativeLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    return QStringLiteral("primed from layout %1").arg(native.layout);
+}
+
+} // namespace
+
 QuickOffscreenSession::QuickOffscreenSession(QQuickRenderControl *control, QQuickWindow *window,
                                              int width, int height, bool threaded, bool preserveColor)
     : m_control(control), m_window(window), m_width(width), m_height(height),
@@ -116,6 +169,8 @@ bool QuickOffscreenSession::begin()
         }
         if (!createOffscreenTarget(rhi, m_width, m_height, &m_target, &m_error, m_preserveColor))
             return;
+        if (m_preserveColor)
+            m_primeNote = primeColorTargetForLoad(rhi, m_target.texture);
         m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));
         m_begun = true;
     });
@@ -180,6 +235,8 @@ bool QuickOffscreenSession::resize(int width, int height)
         destroyOffscreenTarget(&m_target);
         if (!createOffscreenTarget(m_control->rhi(), width, height, &m_target, &m_error, m_preserveColor))
             return;
+        if (m_preserveColor)
+            m_primeNote = primeColorTargetForLoad(m_control->rhi(), m_target.texture);
         m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));
         ok = true;
     });
