@@ -178,7 +178,7 @@ void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float stead
 
 SKY_VERTEX=FOG_FULLSCREEN_VERTEX
 SKY_FRAGMENT='#version 460 core\nin vec2 vNdc;\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\nuniform vec3 uBackdrop;\nuniform int uSkyReflection;\n'+MIST_GLSL+'''
-void main(){vec4 fog=texture(uFogVolume,vec3(vNdc*0.5+0.5,1.0));
+void main(){vec4 fog=texture(uFogVolume,vec3(ndcToUv(vNdc),1.0));
 FragColor=uSkyReflection==1?vec4(fog.rgb,0.0):vec4(uBackdrop*fog.a+fog.rgb,1.0);
 Emission=vec4(0.0);}
 '''

@@ -19,6 +19,7 @@ from typing import Callable, Iterable
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.quick import gl_query
 
 from .passes import blend_scope
@@ -36,8 +37,9 @@ uniform float uStrength;
 float ghost(ivec2 texel) {
     return texelFetch(uGhosts, clamp(texel, ivec2(0), uSize - 1), 0).r;
 }
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
-    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    ivec2 pixel = fragTexel(uSize);
     float here = ghost(pixel);
     float edge = 0.0;
     for (int i = 0; i < 8; ++i) {

@@ -9,6 +9,7 @@ there (lighting and albedo folded in). It is evaluated once per cell per update;
 ``fog_inject_source`` wraps it. ``FOG_INTEGRATE_COMPUTE`` accumulates in-scatter and transmittance front to back,
 exactly per slice (radiance x (1 - exp(-extinction x length))), into the texture ``MIST_GLSL`` samples.
 """
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_GLSL
 from rendering.gl_programs.scene3d import SCENE3D_COMPUTE_BLOCK_BINDING, Scene3DBlockLayout
 
 FOG_DEPTH_MAPPING_GLSL = """
@@ -125,13 +126,13 @@ uniform vec3 uMarchStep;         // view-depth step inside the medium, through c
 uniform vec4 uMarchEdge;         // extra light on thin eroded wisps (curl rims), 0 off; unboosted base radiance
 uniform vec2 uViewportSize;
 layout(location=0) out vec4 FragColor;
-""" + FOG_DEPTH_MAPPING_GLSL + """
+""" + FOG_DEPTH_MAPPING_GLSL + SRPSS_CONVENTIONS_GLSL + """
 vec3 coarseUvw(vec3 world) {
     vec3 v=(uFogView*vec4(world,1.0)).xyz;
     float depth=uFogLens.w>0.0?-v.z:max(-v.z,1e-4);
     vec2 ndc=v.xy/(uFogLens.xy*depth);
     float f=fogDepthFraction(depth)*uFogRange.z;
-    return clamp(vec3(ndc*0.5+0.5,f/uFogRange.z),vec3(0.0),vec3(1.0));
+    return clamp(vec3(ndcToUv(ndc),f/uFogRange.z),vec3(0.0),vec3(1.0));
 }
 // The erodible part of the coarse medium: radiance and the extinction beyond its steady share.
 vec4 coarse(vec3 world) {
@@ -251,6 +252,7 @@ uniform vec2 uFogCrackleSeed;    // the line's bloom share; unused
 uniform sampler2D uFogCrackleLimit; // per screen column: the lowest screen v (0..1, up) the line may reach
 uniform int uFogCrackleLimited;
 uniform float uFogFringeSmoothing; // extra march-texel footprint; 0 preserves the original composite
+""" + SRPSS_CONVENTIONS_GLSL + """
 float crackleHash(vec2 p) { p=fract(p*vec2(0.1031,0.1030)); p+=dot(p,p.yx+33.33); return fract((p.x+p.y)*p.x); }
 float crackleNoise(vec2 x) {
     vec2 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
@@ -307,7 +309,7 @@ vec3 crackle(vec2 uv, vec4 fog) {
 }
 void main() {
     // A tent over the march's texels: its per-pixel step jitter is grain, not detail.
-    vec2 uv=vNdc*0.5+0.5, texel=(0.75+0.25*uFogFringeSmoothing)/vec2(textureSize(uFogMarch,0));
+    vec2 uv=ndcToUv(vNdc), texel=(0.75+0.25*uFogFringeSmoothing)/vec2(textureSize(uFogMarch,0));
     vec4 fog=0.25*(texture(uFogMarch,uv+vec2(-texel.x,-texel.y))+texture(uFogMarch,uv+vec2(texel.x,-texel.y))
                   +texture(uFogMarch,uv+vec2(-texel.x,texel.y))+texture(uFogMarch,uv+vec2(texel.x,texel.y)));
     vec3 line=crackle(uv,fog)*uFogScale;

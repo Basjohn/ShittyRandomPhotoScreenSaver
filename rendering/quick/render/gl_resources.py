@@ -5,16 +5,24 @@ through ``compile_program`` / ``compile_compute_program``). It first tries the a
 (``gl_program_cache``): a stored binary for the same sources and driver is loaded with ``glProgramBinary`` and kept
 only if ``GL_LINK_STATUS`` says it linked. Otherwise it compiles and links as always and saves the linked binary. A
 cold driver link (Neon Lake's basin: ~6 s, R-180) is then paid once per machine and driver, not once per build.
+
+A program that declares the conventions block (``rendering.gl_programs.conventions``) holds that context's one
+conventions buffer, bound at its reserved point for the context's life; owners of such programs delete them with
+``delete_program``, which hands the hold back (the last one deletes the buffer).
 """
 
 from __future__ import annotations
 
 import ctypes
+import threading
 import time
 
 from OpenGL import GL as gl
+from OpenGL.raw.GL.VERSION import GL_4_4 as _gl44
 
 from core.logging.logger import get_logger
+from rendering.gl_programs.conventions import (CONVENTIONS_BLOCK_NAME, SCENE3D_CONVENTIONS_BLOCK_BINDING,
+                                               conventions_block)
 
 from .gl_program_cache import DriverIdentity, ProgramBinaryCache, program_binary_cache, program_key
 
@@ -105,6 +113,84 @@ def _save_binary(cache: ProgramBinaryCache, key: str, program: int) -> int:
 
 
 def _link(stages, label: str) -> int:
+    program = _link_program(stages, label)
+    if any(CONVENTIONS_BLOCK_NAME in source for _shader_type, source, _stage in stages):
+        _acquire_conventions(program)
+    return program
+
+
+def delete_program(program: int) -> None:
+    """Delete a program linked here (in its own current context), releasing its hold on the conventions block."""
+
+    gl.glDeleteProgram(program)
+    _release_conventions(program)
+
+
+# The conventions block (``rendering.gl_programs.conventions``): one buffer per context, created and bound at its
+# reserved point when the first program declaring the block links there, deleted with the last such program. Its
+# values never change for a context, so nothing is written or bound per frame.
+_conventions_lock = threading.Lock()
+_conventions: dict[int, list] = {}              # id(context) -> [buffer, holding programs]
+_convention_programs: set[tuple[int, int]] = set()   # (id(context), program)
+
+
+def _context_key() -> int | None:
+    from PySide6.QtGui import QOpenGLContext
+
+    context = QOpenGLContext.currentContext()
+    return None if context is None else id(context)
+
+
+def _forget_context(key: int) -> None:
+    with _conventions_lock:
+        _conventions.pop(key, None)
+        for entry in [entry for entry in _convention_programs if entry[0] == key]:
+            _convention_programs.discard(entry)
+
+
+def _acquire_conventions(program: int) -> None:
+    from PySide6.QtGui import QOpenGLContext
+
+    context = QOpenGLContext.currentContext()
+    if context is None:
+        raise RuntimeError("the conventions block needs the program's current context")
+    key = id(context)
+    with _conventions_lock:
+        if (key, program) in _convention_programs:
+            return
+        entry = _conventions.get(key)
+        if entry is None:
+            data = conventions_block()
+            name = (ctypes.c_uint * 1)()
+            gl.glCreateBuffers(1, name)
+            buffer = int(name[0])
+            gl.glNamedBufferStorage(buffer, len(data), data, 0)
+            # Multi-bind sets the indexed point only, never the generic uniform-buffer binding Qt Quick may hold.
+            _gl44.glBindBuffersBase(gl.GL_UNIFORM_BUFFER, SCENE3D_CONVENTIONS_BLOCK_BINDING, 1, name)
+            entry = _conventions[key] = [buffer, 0]
+            context.aboutToBeDestroyed.connect(lambda key=key: _forget_context(key))
+        entry[1] += 1
+        _convention_programs.add((key, program))
+
+
+def _release_conventions(program: int) -> None:
+    key = _context_key()
+    if key is None:
+        return
+    with _conventions_lock:
+        if (key, program) not in _convention_programs:
+            return
+        _convention_programs.discard((key, program))
+        entry = _conventions[key]
+        entry[1] -= 1
+        if entry[1] > 0:
+            return
+        del _conventions[key]
+        buffer = entry[0]
+    gl.glDeleteBuffers(1, [buffer])
+
+
+def _link_program(stages, label: str) -> int:
     cache = program_binary_cache()
     driver = _driver_identity() if cache.enabled else None
     key = program_key(((shader_type, source) for shader_type, source, _stage in stages), driver) if driver else ""

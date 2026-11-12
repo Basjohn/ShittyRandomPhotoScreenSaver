@@ -16,6 +16,7 @@ from OpenGL import GL as gl
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from core.settings.shadow_direction import ShadowDirection, shadow_direction_signs
+from rendering.gl_programs.conventions import front_face_clockwise
 from rendering.gl_programs.scene3d import (
     SCENE3D_GLSL, SCENE3D_SPHERE_CAMERA_GLSL, Scene3DBlockLayout, scene3d_detail,
 )
@@ -54,6 +55,12 @@ _TRACER_BASE_RGBA_U8 = (255, 242, 194, 255)
 _TRACER_BASE_RGBA = (1.0, 0.95, 0.76, 1.0)
 
 logger = get_logger(__name__)
+
+
+def _winding(matrix_values) -> int:
+    """The culled passes' front face (N0.3 rule 4): one function of the item matrix's handedness and the backend's
+    clip-space Y, chosen where a pipeline variant would be."""
+    return gl.GL_CW if front_face_clockwise(matrix_values) else gl.GL_CCW
 
 
 def sphere_tracer_color_rgba(value) -> tuple[float, float, float, float]:
@@ -986,11 +993,7 @@ class QuickSphereVoxelRenderer:
                         self._frame_block.update_packed(packed)
                     gl.glEnable(gl.GL_CULL_FACE)
                     gl.glCullFace(gl.GL_BACK)
-                    gl.glFrontFace(
-                        gl.GL_CW
-                        if frame.matrix_values[0] * frame.matrix_values[5] > 0
-                        else gl.GL_CCW
-                    )
+                    gl.glFrontFace(_winding(frame.matrix_values))
                     gl.glEnable(gl.GL_BLEND)
                     gl.glBlendFuncSeparate(
                         gl.GL_SRC_ALPHA,
@@ -1070,11 +1073,7 @@ class QuickSphereVoxelRenderer:
         gl.glDepthFunc(gl.GL_LESS)
         gl.glEnable(gl.GL_CULL_FACE)
         gl.glCullFace(gl.GL_BACK)
-        gl.glFrontFace(
-            gl.GL_CW
-            if frame.matrix_values[0] * frame.matrix_values[5] > 0
-            else gl.GL_CCW
-        )
+        gl.glFrontFace(_winding(frame.matrix_values))
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendFuncSeparate(
             gl.GL_SRC_ALPHA,
