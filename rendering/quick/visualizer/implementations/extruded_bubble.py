@@ -443,7 +443,7 @@ class QuickExtrudedBubbleRenderer:
         shell_count = self._shells.upload(drawn)
         wake_count = self._wakes.upload(wake_instances(state.wakes))
         # Every logical drift step not yet applied, integrated on the GPU into the layout the draws read.
-        drift_layout = self._drift.update(r, state.drift_families, state.drift_steps)
+        drift_layout = self._drift.update(r, state.drift_families, state.drift_steps, state.drift_knots)
         material = bool(state.drift_families) and bool(self._drift.output)
         drift_counts = (np.frombuffer(state.drift_steps[-8 * STEP_FLOATS:], dtype=np.float64) if material else None)
         drift_uniforms={'uChainDriftEnabled':int(material and 'chains' in drift_layout),

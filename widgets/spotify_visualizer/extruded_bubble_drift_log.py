@@ -35,11 +35,11 @@ STEP_FIELDS = ("serial", "dt", "phase", "travel", "speed", "kind",
 STEP_FLOATS = len(STEP_FIELDS)
 STEP_INDEX = {name: index for index, name in enumerate(STEP_FIELDS)}
 STEP_HISTORY = 128  # ~1.4 s of logical ticks: a render gap longer than this restarts drift (a lifecycle event)
-# Geometry rows: chains as 12 float64 (start, span, end, carry, phase, 0, 0, 0) so the knot shift crosses its
-# integer steps on exactly the CPU's ticks; clouds as two float32 vec4s (start, span),
-# (seed, phase, carry / span as a float pair).
-CHAIN_GEOMETRY_DOUBLES = 12
-CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES = 8 * CHAIN_GEOMETRY_DOUBLES, 32
+# Geometry rows, all float32 (no shader reads a double): chains as three vec4s (start, span), (end, carry),
+# (phase, 0, 0, 0), their knot steps being published decisions; clouds as two vec4s (start, span),
+# (seed head, phase, carry / span as a float pair), the seed and the quotient rebuilt as pairs on the GPU.
+CHAIN_GEOMETRY_FLOATS = 12
+CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES = 4 * CHAIN_GEOMETRY_FLOATS, 32
 _REVISIONS = itertools.count(1)
 
 
@@ -102,7 +102,7 @@ def seed_heads(seed) -> np.ndarray:
 def pack_geometry(family: str, geometry) -> bytes:
     if family == "chains":
         base, spans, carry, phases = geometry
-        rows = np.zeros((len(spans), CHAIN_GEOMETRY_DOUBLES), dtype=np.float64)
+        rows = np.zeros((len(spans), CHAIN_GEOMETRY_FLOATS), dtype=np.float32)
         rows[:, 0:3] = base[:, 0]; rows[:, 3] = spans
         rows[:, 4:7] = base[:, -1]; rows[:, 7] = carry
         rows[:, 8] = phases
@@ -110,7 +110,7 @@ def pack_geometry(family: str, geometry) -> bytes:
         start, spans, seed, carry, phases = geometry
         rows = np.zeros((len(spans), 2, 4), dtype=np.float32)
         rows[:, 0, :3] = start; rows[:, 0, 3] = spans
-        rows[:, 1, 0] = seed; rows[:, 1, 1] = phases
+        rows[:, 1, 0] = seed_heads(seed); rows[:, 1, 1] = phases
         rows[:, 1, 2], rows[:, 1, 3] = float_pair(carry / np.asarray(spans, dtype=np.float64))
     return rows.tobytes()
 
@@ -335,7 +335,7 @@ def _reference_step(name, family, paths, record) -> bytes:
     return paths.advance(geometry, key, travel, speed, dt, amount=amount, **_field(record)).tobytes()
 
 
-__all__ = ["CHAIN_GEOMETRY_BYTES", "CHAIN_GEOMETRY_DOUBLES", "CLOUD_GEOMETRY_BYTES", "DriftFamily", "DriftLog", "FAMILIES",
+__all__ = ["CHAIN_GEOMETRY_BYTES", "CHAIN_GEOMETRY_FLOATS", "CLOUD_GEOMETRY_BYTES", "DriftFamily", "DriftLog", "FAMILIES",
            "KNOT_DECISION", "KNOT_DECISION_BYTES", "KnotDecisions", "MaterialDriftReference", "STEP_FIELDS",
            "STEP_FLOATS", "STEP_HISTORY", "STEP_INDEX", "chain_inputs", "chain_lifetime", "cloud_lifetime",
            "float_pair", "knot_starts", "newest_knots", "pack_geometry", "reduced_angles", "seed_heads",

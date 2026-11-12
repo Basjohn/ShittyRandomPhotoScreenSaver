@@ -147,12 +147,11 @@ def _install() -> None:
             _wrap(gl_state, name, "host_state_reads")
     dispatch = solver.DriftSolver._dispatch
 
-    def logged_dispatch(self, resources, name, state, offset, upload, pending, *, fresh, old_geometry=0,
-                        old_carry=0.0):
+    def logged_dispatch(self, resources, name, state, offset, upload, pending, *, fresh, old_geometry=0):
         if fresh or old_geometry:
             _restarts.append((time.time(), name, int(state.serial), bool(fresh), bool(old_geometry)))
         return dispatch(self, resources, name, state, offset, upload, pending, fresh=fresh,
-                        old_geometry=old_geometry, old_carry=old_carry)
+                        old_geometry=old_geometry)
     solver.DriftSolver._dispatch = logged_dispatch
     publish = tick_pipeline._publish_logical_state
 
