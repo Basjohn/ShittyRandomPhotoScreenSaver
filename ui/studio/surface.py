@@ -42,6 +42,9 @@ class StudioShellHost:
         from ui.studio.chrome import register_chrome_types
         register_chrome_types()
         self.window = window
+        # The shell's ``studio``: set before the component loads, and held here for as long as the engine whose
+        # bindings read it (see ``release_engine``). The context does not own it.
+        self.bridge = bridge
         self.engine = QQmlEngine()
         self.engine.addImportPath(str(QML_DIR))
         self.engine.rootContext().setContextProperty("studio", bridge)
@@ -104,8 +107,16 @@ class StudioShellHost:
         self.viewport.detach()
 
     def release_engine(self) -> None:
-        _keep_until_destroyed(self.engine)
-        self.engine.deleteLater()
+        """Queue the engine's destruction after the window's. The shell's ``studio`` lives until the engine is gone:
+        a mode switch replaces the controller's bridge while this window and engine still wait for the event loop,
+        and a bridge deleted under them re-evaluated every binding of the retiring shell with ``studio`` null."""
+        engine, bridge = self.engine, self.bridge
+        self.bridge = None                  # from here the engine's lifetime alone holds it
+        _keep_until_destroyed(engine)
+        if bridge is not None:
+            _RETIRING.add(bridge)
+            engine.destroyed.connect(lambda *_args, b=bridge: _RETIRING.discard(b))
+        engine.deleteLater()
 
 
 class _StudioQuickWindow(QQuickWindow):
