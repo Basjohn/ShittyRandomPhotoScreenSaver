@@ -1465,6 +1465,86 @@ available backend and the backends equal each other within the P1 spike's measur
 3. The conventions block is one binding reserved in every shader. Is a fixed binding index acceptable, or should it
    be allocated by the pass-graph builder?
 
+### As proved (N0.3 harness, `native/spike_p1`, run 1, 12 Nov 2026)
+
+Harness 63f0e75e (`src/n03_scenes.*`, `shaders/n03_*` with the production include baked in, `python/run_n03.py`),
+built on GitHub and run by the lead with the Khronos layer and `--require-validation`
+(`.artifacts/evidence/native_core/n0_3/20261112_n03_scenes/`); the same module rerun with the corrected analysis
+(`20261112_n03_scenes_reanalysed/`, no rebuild). One process, four backends: Vulkan on our N0.6 device, OpenGL 4.6,
+D3D11, D3D12 (RTX 4090, NVIDIA 617.42). Validation clean: 10 errors, all Qt defect A by ID, 0 unexplained.
+
+- **Scene 2, the known-depth plane: proved on all four.** Through `framed_camera.perspective_matrix` corrected at
+  upload, `viewDepthFromDepthTexture` equals the analytical window depth within 1.6e-7 (tolerance 2e-6), the backends
+  within 1.2e-7 of OpenGL; the nearer plane wins whichever is drawn first, LESS rejects an equal depth, the cleared
+  depth reads 1.0 exactly, the near and far planes clip at the same depths. Negative controls fail where they change
+  anything: the depth part skipped (Vulkan, D3D11, D3D12; it changes nothing on OpenGL), no correction (all four).
+- **Scene 3, the culled triangle: proved on all four.** Rule 4 evaluated on the uploaded matrix keeps the authored-front
+  triangle with Quick's Y-down matrix and an up-facing one, `gl_FrontFacing` agrees, the up-facing image mirrored back
+  equals Quick's, and the C++ rule equals `front_face_clockwise` on the same matrix. Negative controls: the front face
+  fixed counter-clockwise culls the wrong triangle (up-facing on Vulkan, D3D11, D3D12; Quick's on OpenGL); rule 4 fed
+  the uncorrected matrix culls the wrong one on Vulkan and OpenGL (finding F3).
+- **Scene 1, the checkerboard: proved on all four except two findings that wait for the lead (F2, F4).** Texel (0,0)
+  top-left in memory, the upload row order, `fragTexel`, `fragUv` and `fragPixel` against the writing pass, the std140
+  probe from reflected offsets (equal to `Scene3DBlockLayout`'s offsets), the double correction refused: all four,
+  the backends identical to OpenGL (max 0). Negative controls fail: the include's flip inverted (all four), no
+  correction (Vulkan, OpenGL; it changes nothing in 2D on D3D), the probe packed by hand (all four).
+- Two errors of the first analysis, corrected without a rebuild: the sRGB check compared with the exact IEC curve at
+  1e-3, but the hardware decode carries 8 significant bits (below); and it compared the other backends with OpenGL's
+  decode, which does not exist (F4).
+
+### Run 1's findings (proposed, for the lead)
+
+**F1. OpenGL keeps texel (0,0) top-left only if the upload correction flips Y for core-owned targets.** Evidence
+(scene 1, OpenGL): with the correction `clipSpaceCorrMatrix() x flipY` (the harness's "target" route) every scene-1
+check holds and the image is byte-identical to Vulkan's, D3D11's and D3D12's; flipping the readback by
+`isYUpInFramebuffer()` (the draft's harness rule) would then show it upside down. With `clipSpaceCorrMatrix()` alone and
+the include's flip at 1 (what `rendering/gl_programs/conventions.py:19-21` says the core does), the content is upside
+down in memory (`content_upside_down_in_memory`), and `fragTexel`, `fragUv`, the upload fetch and `ndcToUv` all
+disagree with the writing pass. `gl_FragCoord` is the memory texel's centre on every backend (all four, exact).
+*Recommended rule:* for a target the core owns, the upload correction is `clipSpaceCorrMatrix()` times a Y flip where
+`isYUpInFramebuffer()`; the include's flip is 0 for every core-owned target on every backend (it would be 1 only for a
+core shader drawing into a bottom-up target it does not own, which D5.2's texture-node composite removes); readbacks
+of core targets are never flipped. Correct `conventions.py`'s docstring when this is accepted.
+
+**F2. `ndcToUv` and `uvToNdc` of the clip NDC are wrong on D3D11 and D3D12 (predicted, confirmed).** Evidence
+(scene 1, "target" route, texel (0,0) = the top-left): `fragUv` (0.005208, 0.008929); the clip NDC the rasterizer
+used (-0.989583, +0.982143) on D3D11 and D3D12 but (-0.989583, -0.982143) on Vulkan and OpenGL; the production
+`ndcToUv` gives (0.005208, **0.991071**) on D3D, the mirrored row; `uvToNdc(fragUv)` gives y -0.982143 against the clip
++0.982143. Worst error over the target: 0.982 in uv y, 1.964 in NDC y, on both D3D backends; 1.5e-7 or less on Vulkan
+and OpenGL. With the NDC's Y negated first, the D3D error is 1.5e-7 (`candidate_ndc_to_uv_agrees`,
+`candidate_uv_to_ndc_agrees`: true on all four). The cause: D3D's clip Y points up (`isYUpInNDC()`) while its rows are
+top-down (`isYUpInFramebuffer()` false), and the correction leaves D3D's Y alone; no matrix can move D3D's NDC +1 off
+row 0. *Recommended rule:* the conventions block's reserved `y` carries `ndcYFlip = isYUpInNDC() && !isYUpInFramebuffer()`
+(1 on D3D11, D3D12 and Metal; 0 on Vulkan, on OpenGL with F1's correction, and in today's OpenGL renderer), and
+`ndcToUv`/`uvToNdc` negate Y when it is set. Consequence: the mapping functions read the block, so any stage that maps
+(vertex, compute) declares it too; `tests/test_conventions_include.py`'s "only a program that reads the block holds it"
+then covers mapping-only programs, and N1.4's identity runs prove the OpenGL renderer bit-identical with `y` 0.
+*Alternative:* define `ndc` in the include as the view NDC (OpenGL form, Y up) and compute it from the uncorrected
+matrix; rejected here because rule 1 gives shaders only corrected matrices.
+
+**F3. Rule 4's input is the uploaded matrix, never the OpenGL-form one.** Evidence (scene 3): `front_face_clockwise` on
+the uploaded (corrected) matrix keeps the authored-front triangle on all four backends with both matrices; the same
+function on the uncorrected matrix culls the wrong triangle on Vulkan (the correction flips Y there) and OpenGL (F1's
+flip), with both matrices, and changes nothing on D3D. *Recommended rule:* the core evaluates rule 4 once per pipeline
+choice on the matrix after the upload correction, with `ndc_y_up = isYUpInNDC()`; the two prebuilt variants stay. Today's
+OpenGL renderer is unchanged (it uploads uncorrected matrices on an identity correction).
+
+**F4 (new). Qt 6.12.0's OpenGL backend ignores `QRhiTexture::sRGB` for uncompressed formats.** Evidence: on OpenGL the
+sRGB-flagged strip samples as byte/255 exactly (max 3e-8; worst 0.287 from the curve at byte 136), identical to the
+unflagged strip; on Vulkan, D3D11 and D3D12 it decodes, bit-identical across the three. A hidden probe through
+PySide6's QRhi read `GL_TEXTURE_INTERNAL_FORMAT` = `GL_RGBA` for the flagged and the unflagged RGBA8 texture alike, and
+qtbase v6.12.0 `src/gui/rhi/qrhigles2.cpp` reads the flag only in `toGlCompressedTextureFormat` (`toGlTextureFormat`
+takes no flags). So the cause is Qt's, not the harness's target creation; no rebuild fixes it. Rule 6 ("the `sRGB`
+texture flag on every backend") does not hold on OpenGL. Also measured: the hardware decode where it exists carries 8
+significant bits (7 fraction bits), worst 0.00375 at byte 251 (1.3 steps of that mantissa, 0.86 of half the gap to the
+neighbouring byte), monotonic, every byte kept.
+*Recommended rule:* the one sRGB asset (the floor albedo, `scene3d/waveform.py:114`) is uploaded as plain RGBA8 and
+decoded in its shader with the exact IEC formula on every backend: one route, bit-identical across backends, no reliance
+on a flag one backend ignores. Its parity bar against today's OpenGL renderer (hardware `GL_SRGB8_ALPHA8`) is the
+hardware's own precision, at most 0.00375 linear, recorded at the port. *Alternatives:* decode in the shader on OpenGL
+only (a block value; the backends then differ by up to 0.00375); or a native `GL_SRGB8_ALPHA8` texture adopted with
+`QRhiTexture::createFrom` on OpenGL (a D5.3 service, raw GL, to win a measurement first).
+
 ## N0.4. The camera (proposed D5.5; decided by the lead 12 Nov)
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Read at `7ac980d7`. One finding differs from

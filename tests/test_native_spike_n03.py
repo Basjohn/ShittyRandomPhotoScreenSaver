@@ -128,7 +128,14 @@ def _entry(array: np.ndarray) -> dict:
             "b64": base64.b64encode(array.astype(np.uint8 if fmt == "rgba8" else np.float32).tobytes()).decode()}
 
 
-def _checker_run(facts: dict, *, mirrored: bool = False) -> dict:
+def _quantised_decode(values: np.ndarray) -> np.ndarray:
+    """The exact decode kept to 8 significant bits, as the hardware returned it on Vulkan and D3D in run 1."""
+    exact = n03.srgb_decode(values)
+    step = 2.0 ** (np.floor(np.log2(np.maximum(exact, 1e-12))) - 7)
+    return np.where(exact > 0, np.round(exact / step) * step, 0.0)
+
+
+def _checker_run(facts: dict, *, mirrored: bool = False, srgb: str = "exact") -> dict:
     """What a backend that keeps the decided convention reads back (the clip NDC per its facts)."""
     content = n03.checker_content()
     y, x = np.mgrid[0:n03.HEIGHT, 0:n03.WIDTH]
@@ -140,9 +147,10 @@ def _checker_run(facts: dict, *, mirrored: bool = False) -> dict:
     one = np.ones_like(ux)
     v = n03.strip_values()
     written = content[::-1] if mirrored else content
+    decoded = {"exact": n03.srgb_decode(v), "raw": v / 255.0, "quantised": _quantised_decode(v)}[srgb]
     readbacks = {
         "written": written, "fetch": written, "sample": written, "upload_fetch": content, "uploaded_raw": content,
-        "strip": np.stack([n03.srgb_decode(v), v / 255.0, 0 * one, one], -1),
+        "strip": np.stack([decoded, v / 255.0, 0 * one, one], -1),
         "pixel": np.stack([x + 0.5, y + 0.5, x, y], -1),
         "uv": np.stack([ux, uy, post[..., 0] * 0.5 + 0.5, post[..., 1] * 0.5 + 0.5], -1),
         "raw": np.stack([x + 0.5, y + 0.5, x + 0.5, y + 0.5], -1),
@@ -169,7 +177,33 @@ def test_the_checker_analysis_passes_the_convention_and_fails_mirrored_rows():
 def test_on_a_y_up_ndc_with_top_down_rows_the_production_ndc_to_uv_disagrees_and_the_candidate_agrees():
     result = n03.analyse_checker(_checker_run(D3D_FACTS), D3D_FACTS)
     assert result["checks"]["ndc_to_uv_agrees_with_writer"] is False
+    assert result["checks"]["uv_to_ndc_agrees_with_clip_ndc"] is False
     assert result["info"]["candidate_ndc_to_uv_agrees"] is True
+    assert result["info"]["candidate_uv_to_ndc_agrees"] is True
+    backend = {"facts": {"backend": "D3D11", **D3D_FACTS}, "runs": {"checker_target": result}}
+    assert n03.finding_for(backend, "checker_target", "ndc_to_uv_agrees_with_writer") == "F2"
+    # Where the candidate does not agree either, the failure stays unexplained.
+    vulkan = n03.analyse_checker(_checker_run(VULKAN_FACTS), D3D_FACTS)
+    assert n03.finding_for({"facts": {"backend": "D3D11"}, "runs": {"checker_target": vulkan}}, "checker_target",
+                           "ndc_to_uv_agrees_with_writer") is None
+
+
+def test_the_srgb_check_takes_the_hardware_precision_and_names_a_decode_that_is_not_there():
+    # The hardware's 8-significant-bit decode keeps every byte (run 1's 0.00375 at byte 251 is within it).
+    kept = n03.analyse_checker(_checker_run(VULKAN_FACTS, srgb="quantised"), VULKAN_FACTS)
+    assert kept["checks"]["srgb_decode_keeps_every_byte"] is True
+    assert kept["measures"]["srgb_max_error_vs_analytic"] > 1.0e-3
+    # A decode one byte off is refused.
+    v = n03.strip_values()
+    shifted = n03.srgb_decode(np.clip(v.astype(int) + 1, 0, 255))
+    assert n03.srgb_decode_measures(shifted, v)["srgb_identifies_its_byte"] is False
+    # No decode at all (Qt 6.12.0's OpenGL backend): the flag is not live, recognised as F4 on OpenGL only.
+    raw = n03.analyse_checker(_checker_run(VULKAN_FACTS, srgb="raw"), VULKAN_FACTS)
+    assert raw["checks"]["srgb_flag_live"] is False and raw["checks"]["srgb_decode_keeps_every_byte"] is False
+    gl = {"facts": {"backend": "OpenGL"}, "runs": {"checker_target": raw}}
+    assert n03.finding_for(gl, "checker_target", "srgb_flag_live") == "F4"
+    assert n03.finding_for({"facts": {"backend": "Vulkan"}, "runs": {"checker_target": raw}}, "checker_target",
+                           "srgb_flag_live") is None
 
 
 def test_the_cull_analysis_fails_the_wrong_triangle():
