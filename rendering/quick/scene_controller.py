@@ -3218,6 +3218,10 @@ class QuickSceneController(QObject):
             root.setProperty("cardSurfaceBackdrop", owner.item)
         self._on_surface_demand_changed()
         self._sync_custom_layout_visualizer()
+        # An Edit bound before this root existed reads its envelope from it: the overlay re-reads it at this edge (1C.4).
+        overlay = self._custom_layout_overlay
+        if overlay is not None and self._custom_layout_session is not None:
+            overlay.refresh_content_envelope()
         return item
 
     @staticmethod

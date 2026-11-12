@@ -1052,6 +1052,14 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             [self._SELECTED_FOR_CHILD_EDIT_ROLE],
         )
 
+    def refresh_content_envelope(self) -> None:
+        """The scene's retained Visualizer root (what ``contentEnvelopeItem`` resolves to) was created or retired after
+        this model bound: every row re-reads it once, at that edge (1C.4: a root created after Edit bound left the
+        Visualizer's frame without envelope, glyph row or drawn rect until the model reset)."""
+        if self._items:
+            self.dataChanged.emit(self.index(0, 0), self.index(len(self._items) - 1, 0),
+                                  [self._CONTENT_ENVELOPE_ITEM_ROLE])
+
     def _publish_item_change(self, item: CustomLayoutSessionItem) -> None:
         publisher = self._item_change_publisher
         if publisher is not None:
@@ -1078,6 +1086,12 @@ class RetainedCustomLayoutOverlay:
         if model is None:
             raise RuntimeError("CUSTOM layout overlay has no bound session")
         return model
+
+    def refresh_content_envelope(self) -> None:
+        """The scene's Visualizer root appeared or went while a session is bound (1C.4): re-read the envelope."""
+        model = self._model
+        if model is not None:
+            model.refresh_content_envelope()
 
     def bind_session(
         self,
