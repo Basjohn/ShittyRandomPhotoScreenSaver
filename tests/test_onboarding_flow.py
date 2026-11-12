@@ -563,3 +563,114 @@ def test_widget_setup_gmail_bucket_offers_the_notification_sound(qapp, settings,
         assert played[-1] == "play" and 40 in played
     finally:
         page.retire(); page.deleteLater()
+
+
+# --- 1D.4: the default Visualizer mode and the image-time row, through the real wizard ---------------
+
+_MODE_KEY = "widgets.spotify_visualizer.mode"
+
+
+def _visualizer_wizard(settings):
+    """The real wizard on its Visualizer page, with the Visualizer family on and two or more modes enabled."""
+    from ui.onboarding.wizard import GuidedSetupPanel
+    widgets = settings.values["widgets"]
+    widgets["family_activation"]["media"] = True
+    widgets["family_activation"]["visualizers"] = True
+    widgets["spotify_visualizer"]["enabled"] = True
+    settings.set("sources.folders", ["C:/Pictures"])  # Finish needs an image source
+    wizard = GuidedSetupPanel(settings)
+    wizard.show_page("visualizer")
+    page = wizard.pages["visualizer"][0]
+    rows = {page.rows.item(i).data(Qt.ItemDataRole.UserRole): page.rows.item(i) for i in range(page.rows.count())}
+    for item in list(rows.values())[:2]:  # tick through the row's own control
+        page.rows.itemWidget(item).setChecked(True)
+    settings.writes.clear()
+    return wizard, page, rows
+
+
+def _enabled_modes(page):
+    from core.settings.visualizer_mode_registry import resolve_admissible_enabled_modes
+    return resolve_admissible_enabled_modes(page.settings.get("widgets.spotify_visualizer.mode_activation"))
+
+
+def _tagged_modes(page):
+    """Rows whose "Default" text shows (asked relative to the page: the wizard is never shown)."""
+    return [mode for mode, tag in page._default_tags.items() if tag.isVisibleTo(page)]
+
+
+def _assert_one_default(page, rows):
+    from core.settings.visualizer_mode_registry import resolve_effective_mode
+    draft = page.settings.get("widgets.spotify_visualizer")
+    expected = resolve_effective_mode(draft["mode"], draft["mode_activation"])[0]  # the runtime's own reading
+    assert expected in _enabled_modes(page)
+    assert _tagged_modes(page) == [expected]
+    for mode, item in rows.items():  # the radio is ticked only on the default mode's preview
+        page.rows.setCurrentItem(item)
+        assert page.make_default.isChecked() is (mode == expected), mode
+    return expected
+
+
+def test_guided_setup_marks_exactly_one_default_mode_that_follows_make_default(qapp, settings):
+    wizard, page, rows = _visualizer_wizard(settings)
+    try:
+        stored = settings.get(_MODE_KEY)
+        default = _assert_one_default(page, rows)
+        other = next(mode for mode in _enabled_modes(page) if mode != default)
+        page.rows.setCurrentItem(rows[other])
+        assert page.make_default.isEnabled() and not page.make_default.isChecked()
+        page.make_default.click()
+        assert wizard.settings.get(_MODE_KEY) == other
+        assert _assert_one_default(page, rows) == other
+        # Unticking the default's own radio is refused: exactly one mode holds it.
+        page.rows.setCurrentItem(rows[other])
+        page.make_default.click()
+        assert page.make_default.isChecked() and wizard.settings.get(_MODE_KEY) == other
+        assert _assert_one_default(page, rows) == other
+        # A mode that is not enabled cannot be made the default.
+        disabled = next((m for m in rows if m not in _enabled_modes(page)), None)
+        if disabled is not None:
+            page.rows.setCurrentItem(rows[disabled])
+            assert not page.make_default.isEnabled()
+        assert settings.writes == [] and settings.get(_MODE_KEY) == stored  # draft only
+        wizard.finish()
+        assert settings.get(_MODE_KEY) == other
+    finally:
+        wizard.deleteLater()
+
+
+def test_guided_setup_unticking_the_default_mode_moves_it_by_the_runtime_rule(qapp, settings):
+    """Rule: the default moves to the mode the runtime itself would start with once that mode is off
+    (resolve_effective_mode: the next enabled mode in registry order, wrapping), written to the draft."""
+    from core.settings.visualizer_mode_registry import resolve_effective_mode
+    wizard, page, rows = _visualizer_wizard(settings)
+    try:
+        default = _assert_one_default(page, rows)
+        page.rows.itemWidget(rows[default]).setChecked(False)
+        activation = wizard.settings.get("widgets.spotify_visualizer.mode_activation")
+        assert activation[default] is False
+        expected, substituted = resolve_effective_mode(default, activation)
+        assert substituted and expected != default and expected in _enabled_modes(page)
+        assert wizard.settings.get(_MODE_KEY) == expected  # written, not merely displayed
+        assert _assert_one_default(page, rows) == expected
+        assert settings.writes == []
+        wizard.finish()
+        assert settings.get(_MODE_KEY) == expected
+    finally:
+        wizard.deleteLater()
+
+
+def test_guided_setup_cancel_keeps_the_saved_default_mode(qapp, settings, monkeypatch):
+    from ui.styled_popup import StyledPopup
+    monkeypatch.setattr(StyledPopup, "exec", lambda popup: setattr(popup, "_result_value", "discard"))
+    wizard, page, rows = _visualizer_wizard(settings)
+    try:
+        stored = settings.get(_MODE_KEY)
+        default = _assert_one_default(page, rows)
+        other = next(mode for mode in _enabled_modes(page) if mode != default)
+        page.rows.setCurrentItem(rows[other])
+        page.make_default.click()
+        assert wizard.settings.get(_MODE_KEY) == other
+        wizard.skip.click()  # Skip, then Discard Changes: the wizard's Cancel
+        assert settings.writes == [] and settings.get(_MODE_KEY) == stored
+    finally:
+        wizard.deleteLater()
