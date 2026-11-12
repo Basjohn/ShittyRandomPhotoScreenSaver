@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** 1D.2 (High), 1D.1's side defects (Medium).
+**Now (in flight):** 1D.2 (High), the native runtime check before import (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -48,8 +48,8 @@ at the size asked.
   3. Then N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
   4. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.1's side defects and the 1D.0 flake (in flight).
-  2. The native runtime check before import (N2.1 leftover).
+  1. The native runtime check before import (N2.1 leftover).
+  2. 1D.1's two leftovers (the probe's preset list, the flaky pair).
   3. The N1.6 remainder (the motion and trail family, then its transitions; no C++).
   4. 1D.4 (the default-mode marker and the image-time row; small, as asked).
   5. 1B.10.
@@ -1062,28 +1062,19 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
-### 1D.0 Studio mode switch (R-200 and its follow-ups merged 12 Nov): one side defect left
+### 1D.1 Guided Setup side defects (merged 12 Nov): what is left
 
-- [ ] Test-order flake: each Studio close leaves a 60 s reveal watch armed (`ui/studio/presence.py:181`, expiry
-  logged at `:255`); a later test's drag counts that expiry line as a write
-  (`test_studio_drag_io_churn.py::...[devcurve]`). Reproduce: `pytest tests/test_studio_exit_repaint.py
-  tests/test_studio_exit_every_mode.py tests/test_studio_drag_io_churn.py -p no:cacheprovider -q`. Root cause
-  first: should a closed Studio's watch end at its close (product), or should the test only count its own
-  session's writes? Fix at the owner, with a test.
-
-### 1D.1 Guided Setup (merged 12 Nov: R-201, R-202, the new previews): side defects left (Medium)
-
-- [ ] `tools/onboarding_preview_foundry.py:1148` names a preset in a tool (`_PREVIEW_PRESETS`), against the preset
-  rule, and is now stale as the default. Remove it. The preview's preset is a run choice (`--visualizer-preset`),
-  and the default is the mode's own default.
-- [ ] The chosen previews are not stored: a full foundry rebuild, or `onboarding_sheet_previews.py`, puts the old
-  looks back. Record the chosen command line beside the manifest (data, not preset names in code), so a rebuild
-  reproduces it. The Bubble simulation is unseeded: seed it for a reproducible frame.
-- [ ] The Visualizer page's status line reads "Choose at least one mode." even when modes are chosen
-  (`ui/onboarding/selection_pages.py:212`). Fix it, with a test.
-- [ ] The packed `onboarding_assets.rcc` still holds the old images until regenerated. Regenerate it (the qrc tool)
-  and check the wizard loads the new images.
-- Kept as designed (9b585e86): the Sources page opens its Folders bucket by default.
+- [ ] `tools/visualizer_replay/extruded_bubble_projection_gate_probe.py` names presets (`PRESETS`), and
+  `tests/test_tool_preset_identity.py::test_projection_gate_probe_reads_named_presets_against_current_source`
+  tests that list. Make the probe take a mode and preset number as run options, and delete the named list and its
+  test.
+- [ ] Flaky pair, found 12 Nov: `test_qtquick_extruded_spectrum.py::test_optional_directional_shadow_uses_canonical_direction_without_an_extra_target`
+  failed once when run after `test_neon_terrain_growth.py::test_an_unpainted_growth_to_the_largest_grid_renders_the_same_picture`,
+  and `...renders_the_same_picture[0]` failed once in a big batch. Both pass on rerun. Find the shared state
+  (GL or global) at its owner.
+- [ ] The committed Neon Lake and Waveform Ribbon Guided Setup previews no longer match current renders (mean pixel
+  difference about 37 and 11). Re-render both through the foundry's recorded-run route, at the mode defaults; the
+  lead reviews old against new before merge.
 
 ### 1D.4 Guided Setup: the default Visualizer mode (operator, 12 Nov; Medium, after 1D.1's side defects)
 
