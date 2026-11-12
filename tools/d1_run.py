@@ -526,6 +526,49 @@ class _FrameGrab:
             self._deliver(TimeoutError("the window rendered no frame within the grab timeout"))
 
 
+class _FrameWriter:
+    """PNG encodes on one worker thread; each completion is handed back to the GUI thread.
+
+    Encoding on the saver's GUI thread stalled the run it measured (1C.2, 12 Nov): a 3840x2160 frame takes 2.0-2.3 s to
+    encode, no window renders while the GUI thread is busy (the threaded render loop renders after a GUI sync), and
+    the product's own edges (a display move's bound, fade and hop) were sampled seconds late, so a 1.85 s move took 7 s.
+    ``QImage.save`` releases the GIL (measured), so a worker thread leaves the GUI thread and the render threads free.
+    Created on the GUI thread (the relay's affinity); ``drain`` (at exit) waits for and delivers what is still pending.
+    """
+
+    def __init__(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        from PySide6.QtCore import QObject, Qt, Signal
+
+        class Relay(QObject):
+            ready = Signal(object)
+
+        self.relay = Relay()
+        self.relay.ready.connect(self._deliver, Qt.ConnectionType.QueuedConnection)
+        self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="d1-frame-writer")
+        self.pending: list = []
+
+    def submit(self, work, on_done) -> None:
+        future = self.pool.submit(work)
+        entry = (future, on_done)
+        self.pending.append(entry)
+        future.add_done_callback(lambda _future, e=entry: self.relay.ready.emit(e))
+
+    def _deliver(self, entry) -> None:                # GUI thread (or the exit drain)
+        if entry not in self.pending:
+            return
+        self.pending.remove(entry)
+        future, on_done = entry
+        error = future.exception()
+        on_done(error if error is not None else future.result())
+
+    def drain(self) -> None:
+        self.pool.shutdown(wait=True)
+        for entry in list(self.pending):
+            self._deliver(entry)
+
+
 class D1Driver:
     """Runner side: at the first reveal, schedule the steps on the GUI thread; record everything in ``d1_state.json``."""
 
@@ -543,6 +586,7 @@ class D1Driver:
         self._receipt: _InputReceipt | None = None
         self._receipt_window = None
         self._grabs: list[_FrameGrab] = []
+        self._writer: _FrameWriter | None = None
 
     def install(self, *, engine_class=None, patch=setattr) -> None:
         if engine_class is None:
@@ -631,7 +675,8 @@ class D1Driver:
                 screen = window.screen()
                 dpr = record["window_dpr"]
                 offset = ((window.x() - screen.geometry().x()) * dpr, (window.y() - screen.geometry().y()) * dpr)
-                record.update(self._save_frame(screen.grabWindow(0), step, record, offset))
+                self._write_frame(screen.grabWindow(0), step, record, offset)
+                return
             elif step.kind == "key":
                 record.update(self._post_key(window, virtual_key(step.arg)))
             else:
@@ -642,15 +687,27 @@ class D1Driver:
         self._complete(record)
 
     def _grabbed(self, window, step: Step, record: dict, result) -> None:
-        try:
+        if isinstance(result, Exception):
+            record.update(ok=False, error=repr(result))
+            self._complete(record)
+            return
+        record["frame_at"] = self._now()
+        self._write_frame(result, step, record, (0.0, 0.0))
+
+    def _write_frame(self, image, step: Step, record: dict, offset: tuple[float, float]) -> None:
+        """Encode on the writer thread (never the saver's GUI thread: ``_FrameWriter``); complete on the GUI thread."""
+        if self._writer is None:
+            self._writer = _FrameWriter()
+
+        def written(result) -> None:
             if isinstance(result, Exception):
-                raise result
-            record["frame_at"] = self._now()
-            record.update(self._save_frame(result, step, record, (0.0, 0.0)))
-            record["ok"] = True
-        except Exception as exc:
-            record.update(ok=False, error=repr(exc))
-        self._complete(record)
+                record.update(ok=False, error=repr(result))
+            else:
+                record.update(result)
+                record["ok"] = True
+            self._complete(record)
+
+        self._writer.submit(partial(self._save_frame, image, step, record, offset), written)
 
     def _complete(self, record: dict) -> None:
         record["done_at"] = self._now()
@@ -813,6 +870,8 @@ class D1Driver:
                 "results": self.results, "received": self._receipt.counts if self._receipt else None}
 
     def finish(self) -> None:
+        if self._writer is not None:
+            self._writer.drain()                       # frames still encoding at exit are written and recorded
         self._event("finish")
 
     def _flush(self) -> None:
