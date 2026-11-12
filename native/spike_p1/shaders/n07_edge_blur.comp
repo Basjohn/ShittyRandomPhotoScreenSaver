@@ -1,0 +1,23 @@
+#version 440
+// N0.7 (harness only): the edge field's 5x5 binomial blur (edge_field.py, _BLUR_COMPUTE), ported for QRhi.
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(std140, binding = 0) uniform Params {
+    ivec2 uSize;
+    vec2 uStep;
+    float uLow;
+    float uHigh;
+    int uJump;
+    float uPad;
+};
+layout(binding = 1, r16f) uniform readonly image2D uSrc;
+layout(binding = 2, r16f) uniform writeonly image2D uDst;
+const float W[5] = float[5](1.0, 4.0, 6.0, 4.0, 1.0);
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= uSize.x || p.y >= uSize.y) return;
+    float sum = 0.0;
+    for (int y = -2; y <= 2; ++y)
+        for (int x = -2; x <= 2; ++x)
+            sum += W[x + 2] * W[y + 2] * imageLoad(uSrc, clamp(p + ivec2(x, y), ivec2(0), uSize - 1)).r;
+    imageStore(uDst, p, vec4(sum / 256.0, 0.0, 0.0, 0.0));
+}

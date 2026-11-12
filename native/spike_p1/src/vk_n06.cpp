@@ -774,6 +774,7 @@ struct Context
 };
 
 Context *g_context = nullptr;
+N06QuiesceHook g_quiesceHook = nullptr;
 
 QByteArrayList availableInstanceExtensions(const Loader &loader, const char *layer)
 {
@@ -1340,6 +1341,25 @@ qint64 n06HandleCount()
     return processHandles();
 }
 
+bool n06DeviceHandles(N06DeviceHandles *out)
+{
+    if (!out || !g_context || !g_context->ours || g_context->device == VK_NULL_HANDLE)
+        return false;
+    out->instance = g_context->ours.get();
+    out->physicalDevice = quint64(reinterpret_cast<quintptr>(g_context->physDev));
+    out->device = quint64(reinterpret_cast<quintptr>(g_context->device));
+    out->family = g_context->family;
+    out->hasSecondQueue = g_context->hasSecondQueue;
+    out->secondFamily = g_context->secondFamily;
+    out->secondIndex = g_context->secondIndex;
+    return true;
+}
+
+void n06SetQuiesceHook(N06QuiesceHook hook)
+{
+    g_quiesceHook = hook;
+}
+
 void n06SetPhase(const QString &phase)
 {
     if (g_context)
@@ -1363,6 +1383,14 @@ QByteArray n06ContextDestroyJson()
         steps.append(name);
         markHandles(&handles, name);
     };
+    if (g_quiesceHook && ctx->device != VK_NULL_HANDLE) {
+        // N0.7: a job service still running on this device is quiesced before the device waits idle (D9).
+        const QJsonObject quiesce = QJsonDocument::fromJson(g_quiesceHook()).object();
+        if (!quiesce.isEmpty()) {
+            root.insert(QStringLiteral("job_quiesce"), quiesce);
+            step(QStringLiteral("job thread quiesced"));
+        }
+    }
     if (ctx->device != VK_NULL_HANDLE) {
         // The windows are gone; this wait also covers any queue Qt's QRhi never waited on (facts A7).
         const VkResult idle = ctx->deviceWaitIdle(ctx->device);

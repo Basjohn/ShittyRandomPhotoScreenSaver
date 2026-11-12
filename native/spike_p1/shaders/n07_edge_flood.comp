@@ -1,0 +1,34 @@
+#version 440
+// N0.7 (harness only): one jump-flooding step of the edge field (edge_field.py, _FLOOD_COMPUTE), ported for QRhi.
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(std140, binding = 0) uniform Params {
+    ivec2 uSize;
+    vec2 uStep;
+    float uLow;
+    float uHigh;
+    int uJump;
+    float uPad;
+};
+layout(binding = 1, rgba32f) uniform readonly image2D uSeedIn;
+layout(binding = 2, rgba32f) uniform writeonly image2D uSeedOut;
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= uSize.x || p.y >= uSize.y) return;
+    vec2 best = vec2(-1.0);
+    float bestDistance = 1e20;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            ivec2 q = p + ivec2(x, y) * uJump;
+            if (q.x < 0 || q.y < 0 || q.x >= uSize.x || q.y >= uSize.y) continue;
+            vec2 seed = imageLoad(uSeedIn, q).rg;
+            if (seed.x < 0.0) continue;
+            vec2 delta = seed - vec2(p);
+            float distance = dot(delta, delta);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = seed;
+            }
+        }
+    }
+    imageStore(uSeedOut, p, vec4(best, 0.0, 0.0));
+}

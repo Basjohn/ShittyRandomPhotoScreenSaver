@@ -70,6 +70,30 @@ file(WRITE "${_gen}/quadfield_shaders.h.in"
     "#pragma once\n#include \"quadfield_vert_qsb.h\"\n#include \"quadfield_frag_qsb.h\"\n")
 configure_file("${_gen}/quadfield_shaders.h.in" "${_gen}/quadfield_shaders.h" COPYONLY)
 
+# N0.7 (D9's proof, Qt Quick part only): the edge field's five compute stages, ported to Vulkan GLSL. The job
+# service runs them on Vulkan only, so the .qsb holds SPIR-V alone (qsb's default target).
+set(_n07_compute luma blur edges flood resolve)
+set(_n07_shader_headers)
+set(_n07_includes "#pragma once\n")
+foreach(_name ${_n07_compute})
+    set(_src "${CMAKE_CURRENT_SOURCE_DIR}/shaders/n07_edge_${_name}.comp")
+    set(_qsb "${_gen}/n07_edge_${_name}.comp.qsb")
+    set(_hdr "${_gen}/n07_edge_${_name}_comp_qsb.h")
+    add_custom_command(
+        OUTPUT "${_qsb}" "${_hdr}"
+        COMMAND "${SPIKE_QSB}" -o "${_qsb}" "${_src}"
+        COMMAND "${CMAKE_COMMAND}" -DINPUT=${_qsb} -DOUTPUT=${_hdr}
+                -DSYMBOL=n07_edge_${_name}_comp_qsb
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_file.cmake"
+        DEPENDS "${_src}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_file.cmake"
+        COMMENT "qsb n07_edge_${_name}.comp"
+        VERBATIM)
+    list(APPEND _n07_shader_headers "${_hdr}")
+    string(APPEND _n07_includes "#include \"n07_edge_${_name}_comp_qsb.h\"\n")
+endforeach()
+file(WRITE "${_gen}/n07_shaders.h.in" "${_n07_includes}")
+configure_file("${_gen}/n07_shaders.h.in" "${_gen}/n07_shaders.h" COPYONLY)
+
 set(_sources
     src/module.cpp
     src/quadfield.cpp
@@ -80,7 +104,7 @@ set(_sources
     src/vk_n06.cpp
     ${_shader_headers})
 if(SPIKE_WITH_QUICK)
-    list(APPEND _sources src/quick_item.cpp src/quick_offscreen.cpp)
+    list(APPEND _sources src/quick_item.cpp src/quick_offscreen.cpp src/vk_n07.cpp ${_n07_shader_headers})
 endif()
 
 # Stable ABI (abi3) like PySide6 itself: one .pyd for every CPython >= 3.10.

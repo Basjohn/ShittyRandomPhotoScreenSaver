@@ -1,0 +1,25 @@
+#version 440
+// N0.7 (harness only): the edge field's luma stage (rendering/quick/scene3d/edge_field.py, _LUMA_COMPUTE), ported
+// to Vulkan GLSL for QRhi. textureLod at level 0 instead of texture(): implicit LOD is a fragment-stage operation
+// in SPIR-V, and the photo has one level, so the result is the same.
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(std140, binding = 0) uniform Params {
+    ivec2 uSize;
+    vec2 uStep;
+    float uLow;
+    float uHigh;
+    int uJump;
+    float uPad;
+};
+layout(binding = 1) uniform sampler2D uPhoto;
+layout(binding = 2, r16f) uniform writeonly image2D uLuma;
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= uSize.x || p.y >= uSize.y) return;
+    vec2 uv = (vec2(p) + 0.5) / vec2(uSize);
+    vec3 sum = vec3(0.0);
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+            sum += textureLod(uPhoto, uv + (vec2(x, y) - 1.5) * uStep, 0.0).rgb;
+    imageStore(uLuma, p, vec4(dot(sum / 16.0, vec3(0.299, 0.587, 0.114)), 0.0, 0.0, 0.0));
+}

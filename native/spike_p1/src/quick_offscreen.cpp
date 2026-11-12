@@ -17,6 +17,18 @@
 
 #include <functional>
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002 // Windows 10 1803 and later
+#endif
+
 namespace srpss_spike {
 
 // Runs work on the render thread while the GUI thread waits: the GUI thread is
@@ -176,6 +188,116 @@ bool QuickOffscreenSession::resize(int width, int height)
         m_height = height;
     }
     return ok;
+}
+
+namespace {
+
+// A waitable timer the GUI thread blocks on until a frame's grid point (high resolution where Windows offers it;
+// the default timer resolution of 15.6 ms would make a 60 Hz grid meaningless).
+class GridTimer
+{
+public:
+    GridTimer()
+    {
+        m_timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+        m_highResolution = m_timer != nullptr;
+        if (!m_timer)
+            m_timer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+    }
+    GridTimer(const GridTimer &) = delete;
+    GridTimer &operator=(const GridTimer &) = delete;
+    ~GridTimer()
+    {
+        if (m_timer)
+            CloseHandle(m_timer);
+    }
+    bool highResolution() const { return m_highResolution; }
+    void waitMs(double ms)
+    {
+        if (ms <= 0.0 || !m_timer)
+            return;
+        LARGE_INTEGER due;
+        due.QuadPart = -LONGLONG(ms * 10000.0); // relative, in 100 ns units
+        if (SetWaitableTimer(m_timer, &due, 0, nullptr, nullptr, FALSE))
+            WaitForSingleObject(m_timer, INFINITE);
+    }
+
+private:
+    HANDLE m_timer = nullptr;
+    bool m_highResolution = false;
+};
+
+} // namespace
+
+PacedFramesResult QuickOffscreenSession::pacedFrames(QObject *animated, int count, double periodMs,
+                                                     FrameHooks *hooks)
+{
+    PacedFramesResult res;
+    res.periodMs = periodMs;
+    if (!m_begun) {
+        res.error = QStringLiteral("session not begun");
+        return res;
+    }
+    if (periodMs <= 0.0) {
+        res.error = QStringLiteral("the period must be positive");
+        return res;
+    }
+    GridTimer timer;
+    res.highResolutionTimer = timer.highResolution();
+    QElapsedTimer clock;
+    clock.start();
+    auto nowMs = [&clock]() { return double(clock.nsecsElapsed()) / 1.0e6; };
+    double scheduled = 0.0;
+    for (int i = 0; i < count; ++i) {
+        timer.waitMs(scheduled - nowMs());
+        const double start = nowMs();
+        if (animated)
+            animated->setProperty("time", double(m_frameIndex++) / 60.0);
+        m_control->polishItems(); // GUI thread
+        double complete = 0.0;
+        bool ok = true;
+        m_host->runBlocking([&]() {
+            QRhi *rhi = m_control->rhi();
+            m_control->beginFrame();
+            QRhiCommandBuffer *cb = m_control->commandBuffer(); // null when the frame did not begin
+            if (!rhi || !cb) {
+                ok = false;
+                return;
+            }
+            if (hooks)
+                hooks->frameStart(rhi, cb, i);
+            m_control->sync(); // GUI thread is blocked here
+            m_control->render();
+            m_control->endFrame();
+            rhi->finish(); // vkQueueWaitIdle on this QRhi's queue: the frame's GPU work is complete
+            complete = nowMs();
+            if (hooks)
+                hooks->frameEnd(rhi, i);
+        });
+        if (!ok) {
+            res.error = QStringLiteral("QQuickRenderControl::beginFrame failed at frame %1").arg(i);
+            return res;
+        }
+        res.scheduledMs << scheduled;
+        res.startMs << start;
+        res.completeMs << complete;
+        scheduled += periodMs;
+        const double after = nowMs();
+        while (scheduled < after) { // the frame overran: the grid points it covered are missed
+            scheduled += periodMs;
+            ++res.missedPeriods;
+        }
+    }
+    res.ok = true;
+    return res;
+}
+
+bool QuickOffscreenSession::runOnRenderThread(const std::function<void(QRhi *)> &work)
+{
+    if (!m_begun)
+        return false;
+    m_host->runBlocking([&]() { work(m_control->rhi()); });
+    return true;
 }
 
 void QuickOffscreenSession::end()
