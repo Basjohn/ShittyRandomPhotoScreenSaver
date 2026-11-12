@@ -266,6 +266,18 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   `Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md` (sections A to E, the order in H); D6 and D9 carry the lead's
   12 Nov amendments from them. Read from Qt's 6.12 branch head: line-level details are checked against the
   `v6.12.0` tag as the harness meets them.
+  - Round 1, facts (29bdd8f1, built on GitHub first time; `run_n06.py --round facts`, PASS, evidence
+    `.artifacts/evidence/native_core/n06/20261112_n06_facts/summary.json`): loader 1.4.341
+    (`C:\WINDOWS\SYSTEM32\vulkan-1.dll`); RTX 4090, API 1.4.351, NVIDIA 617.42; queue families 0 graphics+compute+
+    transfer x16 (presents), 1 transfer x2, 2 compute+transfer x8 (presents), 3 video decode x1, 4 video encode x2, 5
+    optical flow x1: a second queue in the graphics family exists (15 spare) and a compute-only family too. Qt's own
+    device (API 1.2) takes family 0 queue 0; all five `preferredExtensionsForImportedDevice()` names are available;
+    by Qt's rule it enables 109 features (1.0, 1.1, 1.2 structures; only `robustBufferAccess` of the supported ones is
+    left out; unsupported: ETC2, ASTC LDR/HDR, protectedMemory, storageInputOutput16); its QRhi reports every feature
+    flag except RenderBufferImport. Qt's route-(i) instance also enables `VK_KHR_portability_enumeration`,
+    `VK_EXT_debug_utils` and the two surface extensions beside the preferred two. No validation layer installed
+    (implicit layers present: NV optimus, NV present, WEOBS hook, Steam overlay and fossilize); no Qt or loader
+    environment variable set.
   - [ ] The Vulkan validation layer (with synchronisation validation) on the lead's machine: today there is no Vulkan
     SDK here (the spike used the driver's loader and Vulkan-Headers only). Its download and install is the
     operator's approval (a download); without it N0.6 and N0.7 run their functional parts and record validation as
