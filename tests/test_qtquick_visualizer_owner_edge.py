@@ -359,10 +359,12 @@ def test_display_transfer_moves_publication_edge_without_recreating_controller()
             self.double = []
             self.middle = []
             self.image_listeners = []
+            self.framed_view_sinks = []
             self.presentation_image = None
 
-        def set_visualizer_viewport_config_sink(self, sink):
+        def set_visualizer_viewport_config_sink(self, sink, *, framed_view_sink=None):
             self.sinks.append(sink)
+            self.framed_view_sinks.append(framed_view_sink)
 
         def set_presentation_image_listener(self, listener):
             self.image_listeners.append(listener)
@@ -419,6 +421,8 @@ def test_display_transfer_moves_publication_edge_without_recreating_controller()
     assert source.scene_controller.image_listeners[-1] is None
     assert target.scene_controller.image_listeners[-1] == owner._refresh_backdrop
     assert target.scene_controller.sinks[-1] == controller.set_custom_viewport_override
+    # The drawn card's framed view follows the display too (N0.4).
+    assert target.scene_controller.framed_view_sinks[-1] == controller.set_framed_view
 
     assert owner.retire() is True
     assert wake.closed is True

@@ -121,6 +121,10 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
                                                      engine_factory=lambda _: engine)
             controller.engine = engine
             configure_offline_controller(controller, "waveform_ribbon", settings=resolved)
+            # No card is drawn here: the capture sizes its pulse from the Studio's own framed view (N0.4).
+            from ui.studio.waveform_adapter import studio_framed_view
+
+            controller.set_framed_view(studio_framed_view())
             reanalysis = PcmReanalysis()
             try:
                 for feature in frames:

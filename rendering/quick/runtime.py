@@ -465,6 +465,8 @@ class QuickDisplayRuntime(QObject):
     def bind_visualizer_viewport_config(
         self,
         override_sink: Callable[[tuple[float, float] | None, object], None],
+        *,
+        framed_view_sink: Callable[[object], None] | None = None,
     ) -> None:
         """Bind the visualizer CUSTOM viewport/orientation ownership once.
 
@@ -475,14 +477,18 @@ class QuickDisplayRuntime(QObject):
         commit path. Retiring CUSTOM falls back to that committed truth. Only
         plain typed values cross this seam; no QQuickItem/QScreen/render-thread
         object enters logical state, and no second config map/queue/timer/clock
-        is introduced.
+        is introduced. ``framed_view_sink`` (the controller's ``set_framed_view``)
+        receives the drawn card's framed view at the scene's geometry edges (N0.4).
         """
 
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
             raise RuntimeError("cannot bind viewport config on a retiring runtime")
         if not callable(override_sink):
             raise TypeError("visualizer viewport override sink must be callable")
-        self.scene_controller.set_visualizer_viewport_config_sink(override_sink)
+        if framed_view_sink is not None and not callable(framed_view_sink):
+            raise TypeError("visualizer framed view sink must be callable or None")
+        self.scene_controller.set_visualizer_viewport_config_sink(
+            override_sink, framed_view_sink=framed_view_sink)
 
     def get_target_size(self) -> QSize:
         """Return this display's target image pixel size (logical size x DPR).

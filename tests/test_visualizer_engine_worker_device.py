@@ -346,6 +346,7 @@ def test_an_unplugged_device_with_no_output_left_is_a_device_failure_never_a_wor
     # running (no step failure, no session end: nothing counts towards the owner's two-strike rule) and retries at the
     # next capture edge, which opens the output plugged in meanwhile. Negative control: the dead stream is never
     # reported (``capture_failed`` stays False, the replies say all is well).
+    from core.framed_view import VIEW_MESSAGE_VERSION
     from core.process.types import MessageType, WorkerMessage
     from core.visualizer_engine.engine_worker import VisualizerEngineWorker
 
@@ -356,7 +357,8 @@ def test_an_unplugged_device_with_no_output_left_is_a_device_failure_never_a_wor
 
     def view() -> dict:
         reply = worker.handle_message(WorkerMessage(msg_type=MessageType.VIS_SET_VIEW, seq_no=1, correlation_id="1",
-                                                    payload={"extent": (400.0, 300.0), "rotations": {}}))
+                                                    payload={"version": VIEW_MESSAGE_VERSION,
+                                                             "extent": (400.0, 300.0), "rotations": {}}))
         assert reply.success
         return reply.payload
 

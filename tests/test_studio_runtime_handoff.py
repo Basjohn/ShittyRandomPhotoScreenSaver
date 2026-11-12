@@ -95,7 +95,9 @@ def test_runtime_studio_launch_builds_the_lazy_mode_body_before_save_camera(qt_a
     for family in ("media", "visualizers"):
         set_widget_family_activated(widgets, family, True)
     manager.set("widgets", widgets)
-    launch_pose = {spec.key("camera_position"): [0.3, -0.2, 0.4], spec.key("camera_fov"): 63.0}
+    # A field of view inside the mode's own range (derived, so a retuned range never stales the test).
+    fov = round((spec.fov_range[0] + spec.fov_range[1]) / 2.0 + 1.0, 1)
+    launch_pose = {spec.key("camera_position"): [0.3, -0.2, 0.4], spec.key("camera_fov"): fov}
     target = make_studio_launch_target(mode, launch_pose)
 
     opened = []
@@ -135,13 +137,13 @@ def test_runtime_studio_launch_builds_the_lazy_mode_body_before_save_camera(qt_a
         assert tab._vis_body_host.is_constructed(mode)
         assert tab._vis_body_host.selected_mode == mode
         assert isinstance(getattr(tab, "_shockwave_grid_lazy_values"), dict)
-        assert opened[0].initial_pose[spec.key("camera_fov")] == 63.0
+        assert opened[0].initial_pose[spec.key("camera_fov")] == fov
 
         values = opened[0].store.snapshot()
         values[spec.key("camera_position")] = [0.3, -0.2, 0.4]
-        values[spec.key("camera_fov")] = 63.0
+        values[spec.key("camera_fov")] = fov
         assert "Saved camera" in opened[0].store.save_camera(values)
-        assert manager.get(f"widgets.spotify_visualizer.{spec.key('camera_fov')}") == pytest.approx(63.0)
+        assert manager.get(f"widgets.spotify_visualizer.{spec.key('camera_fov')}") == pytest.approx(fov)
     finally:
         if opened:
             opened[0].closed.emit()

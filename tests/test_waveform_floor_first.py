@@ -39,8 +39,12 @@ def shift(model, crest, trough=3., reset=True):
 
 
 def test_card_span_supplies_the_cards_top_edge_and_a_larger_card_shows_more_above_the_axis():
+    from core.framed_view import FramedView
+
     values = camera(camera_fov=5.)
-    small, large = card_span(values, (640., 560.), 280.), card_span(values, (1282., 1005.), 280.)
+    # Two drawn cards' framed views (pixel aspect, aperture): test-owned numbers, a taller card the larger aperture.
+    small = card_span(values, FramedView(640./560., 2., 2.))
+    large = card_span(values, FramedView(1282./1005., 1005./280., 1005./280.))
     assert len(small) == len(large) == 3
     assert large[2] > small[2] > SPEC.pivot[1]
     assert small[2] == visible_top(values, 640./560., 2.)

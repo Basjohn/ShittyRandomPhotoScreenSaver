@@ -86,7 +86,9 @@ def test_camera_pan_moves_near_more_than_far():
 def test_all_render_pass_world_positions_use_same_physical_eye():
     shader = (ROOT / 'rendering/gl_programs/extruded_bubble_program.py').read_text()
     owner = (ROOT / 'rendering/quick/visualizer/implementations/extruded_bubble.py').read_text()
-    assert 'physical_camera(' in owner
+    scene = (ROOT / 'rendering/gl_programs/extruded_bubble_scene.py').read_text()
+    # The renderer's camera is the scene's one assembly of the physical camera (N0.4: the logical side builds it too).
+    assert 'parameter_camera(' in owner and 'return physical_camera(' in scene
     assert 'camera_look_pan' not in owner
     assert 'lens_shift(' not in owner
     assert '"uEye": _floats(eye)' in owner

@@ -522,7 +522,7 @@ class QuickDisplayVisualizerOwner:
                 activation_id=int(activation_id),
             )
         self._runtime.bind_visualizer_viewport_config(
-            self._controller.set_custom_viewport_override
+            self._controller.set_custom_viewport_override, framed_view_sink=self._controller.set_framed_view
         )
         self._presentation_runtime.scene_controller.set_presentation_image_listener(self._refresh_backdrop)
         self._refresh_backdrop()
@@ -663,7 +663,7 @@ class QuickDisplayVisualizerOwner:
             self._presentation_runtime = runtime
             self._runtime = runtime
             runtime.bind_visualizer_viewport_config(
-                self._controller.set_custom_viewport_override
+                self._controller.set_custom_viewport_override, framed_view_sink=self._controller.set_framed_view
             )
             runtime.scene_controller.set_presentation_image_listener(self._refresh_backdrop)
             self._refresh_backdrop()      # the new display's own photograph
@@ -694,7 +694,7 @@ class QuickDisplayVisualizerOwner:
                 int(old_presentation_runtime.screen_index)
             )
             old_presentation_runtime.bind_visualizer_viewport_config(
-                self._controller.set_custom_viewport_override
+                self._controller.set_custom_viewport_override, framed_view_sink=self._controller.set_framed_view
             )
             old_presentation_runtime.scene_controller.set_presentation_image_listener(self._refresh_backdrop)
             raise

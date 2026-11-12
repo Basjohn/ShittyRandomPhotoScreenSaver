@@ -344,7 +344,7 @@ def test_an_in_place_edit_of_a_nested_presentation_input_is_forwarded(qt_app, mo
         gate._event_loop_for(qt_app, 5.0, until=lambda: not link.busy)
 
     try:
-        link.set_view_source(lambda: (((640.0, 360.0), {}, None, None),
+        link.set_view_source(lambda: (((640.0, 360.0), {}, None, None, None),
                                       logical_edges.presentation_inputs_snapshot(state, "waveform_ribbon")))
         assert link.send_view()
         answer()
@@ -428,7 +428,7 @@ def test_a_qt_typed_presentation_input_is_forwarded_plain_or_refused_loudly(qt_a
         return [value] if type(value).__module__.startswith("PySide6") else []
 
     try:
-        link.set_view_source(lambda: (((640.0, 360.0), {}, None, None),
+        link.set_view_source(lambda: (((640.0, 360.0), {}, None, None, None),
                                       logical_edges.presentation_inputs_snapshot(state, mode)))
         assert link.send_view()
         sent = supervisor.payloads[-1]["presentation"]

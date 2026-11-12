@@ -776,8 +776,11 @@ def test_a_device_that_does_not_open_keeps_the_session_and_is_retried_at_the_nex
             done = threading.Event()
             assert engine.fence_capture_transactions(done.set) and done.wait(10.0)
         assert session.capture_failed and not ended.is_set() and not engine.is_capture_running()
+        from core.framed_view import VIEW_MESSAGE_VERSION
+
         reply = worker.handle_message(WorkerMessage(msg_type=MessageType.VIS_SET_VIEW, seq_no=1, correlation_id="1",
-                                                    payload={"extent": (400.0, 300.0), "rotations": {}}))
+                                                    payload={"version": VIEW_MESSAGE_VERSION,
+                                                             "extent": (400.0, 300.0), "rotations": {}}))
         assert reply.success and reply.payload["capture_failed"] is True
         session.set_playing(False)
         session.set_playing(True)                  # the next capture edge retries the device

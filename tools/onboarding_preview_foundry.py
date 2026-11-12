@@ -1344,6 +1344,10 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
         ),
     )
     controller.commit_presentation_metrics(presentation)
+    # The framed view a scene drawing this card would publish (N0.4): a framed mode's logical camera reads it.
+    from rendering.quick.visualizer.framed_view import resolve_framed_view
+
+    controller.set_framed_view(resolve_framed_view(presentation))
 
     # Fixed synthetic analyser output is the only fixture.  Two production
     # captures create a stable live body plus the preset's real falling peaks /
