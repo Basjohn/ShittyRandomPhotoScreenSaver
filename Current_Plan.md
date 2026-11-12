@@ -135,6 +135,12 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
+- [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
+  admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
+  in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
+  new baselines with system usage before the next shared-path comparison. Today's merges (12 Nov: N2.3's changed
+  Spectrum per-frame reads, N1.6's GL-call cuts) were measured on branches without a 6.12 baseline: compare
+  Spectrum against the new one.
 - [ ] Hidden cross-test dependency on an earlier test's `tmp_path` (lead, 7 Nov): with pytest's
   `tmp_path_retention_policy = failed`, `test_3d_curated_preset_ownership.py::...promotes_missing_owned_temporal_
   and_profile_keys...[shockwave_grid]` (0.7 vs 0.23) and two or three `test_settings_dialog.py` tab-restore tests
@@ -1629,9 +1635,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] The overhead baseline cannot see the QML scene: `tools/overhead_baseline.py` renders render nodes on a bare
   host, never `DisplayScene.qml`, so scene-level dormancy (M3's cover) is proven by the QObject census and the
   no-per-frame-work structure instead.
-- [ ] Re-baseline after Qt 6.12.0 (doc sweep, 12 Nov): `tools/overhead_baseline.py`'s stored baselines and the
-  figures in `Docs/Reference/Benchmarks.md` predate the bump; record new baselines with system usage before the
-  next shared-path comparison.
 
 **Found while building Expanded Visualizer M3b (8 Nov; recorded, not yet admitted):**
 
