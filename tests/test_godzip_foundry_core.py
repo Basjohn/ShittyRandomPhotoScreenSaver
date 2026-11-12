@@ -695,7 +695,13 @@ def test_run_auto_logzip_waits_for_process_exit_without_polling() -> None:
     # SOURCE-ORACLE INVARIANT: run completion may block in its waiter, never poll.
     assert "process.wait()" in source
     assert "process.poll()" not in source
-    assert "create_logzip(" in source
+    # The archive is created through the LOGZIP destination owner (the chest
+    # creator wraps core.create_logzip with retention); derive its name from the
+    # owner instead of spelling it here.
+    import godzip_logzip_retention as retention
+
+    assert f"{retention.create_chest_logzip.__name__}(" in source
+    assert retention.create_chest_logzip.__module__ == retention.__name__
 
 
 def test_foundry_folder_open_does_not_spawn_explorer_process() -> None:
