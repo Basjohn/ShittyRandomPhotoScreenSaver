@@ -255,21 +255,60 @@ def test_published_logical_frames_are_identical_ordinary_and_expanded(qt_app, lo
     """Reactivity and payload are untouched for every capable mode (Spectrum's extra bars on the expanded
     horizontal card are drawn from these same frames: ``spectrum_display_bar_count``). Bubble and Waveform Ribbon are extent-sensitive sentinels: their logical worlds read the
     controller's committed extent (Bubble's world, Waveform's visible span), so a display-wide record reaching the
-    controller would change their frames (``tools/expanded_visualizer_evidence.leak_control``)."""
+    controller would change their frames (``tools/expanded_visualizer_evidence.leak_control``).
+
+    The one input the logical side legitimately takes from the drawn card is its framed view (R-196, N0.4: Waveform's
+    pulse is born at the edge of the part of the scene the drawn card's camera shows), so an expanded owner's frames
+    may differ from the ordinary owner's by exactly that. The contract is therefore: every view an owner sends
+    (``VIS_SET_VIEW``) carries the ordinary committed metrics, expanded or not; and each owner's frames are exactly
+    the logical side's (the engine session, which has no presentation record) fed that owner's own views before
+    each tick, as ``test_visualizer_engine_worker`` replays them. Nothing else of the display-wide record reaches
+    the frames. Where the framed view does not feed a mode, both reduce to identical frames."""
     clip = looped_clip
     if mode == "waveform_ribbon":
         from tools.expanded_visualizer_evidence import shipped_clip
 
         clip = shipped_clip(4.0)              # native PCM on every frame (its raw musical lanes need it)
-    ordinary = _replay(qt_app, clip, mode)["digests"]
+    ordinary = _replay(qt_app, clip, mode)
     from_first = _replay(qt_app, clip, mode, expand_at=0)
     mid_clip = _replay(qt_app, clip, mode, expand_at=40, collapse_at=260, animate=True)
     margin = card_inset()
     assert from_first["drawn"][0] == (margin, margin, from_first["display"][2] - 2 * margin,
                                       from_first["display"][3] - 2 * margin)
-    assert ordinary == from_first["digests"] == mid_clip["digests"]
-    assert len(ordinary) == len(clip.frames)
+    # The committed metrics in every view (extent, rotations, CUSTOM override) are the ordinary owner's.
+    metrics = {repr(view[:4]) for view in ordinary["views"]}
+    assert len(metrics) == 1
+    for run in (from_first, mid_clip):
+        assert {repr(view[:4]) for view in run["views"]} == metrics
+    for run in (ordinary, from_first, mid_clip):
+        assert run["digests"] == _session_digests(clip, mode, run["views"])
+    assert len(ordinary["digests"]) == len(clip.frames)
     assert [kind for _frame, kind in mid_clip["events"]] == ["entered", "collapsed"]
+
+
+def _session_digests(clip, mode, views):
+    """The logical side's frames for ``clip`` with ``views`` applied before each tick (the link's shape)."""
+    import tools.expanded_visualizer_evidence as evidence
+    from core.visualizer_engine.engine_worker import EngineSession
+    from core.visualizer_engine.packet_mailbox import PacketMailbox
+
+    before_ticks, sent = [None], None
+    for snapshot in views[:-1]:
+        before_ticks.append(None if snapshot == sent else snapshot)
+        sent = snapshot
+    reader = PacketMailbox(role="reader")
+    session = EngineSession(mapping=reader.mapping_name, mode=mode, runtime_generation=9001, settings=_frozen(mode))
+    try:
+        seen = []
+        for feature, view in zip(clip.frames, before_ticks):
+            if view is not None:
+                session.set_view(**evidence.view_message(view))
+            session.tick(feature)
+            seen.append(evidence.frame_digest(reader.take().state))
+    finally:
+        session.close()
+        reader.close()
+    return seen
 
 
 @pytest.mark.qt
