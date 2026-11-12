@@ -9,6 +9,8 @@
 
 - **Names:** [Naming Reference](Docs/Reference/Naming.md) (generated, `tools/naming_reference.py --write`) maps every product name to its persisted id and every other spelling in code, with the grep hazards. Read it before searching for a mode, transition or widget by name: Neon Lake is `shockwave_grid`, Spline Curve is `devcurve`.
 
+- **Tools and harnesses:** [Tooling](Docs/Reference/Tooling.md) lists every script under `tools/`, `scripts/` and `native/spike_p1/python/` with its flags, who may run it, where it writes and which tools are candidates to retire; [Harness Index](Docs/Reference/Harness_Index.md) routes the recurring acceptance commands.
+
 - **Test suite:** [Test Suite Guide](Docs/TestSuite.md) owns commands and gates (`tests/run_chunked.py --isolated [--changed]` at milestones, focused files per slice). The [23 October archived-failure triage](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md) is historical; its stale-test reconciliation is closed.
 
 ```text
