@@ -19,6 +19,17 @@ embedded in the module, so a frozen build needs no data files.
 
 All parts draw the same 4096 instanced, animated dots (`src/quadfield.*`) and read the last frame back to a PNG.
 
+## Building it: on GitHub only
+
+Since 12 Nov 2026 the module is compiled only by `.github/workflows/native-module.yml` on GitHub's Windows runner
+(operator: builds happen only through GitHub workflows, never on this machine). The lead runs
+`tools/build_runner.py --mode github --run --select native_module`; the validated module lands in
+`release\native_module\` of the checkout the tool runs from. The SDK fetch below is now
+`tools/native_sdk_fetch.py` (the pins, sha256-checked before extraction), and `build.cmd` is the workflow's one CMake
+invocation. Everything (the lead's command, what the runner checks, how a C++ slice iterates) is in
+`Docs/Guides/GitHub_Remote_Build.md`, section "The native module". The sections below record the P1 spike's local
+toolchain and commands as they were run on 7 Nov 2026.
+
 ## Toolchain on the reference machine (7 Nov 2026)
 
 - PySide6 / shiboken6 6.11.2, Qt 6.11.2 (`MSVC 2022`, built with cl 19.44.35227), CPython 3.14.8 x64.
@@ -67,7 +78,8 @@ native\spike_p1\build.cmd D:\Temp\Scratch\SRPSS\native_spike\build OFF F:\Progra
 native\spike_p1\build.cmd D:\Temp\Scratch\SRPSS\native_spike\build ON F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv
 ```
 
-`build.cmd` calls `vcvars64.bat`, then CMake (Ninja, Release) with `CMAKE_PREFIX_PATH` = the Qt prefix,
+`build.cmd` finds the newest Visual Studio with the x64 C++ tools with `vswhere`, calls its `vcvars64.bat`, then CMake
+(Ninja, Release) with `CMAKE_PREFIX_PATH` = the Qt prefix,
 `Python_EXECUTABLE` = the repo venv, `SPIKE_QSB` = PySide6's `qsb.exe` and `SPIKE_VULKAN_INCLUDE`. CMake stops if the
 SDK's Qt version differs from 6.11.2. The `GuiPrivate` warning is expected: QRhi is semi-public API.
 
@@ -75,7 +87,12 @@ SDK's Qt version differs from 6.11.2. The `GuiPrivate` warning is expected: QRhi
 
 ```bat
 .venv\Scripts\python.exe native\spike_p1\python\run_spike.py --module-dir D:\Temp\Scratch\SRPSS\native_spike\build --part all --label p1
+:: the module built on GitHub
+.venv\Scripts\python.exe native\spike_p1\python\run_spike.py --module-dir release\native_module --part all --label p1
 ```
+
+`python/import_check.py` is the GPU-free part the runner runs after compiling (import, `runtime_info()`, the Qt DLLs
+loaded from PySide6's folder); every part of `run_spike.py` needs a GPU device.
 
 The backend is chosen inside each process (`QQuickWindow.setGraphicsApi` before `QGuiApplication`; Qt Quick parts run
 one child process per backend). Evidence (PNGs + `summary.json`) goes to
