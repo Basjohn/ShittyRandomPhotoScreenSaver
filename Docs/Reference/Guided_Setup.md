@@ -191,7 +191,13 @@ run by onboarding.
   through the same capture on a fixture passage (`_PREVIEW_PRIMING_SECONDS`). Rendering only the Visualizer previews:
   `--widgets-only --family visualizers`, then `tools/onboarding_sheet_previews.py` (restores the sheet's
   `widget_visualizers.png` and assembles the manifest), then `tools/regen_qrc.py` after adding any new file to
-  `ui/resources/onboarding_assets.qrc`. The page shows a narrow mode list (sized
+  `ui/resources/onboarding_assets.qrc`. One run's choices, never stored: `--visualizer-mode MODE` renders any
+  mode's preview (Bubble steps its simulation through the same priming), `--visualizer-preset MODE=N` picks the
+  preset numbered N in Settings, and `--photo PATH` puts a real wallpaper behind the card (cover-cropped under the
+  card surface; the card's border band becomes the drawn frame). Copy only the PNGs you mean to replace and run
+  `--assemble-manifest`; a full rebuild or `onboarding_sheet_previews.py` would restore the sheet's and default
+  looks. The 12 Nov 2026 Bubble, Extruded Bubble and Extruded Spectrum previews came from such a run (operator's
+  presets, a PERSONALSET wallpaper; plan 1D.1). The page shows a narrow mode list (sized
   to its longest name, never truncated) with the selected mode's preview beside it.
 - Widget previews render at 2x device pixels (the sheet is a 2x screenshot and is cut at native size). Settings
   shows them at no more than one source pixel per physical pixel (`ImagePanel(..., upscale=False)`), so small cards
