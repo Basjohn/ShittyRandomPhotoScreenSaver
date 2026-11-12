@@ -245,7 +245,7 @@ first capture; `warm()` allocates on a hidden frame.
 RGBA16F 3D texture (plus an R16F steady share) that the mist functions sample. `FogMarch`: a reduced-resolution
 detail march that erodes the non-steady coverage with a baked 3D noise. Consumers: `FogVolume`: Waveform Ribbon;
 **`FogMarch` has no production consumer** (only `tools/compute_pass_identity.py:484`, `tests/test_scene3d_fog_volume.py`
-use it), as the plan says (`:530-533`). Test: `test_scene3d_fog_volume.py`. Native: **N4.f** (reduced-resolution
+use it), as the plan says (`:530-533`). Test: `test_scene3d_fog_volume.py`. Native: **N4.f1** (the fog volume port, before N5.4) and **N4.f2** (reduced-resolution
 volumes and mixed-resolution soft layers, "after N5.6, before Expanded Visualizer M6"; `:530-535`) and the base of
 **N6.3**. Notes: the march is "too costly at full size in the Python path" (0.4 to 1.2 ms main march, 0.2 to 0.7 ms
 mirrored, at 820 x 718 on an RTX 4090; `Scene3D_Resources.md:167-173`); it has open lifecycle defects in the plan
@@ -423,7 +423,7 @@ query helpers (`rendering/quick/gl_query.py`, raw getters for CPU-cheap reads; L
 | S3D-4 | N6.1 | dynamic surface field |
 | S3D-5 | N4.d | planar reflections, rough receivers, scene probe, wet-surface masks |
 | S3D-6 | N4.h | shared shadows |
-| S3D-7 | N4.f | reduced-resolution volumes; its smoke is N6.3, its lightning N6.6 |
+| S3D-7 | N4.f1, N4.f2 | reduced-resolution volumes; its smoke is N6.3, its lightning N6.6 |
 
 ### N6 (primitives track, native only; `Current_Plan.md:603-616`)
 
@@ -431,14 +431,14 @@ query helpers (`rendering/quick/gl_query.py`, raw getters for CPU-cheap reads; L
 |---|---|---|---|---|---|
 | **N6.1** | Dynamic surface field: a bounded GPU height-and-velocity grid with impulse injection and damping, a displaced mesh with true normals, reflection distortion driven by it | **High** | "water, ripples, pools, melt, any reactive surface" | N4.d (reflection distortion), N4.e (the grid it shares), N3.3 compute, N3.2 meshes | Reactive Liquid / Melt Pool (S3D-4, plan `:2234`), Concrete Rain (ripples, `:2248`), Neon Lake's water (named by the plan, but its reflection is analytic today), SMP surfaces |
 | **N6.2** | Static scene geometry and materials, built once and kept (floors, walls, wells, simple skyline and tunnel slices; roughness, bevel, contact shading) | **High** | "what turns a mode into a place" | N3.2 meshes, N4.d | Melt Pool's chamber (`:2234`), Concrete Rain's street (`:2248`), SMP surfaces |
-| **N6.3** | Advected smoke and haze on the volume primitive | **High** | "atmosphere for every 3D scene" | N4.f (shares its reduced-resolution path; the fog detail march is its base), N3.3 | every 3D mode, Waveform's atmosphere, Melt Pool, Concrete Rain |
+| **N6.3** | Advected smoke and haze on the volume primitive | **High** | "atmosphere for every 3D scene" | N4.f2 (shares its reduced-resolution path; the fog detail march is its base), N3.3 | every 3D mode, Waveform's atmosphere, Melt Pool, Concrete Rain |
 | **N6.4** | Photo-textured shells and planes with real depth | **Low until a consumer** | none stated; "a transition or a mode built round the user's photos" | N3.1 targets, N4.j environments | none admitted |
 | **N6.5** | The opt-in deformable sheet | **Low until a consumer** | none stated | N4.l's bendable grid, N4.e | none admitted |
-| **N6.6** | Lightning: procedural bolt geometry and its light | **Low until a consumer** | "one effect" | N4.f (S3D-7's lightning), N3.4 bloom | none admitted |
+| **N6.6** | Lightning: procedural bolt geometry and its light | **Low until a consumer** | "one effect" | N4.f2 (S3D-7's lightning), N3.4 bloom | none admitted |
 
 ### Unbuilt N4 items (ported with their consumer, or on the primitives track)
 
-Existing in Python (section 3) but not yet native: N4.b (E12), N4.c (E11), N4.d (E13, E14), N4.e (E24), N4.f (E15),
+Existing in Python (section 3) but not yet native: N4.b (E12), N4.c (E11), N4.d (E13, E14), N4.e (E24), N4.f1 and N4.f2 (E15),
 N4.g (E16 to E18), N4.h/N4.l (E21, E22, E23), N4.i (E5, E6), N4.j (E7), N4.k (E20), N4.m (E25). Class as stated by
 the plan: high potential for N4.c, N4.d's wet-surface masks, N4.h, N4.k, N4.m (D8 row 6 lists N4.c, N4.h, N4.k, N4.m,
 N6.1 to N6.3, so it omits N4.d; see contradictions).
@@ -448,7 +448,7 @@ Never built in any form:
   `FULLSCREEN_VERTEX_SOURCE` (E4) and the background node, not as one primitive. Consumers: the seven fullscreen
   transitions of N5.2a (Crossfade, Burn, Particle, Ripple, Slide, Warp, Wipe) and the background layer (N5.7a). No
   class stated.
-- **Mixed-resolution soft layers with depth-aware upsampling** (N4.f, D8 plus 4): bloom, reflection blur, wide glows
+- **Mixed-resolution soft layers with depth-aware upsampling** (N4.f2, D8 plus 4): bloom, reflection blur, wide glows
   and fog at reduced resolution; "lines, dots, rims, particles and UI stay at full resolution"; never whole-frame
   upscaling. Gate: stills reviewed by the lead and GPU time before and after; halos at depth edges are the risk.
 - **Instanced screen-space quads in place of `gl_PointSize`** (N3.2, `:491-492`): Bubble ambient, Neon Lake's marks and
@@ -464,7 +464,7 @@ Never built in any form:
 New modes (`Current_Plan.md:631-632`) are built on the native core only: Reactive Liquid / Melt Pool (`:2230-2242`,
 S3D-3, S3D-4, S3D-5, S3D-2: N6.2, N6.1, N4.d, N4.c), Concrete Rain (`:2244-2256`, same four), Usu Moonscape (`:2258-2265`,
 "plus S3D-6", i.e. N4.h, with character and world foundations S19 to S27 that are not primitives of this catalogue).
-Expanded Visualizer M6 (4K acceptance) waits on N4.f for Waveform Ribbon and Extruded Bubble (`:567`). SMP surfaces
+Expanded Visualizer M6 (4K acceptance) waits on N4.f2 for Waveform Ribbon and Extruded Bubble (`:567`). SMP surfaces
 (item 9, `:623-630`): the plan says "one Visualizer owner, any surface"; the plan names Neon Lake and SMP surfaces as
 candidate users of N6.1 (`:605-607`). Which other SMP surface uses which primitive is **unverified**: no SMP document
 was read for this catalogue.

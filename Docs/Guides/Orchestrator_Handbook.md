@@ -119,7 +119,7 @@ defaults, the installer script) are committed and pushed at once, silently.
 - Display 0 (the operator's primary): rare. The lead may use it only for a specific check nothing else can make (operator, 12 Nov: "you can use Display 0 again when you need to", then "The permission is still rare. Do not make display 0 part of automated tests and use it rarely as possible"), through `tools/d1_run.py --allow-primary`, bounded, the reason in the run's label; never in a test, recipe or automated run; agents never take it. Bounded runs on Display 1 are the lead's, through `tools/d1_run.py`; agents never show
   a window on a real screen.
 - Load runs (game60) only after the operator's yes, at most 10 minutes, lead only, with nothing else running.
-- Builds only through GitHub workflows (`tools/github_remote_build.py`), never on this machine's resources; agents never build. Local frozen builds, local installers and the Reddit Helper's local build stay the operator's own to run.
+- Builds only through GitHub workflows (`tools/github_remote_build.py`), never on this machine's resources; agents never build. Local frozen builds, local installer compiles (Build Runner's Inno step) and the Reddit Helper's local build stay the operator's own to run.
 - Linux is best effort: it passes on code quality and the tests that run on Windows.
 - Verification is the lead's job: what can be proved by a harness, a hidden run, a Display 1 run or a frozen build
   is proved, not handed to the operator; what has no simple test goes to the Watchlist and holds nothing open.
@@ -139,8 +139,8 @@ Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Cor
   - `--select native_spike` for a harness slice, landing in `release\native_spike\`;
   - `--select native_module` for the product's native core `native/core`, landing in `release\native_module\`.
 
-  Agents never start a build, remote included. Frozen products and the lead's installers go through GitHub; the
-  operator may compile installers locally.
+  Agents never start a build, remote included. The lead's frozen products and installer payloads go through
+  GitHub; the operator may compile locally (including the installer, since no installer is compiled on GitHub).
 - **A port is audited on both backends.** Beside section 4's checks: the OpenGL parity record against the Python
   renderer, the Vulkan record against the native OpenGL result (hidden host), the thread probe (no call with a
   Python thread state), GPU time per pass, and the Python renderer deleted in the same change (a transition's at

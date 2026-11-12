@@ -135,6 +135,12 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
+- [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
+  admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
+  in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
+  new baselines with system usage before the next shared-path comparison. Today's merges (12 Nov: N2.3's changed
+  Spectrum per-frame reads, N1.6's GL-call cuts) were measured on branches without a 6.12 baseline: compare
+  Spectrum against the new one.
 - [ ] Hidden cross-test dependency on an earlier test's `tmp_path` (lead, 7 Nov): with pytest's
   `tmp_path_retention_policy = failed`, `test_3d_curated_preset_ownership.py::...promotes_missing_owned_temporal_
   and_profile_keys...[shockwave_grid]` (0.7 vs 0.23) and two or three `test_settings_dialog.py` tab-restore tests
@@ -218,8 +224,8 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
 - The shared 3D architecture is inside this item, in order (operator, 12 Nov: "definitely put in the 3D work
   needed into the native work plan, in detail and order"): the port rewrites every renderer, so it is decided
   and built here, never afterwards and never twice. The old primitive ids: S3D-1 is N4.b, S3D-2 N4.c, S3D-3 N6.2
-  (photo shells N6.4), S3D-4 N6.1, S3D-5 N4.d, S3D-6 N4.h, S3D-7 N4.f with its smoke N6.3 and lightning N6.6.
-  The old stage names: P3.1 and P3.2 are N2; P3.3 is N5.2; P3.4 is N5; P3.5 is NF; P4 is N4.f. What exists in
+  (photo shells N6.4), S3D-4 N6.1, S3D-5 N4.d, S3D-6 N4.h, S3D-7 N4.f1 and N4.f2 with its smoke N6.3 and lightning N6.6.
+  The old stage names: P3.1 and P3.2 are N2; P3.3 is N5.2; P3.4 is N5; P3.5 is NF; P4 is N4.f2 (N4.f1 is the fog volume port). What exists in
   the Python substrate and is therefore a port is listed in `Docs/Reference/Scene3D_Resources.md` ("Shared
   Scene3D capability inventory").
 
@@ -383,11 +389,18 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   ratchet in the same change. A group whose conversion is not pixel-identical inside one dispatch is converted at
   its port instead. Order: by first consumer on the ladder, not N5's order. Merged 12 Nov (ratchet 197 to 95): the
   substrate step, Spectrum, the seven fullscreen transitions, the item-quad transition families, the Quick hosts and
-  Waveform Ribbon (its fog composite, fullscreen vertex and march left: the N1.6 remainder box under N2b). Open:
+  Waveform Ribbon (its fog composite, fullscreen vertex and march left: see the last box below). Open (this is the
+  one home of the remainder; ratchet 95):
   - [ ] Spline Curve, Oscilloscope, Bubble (N5.1), with `QUICK_VISUALIZER_VERTEX_SOURCE`.
   - [ ] The rest of the shared scene substrate (targets' resolves, post, environment, resources).
-  - [ ] Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere; the remaining transitions (the N1.6 remainder box
-    under N2b).
+  - [ ] Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere.
+  - [ ] The remaining transitions: the shared motion and trail helpers (`set_motion_uniforms`, `trail_program`) to
+    pass blocks as their own family, then Block Spins, Crumble, Depth Cascade, Glass Shatter, Jigsaw, Membrane,
+    Pixel Accretion, `motion._GATHER_FRAGMENT`, `trails._EDGE_FRAGMENT` and the Capillary seed; then `bind_frame`'s
+    loose branch is deleted.
+  - [ ] Waveform's `FOG_COMPOSITE_FRAGMENT`, `FOG_FULLSCREEN_VERTEX` and the fog march (with N4.f1's fog volume
+    port).
+  - [ ] Is `rendering/gl_programs/lighting.py` (loose uniforms) in a group? Place it.
 - [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
   (`scene3d/target.py`, RG16F kept; RGBA16F would add 127.5 MiB per 4K display at 4x, 255 MiB at 8x). Built with the
   substrate when the scene target ports (N3), or reconsidered if N1.8's resolve-first rule removes the multisampled
@@ -465,32 +478,36 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   pass writes outside the card nor under the border's anti-aliased edge; Sphere's and Extruded Spectrum's
   overflow setting is the one admitted exception and skips the coverage term). Proof: one-to-one texels under
   pixel shift and a uniform CUSTOM scale; the clip-contract test of 1C.4 run on the native item.
-- [ ] N2.5 Spectrum at parity on both backends (the port rule above), then its Python renderer retires. N1.6's
-  Spectrum group is merged (`spectrum.frag` bakes); N1.4's raw `gl_FragCoord` in it is not. Bar coverage keeps R-197's rule: one
-  continuous coordinate from the target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native
-  item. GPU time per pass (port rule e) needs N2.6: build the timer before this port, or record the whole-frame
-  time and say so.
+
+Order inside N2 (the numbers stay stable for the documents that cite them): N2.1 to N2.4, then N2.6, N2.7, then
+N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's retirement.
+
 - [ ] N2.6 The per-pass GPU timer service (D8 plus 2): raw timestamps on Vulkan, timer queries on OpenGL, in the
   frame trace as today's `TIME_ELAPSED` figures are; off means no query objects.
 - [ ] N2.7 The backend owner and the rehearsal path (D10): one owner in `rendering/quick/bootstrap.py`, a
   diagnostic command-line switch, the Vulkan window set up through the module (D6), "available on this backend"
   in the mode and transition registries (an unported mode is not offered, an unported transition is Crossfade),
   the start-up fallback to OpenGL with its remembered failed start and a forced-failure negative control.
+- [ ] N2.5 Spectrum at parity on both backends (the port rule above; scheduled after N2.6 and N2.7, which its rule
+  needs: (e) GPU time per pass is N2.6's timer, (f) the bounded Vulkan rehearsal is N2.7's path and N2.8's run).
+  The Python renderer retires only after N2.8 passes. N1.6's Spectrum group is merged (`spectrum.frag` bakes);
+  N1.4's raw `gl_FragCoord` in it is not. Bar coverage keeps R-197's rule: one continuous coordinate from the
+  target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native item.
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
 
 **N2b. The background layer, natively, and the first full rehearsal**
 
-- [ ] N1.6 remainder (merged 12 Nov to ratchet 95): the shared motion and trail helpers (`set_motion_uniforms`,
-  `trail_program`) to pass blocks as their own family, then Block Spins, Crumble, Depth Cascade, Glass Shatter,
-  Jigsaw, Membrane, Pixel Accretion, `motion._GATHER_FRAGMENT`, `trails._EDGE_FRAGMENT` and the Capillary seed;
-  then `bind_frame`'s loose branch is deleted. Waveform's `FOG_COMPOSITE_FRAGMENT`, `FOG_FULLSCREEN_VERTEX` and
-  the fog march. Is `rendering/gl_programs/lighting.py` (loose uniforms) in a group? Place it.
 - [ ] Side defect: the legacy program classes' `render()` and `cache_uniforms()` in
   `rendering/gl_programs/{blinds,burn,crossfade,particle,raindrops,slide,warp,wipe}` are unused and now read
   block sources; delete them (grep first) with the readiness ratchet unchanged.
 - [ ] N4.a The fullscreen pass and image sampling as a primitive.
 - [ ] N3.8 The async job service (D9), built to N0.7's verdict: the job thread, self-contained jobs, the latch,
   the in-frame form; first job: a photo's upload and mips.
+  - [ ] D8 row 3's gate (the contention measurement under a heavy Visualizer frame, the one limit of N0.7's proof,
+    D9 point 2): p99 frame time and late frames across image changes with a Visualizer running, async against
+    in-frame (Vulkan only; OpenGL runs in-frame).
+  - [ ] D9 point 2, consumer (b), the warm-up class: warm-up jobs run on this service, scheduled with N3.6's
+    gradual warm-up (one unit per spaced frame). Transition preparation (consumer (a)) is N5.2g's.
 - [ ] N5.7a The image presenter and background as the core's background layer (D7 point 1): image ownership,
   covered-display admission and timing kept; the photo textures are the core's (the wrapped-texture bridge is
   OpenGL only and retires with the Python presenter); at rest nothing is drawn again. Proved in the hidden host
@@ -553,11 +570,12 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   none of this.
 - [ ] N4.e Heightfields and refined terrain meshes (the authored heightfield resource; Neon Lake's tile-refined
   basin; the grid a dynamic surface field will share).
-- [ ] N4.f Reduced-resolution volumes and P4's mixed-resolution soft layers (D8 plus 4): the fog volume
-  (Waveform); the fog detail march (written and tested, runs nowhere in production: too costly at full size in
-  the Python path) as the base of N6.3; bloom, reflection blur and wide glows at reduced resolution with
-  depth-aware upsampling; lines, dots, rims, particles and UI stay at full resolution. After N5.6, before
-  Expanded Visualizer M6.
+- [ ] N4.f1 The fog volume port (Waveform draws it today, so N5.4 cannot reach parity without it): ported just
+  before its first consumer, N5.4, like every N4 item. The fog detail march (written and tested, runs nowhere in
+  production: too costly at full size in the Python path) is the base of N6.3 and stays with N4.f2's reduced path.
+- [ ] N4.f2 (placed after N5.6 and before Expanded Visualizer M6, see below) Reduced-resolution volumes and P4's
+  mixed-resolution soft layers (D8 plus 4): bloom, reflection blur and wide glows at reduced resolution with
+  depth-aware upsampling; lines, dots, rims, particles and UI stay at full resolution.
 - [ ] N4.g Edge and propagation fields (the Edge Bloom and Capillary Bloom transitions only); sphere impostors,
   shared optics and underwater light (Extruded Bubble).
 - [ ] N4.h Shared shadows (one fitted directional depth map, bounded soft filtering, caster and receiver
@@ -585,12 +603,13 @@ the feature (D3D11 is not stated).
 - [ ] N5.1 Spline Curve (a fullscreen strip only).
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
-- [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f's fog volume, its five compute passes and three
+- [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
-- [ ] N4.f for both, then Expanded Visualizer M6 (4K acceptance, plan 01) may run.
+- [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
+  (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
   and growth are uniform arrays).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
@@ -635,7 +654,7 @@ section 2)**
   walls, wells, simple skyline and tunnel slices, with roughness, bevel and contact shading, built once and
   kept).
 - [ ] N6.3 Advected smoke and haze on the volume primitive. **High potential** (atmosphere for every 3D scene;
-  shares N4.f's reduced-resolution path).
+  shares N4.f2's reduced-resolution path).
 - [ ] N6.4 Photo-textured shells and planes with real depth. **Low potential until a consumer** (a transition
   or a mode built round the user's photos).
 - [ ] N6.5 The opt-in deformable sheet. **Low potential until a consumer.**
@@ -1623,9 +1642,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] The overhead baseline cannot see the QML scene: `tools/overhead_baseline.py` renders render nodes on a bare
   host, never `DisplayScene.qml`, so scene-level dormancy (M3's cover) is proven by the QObject census and the
   no-per-frame-work structure instead.
-- [ ] Re-baseline after Qt 6.12.0 (doc sweep, 12 Nov): `tools/overhead_baseline.py`'s stored baselines and the
-  figures in `Docs/Reference/Benchmarks.md` predate the bump; record new baselines with system usage before the
-  next shared-path comparison.
 
 **Found while building Expanded Visualizer M3b (8 Nov; recorded, not yet admitted):**
 
