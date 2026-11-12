@@ -546,6 +546,12 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 
 **N5, modes track (one High slot; each box is one port under the port rule)**
 
+Slots (lead, 12 Nov): the first port of each kind, and the heavy 3D ports (Waveform Ribbon, Extruded Bubble, Neon
+Lake, Extruded Spectrum and Sphere), go to Opus High. Once Spectrum (N2.5) has proved the pattern, the simple modes
+(Spline Curve, Oscilloscope, Bubble) go to Opus Medium, proved frame by frame against the Python renderer with the
+identity harnesses. A difference that is not byte for byte goes back to the lead to judge. An Opus High audit
+reruns every port's parity proof and its negative controls before merge.
+
 Rule for every port here (Qt 6.12): where a mode's small instanced batches (bars, specks, snow, sprite families)
 are measured above a handful per frame, one pipeline and one indirect call with `QRhi::ShaderDrawParameters`
 (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) replaces a draw per batch; the port records which backends report
@@ -568,6 +574,10 @@ the feature (D3D11 is not stated).
 
 **N5, background track (one High slot; transitions grouped by what they share; needs are in the matrix,
 section 2)**
+
+Slots (lead, 12 Nov): N5.2a, the first group on the shared fullscreen pass, goes to Opus High, and so does each group
+whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a group whose primitive is already
+native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
 - [ ] N5.2b The six with their own item-quad programs: Beam, Chromatic Shear, Liquid Lens, Melt Drip, Surface
   Tension, VHS.
