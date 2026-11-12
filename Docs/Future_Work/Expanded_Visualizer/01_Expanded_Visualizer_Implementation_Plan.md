@@ -149,6 +149,10 @@ not a different renderer.
 
 ### 0.7 Performance budgets, including 4K, and the backend triggers
 
+*(12 Nov 2026, doc sweep: the native core is no longer waiting on a trigger; it is admitted work, `Current_Plan.md`
+item 8b, Vulkan the default after the flip. The triggers below now only decide whether a 4K miss is recorded as a
+budget failure; M6 waits on Extruded Bubble's port, item 8b N5.)*
+
 Budgets are the live-shape ones in `Docs/Guides/Visualizer_Change_Checklist.md` §1C, applied at the display size.
 Measure with `tools/visualizer_live_check.py --mode <mode> --preset N --load game60` on the quiet machine, A/B
 alternated against the card size, system conditions recorded (`Docs/Reference/Benchmarks.md`), median and p90.
