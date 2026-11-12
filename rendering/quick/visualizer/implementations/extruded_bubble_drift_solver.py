@@ -20,6 +20,10 @@ Positions and displacement are float32, as the draws read them.
 
 A geometry edit continues the old history (the CPU rebase); a render gap longer than the published history, a
 lost context or a retired family restarts that family's history from zero (lifecycle, like a fresh family).
+
+Every replacement of a family's state (a new revision, a geometry edit, a capacity change) allocates the new state
+before the old is released (D3's failed swap): an allocation that fails leaves the current state current and drawn,
+is logged once and its (revision, capacity) is not tried again; a new key is.
 """
 from __future__ import annotations
 
@@ -307,7 +311,11 @@ _CLOUD_FIELDS = {"snow": (_R["count_snow"], _R["amount_snow"]), "specks": (_R["c
 def _buffer(size: int) -> int:
     name = (ctypes.c_uint * 1)()
     gl.glCreateBuffers(1, name)
-    gl.glNamedBufferStorage(int(name[0]), max(16, size), None, gl.GL_DYNAMIC_STORAGE_BIT)
+    try:
+        gl.glNamedBufferStorage(int(name[0]), max(16, size), None, gl.GL_DYNAMIC_STORAGE_BIT)
+    except BaseException:
+        _delete(int(name[0]))       # a name without storage is still a name
+        raise
     return int(name[0])
 
 
@@ -368,6 +376,9 @@ class DriftSolver:
         self.output = 0
         self._output_vec4s = 0
         self._families: dict[str, _Family] = {}
+        # A family whose new state could not be allocated: the (revision, capacity) that failed. Its current state
+        # stays drawn and unchanged; the same key is never retried, a new one is (D3, failed swap).
+        self._failed: dict[str, tuple[int, int]] = {}
         self._ring: StreamRing | None = None   # sized to the most chain rows a step has carried (_ring_for)
         # The warm-up check of the pair arithmetic: None until run, then whether this device computes it exactly.
         self.pairs_exact: bool | None = None
@@ -381,6 +392,7 @@ class DriftSolver:
         for family in self._families.values():
             _delete(family.geometry, family.state, family.aux)
         self._families.clear()
+        self._failed.clear()
         _delete(self.output)
         self.output, self._output_vec4s = 0, 0
         if self._ring is not None:
@@ -465,6 +477,9 @@ class DriftSolver:
             if name not in live:
                 old = self._families.pop(name)
                 _delete(old.geometry, old.state, old.aux)
+        for name in tuple(self._failed):
+            if name not in live or self._failed[name] != (live[name].revision, live[name].capacity):
+                del self._failed[name]          # gone, or a new key: that one is tried
         offsets = self.layout(families)
         if not live:
             return offsets
@@ -472,6 +487,8 @@ class DriftSolver:
         serials = records[:, _R["serial"]].astype(np.int64)
         needed = []
         for name, family in live.items():
+            if name in self._failed:
+                continue        # its new state failed to allocate: the current one stays as it is, no retry
             state = self._families.get(name)
             after = state.serial if state is not None and (state.revision == family.revision
                                                             or family.rebase_from == state.revision) \
@@ -485,8 +502,12 @@ class DriftSolver:
         if offsets["_total"] > self._output_vec4s:
             # Every dispatch rewrites its family's whole output from its state: a new buffer loses nothing.
             _delete(self.output)
-            self._output_vec4s = max(256, 1 << (offsets["_total"] - 1).bit_length())
-            self.output = _buffer(16 * self._output_vec4s)
+            self.output, self._output_vec4s = 0, 0
+            vec4s = max(256, 1 << (offsets["_total"] - 1).bit_length())
+            self.output = _buffer(16 * vec4s)
+            self._output_vec4s = vec4s
+            # A family with no state (its allocation failed) is drawn from here: zero drift, never undefined.
+            gl.glClearNamedBufferData(self.output, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
         base = min(needed)
         starts = knot_starts(records)
         if len(knots) != int(starts[-1]) * KNOT_DECISION_BYTES:
@@ -505,7 +526,7 @@ class DriftSolver:
                 upload = records[start:end]
                 with ring.bound(gl.GL_SHADER_STORAGE_BUFFER, _STEPS, _upload(records, starts, knots, start, end)):
                     for name in ("chains", "snow", "specks"):
-                        if name in live:
+                        if name in live and name not in self._failed:
                             self._advance(resources, name, live[name], offsets[name], upload, serials[start:end])
         finally:
             for binding, buffer, start, size in saved:
@@ -526,7 +547,9 @@ class DriftSolver:
             old_steps = np.flatnonzero((serials > state.serial) & (serials < family.first_serial))
             if len(old_steps):
                 self._dispatch(resources, name, state, offset, upload, old_steps, fresh=False)
-            replacement = self._allocate(family, state)
+            replacement = self._replace(name, family, state)
+            if replacement is None:
+                return          # the old rows stay current and drawn
             replacement.serial, replacement.travel, replacement.count = state.serial, state.travel, state.count
             self._families[name] = replacement
             pending = np.flatnonzero(serials > replacement.serial)
@@ -536,14 +559,20 @@ class DriftSolver:
             _delete(state.geometry, state.state, state.aux)
             return
         fresh = False
+        # The new state exists before the old is released: a failed allocation leaves the old one current and drawn.
         if state is None or state.revision != family.revision:
+            replacement = self._replace(name, family)
+            if replacement is None:
+                return
             if state is not None:
                 _delete(state.geometry, state.state, state.aux)
-            state = self._allocate(family)
+            state = replacement
             state.serial = family.first_serial - 1
             fresh = True
         elif family.capacity != state.capacity:
-            grown = self._allocate(family, state)
+            grown = self._replace(name, family, state)
+            if grown is None:
+                return
             grown.serial, grown.travel, grown.count = state.serial, state.travel, state.count
             _delete(state.geometry, state.state, state.aux)
             state = grown
@@ -556,23 +585,45 @@ class DriftSolver:
             fresh = True
         self._dispatch(resources, name, state, offset, upload, pending, fresh=fresh)
 
+    def _replace(self, name: str, family, previous: _Family | None = None) -> _Family | None:
+        """``family``'s new state (``previous``'s history rows copied), or None when it cannot be allocated: then
+        nothing of the current state is touched, the failure is logged once and its key is not tried again."""
+        try:
+            return self._allocate(family, previous)
+        except Exception as exc:
+            self._failed[name] = (family.revision, family.capacity)
+            logger.error("%s: the %s drift state for revision %s (%s rows) could not be allocated (%s); %s",
+                         self.label, name, family.revision, family.capacity, exc,
+                         "the current state stays drawn" if previous is not None or name in self._families
+                         else "drawn without drift")
+            return None
+
     def _allocate(self, family, previous: _Family | None = None) -> _Family:
         chains = family.family == "chains"
         row_bytes = CHAIN_GEOMETRY_BYTES if chains else CLOUD_GEOMETRY_BYTES
         if len(family.geometry) != row_bytes * family.capacity:
             raise ValueError(f"{self.label}: {family.family} geometry does not match its capacity")
-        geometry = _buffer(len(family.geometry))
-        gl.glNamedBufferSubData(geometry, 0, len(family.geometry), family.geometry)
-        rows = family.capacity * (PATH_NODES if chains else 1)
-        state, aux = _buffer(16 * rows), _buffer(16 * (family.capacity if chains else rows))
-        for buffer in (state, aux):
-            gl.glClearNamedBufferData(buffer, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
-        if previous is not None:
-            # Keep the existing history rows (a stable seeded prefix), as written by every earlier dispatch.
-            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
-            keep = min(previous.capacity, family.capacity)
-            gl.glCopyNamedBufferSubData(previous.state, state, 0, 0, 16 * keep * (PATH_NODES if chains else 1))
-            gl.glCopyNamedBufferSubData(previous.aux, aux, 0, 0, 16 * keep)
+        created: list[int] = []
+        try:
+            geometry = _buffer(len(family.geometry))
+            created.append(geometry)
+            gl.glNamedBufferSubData(geometry, 0, len(family.geometry), family.geometry)
+            rows = family.capacity * (PATH_NODES if chains else 1)
+            state = _buffer(16 * rows)
+            created.append(state)
+            aux = _buffer(16 * (family.capacity if chains else rows))
+            created.append(aux)
+            for buffer in (state, aux):
+                gl.glClearNamedBufferData(buffer, gl.GL_R32F, gl.GL_RED, gl.GL_FLOAT, None)
+            if previous is not None:
+                # Keep the existing history rows (a stable seeded prefix), as written by every earlier dispatch.
+                gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+                keep = min(previous.capacity, family.capacity)
+                gl.glCopyNamedBufferSubData(previous.state, state, 0, 0, 16 * keep * (PATH_NODES if chains else 1))
+                gl.glCopyNamedBufferSubData(previous.aux, aux, 0, 0, 16 * keep)
+        except BaseException:
+            _delete(*created)       # a partial allocation leaves nothing behind
+            raise
         return _Family(family.revision, family.capacity, geometry, state, aux, float(family.carry))
 
     def _dispatch(self, resources, name: str, state: _Family, offset: int, upload: np.ndarray, pending: np.ndarray,

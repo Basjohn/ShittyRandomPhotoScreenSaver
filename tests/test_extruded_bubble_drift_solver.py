@@ -203,6 +203,62 @@ def test_the_pair_check_runs_once_and_reports_a_compiler_that_breaks_the_pairs(q
         target.close()
 
 
+def _read_output(solver, vec4s):
+    from OpenGL import GL as gl
+    gl.glFinish()
+    data = np.empty(vec4s * 4, dtype=np.float32)
+    gl.glGetNamedBufferSubData(solver.output, 0, data.nbytes, data)
+    return data
+
+
+def test_a_failed_allocation_keeps_the_current_state_drawn_logs_once_and_retries_only_a_new_key(
+        qt_app, monkeypatch, caplog):
+    """D3, failed swap: the new state is allocated before the old is released. An allocation that fails leaves the
+    current buffers alive, current and unchanged (the draws keep reading them), is logged once and is not retried on
+    later frames for the same (revision, capacity); a new key is tried."""
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    first, second, third = (list(_log(_controls('wander'), 30, seed=seed)) for seed in (11, 12, 13))
+    target, resources = OffscreenRenderTarget(16, 16), MeshResources('drift failed swap test')
+    solver = module.DriftSolver('failed swap')
+    try:
+        offsets = solver.update(resources, *first[-1])
+        held = dict(solver._families)
+        assert set(held) == {'chains', 'snow', 'specks'}
+        before = _read_output(solver, offsets['_total'])
+        # The second stream's revisions are new keys for every family (the revision-change edge).
+        assert not {family.revision for family in second[-1][0]} & {state.revision for state in held.values()}
+        attempts = []
+
+        def refuse(size):
+            attempts.append(size)
+            raise RuntimeError('injected allocation failure')
+        monkeypatch.setattr(module, '_buffer', refuse)
+        with caplog.at_level('ERROR'):
+            for frame in second[-4:]:
+                solver.update(resources, *frame)
+        monkeypatch.undo()
+        assert all(solver._families[name] is state for name, state in held.items())
+        assert all(gl.glIsBuffer(name) for state in held.values() for name in (state.geometry, state.state, state.aux))
+        assert np.array_equal(_read_output(solver, offsets['_total']), before)          # drawn, unchanged
+        failures = [record for record in caplog.records if 'could not be allocated' in record.getMessage()]
+        assert len(failures) == len(held) and len(attempts) == len(held), (failures, attempts)   # once per key
+        caplog.clear()
+        solver.update(resources, *third[-1])                                  # new keys: tried, and they succeed
+        assert {name: state.revision for name, state in solver._families.items()} == \
+            {family.family: family.revision for family in third[-1][0]}
+        current = {name for state in solver._families.values() for name in (state.geometry, state.state, state.aux)}
+        assert all(not gl.glIsBuffer(name) or name in current         # the old released once replaced (GL may
+                   for state in held.values() for name in (state.geometry, state.state, state.aux))  # reuse a name)
+        assert not solver._failed and 'could not be allocated' not in caplog.text
+    finally:
+        solver.release()
+        resources.release_resources()
+        target.close()
+
+
 def test_no_compute_program_declares_a_64_bit_float():
     import re
     from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import PROGRAMS
