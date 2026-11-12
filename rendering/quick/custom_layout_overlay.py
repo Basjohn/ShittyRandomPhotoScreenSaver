@@ -35,6 +35,7 @@ ResizeWheelHandler = Callable[[CustomLayoutSessionItem, int], bool]
 MoveFinishedHandler = Callable[[], None]
 DisplayTransferCapability = Callable[[CustomLayoutSessionItem, str], bool]
 DisplayTransferHandler = Callable[[CustomLayoutSessionItem, str], bool]
+DisplayTransferHoverHandler = Callable[[CustomLayoutSessionItem | None, str, bool], bool]
 SizeResetHandler = Callable[[CustomLayoutSessionItem], bool]
 ContentRotationHandler = Callable[[CustomLayoutSessionItem], bool]
 PresentationItemResolver = Callable[[CustomLayoutSessionItem], QQuickItem | None]
@@ -163,6 +164,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         move_finished_handler: MoveFinishedHandler | None = None,
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
+        display_transfer_hover_handler: DisplayTransferHoverHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
         presentation_item_resolver: PresentationItemResolver | None = None,
@@ -195,6 +197,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._move_finished_handler = move_finished_handler
         self._display_transfer_capability = display_transfer_capability
         self._display_transfer_handler = display_transfer_handler
+        self._display_transfer_hover_handler = display_transfer_hover_handler
         self._size_reset_handler = size_reset_handler
         self._content_rotation_handler = content_rotation_handler
         self._presentation_item_resolver = presentation_item_resolver
@@ -433,6 +436,24 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return False
         session.notify_item_changed(item)
         return True
+
+    @Slot(int, str, bool)
+    def setTransferHover(self, row: int, direction: str, hovered: bool) -> None:
+        """The pointer entered or left a transfer arrow (an edge from its hover area, 1C.2): the owner prepares the
+        display a click would move to, or releases it. A leave needs no row (the arrow may already be gone)."""
+
+        handler = self._display_transfer_hover_handler
+        if handler is None:
+            return
+        if not hovered:
+            handler(None, "", False)
+            return
+        if not 0 <= int(row) < len(self._items):
+            return
+        item = self._items[int(row)]
+        direction = str(direction or "").strip().lower()
+        if direction in {"left", "right"} and self._can_transfer(item, direction):
+            handler(item, direction, True)
 
     @Slot(int, result=bool)
     def restoreSize(self, row: int) -> bool:
@@ -894,6 +915,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._move_finished_handler = None
         self._display_transfer_capability = None
         self._display_transfer_handler = None
+        self._display_transfer_hover_handler = None
         self._size_reset_handler = None
         self._content_rotation_handler = None
         self._presentation_item_resolver = None
@@ -1030,6 +1052,14 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             [self._SELECTED_FOR_CHILD_EDIT_ROLE],
         )
 
+    def refresh_content_envelope(self) -> None:
+        """The scene's retained Visualizer root (what ``contentEnvelopeItem`` resolves to) was created or retired after
+        this model bound: every row re-reads it once, at that edge (1C.4: a root created after Edit bound left the
+        Visualizer's frame without envelope, glyph row or drawn rect until the model reset)."""
+        if self._items:
+            self.dataChanged.emit(self.index(0, 0), self.index(len(self._items) - 1, 0),
+                                  [self._CONTENT_ENVELOPE_ITEM_ROLE])
+
     def _publish_item_change(self, item: CustomLayoutSessionItem) -> None:
         publisher = self._item_change_publisher
         if publisher is not None:
@@ -1057,6 +1087,12 @@ class RetainedCustomLayoutOverlay:
             raise RuntimeError("CUSTOM layout overlay has no bound session")
         return model
 
+    def refresh_content_envelope(self) -> None:
+        """The scene's Visualizer root appeared or went while a session is bound (1C.4): re-read the envelope."""
+        model = self._model
+        if model is not None:
+            model.refresh_content_envelope()
+
     def bind_session(
         self,
         session: CustomLayoutSession,
@@ -1071,6 +1107,7 @@ class RetainedCustomLayoutOverlay:
         move_finished_handler: MoveFinishedHandler | None = None,
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
+        display_transfer_hover_handler: DisplayTransferHoverHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
         presentation_item_resolver: PresentationItemResolver | None = None,
@@ -1101,6 +1138,7 @@ class RetainedCustomLayoutOverlay:
             move_finished_handler=move_finished_handler,
             display_transfer_capability=display_transfer_capability,
             display_transfer_handler=display_transfer_handler,
+            display_transfer_hover_handler=display_transfer_hover_handler,
             size_reset_handler=size_reset_handler,
             content_rotation_handler=content_rotation_handler,
             presentation_item_resolver=presentation_item_resolver,

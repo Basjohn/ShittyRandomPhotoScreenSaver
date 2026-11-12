@@ -105,6 +105,16 @@ def _qobject_is_alive(value: object) -> bool:
         return False
 
 
+def _projected_pixel_shift(state: QuickAuxiliaryState | None, window: Any, suspended: bool) -> tuple[float, float]:
+    """The shift the cards are drawn at: the admitted auxiliary state's on whole device pixels (1C.4: a card drawn on
+    the device-pixel grid stays on it), or none while Edit's chrome suspends it."""
+
+    if state is None or suspended:
+        return 0.0, 0.0
+    shift_dpr = _scene_device_pixel_ratio(window)
+    return (snap_to_device_pixels(float(state.pixel_shift_x), shift_dpr),
+            snap_to_device_pixels(float(state.pixel_shift_y), shift_dpr))
+
 
 
 def _render_snapshot_has_intentional_base_frame(snapshot: object) -> bool:
@@ -422,6 +432,8 @@ class QuickSceneController(QObject):
     readiness_changed = Signal(object)
     jedi_mode_requested = Signal(str, str)
     hover_edit_glyph_requested = Signal(str, str)
+    #: The pointer entered (True) or left (False) a hover transfer arrow ("transfer_left" / "transfer_right", 1C.2).
+    visualizer_transfer_hover_changed = Signal(str, bool)
     visualizer_camera_reset_requested = Signal()
     # Expanded Visualizer glyph (plan 01 M2): True = expand to the display, False = collapse.
     visualizer_expand_requested = Signal(bool)
@@ -469,6 +481,11 @@ class QuickSceneController(QObject):
         # report their geometry to the listener while it is bound.
         self._custom_layout_fullscreen = False
         self._overlay_edit_geometry_listener: Callable[[], None] | None = None
+        # Edit's chrome suspends pixel shift on this display (1C.4): its overlay lies outside ``pixelShiftLayer``, so
+        # the cards sit unshifted where Edit frames, snaps and saves them; the last admitted auxiliary state returns
+        # the shift when Edit ends.
+        self._pixel_shift_suspended = False
+        self._auxiliary_state: QuickAuxiliaryState | None = None
         # Set only when the C++ DisplayScene root dies while this generation is
         # still admitting work. Normal terminal retirement closes admission first.
         self._unexpected_scene_root_loss = False
@@ -836,13 +853,14 @@ class QuickSceneController(QObject):
         # Pixel shift moves the cards by whole device pixels (1C.4): a card drawn on the device-pixel grid stays on it,
         # so its frame never gains a blended edge pixel. The shift is a few logical pixels; at 125 % and 150 % each
         # step lands within half a device pixel of the logical one.
-        shift_dpr = _scene_device_pixel_ratio(self._window)
+        self._auxiliary_state = state
+        shift_x, shift_y = _projected_pixel_shift(state, self._window, getattr(self, "_pixel_shift_suspended", False))
         backdrop_changed = False
         for name, value in (
             ("dimmingEnabled", state.dimming_enabled),
             ("dimmingOpacity", state.dimming_opacity),
-            ("pixelShiftX", snap_to_device_pixels(float(state.pixel_shift_x), shift_dpr)),
-            ("pixelShiftY", snap_to_device_pixels(float(state.pixel_shift_y), shift_dpr)),
+            ("pixelShiftX", shift_x),
+            ("pixelShiftY", shift_y),
         ):
             if root.property(name) != value:
                 root.setProperty(name, value)
@@ -853,6 +871,22 @@ class QuickSceneController(QObject):
         if backdrop_changed and owner is not None:
             owner.note_background_changed()
         return True
+
+    def _suspend_pixel_shift(self, suspended: bool) -> None:
+        """Edit's chrome opens or closes on this display (1C.4): the cards move to their unshifted place for Edit and
+        back to the latest shift after it. Settings' Arrange never shifts; Edit edits the same unshifted layout."""
+
+        suspended = bool(suspended)
+        if suspended == self._pixel_shift_suspended:
+            return
+        self._pixel_shift_suspended = suspended
+        root = self._scene_root
+        if root is None or not _qobject_is_alive(root):
+            return
+        shift = _projected_pixel_shift(self._auxiliary_state, self._window, suspended)
+        for name, value in zip(("pixelShiftX", "pixelShiftY"), shift):
+            if root.property(name) != value:
+                root.setProperty(name, value)
 
     def _publish_jedi_mode_event(
         self, trigger: str, model_identity: str = "ordinary_widget"
@@ -892,6 +926,20 @@ class QuickSceneController(QObject):
         if action not in {"close", "restore", "rotate", "lock", "studio", "transfer_left", "transfer_right"}:
             return
         self.hover_edit_glyph_requested.emit(action, model_identity)
+
+    def _publish_visualizer_transfer_hover(self, action: object, hovered: object) -> None:
+        """A QML signal's handler (a plain method): the hover arrow's edges. A leave always passes (it releases what
+        an entry prepared); an entry only under the glyph click's own admission."""
+        action, hovered = str(action), bool(hovered)
+        if action not in {"transfer_left", "transfer_right"}:
+            return
+        if hovered:
+            state = self._input_state
+            if (self._custom_layout_session is not None or state is None or not state.admission_open
+                    or state.exiting or state.context_menu_active
+                    or not (state.interaction_mode_enabled or state.ctrl_held) or not state.always_show_glyphs):
+                return
+        self.visualizer_transfer_hover_changed.emit(action, hovered)
 
     def apply_widget_glow_press(self, state: QuickInputState, scene_position: Any) -> bool:
         """Observe an admitted discrete press without participating in actions."""
@@ -1226,6 +1274,7 @@ class QuickSceneController(QObject):
         move_finished_handler: MoveFinishedHandler | None = None,
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
+        display_transfer_hover_handler: Callable[[CustomLayoutSessionItem, str, bool], bool] | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
         child_resize_begin_handler: ChildResizeBeginHandler | None = None,
@@ -1249,6 +1298,8 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = identity
         self._custom_layout_display_origin = QPoint(display_origin or QPoint())
         self._custom_layout_session = session
+        # The cards sit where Edit's frames are: unshifted while its chrome is open (1C.4).
+        self._suspend_pixel_shift(True)
         # Keep native runtime pointer semantics out of CUSTOM before enabling the
         # edit overlay. QML still receives the pointer through QQuickWindow.
         self._window.set_custom_layout_input_blocked(True)
@@ -1281,6 +1332,7 @@ class QuickSceneController(QObject):
             move_finished_handler=move_finished_handler,
             display_transfer_capability=display_transfer_capability,
             display_transfer_handler=display_transfer_handler,
+            display_transfer_hover_handler=display_transfer_hover_handler,
             size_reset_handler=size_reset_handler,
             content_rotation_handler=content_rotation_handler,
             presentation_item_resolver=self._custom_layout_presentation_item,
@@ -1401,6 +1453,7 @@ class QuickSceneController(QObject):
         self._custom_layout_display_origin = QPoint(display_origin or QPoint())
         self._custom_layout_session = session
         self._custom_layout_fullscreen = True
+        self._suspend_pixel_shift(True)               # the overlays' frames sit on the unshifted card (1C.4)
         self._window.set_custom_layout_input_blocked(True)
         self.ordinary_widget_host.set_custom_layout_input_blocked(True)
         if self._visualizer_root is not None:
@@ -1655,6 +1708,7 @@ class QuickSceneController(QObject):
         # Fullscreen Edit: the overlays stop reporting geometry first, then return to their authored visibility.
         self._overlay_edit_geometry_listener = None
         self._custom_layout_fullscreen = False
+        self._suspend_pixel_shift(False)              # the latest pixel shift returns with Edit's end (1C.4)
         self._set_visualizer_overlay_editing(False)
         host = self.ordinary_widget_host
         invalid = host.prune_invalid_presentations()
@@ -2238,6 +2292,7 @@ class QuickSceneController(QObject):
             raise RuntimeError("Quick scene admission is closed")
         self._ensure_visualizer_items().bind_render_source(bridge, identity)
         self._visualizer_bridge = bridge
+        self._set_visualizer_prepare_only(False)      # a prepared display move's target is admitted: input returns
 
     def _semantic_double_click_hit_test(self, scene_position: Any) -> bool:
         """Retained double-click admission: ordinary families, then visualizer.
@@ -2337,7 +2392,8 @@ class QuickSceneController(QObject):
         root = self._visualizer_root
         if root is None:
             return False
-        if not bool(root.property("presentationActive")) or not root.isVisible():
+        # A prepared display move's target is transparent to input (``prepareOnly``: the shell is disabled).
+        if not bool(root.property("presentationActive")) or not root.isVisible() or not root.isEnabled():
             return False
         try:
             local = root.mapFromScene(scene_position)
@@ -2438,9 +2494,19 @@ class QuickSceneController(QObject):
         if current is not None and current.render_identity is not None:
             return False
         item = self._ensure_visualizer_items()
+        # Transparent to input and drawn whatever Edit shows here, from before its first frame (1C.2).
+        self._set_visualizer_prepare_only(True)
         self._apply_visualizer_presentation_items(presentation, active=True)
         item.begin_prewarm(identity)
         return True
+
+    def _set_visualizer_prepare_only(self, prepare_only: bool) -> None:
+        """The one owner of the prepared card's input transparency (``prepareOnly`` disables the shell's handlers;
+        ``visualizer_contains_scene_position`` reads the root's enabled state)."""
+
+        root = self._visualizer_root
+        if root is not None and bool(root.property("prepareOnly")) != bool(prepare_only):
+            root.setProperty("prepareOnly", bool(prepare_only))
 
     def feed_visualizer_prewarm(self, snapshot: VisualizerRenderSnapshot | None) -> None:
         item = self._visualizer_item
@@ -2468,6 +2534,7 @@ class QuickSceneController(QObject):
         root = self._visualizer_root
         if root is not None and item.render_identity is None:
             root.setProperty("presentationActive", False)
+        self._set_visualizer_prepare_only(False)
 
     def transfer_visualizer_to(
         self,
@@ -3137,6 +3204,9 @@ class QuickSceneController(QObject):
                     str(action), "spotify_visualizer"
                 )
             )
+        transfer_hover = getattr(root, "displayTransferHoverChanged", None)
+        if transfer_hover is not None and hasattr(transfer_hover, "connect"):
+            transfer_hover.connect(self._publish_visualizer_transfer_hover)
         root.presetStepRequested.connect(self.visualizer_preset_step_requested.emit)
         camera_reset = getattr(root, "cameraResetRequested", None)
         if camera_reset is not None and hasattr(camera_reset, "connect"):
@@ -3184,6 +3254,10 @@ class QuickSceneController(QObject):
             root.setProperty("cardSurfaceBackdrop", owner.item)
         self._on_surface_demand_changed()
         self._sync_custom_layout_visualizer()
+        # An Edit bound before this root existed reads its envelope from it: the overlay re-reads it at this edge (1C.4).
+        overlay = self._custom_layout_overlay
+        if overlay is not None and self._custom_layout_session is not None:
+            overlay.refresh_content_envelope()
         return item
 
     @staticmethod

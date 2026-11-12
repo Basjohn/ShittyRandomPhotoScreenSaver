@@ -148,3 +148,88 @@ def test_the_target_is_prepared_before_the_swap_and_shows_nothing_meanwhile(host
     assert max(int(numpy.abs(frame.astype(int) - blank).max()) for frame in seen["prewarm_frames"]) <= 1
     cold = _run(hosts_factory(True), HOP_AT)
     assert cold["renderer_before"] is None
+
+
+# A card that would show if anything of it did: an opaque black shell, a white frame, a black shadow.
+_CONTRAST_CARD = {
+    "border_width": 4.0, "corner_radius": 8.0, "content_inset": 0.0,
+    "background_color": (0, 0, 0, 255), "border_color": (255, 255, 255, 255),
+    "shadow_enabled": True, "shadow_color": (0, 0, 0, 255), "shadow_blur": 18.0,
+    "shadow_offset": (0.0, 4.0), "shadow_spread": 0.0, "shadow_extensions": (0.0, 0.0, 0.0, 0.0),
+}
+
+
+def _preparing_card_difference(scene_colour: str, scene_fade: float) -> tuple[int, bool]:
+    """Render a scene of ``scene_colour``, then the same with a preparing card at ``scene_fade`` (fed real
+    snapshots, so its renderer prepares): the largest channel difference over every frame, and whether it prepared."""
+    from dataclasses import replace
+
+    from PySide6.QtGui import QColor
+
+    from tools.expanded_visualizer_evidence import HiddenDisplayHost, looped_fixture
+    from tools.visualizer_replay.engine import ReplayBeatEngine
+    from widgets.spotify_visualizer.feature_replay import configure_offline_controller, deterministic_clock
+    from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+    from widgets.spotify_visualizer.quick_presentation_sync import QuickVisualizerPresentationSync
+    from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
+    from widgets.spotify_visualizer.tick_pipeline import logical_tick
+
+    mode = "spectrum"
+    host = HiddenDisplayHost(W, H, dpr=1.0)
+    try:
+        host.window.setColor(QColor(scene_colour))
+        host.render()
+        empty = host.read().astype(int)
+        worst, prepared = 0, False
+        with deterministic_clock() as clock:
+            engine = ReplayBeatEngine(32)
+            controller = VisualizerRuntimeController(runtime_generation=1, initial_mode=mode,
+                                                     engine_factory=lambda _count, e=engine: e)
+            controller.engine = engine
+            configure_offline_controller(controller, mode, 0)
+            identity = controller.begin_render_activation(engine_generation=engine.get_generation_id(),
+                                                          activation_id=engine.get_activation_id())
+
+            def resolve():
+                return resolve_visualizer_presentation(policy=get_visualizer_presentation_policy(mode),
+                                                       display_size=(W, H), outer_origin=(40.0, 30.0), dpr=1.0,
+                                                       **_CONTRAST_CARD)
+            sync = QuickVisualizerPresentationSync(controller, resolve_presentation=resolve,
+                                                   commit_presentation=None, request_present=None)
+            assert host.scene.begin_visualizer_prewarm(identity, replace(resolve(), scene_fade=scene_fade,
+                                                                         content_fade=0.0))
+            after = 0
+            for feature in looped_fixture().frames[:160]:
+                clock[0] = feature.timestamp_us / 1_000_000.0
+                controller.playing = feature.playing
+                engine.set_playback_state(feature.playing)
+                engine.accept_feature_frame(feature)
+                assert logical_tick(controller.logical_tick_state) is not None
+                sync.sync_latest()
+                host.scene.feed_visualizer_prewarm(controller.render_bridge.peek())
+                host.render()
+                worst = max(worst, int(numpy.abs(host.read().astype(int) - empty).max()))
+                prepared = prepared or host.scene.visualizer_prewarm_prepared(identity)
+                after += int(prepared)
+                if after >= 10:                       # prepared, and drawn a few frames more
+                    break
+                time.sleep(0.02)                      # the render host spaces its preparation units (real time)
+            controller.close_render_admission()
+        return worst, prepared
+    finally:
+        host.close()
+
+
+def test_a_preparing_card_shows_no_pixel_on_a_bright_or_a_dark_scene(qt_app):
+    """The prewarm's card opacity (1C.2) prepares the renderer and leaves every pixel of a full-white and a full-black
+    scene unchanged, with a card made to show (opaque black shell, white frame, black shadow). Measured 12 Nov
+    (evidence ``visualizers/shared/hop_prewarm/20261112_1c2_pixels``): 0 at the prewarm's opacity and at 0.0011 and
+    0.0015; 1-4 levels at 0.004-0.01; nothing prepares below Qt Quick's 0.001 cut. Control: twice the opacity shows."""
+    if qt_app.platformName().strip().lower() != "windows":
+        pytest.skip("the hidden production host needs the Windows QPA GL")
+    from widgets.spotify_visualizer.quick_display_visualizer_owner import _PREWARM_SCENE_FADE
+
+    for colour in ("#ffffff", "#000000"):
+        assert _preparing_card_difference(colour, _PREWARM_SCENE_FADE) == (0, True), colour
+    worst, prepared = _preparing_card_difference("#ffffff", 2.0 * _PREWARM_SCENE_FADE)
+    assert prepared and worst > 0                     # the measurement sees a card that does show

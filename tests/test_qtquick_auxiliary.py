@@ -220,6 +220,86 @@ def test_scene_projects_matching_auxiliary_state_without_item_recreation(qt_app)
 
 
 @pytest.mark.qt
+def test_edit_suspends_pixel_shift_so_its_frame_sits_on_the_card(qt_app) -> None:
+    """1C.4: the Edit overlay lies outside ``pixelShiftLayer``; with pixel shift active its Visualizer frame sat up to
+    the shift away from the card it frames. Edit (its chrome) suspends the shift on its display: the cards return to
+    their unshifted place (the place Edit edits, snaps and saves, and where Settings' Arrange shows them), shift steps
+    during Edit do not move them, and the latest shift returns when Edit ends. Negative control (checked 12 Nov on the
+    pre-change scene): the cards' layer stayed shifted by (3.33, -2) under Edit's frames at 150 %."""
+    from rendering.custom_layout_session import CustomLayoutKey, CustomLayoutSession, CustomLayoutSessionItem
+    from tests._visualizer_presentation import resolve_presentation
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
+    from PySide6.QtCore import QPoint, QRect
+
+    window = QuickDisplayWindow(screen_index=0, runtime_generation=46, screen=qt_app.primaryScreen(),
+                                policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+
+    def shift_state(x: int, y: int) -> QuickAuxiliaryState:
+        return QuickAuxiliaryState(screen_index=0, runtime_generation=46, pixel_shift_enabled=True,
+                                   pixel_shift_x=x, pixel_shift_y=y)
+
+    def find(item, name):
+        if item.objectName() == name:
+            return item
+        for child in item.childItems():
+            found = find(child, name)
+            if found is not None:
+                return found
+        return None
+
+    try:
+        root = controller.scene_root
+        layer = root.findChild(QQuickItem, "pixelShiftLayer")
+        presentation = resolve_presentation(policy=get_visualizer_presentation_policy("spectrum"),
+                                            display_size=(1920.0, 1080.0), outer_origin=(207.0, 310.0))
+        bridge = VisualizerSnapshotBridge()
+        controller.set_visualizer_render_source(bridge, bridge.begin_activation(
+            runtime_generation=46, engine_generation=5, activation_id=7, mode_id="spectrum"))
+        controller.apply_visualizer_presentation(presentation)
+        assert controller.apply_auxiliary_state(shift_state(3, -2)) is True
+        shifted = (root.property("pixelShiftX"), root.property("pixelShiftY"))
+        assert shifted != (0.0, 0.0)
+
+        x, y, width, height = presentation.outer_rect
+        session = CustomLayoutSession()
+        session.add_item(CustomLayoutSessionItem(
+            source_key=CustomLayoutKey("spotify_visualizer", "display:a", "default"),
+            model_identity="spotify_visualizer", baseline_global_rect=QRect(int(x), int(y), int(width), int(height)),
+            current_global_rect=QRect(int(x), int(y), int(width), int(height)), baseline_size_payload={},
+            current_size_payload={}, baseline_enabled=True, current_enabled=True, geometry_kind="planar",
+            resize_capable=True))
+        controller.bind_custom_layout_session(session, display_identity="display:a", display_origin=QPoint(0, 0))
+        qt_app.processEvents()
+        frame = find(controller.custom_layout_overlay.item, "customLayoutEditFrame-spotify_visualizer")
+        card = controller.scene_root.findChild(QQuickItem, "visualizerPresentationRoot")
+
+        def frame_offset():
+            frame_origin = frame.mapToScene(QPointF(0.0, 0.0))
+            card_origin = card.mapToScene(QPointF(0.0, 0.0))
+            return (card_origin.x() - frame_origin.x(), card_origin.y() - frame_origin.y())
+
+        assert layer.mapToScene(QPointF(0.0, 0.0)) == QPointF(0.0, 0.0)
+        assert frame_offset() == pytest.approx((0.0, 0.0), abs=0.5)
+        controller.apply_auxiliary_state(shift_state(2, -1))       # a shift step while Edit is open
+        qt_app.processEvents()
+        assert layer.mapToScene(QPointF(0.0, 0.0)) == QPointF(0.0, 0.0)
+        controller.clear_custom_layout_session()
+        qt_app.processEvents()
+        latest = layer.mapToScene(QPointF(0.0, 0.0))
+        assert (latest.x(), latest.y()) != (0.0, 0.0)
+        assert (latest.x(), latest.y()) == pytest.approx((root.property("pixelShiftX"), root.property("pixelShiftY")))
+        assert abs(latest.x() - 2.0) <= 1.0 and abs(latest.y() + 1.0) <= 1.0
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_quick_window_routes_motion_only_to_native_cursor_owner(qt_app) -> None:
     screen = qt_app.primaryScreen()
     assert screen is not None

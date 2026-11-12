@@ -168,7 +168,7 @@ Item {
     // Keep the same passive observer alive through menu/Ctrl suppression so a
     // visit ends only when the pointer leaves, not when action admission changes.
     readonly property bool controlHintVisitTracking: show3DControlHints && controlHintsAvailable
-        && cardShellEnabled && visible
+        && cardShellEnabled && visible && !prepareOnly
     readonly property bool controlHintHovered: controlHintEligible
         && controlHintVisitObserver.item !== null && controlHintVisitObserver.item.insideCard
     property bool controlHintVisitStarted: false
@@ -189,6 +189,7 @@ Item {
         }
     }
     signal hoverEditGlyphRequested(string action)
+    signal displayTransferHoverChanged(string action, bool hovered)
     property bool displayTransferLeftAvailable: false
     property bool displayTransferRightAvailable: false
     property bool widgetGlowOnHover: false
@@ -220,8 +221,12 @@ Item {
     property bool perfHudEnabled: false
     property string perfHudText: ""
 
+    // A display move's target while its renderer prepares (1C.2): drawn at a sub-visible opacity whatever Edit shows
+    // on this display, and transparent to input, so a press there reaches what lies below.
+    property bool prepareOnly: false
+    enabled: !prepareOnly
     opacity: authoredSceneOpacity * startupRevealOpacity
-    visible: presentationActive && customLayoutWorkingVisible && opacity > 0.0
+    visible: presentationActive && (customLayoutWorkingVisible || prepareOnly) && opacity > 0.0
 
     Loader {
         id: visualizerInteractionGlowLoader
@@ -939,6 +944,7 @@ Item {
             && visualizerPresentationRoot.widgetGlowAdmitted
             && visualizerPresentationRoot.presentationActive
             && !visualizerPresentationRoot.expandedDisplay
+            && !visualizerPresentationRoot.prepareOnly
         sourceComponent: WidgetHoverEditGlyphs {
             objectName: "visualizerHoverEditGlyphs"
             anchors.fill: parent
@@ -951,6 +957,9 @@ Item {
             canLock: false
             onActionRequested: function(action) {
                 visualizerPresentationRoot.hoverEditGlyphRequested(action)
+            }
+            onTransferHoverChanged: function(action, hovered) {
+                visualizerPresentationRoot.displayTransferHoverChanged(action, hovered)
             }
         }
     }

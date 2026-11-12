@@ -130,6 +130,12 @@ from widgets.spotify_visualizer.render_state import (
 
 logger = get_logger(__name__)
 
+# A Visualizer drag prepares the neighbouring display once the card's near edge is within this many card widths of the
+# seam, and releases it past the second (hysteresis, so a drag along the threshold does not prepare and release on
+# alternate samples). Extruded Bubble prepares in a few dozen frames: one card width is ample at a drag's speed.
+_SEAM_PREPARE_FRACTION = 1.0
+_SEAM_RELEASE_FRACTION = 1.5
+
 
 @dataclass(frozen=True, slots=True)
 class _DisplayBinding:
@@ -596,6 +602,7 @@ class QuickCustomLayoutOwner:
                         self._adjacent_display_binding(item, direction, available) is not None
                     ),
                     display_transfer_handler=self.transfer_display,
+                    display_transfer_hover_handler=self._on_visualizer_transfer_hover,
                     size_reset_handler=self.restore_item_size,
                     content_rotation_handler=self.rotate_visualizer_content,
                     child_resize_begin_handler=self.begin_child_resize,
@@ -1295,6 +1302,9 @@ class QuickCustomLayoutOwner:
                         for entry in self._bindings.values()
                         if entry.screen is candidate
                     )
+        if (not transfer_latched and target is binding and item.model_identity == "spotify_visualizer"
+                and not self._direct):
+            self._prepare_visualizer_near_seam(item, binding, proposed)
         frame = self._edit_frame(item, target)
         local = QRect(
             proposed.x() - frame.x(),
@@ -1333,6 +1343,7 @@ class QuickCustomLayoutOwner:
 
         self._finish_undo_gesture("parent_move")
         self._visualizer_move_transfer_latch.clear()
+        self.release_visualizer_display_preparation()     # a drag that neared the seam and ended without a hop
         self._clear_all_guides()
 
     def _clear_all_guides(self) -> None:
@@ -1435,6 +1446,61 @@ class QuickCustomLayoutOwner:
                   if candidate.identity != source.identity}
         key = neighbour_on_side(rect(source), others, -1 if direction == "left" else 1)
         return None if key is None else available.get(key)
+
+    def prepare_visualizer_display_transfer(self, source_unit: Any, direction: str) -> bool:
+        """The pointer entered a transfer arrow (Edit's or the hover glyph's): prepare the display a click would move
+        the Visualizer to, through the one live neighbour selector (1C.2). An edge, never polled; a hop after it
+        adopts the prepared renderer, ``release_visualizer_display_preparation`` ends it."""
+
+        available = self._live_display_bindings()
+        source = next((entry for entry in available.values() if entry.unit is source_unit), None)
+        if source is None:
+            return False
+        target = self._adjacent_binding_for_identity(source.identity, direction, available)
+        return target is not None and self._prepare_visualizer_binding(target)
+
+    def release_visualizer_display_preparation(self) -> bool:
+        """The pointer left the arrow, or the drag turned back or ended: the prepared neighbour is released once."""
+
+        owner, _unit = self._visualizer_provider()
+        release = getattr(owner, "release_prepared_display", None)
+        return bool(release()) if callable(release) else False
+
+    def _prepare_visualizer_binding(self, target: _DisplayBinding) -> bool:
+        owner, unit = self._visualizer_provider()
+        prepare = getattr(owner, "prepare_display", None)
+        if not callable(prepare) or unit is None or target.unit is unit:
+            return False
+        return bool(prepare(target.unit.runtime))
+
+    def _on_visualizer_transfer_hover(self, item: CustomLayoutSessionItem, direction: str, hovered: bool) -> bool:
+        """Edit's own transfer arrows: hovering one prepares its display; leaving it releases that."""
+
+        if not hovered:
+            return self.release_visualizer_display_preparation()
+        target = self._adjacent_display_binding(item, direction)
+        return target is not None and self._prepare_visualizer_binding(target)
+
+    def _prepare_visualizer_near_seam(self, item: CustomLayoutSessionItem, binding: _DisplayBinding,
+                                      proposed: QRect) -> None:
+        """A Visualizer drag nearing the seam to a neighbouring display prepares that display (1C.2); turning back
+        past the release distance ends it. Evaluated on the drag's own move samples (an edge per sample, no poll)."""
+
+        geometry = binding.geometry
+        width = max(1, proposed.width())
+        gaps = {"left": proposed.left() - geometry.left(), "right": geometry.right() - proposed.right()}
+        side = min(gaps, key=gaps.get)
+        owner, _unit = self._visualizer_provider()
+        prepared = getattr(owner, "prepared_display", None)
+        target = self._adjacent_display_binding(item, side)
+        if target is not None and gaps[side] <= width * _SEAM_PREPARE_FRACTION:
+            if prepared is not target.unit.runtime:
+                self._prepare_visualizer_binding(target)
+        elif prepared is not None and not any(
+                (neighbour := self._adjacent_display_binding(item, name)) is not None
+                and neighbour.unit.runtime is prepared and gaps[name] <= width * _SEAM_RELEASE_FRACTION
+                for name in gaps):
+            self.release_visualizer_display_preparation()
 
     def transfer_display(
         self,
@@ -3762,6 +3828,11 @@ class QuickCustomLayoutOwner:
                 reason="custom_layout_overlay_close",
             )
         corruption: list[str] = []
+        try:
+            # A display prepared by Edit's arrows or a drag near the seam ends with the session (1C.2).
+            self.release_visualizer_display_preparation()
+        except Exception:
+            logger.exception("[CUSTOM_LAYOUT] A prepared neighbouring display could not be released")
         bindings = tuple(self._bindings.values())
         coordinator = self._coordinator
         # Retire the cross-display listener before clearing per-scene edit state.

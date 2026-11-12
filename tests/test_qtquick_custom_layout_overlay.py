@@ -1618,3 +1618,52 @@ def test_glyph_tip_hosts_reparent_onto_their_controls_without_stacking_warnings(
         assert len({id(parent) for parent in parents}) == len(parents)
     overlay.clear_session()
     del context
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("root_first", [True, False], ids=["root-before-edit", "root-after-edit"])
+def test_the_visualizer_frame_reads_its_envelope_whichever_comes_first(qt_app, root_first) -> None:
+    """1C.4: Edit's Visualizer frame reads the retained root (its envelope, glyph row and drawn card rect) through
+    ``contentEnvelopeItem``. The product shows the Visualizer before Edit binds; a root created after Edit bound (a
+    display move's target, a late admission) must reach the frame at its creation edge, without a model reset.
+    Negative control (checked 12 Nov on the pre-change scene): root-after-edit kept the frame's envelope null."""
+    window = QuickDisplayWindow(screen_index=0, runtime_generation=219, screen=qt_app.primaryScreen(),
+                                policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    try:
+        presentation = resolve_visualizer_presentation(policy=get_visualizer_presentation_policy("spectrum"),
+                                                       display_size=(1920.0, 1080.0), outer_origin=(207.0, 310.0))
+        x, y, width, height = presentation.outer_rect
+        session = CustomLayoutSession()
+        session.add_item(_item("spotify_visualizer", "display:a", QRect(int(x), int(y), int(width), int(height)),
+                               resizable=True))
+        bridge = VisualizerSnapshotBridge()
+        identity = bridge.begin_activation(runtime_generation=219, engine_generation=5, activation_id=7,
+                                           mode_id="spectrum")
+
+        def admit() -> None:
+            controller.set_visualizer_render_source(bridge, identity)
+            controller.apply_visualizer_presentation(presentation)
+
+        if root_first:
+            admit()
+        controller.bind_custom_layout_session(session, display_identity="display:a", display_origin=QPoint(0, 0))
+        qt_app.processEvents()
+        frame = _quick_items_named(controller.custom_layout_overlay.item,
+                                   "customLayoutEditFrame-spotify_visualizer")[0]
+        if not root_first:
+            assert not frame.property("contentEnvelopeItem")      # no root yet
+            admit()
+            qt_app.processEvents()
+        root = controller.scene_root.findChild(QQuickItem, "visualizerPresentationRoot")
+        assert root is not None
+        assert frame.property("contentEnvelopeItem") is root
+        drawn = frame.property("drawnCardRect")
+        assert drawn.width() > 0.0 and drawn.height() > 0.0
+        controller.clear_custom_layout_session()
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
