@@ -54,7 +54,7 @@ def test_preset_glyphs_click_both_directions_and_delay_tooltips(qt_app, qtbot, e
         overlay.setProperty("editActive", True)
     keep_off_screen(window)
     window.show()
-    assert QTest.qWaitForWindowExposed(window)
+    qtbot.waitUntil(window.isExposed, timeout=5000)
     def button(direction):
         name = (("customLayoutPreviousPreset-" if direction < 0 else "customLayoutNextPreset-") + "spotify_visualizer"
                 if editing else ("visualizerPreviousPresetGlyph" if direction < 0 else "visualizerNextPresetGlyph"))
@@ -108,7 +108,7 @@ def test_studio_and_rotate_glyph_clicks_use_one_shared_qml_signal(qt_app, qtbot)
     root.hoverEditGlyphRequested.connect(actions.append)
     keep_off_screen(window)
     window.show()
-    assert QTest.qWaitForWindowExposed(window)
+    qtbot.waitUntil(window.isExposed, timeout=5000)
     try:
         # Native QQuickWindow pointer delivery, not an isolated Python payload test.
         QTest.mouseMove(window, QPoint(330, 230))
